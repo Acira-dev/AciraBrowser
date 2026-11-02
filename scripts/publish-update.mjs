@@ -363,7 +363,8 @@ async function ensureRelease({gh,slug,release,log,workDir}){
  for(const asset of release.assets){
   if(have.has(asset.name)){if(have.get(asset.name)!==asset.size)throw Error(asset.name+' is already attached to '+release.tag+' with a different size ('+have.get(asset.name)+' vs '+asset.size+'). Delete the release and run again.');continue;}
   let file=asset.path;
-  if(asset.content!==undefined){file=path.join(workDir,release.platform+'-'+asset.name);await fs.writeFile(file,asset.content);}
+  // gh names an asset after its file, so a generated file keeps its plain name, in a folder per platform.
+  if(asset.content!==undefined){const dir=path.join(workDir,release.platform);await fs.mkdir(dir,{recursive:true});file=path.join(dir,asset.name);await fs.writeFile(file,asset.content);}
   log('  uploading '+asset.name+(asset.size>1048576?' ('+mb(asset.size)+')':''));
   await gh(['release','upload',release.tag,file,'--repo',slug]);
  }

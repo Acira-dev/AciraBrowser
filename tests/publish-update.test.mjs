@@ -24,7 +24,7 @@ function fakeGitHub({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0.0.0','lat
    const [sub]=rest;
    if(sub==='view'){const release=find(args);return JSON.stringify({tagName:rest[1],isDraft:release.isDraft,assets:[...release.assets].map(([name,asset])=>({name,size:asset.size}))});}
    if(sub==='create'){const tag=rest[1];state.releases.set(tag,{isDraft:true,prerelease:rest.includes('--prerelease'),assets:new Map(),notes:await fs.readFile(rest[rest.indexOf('--notes-file')+1],'utf8')});return '';}
-   if(sub==='upload'){const release=find(['release',...rest]),file=rest[2];const name=path.basename(file).replace(/^(mac|windows)-/,'');if(state.failUpload===name)throw notFound('upload failed: '+name);const bytes=await fs.readFile(file);release.assets.set(name,{size:bytes.length,bytes:state.corrupt===name?Buffer.from(bytes.map((byte,index)=>index===0?byte^0xff:byte)):bytes});return '';}
+   if(sub==='upload'){const release=find(['release',...rest]),file=rest[2];const name=path.basename(file);/* like the real gh: the asset is named after the file */if(state.failUpload===name)throw notFound('upload failed: '+name);const bytes=await fs.readFile(file);release.assets.set(name,{size:bytes.length,bytes:state.corrupt===name?Buffer.from(bytes.map((byte,index)=>index===0?byte^0xff:byte)):bytes});return '';}
    if(sub==='edit'){const release=find(['release',...rest]);if(rest.includes('--draft=false'))release.isDraft=false;return '';}
   }
   if(command==='api'){

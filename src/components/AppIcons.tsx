@@ -108,6 +108,7 @@ export const Slash=wrap('Slash');
 export const SlidersHorizontal=wrap('SlidersHorizontal');
 export const Smartphone=wrap('Smartphone');
 export const Sparkles=wrap('Sparkles');
+export const SparklesOff=wrap('SparklesOff');
 export const Square=wrap('Square');
 export const SquareCheck=wrap('SquareCheck');
 export const SquareStack=wrap('SquareStack');

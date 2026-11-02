@@ -12,18 +12,28 @@
 //    without one the call is refused with NotAllowedError. Conditional requests never reach Windows: get() waits until the page aborts
 //    it, create() is refused. isConditionalMediationAvailable() answers false and getClientCapabilities() reports no conditional get or
 //    create, so sites show their normal "Sign in with a passkey" button instead.
-// Windows only: macOS and Linux keep their native WebAuthn methods and capability answers. Applying this Windows workaround there
-// can suppress a sign-in request after navigation, when the initiating click belonged to the previous document.
+// macOS (2 Nov, `mac` set): Electron shows no passkey sheet of its own. Touch ID / iCloud Keychain passkeys need Apple's browser passkey
+// entitlement, which no build has yet (mac-passkey-preload.cjs adds them in main frames once one does), and a phone (hybrid) needs a QR
+// code Electron never shows. Yet the engine tells pages a passkey can be used (getClientCapabilities() says passkeyPlatformAuthenticator
+// and hybridTransport, and autofill is reported available), so Google asked for a passkey and its "Verifying it's you…" page waited with
+// nothing on screen until the sign-in session expired. Here the guard answers what is true on a Mac: no platform authenticator, no
+// phone, no autofill (immediate mediation either). A passkey get()/create() is refused at once with NotAllowedError, what a cancelled
+// sheet gives, so the site moves on to its other ways (Google: "Try another way"). A request only a security key can answer still
+// reaches the engine, which talks to USB keys without any sheet: a get() whose every allowCredentials entry names only usb, nfc, ble or
+// smart-card transports, a create() asking for a cross-platform authenticator, or either one hinting only 'security-key'. No setting and
+// no press: nothing here opens a system dialog. The Windows press rule is not used on a Mac (it can suppress a sign-in request after
+// navigation, when the initiating click belonged to the previous document). Linux keeps its native WebAuthn methods and answers.
 // Passwords, federated sign-in and every other credential call are untouched (the check is for `publicKey` options only). Runs before
 // any page script in every website frame (tabs, pop-ups and Peek load preloads in iframes; every session registers it, private, Tor and
 // secured ones included) and in the page's own world; a child frame that is still about:blank is covered by its parent the moment the
 // parent reaches it. The main process backs this up for pages loaded after a change: with the choice off it adds a Permissions-Policy
 // header (publickey-credentials-get / -create denied) to every web response, so the engine itself refuses the call in the frame and
-// its children (content-blocking.cjs). If the browser has no navigator.userActivation the guard does nothing. A sandboxed preload cannot
-// require other files, so the guard is one function that executeInMainWorld serialises; tests/passkey-guard.test.cjs runs it against
-// stand-in windows. `allowed` is the bridged answer from the main process (true only when the person turned passkeys on).
+// its children (Windows, content-blocking.cjs). If a Windows browser has no navigator.userActivation the guard does nothing. A sandboxed
+// preload cannot require other files, so the guard is one function that executeInMainWorld serialises; tests/passkey-guard.test.cjs runs
+// it against stand-in windows. `allowed` is the bridged answer from the main process (true only when the person turned passkeys on);
+// `mac` selects the macOS answers above, which ask nothing of the main process.
 const {ipcRenderer,contextBridge}=require('electron');
-const guard = function (allowed) {
+const guard = function (allowed, mac) {
   // The page's own globals can be replaced by page scripts later: everything the guard calls at request time is taken now, before any
   // page script runs. (A page that swapped Reflect.apply used to be handed the unguarded original on its next ordinary call.)
   const apply = Reflect.apply, keysOf = Object.keys, define = Object.defineProperty, createBare = Object.create, describe = Object.getOwnPropertyDescriptor;
@@ -34,11 +44,11 @@ const guard = function (allowed) {
       if (!w || covered.has(w)) return;
       covered.add(w);
       const Container = w.CredentialsContainer, activation = w.navigator && w.navigator.userActivation;
-      if (!Container || !Container.prototype || !activation) return;
+      if (!Container || !Container.prototype || (!activation && !mac)) return;
       const proto = Container.prototype, Exception = w.DOMException, PromiseOf = w.Promise;
       // One passkey dialog per press: count trusted presses in this frame and remember which one the last request used.
       let presses = 0, spent = -1;
-      for (const type of ['pointerdown', 'keydown', 'click', 'touchend']) w.addEventListener(type, event => { if (event.isTrusted) presses++; }, { capture: true, passive: true });
+      if (!mac) for (const type of ['pointerdown', 'keydown', 'click', 'touchend']) w.addEventListener(type, event => { if (event.isTrusted) presses++; }, { capture: true, passive: true });
       // The engine's own isActive getter, taken now: a page that redefines UserActivation.prototype.isActive cannot fake a press.
       const activeGetter = (() => { try { const d = w.UserActivation && describe(w.UserActivation.prototype, 'isActive'); return d && typeof d.get === 'function' ? d.get : null; } catch (error) { return null; } })();
       const isActive = () => (activeGetter ? apply(activeGetter, activation, []) : activation.isActive) === true;
@@ -49,6 +59,20 @@ const guard = function (allowed) {
         if (signal.aborted) { reject(signal.reason); return; }
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
       });
+      // macOS: what only a security key can answer (a list counts when it has entries and every one passes; plain comparisons, so a page
+      // that replaces Array methods cannot change the answer). Anything else (internal, hybrid, no transports given) is refused at once.
+      const every = (list, test) => {
+        if (!list || typeof list !== 'object' || typeof list.length !== 'number' || list.length < 1) return false;
+        for (let i = 0; i < list.length; i++) if (!test(list[i])) return false;
+        return true;
+      };
+      const keyTransport = value => value === 'usb' || value === 'nfc' || value === 'ble' || value === 'smart-card';
+      const securityKeyOnly = (publicKey, creating) => every(publicKey.hints, hint => hint === 'security-key') || (creating
+        ? Boolean(publicKey.authenticatorSelection) && publicKey.authenticatorSelection.authenticatorAttachment === 'cross-platform'
+        : every(publicKey.allowCredentials, item => Boolean(item) && every(item.transports, keyTransport)));
+      const onMac = (options, creating) => {
+        try { return securityKeyOnly(options.publicKey, creating) ? undefined : refuse('The operation either timed out or was not allowed.'); } catch (error) { return PromiseOf.reject(error); }
+      };
       // The engine converts any object as the options dictionary (a function too, and document.all, whose typeof is 'undefined') and reads
       // its members again. So the options are read once, here, into a plain copy: the decision and the engine see the same values, and a
       // getter cannot hide publicKey from the guard and show it to the engine.
@@ -79,12 +103,14 @@ const guard = function (allowed) {
         const options = args[0];
         if (!passkey(options)) return undefined;
         if (options.mediation === 'conditional') return untilAborted(options.signal);
+        if (mac) return onMac(options, false);
         if (!open()) return refuse('The operation either timed out or was not allowed.');
         return fresh() ? undefined : refuse('Signing in with a passkey needs a click or tap on this page first.');
       }, true);
       wrap(proto, 'create', args => {
         const options = args[0];
         if (!passkey(options)) return undefined;
+        if (mac) return options.mediation === 'conditional' ? refuse('Automatic passkey creation is not available.') : onMac(options, true);
         if (!open()) return refuse('The operation either timed out or was not allowed.');
         if (options.mediation === 'conditional') return refuse('Automatic passkey creation is not available.');
         return fresh() ? undefined : refuse('Creating a passkey needs a click or tap on this page first.');
@@ -92,10 +118,12 @@ const guard = function (allowed) {
       const Key = w.PublicKeyCredential;
       if (Key) {
         wrap(Key, 'isConditionalMediationAvailable', () => PromiseOf.resolve(false));
-        wrap(Key, 'isUserVerifyingPlatformAuthenticatorAvailable', () => (open() ? undefined : PromiseOf.resolve(false)));
+        wrap(Key, 'isUserVerifyingPlatformAuthenticatorAvailable', () => (!mac && open() ? undefined : PromiseOf.resolve(false)));
         const capabilities = Key.getClientCapabilities;
         if (typeof capabilities === 'function') Object.defineProperty(Key, 'getClientCapabilities', { value: new Proxy(capabilities, { apply(target, self, args) {
           return PromiseOf.resolve(apply(target, self, args)).then(found => {
+            // Mac: security keys and the extensions stay as the engine reports them; nothing that needs a sheet or a phone.
+            if (mac) return Object.assign({}, found, { conditionalCreate: false, conditionalGet: false, hybridTransport: false, immediateGet: false, passkeyPlatformAuthenticator: false, userVerifyingPlatformAuthenticator: false });
             if (open()) return Object.assign({}, found, { conditionalGet: false, conditionalCreate: false });
             // Off: nothing is supported, whatever the engine knows (the known names stay present so a page reads false, not undefined).
             const none = {};
@@ -126,4 +154,8 @@ if(process.platform==='win32'&&(/^(?:blob:)?https?:/.test(location.href)||locati
   const allowed=()=>{try{return ipcRenderer.sendSync('acira:passkeys-allowed')===true;}catch{return false;}};
   contextBridge.executeInMainWorld({func:guard,args:[allowed]});
  }catch{/* A closing window. */}
+}else if(process.platform==='darwin'&&(/^(?:blob:)?https?:/.test(location.href)||location.href==='about:srcdoc')){
+ // Registered before mac-passkey-preload.cjs: in a main frame where Apple's passkeys are approved, that bridge sits on top and hands
+ // the guard only what it leaves to the engine (security keys, unsupported extensions).
+ try{contextBridge.executeInMainWorld({func:guard,args:[null,true]});}catch{/* A closing window. */}
 }

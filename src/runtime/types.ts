@@ -48,7 +48,7 @@ export interface ClosedSplit { split: SplitGroup; slot: number; shown: boolean }
 export interface ClosedTabSession extends TabSession { closedSplit?: ClosedSplit; closedIndex?: number; closedLeftId?: string; closedRightId?: string; closedBatch?: string; closedActive?: boolean; /** The window revision at which it closed: orders a normal close against a private one (Ctrl+Shift+T takes the newest of both). */closedRev?: number }
 /** A toast's one text action (bible §4: "Tab closed · Undo"); the command is dispatched as-is and validated in main. */
 /** A status pill's glyph (bible §4 Transient surfaces): "AI-free mode on" uses shield. */
-export type StatusIcon = 'check' | 'shield' | 'info' | 'error' | 'workspace';
+export type StatusIcon = 'check' | 'shield' | 'sparkles' | 'sparkles-off' | 'info' | 'error' | 'workspace';
 /** One row of a page/link right-click menu shown as an Acira menu (main keeps the action; the row carries its id). */
 export interface PageMenuItem { id?: string; label?: string; enabled?: boolean; checked?: boolean; type?: 'separator'; /** A gesture or key shown at the row's end ('Shift+Click'). */ shortcut?: string; /** An extension's item: its icon (a data URL), how far it sits in (a group's children), a heading row that only names its group, and a check or radio mark that closes the menu on click. */ icon?: string; depth?: number; header?: boolean; mark?: 'check' | 'dot' | 'none' }
 export interface ToastAction { label: string; /** A catalog id for the label; the interface shows it in the current language and falls back to `label`. */labelId?: string; command: BrowserAction; /** A Settings control id to land on when the action opens Settings (handed over in the interface, since page addresses cannot carry it). */ settings?: string }
@@ -92,6 +92,8 @@ export interface BrowserLayout {
 }
 export type BrowserCommand =
   | { type: 'address-highlight'; tabId: string; query: string; index: number }
+  /** The lights Acira draws in a fullscreen Mac window (ui/FullscreenLights.tsx): close the window, or leave fullscreen. */
+  | { type: 'window-control'; tabId: string; action: 'close' | 'exit-fullscreen' }
   | { type: 'navigate'; tabId: string; url: string }
   | { type: 'reload'; tabId: string; /** Shift+click on a pane's Reload: fetch the page again instead of reusing its cache (Chrome's hard reload). */ ignoreCache?: boolean }
   | { type: 'back' | 'forward' | 'stop' | 'focus' | 'devtools' | 'clear-data' | 'print' | 'save-page' | 'save-pdf' | 'stop-capture' | 'snapshot'; tabId: string }

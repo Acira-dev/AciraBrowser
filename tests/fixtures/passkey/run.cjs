@@ -12,7 +12,7 @@ process.on('unhandledRejection', error => { process.stdout.write('ERROR ' + (err
 // Credentials exist only in secure contexts; http://127.0.0.1 is one.
 const server = require('node:http').createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<!doctype html><title>t</title>' + (req.url === '/native' ? '<iframe src="/frame"></iframe>' : '<p>x</p>')); });
 const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'desktop', 'browser-services', 'passkey-guard-preload.cjs'), 'utf8');
-const match = /const guard = (function \(allowed\) \{[\s\S]*?\n\});\r?\n/.exec(source);
+const match = /const guard = (function \(allowed, mac\) \{[\s\S]*?\n\});\r?\n/.exec(source);
 if (!match) { process.stdout.write('ERROR guard script not found in the preload\n'); app.exit(1); }
 const guard = match[1];
 const STUB = `(async () => { window.__calls = []; const proto = CredentialsContainer.prototype;
@@ -47,6 +47,24 @@ const CALLS = `(async () => {
   out.text = Function.prototype.toString.call(CredentialsContainer.prototype.get);
   return out;
 })()`;
+// macOS: the registered guard above the QA stub (passkey-test-stub-preload.cjs records the engine's calls). No stub, no request: then
+// nothing here may reach a real authenticator.
+const MAC_CALLS = `async () => {
+  if (!Array.isArray(window.__passkeyStubCalls)) return null;
+  const out = {}, key = window.PublicKeyCredential, id = new Uint8Array(16);
+  const attempt = async (label, run) => { const started = performance.now(); try { out[label] = String(await run()); } catch (error) { out[label] = error.name + ': ' + error.message; } out[label + 'Ms'] = Math.round(performance.now() - started); };
+  out.uvpaa = await key.isUserVerifyingPlatformAuthenticatorAvailable();
+  out.capabilities = await key.getClientCapabilities();
+  const passkey = { challenge: new Uint8Array(32), timeout: 300000, userVerification: 'preferred', allowCredentials: [{ type: 'public-key', id, transports: ['internal', 'hybrid'] }] };
+  await attempt('passkey', () => navigator.credentials.get({ publicKey: passkey }));
+  await attempt('discoverable', () => navigator.credentials.get({ publicKey: { challenge: new Uint8Array(32) } }));
+  await attempt('create', () => navigator.credentials.create({ publicKey: ${KEY} }));
+  await attempt('securityKey', () => navigator.credentials.get({ publicKey: { ...passkey, allowCredentials: [{ type: 'public-key', id, transports: ['usb', 'nfc'] }] } }));
+  await attempt('createSecurityKey', () => navigator.credentials.create({ publicKey: { ...${KEY}, authenticatorSelection: { authenticatorAttachment: 'cross-platform' } } }));
+  await attempt('password', () => navigator.credentials.get({ password: true }));
+  out.calls = window.__passkeyStubCalls.slice();
+  return out;
+}`;
 const NATIVE_PROBE = `(async () => {
   const before = window.__nativePasskeyBaseline;
   const key = window.PublicKeyCredential;
@@ -60,7 +78,9 @@ const NATIVE_PROBE = `(async () => {
       capabilities: key.getClientCapabilities === before.capabilities
     },
     conditionalBefore: await before.conditionalBefore,
-    conditionalAvailable: await key.isConditionalMediationAvailable()
+    conditionalAvailable: await key.isConditionalMediationAvailable(),
+    engine: before.capabilities ? await before.capabilities.call(key) : null,
+    mac: before.platform === 'darwin' ? await (${MAC_CALLS})() : undefined
   };
 })()`;
 app.whenReady().then(async () => {
@@ -80,6 +100,8 @@ app.whenReady().then(async () => {
   if (process.platform !== 'win32') {
     const ses = session.fromPartition('passkey-native-' + process.pid);
     ses.registerPreloadScript({type: 'frame', filePath: path.join(__dirname, 'native-preload.cjs')});
+    // The order content-blocking.cjs uses in test profiles: the QA stub below the guard. The stub only records on a Mac run.
+    if (process.platform === 'darwin') ses.registerPreloadScript({type: 'frame', filePath: path.join(__dirname, '..', '..', '..', 'desktop', 'browser-services', 'passkey-test-stub-preload.cjs')});
     ses.registerPreloadScript({type: 'frame', filePath: path.join(__dirname, '..', '..', '..', 'desktop', 'browser-services', 'passkey-guard-preload.cjs')});
     const page = new BrowserWindow({show: false, webPreferences: {session: ses, sandbox: true, contextIsolation: true, nodeIntegrationInSubFrames: true}});
     await page.loadURL(`http://127.0.0.1:${server.address().port}/native`);

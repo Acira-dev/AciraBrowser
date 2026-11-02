@@ -4,6 +4,7 @@ import './fonts.css';
 import './styles.css';
 import './shell-references.css';
 import './styles/platform.css';
+import './styles/fullscreen-lights.css';
 import './styles/selection.css';
 import './styles/ux-controls.css';
 import './frost-preview.css';

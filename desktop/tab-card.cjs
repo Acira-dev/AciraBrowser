@@ -41,7 +41,9 @@ function cardPlacement({anchor,side='below',height,window:win,scale=1,floor=0}){
   placed=fits?'below':'above';y=fits?below:anchor.y-gap-tall;x=fit(anchor.x,edge,win.width-width-edge);
  }
  x=Math.round(x);y=Math.round(y);
- const inset={left:placed==='right'?gap:margin,right:placed==='left'?gap:margin,top:placed==='below'?gap:margin,bottom:placed==='above'?gap:margin};
+ // The view's shadow room takes the pointer like the card does, so beside a sidebar tab near the top it stops at the floor and never
+ // reaches over the toolbar's back, forward and address controls (the card itself already starts at or below the floor).
+ const inset={left:placed==='right'?gap:margin,right:placed==='left'?gap:margin,top:placed==='below'?gap:beside?Math.max(0,Math.min(margin,y-floor)):margin,bottom:placed==='above'?gap:margin};
  return {side:placed,card:{x,y,width:Math.round(width),height:Math.round(tall)},
   bounds:{x:Math.round(x-inset.left),y:Math.round(y-inset.top),width:Math.round(width+inset.left+inset.right),height:Math.round(tall+inset.top+inset.bottom)},
   inset:{left:inset.left/scale,top:inset.top/scale}};

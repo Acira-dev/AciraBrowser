@@ -366,6 +366,73 @@ test('the page keeps its woken pixel back while an edge shows and gives it back 
   });
 });
 
+// ---- macOS fullscreen: the notch band above the window, and a fullscreen window that does not hold the keyboard -----------------------------------
+
+test('fullscreen on a notched display: the pointer in the band above the window (the menu bar\'s) shows the top, holds it while it rests there, and a jump from the middle of the page counts', () => {
+  const r = rig({ band: 29 });
+  // The window's top is at win.y; the band is the 29px above it.
+  const band = x => ({ x: win.x + x, y: win.y - 10 });
+  assert.equal(r.hold(away, 200).top, false);
+  // A jump (no sample close to the edge before it, which the exit-across-the-edge rule needs): the band alone shows the bar, at the short dwell.
+  const shown = r.until('top', band(300), 400);
+  assert.ok(shown !== null && shown <= DWELL_PUSH.top + STEP * 2, 'shown after the short dwell, got ' + shown);
+  assert.equal(r.hold(band(300), OUTSIDE_CAP + 1500).top, true, 'it stays while the pointer rests in the band, past the usual outside tolerance');
+  assert.equal(r.hold(away, GRACE.top + 300).top, false, 'and goes after the usual grace once the pointer is back in the page');
+});
+
+test('fullscreen band: only the band above the window counts (not beside it, not past its height), and a window without a band behaves as before', () => {
+  const r = rig({ band: 29 });
+  assert.equal(r.until('top', { x: win.x + 300, y: win.y - 40 }, 700), null, 'above the band: another screen, not the edge');
+  assert.equal(r.until('top', { x: win.x - 30, y: win.y - 10 }, 700), null, 'beside the window');
+  assert.equal(r.until('top', { x: win.x + win.width + 30, y: win.y - 10 }, 700), null, 'beside the window, right');
+  const plain = rig({ band: 0 });
+  assert.equal(plain.until('top', { x: win.x + 300, y: win.y - 10 }, 700), null, 'no band (a window that starts at the top of its display): a jump out of the window is no reveal');
+});
+
+test('fullscreen band: the band does not reveal while a button is held, and a hold ends only after the pointer has left and returned', () => {
+  const r = rig({ band: 29 });
+  const band = { x: win.x + 300, y: win.y - 10 };
+  assert.equal(r.hold(band, 700, { pressed: true }).top, false);
+  assert.equal(r.hold(band, 700).top, false, 'a release in the band is not a rest');
+  r.hold(away, 600);
+  assert.equal(r.hold(band, 500).top, true, 'after leaving and coming back it shows');
+});
+
+test('a fullscreen window whose Space is showing is live without the keyboard: its edges work and its band is read from the display; a windowed one stays idle', () => {
+  const emitted = [];
+  let timeout = null;
+  const clock = { t: 5000 };
+  const screen = { point: { x: 600, y: 429 }, getCursorScreenPoint() { return this.point; }, getDisplayMatching: () => ({ bounds: { x: 0, y: 0, width: 1352, height: 878 } }) };
+  const win = { focused: false, fullscreen: true, isDestroyed: () => false, isFocused() { return this.focused; }, isFullScreen() { return this.fullscreen; }, isMinimized: () => false, getContentBounds: () => ({ x: 0, y: 29, width: 1352, height: 849 }), on() {} };
+  let live = true;
+  const item = { window: win, state: { settings: { verticalTabs: true } }, emit: event => emitted.push(event), size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), docked: () => false, suspended: () => false, live: () => live };
+  const app = { whenReady: () => Promise.resolve(), on() {} };
+  watchChromeEdges({ app, windows: () => [item], screen, view: () => 'seamless', now: () => clock.t, schedule: fn => { timeout = fn; return { unref() {} }; }, cancel() {} });
+  const run = ms => { for (let i = 0; i < ms / 16; i++) { clock.t += 16; const fn = timeout; timeout = null; fn(); } };
+  const edges = () => emitted.filter(event => event.type === 'chrome-edge');
+  return Promise.resolve().then(() => {
+    timeout();
+    run(64);
+    screen.point = { x: 3, y: 429 };                                // the left edge, another app holds the keyboard
+    run(320);
+    assert.deepEqual(edges().at(-1), { type: 'chrome-edge', top: false, side: true, pinned: { top: false, side: false } }, 'the sidebar shows although the window is not key');
+    screen.point = { x: 600, y: 429 };
+    run(1200);
+    assert.equal(edges().at(-1).side, false);
+    screen.point = { x: 600, y: 10 };                               // in the menu bar\'s band above the window (the display starts at y 0, the window at 29)
+    run(320);
+    assert.equal(edges().at(-1).top, true, 'the band shows the top bar');
+    screen.point = { x: 600, y: 429 };
+    run(1200);
+    assert.equal(edges().at(-1).top, false);
+    live = false; win.fullscreen = false;                           // windowed, not key: idle as before
+    const before = edges().length;
+    screen.point = { x: 3, y: 429 };
+    run(480);
+    assert.equal(edges().length, before, 'a window that is not fullscreen and not key reveals nothing');
+  });
+});
+
 // ---- R4-24: the wider zone, intent, and a push out across the edge -----------------------------------------------------------
 test('R4-24: the zone reaches 10px into the window on the left and 8px at the top; 11px and 9px are the page', () => {
   within(rig().until('side', at(10, 300), 400), DWELL.side);

@@ -4,7 +4,8 @@ const {webcrypto}=require('node:crypto');
 const {requestFor,validateResult}=require('../desktop/browser-services/mac-passkey-policy.cjs');
 const {result}=require('./fixtures/passkey/records.cjs');
 const source=fs.readFileSync(path.join(__dirname,'../desktop/browser-services/mac-passkey-preload.cjs'),'utf8');
-function page({ready=true,platform='darwin',main=true,start}={}){
+const guardSource=fs.readFileSync(path.join(__dirname,'../desktop/browser-services/passkey-guard-preload.cjs'),'utf8');
+function page({ready=true,platform='darwin',main=true,start,guard=false}={}){
  const requests=[],cancels=[],context=vm.createContext({AbortController,DOMException,structuredClone,crypto:webcrypto,atob,btoa,process:{platform,isMainFrame:main},location:{href:'https://accounts.google.com/'}});
  vm.runInContext(`var window=globalThis;class CredentialsContainer {get(){return Promise.resolve('native-get')}create(){return Promise.resolve('native-create')}}
  class PublicKeyCredential {static isUserVerifyingPlatformAuthenticatorAvailable(){return Promise.resolve(false)}static isConditionalMediationAvailable(){return Promise.resolve(true)}static getClientCapabilities(){return Promise.resolve({conditionalGet:true,conditionalCreate:true,hybridTransport:true})}}
@@ -19,6 +20,8 @@ function page({ready=true,platform='darwin',main=true,start}={}){
   return {ok:true,credential:validateResult(req,result(req))};
  }};
  context.require=()=>({ipcRenderer,contextBridge:{executeInMainWorld({func,args}){func(...args);}}});
+ // content-blocking.cjs registers the passkey guard first; each preload has its own scope.
+ if(guard)vm.runInContext('(function(){'+guardSource+'\n})()',context);
  vm.runInContext(source,context);
  return {context,requests,cancels,run:code=>vm.runInContext(code,context)};
 }
@@ -54,6 +57,28 @@ test('Google-style AppID requests use the platform RP ID and report that the leg
 test('passwords, hardware-only requests and unsupported extension requests stay on Chromium',async()=>{
  const p=page();for(const code of ['{password:true}','{publicKey:{allowCredentials:[{type:"public-key",id:new Uint8Array([1]),transports:["usb"]}]}}','{publicKey:{extensions:{prf:{}}}}'])assert.equal(await p.run('navigator.credentials.get('+code+')'),'native-get');
  assert.equal(await p.run('navigator.credentials.create({publicKey:{authenticatorSelection:{authenticatorAttachment:"cross-platform"}}})'),'native-create');assert.equal(p.requests.length,0);
+});
+test('over the Mac passkey guard (registered first), the approved bridge keeps Apple passkeys and security keys; what it leaves to Chromium is answered at once',async()=>{
+ const p=page({guard:true});
+ assert.equal(await p.run('navigator.credentials.get({publicKey:{rpId:"google.com",challenge:new Uint8Array([1])}}).then(value=>value instanceof PublicKeyCredential)'),true);
+ assert.equal(p.requests.length,1,'a passkey request goes to the Apple sheet');
+ assert.equal(await p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array([1]),allowCredentials:[{type:"public-key",id:new Uint8Array([1]),transports:["usb"]}]}})'),'native-get');
+ assert.equal(await p.run('navigator.credentials.create({publicKey:{authenticatorSelection:{authenticatorAttachment:"cross-platform"}}})'),'native-create');
+ assert.equal(await p.run('navigator.credentials.get({password:true})'),'native-get');
+ // Chromium has no sheet for a request the bridge leaves to it (an extension it does not carry): refused at once, not left waiting.
+ await assert.rejects(p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array([1]),extensions:{prf:{}}}})'),{name:'NotAllowedError'});
+ assert.equal(await p.run('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()'),true);
+ assert.equal(await p.run('PublicKeyCredential.isConditionalMediationAvailable()'),false);
+ const caps=await p.run('PublicKeyCredential.getClientCapabilities()');
+ assert.equal(caps.passkeyPlatformAuthenticator,true);assert.equal(caps.conditionalGet,false);assert.equal(caps.hybridTransport,false,'no phone QR code in Electron');
+ assert.equal(p.requests.length,1);
+});
+test('without approval the guard alone answers: no platform passkey, and a passkey request is refused at once',async()=>{
+ const p=page({guard:true,ready:false});
+ assert.equal(await p.run('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()'),false);
+ assert.equal((await p.run('PublicKeyCredential.getClientCapabilities()')).passkeyPlatformAuthenticator,false);
+ await assert.rejects(p.run('navigator.credentials.get({publicKey:{rpId:"google.com",challenge:new Uint8Array([1])}})'),{name:'NotAllowedError'});
+ assert.equal(p.requests.length,0);
 });
 test('abort before dispatch never starts native authentication; abort during a request cancels it and keeps the original reason',async()=>{
  const early=page();const pending=early.run(`var control=new AbortController();var pending=navigator.credentials.get({publicKey:{challenge:new Uint8Array([1])},signal:control.signal});control.abort('stop');pending`);

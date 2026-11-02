@@ -11,20 +11,18 @@ html[data-platform=darwin] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::
  align-self:stretch;
  -webkit-app-region:drag;
 }
-/* In macOS fullscreen the native buttons are hidden: the band is not kept, docked or peeking, and the first section starts at the top as on
-   Windows (ui/windowFullscreen.ts; main says so with the window's new size, at the start of the fullscreen animation). */
-html[data-platform=darwin][data-window-fullscreen] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::before{flex-basis:0}
+/* In macOS fullscreen the native buttons are gone with AppKit's title strip, and Acira draws its own in the same place (ui/FullscreenLights.tsx), so the
+   band is kept there too, docked or peeking. */
 html[data-platform=darwin] .titlebar,
 html[data-platform=darwin] .focus-toolbar{padding-right:8px}
 /* Match the shared toolbar's specificity: its later three-:root padding
    shorthand used to erase Mac's inset in Compact and Focus. Reserve the native
    corner on the ROW, including sidebar tabs, so fitRow also measures that space.
    The nested leading group must not reserve it a second time.
-   In macOS fullscreen the native buttons are hidden, so the corner is not kept (ui/windowFullscreen.ts): the row starts at its own gutter.
-   The sidebar-out rules below stay stronger than these (one :has of two classes against one :not of an attribute). */
-:root:root:root[data-platform=darwin]:not([data-window-fullscreen]) .app.style-acira .acira-tab-row,
-:root:root:root[data-platform=darwin]:not([data-window-fullscreen]) .app.style-acira .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,
-:root:root:root[data-platform=darwin]:not([data-window-fullscreen]) .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{padding-left:var(--mac-caption-space,86px)}
+   In macOS fullscreen Acira draws the lights itself in the same place (ui/FullscreenLights.tsx), so the corner is kept there too. */
+:root:root:root[data-platform=darwin] .app.style-acira .acira-tab-row,
+:root:root:root[data-platform=darwin] .app.style-acira .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,
+:root:root:root[data-platform=darwin] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{padding-left:var(--mac-caption-space,86px)}
 /* With the sidebar out (docked or peeking) the native buttons sit over the sidebar, not beside the toolbar: the toolbar starts at
    the page's corner, so its first control lines up with that corner instead of keeping the buttons' space past the sidebar. */
 :root:root:root[data-platform=darwin] .app.style-acira:has(> .ed-rail.is-expanded) .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,

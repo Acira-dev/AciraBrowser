@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { CheckMark, CrossMark } from '../CheckMark';
-import { Info, ShieldCheck } from '../AppIcons';
+import { Info, ShieldCheck, Sparkles, SparklesOff } from '../AppIcons';
 import { WorkspaceGlyph } from '../WorkspaceGlyph';
 import type { StatusIcon } from '../../runtime/types';
 import { classScale, motionSpeed, motionTokens, springEasing, springFor, type MotionTokenId } from '../../ui/sharedMotion';
@@ -59,7 +59,7 @@ export function toastSlotSize(rows: ToastRowModel[], pill?: string, expanded = f
 
 const glyph = (tone?: ToastTone, icon?: StatusIcon) => {
   const name = icon || (tone === 'error' ? 'error' : tone === 'info' ? 'info' : 'check');
-  return name === 'workspace' ? <WorkspaceGlyph icon="workspace" /> : name === 'error' ? <CrossMark size={16} /> : name === 'info' ? <Info size={16} /> : name === 'shield' ? <ShieldCheck size={16} /> : <CheckMark size={16} />;
+  return name === 'workspace' ? <WorkspaceGlyph icon="workspace" /> : name === 'error' ? <CrossMark size={16} /> : name === 'info' ? <Info size={16} /> : name === 'shield' ? <ShieldCheck size={16} /> : name === 'sparkles' ? <Sparkles size={16} /> : name === 'sparkles-off' ? <SparklesOff size={16} /> : <CheckMark size={16} />;
 };
 
 /** The toast's leading spot (founder, 27 Oct, like macOS Notification Center): its status glyph at rest; while the pointer is

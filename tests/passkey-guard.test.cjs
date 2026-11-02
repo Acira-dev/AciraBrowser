@@ -4,7 +4,7 @@
 // answered quietly the way Chrome answers them with no passkey to offer. Passwords are untouched. The switch is read at every call (live).
 const {test}=require('node:test'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process'),path=require('node:path'),fs=require('node:fs'),vm=require('node:vm');
 const PRELOAD=path.join(__dirname,'..','desktop','browser-services','passkey-guard-preload.cjs');
-const source=fs.readFileSync(PRELOAD,'utf8'),GUARD=/const guard = (function \(allowed\) \{[\s\S]*?\n\});\r?\n/.exec(source)[1];
+const source=fs.readFileSync(PRELOAD,'utf8'),GUARD=/const guard = (function \(allowed, mac\) \{[\s\S]*?\n\});\r?\n/.exec(source)[1];
 
 // A stand-in window: Chromium's credential calls are recorded instead of reaching Windows; press() is a real click (a trusted event plus
 // transient activation, as Chromium gives); lapse() is the 5-second activation window running out.
@@ -46,13 +46,14 @@ function preloadedPage(platform,href='https://accounts.example/',allowed=false){
  const context=vm.createContext({AbortController,HREF:href,process:{platform}}),injected=[];
  vm.runInContext(WINDOW,context);
  const originals=vm.runInContext('[CredentialsContainer.prototype.get,CredentialsContainer.prototype.create,PublicKeyCredential.isConditionalMediationAvailable,PublicKeyCredential.getClientCapabilities]',context);
- context.require=name=>{assert.equal(name,'electron');return {ipcRenderer:{sendSync(channel){assert.equal(channel,'acira:passkeys-allowed');return allowed;}},contextBridge:{executeInMainWorld({func,args}){injected.push(func);return func(...args);}}};};
+ const asked=[];
+ context.require=name=>{assert.equal(name,'electron');return {ipcRenderer:{sendSync(channel){asked.push(channel);assert.equal(channel,'acira:passkeys-allowed');return allowed;}},contextBridge:{executeInMainWorld({func,args}){injected.push(func);return func(...args);}}};};
  vm.runInContext(source,context);
- return {run:code=>vm.runInContext(code,context),originals,injected};
+ return {run:code=>vm.runInContext(code,context),originals,injected,asked,calls:()=>JSON.parse(vm.runInContext('JSON.stringify(calls)',context))};
 }
 
-for(const platform of ['darwin','linux'])test(`${platform}: the actual preload preserves native passkey APIs, requests and capabilities`,async()=>{
- const p=preloadedPage(platform);
+test('linux: the actual preload preserves native passkey APIs, requests and capabilities',async()=>{
+ const p=preloadedPage('linux');
  assert.deepEqual(p.injected,[]);
  const current=p.run('[CredentialsContainer.prototype.get,CredentialsContainer.prototype.create,PublicKeyCredential.isConditionalMediationAvailable,PublicKeyCredential.getClientCapabilities]');
  current.forEach((value,i)=>assert.equal(value,p.originals[i],'native API reference is unchanged'));
@@ -64,6 +65,105 @@ for(const platform of ['darwin','linux'])test(`${platform}: the actual preload p
  assert.equal(await p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array(1)}})'), 'GOT');
  assert.equal(await p.run('navigator.credentials.get({mediation:"conditional",publicKey:{challenge:new Uint8Array(1)}})'), 'GOT');
  assert.equal(await p.run('navigator.credentials.create({publicKey:{challenge:new Uint8Array(1)}})'), 'CREATED');
+});
+
+// macOS (2 Nov): the founder's Google sign-in in the notarized 0.1.0-beta.7 sat on "Verifying it's you… Complete sign-in using your
+// passkey" until the session expired. No Mac build has Apple's browser passkey entitlement, Electron shows no passkey sheet or phone QR
+// code, yet the engine told Google a passkey would work. What Electron 44.9.3 (and the shipped ECS runtime) answered on a Mac:
+const ELECTRON_MAC_CAPABILITIES={conditionalCreate:true,conditionalGet:true,'extension:appid':true,'extension:credProps':true,'extension:largeBlob':true,'extension:prf':true,hybridTransport:true,immediateGet:true,passkeyPlatformAuthenticator:true,relatedOrigins:true,signalAllAcceptedCredentials:true,signalCurrentUserDetails:true,signalUnknownCredential:true,userVerifyingPlatformAuthenticator:false};
+function macPage(){
+ const context=vm.createContext({AbortController,HREF:'https://accounts.google.com/v3/signin/challenge/pk',ENGINE:ELECTRON_MAC_CAPABILITIES});vm.runInContext(WINDOW,context);
+ vm.runInContext('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function isUserVerifyingPlatformAuthenticatorAvailable() { return Promise.resolve(false); }; PublicKeyCredential.getClientCapabilities = function getClientCapabilities() { return Promise.resolve(Object.assign({}, ENGINE)); };',context);
+ vm.runInContext('('+GUARD+')',context)(()=>{throw new Error('a Mac never asks the main process');},true);
+ const run=code=>vm.runInContext(code,context);
+ return {context,run,calls:()=>JSON.parse(run('JSON.stringify(calls)')),press:()=>run('press()'),get:o=>run('navigator.credentials').get(o),create:o=>run('navigator.credentials').create(o)};
+}
+const credential=transports=>({type:'public-key',id:new Uint8Array([1,2,3]),...(transports?{transports}:{})});
+// Google's passkey challenge: the account's passkeys (iCloud Keychain, Google Password Manager) listed with internal and hybrid transports.
+const googlePasskey={challenge:new Uint8Array(32),rpId:'google.com',timeout:300000,userVerification:'preferred',allowCredentials:[credential(['internal','hybrid'])]};
+
+test('macOS: no platform passkey, phone or passkey autofill is reported, so Google does not pick a passkey it cannot get',async()=>{
+ const p=macPage();
+ assert.equal(await p.run('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()'),false);
+ assert.equal(await p.run('PublicKeyCredential.isConditionalMediationAvailable()'),false);
+ const caps=await p.run('PublicKeyCredential.getClientCapabilities()');
+ for(const name of ['passkeyPlatformAuthenticator','hybridTransport','userVerifyingPlatformAuthenticator','conditionalGet','conditionalCreate','immediateGet'])assert.equal(caps[name],false,name);
+ for(const name of ['extension:appid','extension:largeBlob','extension:prf','relatedOrigins','signalUnknownCredential'])assert.equal(caps[name],true,name+' stays as the engine reports it (security keys)');
+});
+
+test('macOS: a passkey request is refused at once with NotAllowedError, press or not, and never reaches the engine',async()=>{
+ const p=macPage();
+ const passkeyRequests=[
+  {publicKey:googlePasskey},
+  {publicKey:{challenge:new Uint8Array(1)}},
+  {publicKey:{...googlePasskey,allowCredentials:[credential(['internal'])]}},
+  {publicKey:{...googlePasskey,allowCredentials:[credential(['hybrid'])]}},
+  {publicKey:{...googlePasskey,allowCredentials:[credential()]}},
+  {publicKey:{...googlePasskey,allowCredentials:[credential(['usb']),credential(['internal','hybrid'])]}},
+  {publicKey:{...googlePasskey,allowCredentials:[credential([])]}},
+  {publicKey:{...googlePasskey,hints:['client-device']}},
+  {publicKey:{...googlePasskey,extensions:{appid:'https://www.gstatic.com/securitykey/origins.json'}}},
+  {mediation:'immediate',publicKey:{challenge:new Uint8Array(1)}},
+  {mediation:'required',publicKey:googlePasskey,signal:new AbortController().signal},
+ ];
+ for(const options of passkeyRequests){
+  assert.equal(await settledWithin(outcome(p.get(options)),50),'settled','refused at once, not after the 5-minute timeout: '+JSON.stringify(options.publicKey.allowCredentials));
+  assert.equal(await outcome(p.get(options)),'NotAllowedError: The operation either timed out or was not allowed.','the error a cancelled sheet gives');
+ }
+ p.press();
+ assert.match(await outcome(p.get({publicKey:googlePasskey})),/^NotAllowedError/,'a click does not change it: there is no sheet to open');
+ for(const options of [{publicKey},{publicKey:{...publicKey,authenticatorSelection:{authenticatorAttachment:'platform'}}},{publicKey:{...publicKey,authenticatorSelection:{residentKey:'required'}}},{publicKey:{...publicKey,hints:['hybrid']}}]){
+  assert.equal(await settledWithin(outcome(p.create(options)),50),'settled');
+  assert.match(await outcome(p.create(options)),/^NotAllowedError: The operation either timed out or was not allowed/);
+ }
+ assert.match(await outcome(p.create({mediation:'conditional',publicKey:{...publicKey,authenticatorSelection:{authenticatorAttachment:'cross-platform'}}})),/^NotAllowedError: Automatic passkey creation/);
+ assert.deepEqual(p.calls(),[],'nothing reached the engine');
+});
+
+test('macOS: a request only a security key can answer still reaches the engine (USB keys need no sheet), without a press',async()=>{
+ const p=macPage();
+ assert.equal(await outcome(p.get({publicKey:{...googlePasskey,allowCredentials:[credential(['usb'])]}})),'GOT');
+ assert.equal(await outcome(p.get({publicKey:{...googlePasskey,allowCredentials:[credential(['usb','nfc']),credential(['ble']),credential(['smart-card'])]}})),'GOT');
+ assert.equal(await outcome(p.get({publicKey:{challenge:new Uint8Array(1),hints:['security-key']}})),'GOT','a discoverable request that asks for a security key');
+ assert.equal(await outcome(p.create({publicKey:{...publicKey,authenticatorSelection:{authenticatorAttachment:'cross-platform'}}})),'CREATED');
+ assert.equal(await outcome(p.create({publicKey:{...publicKey,hints:['security-key']}})),'CREATED');
+ assert.deepEqual(p.calls(),['get','get','get','create','create']);
+});
+
+test('macOS: passwords, federated sign-in and calls without options are untouched; passkey autofill waits for the page to abort',async()=>{
+ const p=macPage();
+ assert.equal(await outcome(p.get({password:true})),'GOT');
+ assert.equal(await outcome(p.get({federated:{providers:['https://idp.example']}})),'GOT');
+ assert.equal(await outcome(p.get(undefined)),'GOT');
+ assert.equal(await outcome(p.create({password:{id:'a',password:'b'}})),'CREATED');
+ const controller=new AbortController(),pending=outcome(p.get({mediation:'conditional',publicKey,signal:controller.signal}));
+ assert.equal(await settledWithin(pending,50),'pending','as in Chrome with no passkey to offer');
+ controller.abort(new DOMException('page moved on','AbortError'));
+ assert.equal(await pending,'AbortError: page moved on');
+ assert.deepEqual(p.calls(),['get','get','get','create']);
+});
+
+test('macOS: the page cannot bend the decision: replaced Array methods change nothing, a throwing getter rejects instead of throwing',async()=>{
+ const p=macPage();
+ p.run('Array.prototype.every = function () { return true; }; Array.prototype.includes = function () { return true; }; Array.prototype.indexOf = function () { return 0; };');
+ assert.match(await outcome(p.get({publicKey:googlePasskey})),/^NotAllowedError/);
+ const thrown=p.get({publicKey:{challenge:new Uint8Array(1),get allowCredentials(){throw new TypeError('bad list');}}});
+ assert.equal(typeof thrown.then,'function','a promise, not a synchronous throw');
+ assert.equal(await outcome(thrown),'TypeError: bad list');
+ assert.deepEqual(p.calls(),[]);
+});
+
+test('macOS: the actual preload installs the Mac answers in website and srcdoc frames, asks the main process nothing, and leaves file pages alone',async()=>{
+ for(const href of ['https://accounts.google.com/','about:srcdoc','blob:https://accounts.google.com/1']){
+  const p=preloadedPage('darwin',href);
+  assert.equal(p.injected.length,1,href);
+  assert.equal(await p.run('PublicKeyCredential.isConditionalMediationAvailable()'),false);
+  assert.equal((await p.run('PublicKeyCredential.getClientCapabilities()')).passkeyPlatformAuthenticator,false);
+  assert.match(await outcome(p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array(1)}})')),/^NotAllowedError/);
+  assert.equal(await p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array(1),allowCredentials:[{type:"public-key",id:new Uint8Array(1),transports:["usb"]}]}})'),'GOT');
+  assert.deepEqual(p.calls(),['get']);assert.deepEqual(p.asked,[],'no setting is read on a Mac');
+ }
+ assert.equal(preloadedPage('darwin','file:///Users/someone/page.html').injected.length,0);
 });
 
 test('Windows: the actual preload still guards requests in HTTPS and srcdoc frames',async()=>{
@@ -248,6 +348,10 @@ test('the Windows guard covers every website frame, never needs another file (sa
  // The QA stub sits below the guard, and only in test profiles with its own switch on.
  assert.match(blocking,/if\(process\.env\.ACIRA_BROWSER_TEST_DATA&&process\.env\.ACIRA_TEST_PASSKEY_STUB==='1'\)session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','passkey-test-stub-preload\.cjs'\)\}\);session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','passkey-guard-preload\.cjs'\)\}\)/);
  assert.equal((blocking.match(/passkey-test-stub-preload/g)||[]).length,1);
+ // macOS: the guard's Mac answers need no main-process question, and an approved Apple bridge is registered after it, so it sits on top.
+ assert.match(source,/process\.platform==='darwin'[\s\S]*executeInMainWorld\(\{func:guard,args:\[null,true\]\}\)/);
+ assert.match(blocking,/'passkey-guard-preload\.cjs'\)\}\);if\(process\.platform==='darwin'\)session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','mac-passkey-preload\.cjs'\)\}\)/);
+ assert.match(blocking,/if\(process\.platform==='win32'\)pipeline\.useHeaders\(passkeyPolicy\)/,'no Permissions-Policy denial on a Mac: security keys still work');
 });
 
 // The same script in real Chromium (Electron), with the credential calls stubbed so no Windows dialog can open.
@@ -261,7 +365,7 @@ if(electron){
 }
 const skip=!electron?'electron binary not available':false;
 test('Chromium: fixture run finished',{skip},()=>assert.ok(result,problem));
-test('Chromium: the registered sandboxed preload preserves native macOS/Linux APIs in pages, frames and popups',{skip:skip||process.platform==='win32'},()=>{
+test('Chromium: the registered sandboxed preload preserves native Linux APIs in pages, frames and popups',{skip:skip||process.platform!=='linux'},()=>{
  for(const [name,probe] of Object.entries(result.native)){
   assert.equal(probe.platform,process.platform,name);
   assert.equal(probe.sandboxed,true,name);
@@ -269,6 +373,25 @@ test('Chromium: the registered sandboxed preload preserves native macOS/Linux AP
   assert.equal(probe.conditionalAvailable,probe.conditionalBefore,name);
  }
  assert.deepEqual(Object.keys(result.native).sort(),['frame','page','popup']);
+});
+// macOS: the registered preload in real Chromium, with the engine's credential calls recorded below it (the QA stub), so no request can
+// reach a real authenticator. The engine's own answers before the guard are the ones that sent Google to its passkey page.
+test('Chromium on macOS: the engine claims passkeys; the registered preload answers no platform passkey, phone or autofill in pages, frames and popups',{skip:skip||process.platform!=='darwin'},()=>{
+ assert.deepEqual(Object.keys(result.native).sort(),['frame','page','popup']);
+ for(const [name,probe] of Object.entries(result.native)){
+  assert.equal(probe.platform,'darwin',name);assert.equal(probe.sandboxed,true,name);
+  assert.equal(probe.conditionalBefore,true,name+': Electron says passkey autofill works');
+  assert.equal(probe.engine.passkeyPlatformAuthenticator,true,name+': Electron says a passkey can be used');
+  assert.equal(probe.engine.hybridTransport,true,name+': Electron says a phone can be used, yet shows no QR code');
+  const mac=probe.mac;assert.ok(mac,name+': the engine stub sits below the guard');
+  assert.equal(mac.uvpaa,false,name);assert.equal(probe.conditionalAvailable,false,name);
+  for(const capability of ['passkeyPlatformAuthenticator','hybridTransport','userVerifyingPlatformAuthenticator','conditionalGet','conditionalCreate','immediateGet'])assert.equal(mac.capabilities[capability],false,`${name}: ${capability}`);
+  assert.equal(mac.capabilities['extension:prf'],probe.engine['extension:prf'],name+': extension support stays the engine\'s');
+  for(const label of ['passkey','discoverable','create']){assert.equal(mac[label],'NotAllowedError: The operation either timed out or was not allowed.',`${name}: ${label}`);assert.ok(mac[label+'Ms']<500,`${name}: ${label} refused at once (${mac[label+'Ms']} ms)`);}
+  assert.equal(mac.securityKey,'STUBBED',name+': a security-key request reaches the engine');assert.equal(mac.createSecurityKey,'STUBBED',name);
+  assert.equal(mac.password,'STUBBED',name+': passwords are untouched');
+  assert.deepEqual(mac.calls,['get','create','get'],name+': only the security key and password calls reached the engine');
+ }
 });
 test('Chromium: without a press, autofill is unavailable, conditional sign-in waits for the abort and passkey calls are refused',{skip},()=>{
  const {without}=result;

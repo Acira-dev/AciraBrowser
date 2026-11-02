@@ -23,8 +23,7 @@
     "build:windows": "node scripts/build-windows.mjs",
     "test:regressions": "node scripts/run-ui-regressions.mjs",
     "version:next": "node scripts/version-next.mjs",
-    "publish:update": "node scripts/publish-update.mjs",
-    "release:windows:update": "node scripts/windows-update-release.mjs"
+    "publish:update": "node scripts/publish-update.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.17.3",
@@ -278,6 +277,7 @@
       "tests/ext-api-runtime.test.cjs",
       "tests/ext-api-web-request.test.cjs",
       "tests/ext-api-web-navigation.test.cjs",
+      "tests/ext-api-downloads.test.cjs",
       "tests/ext-api-downloads-engine.test.cjs",
       "tests/ext-api-history.test.cjs",
       "tests/ext-api-action.test.cjs",
@@ -306,11 +306,9 @@
       "tests/update-verify.test.cjs",
       "tests/publish-update.test.mjs",
       "tests/version-next.test.mjs",
-      "tests/windows-update-release.test.mjs",
       "tests/windows-update-config.test.cjs"
     ],
     "serial": [
-      "tests/ext-api-downloads.test.cjs",
       "tests/search-preview.test.cjs",
       "tests/page-still.test.cjs",
       "tests/peek-polish.test.cjs",
@@ -446,8 +444,12 @@
       "tests/peek-frame.test.ts",
       "tests/sidebar-media.test.ts",
       "tests/window-view.test.ts",
+      "tests/fullscreen-lights.test.ts",
       "tests/window-fullscreen-corner.test.ts",
       "tests/appearance-crossfade-curve.test.ts",
+      "tests/popup-host-caption.test.ts",
+      "tests/ai-free-icon.test.ts",
+      "tests/tab-control-tips.test.ts",
       "tests/seamless-motion.test.ts",
       "tests/layout-switch-send.test.ts",
       "tests/sidebar-page-follow-clock.test.ts",

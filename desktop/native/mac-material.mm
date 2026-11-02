@@ -326,8 +326,25 @@ static napi_value HideFullscreenStrip(napi_env env, napi_callback_info info) {
     napi_value answer; napi_create_int32(env, held, &answer); return answer;
   }
 }
+// Is this window on the Space the person is looking at (a fullscreen window is its own Space, so this is "its Space is showing on its display")?
+// Electron's isVisible() stays true for a window on another Space, and isFocused() is false whenever another app has the keyboard.
+static NSWindow *WindowOf(napi_env env, napi_callback_info info) {
+  size_t argc = 1, length = 0; napi_value args[1]; void *bytes = nullptr;
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc != 1 || napi_get_buffer_info(env, args[0], &bytes, &length) != napi_ok || length != sizeof(void *)) { napi_throw_type_error(env, nullptr, "Expected a native window handle"); return nil; }
+  uintptr_t address = 0; std::memcpy(&address, bytes, sizeof(address));
+  if (!address) { napi_throw_error(env, nullptr, "Window handle is null"); return nil; }
+  NSView *view = (__bridge NSView *)(reinterpret_cast<void *>(address)); return view.window;
+}
+static napi_value WindowOnActiveSpace(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    NSWindow *window = WindowOf(env, info); bool on = window && window.isOnActiveSpace && window.isVisible && !window.isMiniaturized && !NSApp.isHidden;
+    napi_value answer; napi_get_boolean(env, on, &answer); return answer;
+  }
+}
 NAPI_MODULE_INIT() {
   InstallMacPasskeys(env,exports);
+  { napi_value onSpace; napi_create_function(env, "windowOnActiveSpace", NAPI_AUTO_LENGTH, WindowOnActiveSpace, nullptr, &onSpace); napi_set_named_property(env, exports, "windowOnActiveSpace", onSpace); }
   napi_value set, inspect, buttons, available, authenticate;
   napi_create_function(env, "setAppearance", NAPI_AUTO_LENGTH, Set, nullptr, &set);
   napi_create_function(env, "inspect", NAPI_AUTO_LENGTH, Inspect, nullptr, &inspect);

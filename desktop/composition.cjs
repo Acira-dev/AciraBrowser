@@ -199,8 +199,12 @@ class MaterialHost {
     const aboveAnchor=!centered&&config.anchor&&config.origin?.y===1;
     // Transparent shadow margins must never become invisible hit targets over
     // the toolbar control that opened this panel (or its neighboring controls).
+    // The panel itself is never cropped by that rule: a right-click menu opens at
+    // the pointer, so one opened in the toolbar row starts above the caption line
+    // (beta.7: Toolbar options lost its title row under the toolbar), and its
+    // shadow margin then stops at its own top edge.
     const topLimit=belowAnchor?config.anchor.y+config.anchor.height:layout.captionHeight||40;
-    const y=Math.max(layout.captionHeight||40,topLimit,p.y-SHADOW.top);
+    const y=Math.min(p.y,Math.max(layout.captionHeight||40,topLimit,p.y-SHADOW.top));
     const bottom=Math.min(size[1],aboveAnchor?config.anchor.y:size[1],p.y+p.height+SHADOW.bottom);
     let destination=clampBounds({x,y,width:Math.min(size[0],p.x+p.width+SHADOW.side)-x,height:Math.max(0,bottom-y)},size);
     // A child form extends only the input/crop host. The primary panel and its
@@ -208,7 +212,7 @@ class MaterialHost {
     if(config.auxiliaryBounds){
       const child=clampBounds(config.auxiliaryBounds,size);
       const left=Math.max(0,Math.min(destination.x,child.x-SHADOW.side));
-      const top=Math.max(layout.captionHeight||40,topLimit,Math.min(destination.y,child.y-SHADOW.top));
+      const top=Math.min(destination.y,child.y,Math.max(layout.captionHeight||40,topLimit,Math.min(destination.y,child.y-SHADOW.top)));
       const right=Math.min(size[0],Math.max(destination.x+destination.width,child.x+child.width+SHADOW.side));
       const end=Math.min(size[1],aboveAnchor?config.anchor.y:size[1],Math.max(destination.y+destination.height,child.y+child.height+SHADOW.bottom));
       destination=clampBounds({x:left,y:top,width:right-left,height:Math.max(0,end-top)},size);

@@ -68,7 +68,8 @@ const distanceOutside = (point, b) => {
  * edges {top, side} (the Seamless switches), peek {full, compact, focus} (the closed sidebar's switch per view), keys {top, side} (a key press asked for the edge: Ctrl+L, F10, a new tab), holds {top, side}
  * (what keeps a showing edge open: a popup, a drag, focus in the chrome), size {topHeight, sideWidth} (how big the revealed chrome
  * is, DIPs), pressed (a button held in any frame, an in-page drag, a native menu or dialog: nothing reveals), engaged (the page
- * reports something to use under the pointer: a longer rest is needed, see ENGAGED_DWELL). Pins (Ctrl+Shift+E) are set with pin(). */
+ * reports something to use under the pointer: a longer rest is needed, see ENGAGED_DWELL), band (DIPs of screen above the window that the system keeps for itself
+ * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere). Pins (Ctrl+Shift+E) are set with pin(). */
 function createEdgeController({ now = Date.now } = {}) {
   const zones = { top: fresh(), side: fresh() };
   let lastBounds = null, prev = null, lastInside = null, exit = null, crossed = null;
@@ -94,8 +95,12 @@ function createEdgeController({ now = Date.now } = {}) {
     // Windows: the caption buttons' corner (top right, hidden with the toolbar) shows the top at once, so the buttons are back
     // under the pointer before it can click where they are.
     const caption = input.caption && rel ? rel.x >= b.width - input.caption.width && rel.y < input.caption.height : false;
+    // macOS fullscreen on a notched display: the window sits below the camera housing and the menu bar comes down in the band above it, so
+    // the pointer that goes to "the top" ends in that band, outside the window. It is at the top edge of the screen, which is what the zone
+    // stands for: it counts as pressing against the window's top edge, and keeps the bar open while it stays there.
+    const inBand = !!(point && b && input.band > 0 && point.x >= b.x && point.x < b.x + b.width && point.y < b.y && point.y >= b.y - input.band);
     const trigger = {
-      top: !!(live && rel && (rel.y <= EDGE.top || caption)),
+      top: !!(live && (rel && (rel.y <= EDGE.top || caption) || inBand)),
       side: !!(live && rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top),
     };
     // A push out across the left or top edge (the founder's two monitors: the window's edge is not the screen's, so the pointer
@@ -124,9 +129,9 @@ function createEdgeController({ now = Date.now } = {}) {
     }
     const exited = { top: bounced.top || (exit?.zone === 'top' && !!exit.still && t - exit.still >= EXIT_DWELL), side: bounced.side || (exit?.zone === 'side' && !!exit.still && t - exit.still >= EXIT_DWELL) };
     const toward = { top: -v.y, side: -v.x }, along = { top: point ? point.x : 0, side: point ? point.y : 0 };
-    const pushing = { top: !!(rel && rel.y <= PUSH), side: !!(rel && rel.x <= PUSH) };
+    const pushing = { top: !!(rel && rel.y <= PUSH) || inBand, side: !!(rel && rel.x <= PUSH) };
     const onChrome = {
-      top: !!(inside && rel.y <= size.topHeight + LEEWAY),
+      top: inBand || !!(inside && rel.y <= size.topHeight + LEEWAY),
       // Full/Compact/Focus keep one connected frame: crossing into its toolbar is not leaving for the page.
       side: !!(inside && (rel.x <= size.sideWidth + LEEWAY || input.view !== 'seamless' && rel.y <= size.topHeight + LEEWAY)),
     };
@@ -212,7 +217,9 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       if (!win || win.isDestroyed?.()) { seen.delete(item); continue; }
       const entry = entryOf(item);
       if (!entry.listening) { entry.listening = true; const change = () => entry.edge.geometryChanged(); for (const name of ['resize', 'move']) win.on?.(name, change); }
-      const state = item.state, effective = view(state), focused = !!win.isFocused?.(), peek = item.peek?.() || null;
+      // A fullscreen window is the only thing its display shows: another app holding the keyboard (the other monitor, Spotlight, a notification) must not stop
+      // its edges, or the sidebar "would not reveal" until a click gave the window the keyboard back. `live()` is main's word for that (the window's Space is showing).
+      const state = item.state, effective = view(state), focused = !!win.isFocused?.() || !!item.live?.(), peek = item.peek?.() || null;
       const input = { view: effective, vertical: !!state?.settings?.verticalTabs, docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek };
       const enabled = enabledEdges(input);
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
@@ -222,9 +229,11 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       if (!wants && !entry.edge.active() && !entry.last.top && !entry.last.side && !entry.last.pinned.top && !entry.last.pinned.side) continue;
       fast = true;
       if (TRACE) { const line = JSON.stringify({ pressed: !!item.pressed?.(), engaged: !!item.engaged?.(), ...item.why?.() }); if (line !== entry.intent) { entry.intent = line; console.log('[edge-intent]', Date.now(), line); } }
+      const bounds = win.getContentBounds();
       const result = entry.edge.sample({
         point: focused || entry.edge.active() ? screen.getCursorScreenPoint() : null,
-        bounds: win.getContentBounds(),
+        bounds,
+        band: win.isFullScreen?.() ? Math.max(0, bounds.y - (screen.getDisplayMatching?.(bounds)?.bounds.y ?? bounds.y)) : 0,
         focused,
         suspended: !!item.suspended?.() || !!win.isMinimized?.(),
         ...input,

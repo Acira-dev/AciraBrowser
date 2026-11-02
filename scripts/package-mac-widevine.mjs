@@ -22,8 +22,9 @@ const {readMacTor,NATIVE_FILES}=require('../desktop/browser-services/tor-mac.cjs
 const signer=require('../desktop/browser-services/mac-distribution-identity.cjs');
 const {notarizationPolicy,notarizeBundle,notarize,stapleAndAssess,sealedNotarization,notarizationOutcome}=require('../packaging/macos/notarization.cjs');
 const {createMacUpdateZip}=require('../packaging/macos/update-zip.cjs');
+const {preparePasskeySigning,verifySignedPasskeys}=require('../packaging/macos/passkeys.cjs');
 const read=async file=>JSON.parse(await fs.readFile(file,'utf8'));
-export async function packageMacWidevine(candidate,{template,arch=process.arch,version,signingIdentity=process.env.ACIRA_MAC_SIGN_IDENTITY||`Developer ID Application: ${signer.name} (${signer.team})`,dmg=true,updateZip=true,notaryProfile=process.env.ACIRA_MAC_NOTARY_PROFILE}={}){
+export async function packageMacWidevine(candidate,{template,arch=process.arch,version,signingIdentity=process.env.ACIRA_MAC_SIGN_IDENTITY||`Developer ID Application: ${signer.name} (${signer.team})`,dmg=true,updateZip=true,notaryProfile=process.env.ACIRA_MAC_NOTARY_PROFILE,browserPasskeyProfile=process.env.ACIRA_MAC_BROWSER_PASSKEY_PROFILE}={}){
  if(process.platform!=='darwin')throw Error('Mac Widevine packaging requires macOS; Windows packaging is unchanged.');
  if(!['arm64','x64'].includes(arch))throw Error('Choose arm64 or x64 for the Mac Widevine runtime.');
  if(!process.env.EVS_CONFIG_FILE)throw Error('Set EVS_CONFIG_FILE to an existing private EVS login; no credential is created or shipped.');
@@ -63,7 +64,12 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  assert.equal(info.CFBundleIdentifier,'computer.acira.browser');
  info.CFBundleVersion=macBuildVersion();info.CFBundleShortVersionString=version.split('-')[0];info.LSMinimumSystemVersion='13.0';
  await fs.writeFile(infoFile,plist.build(info));await require('../packaging/macos/icon.cjs').applyMacIcon(appBundle,repo);await writeMacUpdateConfig(resources);
- const build={version,commit:head,sourceDigest:source.sourceDigest,electron:source.electron,arch,minimumMacOS:'13.0',notarization:sealedNotarization(notary),iCloudPasskeysEnabled:false,widevine:{runtime:runtime.release,archiveSha256:runtime.archiveSha256,cdm:'Downloaded and updated by Google component updater; not bundled',productionVmpSigned:false}};
+ // Browser passkeys (docs/launch/ICLOUD_PASSKEYS.md) only with Apple's approved Developer ID provisioning profile: it is validated, embedded
+ // here and its managed entitlement goes on the browser root alone. A profile the template carried never ships by itself.
+ await fs.rm(path.join(contents,'embedded.provisionprofile'),{force:true});
+ const passkeyWork=browserPasskeyProfile?await fs.mkdtemp(path.join(os.tmpdir(),'acira-widevine-passkeys-')):null;
+ const passkeys=await preparePasskeySigning({application:appBundle,work:passkeyWork,profilePath:browserPasskeyProfile,policy});
+ const build={version,commit:head,sourceDigest:source.sourceDigest,electron:source.electron,arch,minimumMacOS:'13.0',notarization:sealedNotarization(notary),iCloudPasskeysEnabled:Boolean(passkeys),widevine:{runtime:runtime.release,archiveSha256:runtime.archiveSha256,cdm:'Downloaded and updated by Google component updater; not bundled',productionVmpSigned:false}};
  await fs.writeFile(path.join(resources,'ACIRA-BUILD.json'),JSON.stringify(build,null,2)+'\n');
  const asarIntegrity=await sealAsar(appBundle);
  await configureWidevineFuses(appBundle);
@@ -71,12 +77,13 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  const vmpBefore=await signWidevine(appBundle);console.log(vmpBefore.diagnostic);
  build.widevine.productionVmpSigned=true;await fs.writeFile(path.join(resources,'ACIRA-BUILD.json'),JSON.stringify(build,null,2)+'\n');
  const code=await signingTargets(appBundle);console.log('Signing '+code.size+' Mac code targets; data files remain resources.');
- await signAsync({app:appBundle,identity:policy.identity,identityValidation:true,platform:'darwin',type:'distribution',preAutoEntitlements:false,preEmbedProvisioningProfile:false,ignore:file=>!code.has(path.resolve(file)),optionsForFile:file=>({hardenedRuntime:true,entitlements:path.join(repo,'packaging/mac',path.resolve(file)===appBundle?'entitlements.mac.plist':'entitlements.mac.inherit.plist')})});
+ await signAsync({app:appBundle,identity:policy.identity,identityValidation:true,platform:'darwin',type:'distribution',preAutoEntitlements:false,preEmbedProvisioningProfile:false,ignore:file=>!code.has(path.resolve(file)),optionsForFile:file=>({hardenedRuntime:true,entitlements:path.resolve(file)===appBundle?(passkeys?.entitlements||path.join(repo,'packaging/mac/entitlements.mac.plist')):path.join(repo,'packaging/mac/entitlements.mac.inherit.plist')})});
  const torMeta=await read(path.join(tor,'native-manifest.json'));for(const name of NATIVE_FILES)torMeta.files[name]=await hashFile(path.join(tor,name));
  await fs.writeFile(path.join(tor,'native-manifest.json'),JSON.stringify(torMeta,null,2)+'\n');
  await run('/usr/bin/codesign',resealArguments(appBundle,policy));
  await run('/usr/bin/codesign',['--verify','--deep','--strict',appBundle]);
  verifySigningDetails((await run('/usr/bin/codesign',['--display','--verbose=4',appBundle])).stderr,policy);
+ if(passkeys){await verifySignedPasskeys(appBundle,passkeys);await fs.rm(passkeyWork,{recursive:true,force:true});}
  const vmpAfter=await signWidevine(appBundle,{verifyOnly:true});assert(readMacTor(path.join(tor,'tor'),{arch}));
  const expected=arch==='x64'?'x86_64':'arm64';assert.equal((await run('/usr/bin/lipo',['-archs',path.join(contents,'MacOS/AciraBrowser')])).stdout.trim(),expected);
  // Apple notarization only when ACIRA_MAC_NOTARY_PROFILE names existing notarytool credentials: the browser is notarized and stapled
@@ -88,7 +95,7 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  let update=null;
  if(updateZip&&notary.enabled){console.log('Zipping and verifying the update archive');update=await createMacUpdateZip({appBundle,output,version,arch});}
  else if(updateZip)console.log('No update ZIP: it needs a notarized app (set ACIRA_MAC_NOTARY_PROFILE).');
- const receipt={...build,signedCodeTargets:code.size,appBundle,output,candidate,distributionSigned:true,signingIdentity:policy.identity,cookieEncryption:true,asarIntegrity,vmpBefore,vmpAfter,automaticUpdateOffered:false,updateZip:update,...notarizationOutcome(appleSubmission?.browser),appleSubmission,canonicalAppUntouched:true}; // measured after stapling: the receipt sits beside the app, so it can say what the sealed ACIRA-BUILD.json cannot
+ const receipt={...build,signedCodeTargets:code.size,appBundle,output,candidate,distributionSigned:true,signingIdentity:policy.identity,cookieEncryption:true,asarIntegrity,vmpBefore,vmpAfter,automaticUpdateOffered:false,updateZip:update,browserPasskeys:passkeys?{capability:passkeys.capability,applicationIdentifier:passkeys.applicationIdentifier,requiresNewSignedBuild:true,realAccountAuthenticationVerified:false}:null,...notarizationOutcome(appleSubmission?.browser),appleSubmission,canonicalAppUntouched:true}; // measured after stapling: the receipt sits beside the app, so it can say what the sealed ACIRA-BUILD.json cannot
  if(dmg){
   const setup=await packageBetaInstaller({repo,browser:appBundle,output,source:{...source,arch},version,policy,archiveApplication:true,notarization:sealedNotarization(notary),payloadNotarized:notarizationOutcome(appleSubmission?.browser).stapled});Object.assign(receipt,setup);
   if(notary.enabled){console.log('Notarizing the installer with Apple');appleSubmission.installer=await notarizeBundle({bundle:setup.installer,work:notaryWork,policy:notary});const outcome=notarizationOutcome(appleSubmission.installer);receipt.installerNotarized=outcome.notarized;receipt.installerStapled=outcome.stapled;}
@@ -104,7 +111,7 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
   }finally{await fs.rm(work,{recursive:true,force:true});}
  }
  receipt.packagingInputs=[];
- for(const file of ['scripts/package-mac-widevine.mjs','scripts/fetch-mac-widevine.mjs','packaging/macos/widevine.cjs','packaging/macos/widevine-runtime.json','packaging/macos/update-zip.cjs','packaging/macos/update-verify.cjs'])receipt.packagingInputs.push({file,sha256:await hashFile(path.join(repo,file))});
+ for(const file of ['scripts/package-mac-widevine.mjs','scripts/fetch-mac-widevine.mjs','packaging/macos/widevine.cjs','packaging/macos/passkeys.cjs','packaging/mac/entitlements.mac.plist','packaging/macos/widevine-runtime.json','packaging/macos/update-zip.cjs','packaging/macos/update-verify.cjs'])receipt.packagingInputs.push({file,sha256:await hashFile(path.join(repo,file))});
  await fs.writeFile(path.join(output,'mac-widevine-package.json'),JSON.stringify(receipt,null,2)+'\n');
  if(notaryWork)await fs.rm(notaryWork,{recursive:true,force:true});
  return receipt;

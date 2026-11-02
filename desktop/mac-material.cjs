@@ -26,4 +26,11 @@ function hideFullscreenStrip(window){
  try{return bridge.hideFullscreenStrip(window.getNativeWindowHandle());}
  catch(error){if(!warningShown){console.warn('Mac fullscreen titlebar:',error.message);warningShown=true;}return 0;}
 }
-module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip};
+// Is the window on the Space on screen (a fullscreen window is its own Space)? False when unknown. Key status says nothing about it: another app
+// can hold the keyboard while this window is the only thing its display shows.
+function windowOnActiveSpace(window){
+ if(!bridge?.windowOnActiveSpace||!window||window.isDestroyed())return false;
+ try{return !!bridge.windowOnActiveSpace(window.getNativeWindowHandle());}
+ catch(error){if(!warningShown){console.warn('Mac window space:',error.message);warningShown=true;}return false;}
+}
+module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip,windowOnActiveSpace};

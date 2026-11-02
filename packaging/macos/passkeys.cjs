@@ -29,6 +29,19 @@ async function preparePasskeySigning({application,work,profilePath,policy,appId=
  await fs.copyFile(file,path.join(application,'Contents','embedded.provisionprofile'));
  return {entitlements,applicationIdentifier:managed['com.apple.application-identifier'],capability:CAPABILITY,requiresNewSignedBuild:true};
 }
+// After the final seal: the browser root really carries the managed entitlement for this app identifier, beside the embedded profile.
+// (A re-sign without --preserve-metadata=entitlements, or a root signed with the plain template, silently ships without passkeys.)
+async function signedEntitlements(application){
+ const result=await exec('/usr/bin/codesign',['--display','--entitlements','-','--xml',application],{timeout:15000,maxBuffer:2*1024*1024});
+ return plist.parse(result.stdout);
+}
+async function verifySignedPasskeys(application,prepared,{read=signedEntitlements}={}){
+ const signed=await read(application);
+ if(signed?.[CAPABILITY]!==true||signed['com.apple.application-identifier']!==prepared.applicationIdentifier)throw Error('The signed browser does not carry the approved passkey entitlement for '+prepared.applicationIdentifier+'.');
+ const profile=await fs.lstat(path.join(application,'Contents','embedded.provisionprofile')).catch(()=>null);
+ if(!profile?.isFile())throw Error('The signed browser has no embedded passkey provisioning profile.');
+ return true;
+}
 function configureBuilderPasskeys(config,env){
  const profilePath=env.ACIRA_MAC_BROWSER_PASSKEY_PROFILE;
  if(!profilePath)return config;
@@ -45,4 +58,4 @@ function configureBuilderPasskeys(config,env){
  };
  return config;
 }
-module.exports={CAPABILITY,validateProfile,decodeProfile,preparePasskeySigning,configureBuilderPasskeys};
+module.exports={CAPABILITY,validateProfile,decodeProfile,preparePasskeySigning,signedEntitlements,verifySignedPasskeys,configureBuilderPasskeys};

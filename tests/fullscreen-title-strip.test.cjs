@@ -29,3 +29,21 @@ test('the native side keeps the strip invisible and mouse-transparent, and lets 
  assert.match(source,/NSWindowWillExitFullScreenNotification, NSWindowWillCloseNotification/,'no observer outlives the strip window');
  assert.match(source,/NSMaxY\(f\) - NSMaxY\(m\)/,'only the strip of this window');
 });
+
+// A fullscreen window is the only thing its display shows, but it is not always the key window (another app on the other monitor, Spotlight, a
+// notification): the edges used to need the keyboard, so the sidebar "would not reveal" until a click gave it back (founder, 2 Nov).
+test('the Space check answers false, never throws, without a window, a destroyed window or a handle the native side refuses',()=>{
+ const {windowOnActiveSpace}=require('../desktop/mac-material.cjs');
+ assert.equal(windowOnActiveSpace(null),false);
+ assert.equal(windowOnActiveSpace({isDestroyed:()=>true}),false);
+ assert.equal(windowOnActiveSpace({isDestroyed:()=>false,getNativeWindowHandle:()=>Buffer.alloc(8)}),false,'a null handle');
+});
+
+test('main calls a fullscreen window live while its Space is showing, and the edge poller lets that stand in for the keyboard',()=>{
+ const main=read('desktop/main.cjs');
+ assert.match(main,/live:\(\)=>process\.platform==='darwin'&&!!mainWindow&&!mainWindow\.isDestroyed\(\)&&mainWindow\.isFullScreen\(\)&&windowOnActiveSpace\(mainWindow\),/);
+ const poller=read('desktop/edge-reveal.cjs');
+ assert.match(poller,/focused = !!win\.isFocused\?\.\(\) \|\| !!item\.live\?\.\(\)/);
+ const native=read('desktop/native/mac-material.mm');
+ assert.match(native,/window\.isOnActiveSpace && window\.isVisible && !window\.isMiniaturized && !NSApp\.isHidden/);
+});

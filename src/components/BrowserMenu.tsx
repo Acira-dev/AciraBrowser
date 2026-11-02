@@ -5,7 +5,7 @@ import { formatShortcut, isMac, isTorSupported } from '../ui/platform';
 import { menuShortcut } from '../ui/shortcutKeys';
 import {runtime} from '../runtime/client';
 import { defaultMenuLayout,platformMenuLayout,menuSections,type MenuItemId,type MenuLayout } from '../ui/menuPrefs';
-import { ChevronLeft,Code2,FocusRow,PanelLeft,SeamlessRow,Link2,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Star,Undo2 } from './AppIcons';
+import { ChevronLeft,Code2,FocusRow,PanelLeft,SeamlessRow,Link2,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Sparkles,SparklesOff,Star,Undo2 } from './AppIcons';
 import { ExtensionsIcon } from './ToolbarIcon';
 import { TorCircuitGlyph, TorGlyph } from '../features/tor/TorChip';
 import { copyText } from '../ui/pageActions';
@@ -16,14 +16,15 @@ import type { WindowView } from '../runtime/windowView';import { windowViewName 
 import { t } from '../i18n';
 import { LockKeyhole } from './AppIcons';
 import { restartToUpdate,useUpdateReady } from '../features/updates/useUpdateReady';
-/** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter. */
-const ShieldGlyph=({size=16}:{size?:number})=><svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><path d="M8 1.8 13 3.6v4.1c0 3-2 5.2-5 6.5-3-1.3-5-3.5-5-6.5V3.6z"/></svg>;
+/** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter.
+ * Its glyph says the state with the switch (founder after beta.7: both rows were shields, and on or off should show): the sparkles
+ * (the AI mark) while AI is shown, the sparkle crossed out while AI-free mode hides it. */
 function AiFreeRow(){
   const [on,setOn]=useState<boolean|null>(null),busy=useRef(false);
   useEffect(()=>{let alive=true;const read=()=>runtime.service({type:'filters.profile-status'}).then(result=>{if(alive)setOn(!!result.filters?.aiContent);}).catch(()=>{});void read();const unsubscribe=runtime.subscribeBrowser?.(event=>{if(event.type==='filters-changed')void read();});return()=>{alive=false;unsubscribe?.();};},[]);
   // Flips at once (the switch's 140ms thumb) and the menu stays open; it reverts if the profile could not be updated.
   const toggle=()=>{if(on===null||busy.current)return;const next=!on;setOn(next);busy.current=true;void runtime.service({type:'filters.profile-set',patch:{aiContent:next}}).then(result=>setOn(!!result.filters?.aiContent)).catch(()=>setOn(!next)).finally(()=>{busy.current=false;});};
-  return <MenuToggle icon={ShieldGlyph} label={t("browsermenu.aiFreeMode")} on={!!on} disabled={on===null} shortcut={formatShortcut('Ctrl Shift X')} onToggle={toggle}/>;
+  return <MenuToggle icon={on?SparklesOff:Sparkles} label={t("browsermenu.aiFreeMode")} on={!!on} disabled={on===null} shortcut={formatShortcut('Ctrl Shift X')} onToggle={toggle}/>;
 }
 
 /** New Tor identity: the refresh arrow the Tor panel uses for the same action. */

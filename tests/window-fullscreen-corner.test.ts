@@ -17,7 +17,7 @@ test('Fullscreen corner: the root is marked while main says the window is fullsc
   assert.equal('windowFullscreen' in root.dataset, false, 'leaving twice is harmless');
 });
 
-test('Fullscreen corner: the Mac rows keep the traffic lights\' 86px only out of fullscreen (Compact, Focus, sidebar tabs and the tab row)', () => {
+test('Fullscreen corner: the Mac rows keep the traffic lights\' 86px in fullscreen too, where Acira draws its own lights (Compact, Focus, sidebar tabs and the tab row)', () => {
   const css = read('src/styles/platform.css');
   const rule = css.match(/([^}]*)\{padding-left:var\(--mac-caption-space,86px\)\}/);
   assert.ok(rule, 'the corner rule is still there');
@@ -25,9 +25,10 @@ test('Fullscreen corner: the Mac rows keep the traffic lights\' 86px only out of
   assert.equal(selectors.length, 3);
   for (const layout of ['.acira-tab-row', '.side-tabs .browser-shell.acira-shell .acira-persistent-toolbar', ':is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar'])
     assert.ok(selectors.some(selector => selector.endsWith(layout)), `the corner is kept for ${layout}`);
-  for (const selector of selectors) assert.match(selector, /^:root:root:root\[data-platform=darwin\]:not\(\[data-window-fullscreen\]\) /, selector);
-  assert.equal(css.match(/--mac-caption-space/g)?.length, 1, 'no other rule reserves the corner past fullscreen');
-  // The sidebar-out rules (padding-left:0) must still win over the corner rule outside fullscreen: one :has(> .a.b) beats one :not([attr]).
+  for (const selector of selectors) assert.match(selector, /^:root:root:root\[data-platform=darwin\] \.app\.style-acira /, selector);
+  assert.ok(!css.includes('data-window-fullscreen'), 'nothing in platform.css takes the corner away in fullscreen any more: the lights stand in it');
+  assert.equal(css.match(/--mac-caption-space/g)?.length, 1, 'no other rule reserves the corner');
+  // The sidebar-out rules (padding-left:0) still win over the corner rule: one :has(> .a.b) beats the plain selector.
   assert.match(css, /:root:root:root\[data-platform=darwin\] \.app\.style-acira:has\(> \.ed-rail\.is-expanded\) \.browser-shell\.acira-shell:is\(\[data-layout=compact\],\[data-layout=focus\]\) \.acira-persistent-toolbar\{padding-left:0\}/);
 });
 
@@ -42,11 +43,12 @@ test('Fullscreen corner: main says so with the window\'s new size (the start of 
   assert.ok(installed > 0 && installed < app, 'installed by the entry script itself, not by the lazily loaded App (dom-ready can come first)');
 });
 
-test('Fullscreen band: the sidebar keeps its 32px band for the traffic lights only out of fullscreen, docked or peeking (founder, 2 Nov)', () => {
+test('Fullscreen band: the sidebar keeps its 32px band for the traffic lights in fullscreen too, docked or peeking', () => {
   const css = read('src/styles/platform.css');
-  const band = css.indexOf("html[data-platform=darwin] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::before{"), off = css.indexOf('html[data-platform=darwin][data-window-fullscreen] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::before{flex-basis:0}');
-  assert.ok(band >= 0 && off > band, 'the fullscreen rule follows the band (and outranks it by one attribute)');
-  assert.match(css.slice(band, off), /flex:0 0 var\(--mac-caption-top,32px\);/);
+  const band = css.indexOf("html[data-platform=darwin] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::before{");
+  assert.ok(band >= 0);
+  assert.match(css.slice(band, band + 260), /flex:0 0 var\(--mac-caption-top,32px\);/);
+  assert.ok(!/\[data-window-fullscreen\][^{]*::before/.test(css), 'no fullscreen rule drops the band');
 });
 
 test('Fullscreen Seamless: the store follows main and tells a layout once per change; the page card has no margin, radius or ring in fullscreen', () => {

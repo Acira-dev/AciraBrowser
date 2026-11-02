@@ -4,6 +4,7 @@ import { placeTooltip,tooltipWidthLimit,type TooltipSide } from '../../ui/toolti
 import '../../styles/transient.css';
 import { tipKeyAction } from './tooltipKeys';
 import { pageCoversTip, parseTip, type ParsedTip } from './tooltipParse';
+import { TAB_ROW } from '../../ui/tabHoverCard';
 
 /** The one tooltip (bible §4, I's PREMIUM_COMPONENTS §9): an inverted chip (rgb 24 24 27, #f4f4f5 text, 1px ring) that
  * slides 4px and fades in from its trigger's side over 140ms expo-out. First show after 500ms; within 300ms of the last one
@@ -15,6 +16,26 @@ import { pageCoversTip, parseTip, type ParsedTip } from './tooltipParse';
 const SELECTOR = 'button[title], a[title], [role="button"][title], [role="tab"][title], [data-tip], [data-tip-title]';
 const FIRST_DELAY = 500, SKIP_WINDOW = 300, GAP = 8, EDGE = 8, MAX_WIDTH = 300;
 type Side = 'below' | 'above' | 'right' | 'left';
+/** What a person can press: the chip of a tab's own control never lands on one (founder after beta.7: the close button's tip covered
+ * the next tabs, their close buttons and the toolbar's buttons in Compact and Focus, and the address field in the top strip). */
+const WORKING = 'button, a[href], input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="menuitem"], [role="link"], [contenteditable="true"], [data-tab-id]';
+/** The working controls near a control inside a tab row, as rects. Not the control itself, nor what holds it (its own row may be
+ * covered: the tab's title is under the pointer's tab already), nor its row's body (a child as wide as half the row, the sidebar's
+ * row button); the row's other small controls (mute, the tab's close beside an info button) are kept clear like every other. */
+export function tabControlNeighbours(el: HTMLElement, row: HTMLElement, reach = MAX_WIDTH + 2 * GAP): DOMRect[] {
+  const r = el.getBoundingClientRect(), own = row.getBoundingClientRect(), area = innerWidth * innerHeight, rects: DOMRect[] = [];
+  for (const other of document.querySelectorAll<HTMLElement>(WORKING)) {
+    if (other === el || other.contains(el) || el.contains(other) || other.closest('[inert], [aria-hidden="true"], .t-tip')) continue;
+    const box = other.getBoundingClientRect();
+    if (box.width < 2 || box.height < 2 || box.width * box.height > area / 4) continue;
+    if (box.right < r.left - reach || box.left > r.right + reach || box.bottom < r.top - reach || box.top > r.bottom + reach) continue;
+    if (row.contains(other) && box.width >= own.width / 2) continue;
+    const style = getComputedStyle(other);
+    if (style.visibility === 'hidden' || style.pointerEvents === 'none') continue;
+    rects.push(box);
+  }
+  return rects;
+}
 interface Tip { text: string; key?: string; description?: string; x: number; y: number; side: Side; id: number; wrap: boolean; width: number }
 
 /** One tooltip for every label and every explanation (R3-05, founder: the (i) buttons showed two different tips, a long
@@ -62,16 +83,19 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
       current = null;
       if (shown) { shown = false; lastHide = performance.now(); setTip(null); }
     };
-    /** Places the chip on the first free side; false when every side would land on the website's native view. */
-    const show = (el: HTMLElement) => {
+    /** Places the chip on the first free side; false when every side would land on the website's native view (the title goes back for
+     * the system's tooltip); 'quiet' for a tab's own control with no spot clear of the other controls: no tip at all, as in Chrome
+     * (the tab's hover card names it, and the system's tooltip would land on the toolbar under a strip). */
+    const show = (el: HTMLElement): boolean | 'quiet' => {
       const raw = el.dataset.tip || el.dataset.tipTitle || '';
       if (!raw.trim() || !el.isConnected || !measure.current) return false;
       const parsed = parseTip(raw);
       // A two-line tip is taller than a toolbar row: beside a button over a website it may find no free spot, and then the
       // title and its keys (one line, which does fit) are better than the system's raw tooltip.
-      return place(el, parsed) || (!!parsed.description && place(el, { text: parsed.text, ...(parsed.key ? { key: parsed.key } : {}) }));
+      const row = el.parentElement?.closest<HTMLElement>(TAB_ROW) ?? null, avoid = row ? tabControlNeighbours(el, row) : undefined;
+      return place(el, parsed, avoid) || (!!parsed.description && place(el, { text: parsed.text, ...(parsed.key ? { key: parsed.key } : {}) }, avoid)) || (row ? 'quiet' : false);
     };
-    const place = (el: HTMLElement, parsed: ParsedTip) => {
+    const place = (el: HTMLElement, parsed: ParsedTip, avoid?: readonly DOMRect[]) => {
       const node = measure.current!, { text, key, description } = parsed, r = el.getBoundingClientRect();
       const page = pageCoversTip(block.current, !!el.closest('.setup-dialog')) ? document.querySelector('.page-area')?.getBoundingClientRect() ?? null : null;
       node.style.maxWidth = `${Math.min(MAX_WIDTH,tooltipWidthLimit(r,page,innerWidth))}px`;
@@ -88,7 +112,7 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
       const caption = root.dataset.platform === 'darwin'
         ? {left:0,right:parseFloat(style.getPropertyValue('--mac-caption-space'))||86,top:0,bottom:parseFloat(style.getPropertyValue('--mac-caption-top'))||32}
         : {left:innerWidth-(Number.isFinite(captionWidth)?captionWidth:138),right:innerWidth,top:0,bottom:40};
-      const choice = placeTooltip(r,w,{width:innerWidth,height:innerHeight},page,caption,h,!!el.closest('.acira-sidebar .sb-tab,.acira-sidebar .sb-bookmark,.acira-sidebar .sb-folder'));
+      const choice = placeTooltip(r,w,{width:innerWidth,height:innerHeight},page,caption,h,!!el.closest('.acira-sidebar .sb-tab,.acira-sidebar .sb-bookmark,.acira-sidebar .sb-folder'),avoid);
       if (!choice) return false;
       shown = true;
       setTip({ text, ...(key ? { key } : {}), ...(description ? { description } : {}), ...choice, id: refreshing ? serial : ++serial, wrap, width:w });
@@ -99,7 +123,7 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
       current = el;
       watcher.observe(el, { attributes: true, attributeFilter: ['data-tip'] });
       suppress(el);
-      timer = setTimeout(() => { if (current === el && !show(el)) restore(el); }, delay);
+      timer = setTimeout(() => { if (current === el && show(el) === false) restore(el); }, delay);
     };
     const over = (event: Event) => {
       if (current && !current.isConnected) hide(); // its step or page unmounted under the pointer (R4-10): forget it
@@ -121,7 +145,7 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
       if (current && !current.isConnected) hide();
       if (pinned === el) { hide(); return; }
       if (current !== el) arm(el, 0);
-      else if (!shown) { clearTimeout(timer); if (!show(el)) restore(el); }
+      else if (!shown) { clearTimeout(timer); if (show(el) === false) restore(el); }
       pinned = el;
     };
     const focus = (event: FocusEvent) => {
