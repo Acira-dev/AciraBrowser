@@ -26,6 +26,10 @@ const qualified=reports.sort().at(-1);if(!qualified)throw Error('The exact packa
 node('qa/release-profile-cleanup.mjs',portable.output,'--committed-fixture',qualified);node('qa/release-profile-cleanup.mjs',portable.output,'--committed-fixture',qualified,'--worker');
 node('qa/release-private-close.mjs',portable.output,qualified);node('qa/release-private-close.mjs',portable.output,qualified,'--last-window');
 for(const file of ['qa/accounts-private-worker.mjs','qa/release-session-cookie.mjs','qa/release-reader-assets.mjs'])node(file);
-const {buildInstaller}=await import('./release-installer.mjs'),installer=await buildInstaller(portable.output);
+// Retain the existing freshly compiled Creation helpers until the child installer build exits.
+const {withInstallerHelpers}=await import('./release-helpers.mjs');
+withInstallerHelpers({root,sign:()=>{},build:()=>node('scripts/release-installer.mjs',portable.output)});
+const installerDirectory=path.join(root,'release/installers',portable.sourceDigest.slice(0,8));
+const installer={output:installerDirectory,...JSON.parse(await fs.readFile(path.join(installerDirectory,'ACIRA-INSTALLER-PROVENANCE.json'),'utf8'))};
 const result={version:pkg.version,commit,portable:portable.output,installerDirectory:installer.output,installer:installer.installer,published:false,updateConfig:installer.updateConfig,nativeWindowsChecksPassed:true,installedIntoRealProfile:false,widevineQualified:false};
 await fs.writeFile(path.join(installer.output,'WINDOWS-BUILD-RESULT.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));

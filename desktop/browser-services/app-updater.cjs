@@ -71,7 +71,8 @@ function createStubUpdater({env,dir}){
  stub.setFeedURL=config=>{stub.feed=typeof config?.url==='string'?config.url:null;};
  return stub;
 }
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>fs.existsSync(path.join(path.dirname(process.execPath),'Uninstall AciraBrowser.exe')),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app})}){
+function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app})}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  const version=testing&&env.ACIRA_UPDATE_TEST_VERSION?String(env.ACIRA_UPDATE_TEST_VERSION):app.getVersion();
@@ -180,4 +181,4 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  function start(){if(started||unsupported)return;started=true;const run=()=>{void check();};const first=schedule(run,stubbed?1500:CHECK_DELAY);first?.unref?.();const loop=every(run,CHECK_EVERY);loop?.unref?.();}
  return {status,check,download,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo};
 }
-module.exports={createAppUpdater,createStubUpdater,notesText,CHECK_EVERY,CHECK_DELAY,CHANNELS};
+module.exports={hasInstalledWindowsUninstaller,createAppUpdater,createStubUpdater,notesText,CHECK_EVERY,CHECK_DELAY,CHANNELS};
