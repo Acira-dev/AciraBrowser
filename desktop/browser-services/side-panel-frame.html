@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Side panel</title>
+<style>
+/* An extension's side panel (chrome.sidePanel): a pane docked on the right of the page area, beside the page like a split pane
+   (same 6px gap, same radius), with a 40px header (extension name, Close) over the extension's own page view. The values are the
+   page-card material Peek uses (desktop/rewind/peek-frame.html), so both read as the same surface. It slides in on the shared
+   strong ease, scaled by the motion speed (Premium 1.7, Fast 1, Off 0). */
+:root{
+ --card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--hover:rgb(255 255 255/.08);--press:rgb(255 255 255/.12);
+ --line:rgb(255 255 255/.10);--highlight:inset 0 1px 0 rgb(255 255 255/.06);--ring:#6ea8ff;
+ --e1:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -8px rgb(0 0 0/.28);
+ --strong:cubic-bezier(.23,1,.32,1);--motion-scale:1;--radius:8px;
+ color-scheme:dark;
+}
+body.light{
+ --card:#ffffff;--ink:rgb(29 31 36/.90);--ink-2:rgb(29 31 36/.66);--hover:rgb(0 0 0/.06);--press:rgb(0 0 0/.10);
+ --line:rgb(0 0 0/.08);--highlight:inset 0 1px 0 rgb(255 255 255/.7);--ring:#2563eb;
+ --e1:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -10px rgb(0 0 0/.14);
+ color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#card{position:absolute;inset:0;border-radius:var(--radius);background:var(--card);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--e1);
+ opacity:0;transform:translateX(12px)}
+body.in #card{opacity:1;transform:none;transition:opacity calc(180ms*var(--motion-scale)) var(--strong),transform calc(260ms*var(--motion-scale)) var(--strong)}
+body.out #card{opacity:0;transform:translateX(12px);transition:opacity calc(140ms*var(--motion-scale)) var(--strong),transform calc(180ms*var(--motion-scale)) var(--strong)}
+#bar{position:absolute;inset:0 0 auto;height:40px;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;border-bottom:1px solid var(--line)}
+#icon{width:16px;height:16px;flex:none;border-radius:4px;object-fit:contain}
+#icon[src=""]{display:none}
+#name{flex:1;min-width:0;color:var(--ink);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{all:unset;flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:var(--ink-2);cursor:default}
+button:hover{background:var(--hover);color:var(--ink)}
+button:active{background:var(--press)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+</style>
+</head>
+<body>
+<div id="card" role="complementary" aria-labelledby="name">
+ <div id="bar"><img id="icon" alt="" src=""><span id="name"></span>
+  <button id="close" type="button"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+ </div>
+</div>
+<script>
+const api=window.sidePanelFrame,close=document.getElementById('close');
+close.addEventListener('click',()=>api.command('close'));
+document.addEventListener('keydown',event=>{if(event.key==='Escape')api.command('close');});
+api.onState(state=>{
+ document.body.classList.toggle('light',!state.dark);
+ document.documentElement.style.setProperty('--motion-scale',String(state.motionScale));
+ document.documentElement.style.setProperty('--radius',state.radius+'px');
+ document.getElementById('name').textContent=state.name;
+ document.documentElement.lang=state.lang||'en';
+ close.setAttribute('aria-label',state.closeLabel);close.title=state.closeLabel+(state.closeKey?' ('+state.closeKey+')':'');
+ if(state.phase==='in'&&!document.body.classList.contains('in')){document.body.classList.remove('out');requestAnimationFrame(()=>{document.body.classList.add('in');setTimeout(()=>api.command('entered'),Math.round(200*state.motionScale));});}
+ if(state.phase==='out'){document.body.classList.remove('in');document.body.classList.add('out');setTimeout(()=>api.command('gone'),Math.round(180*state.motionScale));}
+});
+</script>
+</body>
+</html>

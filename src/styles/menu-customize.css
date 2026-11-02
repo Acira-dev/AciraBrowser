@@ -1,0 +1,21 @@
+/* Settings › Appearance › Menu (R3-43): the Customize toolbar rows, two lists and a live preview of the menu they make. */
+.menu-customize{gap:10px;padding:2px 0 4px}
+.menu-customize-grid{display:grid;grid-template-columns:minmax(0,1fr) 248px;gap:20px;align-items:start}
+@container (max-width:700px){.menu-customize-grid{grid-template-columns:minmax(0,1fr)}.menu-customize-previews{position:static;flex-direction:row;flex-wrap:wrap;align-items:flex-start}.menu-customize-previews>.menu-preview{flex:1 1 200px;min-width:0}}
+.menu-customize-lists{display:flex;flex-direction:column;gap:6px;min-width:0}
+.menu-customize-list{min-width:0}
+.menu-customize-list .popup-label{margin:8px 8px 2px}
+.menu-customize-empty{margin:2px 8px 8px;font-size:12px;line-height:1.5;color:var(--muted)}
+.menu-customize-row .menu-customize-switch{opacity:.7}
+.menu-customize-row .menu-customize-switch:not(:disabled):hover{opacity:1}
+.menu-customize-previews{display:flex;flex-direction:column;gap:10px;position:sticky;top:8px}
+.menu-preview{display:flex;flex-direction:column;padding:6px 4px 6px;border-radius:8px;background:var(--sheet,transparent);box-shadow:0 0 0 1px var(--line),0 1px 2px rgb(0 0 0 / .05);transition:height .2s}
+.menu-preview-title{margin:0 0 4px;padding:0 8px;font:500 11px/16px var(--font-ui);color:var(--muted)}
+.menu-preview-group{display:flex;flex-direction:column;margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+.menu-preview-group[data-first]{margin-top:0;padding-top:0;border-top:0}
+.menu-preview-row{display:block;height:22px;padding:0 8px;font:400 12px/22px var(--font-ui);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:menu-preview-in calc(.18s * var(--motion-scale,1)) cubic-bezier(.2,.8,.2,1) both}
+.menu-preview-row[data-fixed]{color:var(--muted)}
+.menu-preview-empty{padding:6px 8px;font-size:12px;color:var(--muted)}
+@keyframes menu-preview-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+.app[data-reduced-motion=true] .menu-preview-row,.app[data-reduced-motion=true] .menu-preview{animation:none;transition:none}
+.toolbar-customize-reset:disabled{opacity:.45;cursor:default}

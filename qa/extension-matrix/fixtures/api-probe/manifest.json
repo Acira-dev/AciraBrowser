@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Acira API probe",
+  "version": "1.0.0",
+  "description": "QA fixture: exercises chrome.offscreen, sidePanel, identity, userScripts, bookmarks, history, sessions and search in Acira's engine.",
+  "permissions": ["offscreen", "sidePanel", "identity", "userScripts", "bookmarks", "history", "sessions", "search", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "sw.js" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Acira API probe" }
+}

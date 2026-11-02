@@ -1,0 +1,54 @@
+/* Mac keeps native traffic lights inside the full-size content header. */
+html[data-platform=darwin]{--caption-width:0px}
+html[data-platform=darwin] .caption-reservation,
+html[data-platform=darwin] .compact-caption-space{display:none}
+/* The current sidebar starts at the window's top edge, including when peeking.
+   Keep every section below the native buttons, even with Favorites turned off.
+   App compensates this inset for UI zoom; the controls stay 32 native points tall. */
+html[data-platform=darwin] .app.style-acira>.ed-rail.acira-sidebar.is-expanded::before{
+ content:'';
+ flex:0 0 var(--mac-caption-top,32px);
+ align-self:stretch;
+ -webkit-app-region:drag;
+}
+html[data-platform=darwin] .titlebar,
+html[data-platform=darwin] .focus-toolbar{padding-right:8px}
+/* Match the shared toolbar's specificity: its later three-:root padding
+   shorthand used to erase Mac's inset in Compact and Focus. Reserve the native
+   corner on the ROW, including sidebar tabs, so fitRow also measures that space.
+   The nested leading group must not reserve it a second time. */
+:root:root:root[data-platform=darwin] .app.style-acira .acira-tab-row,
+:root:root:root[data-platform=darwin] .app.style-acira .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,
+:root:root:root[data-platform=darwin] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{padding-left:var(--mac-caption-space,86px)}
+/* With the sidebar out (docked or peeking) the native buttons sit over the sidebar, not beside the toolbar: the toolbar starts at
+   the page's corner, so its first control lines up with that corner instead of keeping the buttons' space past the sidebar. */
+:root:root:root[data-platform=darwin] .app.style-acira:has(> .ed-rail.is-expanded) .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,
+:root:root:root[data-platform=darwin] .app.style-acira:has(> .ed-rail.is-expanded) .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{padding-left:0}
+:root:root:root[data-platform=darwin] .app.style-acira .acira-focus-row{padding-left:0}
+:root:root:root[data-platform=darwin] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{padding-right:12px}
+:root:root:root[data-platform=darwin] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar>.toolbar-actions{margin-right:0}
+
+/* On Mac, a short window or enlarged interface can reduce the cover's height
+   budget to 240px wide. Size the picture separately so the workspace title,
+   search and shortcuts keep the full available column. */
+html[data-platform=darwin] .nt-page[data-style=framed] .nt-stack { width:min(100%,880px); }
+html[data-platform=darwin] .nt-page[data-style=framed] .nt-frame-wrap {
+ width:min(100%,max(240px,calc(var(--nt-frame-height,36cqh) * 16 / 9)));
+ align-self:center;
+}
+html[data-platform=darwin] .nt-page[data-style=framed] .nt-scroll { overflow-y:auto; }
+html[data-platform=darwin] .nt-workspace-heading { flex-wrap:wrap; }
+html[data-platform=darwin] .nt-workspace-title { flex:1 1 auto; }
+html[data-platform=darwin] .nt-workspace-actions { max-width:100%; flex-wrap:wrap; }
+
+/* Windows display scaling can leave little room for the cover. Keep its height
+   budget from shrinking the heading, search and links into a narrow column. */
+html[data-platform=win32] .nt-page[data-style=framed] .nt-stack { width:min(100%,880px); }
+html[data-platform=win32] .nt-page[data-style=framed] .nt-frame-wrap {
+ width:min(100%,max(240px,calc(var(--nt-frame-height,36cqh) * 16 / 9)));
+ align-self:center;
+}
+html[data-platform=win32] .nt-page[data-style=framed] .nt-scroll { overflow-y:auto; }
+html[data-platform=win32] .nt-workspace-heading { flex-wrap:wrap; }
+html[data-platform=win32] .nt-workspace-title { flex:1 1 auto; }
+html[data-platform=win32] .nt-workspace-actions { max-width:100%; flex-wrap:wrap; }

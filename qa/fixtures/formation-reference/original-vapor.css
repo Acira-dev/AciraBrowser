@@ -1,0 +1,2 @@
+@property --vapor { syntax:'<number>'; inherits:false; initial-value:1.4; }
+.app.style-acira [data-vapor]{ -webkit-mask-image:radial-gradient(farthest-corner at var(--vx,50%) var(--vy,0%),#000 calc(var(--vapor) * 100% - 40%),transparent calc(var(--vapor) * 100% + 8%)); mask-image:radial-gradient(farthest-corner at var(--vx,50%) var(--vy,0%),#000 calc(var(--vapor) * 100% - 40%),transparent calc(var(--vapor) * 100% + 8%)); }

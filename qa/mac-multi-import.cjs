@@ -1,0 +1,26 @@
+// Actual main/setup/importer/lifecycle routes, configured with only an owned
+// Chromium profile fixture. No UI driver, personal import source or OS prompts.
+const {app,ipcMain,webContents,BaseWindow}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const directory=fs.mkdtempSync(path.resolve('.qa-profiles/mac-multi-import-')),source=path.join(directory,'owned-chrome');fs.mkdirSync(path.join(source,'Default'),{recursive:true});
+fs.writeFileSync(path.join(source,'Local State'),JSON.stringify({profile:{info_cache:{Default:{name:'Owned work'}}}}));
+fs.writeFileSync(path.join(source,'Default','Bookmarks'),JSON.stringify({roots:{bookmark_bar:{type:'folder',name:'Bookmarks bar',children:[{type:'url',name:'Owned bookmark',url:'https://owned-import.test/'}]}}}));
+const imports=require(path.resolve('desktop/imports.cjs')),originalImporter=imports.createImporter;imports.createImporter=options=>originalImporter({...options,roots:[['Chrome',source]],firefoxRoots:[]});
+Object.assign(process.env,{ACIRA_QA_RUN:'1',ACIRA_BROWSER_TEST_DATA:directory,ACIRA_BROWSER_TEST_HIDDEN:'1',ACIRA_PREVIEW_RECORD:'1',ACIRA_DEV:'0'});
+const routes=new Map(),handle=ipcMain.handle.bind(ipcMain);ipcMain.handle=(ch,fn)=>{routes.set(ch,fn);return handle(ch,fn)};
+require(path.resolve('desktop/main.cjs'));
+const invoke=(wc,ch,...args)=>routes.get(ch)({sender:wc,senderFrame:wc.mainFrame},...args),wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function poll(fn,ok,label){for(let i=0;i<300;i++){const v=await fn();if(ok(v))return v;await wait(25)}throw Error(label)}
+let done=false;const report={checks:[],scope:'Actual hidden main, native setup/importer and profile lifecycle; only disposable source files. No UI driver or personal browser data.'},deadline=setTimeout(()=>finish(false,Error('deadline')),30000);
+app.on('before-quit',e=>{if(!done)e.preventDefault()});function finish(passed,error){if(done)return;done=true;clearTimeout(deadline);report.passed=passed;report.hidden=BaseWindow.getAllWindows().every(w=>!w.isVisible());if(error)report.error=error.stack;fs.writeFileSync('qa/artifacts/mac-multi-import.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));app.exit(passed?0:1)}
+app.whenReady().then(async()=>{
+ const ui=await poll(()=>webContents.getAllWebContents().find(w=>w.getURL()==='acira-browser-ui://ui/index.html'),Boolean,'chrome'),snap=()=>invoke(ui,'acira:snapshot');await poll(snap,Boolean,'snapshot');
+ const origin=snap().activeBrowserProfileId,found=await invoke(ui,'acira:setup',{type:'imports.discover'});assert(found.ok);assert.equal(found.sources.length,1);report.checks.push('Discovery sees only the configured owned Chromium source');
+ const made=await invoke(ui,'acira:setup',{type:'profiles.fromSource',sourceId:found.sources[0].id});assert(made.ok&&made.createdProfileId);const target=made.createdProfileId;assert.equal(snap().activeBrowserProfileId,origin);assert(snap().browserProfiles.some(p=>p.id===target));report.checks.push('Source profile is created without replacing the current ordinary profile');
+ const imported=await invoke(ui,'acira:setup',{type:'imports.run',sourceId:found.sources[0].id,categories:['bookmarks'],profileId:target});assert(imported.ok);assert.equal(imported.batch.profileId,target);assert.equal(imported.batch.initiatorProfileId,origin);assert(snap().bookmarkNodes.some(n=>n.browserProfileId===target&&n.url==='https://owned-import.test/'));report.checks.push('Targeted native import records its originating profile and places bookmarks only in the target');
+ await invoke(ui,'acira:dispatch',{type:'browser.profile.create',name:'Unrelated owned fixture'});const other=snap().browserProfiles.find(p=>p.id!==origin&&p.id!==target);
+ const {BrowserDatabase}=require(path.resolve('desktop/database.cjs')),db=new BrowserDatabase(path.join(directory,'browser.sqlite'));db.recordImport({id:'unrelated-owned-batch',profileId:other.id,createdAt:Date.now(),sourceId:'owned',browser:'Chrome',name:'Other',bookmarkIds:[],historyIds:[],results:[],importedBookmarks:[]});
+ await assert.rejects(()=>Promise.resolve().then(()=>invoke(ui,'acira:service',{type:'imports.undo',batchId:'unrelated-owned-batch'})),/not part of this profile/);assert(!db.imports(other.id)[0].undoneAt);report.checks.push('Actual native service refuses another profile’s unrelated batch without marking it undone');
+ const undone=await invoke(ui,'acira:service',{type:'imports.undo',batchId:imported.batch.id});assert(undone.undone&&undone.profileId===target);assert(!snap().bookmarkNodes.some(n=>n.importBatchId===imported.batch.id));assert(snap().browserProfiles.some(p=>p.id===target));report.checks.push('Confirmed native Undo removes imported data; profile remains until explicit cleanup');
+ await invoke(ui,'acira:dispatch',{type:'import.undo',batchIds:[imported.batch.id],profileIds:[target]});assert(!snap().browserProfiles.some(p=>p.id===target));assert(snap().browserProfiles.some(p=>p.id===other.id));assert.equal(snap().activeBrowserProfileId,origin);assert.match(snap().toast.text,/Removed 1 unused profile/);report.checks.push('Awaited cleanup removes only the unused pending target, preserves current/unrelated profiles and reports the completed count');
+ db.close();finish(true);
+}).catch(e=>finish(false,e));

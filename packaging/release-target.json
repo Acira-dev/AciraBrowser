@@ -1,0 +1,5 @@
+{
+  "comment": "WHERE releases and updates live, in one place. provider \"github\": {owner, repo} of the releases repository (must be PUBLIC for users' update checks to work). provider \"generic\": {url} of your own server or CDN folder that serves latest.yml, beta.yml and the installer. Acira uses the public metadata feed (same as the Mac build, packaging/update-feed.cjs); the application source repository stays private. Read by packaging/electron-builder.cjs (the installed app's app-update.yml), scripts/release.mjs, scripts/check-release-target.mjs and the spelling-dictionary mirror. docs/launch/PUBLIC_UPDATES.md.",
+  "provider": "generic",
+  "url": "https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/"
+}

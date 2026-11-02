@@ -1,0 +1,3 @@
+/* Keep transient feedback above the settings actions instead of covering the lower primary action. */
+.app .toast[data-general-toast]{top:104px;bottom:auto;max-width:min(460px,calc(100vw - 48px));pointer-events:none}
+.app .toast[data-general-toast] canvas{flex:0 0 auto}

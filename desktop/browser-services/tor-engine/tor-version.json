@@ -1,0 +1,32 @@
+{
+  "comment": "Pinned Tor engine for private windows with Tor. Update: node scripts/fetch-tor.mjs --update <tor-browser-version> (verifies the Tor Browser Developers signature, then rewrites this file). See docs/launch/TOR_WINDOWS.md.",
+  "torBrowserVersion": "15.0.26",
+  "tor": "0.4.9.14",
+  "checked": "2026-10-24",
+  "archive": {
+    "name": "tor-expert-bundle-windows-x86_64-15.0.26.tar.gz",
+    "url": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-windows-x86_64-15.0.26.tar.gz",
+    "signature": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-windows-x86_64-15.0.26.tar.gz.asc",
+    "sha256": "c1988c701de2f24f7d098d1d6d7f507b58f27740d097f29c246e0524d639b252"
+  },
+  "signingKey": "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290",
+  "signingKeyUrl": "https://keys.openpgp.org/vks/v1/by-fingerprint/EF6E286DDA85EA2A4BA7DE684E2C6E8793298290",
+  "updateFeed": "https://aus1.torproject.org/torbrowser/update_3/release/download-windows-x86_64.json",
+  "files": {
+    "tor.exe": { "from": "tor/tor.exe", "sha256": "8c38513b3c4584154158e7c584f4144849dc679a64cd679553d72dad28230c54" },
+    "LICENSE.tor.txt": { "from": "docs/tor.txt", "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766" },
+    "geoip": { "from": "data/geoip", "sha256": "3099e91a4c8c87a1e6ab8a0b1e7407aea0314a2d8d048d654b4087b9ae103d9f" },
+    "geoip6": { "from": "data/geoip6", "sha256": "10f50daba4156a5b1ae782c0db0478b4584901b1ed72cd619cddd4b9f2b03d6a" }
+  },
+  "pluggableTransports": {
+    "comment": "Bridge clients (lyrebird: obfs4, meek, WebTunnel, Snowflake; conjure-client: Conjure), pinned from Tor Browser 15.0.25 (windows-x86_64) program files: Browser/TorBrowser/Tor/PluggableTransports/ and Docs/Licenses/ (Tor Browser's tor.exe and tor.txt there match this file's Expert Bundle 15.0.26 pins byte for byte). fetch-tor.mjs --from-tor-browser <folder> copies them from a local Tor Browser; without it they are taken from the signature-checked Expert Bundle at the 'from' paths. Either way every file must match these hashes, and tor-engine.cjs checks them again before tor may start one. Built-in bridges: tor-engine/pt_config.json, Tor Browser 15.0.25's chrome://global/content/pt_config.json (ptConfigSha256 is of its LF bytes).",
+    "source": "Tor Browser 15.0.25",
+    "ptConfigSha256": "3f11d303c30191b3b1d382b9badd882d87fd87550d061f7d25a1b31226fc9b75",
+    "files": {
+      "pluggable_transports/lyrebird.exe": { "from": "tor/pluggable_transports/lyrebird.exe", "torBrowser": "Browser/TorBrowser/Tor/PluggableTransports/lyrebird.exe", "sha256": "6e218e85f9a7ae2481f5402ded822471a9a9d0c7e66b05db3842b93fa5c1f02e" },
+      "pluggable_transports/conjure-client.exe": { "from": "tor/pluggable_transports/conjure-client.exe", "torBrowser": "Browser/TorBrowser/Tor/PluggableTransports/conjure-client.exe", "sha256": "6d3bca367226caf0cd065ced8b031b482b5cd5c3889bce886f2e903197b9b43b" },
+      "pluggable_transports/LICENSE.lyrebird.txt": { "from": "docs/lyrebird.txt", "torBrowser": "Browser/TorBrowser/Docs/Licenses/lyrebird.txt", "sha256": "2331e6517a15ce87e2a1d2838c314ca1b8f3c7a347ac28d370a7fccdb5964f40" },
+      "pluggable_transports/LICENSE.conjure.txt": { "from": "docs/conjure.txt", "torBrowser": "Browser/TorBrowser/Docs/Licenses/conjure.txt", "sha256": "0522541e3505d6669334f6eb488d4fde9c4af2234daec13170a0cf4d46d99e92" }
+    }
+  }
+}

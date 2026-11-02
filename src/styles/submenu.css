@@ -1,0 +1,44 @@
+/* R3-42: a submenu of the Acira menu (More tools, Bookmarks, Ads and trackers, Split view, Downloads) is a drill-in: its
+   header is a back row (chevron + title), and the level slides in from the side it came from. One pattern for all of them. */
+:root:root:root:root .browser-popup[data-backable] > .popup-header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 4px;
+}
+.browser-popup .popup-back {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--menu-t1, var(--text-primary, inherit));
+  text-align: left;
+  cursor: default;
+}
+.browser-popup .popup-back > svg { flex: 0 0 16px; color: var(--menu-t3, currentColor); transition: transform calc(.16s * var(--motion-scale, 1)) cubic-bezier(.2, .8, .2, 1); }
+.browser-popup .popup-back:hover > svg { transform: translateX(-2px); }
+.browser-popup .popup-back > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/16px var(--font-ui); color: inherit; }
+.browser-popup .popup-back:hover,
+.browser-popup .popup-back:focus-visible { background: var(--menu-hover); }
+.browser-popup .popup-back:focus-visible { outline: 2px solid var(--selection-marker, var(--accent)); outline-offset: -2px; }
+/* R3-19: a ring marks the keyboard's place only. A popup opened with the mouse (or touched since) shows none on the row it
+   focuses for assistive tech; the first key press brings it back (App's popup keyboard handler sets data-input-mode). */
+.browser-popup:focus-visible { outline: none; }
+:root .app .browser-popup[data-input-mode=pointer] :is(button, a, summary, [role=menuitem], [role=option], [role=checkbox], [tabindex]):focus-visible { outline: none; }
+@keyframes popup-level-forward { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@keyframes popup-level-back { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+.browser-popup[data-backable] > .popup-scroll,
+.browser-popup[data-backable] > .popup-header { animation: popup-level-forward calc(.2s * var(--motion-scale, 1)) cubic-bezier(.2, .8, .2, 1) both; }
+.browser-popup[data-level='back'] > .popup-scroll { animation: popup-level-back calc(.2s * var(--motion-scale, 1)) cubic-bezier(.2, .8, .2, 1) both; }
+.app[data-reduced-motion='true'] .browser-popup[data-backable] > :is(.popup-scroll, .popup-header),
+.app[data-reduced-motion='true'] .browser-popup[data-level='back'] > .popup-scroll { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .browser-popup[data-backable] > :is(.popup-scroll, .popup-header), .browser-popup[data-level='back'] > .popup-scroll { animation: none; }
+}

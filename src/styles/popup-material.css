@@ -1,0 +1,93 @@
+/* The material, edge and shadow share one transform. No stationary frame. */
+.app .popup-surface{isolation:isolate;border:0;border-radius:var(--geometry-materialRadius,8px);box-sizing:border-box;background:transparent;backdrop-filter:none;box-shadow:none;overflow:visible;will-change:auto}
+.app .popup-surface::before{display:none}
+.popup-surface .popup-material{position:absolute;inset:0;box-sizing:border-box;border-radius:inherit;background:var(--surface);box-shadow:0 6px 24px #00000024;pointer-events:none}
+.app .acira-popup-surface{--muted:var(--popup-muted);--popup-rim-shadow:var(--elevation-rim,inset 0 0 0 1px rgb(var(--ink) / .14))}
+/* Original Formation paint inputs; the frontend's one lifecycle consumes them. */
+.app .acira-popup-surface{
+ --formation-group-blur:12px;--formation-item-blur:4px;--formation-item-rise:3px;
+ --formation-enter-scale:1.012;--formation-exit-scale:.992;--formation-exit-blur:10px;
+ --formation-first-item-delay:30ms;--formation-menu-stagger:18ms;--formation-switcher-stagger:16ms;
+}
+.app .acira-popup-surface[data-popup-appearance]{color:var(--text)}
+.app .acira-popup-surface .popup-material{background:var(--glass);border:0;box-shadow:var(--popup-rim-shadow),var(--float-shadow)}
+.acira-popup-surface.local-popup .popup-material{backdrop-filter:blur(var(--frost-blur,32px));-webkit-backdrop-filter:blur(var(--frost-blur,32px))}
+.app.opaque-glass .popup-material,.app.opaque-glass .acira-popup-surface.local-popup .popup-material{background:var(--overlay);backdrop-filter:none}
+.app.opaque-glass .acira-popup-surface.local-popup[data-popup-appearance] .popup-material{background:var(--overlay);backdrop-filter:none}
+.popup-surface .popup-contents{position:relative;z-index:1;overflow:hidden;border-radius:inherit;height:100%;min-height:0}
+.browser-popup:focus{outline:none}
+.browser-popup .popup-header>strong{font-weight:600;font-size:14px;letter-spacing:-.15px}
+.browser-popup .site-info{align-items:flex-start;padding:12px 10px;gap:12px}
+.browser-popup .site-info strong{font-size:14px;font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.browser-popup .site-info p{font-size:12px;line-height:1.5;margin-top:4px}
+.browser-popup .popup-label{font-weight:500;font-size:12px}
+.browser-popup .info-note{font-size:13px;line-height:1.6;font-weight:400}
+.browser-popup .popup-header>.icon-button:focus:not(:focus-visible){background:transparent;outline:none}
+
+.browser-popup[data-input-mode=keyboard] .popup-header>.icon-button:hover,.browser-popup[data-input-mode=keyboard] .menu-row:hover,.browser-popup[data-input-mode=keyboard] .profile-row:hover{background:transparent}
+
+/* Let toolbar controls replace local panels while ordinary page clicks dismiss. */
+.app .local-overlay-scrim{pointer-events:none;background:transparent}
+.app .local-overlay-scrim>.popup-surface{pointer-events:auto}
+
+/* Native tint and frost share the compositor layer below crisp text. */
+.app .acira-popup-surface.native-popup-surface:not([data-material-provider="live"]):not([data-material-provider="opaque"]) .popup-material{background:transparent;backdrop-filter:none;box-shadow:var(--popup-rim-shadow)}
+
+/* Material sources, tint, one rim and crisp content share the runtime sheet.
+   SheetPopupSurface owns progress and padded bounds; this stylesheet owns paint. */
+/* The component projects one clock onto the plane and mist layers. */
+.app .acira-popup-surface .popup-sheet-plane{box-sizing:border-box;border-radius:inherit;isolation:isolate;pointer-events:none;mask-image:none}
+/* Mist is a real, separately composited fixed-blur layer. Its opacity and
+   transform share the plane's reversible clock, never a CSS-variable animation. */
+.app .acira-popup-surface.sheet-popup{--material-envelope-origin:24px 24px}
+.app .acira-popup-surface.sheet-popup[data-sheet-origin=center]{--material-envelope-origin:50% 50%}
+.app .acira-popup-surface.sheet-popup[data-sheet-origin=top-right]{--material-envelope-origin:calc(100% - 24px) 24px}
+.app .acira-popup-surface.sheet-popup[data-sheet-origin=bottom-left]{--material-envelope-origin:24px calc(100% - 24px)}
+.app .acira-popup-surface.sheet-popup[data-sheet-origin=bottom-right]{--material-envelope-origin:calc(100% - 24px) calc(100% - 24px)}
+.app .acira-popup-surface.sheet-popup .popup-sheet-plane>.popup-sheet-material{transform-origin:var(--material-envelope-origin)}
+.app .acira-popup-surface.sheet-popup[data-material-provider=css] .popup-material{transform-origin:var(--formation-origin,50% 50%)}
+.app .acira-popup-surface.sheet-popup .popup-sheet-mist{
+ position:absolute;inset:24px;z-index:0;border-radius:inherit;pointer-events:none;
+ background:radial-gradient(130% 130% at var(--formation-origin,50% 50%),rgb(var(--native-material-tint-rgb) / .95),rgb(var(--native-material-tint-rgb) / .6) 62%,rgb(var(--native-material-tint-rgb) / .25));
+ /* A pre-blurred mist: its blur is fixed, only its opacity and scale move. */
+ opacity:0;
+ filter:blur(16px);
+ transform:scale(1);transform-origin:var(--formation-origin,50% 50%);
+}
+.app .acira-popup-surface.sheet-popup[data-formation-ready=true] :is(.popup-sheet-material,.popup-material){opacity:1;filter:none;transform:none}
+.app .acira-popup-surface.sheet-popup:is([data-formation-ready=true],[data-bare]) .popup-sheet-mist,
+.app[data-reduced-motion=true] .acira-popup-surface.sheet-popup .popup-sheet-mist{display:none}
+@media(forced-colors:active),(prefers-contrast:more){.app .acira-popup-surface.sheet-popup .popup-sheet-mist{display:none}}
+
+.app .acira-popup-surface .popup-backdrop-clip{z-index:0;border-radius:inherit}
+.app .acira-popup-surface:is([data-material-provider="pending"],[data-material-provider="live"],[data-material-provider="opaque"]) .popup-backdrop-sources{
+ overflow:visible;pointer-events:none;filter:blur(var(--frost-blur,32px)) saturate(1.7);
+}
+/* Frozen pixels keep one fixed blur through opening, rest, closing and reversal. */
+.app .acira-popup-surface.sheet-popup:is([data-material-provider="live"],[data-material-provider="opaque"]) .popup-backdrop-sources{
+ filter:blur(var(--frost-blur,32px)) saturate(1.7);
+}
+.app .acira-popup-surface.sheet-popup[data-formation-ready=true]:is([data-material-provider="live"],[data-material-provider="opaque"]) .popup-backdrop-sources{filter:blur(var(--frost-blur,32px)) saturate(1.7)}
+.app .acira-popup-surface:is([data-material-provider="live"],[data-material-provider="opaque"]) .popup-backdrop-sources video{
+ position:absolute;max-width:none;object-fit:fill;pointer-events:none;filter:none;
+}
+.app .acira-popup-surface:is([data-material-provider="live"],[data-material-provider="opaque"]) .popup-backdrop-tint{
+ z-index:1;pointer-events:none;
+ background:rgb(var(--native-material-tint-rgb) / var(--popup-material-opacity,var(--material-opacity)));
+}
+/* The safe base never changes alpha while a complete captured glass layer
+   fades over it. Cold glass sheets stay hidden until that layer is decoded. */
+.app .acira-popup-surface .popup-backdrop-base{background:color-mix(in srgb,rgb(var(--native-material-tint-rgb)) calc(var(--popup-material-opacity,var(--material-opacity,.9)) * 100%),rgb(128 128 128))}
+.app .acira-popup-surface:is([data-material-provider="pending"],[data-material-provider="live"],[data-material-provider="opaque"]) .popup-material{
+ z-index:2;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;
+ box-shadow:var(--popup-rim-shadow),var(--float-shadow);
+}
+.app .acira-popup-surface .popup-contents{z-index:3;pointer-events:auto}
+.app.opaque-glass .acira-popup-surface .popup-captured-material{display:none}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active){
+ .app .acira-popup-surface .popup-captured-material{display:none}
+}
+@media(forced-colors:active){
+ .app .acira-popup-surface .popup-backdrop-base{background:Canvas}
+ .app .acira-popup-surface:is([data-material-provider="live"],[data-material-provider="opaque"]) .popup-material{box-shadow:inset 0 0 0 1px CanvasText}
+}

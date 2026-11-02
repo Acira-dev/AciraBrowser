@@ -1,0 +1,36 @@
+/* Customize toolbar: compact rows, a dot-matrix grip, quiet move buttons. */
+.toolbar-customize{display:flex;flex-direction:column;gap:6px;padding:2px 2px 4px}
+.toolbar-customize-hint{margin:0 8px 2px;font-size:12px;line-height:1.5;color:var(--muted)}
+.toolbar-customize .popup-label{margin:8px 8px 0}
+.toolbar-customize-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.toolbar-customize-row{position:relative;display:flex;align-items:center;gap:6px;height:34px;padding:0 4px 0 6px;border-radius:8px;background:transparent;user-select:none}
+.toolbar-customize-row:hover,.toolbar-customize-row:focus-within{background:var(--hover)}
+.toolbar-customize-row[data-hidden] .toolbar-customize-check>span{color:var(--muted)}
+.toolbar-customize-row.fixed{padding-left:24px}
+.toolbar-customize-grip{flex:0 0 12px;width:12px;height:18px;cursor:grab;touch-action:none;opacity:.55;
+ background:radial-gradient(circle,currentColor 1.1px,transparent 1.4px) 0 0/6px 6px;}
+.toolbar-customize-grip:active{cursor:grabbing}
+.toolbar-customize-row:hover .toolbar-customize-grip{opacity:.9}
+.toolbar-customize-check{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:100%;font-size:13px;cursor:pointer}
+.toolbar-customize-check>input{appearance:none;flex:0 0 16px;display:grid;place-items:center;width:16px;height:16px;margin:0;border:0;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1.5px rgb(var(--ink) / .32);cursor:pointer;transition:background .12s,box-shadow .12s}
+.toolbar-customize-check>input:checked{background:var(--selection-marker,var(--accent));box-shadow:none}
+.toolbar-customize-check>input:checked::after{content:"";width:8px;height:4px;border:solid #fff;border-width:0 0 1.75px 1.75px;transform:translateY(-1px) rotate(-45deg)}
+.toolbar-customize-check>input:focus-visible{outline:2px solid var(--selection-marker,var(--accent));outline-offset:2px}
+@media(forced-colors:active){.toolbar-customize-check>input{appearance:auto}}
+.toolbar-customize-check>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* R4 sweep: in a narrow column (two lists side by side at 150%) the quiet move buttons give the label room: 22px targets and a 4px gap. The label still ellipsises with its full name as the tooltip when even that is not enough. */
+@container (max-width: 240px){.toolbar-customize-row{gap:4px;padding-right:2px}.toolbar-customize-move{flex-basis:22px;width:22px}}
+.toolbar-customize-list{container-type:inline-size}
+.toolbar-customize-move{flex:0 0 26px;display:grid;place-items:center;width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:inherit;opacity:0;transition:opacity .12s,background .12s;cursor:pointer}
+.toolbar-customize-move.down svg{transform:rotate(180deg)}
+.toolbar-customize-row:is(:hover,:focus-within) .toolbar-customize-move:not(:disabled){opacity:.75}
+.toolbar-customize-move:not(:disabled):hover{opacity:1;background:var(--frame-hover,var(--hover))}
+.toolbar-customize-move:focus-visible{opacity:1;outline:2px solid var(--selection-marker,var(--accent));outline-offset:-2px}
+.toolbar-customize-move:disabled{cursor:default}
+.toolbar-customize-footer{display:flex;align-items:center;gap:10px;margin:6px 8px 0;padding-top:10px;border-top:1px solid var(--line);font-size:12px;line-height:1.45;color:var(--muted)}
+.toolbar-customize-footer>span{flex:1}
+.toolbar-customize-reset{flex:0 0 auto;height:28px;padding:0 12px;border:0;border-radius:7px;background:var(--hover);color:var(--text);font:inherit;font-weight:500;cursor:pointer}
+.toolbar-customize-reset:hover{background:var(--frame-hover,var(--selected))}
+.toolbar-customize-reset:focus-visible{outline:2px solid var(--selection-marker,var(--accent));outline-offset:1px}
+.app[data-reduced-motion=true] .toolbar-customize-move{transition:none}
+@media(forced-colors:active){.toolbar-customize-grip{background:radial-gradient(circle,CanvasText 1.1px,transparent 1.4px) 0 0/6px 6px}.toolbar-customize-move{opacity:1}}

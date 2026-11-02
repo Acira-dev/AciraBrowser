@@ -1,0 +1,88 @@
+/* Acira's native frame uses physical coordinates for caption hit testing, sidebar
+   placement, split bounds and popup anchors. Keep that coordinate system intact;
+   only the interface surfaces inside it take the reading direction. Websites are
+   separate WebContents and must never receive these rules. */
+html[dir='rtl'] .app { direction: ltr; }
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .nt-page, .fr-stage, .fr-w, .navigation-error, .t-toast, .t-pill, .lib, .rw-page, .pvt-page) {
+  direction: rtl;
+}
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .lib, .rw-page, .pvt-page) { text-align: start; }
+/* Preserve connected-script shaping rather than Latin display tracking. */
+html:lang(ar) .app :is(h1, h2, h3, button, input, .display-hero, .display-page, .lede) { letter-spacing: normal; }
+
+/* Native glyph fallback covers Arabic joining and the scripts not in Geist. */
+html:lang(ar), html:lang(hi), html:lang(ko) {
+  --font-ui: 'Geist', 'Segoe UI', 'Nirmala UI', 'Malgun Gothic', system-ui, sans-serif;
+}
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .fr-stage) :is(button, input, textarea) {
+  text-align: start;
+}
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .fr-stage) :is(.icon-button, .st-switch) {
+  text-align: center;
+}
+
+/* User text is isolated from adjacent Arabic punctuation. URLs, shortcuts and
+   technical identifiers retain their conventional order without reversing icons. */
+html[dir='rtl'] .app :is(.tab-title, .sb-tab-title, .tab-result-label, .nt-tile-label, .nt-caption > h1) {
+  unicode-bidi: plaintext;
+}
+html[dir='rtl'] .app :is(kbd, code, pre, input[type='url'], input[type='email'], .address-bar, .address-measure) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+html[dir='rtl'] .app .address-field input { unicode-bidi: plaintext; }
+
+html[dir='rtl'] .app.style-acira .browser-settings.settings-acira .bs-sidebar::after {
+  right: auto;
+  inset-inline-end: 0;
+}
+html[dir='rtl'] .app.style-acira .browser-settings.settings-acira :is(.st-profile .st-control, .newtab-shortcut-actions, .profile-cleanup__fold-summary) {
+  margin-left: 0;
+  margin-inline-start: auto;
+}
+html[dir='rtl'] .app.style-acira .browser-settings.settings-acira .st-range > span { text-align: end; }
+/* Switch animations use physical translateX; do not reverse their track. */
+html[dir='rtl'] .app :is(.st-switch, input[role='switch']) { direction: ltr; }
+
+html[dir='rtl'] .app.style-acira .browser-popup :is(.menu-row kbd, .popup-shortcut, .find-actions kbd) {
+  margin-left: 0;
+  margin-inline-start: auto;
+}
+html[dir='rtl'] .app .browser-popup .popup-count { margin-left: 0; margin-inline-start: 8px; }
+html[dir='rtl'] .app .browser-popup .tab-result > .tab-result-label { text-align: start; }
+html[dir='rtl'] .app .browser-popup .menu-row-more > svg:last-child {
+  margin-left: 0;
+  margin-inline-start: 6px;
+  transform: scaleX(-1);
+}
+html[dir='rtl'] .app.style-acira .acira-sidebar .sb-zone-chev-end {
+  margin-left: 2px;
+  margin-right: auto;
+}
+html[dir='rtl'] .app.style-acira .lib :is(.lib-open, .bm-node, .bm-edit-option) { text-align: start; }
+html[dir='rtl'] .app.style-acira .lib :is(.bm-node, .bm-edit-option) {
+  padding-left: 8px;
+  padding-inline-start: calc(8px + var(--depth, 0) * 14px);
+}
+html[dir='rtl'] .app.style-acira .lib .lib-section-action { margin-left: 0; margin-inline-start: auto; }
+html[dir='rtl'] .app.style-acira .lib .bm-edit-new { margin-left: 0; margin-inline-start: -8px; }
+html[dir='rtl'] .app.style-acira .lib .bm-crumb .lib-section-count { margin-right: 0; margin-inline-end: auto; }
+
+html[dir='rtl'] .fr-w-lang { left: auto; inset-inline-start: 24px; }
+html[dir='rtl'] .fr-w-lang-list {
+  left: auto;
+  inset-inline-start: 0;
+  text-align: start;
+  transform-origin: 100% 100%;
+}
+html[dir='rtl'] .fr-val { text-align: end; }
+html[dir='rtl'] .fr-content { text-align: start; }
+html[dir='rtl'] .fr-skip { right: auto; inset-inline-end: 24px; }
+html[dir='rtl'] .fr-stage button.fr-more { text-align: start; }
+html[dir='rtl'] .fr-more-val { margin-right: 0; margin-inline-end: -2px; }
+html[dir='rtl'] .app.style-acira .nt-page .nt-search .address-field input {
+  text-align: start;
+  direction: rtl;
+  padding-right: 0;
+  padding-inline-end: var(--space-2, 8px) !important;
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Tab card</title>
+<style>
+/* Tab hover card (R3-14: the card with a picture that Brave and Helium show). A small native view above the page, drawn here:
+   the tab's name, its site and a picture of the page from when you left it (kept in memory, never saved). Solid surface,
+   hairline ring, the soft layered shadow; radius 8 (4 for the picture). It arrives on the effects and spatial springs. */
+:root{
+ --card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-quiet:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--well:rgb(255 255 255/.06);
+ --shadow:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -6px rgb(0 0 0/.42);
+ color-scheme:dark;
+}
+body.light{
+ --card:#ffffff;--ink:rgb(29 31 36/.90);--ink-2:rgb(29 31 36/.66);--ink-quiet:rgb(29 31 36/.46);--line:rgb(0 0 0/.08);--well:rgb(0 0 0/.045);
+ --shadow:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.18);
+ color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
+#card{position:absolute;width:264px;border-radius:8px;background:var(--card);box-shadow:var(--shadow),0 0 0 1px var(--line);padding:8px;opacity:0;transform-origin:0 0}
+#pic{display:block;width:100%;height:140px;margin:0 0 8px;border-radius:4px;overflow:hidden;background:var(--well)}
+#pic[hidden]{display:none}
+#pic img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 0}
+#text{padding:0 4px 4px}
+body.bare #text{padding:2px 4px 2px}
+#ttl{font-size:13px;line-height:17px;font-weight:500;color:var(--ink);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+#meta{display:flex;gap:6px;min-width:0;margin-top:2px;font-size:11.5px;line-height:15px;color:var(--ink-quiet);white-space:nowrap}
+#host{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
+#tag{flex:none}
+#tag:empty{display:none}
+#tag::before{content:'· '}
+@media (forced-colors:active){#card{border:1px solid CanvasText;box-shadow:none}}
+</style>
+</head>
+<body>
+<div id="card" role="tooltip">
+ <div id="pic" hidden><img id="img" alt=""></div>
+ <div id="text"><div id="ttl"></div><div id="meta"><span id="host"></span><span id="tag"></span></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id),body=document.body,card=$('card');
+//#spring — the springs of src/ui/springs.ts and the tokens of src/ui/motionTokens.ts, ported (tests/tab-card.test.ts holds them equal).
+const TAU=Math.PI*2,POINTS=44;
+const springAt=(spec,from,to,t,velocity=0)=>{
+ const duration=Math.max(.05,spec.duration),omega=TAU/duration,zeta=1-Math.max(0,Math.min(.95,spec.bounce)),y0=from-to;
+ if(t<=0)return {value:from,velocity};
+ if(zeta>=.9999){const a=y0,b=velocity+omega*y0,e=Math.exp(-omega*t);return {value:to+(a+b*t)*e,velocity:(b-omega*(a+b*t))*e};}
+ const wd=omega*Math.sqrt(1-zeta*zeta),decay=zeta*omega,e=Math.exp(-decay*t),a=y0,b=(velocity+decay*y0)/wd,cos=Math.cos(wd*t),sin=Math.sin(wd*t);
+ return {value:to+e*(a*cos+b*sin),velocity:e*((b*wd-decay*a)*cos-(a*wd+decay*b)*sin)};
+};
+const springSettle=(spec,tolerance=.004,velocity=0)=>{const step=1/240;let last=0;for(let i=1;i<=240*6;i++){const t=i*step;if(Math.abs(springAt(spec,0,1,t,velocity).value-1)>tolerance)last=t;else if(t-last>.1)break;}return last+step;};
+const springEasing=(spec,scale=1,velocity=0)=>{
+ if(!(scale>0))return {duration:0,easing:'linear'};
+ velocity=Math.round(velocity*20)/20;
+ const stretched={duration:spec.duration*scale,bounce:spec.bounce},settle=springSettle(stretched,.004,velocity),stops=[];
+ for(let i=0;i<POINTS;i++){const t=settle*Math.pow(i/(POINTS-1),1.35),value=i===POINTS-1?1:springAt(stretched,0,1,t,velocity).value;stops.push(`${Math.round(value*10000)/10000}`);}
+ const positions=stops.map((_,i)=>Math.round(Math.pow(i/(POINTS-1),1.35)*10000)/100);
+ return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
+};
+const TOKENS={'menu.grow':['S',.170,0],'menu.fade':['E',.085,0],'materialize':['E',.170,0]};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
+//#endspring
+let speed='premium',off=false,pending=null,running=[];
+const play=(el,keyframes,id,opening=false)=>{
+ const spec=tokenSpring(id,speed),velocity=opening?KICK[speed]*TAU/spec.duration:0,{duration,easing}=springEasing(spec,1,velocity);
+ const a=el.animate(keyframes,{duration,easing,fill:'both'});running.push(a);return a;
+};
+const settle=()=>{for(const a of running.splice(0))a.cancel();};
+
+function render(state){
+ body.classList.toggle('light',state.dark===false);
+ speed=state.speed==='fast'?'fast':'premium';off=state.speed==='off'||!!state.reducedMotion;
+ card.style.left=state.inset.left+'px';card.style.top=state.inset.top+'px';
+ $('ttl').textContent=state.title||state.host||'';$('host').textContent=state.host||'';$('tag').textContent=state.renamed?(state.labels&&state.labels.renamed)||'':'';
+ const has=typeof state.picture==='string'&&state.picture.startsWith('data:image/jpeg;base64,');
+ $('pic').hidden=!has;body.classList.toggle('bare',!has);if(has)$('img').src=state.picture;else $('img').removeAttribute('src');
+ card.dataset.side=state.side||'below';
+}
+const measure=()=>Math.ceil(card.getBoundingClientRect().height);
+
+tabCard.onState(state=>{
+ if(state.leaving){
+  settle();
+  if(off){card.style.opacity='0';return;}
+  const beside=state.side==='right'||state.side==='left',dx=state.side==='right'?-2:state.side==='left'?2:0,dy=beside?0:-2;
+  play(card,[{opacity:1,transform:'none'},{opacity:0,transform:`translate(${dx}px,${dy}px)`}],'menu.fade');
+  return;
+ }
+ if(state.reveal){
+  settle();
+  if(state.inset){card.style.left=state.inset.left+'px';card.style.top=state.inset.top+'px';}
+  card.dataset.side=state.side||'below';
+  if(off||state.instant){card.style.opacity='1';card.style.transform='none';return;}
+  // From the tab's edge: a few pixels of travel and a touch of scale on the spatial spring, opacity on the effects spring.
+  const beside=state.side==='right'||state.side==='left',dx=state.side==='right'?-6:state.side==='left'?6:0,dy=beside?0:-6;
+  card.style.transformOrigin=state.side==='right'?'0 50%':state.side==='left'?'100% 50%':'50% 0';
+  play(card,[{opacity:0},{opacity:1}],'materialize');
+  play(card,[{transform:`translate(${dx}px,${dy}px) scale(.97)`},{transform:'none'}],'menu.grow',true);
+  return;
+ }
+ render(state);
+ tabCard.command({type:'size',height:measure()+0});
+});
+tabCard.command({type:'ready'});
+</script>
+</body>
+</html>

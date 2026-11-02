@@ -1,0 +1,7 @@
+.acira-seg { --seg-ease: cubic-bezier(.445, .05, .55, .95); position: relative; justify-self: start; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 32px; padding: 2px; border-radius: 6px; background: var(--seg-track, rgb(var(--ink, 17 17 19) / .06)); }
+.acira-seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / var(--seg-count, 2)); border-radius: 4px; background: var(--seg-thumb, var(--tab-surface, #fff)); box-shadow: var(--seg-thumb-rim, 0 0 0 .5px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .08)); transform: translateX(calc(var(--seg-index, 0) * 100%)); transition: transform 100ms var(--seg-ease); pointer-events: none; }
+.acira-seg button { position: relative; z-index: 1; height: 28px; padding: 0 12px; border: 0; border-radius: 4px; background: none; font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif); color: var(--seg-ink-2, var(--text-2, #646465)); cursor: default; white-space: nowrap; transition: color 100ms var(--seg-ease); }
+.acira-seg button[aria-checked='true'] { color: var(--seg-ink, var(--text-1, #111113)); }
+.acira-seg button:focus-visible { outline: 2px solid var(--seg-ring, var(--focus-ring-color, var(--accent, #3b6eea))); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .acira-seg-thumb, .acira-seg button { transition: none; } }
+[data-reduced-motion='true'] .acira-seg-thumb { transition: none; }

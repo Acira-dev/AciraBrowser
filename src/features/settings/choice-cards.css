@@ -1,0 +1,79 @@
+/* Illustrated choices in Settings (tab layout, appearance). A card is a miniature browser window, a radio and a label.
+   The chosen card has a 2px accent ring and a filled radio; hover is a 4% fill; arrow keys move and choose. */
+.cc-group { display: grid; grid-template-columns: repeat(var(--cc-cols, var(--cc-count, 2)), minmax(0, 1fr)); gap: 12px; width: 100%; }
+.st-row[data-stacked]:has(> .st-control > .cc-group) { padding-bottom: 20px; }
+.cc-card { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 8px 8px 12px; border: 0; border-radius: 14px; background: transparent; color: var(--st-text, var(--text-1)); font: inherit; text-align: left; cursor: pointer; -webkit-appearance: none; appearance: none; transition: background-color 120ms ease, box-shadow 120ms ease; }
+.cc-card:hover { background: color-mix(in srgb, var(--st-text, var(--text-1, #1f2328)) 4%, transparent); }
+.cc-card[aria-checked='true'] { box-shadow: inset 0 0 0 2px var(--accent, #3b6eea); }
+.cc-card:focus { outline: 0; }
+.cc-card:focus-visible { outline: 2px solid var(--st-ring, var(--accent, #3b6eea)); outline-offset: 2px; }
+
+/* The miniature takes the live theme unless a card sets its own (Light, Dark). */
+.cc-art { --cc-frame: var(--ed-chrome); --cc-sheet: var(--chrome-sheet, var(--sheet)); --cc-page: var(--sheet, #fff); --cc-ink: var(--ink, 17 17 19); --cc-chrome-ink: var(--chrome-ink, 20 21 24); --cc-accent: var(--accent, #3b6eea); --cc-wall: #dde2eb;
+  display: block; position: relative; aspect-ratio: 8 / 5; border-radius: 9px; overflow: hidden; box-shadow: 0 0 0 1px var(--st-line, rgb(0 0 0 / .08)); }
+[data-theme='dark'] .cc-art { --cc-wall: #1c1e24; }
+.cc-svg { display: block; width: 100%; height: 100%; }
+.cc-wall { fill: var(--cc-wall); }
+.cc-shadow { fill: #000; }
+.cc-frame { fill: var(--cc-frame); }
+.cc-sheet { fill: var(--cc-sheet); }
+.cc-page { fill: var(--cc-page); }
+.cc-accent { fill: var(--cc-accent); }
+.cc-bar { fill: rgb(var(--cc-chrome-ink) / .26); }
+.cc-bar-strong { fill: rgb(var(--cc-chrome-ink) / .62); }
+.cc-stroke { fill: none; stroke: rgb(var(--cc-chrome-ink) / .4); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.cc-field { fill: rgb(var(--cc-chrome-ink) / .07); }
+.cc-hair { fill: none; stroke: rgb(var(--cc-ink) / .09); stroke-width: .5; }
+.cc-picture { fill: rgb(var(--cc-ink) / .06); }
+.cc-rim { fill: none; stroke: rgb(var(--cc-ink) / .14); stroke-width: .5; }
+/* Text bars drawn after the page rectangle sit on the page, so they use the page's own ink. */
+
+.cc-label { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 13px; line-height: 16px; }
+.cc-name { font-weight: 400; color: var(--st-text, var(--text-1)); }
+.cc-card[aria-checked='true'] .cc-name { font-weight: 500; }
+.cc-radio { position: relative; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--st-edge-strong, rgb(0 0 0 / .3)); transition: background-color 120ms ease, box-shadow 120ms ease; }
+.cc-card:hover .cc-radio { box-shadow: inset 0 0 0 1.5px var(--st-muted, rgb(0 0 0 / .5)); }
+.cc-card[aria-checked='true'] .cc-radio { background: var(--accent, #3b6eea); box-shadow: none; }
+.cc-card[aria-checked='true'] .cc-radio::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--on-accent, #fff); }
+
+@container (max-width: 560px) { .cc-group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 380px) { .cc-group { grid-template-columns: 1fr; } }
+/* R4-56: a short window (150% interface size in 1280x800 leaves 533px) still shows Tabs and Window view under the page head with no
+   scrolling. Only the Layout group at the top of Appearance changes: the Tabs choice becomes two side-by-side cards (miniature left,
+   radio and name right) and the page head and card padding tighten (the head rules need the extra .bs-main: settings.css nests its rules under the same four classes). Taller windows keep the big cards. */
+@media (max-height: 600px) {
+  .app.style-acira .browser-settings.settings-acira .bs-main .st-toolbar { padding-top: 12px; }
+  .app.style-acira .browser-settings.settings-acira .bs-main .bs-page { padding-top: 0; }
+  .app.style-acira .browser-settings.settings-acira .bs-main .bs-page > h1 { margin: 4px 0 2px; }
+  .app.style-acira .browser-settings.settings-acira .bs-main .bs-page > .st-lede { margin-bottom: 16px; }
+  [data-group='layout'] .st-row[data-stacked]:has(> .st-control > .cc-group) { padding-bottom: 8px; gap: 6px; }
+  [data-group='layout'] .cc-group { gap: 8px; }
+  [data-group='layout'] .cc-card { gap: 6px; padding: 6px 8px 8px; }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: row; align-items: center; gap: 12px; padding: 6px 12px 6px 8px; }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: 0 0 88px; width: 88px; border-radius: 7px; }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-label { flex: 1 1 auto; min-width: 0; }
+  /* side-by-side needs about 230px a card (88px miniature + the longest label, in German "In einer Seitenleiste"); in a narrower pane the cards go back to a miniature over its label */
+  @container (max-width: 600px) {
+    [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 8px 8px; }
+    [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: none; width: auto; }
+  }
+}
+@media (prefers-reduced-motion: reduce) { .cc-card, .cc-radio { transition: none; } }
+[data-reduced-motion='true'] .cc-card, [data-reduced-motion='true'] .cc-radio { transition: none; }
+@media (forced-colors: active) {
+  .cc-card[aria-checked='true'] { box-shadow: inset 0 0 0 2px Highlight; }
+  .cc-card[aria-checked='true'] .cc-radio { background: Highlight; }
+}
+/* Thin-line miniatures: bars and dots are round-capped strokes (one path per kind), the window is hairlines and tone, nothing else. */
+.cc-bar { fill: none; stroke: rgb(var(--cc-chrome-ink) / .38); stroke-width: 2.6; stroke-linecap: round; }
+.cc-bar-strong { stroke: rgb(var(--cc-chrome-ink) / .66); stroke-width: 3.6; }
+.cc-page-ink { stroke: rgb(var(--cc-ink) / .26); }
+.cc-bar-strong.cc-page-ink { stroke: rgb(var(--cc-ink) / .55); stroke-width: 5; }
+.cc-dot { fill: none; stroke: rgb(var(--cc-chrome-ink) / .3); stroke-width: 4.6; stroke-linecap: round; }
+.cc-dot-accent { stroke: var(--cc-accent); }
+.cc-field { fill: none; stroke: rgb(var(--cc-chrome-ink) / .3); stroke-width: .6; }
+.cc-picture { fill: none; stroke: rgb(var(--cc-ink) / .26); stroke-width: .7; }
+.cc-stroke { fill: none; stroke: rgb(var(--cc-chrome-ink) / .55); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+.cc-hair { fill: none; stroke: rgb(var(--cc-ink) / .16); stroke-width: .6; }
+.cc-rim { fill: none; stroke: rgb(var(--cc-ink) / .3); stroke-width: .6; }

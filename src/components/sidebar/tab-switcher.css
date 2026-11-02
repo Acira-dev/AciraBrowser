@@ -1,0 +1,14 @@
+/* Ctrl+Tab switcher (bible §4 menu rows, §3.9 frequency rule: no enter animation beyond the surface's 80ms fade). */
+.tab-switcher{
+ --ts-fg:var(--chrome-fg,var(--ed-ink));--ts-muted:var(--chrome-text-2,rgb(var(--ink) / .64));--ts-faint:rgb(var(--ink) / .44);
+ display:flex;flex-direction:column;gap:0;padding:6px;outline:0;font-family:var(--font-ui,inherit);color:var(--ts-fg);
+ max-height:100%;overflow-y:auto;scrollbar-width:none;
+}
+.tab-switcher-row{display:flex;align-items:center;gap:10px;flex:none;height:36px;padding:0 10px;border-radius:var(--radius-control,4px);color:var(--ts-muted);cursor:default;user-select:none}
+.tab-switcher-row[aria-selected=true]{background:rgb(var(--ink) / .07);color:var(--ts-fg)}
+.tab-switcher-icon{flex:none;display:grid;place-items:center;width:16px;height:16px}
+.tab-switcher-icon>:is(img,svg){width:16px;height:16px}
+.tab-switcher-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-13,13px);font-weight:450}
+.tab-switcher-host{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-12,12px);color:var(--ts-faint)}
+.tab-switcher-foot{flex:none;height:28px;display:flex;align-items:center;padding:0 10px;margin-top:4px;border-top:1px solid var(--chrome-line,rgb(var(--ink) / .08));font-size:var(--text-11,11px);color:var(--ts-faint)}
+@media(forced-colors:active){.tab-switcher-row[aria-selected=true]{forced-color-adjust:none;background:Highlight;color:HighlightText}}

@@ -1,0 +1,1355 @@
+/* The isolated preview's presentation system. All material is neutral white frost. */
+:root { color-scheme:light; --caption-width:var(--geometry-caption); }
+html,body,#root { width:100%; height:100%; margin:0; overflow:hidden; }
+body { background:var(--sheet); }
+.app.style-acira {
+  --material-radius:8px; background:var(--sheet); color:var(--ed-ink);
+  font-family:Geist,Inter,'Segoe UI',sans-serif; font-size:13px; font-weight:400;
+  font-synthesis:none; letter-spacing:normal;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  --xp-glass:var(--sheet); --xp-paper:var(--sheet); --xp-hover:var(--ed-hover); --xp-selected:var(--ed-selected);
+  --xp-rim:var(--ed-line); --xp-selected-rim:var(--ed-controlEdge); --xp-separator:var(--ed-line);
+  --xp-card-shadow:none; --xp-selected-shadow:none; --xp-float-shadow:var(--frost-shadow);
+}
+.app.style-acira:not(.native-layer) { display:grid; grid-template-columns:var(--navigation-width,var(--geometry-rail)) minmax(0,1fr); transition:grid-template-columns .28s cubic-bezier(.16,1,.3,1); }
+.app.style-acira.native-layer { display:block; background:transparent; }
+html:has(.native-layer),html:has(.native-layer) body,html:has(.native-layer) #root { background:transparent; }
+.app.style-acira button,.app.style-acira input,.app.style-acira textarea,.app.style-acira select { font-family:inherit; letter-spacing:inherit; }
+.app.style-acira button:focus-visible,.app.style-acira a:focus-visible,.app.style-acira [role=separator]:focus-visible { outline:2px solid var(--ed-blue); outline-offset:2px; }
+.app.style-acira svg.lucide { vector-effect:non-scaling-stroke; }
+.app.style-acira .browser-root { min-width:0; background:var(--sheet); border-left:1px solid var(--ed-line); }
+.app.style-acira:has(.ed-rail:not(.is-expanded)) .browser-root { border-left:0; }
+.app.style-acira .browser-shell { background:var(--sheet); border-bottom:1px solid var(--ed-line); box-shadow:none; }
+.app.style-acira .acira-tab-row { height:var(--geometry-tabRow); padding:0 0 0 8px; gap:4px; background:var(--sheet); -webkit-app-region:drag; }
+.app.style-acira .tabs-strip { padding:3px 0; }
+.app.style-acira .browser-tab { height:30px; border-radius:6px; gap:8px; color:var(--ed-muted); }
+.app.style-acira .browser-tab .tab-title { font-size:13px; font-weight:400; }
+.app.style-acira .browser-tab[data-tab-group],.app.style-acira .tab-group-header:not(.compact) { height:26px; }
+.app.style-acira .tab-group-tray { border-radius:6px; box-shadow:inset 0 0 0 1px var(--group-accent,var(--ed-line)); }
+.app.style-acira .tab-group-label { font-size:13px; font-weight:500; border-radius:6px; }
+.app.style-acira .browser-tab[data-entering=true]>:is(.tab-title,.site-identity-icon,.tab-close) { animation:ed-tab-form .26s cubic-bezier(.22,.7,.3,1) both; }
+/* A new tab's contents resolve in place: opacity and a 2px rise on the compositor, never an animated blur (bible §3.9). */
+@keyframes ed-tab-form { from { opacity:0; transform:translateY(2px) scale(.97); } to { opacity:1; transform:none; } }
+.app[data-reduced-motion=true] .browser-tab[data-entering=true]>* { animation:none; }
+.app.style-acira .browser-tab.selected { color:var(--ed-ink); }
+.app.style-acira .browser-tab.selected .tab-title { font-weight:500; }
+.app.style-acira .browser-tab .tab-selection,.app.style-acira .tab-strip-selection { background:var(--ed-selected); border:0; box-shadow:none; border-radius:6px; }
+.app.style-acira .browser-tab .tab-close { width:18px; height:20px; flex-basis:18px; color:var(--ed-muted); border-radius:4px; }
+.app.style-acira .browser-tab:not(.selected) .tab-close { opacity:0; }
+.app.style-acira .browser-tab:hover .tab-close,.app.style-acira .browser-tab:focus-within .tab-close { opacity:1; }
+.app.style-acira .titlebar-drag { flex:0 0 48px; min-width:48px; -webkit-app-region:drag; }
+.app.style-acira .caption-reservation { display:block; }
+html[data-native=false] .app .caption-reservation { display:none; }
+.app.style-acira .compact-caption-space { display:none; }
+.app.style-acira .icon-button { width:28px; height:28px; min-width:28px; flex-basis:28px; color:var(--ed-icon); border-radius:6px; }
+.app.style-acira .icon-button:hover { background:var(--ed-hover); color:var(--ed-ink); }
+.app.style-acira .icon-button.active { background:var(--ed-selected); color:var(--ed-ink); }
+.app.style-acira .icon-button svg { width:18px; height:18px; }
+.app.style-acira .acira-persistent-toolbar { display:flex; height:var(--geometry-toolbar); padding:0 12px; gap:12px; border:0; background:var(--sheet); }
+.app.style-acira .acira-leading-controls { flex:0 0 auto; min-width:0; }
+.app.style-acira .navigation-controls { padding:0; border:0; background:transparent; border-radius:0; box-shadow:none; gap:2px; }
+.app.style-acira .navigation-controls .icon-button { width:28px; height:28px; min-width:28px; flex-basis:28px; }
+
+/* One material layer:translucent body, soft edge, and stationary grain. */
+.ed-frost,.app.style-acira .address-bar {
+  position:relative; isolation:isolate; border:1px solid var(--frost-edge); border-radius:8px;
+  background:var(--frost-fill); backdrop-filter:blur(var(--frost-blur)); -webkit-backdrop-filter:blur(var(--frost-blur));
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.7 * var(--hi-k))),var(--frost-shadow);
+}
+.ed-frost::before,.app.style-acira .address-bar::before {
+  content:''; position:absolute; inset:0; border-radius:inherit; background-image:url('/frost-grain.svg');
+  background-size:var(--frost-grain-size) var(--frost-grain-size); opacity:var(--frost-grain); pointer-events:none; z-index:0;
+}
+.ed-frost>*,.app.style-acira .address-bar>:not(.navigation-progress) { position:relative; z-index:1; }
+/* On acrylic chrome Windows already blurs what is behind the window; a CSS backdrop blur over the chrome veil only adds
+   compositor work (re-run whenever the loading line or chrome repaints) without changing a pixel. */
+html[data-material=acrylic] .app.style-acira .address-bar { backdrop-filter:none; -webkit-backdrop-filter:none; }
+.app.style-acira .address-bar { height:34px; flex:1 1 0; width:auto; max-width:none; min-width:140px; border-radius:8px; background:var(--address-fill); box-shadow:var(--field-shadow); }
+.app.style-acira .address-bar input,.app.style-acira .address-bar .address-field input { font-size:13px; text-align:left; color:var(--ed-ink); }
+.app.style-acira .address-bar:focus-within { border-color:rgb(255 255 255 / calc(0.851 * var(--hi-k))); background:var(--address-focus); box-shadow:var(--field-shadow); }
+.app.style-acira .address-security { width:27px; height:27px; flex-basis:27px; color:var(--ed-icon); }
+.app.style-acira .address-security svg,.app.style-acira .address-star svg { width:16px; height:16px; }
+.app.style-acira .toolbar-actions { gap:4px; }
+.app.style-acira .toolbar-actions>.profile-button { display:none; }
+.app.style-acira .profile-button span { background:var(--ed-selected); color:var(--ed-ink); font-size:12px; }
+.app.style-acira .browser-body { padding:0; gap:0; }
+.app.style-acira .acira-workspace-slot { display:none !important; }
+.app.style-acira .browser-body>.page-area { margin:0; border:0; border-radius:0; background:var(--sheet); box-shadow:none; }
+.app.style-acira .page-content,.app.style-acira .page-pane { border-radius:0; background:var(--sheet); }
+.app.style-acira .native-assistant-panel { border:1px solid var(--frost-edge); border-radius:8px; box-shadow:inset 0 1px rgb(255 255 255 / calc(0.702 * var(--hi-k))); }
+.app.style-acira .native-assistant-panel::before { content:''; position:absolute; inset:0; border-radius:inherit; background:url('/frost-grain.svg') repeat; background-size:var(--frost-grain-size); opacity:var(--frost-grain); pointer-events:none; }
+
+/* Expanded workspace navigation collapses completely; the header restores it. */
+.ed-rail { position:relative; z-index:10; height:100%; min-height:0; min-width:0; width:100%; overflow:hidden; display:flex; align-items:center; flex-direction:column; background:var(--sheet); }
+.ed-rail:not(.is-expanded) { visibility:hidden; pointer-events:none; }
+.ed-rail-brand { display:flex; align-items:center; flex:0 0 52px; width:100%; padding:0 10px; -webkit-app-region:drag; }
+.ed-rail nav,.ed-rail footer { display:flex; flex-direction:column; align-items:flex-start; gap:8px; width:100%; padding-left:10px; }
+.ed-rail nav { padding-top:9px; }
+.ed-rail footer { margin-top:auto; padding:12px 0 12px 10px; }
+.ed-rail-button { position:relative; display:grid; place-items:center; width:32px; height:32px; border-radius:6px; color:var(--ed-icon); -webkit-app-region:no-drag; }
+.ed-rail-button:hover { background:var(--ed-hover); color:var(--ed-ink); }
+.ed-rail-button[aria-current=page] { background:var(--ed-selected); color:var(--ed-blue); }
+.ed-rail-button[aria-current=page]::before { content:''; position:absolute; left:-10px; height:14px; width:2px; background:var(--ed-blue); border-radius:0 2px 2px 0; }
+.ed-rail-button .brand-symbol img { width:20px; height:24px; }
+/* Rail labels use the one inverted tooltip (bible §4, transient.css .t-tip): 24px, radius 4, ring as a shadow, 140ms expo-out
+   slide from the trigger, after 500ms. */
+.ed-rail-button::after { content:attr(data-tooltip); position:absolute; left:42px; top:50%; transform:translate(-4px,-50%); box-sizing:border-box; height:24px; padding:4px 8px; border-radius:4px; background:rgb(24 24 27); color:#f4f4f5; box-shadow:0 0 0 1px rgb(255 255 255 / .1),0 1px 2px rgb(0 0 0 / .2),0 4px 12px -2px rgb(0 0 0 / .25); font:500 12px/16px var(--font-ui); white-space:nowrap; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 140ms cubic-bezier(.16,1,.3,1),transform 140ms cubic-bezier(.16,1,.3,1),visibility 0s 140ms; }
+.ed-rail-button:hover::after { opacity:1; visibility:visible; transform:translate(0,-50%); transition-delay:.5s,.5s,0s; }
+.ed-rail-button:focus-visible::after { opacity:1; visibility:visible; transform:translate(0,-50%); transition-delay:0s; }
+.ed-rail-divider { height:1px; background:var(--ed-line); width:20px; margin:6px; }
+.ed-rail-badge { position:absolute; right:5px; top:5px; width:4px; height:4px; border-radius:50%; background:var(--ed-blue); border:1px solid rgb(255 255 255 / calc(1 * var(--hi-k))); }
+.ed-profile-initial { width:25px; height:25px; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:500; background:var(--ed-selected); color:var(--ed-ink); }
+.ed-icon { display:inline-grid; place-items:center; flex:0 0 28px; width:28px; height:28px; border-radius:6px; color:var(--ed-icon); }
+.ed-icon:hover { background:var(--ed-hover); color:var(--ed-ink); }
+
+/* The same navigation can expand into a useful editor-style sidebar. */
+.ed-rail-label { display:none; }
+.ed-rail.is-expanded { align-items:stretch; overflow:hidden; }
+.ed-rail.is-expanded .ed-rail-brand { display:flex; justify-content:flex-start; gap:8px; padding:0 12px; }
+.ed-rail.is-expanded .ed-rail-brand>.ed-rail-button { width:78px; padding:0 6px; flex:0 0 78px; justify-content:flex-start; }
+.ed-rail.is-expanded .ed-rail-brand>.ed-rail-button .brand-logo img { width:62px; height:auto; }
+.ed-rail.is-expanded .ed-rail-brand>.ed-icon { margin-left:auto; }
+.ed-rail.is-expanded .ed-rail-brand .ed-rail-label { display:none; }
+.ed-rail.is-expanded nav,.ed-rail.is-expanded footer { align-items:stretch; padding-left:12px; padding-right:12px; gap:4px; }
+.ed-rail nav { flex-shrink:0; }
+.ed-rail footer { flex-shrink:0; }
+.ed-rail.is-expanded .ed-rail-button { display:flex; gap:10px; justify-content:flex-start; padding:0 8px; width:100%; height:32px; border-radius:6px; }
+.ed-rail.is-expanded .ed-rail-label { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:400; line-height:18px; animation:ed-nav-label .18s ease-out; }
+.ed-rail.is-expanded .ed-rail-button[aria-current=page] .ed-rail-label { font-weight:500; color:var(--ed-ink); }
+.ed-rail.is-expanded .ed-rail-button[aria-current=page]::before { left:-12px; }
+.ed-rail.is-expanded .ed-rail-button::after { display:none; }
+.ed-rail.is-expanded .ed-rail-divider { width:100%; margin:10px 0; }
+.ed-rail-saved { margin:16px 12px 0; overflow:auto; min-height:0; scrollbar-width:thin; }
+.ed-rail-saved>header { height:28px; display:flex; align-items:center; justify-content:space-between; padding-left:8px; color:var(--ed-muted); font-size:12px; }
+.ed-rail-saved>button { display:flex; align-items:center; gap:10px; height:32px; width:100%; padding:0 8px; text-align:left; border-radius:6px; }
+.ed-rail-saved>button>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.ed-rail-saved>button:hover { background:var(--ed-hover); }
+.ed-rail-saved>p { font-size:12px; line-height:18px; color:var(--ed-muted); padding:8px; }
+.ed-rail.is-expanded footer { padding-bottom:12px; }
+.ed-rail.is-expanded .ed-profile-initial { width:18px; height:18px; font-size:12px; }
+@keyframes ed-nav-label { from { opacity:0; } to { opacity:1; } }
+.app.style-acira[data-reduced-motion=true] { transition:none; }
+.app[data-reduced-motion=true] .ed-rail-label { animation:none; }
+
+/* The start canvas centers its real content, and scrolls safely on short windows. */
+.ed-workspace { height:100%; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; padding:32px; background:var(--ed-surface); color:var(--ed-ink); scrollbar-width:thin; scrollbar-gutter:stable both-edges; container-type:inline-size; }
+.ed-start-composition { flex:0 0 auto; width:100%; max-width:var(--geometry-startWidth); margin-block:auto; }
+.ed-workspace-identity { position:relative; margin-bottom:16px; padding-top:28px; }
+.ed-workspace-identity.has-cover { width:100%; min-width:0; max-width:100%; height:auto; min-height:144px; aspect-ratio:45 / 11; padding:0; }
+.ed-workspace-cover { position:absolute; inset:0; border-radius:8px; overflow:hidden; background:var(--ed-selected); }
+.ed-workspace-cover>img { display:block; width:100%; height:100%; object-fit:cover; object-position:var(--workspace-cover-position,50% 48%); }
+.ed-start-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:48px; }
+.has-cover>.ed-start-heading { position:absolute; bottom:0; left:0; right:0; min-height:64px; padding:12px 20px; border-radius:0 0 8px 8px; border-width:1px 0 0; box-shadow:inset 0 1px rgb(255 255 255 / calc(0.502 * var(--hi-k))); }
+.ed-start-heading>h1 { margin:0; min-width:0; overflow-wrap:anywhere; font-size:20px; line-height:28px; font-weight:500; letter-spacing:-.3px; }
+.ed-cover-toggle { position:absolute; top:0; right:0; display:grid; place-items:center; min-width:36px; min-height:36px; padding:0 8px; border-radius:6px; color:var(--ed-muted); font-size:12px; }
+.has-cover>.ed-cover-toggle { top:12px; right:12px; background:rgb(var(--sheet-rgb) / 0.878); color:var(--ed-ink); backdrop-filter:blur(16px); }
+.ed-cover-toggle:hover { color:var(--ed-ink); background:var(--ed-hover); }
+.ed-workspace-profile { display:flex; align-items:center; gap:8px; min-width:0; max-width:42%; height:28px; padding:0 6px; border-radius:6px; color:var(--ed-ink); font-size:13px; flex-shrink:0; }
+.ed-workspace-profile>span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ed-workspace-profile .ed-profile-initial { flex:0 0 20px; width:20px; height:20px; background:rgb(var(--sheet-rgb) / 0.702); font-size:12px; }
+.ed-workspace-profile:hover { background:rgb(var(--sheet-rgb) / 0.502); }
+.ed-start-search { position:relative; }
+.ed-start-mark{display:flex;align-items:center;justify-content:center;min-height:36px;margin-bottom:20px;color:var(--ed-icon)}
+.ed-start-mark .brand-symbol,.ed-start-mark .brand-symbol img{width:28px;height:32px}
+.ed-start-shortcuts{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,100px));justify-content:center;gap:12px;margin-top:24px}
+.ed-start-shortcuts:empty,.ed-start-composition.is-blank{display:none}
+.ed-site-shortcut{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0;max-width:100px;min-height:88px;padding:10px 6px;border:0;border-radius:6px;color:var(--text-primary);background:transparent}
+.ed-site-shortcut:hover{background:var(--input-hover)}
+.ed-site-shortcut:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.ed-site-shortcut-icon{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border-radius:50%;background:var(--input-fill);color:var(--ed-icon)}
+.ed-site-shortcut-icon>:is(img,svg){width:22px;height:22px;object-fit:contain}
+.ed-site-shortcut-label{display:-webkit-box;max-width:100%;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font-size:12px;line-height:16px;text-align:center;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.ed-search-glass { position:relative; height:48px; width:100%; display:flex; align-items:center; gap:10px; padding:0 12px; color:var(--ed-icon); background:var(--address-fill); box-shadow:inset 0 1px rgb(255 255 255 / calc(0.702 * var(--hi-k))),var(--search-shadow); }
+.ed-search-glass>.address-field input { width:100%; min-width:0; background:transparent; height:46px; color:var(--ed-ink); font-size:14px; line-height:20px; }
+.ed-search-glass>.address-field input::placeholder { color:var(--ed-muted); }
+.ed-search-glass:focus-within { background:var(--address-focus); border-color:rgb(255 255 255 / calc(.92 * var(--hi-k))); outline:none; box-shadow:inset 0 1px rgb(255 255 255 / calc(1 * var(--hi-k))),var(--search-shadow); }
+.ed-mode-root { position:relative; flex-shrink:0; }
+.ed-search-mode { display:flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:6px; color:var(--ed-muted); font-size:12px; }
+.ed-search-mode:hover { color:var(--ed-ink); background:rgb(var(--ink) / 0.024); }
+.ed-mode-menu { position:absolute; z-index:20; right:0; top:36px; width:168px; padding:4px; color:var(--ed-ink); }
+.ed-mode-menu button { display:flex; align-items:center; gap:8px; width:100%; height:32px; padding:0 8px; border-radius:6px; font-size:13px; text-align:left; }
+.ed-mode-menu button>span:not(.brand-logo) { flex:1; }
+.ed-mode-menu button:hover,.ed-mode-menu button:focus-visible { background:var(--ed-selected); }
+.ed-mode-menu .brand-symbol,.ed-mode-menu .brand-symbol img { width:16px; height:18px; }
+.ed-submit { display:grid; place-items:center; width:28px; height:28px; flex:0 0 28px; color:var(--on-ink); background:var(--ed-ink); border-radius:6px; }
+.ed-submit:disabled { opacity:1; color:var(--ed-muted); background:var(--ed-selected); }
+.ed-start-lists { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:32px; margin-top:24px; }
+.ed-start-lists:empty { display:none; }
+.ed-start-lists>.ed-page-section:only-child { grid-column:1 / -1; }
+.ed-page-section { min-width:0; }
+.ed-page-section>header { display:flex; align-items:center; justify-content:space-between; height:28px; border-bottom:1px solid var(--ed-line); }
+.ed-page-section h2 { font-size:13px; line-height:18px; font-weight:500; margin:0; }
+.ed-page-section>header>button { display:flex; align-items:center; gap:6px; color:var(--ed-muted); font-size:12px; }
+.ed-page-section>header>button:hover { color:var(--ed-ink); }
+.ed-page-row { display:flex; align-items:center; gap:10px; width:100%; min-height:40px; padding:0 8px; border-radius:6px; text-align:left; color:var(--ed-icon); }
+.ed-page-row:hover { background:var(--ed-hover); }
+.ed-page-row>strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ed-ink); font-size:13px; font-weight:400; line-height:18px; }
+.ed-page-row>span { max-width:42%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ed-muted); font-size:12px; line-height:18px; }
+.ed-page-row>svg:last-child { color:var(--ed-muted); opacity:0; }
+.ed-page-row:hover>svg:last-child,.ed-page-row:focus-visible>svg:last-child { opacity:1; }
+.ed-page-row-compact { min-height:36px; padding:0 6px; }
+.ed-page-row-compact>span { display:none; }
+.ed-empty { margin:14px 0 0; color:var(--ed-muted); font-size:12px; line-height:18px; max-width:280px; }
+.ed-start-tasks { margin-top:20px; padding-top:8px; border-top:1px solid var(--ed-line); }
+.ed-start-tasks .ed-page-row { min-height:36px; }
+.ed-library { height:100%; overflow:auto; background:var(--sheet); padding:24px 32px; }
+.ed-library-content { width:100%; max-width:1040px; margin:0 auto; }
+.ed-library-header { display:flex; align-items:baseline; gap:12px; margin-bottom:24px; }
+.ed-library-header h1 { font-size:20px; font-weight:500; line-height:28px; margin:0; letter-spacing:-.3px; }
+.ed-library-header>span { color:var(--ed-muted); font-size:12px; }
+.ed-list-search { display:flex; align-items:center; gap:10px; width:320px; max-width:100%; height:34px; border:1px solid var(--ed-controlEdge); border-radius:6px; padding:0 10px; color:var(--ed-icon); margin-bottom:20px; }
+.ed-list-search input { background:transparent; height:32px; min-width:0; width:100%; font-size:13px; }
+.ed-bookmark-row { display:flex; align-items:center; border-bottom:1px solid var(--ed-line); }
+.ed-bookmark-row>.ed-page-row { flex:1; min-width:0; border-radius:0; }
+.ed-row-action { opacity:0; }
+.ed-bookmark-row:hover .ed-row-action,.ed-bookmark-row:focus-within .ed-row-action { opacity:1; }
+@container(max-width:639px) { .ed-start-lists { grid-template-columns:1fr; gap:20px; } }
+@media(max-width:811px) { .ed-workspace { padding-inline:24px; } }
+
+/* Frost is painted by the parent/native host. Foreground stays transparent. */
+.ed-model { display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; color:var(--ed-muted); }
+.ed-message { margin:0 0 18px; font-size:14px; line-height:22px; }
+.ed-message small { color:var(--ed-muted); font-size:12px; }
+.ed-message p { margin:7px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ed-message-user { padding:12px; border:1px solid rgb(var(--ink) / 0.039); border-radius:6px; background:rgb(var(--sheet-rgb) / 0.439); }
+.ed-run-stage { padding:14px 0; font-size:13px; line-height:20px; border-top:1px solid rgb(var(--ink) / 0.047); }
+.ed-run-stage>span { font-size:12px; color:var(--ed-muted); text-transform:capitalize; }
+.ed-run-stage p { margin:6px 0 0; }
+.ed-run-stage progress { width:100%; height:3px; margin-top:12px; accent-color:var(--ed-blue); }
+.ed-new-task { display:flex; justify-content:center; align-items:center; gap:7px; color:var(--ed-muted); font-size:12px; padding:0 12px 12px; }
+
+/* Shared reading surfaces, management pages, and browser settings. */
+.app.style-acira .management { --m-bg:var(--sheet); --m-paper:var(--sheet); --m-sidebar:var(--sheet); --m-text:var(--ed-ink); --m-muted:var(--ed-muted); --m-line:var(--ed-line); --m-soft:var(--ed-hover); --m-accent:var(--ed-blue); --m-accent-soft:var(--ed-selected); font-size:13px; font-family:inherit; background:var(--sheet); }
+.app.style-acira .management>.m-sidebar { display:none; }
+.app.style-acira .management .m-main,.app.style-acira .management .m-content { background:var(--sheet); }
+.app.style-acira .management .m-main { container:working-view / inline-size; }
+.app.style-acira .management .m-content { width:100%; max-width:1104px; padding:24px 32px; margin:0 auto; }
+.app.style-acira .management .m-page-header { margin-bottom:24px; align-items:center; min-height:32px; }
+.app.style-acira .management .m-page-header h1 { font-size:20px; line-height:28px; letter-spacing:-.3px; font-weight:500; }
+.app.style-acira .management .m-page-header p { font-size:13px; line-height:20px; color:var(--ed-muted); }
+.app.style-acira .management .m-breadcrumb { font-size:12px; }
+.app.style-acira .btn { min-height:30px; padding:5px 10px; border-radius:6px; font-size:13px; font-weight:500; line-height:18px; }
+.app.style-acira .badge { padding:3px 7px; border-radius:4px; font-size:12px; font-weight:400; background:var(--ed-selected); color:var(--ed-muted); }
+.app.style-acira .management .card,.app.style-acira .m-dialog { border-radius:6px; box-shadow:none; }
+.app.style-acira .task-empty { text-align:left; padding:28px 0; }
+.app.style-acira .task-empty h2 { font-size:16px; font-weight:500; margin-top:14px; }
+.app.style-acira .task-empty>button:not(.btn) { border:0; border-bottom:1px solid var(--ed-line); border-radius:0; font-size:13px; padding:12px 0; }
+.app.style-acira .task-list-row { min-height:40px; padding:10px 0; gap:12px; }
+.app.style-acira .task-row-title { font-size:13px; font-weight:400; }
+.app.style-acira .task-list-row p,.app.style-acira .task-list-row small,.app.style-acira .task-list-row span:not(.badge) { color:var(--ed-muted); font-size:12px; }
+.app.style-acira .task-filter-row>button { font-size:13px; border-radius:6px; padding:5px 9px; }
+.app.style-acira .task-list-toolbar label { border-radius:6px; padding:6px 10px; }
+.app.style-acira .task-list-toolbar { margin-bottom:12px; }
+.app.style-acira .task-list-toolbar label { height:34px; background:var(--ed-hover); border:0; }
+.app.style-acira .task-list-toolbar input { border:0; border-radius:0; background:none; padding:0; outline:0; font-size:13px; }
+.app.style-acira .ed-task-list-row { display:grid; grid-template-columns:18px minmax(0,1fr) 104px minmax(0,190px); align-items:center; gap:12px; min-height:64px; padding:12px 8px; }
+.app.style-acira .ed-task-list-row:hover { background:var(--ed-hover); }
+.ed-task-status-icon { display:grid; place-items:center; flex:0 0 18px; width:18px; color:var(--ed-icon); }
+.app.style-acira .ed-task-identity .task-row-title { display:block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.app.style-acira .ed-task-identity p { margin:4px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:18px; }
+.app.style-acira .ed-task-list-row>.ed-task-status { flex:0 0 104px; margin:0; color:var(--ed-muted); font-size:12px; }
+.app.style-acira .ed-task-list-row>.task-controls { margin:0; padding:0; width:auto; max-width:none; justify-content:flex-end; }
+.app.style-acira .attention-row { padding:16px 8px; gap:12px; align-items:center; }
+.app.style-acira .attention-symbol { width:18px; height:18px; background:none; border-radius:0; color:var(--ed-icon); }
+.app.style-acira .attention-row h3 { margin:4px 0 0; font-weight:400; }
+.app.style-acira .attention-row h3>button { text-align:left; font:inherit; }
+.app.style-acira .attention-row h3>button:hover { text-decoration:underline; }
+.app.style-acira .attention-row p { margin:4px 0 0; font-size:12px; line-height:18px; }
+.app.style-acira .attention-row small { font-size:12px; line-height:18px; }
+@container working-view (max-width:700px) {
+  .app.style-acira .management .m-content { padding:24px; }
+  .app.style-acira .ed-task-list-row { grid-template-columns:18px minmax(0,1fr) auto; gap:8px 12px; }
+  .app.style-acira .ed-task-list-row>.task-controls { grid-column:2 / -1; justify-content:flex-start; }
+  .app.style-acira .ed-task-list-row>.ed-task-status { max-width:104px; }
+  .app.style-acira .task-list-toolbar { gap:12px; }
+  .app.style-acira .attention-row { display:grid; grid-template-columns:18px minmax(0,1fr); gap:8px 12px; }
+  .app.style-acira .attention-row>.btn { grid-column:2; margin:0; justify-self:start; }
+}
+.app.style-acira .m-history-row { min-height:48px; padding:8px 0; }
+.app.style-acira .m-history-row strong { font-size:14px; font-weight:400; }
+.app.style-acira .m-round-icon { background:transparent; border:0; border-radius:0; }
+.app.style-acira .browser-settings { --bs-background:var(--sheet); --bs-paper:var(--sheet); --bs-soft:var(--ed-hover); --bs-text:var(--ed-ink); --bs-muted:var(--ed-muted); --bs-line:var(--ed-line); background:var(--sheet); font-size:13px; font-family:inherit; container:settings / inline-size; }
+.app.style-acira .browser-settings .bs-sidebar { background:var(--sheet); border-right:1px solid var(--ed-line); }
+.app.style-acira .browser-settings h1 { font-size:20px; font-weight:500; letter-spacing:-.3px; }
+.app.style-acira .browser-settings .bs-card { border-radius:6px; box-shadow:none; }
+.app.style-acira .browser-settings .bs-sidebar { width:224px; flex-basis:224px; padding:24px 16px 16px; }
+/* One left edge: brand glyph, nav icons and the back arrow share the 16px column at x 26; every label starts at x 52. */
+.app.style-acira .browser-settings .bs-brand { font-size:16px; font-weight:500; letter-spacing:-.2px; gap:10px; margin:0 0 28px; padding:0 10px; height:28px; }
+.app.style-acira .browser-settings .bs-brand .brand-symbol { width:18px; margin-inline:-1px; }
+.app.style-acira .browser-settings .bs-back { height:32px; padding:0 10px; gap:10px; font-size:13px; }
+.app.style-acira .browser-settings .bs-back svg { width:16px; height:16px; flex:0 0 16px; }
+.app.style-acira .browser-settings .bs-sidebar nav>button { height:32px; min-height:32px; flex-shrink:0; font-size:13px; gap:10px; padding:0 10px; color:var(--ed-icon); box-shadow:none; }
+.app.style-acira .browser-settings .bs-sidebar nav>button { border-radius:6px !important; }
+.app.style-acira .browser-settings .bs-sidebar nav>button.selected { background:var(--ed-selected); color:var(--ed-ink); font-weight:400; }
+.app.style-acira .browser-settings .bs-sidebar nav .brand-symbol,.app.style-acira .browser-settings .bs-sidebar nav .brand-symbol img { width:16px; height:18px; flex:0 0 16px; }
+.app.style-acira .browser-settings .bs-main { background:var(--sheet); }
+.app.style-acira .browser-settings .bs-main { scrollbar-width:thin; scrollbar-color:var(--ed-controlEdge) transparent; }
+.app.style-acira .browser-settings .bs-toolbar { margin:0 auto; width:100%; max-width:824px; padding:32px 32px 0; }
+.app.style-acira .browser-settings .bs-toolbar>label { height:34px; max-width:100%; background:var(--input-fill); border:1px solid var(--input-edge); border-radius:6px; gap:10px; font-size:13px; box-shadow:none; }
+.app.style-acira .browser-settings .bs-toolbar input { font-size:13px; }
+.app.style-acira .browser-settings .bs-page { margin:0 auto; width:100%; max-width:824px; padding:24px 32px 32px; }
+.app.style-acira .browser-settings .bs-page>h1 { font-size:20px; font-weight:500; line-height:28px; margin-bottom:24px; letter-spacing:-.3px; }
+.app.style-acira .browser-settings .bs-row { min-height:48px; gap:24px; padding:12px 0; }
+.app.style-acira .browser-settings .bs-row-copy>span { font-size:13px; line-height:19px; }
+.app.style-acira .browser-settings .bs-row-copy>p { font-size:12px; line-height:18px; max-width:480px; }
+.app.style-acira .browser-settings .bs-row:has(.bs-row-copy>p) { min-height:64px; }
+.app.style-acira .experience-settings .exp-intro { font-size:13px; line-height:20px; color:var(--ed-muted); margin:0 0 20px; }
+.app.style-acira .experience-settings .exp-settings-layouts { display:flex; flex-direction:column; gap:0; margin-bottom:28px; border-top:1px solid var(--ed-line); }
+.app.style-acira .experience-settings .exp-settings-layouts>button { display:grid; grid-template-columns:160px minmax(0,1fr) 22px; align-items:center; gap:16px; min-height:72px; padding:14px 10px; border:0; border-bottom:1px solid var(--ed-line); border-radius:0; background:transparent; color:var(--ed-ink); box-shadow:none; backdrop-filter:none; transform:none; }
+.app.style-acira .experience-settings .exp-settings-layouts>button:hover { background:var(--ed-hover); box-shadow:none; transform:none; translate:none; }
+.app.style-acira .experience-settings .exp-settings-layouts>button.selected { background:var(--ed-hover); border-color:var(--ed-line); box-shadow:none; }
+.app.style-acira .experience-settings .exp-layout-thumbnail { display:none; }
+.app.style-acira .experience-settings .exp-settings-layouts strong { font-size:13px; font-weight:500; margin:0; }
+.app.style-acira .experience-settings .exp-settings-layouts small { font-size:12px; line-height:18px; color:var(--ed-muted); margin:0; }
+.app.style-acira .experience-settings .exp-layout-check { position:static; width:18px; height:18px; border:1px solid var(--ed-controlEdge); border-radius:50%; box-shadow:none; background:var(--sheet); }
+.app.style-acira .experience-settings .selected .exp-layout-check { border-color:var(--ed-ink); background:var(--ed-ink); color:var(--on-ink); }
+.app.style-acira .experience-settings .exp-settings-fields { display:block; padding:0; margin:0; border:0; border-radius:0; background:transparent; box-shadow:none; backdrop-filter:none; }
+.app.style-acira .experience-settings .exp-field+.exp-field { border-top:0; }
+.app.style-acira .experience-settings .exp-settings-layouts :is(strong,small) { grid-column:auto; padding-right:0; }
+.app.style-acira .experience-settings .exp-field { display:grid; grid-template-columns:190px minmax(0,1fr); gap:16px; align-items:center; padding:14px 0; margin:0; min-height:60px; border-bottom:1px solid var(--ed-line); font-size:13px; line-height:19px; }
+.app.style-acira .experience-settings .exp-field select { width:100%; max-width:360px; height:32px; min-height:32px; padding:5px 9px; border:1px solid var(--ed-line); border-radius:6px; background:var(--sheet); font-size:13px; box-shadow:none; }
+.app.style-acira .experience-settings .exp-note { color:var(--ed-muted); font-size:12px; line-height:18px; margin:18px 0; }
+.app.style-acira .experience-settings .exp-actions { justify-content:flex-start; gap:8px; }
+.app.style-acira .experience-settings .exp-actions .btn { border-radius:6px; padding:6px 10px; min-height:30px; font-size:13px; box-shadow:none; }
+
+.ed-matrix { flex-shrink:0; display:block; color:var(--ed-ink); }
+.ed-matrix circle { fill:currentColor; opacity:.12; }
+.ed-matrix circle[data-on=true] { opacity:.8; }
+.ed-matrix.is-working .ed-matrix-cell { animation:matrix-scan 1.4s linear infinite; animation-delay:var(--cell-phase); }
+@keyframes matrix-scan { 0%,100%{opacity:.16} 30%{opacity:1} 70%{opacity:.16} }
+
+/* Interfear's context / activity split is reserved for actual task details. */
+.task-editor-layout { display:flex; flex:1; min-height:0; }
+.task-editor-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.task-editor-context { flex:0 0 320px; width:320px; border-right:1px solid var(--ed-line); padding:24px; overflow:auto; }
+.task-editor-context>summary { display:none; color:var(--ed-muted); font-size:12px; cursor:default; }
+.task-editor-context h1 { margin:15px 0 14px; font-size:20px; line-height:28px; font-weight:500; letter-spacing:-.3px; }
+.task-editor-context .task-context-caption { color:var(--ed-muted); font-size:12px; line-height:17px; }
+.task-editor-context .task-facts { grid-template-columns:1fr; gap:16px; margin:28px 0; }
+.task-editor-context .task-facts dt { font-size:12px; color:var(--ed-muted); }
+.task-editor-context .task-facts dd { font-size:13px; line-height:20px; }
+.task-editor-context .task-controls { padding-top:20px; border-top:1px solid var(--ed-line); gap:6px; }
+.app.style-acira .task-conversation { background:transparent; color:var(--ed-ink); font-size:14px; }
+.app.style-acira .task-conversation-header { height:36px; padding:0 24px; border-bottom:1px solid var(--ed-line); gap:9px; }
+.app.style-acira .task-conversation-header strong { font-size:13px; font-weight:500; }
+.app.style-acira .task-fullpage .task-conversation-scroll { padding:28px 32px; }
+.app.style-acira .task-fullpage .task-conversation-scroll>* { width:100%; max-width:880px; margin-left:auto; margin-right:auto; }
+.app.style-acira .task-fullpage .task-composer-area { padding:12px 24px 20px; border-top:1px solid var(--ed-line); }
+.task-activity-heading { font-size:14px; font-weight:500; line-height:21px; margin:0 0 24px; }
+.app.style-acira .task-message { font-size:14px; line-height:21px; margin:0 0 24px; }
+.app.style-acira .task-message small { font-size:12px; color:var(--ed-muted); }
+.app.style-acira .task-message p { line-height:1.6; }
+.app.style-acira .task-message.message-user { border:1px solid var(--ed-line); border-radius:6px; background:var(--sheet-hover); padding:13px 15px; }
+.app.style-acira .task-composer { border-radius:8px; background:var(--sheet-hover); border-color:var(--ed-line); }
+.app.style-acira .task-facts dd small,.app.style-acira .task-secondary,.app.style-acira .task-advanced { font-size:12px; line-height:18px; }
+.app.style-acira .task-details,.app.style-acira .task-note,.app.style-acira .task-context-line { font-size:12px; line-height:18px; }
+
+/* Popups share native frost with a local grain layer, without duplicate tint. */
+.app.style-acira .acira-popup-surface { border-radius:var(--geometry-materialRadius,8px); color:var(--ed-ink); }
+.app.style-acira .popup-contents { box-sizing:border-box;border-radius:inherit; }
+/* Popup geometry is measured in window coordinates; the in-page host must match it. */
+.app.style-acira .local-overlay-scrim { position:fixed; inset:0; z-index:40; }
+.app.style-acira .menu-row { min-height:30px; padding:5px 9px; border-radius:6px; font-size:13px; line-height:18px; gap:10px; }
+.app.style-acira .menu-row:hover { background:rgb(var(--ink) / 0.024); }
+.app.style-acira .menu-row kbd { font-size:12px; color:var(--ed-muted); }
+.app.style-acira .browser-popup { color:var(--ed-ink); }
+.app.style-acira .browser-popup .popup-header>strong { font-size:13px; line-height:18px; font-weight:500; letter-spacing:normal; }
+.app.style-acira .browser-popup .muted,.app.style-acira .tab-result small { color:var(--ed-muted); }
+.app.style-acira .toast { background:rgb(var(--sheet-rgb) / 0.949); border:1px solid var(--ed-line); border-radius:8px; box-shadow:var(--frost-shadow); backdrop-filter:blur(var(--frost-blur)); font-size:13px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+@media(max-width:1100px) {
+  .task-editor-layout { flex-direction:column; }
+  .task-editor-context { flex:0 0 auto; width:auto; border-right:0; border-bottom:1px solid var(--ed-line); padding:12px 24px; max-height:220px; }
+  .task-editor-context>summary { display:list-item; }
+  .task-editor-context h1 { margin-top:15px; }
+  .task-editor-context .task-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin:20px 0; }
+}
+@media(max-width:1000px) {
+  .app.style-acira .toolbar-actions>.icon-button:not(:last-child) { display:none; }
+  .app.style-acira .browser-settings .bs-sidebar { width:208px; flex-basis:208px; }
+  .app.style-acira .browser-settings .bs-page,.app.style-acira .browser-settings .bs-toolbar { padding-left:24px; padding-right:24px; }
+  .app.style-acira .experience-settings .exp-settings-layouts>button { grid-template-columns:120px minmax(0,1fr) 18px; gap:10px; }
+  .app.style-acira .experience-settings .exp-field { grid-template-columns:130px minmax(0,1fr); }
+}
+@media(prefers-reduced-transparency:reduce) {
+  .app.style-acira { --frost-fill:var(--sheet); }
+  .ed-frost,.app.style-acira .address-bar { backdrop-filter:none; background:var(--sheet); }
+  .ed-frost::before,.address-bar::before { display:none; }
+}
+.app.style-acira.opaque-glass { --frost-fill:var(--sheet); }
+.app.style-acira.opaque-glass .ed-frost,.app.style-acira.opaque-glass .address-bar { background:var(--sheet); backdrop-filter:none; }
+.app.style-acira.opaque-glass .address-bar { background:var(--address-fill); }
+.app.style-acira.opaque-glass .address-bar:focus-within { background:var(--address-focus); }
+.app.style-acira.opaque-glass .ed-search-glass { background:var(--input-fill); }
+.app.opaque-glass .popup-material::after,.app.opaque-glass .native-assistant-panel::before,.app.opaque-glass .ed-frost::before,.app.opaque-glass .address-bar::before { display:none; }
+/* Increased-contrast roles are resolved by themeTokens from the effective surface tone. */
+@media(prefers-reduced-motion:reduce) { .ed-rail-button::after { transition:none; } }
+@media(prefers-reduced-motion:reduce) { .ed-matrix.is-working .ed-matrix-cell { animation:none; } }
+
+/* Shared text/control roles on existing secondary screens. */
+.app.style-acira .management strong,.app.style-acira .management b,.app.style-acira .browser-settings strong { font-weight:500; }
+.app.style-acira .management h2,.app.style-acira .management h3,.app.style-acira .task-progress h3 { font-size:13px; line-height:18px; font-weight:500; letter-spacing:normal; }
+.app.style-acira .m-dialog h2 { font-size:16px; line-height:22px; font-weight:500; }
+.app.style-acira .menu-row { font-weight:400; }
+.app.style-acira .study-appearance h3 { font-size:13px; font-weight:500; text-transform:none; letter-spacing:normal; }
+.app.style-acira .study-appearance p { font-size:12px; line-height:18px; color:var(--ed-muted); margin:0; }
+.app.style-acira .menu-row svg { flex-shrink:0; }
+.app.style-acira .bs-note,.app.style-acira .bs-secondary,.app.style-acira .m-history-row p,.app.style-acira .m-history-row>span { font-size:12px; line-height:18px; }
+
+
+
+.app.style-acira .browser-settings input:not([type=checkbox]),.app.style-acira .browser-settings select { font-size:13px; font-weight:400; min-height:30px; border-radius:6px; }
+.ed-formation-fill { height:100%; min-height:0; }
+.task-editor-context .task-facts>div { display:grid; grid-template-columns:80px minmax(0,1fr); gap:12px; }
+.task-editor-context .task-facts dd { margin:0; }
+
+.ed-history-row { display:flex; align-items:center; border-bottom:1px solid var(--ed-line); }
+.ed-history-open { display:grid; grid-template-columns:16px minmax(100px,1fr) minmax(100px,1fr) 64px 16px; gap:12px; align-items:center; min-width:0; flex:1; height:40px; padding:0 8px; font-size:13px; text-align:left; }
+.ed-history-open>span,.ed-history-open>small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ed-history-open>small,.ed-history-open>time { color:var(--ed-muted); font-size:12px; font-weight:400; }
+.ed-history-open>time { text-align:right; }
+.ed-history-open>svg:last-child { opacity:0; }
+.ed-history-row:hover,.ed-history-row:focus-within { background:var(--ed-hover); }
+.ed-history-row:hover .ed-row-action,.ed-history-row:focus-within .ed-row-action,.ed-history-row:hover .ed-history-open>svg:last-child { opacity:1; }
+@media(max-width:1000px) { .ed-history-open { grid-template-columns:16px minmax(100px,1fr) 56px 16px; } .ed-history-open>small { display:none; } }
+
+.ed-editor-icon { display:block; flex:0 0 auto; width:var(--icon-size,16px); height:var(--icon-size,16px); color:inherit; }
+.ed-editor-icon>path { stroke:currentColor; stroke-width:.25px; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.ed-rail-button>.ed-editor-icon { margin:1px; }
+.ed-rail:not(.is-expanded) .ed-rail-button>.ed-editor-icon { width:18px; height:18px; }
+.ed-rail.is-expanded .ed-rail-button { gap:10px; }
+.ed-search-glass>.address-field { flex:1; height:46px; min-width:0; }
+.ed-search-glass .address-measure { font-size:14px; line-height:20px; }
+.ed-search-glass,.app.style-acira .address-bar { transition:background .22s,border-color .22s,box-shadow .22s; }
+
+/* Native drag regions are explicit; every interactive child remains clickable. */
+.app.style-acira :is(button,input,textarea,select,[role=tab],[data-group-header],.panel-resizer) { -webkit-app-region:no-drag; }
+.app.style-acira :is(.acira-tab-row,.acira-focus-row) { -webkit-app-region:drag; }
+.app.style-acira .tab-strip-container { -webkit-app-region:drag; }
+.app.style-acira .tab-strip-drag { flex:1 1 0; align-self:stretch; -webkit-app-region:drag; }
+.app.style-acira .tab-strip-tools { display:flex; align-items:center; flex:0 0 28px; margin-right:4px; }
+.app.style-acira .acira-shell>[inert] { visibility:hidden; transition:visibility 0s linear .12s; }
+.app.style-acira .acira-shell>[inert] .titlebar-drag { -webkit-app-region:no-drag; }
+.app.style-acira[data-reduced-motion=true] .acira-shell>[inert] { transition:none; }
+.app.style-acira :is(.tab-strip-viewport,.tabs-strip) { -webkit-app-region:drag; }
+.app.style-acira :is(.browser-tab,.tab-group-tray,.tab-strip-add,.standard-tabs-scroll,.caption-reservation,.ed-icon,.ed-rail-button) { -webkit-app-region:no-drag; }
+.ed-rail-brand .ed-icon>* { pointer-events:none; }
+.ed-rail-brand .brand-logo { pointer-events:none; }
+.ed-working-label { display:inline-flex; align-items:center; gap:8px; font-size:12px; line-height:18px; color:var(--ed-ink); font-weight:400; }
+/* ElevenLabs ShimmeringText, as on acirabrowser.com: a band sized to the text (length x 2px) sweeps a
+   250% gradient linearly over 2s, pauses .5s, after a .3s fade in. Base and band are the same ink. */
+@property --base-color { syntax:'<color>'; inherits:true; initial-value:rgb(var(--ink) / .45); }
+.ed-shimmer { --base-color:rgb(var(--ink) / .45); --shimmer-color:rgb(var(--ink)); color:transparent; -webkit-text-fill-color:transparent;
+  background-image:linear-gradient(90deg,transparent calc(50% - var(--spread,48px)),var(--shimmer-color),transparent calc(50% + var(--spread,48px))),linear-gradient(var(--base-color),var(--base-color));
+  background-size:250% 100%,auto; background-repeat:no-repeat,padding-box; background-position:100% center; -webkit-background-clip:text; background-clip:text;
+  animation:ed-text-fade .3s ease both,ed-text-shimmer 2.5s linear infinite; }
+.ed-shimmer.accent { --base-color:color-mix(in srgb,var(--ed-blue) 55%,transparent); --shimmer-color:var(--ed-blue); }
+@keyframes ed-text-fade { from { opacity:0; } }
+@keyframes ed-text-shimmer { 0% { background-position:100% center; } 80%,100% { background-position:0% center; } }
+@media(prefers-reduced-motion:reduce) { .ed-shimmer { animation:none; background:none; color:var(--text-secondary); -webkit-text-fill-color:currentColor; } }
+.app[data-reduced-motion=true] .ed-shimmer { animation:none; background:none; color:var(--text-secondary); -webkit-text-fill-color:currentColor; }
+.ed-run-stage>.ed-working-label { margin-bottom:2px; }
+.task-progress>.ed-working-label { margin-bottom:12px; }
+@media(prefers-contrast:more),(forced-colors:active) { .ed-shimmer { animation:none; background:none; color:CanvasText; -webkit-text-fill-color:currentColor; } }
+
+/* Agent tabs and the address bar use the acirabrowser.com status language:dot lights, a short state, one clear action. */
+@keyframes ed-enter { from { opacity:0; filter:blur(var(--enter-blur,6px)); transform:translateY(var(--enter-rise,4px)); } to { opacity:1; filter:none; transform:none; } }
+.dot-matrix { display:block; flex:none; }
+.app.style-acira .tab-agent-icon { display:grid; place-items:center; flex:0 0 16px; width:16px; height:16px; }
+/* R5-11: a loading tab lights its matrix in the full text colour (a tab that is not current rests in the dimmer ink, which made the dots almost vanish). */
+.app.style-acira .tab-agent-icon:not(.is-done) { color:var(--text-primary); }
+.app.style-acira .tab-agent-state { flex:0 0 auto; font-size:11.5px; line-height:16px; color:var(--text-secondary); white-space:nowrap; animation:ed-enter .42s cubic-bezier(.16,1,.3,1) both; }
+.app.style-acira .tab-agent-state.ask { color:var(--ed-accentInk); font-weight:500; }
+.app.style-acira .browser-tab:not(.selected):hover .tab-agent-state { display:none; }
+@container (max-width:240px) { .app.style-acira .tab-agent-state:not(.ask) { display:none; } }
+.app.style-acira .address-bar .address-agent { position:absolute; inset:0; z-index:2; display:flex; align-items:center; gap:8px; padding:0 6px 0 9px; border-radius:inherit; background:var(--address-fill); opacity:0; visibility:hidden; transition:opacity .18s,visibility 0s linear .18s; }
+.app.style-acira .address-bar.has-agent-state .address-agent { opacity:1; visibility:visible; transition:opacity .24s; }
+.app.style-acira .address-bar.has-agent-state[data-attention] { background:var(--ed-accentSoft); border-color:transparent; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ed-blue) 22%,transparent); }
+.app.style-acira .address-bar[data-attention] .address-agent { background:var(--ed-accentSoft); }
+.app.style-acira .address-agent-status { flex:1; min-width:0; height:100%; display:flex; align-items:center; gap:10px; padding:0; text-align:left; font-size:13px; line-height:18px; color:var(--ed-ink); }
+.app.style-acira .address-agent-message { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; animation:ed-enter .48s cubic-bezier(.16,1,.3,1) both; }
+.app.style-acira .address-agent-message.ed-shimmer { animation:ed-enter .48s cubic-bezier(.16,1,.3,1) both,ed-text-shimmer 2.5s linear .48s infinite; }
+.app.style-acira .address-agent-review { flex:none; height:26px; padding:0 12px; border-radius:6px; background:var(--ed-ink); color:var(--on-ink); font-size:12.5px; font-weight:500; line-height:26px; box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.14 * var(--hi-k))),0 1px 2px rgb(var(--ink) / .24); transition:background-color .2s,translate .25s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .address-agent-review:hover { background:rgb(var(--ink) / .86); translate:0 -1px; }
+.app.style-acira .address-agent-review:active { translate:0 0; }
+.app[data-reduced-motion=true] :is(.tab-agent-state,.address-agent-message) { animation:none; }
+@media(prefers-reduced-motion:reduce) { .app :is(.tab-agent-state,.address-agent-message) { animation:none; } }
+
+/* Local settings respond to their available pane, including expanded navigation. */
+@container settings (max-width:700px) {
+  .app.style-acira .browser-settings .bs-sidebar { width:176px; flex-basis:176px; padding-inline:12px; }
+  .app.style-acira .browser-settings .bs-page,.app.style-acira .browser-settings .bs-toolbar { padding-inline:24px; }
+  .app.style-acira .experience-settings .exp-settings-layouts>button { grid-template-columns:1fr 20px; gap:6px 12px; min-height:76px; }
+  .app.style-acira .experience-settings .exp-settings-layouts strong { grid-column:1; }
+  .app.style-acira .experience-settings .exp-settings-layouts small { grid-column:1; grid-row:2; }
+  .app.style-acira .experience-settings .exp-layout-check { grid-column:2; grid-row:1 / 3; }
+  .app.style-acira .experience-settings .exp-field { grid-template-columns:1fr; gap:8px; }
+  .app.style-acira .browser-settings .bs-row { flex-wrap:wrap; gap:8px 16px; }
+  .app.style-acira .browser-settings .bs-row-copy { flex:1 1 160px; }
+  .app.style-acira .browser-settings select { max-width:100%; }
+}
+@container settings (max-width:540px) {
+  .app.style-acira .browser-settings .bs-sidebar { width:52px; flex-basis:52px; padding-inline:8px; }
+  .app.style-acira .browser-settings .bs-sidebar :is(.bs-brand>span:last-child,nav>button>span:not(.brand-logo),.bs-back>span) { display:none; }
+  .app.style-acira .browser-settings .bs-brand { padding:0; justify-content:center; }
+  .app.style-acira .browser-settings .bs-sidebar nav>button { padding:0; justify-content:center; }
+  .app.style-acira .browser-settings .bs-back { padding:8px; font-size:0; }
+}
+
+/* acirabrowser.com alignment:one ink at different strengths, a soft chrome with white lifted
+   selections, hairlines instead of borders, and the site's glass recipe on floating material. */
+@font-face { font-family:'Geist Mono'; src:url('/fonts/GeistMono.woff2') format('woff2'); font-weight:100 900; font-display:swap; }
+.app.style-acira {
+  --ink:37 38 43; --hair:rgb(var(--ink) / .075); --hair-2:rgb(var(--ink) / .12); --well:rgb(var(--ink) / .045);
+  --lift:0 1px 2px rgb(var(--ink) / .07),0 0 0 1px rgb(var(--ink) / .045);
+  --mono:'Geist Mono',ui-monospace,'SF Mono',Consolas,monospace;
+  --ease-out:cubic-bezier(.16,1,.3,1);
+}
+.app.style-acira kbd,.app.style-acira .menu-row kbd,.app.style-acira .popup-shortcut { font-family:var(--mono); font-size:11.5px; letter-spacing:-.01em; color:var(--text-secondary); background:none; border:0; box-shadow:none; }
+
+/* Chrome: sidebar, tab row and toolbar share one soft surface; pages stay white. */
+.app.style-acira:not(.native-layer),.app.style-acira .ed-rail,.app.style-acira .browser-shell,.app.style-acira .acira-tab-row,.app.style-acira .acira-persistent-toolbar { background:var(--ed-chrome); }
+.app.style-acira .browser-root { background:var(--ed-chrome); border-left-color:var(--hair); }
+.app.style-acira .browser-shell { border-bottom-color:var(--hair-2); }
+.app.style-acira .browser-body>.page-area,.app.style-acira .page-content,.app.style-acira .page-pane { background:var(--sheet); }
+
+/* Native Windows acrylic or macOS AppKit (set by the main process): a light veil over real OS glass,
+   so the desktop shows through the sidebar and header. Pages and reading surfaces stay solid. */
+html:is([data-material=acrylic],[data-material=vibrancy]),html:is([data-material=acrylic],[data-material=vibrancy]) body,html:is([data-material=acrylic],[data-material=vibrancy]) #root { background:transparent; }
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira:not(.native-layer) { background:linear-gradient(180deg,color-mix(in srgb,var(--ed-chrome) 66%,transparent),color-mix(in srgb,var(--ed-chrome) 54%,transparent)); }
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira :is(.ed-rail,.browser-root,.browser-shell,.acira-tab-row,.acira-persistent-toolbar,.browser-body) { background:transparent; }
+/* One continuous chrome:no divider between the sidebar and the header. Only the white page has an edge. */
+.app.style-acira .browser-root,.app.style-acira:has(.ed-rail:not(.is-expanded)) .browser-root { border-left:0; }
+/* Pages are rounded white sheets on the chrome; native website views use the same radius. */
+.app.style-acira .browser-body>.page-area { border-radius:var(--geometry-pageRadius); overflow:hidden; box-shadow:0 0 0 1px rgb(var(--ink) / .07),0 1px 3px rgb(var(--shade) / .05); }
+.app.style-acira .browser-body>.page-area :is(.page-content,.page-pane) { border-radius:inherit; }
+.app.style-acira .browser-shell { border-bottom-color:transparent; }
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .browser-shell { border-bottom-color:transparent; }
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-rail-button:hover,html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .icon-button:hover { background:rgb(var(--sheet-rgb) / .5); }
+
+/* Tabs: quiet text on the chrome; the selected tab lifts out as a white sheet. */
+.app.style-acira .browser-tab { color:var(--text-secondary); }
+.app.style-acira .browser-tab .tab-title { font-size:12.5px; letter-spacing:-.003em; }
+.app.style-acira .browser-tab:not(.selected):hover { color:rgb(var(--ink) / .86); }
+.app.style-acira .browser-tab .tab-selection,.app.style-acira .tab-strip-selection { background:var(--chrome-selection-bg); box-shadow:none; }
+.app.style-acira .browser-tab:not(.selected):not([data-tab-group]):hover::before { content:''; position:absolute; inset:0; border-radius:6px; background:var(--well); pointer-events:none; }
+.app.style-acira .browser-tab .tab-close:hover { background:var(--well); color:var(--ed-ink); }
+.app.style-acira .tab-group-tray { border-radius:6px; box-shadow:inset 0 0 0 1.5px var(--group-accent,var(--hair-2)); background:color-mix(in srgb,var(--group-accent,var(--sheet)) 5%,transparent); }
+
+/* Toolbar fields inherit chrome-specific fill, edge and focus roles. */
+/* One surface on every finish: an ink fill over the chrome, no rim (M40). */
+.app.style-acira .address-bar { background:var(--address-fill); border-color:transparent; box-shadow:none; }
+.app.style-acira .address-bar:hover { background:var(--address-hover); }
+.app.style-acira .address-bar:focus-within { background:var(--address-focus); border-color:transparent; outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:var(--field-shadow); }
+.app.style-acira .address-bar::before { display:none; }
+.app.style-acira .address-bar .address-agent { background:var(--sheet); }
+.app.style-acira .icon-button:hover,.app.style-acira .ed-icon:hover { background:var(--well); }
+.app.style-acira .icon-button.active { background:var(--sheet); box-shadow:var(--lift); }
+
+/* Sidebar: rows on the chrome, the current page lifted white with its accent tick. */
+.app.style-acira .ed-rail-button { color:var(--text-secondary); transition:background-color .15s,color .15s,box-shadow .15s; }
+.app.style-acira .ed-rail-button:hover { background:var(--well); color:var(--ed-ink); }
+.app.style-acira .ed-rail-button[aria-current=page] { background:var(--sidebar-selection-bg); color:var(--ed-ink); box-shadow:none; }
+.app.style-acira .ed-rail-button[aria-current=page] .ed-editor-icon { color:var(--ed-blue); }
+.app.style-acira .ed-rail-saved>button { color:var(--text-secondary); }
+.app.style-acira .ed-rail-saved>button:hover { background:var(--well); color:var(--ed-ink); }
+.app.style-acira .ed-rail-divider { background:rgb(var(--ink) / .08); }
+.app.style-acira .ed-rail-saved>header { color:var(--text-secondary); }
+.app.style-acira .ed-rail-count { display:none; }
+.app.style-acira .ed-rail.is-expanded .ed-rail-count { display:block; margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); }
+.app.style-acira .ed-rail.is-expanded .ed-rail-badge { position:static; flex:none; width:6px; height:6px; margin-left:auto; margin-right:2px; border:0; box-shadow:0 0 0 3px color-mix(in srgb,var(--ed-blue) 14%,transparent); }
+.app.style-acira .ed-rail.is-expanded .ed-rail-count+.ed-rail-badge { margin-left:8px; }
+
+/* Buttons: the site's dark primary and hairline secondary, with a one-pixel lift. */
+.app.style-acira .btn { border:0; box-shadow:inset 0 0 0 1px var(--hair-2),0 1px 2px rgb(var(--ink) / .04); border-radius:6px; transition:background-color .2s,box-shadow .25s var(--ease-out),translate .25s var(--ease-out); }
+.app.style-acira .btn:hover { background:var(--sheet-hover); }
+.app.style-acira .btn.primary { background:var(--ed-ink); color:var(--on-ink); box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.14 * var(--hi-k))),0 1px 2px rgb(var(--ink) / .24); }
+.app.style-acira .btn.primary:hover { background:rgb(var(--ink) / .86); translate:0 -1px; box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.14 * var(--hi-k))),0 2px 4px rgb(var(--ink) / .14),0 12px 26px -12px rgb(var(--ink) / .55); }
+.app.style-acira .btn:active { translate:0 0; }
+.app.style-acira .ed-submit:not(:disabled) { box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.14 * var(--hi-k))),0 1px 2px rgb(var(--ink) / .24); }
+
+/* Floating material:the site's glass. Saturation keeps color behind the frost alive. */
+.app.style-acira .native-assistant-panel { border-color:rgb(255 255 255 / calc(.7 * var(--hi-k))); box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.9 * var(--hi-k))),inset 0 0 0 1px rgb(255 255 255 / calc(.25 * var(--hi-k))),var(--frost-shadow); }
+/* The site's light-catching rim (brighter top-left, fading round the sides) and a soft top sheen. */
+.app.style-acira .native-assistant-panel { border-color:rgb(255 255 255 / calc(0 * var(--hi-k))); box-shadow:inset 0 18px 40px -28px rgb(255 255 255 / calc(.7 * var(--hi-k))),inset 0 -1px 0 rgb(255 255 255 / calc(.25 * var(--hi-k))),0 0 0 .5px rgb(var(--shade) / .08),var(--frost-shadow); }
+.app.style-acira .menu-row { color:var(--text-primary); }
+.app.style-acira .menu-row:hover,.app.style-acira .menu-row:focus-visible { background:rgb(var(--ink) / .05); color:var(--ed-ink); }
+.app.style-acira .browser-popup .popup-header>strong { color:var(--text-secondary); font-size:12px; }
+
+/* Start: one clipped cover. Its lower part is a progressive blur of the same painting, so the
+   frost has no seam, no separate corners, and no slivers of sharp image at its edges. */
+.app.style-acira .ed-workspace-identity.has-cover { border-radius:8px; overflow:hidden; isolation:isolate; box-shadow:0 0 0 1px rgb(var(--ink) / .05),0 1px 3px rgb(var(--shade) / .07); }
+.app.style-acira .has-cover .ed-workspace-cover { border-radius:inherit; }
+.app.style-acira .has-cover .ed-workspace-cover::after { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  /* Blur the rendered image itself: manual/daily artwork and focal crop have one owner. */
+  opacity:.6;backdrop-filter:blur(14px) saturate(1.03); -webkit-backdrop-filter:blur(14px) saturate(1.03);
+  -webkit-mask-image:linear-gradient(180deg,transparent 72%,rgb(var(--ink)) 100%);
+  mask-image:linear-gradient(180deg,transparent 72%,rgb(var(--ink)) 100%); }
+.app.style-acira .has-cover.has-label .ed-workspace-cover::after{opacity:1;backdrop-filter:blur(22px) saturate(1.1);-webkit-backdrop-filter:blur(22px) saturate(1.1);-webkit-mask-image:linear-gradient(180deg,transparent 36%,rgb(var(--ink)) 82%);mask-image:linear-gradient(180deg,transparent 36%,rgb(var(--ink)) 82%)}
+.app.style-acira .ed-artwork-label{position:absolute;bottom:0;inset-inline:0;display:flex;align-items:center;min-height:48px;padding:10px 20px;background:rgb(var(--cover-scrim-rgb) / .72);color:var(--cover-text);font-size:20px;line-height:28px;font-weight:500;overflow-wrap:anywhere}
+@media(forced-colors:active){.app.style-acira .ed-artwork-label{background:Canvas;color:CanvasText}}
+.app.style-acira .has-cover>.ed-start-heading { min-height:52px; padding:12px 20px; border:0; border-radius:0; box-shadow:none; background:linear-gradient(180deg,transparent,rgb(var(--cover-scrim-rgb) / .72) 35%); color:var(--cover-text); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.app.style-acira .has-cover>.ed-start-heading::before { display:none; }
+.app.style-acira .has-cover .ed-workspace-profile:hover { background:rgb(var(--sheet-rgb) / .6); }
+.app.style-acira .has-cover>.ed-cover-toggle { background:rgb(var(--sheet-rgb) / .72); backdrop-filter:blur(16px) saturate(160%); box-shadow:0 1px 2px rgb(var(--shade) / .08); }
+/* Editable surfaces have a measured structural edge; decorative dividers remain quiet. */
+.app.style-acira .ed-search-glass { background:var(--input-fill); border-color:var(--input-edge); border-radius:8px; color:var(--ed-icon); box-shadow:var(--field-shadow); }
+.app.style-acira .ed-search-glass:hover { background:var(--input-hover); }
+.app.style-acira .ed-search-glass::before { display:none; }
+/* Focus remains visible while editing; fill/depth are not the only indication. */
+.app.style-acira .ed-search-glass:focus-within { background:var(--input-fill); border-color:transparent; outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:var(--field-shadow); }
+.app.style-acira :is(.ed-list-search,.task-list-toolbar label,.browser-settings .bs-toolbar>label) { border:1px solid var(--input-edge); background:var(--input-fill); box-shadow:none; border-radius:6px; transition:background-color .2s,box-shadow .2s; }
+.app.style-acira :is(.ed-list-search,.task-list-toolbar label,.browser-settings .bs-toolbar>label):focus-within { background:var(--input-fill); outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:none; }
+.app.style-acira .ed-search-glass>.address-field input::placeholder { color:var(--text-placeholder); }
+.app.style-acira .ed-submit:disabled { background:var(--disabled-fill); color:var(--disabled-text); }
+.app.style-acira .ed-page-section>header { border-bottom-color:var(--hair); }
+.app.style-acira .ed-page-row:hover { background:var(--sheet-hover); }
+
+/* Tab viewer:the current row is a white sheet with the site's soft accent ring. */
+.app.style-acira .popup-content-tabs .tab-result:hover { background:rgb(var(--ink) / .04); }
+.app.style-acira .popup-search { background:var(--input-fill); border:1px solid var(--input-edge); box-shadow:none; }
+.app.style-acira .popup-search:focus-within { outline:2px solid var(--focus-ring); outline-offset:1px; }
+
+/* Task lists:segmented filters like the site's nav pill, and a legend for the status lights. */
+.app.style-acira .task-filter-row { display:inline-flex; gap:2px; padding:3px; border-radius:6px; background:var(--well); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .04); }
+.app.style-acira .task-filter-row>button { height:28px; padding:0 11px; border-radius:6px; color:var(--text-secondary); background:transparent; transition:background-color .2s,color .2s,box-shadow .2s; }
+.app.style-acira .task-filter-row>button:hover { color:var(--ed-ink); }
+.app.style-acira .task-filter-row>button.selected { background:var(--sheet); color:var(--ed-ink); font-weight:500; box-shadow:0 1px 2px rgb(var(--shade) / .08),0 0 0 1px rgb(var(--ink) / .04); }
+.app.style-acira .task-list-toolbar label { background:var(--sheet); box-shadow:inset 0 0 0 1px var(--hair-2); }
+.app.style-acira .task-empty { padding:40px 0 8px; }
+.app.style-acira .task-empty>p { max-width:440px; margin:6px 0 0; color:var(--text-secondary); font-size:13px; line-height:20px; }
+.app.style-acira .task-state-legend { list-style:none; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:32px 0 0; padding:0; border-top:1px solid var(--hair); }
+.app.style-acira .task-state-legend>li { display:flex; flex-direction:column; gap:6px; padding:20px 20px 4px 0; }
+.app.style-acira .task-state-legend>li+li { padding-left:20px; border-left:1px solid var(--hair); }
+.app.style-acira .task-state-legend .dot-matrix { margin:0 0 10px; }
+.app.style-acira .task-state-legend strong { font-size:13px; font-weight:500; color:var(--ed-ink); }
+.app.style-acira .task-state-legend span { font-size:12px; line-height:18px; color:var(--text-secondary); }
+@container working-view (max-width:700px) { .app.style-acira .task-state-legend { grid-template-columns:repeat(2,minmax(0,1fr)); } .app.style-acira .task-state-legend>li:nth-child(3) { padding-left:0; border-left:0; } }
+.app.style-acira .ed-task-list-row>.ed-task-status.ask { color:var(--ed-accentInk); font-weight:500; }
+.app.style-acira .experience-settings .exp-actions .btn:not(.primary) { box-shadow:inset 0 0 0 1px var(--hair-2),0 1px 2px rgb(var(--ink) / .04); }
+.app.style-acira .experience-settings .exp-actions .btn.primary { box-shadow:inset 0 1px 0 rgb(255 255 255 / calc(.14 * var(--hi-k))),0 1px 2px rgb(var(--ink) / .24); }
+
+/* Keyboard focus on a tab sits inside its shape:the strip clips anything outside. */
+.app.style-acira .browser-tab:focus { outline:none; }
+.app.style-acira .browser-tab:focus-visible { outline:1.5px solid color-mix(in srgb,var(--ed-blue) 75%,transparent); outline-offset:-1.5px; border-radius:6px; }
+.app.style-acira .tab-group-header button:focus-visible { outline:2px solid var(--focus-ring); outline-offset:-2px; box-shadow:none; }
+/* Toasts centre on the window. Their motion owns `transform`, so centring must not use it. */
+.app.style-acira .toast { left:0; right:0; margin-inline:auto; width:max-content; max-width:min(600px,calc(100vw - 48px)); translate:none; border:0; box-shadow:0 0 0 1px rgb(var(--ink) / .06),0 10px 24px -14px rgb(var(--shade) / .32); background:rgb(var(--sheet-rgb) / .9); backdrop-filter:blur(24px) saturate(170%); }
+
+/* With the floating assistant open, a toast sits at the page's leading edge instead of under the assistant. */
+
+/* Tab dragging, as in the original browser:the strip itself is never a window-drag region
+   (Windows cancels a pointer drag that crosses one), only the filler beyond the tabs is. */
+.app.style-acira .tab-strip-container,.app.style-acira :is(.tab-strip-viewport,.tabs-strip) { -webkit-app-region:no-drag; }
+.app.style-acira .tab-strip-drag { -webkit-app-region:drag; }
+.app.style-acira .tab-group-tray { transition:background-color .18s,box-shadow .18s; }
+.app.style-acira .tab-group-tray[data-group-drop-target] { background:color-mix(in srgb,var(--group-accent,var(--ed-blue)) 15%,var(--sheet)); box-shadow:inset 0 0 0 2px var(--group-accent,var(--ed-blue)),0 0 0 3px color-mix(in srgb,var(--group-accent,var(--ed-blue)) 14%,transparent); }
+.app.style-acira .tab-group-tray[data-group-drop-leaving] { background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--group-accent,var(--ed-blue)) 30%,transparent); }
+.app.style-acira .browser-tab[data-drop-intent] { z-index:6; background:var(--sheet); border-radius:6px; box-shadow:0 10px 24px -12px rgb(var(--shade) / .38),0 0 0 1px rgb(var(--ink) / .06); cursor:grabbing; }
+.app.style-acira .browser-tab[data-drop-intent=join] { box-shadow:0 10px 24px -12px rgb(var(--shade) / .38),0 0 0 2px var(--drop-accent,var(--ed-blue)); }
+.app.style-acira .browser-tab[data-drop-intent=leave] { box-shadow:0 14px 28px -12px rgb(var(--shade) / .42),0 0 0 1px rgb(var(--ink) / .1); }
+.app.style-acira .browser-tab[data-drop-intent]::before { display:none; }
+
+/* Standalone inputs own their paint. The settings search wrapper owns its nested input. */
+.app.style-acira .browser-settings :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not(.bs-search-input),select),
+.app.style-acira :is(.group-editor,.experience-settings .exp-field) :where(input,select),.app.style-acira .m-inline-input { border:1px solid var(--input-edge); background-color:var(--input-fill); color:var(--text-primary); box-shadow:none; border-radius:6px; transition:background-color .18s,box-shadow .18s; }
+.app.style-acira .browser-settings :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not(.bs-search-input),select):focus-visible,
+.app.style-acira :is(.group-editor,.experience-settings .exp-field) :where(input,select):focus-visible,.app.style-acira .m-inline-input:focus-visible { background-color:var(--input-fill); box-shadow:none; outline:2px solid var(--focus-ring); outline-offset:1px; }
+.app.style-acira .bs-toolbar>label input.bs-search-input,.app.style-acira .bs-toolbar>label input.bs-search-input:focus { background:transparent; border:0; border-radius:0; box-shadow:none; outline:none; }
+
+/* Assistant run:the site's step trail and approval card. */
+
+/* Assistant: an empty conversation offers real starting points that only fill the composer. */
+/* Overflow-hidden containers can still be scrolled by focus; clip makes that impossible. */
+.app.style-acira .ed-rail,.app.style-acira .browser-shell { overflow:clip; }
+
+/* Numbers and keys read in the site's mono. */
+.app.style-acira :is(.m-code-pill,.task-facts dd .mono,.ed-history-open>time,.tab-group-count) { font-family:var(--mono); font-size:11.5px; letter-spacing:-.01em; }
+
+/* Assistant header state, as on the site's Ask Acira panel. */
+
+/* Finishes: one row of FinishSwatches, the chosen finish's name beside it. */
+.glass-finish { display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-width:0; max-width:100%; }
+.glass-finish-grid { display:grid; grid-template-columns:repeat(auto-fit,var(--swatch-size,24px)); width:calc(var(--swatch-columns,12) * (var(--swatch-size,24px) + 8px) - 8px); max-width:100%; gap:8px; }
+.app .st-control:has(>.glass-finish) { min-width:0; width:100%; max-width:328px; }
+/* FinishSwatch: a diagonal split of the finish's real chrome, light-mode tone top left, dark-mode tone bottom right.
+   Square, radius 4; a hairline rim drawn from the surrounding text color so it holds on light and dark surfaces.
+   Selected = 2px accent ring offset 2px; hover lifts with a shadow, never a scale. */
+.finish-swatch { position:relative; flex:none; width:var(--swatch-size,24px); height:var(--swatch-size,24px); padding:0; border:0; border-radius:4px; cursor:default; color:inherit;
+  background:linear-gradient(135deg,var(--swatch-light) 50%,var(--swatch-dark) 50%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 14%,transparent); transition:box-shadow var(--dur-ui,150ms) var(--ease-ui,ease); }
+.finish-swatch:hover { box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 14%,transparent),0 3px 8px -3px rgb(0 0 0 / .4); }
+.finish-swatch[aria-checked=true] { outline:2px solid var(--focus-ring-color,var(--accent)); outline-offset:2px; }
+.finish-swatch:focus-visible { outline:2px solid var(--focus-ring-color,var(--accent)); outline-offset:2px; }
+.finish-swatch-item { display:inline-grid; justify-items:center; gap:6px; }
+.finish-swatch-name { font-size:12px; color:var(--text-2,inherit); }
+@media (forced-colors:active) { .finish-swatch { forced-color-adjust:none; border:1px solid CanvasText; } .finish-swatch[aria-checked=true] { outline-color:Highlight; } }
+@media (prefers-reduced-motion:reduce) { .finish-swatch { transition:none; } }
+.glass-finish-name { min-width:96px; font-size:12px; color:var(--text-secondary); }
+.study-appearance .glass-finish { margin-top:12px; }
+.app.style-acira .browser-settings .bs-row:has(.glass-finish) { align-items:center; }
+@container settings (max-width:700px) { .glass-finish { justify-content:flex-start; } }
+
+/* Sidebar: a quiet Manage disclosure and the open tab groups. */
+.app.style-acira .ed-rail-more { display:none; }
+.app.style-acira .ed-rail.is-expanded .ed-rail-more { display:flex; align-items:center; justify-content:space-between; height:28px; margin-top:6px; padding:0 8px; border-radius:6px; font-size:12px; color:var(--text-secondary); -webkit-app-region:no-drag; }
+.app.style-acira .ed-rail-more:hover { color:var(--ed-ink); background:var(--well); }
+.app.style-acira .ed-rail-more svg { transition:transform .25s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .ed-rail-more[aria-expanded=false] svg { transform:rotate(-90deg); }
+.app.style-acira .ed-rail-more[aria-expanded=true]~.ed-rail-button { animation:ed-enter .36s cubic-bezier(.16,1,.3,1) both; }
+.app.style-acira .ed-rail.is-expanded .ed-rail-more~.ed-rail-button { height:30px; }
+.app.style-acira .ed-rail-groups { margin-top:10px; }
+.app.style-acira .ed-rail-groups>button { gap:10px; }
+.app.style-acira .ed-rail-groups>button>span { flex:1; }
+.app.style-acira .ed-rail-groups>button>small { font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); }
+.app.style-acira .ed-rail-groups>button[aria-current=true] { background:var(--sidebar-selection-bg); color:var(--ed-ink); box-shadow:none; }
+.ed-group-dot { flex:none; width:8px; height:8px; margin:0 4px; border-radius:50%; box-shadow:0 0 0 3px color-mix(in srgb,currentColor 0%,transparent); }
+.app.style-acira .ed-rail { overflow-y:auto; overflow-x:clip; scrollbar-width:none; }
+
+/* Chrome scope. Inside the sidebar and header every derived color is re-declared from the finish's chrome,
+   so Burgundy or Emerald chrome gets light ink and lighter sheets, and pale finishes keep dark ink. Custom
+   properties resolve where they are declared, which is why the derived ones are repeated here. */
+.app.style-acira :is(.ed-rail,.browser-shell) {
+  --ink:var(--chrome-ink); --sheet:var(--chrome-sheet); --sheet-rgb:var(--chrome-sheet-rgb); --hi-k:var(--chrome-hi-k);
+  --text-primary:var(--chrome-fg); --text-secondary:var(--chrome-text-secondary); --text-placeholder:var(--chrome-text-secondary);
+  --ed-ink:var(--chrome-fg); --ed-muted:var(--chrome-text-secondary); --ed-icon:var(--chrome-icon); --ed-line:var(--chrome-divider);
+  --input-fill:var(--chrome-input-fill); --input-hover:var(--chrome-input-fill); --input-edge:var(--chrome-input-edge); --focus-ring:var(--chrome-focus-ring);
+  --ed-hover:var(--chrome-hover); --ed-selected:var(--chrome-sheet);
+  --ed-blue:var(--chrome-accent); --ed-accentSoft:var(--chrome-accent-soft); --ed-accentInk:var(--chrome-accent-ink);
+  --text:var(--chrome-fg); --muted:var(--chrome-text-secondary); --frame-text:var(--chrome-fg);
+  --group-label:var(--chrome-fg); --group-count:var(--chrome-text-secondary); --group-tab-text:var(--chrome-fg);
+  --well:var(--chrome-hover); --hair:var(--chrome-divider); --hair-2:var(--chrome-divider);
+  --lift:0 1px 2px rgb(var(--shade) / .12),0 0 0 1px rgb(var(--chrome-ink) / .06);
+  color:var(--ed-ink);
+}
+/* One veil per region, side by side rather than stacked: the sidebar's own color (the finish unless a sidebar
+   color is chosen) and the chrome's, so a custom sidebar never thickens the glass. */
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira:not(.native-layer) { background:
+ linear-gradient(180deg,rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-top)),rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-bottom))) 0 0/var(--navigation-width,0px) 100% no-repeat,
+ linear-gradient(180deg,rgb(var(--chrome-rgb) / var(--chrome-veil-top)),rgb(var(--chrome-rgb) / var(--chrome-veil-bottom))) var(--navigation-width,0px) 0/100% 100% no-repeat; }
+/* Windows swaps acrylic for a flat grey while the window is inactive; a veil over that grey reads muddy, so
+   the chrome shows its own finish color until the window is active again and the glass returns. */
+/* Windows transparency effects off (Energy saver or the user) drop acrylic just like an inactive window: paint an
+   opaque Mica-like finish tone rather than a veil over the grey fallback. The sidebar column takes the same top lift as
+   the toolbar, so with the default sidebar color they read as one pane, not a flat slab beside a lit strip. */
+html[data-material=acrylic]:is([data-window-active=false],[data-system-transparency=off]) .app.style-acira:not(.native-layer) { background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--sidebar-rgb,var(--chrome-rgb))) 96%,#fff),rgb(var(--sidebar-rgb,var(--chrome-rgb))) 120px) 0 0/var(--navigation-width,0px) 100% no-repeat,linear-gradient(180deg,color-mix(in srgb,rgb(var(--chrome-rgb)) 96%,#fff),rgb(var(--chrome-rgb)) 120px) var(--navigation-width,0px) 0/100% 100% no-repeat,rgb(var(--chrome-rgb)); }
+html:not(:is([data-material=acrylic],[data-material=vibrancy])) .app.style-acira .ed-rail { background:rgb(var(--sidebar-rgb,var(--chrome-rgb))); }
+/* Sidebar ink and states follow the sidebar's color; the selected tab carries the tab color with its own ink. */
+.app.style-acira .ed-rail { --chrome-fg:var(--sidebar-ink); --frame-text:var(--sidebar-ink); --frame-hover-text:var(--sidebar-ink); --frame-selection-fg:var(--sidebar-ink); --chrome-ink:var(--sidebar-ink-rgb); --chrome-text-secondary:var(--sidebar-muted); --frame-muted:var(--sidebar-muted); --chrome-icon:var(--sidebar-muted); --frame-hover:var(--sidebar-hover); --chrome-hover:var(--sidebar-hover); --frame-selection-bg:var(--sidebar-selection-bg); --chrome-selection-bg:var(--sidebar-selection-bg); --frame-selection-marker:var(--sidebar-selection-marker); }
+.app.style-acira :is(.acira-tab-row,.acira-compact-row,.acira-focus-row) { --frame-selection-fg:var(--tab-selection-fg); }
+.app.style-acira .address-agent-review { background:rgb(var(--ink)); color:var(--ed-chrome); }
+.app.style-acira .address-agent-review:hover { background:rgb(var(--ink) / .86); }
+
+/* Primary actions follow the finish. */
+.app.style-acira :is(.btn.primary,.ed-submit:not(:disabled)) { background:var(--primary); color:var(--on-primary); }
+.app.style-acira .btn.primary:hover,.app.style-acira .ed-submit:not(:disabled):hover { background:var(--primary-hover); }
+.app.style-acira .btn.primary:active,.app.style-acira .ed-submit:not(:disabled):active { background:var(--primary-pressed); }
+
+/* Hover and current states that are clearly visible on every finish. */
+.app.style-acira .ed-rail-button:hover,.app.style-acira .ed-rail-saved>button:hover,.app.style-acira .ed-rail-more:hover { background:rgb(var(--ink) / .08); color:var(--ed-ink); }
+.app.style-acira .ed-rail-button[aria-current=page],.app.style-acira .ed-rail-groups>button[aria-current=true] { background:var(--sidebar-selection-bg); color:var(--ed-ink); font-weight:500; box-shadow:none; }
+.app.style-acira .ed-rail-button:active,.app.style-acira .ed-rail-saved>button:active { transform:scale(.985); }
+.app.style-acira .ed-page-row:hover,.app.style-acira .ed-history-row:hover,.app.style-acira .ed-bookmark-row:hover { background:rgb(var(--ink) / .045); }
+.app.style-acira .ed-page-row:active { background:rgb(var(--ink) / .07); }
+.app.style-acira .browser-tab:not(.selected):not([data-tab-group]):hover::before { background:rgb(var(--ink) / .08); }
+
+/* On the chrome, controls sit on the chrome's own sheet; muted labels stay strong enough to read on every finish. */
+.app.style-acira :is(.ed-rail,.browser-shell) :is(.ed-rail-button,.ed-rail-saved>button,.browser-tab) { color:var(--text-secondary); }
+.app.style-acira :is(.ed-rail,.browser-shell) :is(.ed-rail-saved>header,.ed-rail-more,.ed-rail-count,.ed-rail-groups small) { color:var(--text-secondary); }
+.app.style-acira .browser-shell .browser-tab.selected { color:var(--ed-ink); }
+
+/* Chat, in the site's message style: your words in a quiet bubble, Acira's as plain text beside its mark. */
+.ed-thread { display:grid; gap:14px; margin:0 0 18px; }
+
+/* Ask Acira panel: a finish-tinted glass that separates from white pages, one radius with the native view,
+   no header rule, a filled composer instead of an outline. */
+.app.style-acira .native-assistant-panel { border:0; border-radius:8px; }
+.app.style-acira .native-assistant-panel { background:color-mix(in srgb,var(--ed-chrome) 34%,transparent); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .09),inset 0 1px 0 rgb(255 255 255 / calc(.6 * var(--hi-k))); }
+.app.style-acira .native-assistant-panel::after,.app.style-acira .native-assistant-panel::before { display:none; }
+.ed-new-task { padding-bottom:10px; }
+
+/* Floating surfaces (menus, the tab viewer, toasts, dialogs) sit on their own lifted tone with a ring in the
+   page's ink, so on every finish they read as a layer above the page and the chrome instead of melting into it. */
+.app.style-acira { --float-ring:0 0 0 1px rgb(var(--ink) / .1); --float-shadow:var(--shadow-popover); }
+.app.style-acira .ed-mode-menu,.app.style-acira .m-dialog { border:0;box-sizing:border-box;border-radius:var(--geometry-materialRadius,8px);background:rgb(var(--overlay-rgb) / var(--overlay-opacity));box-shadow:inset 0 0 0 1px rgb(var(--ink) / .1),var(--float-shadow); }
+.app.style-acira .toast { background:rgb(var(--overlay-rgb) / var(--overlay-opacity)); color:var(--text-primary); box-shadow:var(--float-ring),var(--float-shadow); }
+.app.style-acira .toast svg { color:var(--ed-blue); }
+.app.style-acira .toast-status{display:grid;place-items:center;flex:0 0 20px;color:var(--success)}
+.app.style-acira .toast-message{flex:1;min-width:0;line-height:18px;overflow-wrap:anywhere}
+.app.style-acira .toast-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.app.style-acira .toast :is(.toast-undo,.toast-dismiss){display:inline-grid;place-items:center;min-height:32px;border:0;border-radius:6px;background:transparent;color:var(--text-primary)}
+.app.style-acira .toast .toast-undo{padding:0 8px;font-weight:500}
+.app.style-acira .toast .toast-dismiss{width:32px;padding:0;color:var(--text-secondary)}
+.app.style-acira .toast :is(.toast-undo,.toast-dismiss):hover{background:var(--popup-selection-bg)}
+.app.style-acira .toast :is(.toast-undo,.toast-dismiss):focus-visible{outline:2px solid var(--popup-focus-ring);outline-offset:1px;box-shadow:none}
+.app.style-acira .toast :is(.toast-undo,.toast-dismiss) svg{color:currentColor}
+/* Group trays: a quiet tint and a softer outline in the group color instead of a hard ring. */
+.app.style-acira .tab-group-tray { box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--group-accent,var(--ed-line)) 25%,transparent); background:color-mix(in srgb,var(--group-accent,var(--sheet)) 6%,transparent); }
+
+/* LibraryPage now owns its container, header and responsive layout in library.css. */
+.attention-empty { margin-top:16px; }
+
+/* Sidebar sections: a quiet header folds each section; rows keep the navigation's rhythm (12px gutter, 32px rows). */
+.app.style-acira .ed-rail-sections { width:100%; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:4px; padding:10px 12px 8px; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
+.ed-rail-section>header { display:flex; align-items:center; gap:2px; height:28px; }
+.ed-rail-section-toggle { flex:1; min-width:0; display:flex; align-items:center; gap:6px; height:26px; padding:0 8px; border-radius:6px; color:var(--text-secondary); font-size:12px; font-weight:500; text-align:left; transition:background-color .15s,color .15s; }
+.ed-rail-section-toggle:hover,.ed-rail-section-toggle:focus-visible { color:var(--ed-ink); background:rgb(var(--ink) / .06); }
+.ed-rail-section-toggle>svg { flex:none; transition:transform .22s cubic-bezier(.16,1,.3,1); }
+.ed-rail-section[data-open=false] .ed-rail-section-toggle>svg { transform:rotate(-90deg); }
+.ed-rail-section-toggle>small { margin-left:0; color:var(--text-secondary); font:500 11.5px/16px inherit; }
+.ed-rail-section>header>.ed-icon { flex:none; width:26px; height:26px; }
+.ed-rail-section-body { overflow:hidden; }
+.ed-rail-section-body>p { margin:0; padding:2px 8px 8px; color:var(--text-secondary); font-size:12px; line-height:18px; }
+.app.style-acira .ed-rail-section-body>button:not(.ed-rail-button),.app.style-acira .ed-rail-recent>button,.ed-rail-tab>button:first-child { display:flex; align-items:center; gap:10px; width:100%; height:32px; padding:0 8px; border-radius:6px; color:rgb(var(--ink) / .84); font-size:13px; text-align:left; transition:background-color .15s,color .15s; }
+.ed-rail-section-body>button>span,.ed-rail-recent>button>span:not(.ed-rail-run-icon),.ed-rail-tab>button>span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.app.style-acira .ed-rail-section-body>button:not(.ed-rail-button):hover,.app.style-acira .ed-rail-recent>button:hover,.app.style-acira .ed-rail-tab:hover { background:rgb(var(--ink) / .08); color:var(--ed-ink); }
+.ed-rail-section-body>button>small,.ed-rail-recent>button>small { flex:none; color:var(--text-secondary); font:500 11px/16px var(--mono); }
+.ed-rail-run>small { font-family:inherit !important; font-size:11.5px !important; }
+.ed-rail-run>small.ask { color:var(--ed-blue) !important; font-weight:600 !important; }
+.app.style-acira .ed-rail-section-body>.ed-rail-group[aria-current=true],.app.style-acira .ed-rail-tab[aria-current=true] { background:var(--sidebar-selection-bg); color:var(--ed-ink); box-shadow:inset 2px 0 var(--chrome-focus-ring); }
+.ed-rail-tab { display:flex; align-items:center; border-radius:6px; transition:background-color .15s; }
+.ed-rail-tab>button:first-child { flex:1; min-width:0; }
+.ed-rail-tab[aria-current=true]>button:first-child { color:var(--ed-ink); font-weight:500; }
+.ed-rail-tab>.ed-icon { flex:none; width:24px; height:24px; margin-right:4px; opacity:0; transition:opacity .15s; }
+.ed-rail-tab:hover>.ed-icon,.ed-rail-tab:focus-within>.ed-icon,.ed-rail-tab[aria-current=true]>.ed-icon { opacity:1; }
+.ed-rail-tab-group { margin:2px 0; }
+.ed-rail-tab-group-name { display:flex; align-items:center; gap:8px; height:26px; padding:0 8px; color:var(--text-secondary); font-size:12px; font-weight:500; }
+.ed-rail-tab-group>.ed-rail-tab { margin-left:12px; }
+.app.style-acira .ed-rail-section-body>.ed-rail-new-tab { color:var(--text-secondary); }
+.ed-rail-section-body .ed-rail-button { width:100%; }
+.ed-rail-section-body .ed-matrix { flex:none; }
+.ed-rail-section-body .ed-rail-button { text-align:left; } .ed-rail-section-body .ed-rail-button .ed-rail-label { flex:1; text-align:left; }
+
+/* Legacy unmarked assets retain their white deep-surface treatment. Canonical
+   assets select paired wordmarks in BrandLogo and preserve the supplied gradient. */
+
+/* Side tabs: with tabs in the sidebar the strip is gone and the toolbar is the top row. Its empty space drags the
+   window, and it stops short of the window controls. */
+.app.style-acira .browser-root.side-tabs .acira-tab-row { display:none; }
+.app.style-acira .browser-root.side-tabs .acira-persistent-toolbar { padding-right:0; -webkit-app-region:drag; }
+.app.style-acira .browser-root.side-tabs .acira-persistent-toolbar :is(button,input,textarea,a,.address-bar,.navigation-controls) { -webkit-app-region:no-drag; }
+.app.style-acira .browser-root.side-tabs .compact-caption-space { display:block; flex:0 0 var(--caption-width); align-self:stretch; }
+html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { flex-basis:12px; }
+
+/* Agent tab core · Store identity */
+.app.style-acira .site-store-tile{display:inline-grid;place-items:center;border-radius:4px;color:#fff;font-weight:600;line-height:1}
+
+/* Agent tab core · In-page language
+   Everything inside an agent tab speaks acirabrowser.com's product language (docs/superpowers/specs/2026-10-22-in-page-style-study.md):
+   one ink at opacities, hairlines drawn as inset shadows, radius 6–10, Geist at 12–13.5px, color only where something is
+   selected, guarded or waiting. Block is an ink chip, Ask is accent-soft, Allow is a grey well; there is no red or green.
+   Acira speaks with its symbol and name in sentence case, never a mono eyebrow. */
+.app { --acira-caution-bg:#fbf6ea; --acira-caution-ink:#6b5420; }
+.app[data-theme="dark"] { --acira-caution-bg:rgb(226 167 75 / .14); --acira-caution-ink:#e6c98a; }
+
+/* Acira's voice */
+.app.style-acira .acira-mark { display:inline-grid; place-items:center; width:12px; height:14px; flex:none; }
+.app.style-acira .acira-mark img { width:10px; height:12px; }
+.app.style-acira .acira-kicker { display:flex; align-items:center; gap:4px; min-height:20px; color:rgb(var(--ink) / .55); font-size:12px; line-height:16px; }
+.app.style-acira .acira-muted { color:var(--ip-fg-2); }
+.app.style-acira .acira-link { padding:0; border:0; background:none; color:var(--ed-accentInk); font:inherit; cursor:pointer; }
+.app.style-acira .acira-link:hover { text-decoration:underline; text-underline-offset:2px; }
+/* Something Acira did is one timeline line, the Interfere activity pattern. */
+.app.style-acira :is(.acira-event,.acira-card.is-compact) { display:grid; grid-template-columns:16px minmax(0,1fr); gap:10px; align-items:start; padding:0 2px; font-size:12.5px; line-height:17px; color:var(--ed-ink); }
+.app.style-acira .acira-event-icon { display:grid; place-items:center; height:17px; color:var(--ed-blue); }
+.app.style-acira .acira-event[data-kind=note] .acira-event-icon { color:var(--ip-fg-3); }
+.app.style-acira .acira-event-text { min-width:0; display:grid; gap:1px; }
+.app.style-acira .acira-event-text>b { font-weight:500; }
+.app.style-acira .acira-event-text>span { color:rgb(var(--ink) / .55); font-size:12px; }
+.app.style-acira .acira-event-text>small { color:var(--ip-fg-3); font-size:11.5px; line-height:15px; }
+.app.style-acira .acira-card.is-compact .boundary-rows { margin:8px 0 0; border-radius:8px; background:var(--raised); box-shadow:var(--ip-card); }
+/* A decision is a card: white, radius 10, a hairline and a soft drop, no tone rail. */
+.app.style-acira .acira-card:not(.is-compact) { border-radius:8px; background:var(--raised); color:var(--ed-ink); font-size:13px; line-height:19px; box-shadow:var(--ip-card); overflow:hidden; }
+.app.style-acira .acira-card-head { display:grid; gap:3px; padding:12px 16px 12px; }
+.app.style-acira .acira-card-title { margin-top:3px; font-size:15px; line-height:21px; font-weight:600; letter-spacing:-.01em; }
+.app.style-acira .acira-card-detail { margin:0; color:var(--ip-fg-2); font-size:12.5px; line-height:18px; }
+.app.style-acira .acira-card-foot { display:flex; align-items:center; gap:8px; padding:12px 16px; border-top:1px solid var(--ip-line); }
+.app.style-acira .acira-card-spacer { flex:1; }
+.app.style-acira .acira-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:30px; padding:0 12px; border:0; border-radius:6px; background:var(--raised); box-shadow:inset 0 0 0 1px var(--ip-line-2,rgb(var(--ink) / .12)); color:var(--ed-ink); font:500 12.5px/1 Geist,Inter,'Segoe UI',sans-serif; white-space:nowrap; cursor:default; transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease); }
+.app.style-acira .acira-btn:hover { background:color-mix(in srgb,rgb(var(--ink)) 7%,var(--raised)); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .18); }
+.app.style-acira .acira-btn[aria-pressed=true] { background:var(--ip-well); box-shadow:inset 0 0 0 1px var(--ip-line-2); }
+.app.style-acira .acira-btn.is-dark { background:rgb(var(--ink)); color:var(--raised); box-shadow:none; }
+.app.style-acira .acira-btn.is-dark:hover { background:rgb(var(--ink) / .86); }
+.app.style-acira .acira-btn:disabled { opacity:.5; cursor:default; }
+.app.style-acira .acira-icon-btn { display:grid; place-items:center; width:28px; height:28px; border:0; border-radius:6px; background:none; color:var(--ip-fg-2); cursor:default; }
+.app.style-acira .acira-icon-btn:hover { background:var(--ip-well); color:var(--ed-ink); }
+.app.style-acira mark.ed-src { background:var(--ed-accentSoft); color:var(--ed-accentInk); border-radius:3px; padding:0 2px; box-shadow:inset 0 -1px 0 var(--ip-accent-line,var(--ed-blue)); transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease); }
+.app.style-acira mark.ed-src.is-hovered { background:color-mix(in srgb,var(--ed-blue) 20%,transparent); box-shadow:inset 0 -1.5px 0 var(--ed-blue); }
+
+/* Boundaries: Permissions-style rows with the decision on the right, the website's segmented control while adjusting */
+.app.style-acira .boundary-rows { display:grid; }
+.app.style-acira .boundary-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:center; padding:10px 16px; border-top:1px solid var(--ip-line); transition:background-color .2s var(--ease-out,ease); }
+.app.style-acira .boundary-row:hover,.app.style-acira .boundary-row:focus-within { background:rgb(var(--ink) / .035); }
+.app.style-acira .boundary-text { min-width:0; display:grid; gap:1px; }
+.app.style-acira .boundary-text>b { font-size:13px; line-height:19px; font-weight:500; }
+.app.style-acira .boundary-text>small { color:var(--ip-fg-3); font-size:11.5px; line-height:15px; }
+.app.style-acira .boundary-decision { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-width:52px; height:24px; padding:0 10px; border-radius:6px; background:var(--ip-well); color:rgb(var(--ink) / .75); font-size:12px; font-weight:500; white-space:nowrap; }
+.app.style-acira .boundary-decision[data-decision=block] { background:rgb(var(--ink)); color:var(--raised); }
+.app.style-acira .boundary-decision[data-decision=ask] { background:var(--ed-accentSoft); color:var(--ed-accentInk); }
+.app.style-acira .boundary-decision[data-decision=unclear] { background:var(--acira-caution-bg); color:var(--acira-caution-ink); }
+.app.style-acira .boundary-block { justify-self:start; height:26px; margin-top:7px; font-size:12px; }
+.app.style-acira .boundary-seg { display:inline-flex; gap:2px; padding:2px; border-radius:6px; background:rgb(var(--ink) / .05); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .06); }
+.app.style-acira .boundary-seg button { min-width:50px; height:26px; padding:0 10px; border:0; border-radius:6px; background:none; color:var(--ip-fg-2); font:400 12px/1 Geist,Inter,'Segoe UI',sans-serif; cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .boundary-seg button:hover { color:var(--ed-ink); background:rgb(var(--ink) / .045); }
+.app.style-acira .boundary-seg button[aria-checked=true] { background:var(--raised); color:var(--ed-ink); font-weight:500; box-shadow:0 1px 2px rgb(var(--shade) / .1),0 0 0 1px rgb(var(--ink) / .06); }
+.app.style-acira .boundary-facts { display:grid; gap:8px; margin:0; padding:12px 16px; border-top:1px solid var(--ip-line); list-style:none; font-size:12.5px; line-height:18px; }
+.app.style-acira .boundary-facts li { display:grid; grid-template-columns:13px minmax(0,1fr); gap:9px; align-items:start; }
+.app.style-acira .boundary-facts svg { margin-top:2.5px; color:var(--ip-fg-3); }
+.app.style-acira .boundary-facts svg.is-accent { color:var(--ed-blue); }
+.app.style-acira .boundary-facts strong { font-weight:500; }
+
+/* The agent tab: chat beside a live view. The trail sits straight in the thread; its lights are the progress. */
+@keyframes agent-live-in { from { opacity:0; transform:translateX(18px); } }
+/* The pane slides in from the right; the layout clips that slide so it never widens the page into a scrollbar. */
+.app.style-acira .browsers-strip { display:flex; flex-wrap:nowrap; align-items:center; gap:6px; padding:10px 20px; border-bottom:1px solid var(--ip-line); overflow-x:auto; scrollbar-width:none; -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent); }
+.app.style-acira .browsers-strip-label { flex:none; margin-right:4px; color:var(--text-secondary); font-size:12px; }
+.app.style-acira .browser-chip { flex:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border:0; border-radius:6px; background:none; box-shadow:inset 0 0 0 1px var(--ip-line-2); color:var(--ip-fg-2); font-size:11.5px; white-space:nowrap; cursor:default; transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .browser-chip:hover { background:var(--ip-well); color:var(--ed-ink); }
+.app.style-acira .browser-chip.is-live { background:var(--raised); color:var(--ed-ink); font-weight:500; box-shadow:0 1px 2px rgb(var(--shade) / .1),0 0 0 1px rgb(var(--ink) / .08); }
+.app.style-acira .browser-chip svg { flex:none; }
+
+/* The agent's browser: a website panel. While the agent drives it carries the website's "being worked on" ring. */
+/* Guarded elements, drawn by Acira over the site: the website's .fld.guarded and its quiet disabled order button. */
+.app.style-acira .protection-guard { position:absolute; z-index:2; display:grid; align-content:center; gap:2px; padding:0 10px; border-radius:6px; pointer-events:none; font-family:Geist,Inter,'Segoe UI',sans-serif; }
+.app.style-acira .protection-guard.on-field { background:color-mix(in srgb,var(--ip-accent) 5%,#fff); box-shadow:inset 0 0 0 1px var(--ip-frame-line); }
+.app.style-acira .protection-guard.on-button { display:flex; align-items:center; justify-content:center; border-radius:6px; background:#ededee; }
+.app.style-acira .protection-guard.on-button[data-decision=ask] { background:var(--ip-accent-soft); box-shadow:inset 0 0 0 1px var(--ip-frame-line); }
+.app.style-acira .protection-label { color:rgb(37 38 43 / .58); font-size:11px; line-height:13px; }
+.app.style-acira .protection-tag { display:flex; align-items:center; gap:6px; color:var(--ip-accent-ink); font-size:12.5px; line-height:16px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.app.style-acira .on-button .protection-tag { color:rgb(37 38 43 / .62); }
+.app.style-acira .on-button .protection-tag[data-decision=ask] { color:var(--ip-accent-ink); }
+.app.style-acira .protection-guard.is-flash { animation:acira-guard-flash .6s cubic-bezier(.16,1,.3,1); }
+@keyframes acira-guard-flash { 0% { box-shadow:inset 0 0 0 1px var(--ip-frame-line),0 0 0 0 color-mix(in srgb,var(--ip-accent) 28%,transparent); } 100% { box-shadow:inset 0 0 0 1px var(--ip-frame-line),0 0 0 6px transparent; } }
+/* The drive bar is the website's glass: white frost, a hairline and a long soft shadow. Stop is the dark action. */
+.app.style-acira .takeover-ask { position:absolute; z-index:5; display:flex; align-items:center; gap:10px; padding:6px 6px 6px 14px; border-radius:8px; background:var(--raised); color:var(--ed-ink); font-size:12.5px; box-shadow:0 0 0 1px rgb(var(--ink) / .08),0 12px 28px -14px rgb(var(--shade) / .4); transform:translate(8px,8px); animation:takeover-ask-in .2s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .takeover-ask .acira-btn { height:26px; }
+@keyframes takeover-ask-in { from { opacity:0; filter:blur(4px); transform:translate(8px,4px) scale(.97); } }
+.app[data-reduced-motion=true] .takeover-ask { animation:none; }
+/* Popped out, the same browser fills its own tab with a little air around its ring. */
+
+/* Store pages: the fictional sites themselves are styled in features/store-site.css. */
+.sample-pages.store-page { height:100%; overflow:auto; background:#fff; container-type:inline-size; }
+
+/* Agent tab core · Tab states
+   A tab is its agent: lights while it works, an accent tint and one soft pulse when it needs you, still lights when
+   paused, a check when done, nothing when stopped. The address strip names the guard on duty and holds the controls. */
+.app.style-acira .browser-tab[data-agent-state="needs-you"] { background:var(--ed-accentSoft); animation:agent-needs-pulse 900ms var(--ease-out,cubic-bezier(.16,1,.3,1)) 1; }
+.app.style-acira .browser-tab[data-agent-state="needs-you"] .tab-title { color:var(--ed-accentInk); }
+@keyframes agent-needs-pulse { 0% { box-shadow:0 0 0 0 color-mix(in srgb,var(--ed-blue) 38%,transparent); } 100% { box-shadow:0 0 0 6px transparent; } }
+.app.style-acira .browser-tab[data-agent-state="paused"] .tab-title { opacity:.7; }
+.app.style-acira .browser-tab[data-agent-state="stopped"] .tab-title { opacity:.55; }
+.app.style-acira .tab-agent-icon.is-done { color:var(--text-secondary); }
+.app[data-reduced-motion=true] .browser-tab[data-agent-state] { animation:none; }
+.app.style-acira[data-reduced-motion=true] .address-agent-message.ed-shimmer { animation:none; background:none; color:var(--text-secondary); -webkit-text-fill-color:currentColor; }
+@media (prefers-reduced-motion:reduce) { .app .browser-tab[data-agent-state] { animation:none; } }
+.app.style-acira .address-guard { flex:none; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; background:var(--sheet); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .12); color:var(--ed-ink); font-size:11.5px; font-weight:500; white-space:nowrap; }
+.app.style-acira .address-guard svg { color:var(--ed-blue); }
+.app.style-acira .address-agent-controls { flex:none; display:flex; align-items:center; gap:1px; }
+.app.style-acira .address-agent-control { display:grid; place-items:center; width:24px; height:24px; border:0; border-radius:6px; background:none; color:var(--text-secondary); cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .address-agent-control:hover { background:rgb(var(--ink) / .08); color:var(--ed-ink); }
+.app.style-acira .ed-rail-section-action { flex:none; height:24px; padding:0 8px; border:0; border-radius:6px; background:none; color:var(--text-secondary); font-size:12px; cursor:default; }
+.app.style-acira .ed-rail-section-action:hover { background:rgb(var(--ink) / .06); color:var(--ed-ink); }
+.app.style-acira .ed-rail-recent { display:grid; grid-template-columns:minmax(0,1fr); margin-top:6px; }
+.app.style-acira .ed-rail-recent>h3 { margin:0; padding:4px 8px 2px; color:var(--text-secondary); font-size:11.5px; font-weight:500; }
+.app.style-acira .ed-rail-run-icon { display:grid; place-items:center; flex:0 0 14px; width:14px; height:14px; color:rgb(var(--ink) / .55); }
+.app.style-acira .ed-rail-run.is-recent>span:not(.ed-rail-run-icon) { color:var(--text-secondary); }
+
+/* Agent tab core · Exact approval
+   The website's Operation review: Acira's kicker with time left, the exact order as a title, label/value facts, why
+   it asked in your own words, what the approval covers, and Deny / Reply / Approve once. */
+.app.style-acira .op-review { scroll-margin-top:12px; margin:4px 0 12px; border-radius:8px; background:var(--raised); color:var(--ed-ink); font-size:13px; line-height:19px; box-shadow:var(--ip-card); overflow:hidden; }
+.app.style-acira .op-review-head { display:grid; gap:4px; justify-items:start; padding:14px 16px 8px; }
+.app.style-acira .op-review-kicker { display:flex; align-items:center; gap:6px; width:100%; color:rgb(var(--ink) / .55); font-size:12px; line-height:16px; }
+.app.style-acira .op-review-title { font:600 17px/22px Geist,Inter,'Segoe UI',sans-serif; letter-spacing:-.01em; }
+.app.style-acira .op-review-facts { display:grid; gap:8px; margin:0 16px; padding:12px 0; border-top:1px solid var(--ip-line); }
+.app.style-acira .op-review-facts>div { display:grid; grid-template-columns:104px minmax(0,1fr); gap:12px; }
+.app.style-acira .op-review-facts dt { color:var(--ip-fg-3); font-size:12.5px; }
+.app.style-acira .op-review-facts dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+.app.style-acira .op-review-facts dd small { display:block; color:var(--text-secondary); font-size:11px; line-height:14px; }
+.app.style-acira :is(.op-why,.op-covers) { margin:0 16px; padding-top:8px; color:var(--ip-fg-2); font-size:12.5px; line-height:18px; }
+.app.style-acira :is(.op-why,.op-covers) b { color:var(--ed-ink); font-weight:500; }
+.app.style-acira .op-why { border-top:1px solid var(--ip-line); padding-top:10px; }
+.app.style-acira .op-covers { padding-bottom:12px; }
+/* Evidence reads as plain lines on a hairline, like the folded steps: no checkmarks. */
+.app.style-acira .op-evidence { display:grid; gap:4px; margin:0 16px 12px 23.5px; padding:0 0 0 10px; list-style:none; box-shadow:inset 1px 0 0 var(--ip-line-2); color:var(--ip-fg-2); font-size:12px; line-height:17px; }
+.app.style-acira .op-caution { margin:0 16px 12px; padding:10px 12px; border-radius:6px; background:var(--acira-caution-bg); color:var(--acira-caution-ink); font-size:12.5px; line-height:18px; }
+.app.style-acira .op-review-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:14px 16px; border-top:1px solid var(--ip-line); }
+.app.style-acira .op-review-actions>span { flex-basis:100%; color:var(--ip-fg-3); font-size:12px; }
+.app.style-acira .op-review-actions .acira-btn { height:34px; padding:0 14px; }
+.app.style-acira .op-review-actions .acira-btn.is-dark { margin-left:auto; }
+.app.style-acira .acira-btn.is-well { background:var(--ip-well,rgb(var(--ink) / .045)); box-shadow:none; }
+.app.style-acira .acira-btn.is-well:hover { background:rgb(var(--ink) / .08); }
+.app.style-acira .op-disown { display:block; margin:-4px 16px 12px; color:var(--ip-fg-2); font-size:12px; text-decoration:underline; text-decoration-color:rgb(var(--ink) / .25); text-underline-offset:2px; }
+
+/* Agent tab core · Status language (Task 17)
+   Every status is one quiet pill with a static dot glyph whose lit dots read as strength. Color only carries
+   meaning: the accent for something waiting on you or actively watched, the website's single caution tone for a
+   degraded control, an ink chip with a lock for anything blocked. No red, no green, no mono uppercase tags. */
+.app.style-acira span.status-pill.status-pill { display:inline-flex; align-items:center; gap:6px; width:fit-content; height:22px; padding:0 10px 0 8px; border:0; border-radius:4px; background:var(--raised); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .12); color:var(--text-secondary); font:500 11.5px/1 Geist,Inter,'Segoe UI',sans-serif; letter-spacing:0; text-transform:none; white-space:nowrap; flex-shrink:0; }
+.app.style-acira span.status-pill.status-pill>svg { flex:none; }
+/* Optical centring: capitals sit low in a line box, so the glyph drops half a pixel and stays smaller than the text. */
+.app.style-acira span.status-pill.status-pill>.status-glyph { width:9px; height:9px; position:relative; top:0; }
+.app.style-acira span.status-pill.status-pill[data-tone=settled] .status-glyph { color:rgb(var(--ink) / .8); }
+.app.style-acira span.status-pill.status-pill[data-tone=active] { color:var(--ed-accentInk); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ed-blue) 34%,transparent); }
+.app.style-acira span.status-pill.status-pill[data-tone=attention] { background:var(--ed-accentSoft); color:var(--ed-accentInk); box-shadow:none; }
+.app.style-acira span.status-pill.status-pill[data-tone=caution] { background:var(--acira-caution-bg); color:var(--acira-caution-ink); box-shadow:none; }
+.app.style-acira span.status-pill.status-pill[data-tone=blocked] { background:rgb(var(--ink)); color:var(--raised); box-shadow:none; }
+.app.style-acira span.status-pill.status-pill[data-tone=muted] { background:rgb(var(--ink) / .045); color:var(--text-secondary); box-shadow:none; }
+/* Control IDs and codes are plain mono text, the website's .id; kickers are sentence-case labels, never tags. */
+.app.style-acira .m-control-id { padding:0; border:0; border-radius:0; background:none; color:var(--text-secondary); font:400 11.5px/16px var(--mono); }
+.app.style-acira .m-code-pill { padding:1px 6px; border:0; border-radius:4px; background:rgb(var(--ink) / .05); color:var(--text-secondary); font:400 11.5px/18px var(--mono); letter-spacing:0; text-transform:none; }
+/* Management's own hues fold into the same language: settled is ink, anything asking is the accent, and the
+   coverage bar is a meter (enforced lit in ink, observed in the accent, the rest unlit). */
+.app.style-acira .management.management { --m-green:rgb(var(--ink) / .72); --m-green-soft:rgb(var(--ink) / .06); --m-amber:var(--ed-accentInk); --m-amber-soft:var(--ed-accentSoft); }
+.app.style-acira .m-coverage-bar.m-coverage-bar { gap:2px; height:8px; border-radius:4px; }
+.app.style-acira .m-coverage-bar.m-coverage-bar>span.enforced { background:rgb(var(--ink) / .82); }
+.app.style-acira .m-coverage-bar.m-coverage-bar>span.observed { background:var(--ed-blue); }
+.app.style-acira .m-coverage-bar.m-coverage-bar>span.attention { background:rgb(var(--ink) / .14); }
+
+/* Browser parity · Tab audio
+   A tab playing sound shows a speaker beside its close button, as in Chrome; clicking it mutes that tab. */
+.app.style-acira .browser-tab .tab-audio { flex:0 0 20px; width:20px; height:20px; display:grid; place-items:center; padding:0; border:0; border-radius:4px; background:none; color:var(--text-secondary); cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .browser-tab .tab-audio:hover { background:rgb(var(--ink) / .08); color:var(--ed-ink); }
+.app.style-acira .browser-tab .tab-audio.is-muted { color:var(--text-secondary); }
+
+/* Agent tab core · Audit fixes (22 Oct)
+   Layout at narrow widths, page-safe accents on the white store page in dark themes, solid glass over that page,
+   visible hovers, and the small alignments the visual audit measured. */
+/* H1: the agent tab keeps its chat beside the live view at every width; the old stacking rule is for task details. */
+/* H2: deep themes use a pastel accent tuned for dark surfaces; the store page stays white, so darken it there. */
+/* H7: over a white page, thin dark glass turns muddy; dark themes use nearly solid glass. */
+/* H4: the focus ring sits inside the popover's padding. */
+.app.style-acira .takeover-ask .acira-btn:focus-visible { outline-offset:0; }
+/* M4: in dark themes the chosen segment lifts above its track. */
+.app.style-acira[data-theme="dark"] .boundary-seg button[aria-checked=true] { background:rgb(var(--ink) / .14); box-shadow:0 0 0 1px rgb(var(--ink) / .1); }
+/* M5: fixed rows say so while adjusting. */
+.app.style-acira .boundaries-card[data-adjusting] .boundary-decision.is-fixed { opacity:.72; }
+/* M6: the unclear row's chip lines up with its title. */
+.app.style-acira .boundary-row:has(.boundary-block) { align-items:start; }
+.app.style-acira .boundary-row:has(.boundary-block) .boundary-decision { margin-top:-2.5px; }
+/* M7: run rows share the navigation's icon column and text start. */
+.app.style-acira :is(.ed-rail-run>.ed-matrix,.ed-rail-run-icon) { margin:0 2px; }
+/* M10: dark themes need stronger meta text. */
+/* M3: the agent strip's message reads as the button it is. */
+.app.style-acira .address-agent-status:hover .address-agent-message { color:var(--ed-ink); text-decoration:underline; text-underline-offset:3px; }
+/* L4: a store's tab tile is ink, like its site. */
+.app.style-acira .site-store-tile { background:rgb(37 38 43) !important; }
+/* L8: the end of the thread clears the composer. */
+
+/* Agent chat (22 Oct), from the Strawberry and BrowserOS study: one centred column, a slim header, your
+   words in a soft bubble and the agent's as plain text, and work folded into one line. One left edge, a 16px icon column
+   with a 10px gap, and three type sizes: 13.5 for messages, 12.5 for steps and Acira lines, 12 for meta and chips. */
+/* No fade mask here: Chrome counts a masked scroller's hidden content as overflow of the page around it. */
+
+/* Header: a short title, the state in lights and words, a few controls, and "…" for the details. */
+.app.style-acira .at-head { position:relative; z-index:3; flex:none; display:flex; align-items:center; gap:6px; height:44px; padding:0 10px 0 16px; box-shadow:inset 0 -1px 0 var(--ip-line); }
+.app.style-acira .at-title { min-width:0; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ed-ink); font-size:13px; line-height:20px; font-weight:500; letter-spacing:0; }
+.app.style-acira .at-state { flex:none; display:inline-flex; align-items:center; gap:6px; margin-left:6px; color:var(--ip-fg-3); font-size:12px; line-height:16px; }
+.app.style-acira .at-state[data-attention] { color:var(--ed-accentInk); }
+.app.style-acira .at-guard { flex:none; display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:6px; background:var(--ip-well); color:var(--ip-fg-2); font-size:12px; line-height:20px; }
+.app.style-acira .at-sim { flex:none; color:var(--ip-fg-3); font-size:12px; line-height:16px; }
+.app.style-acira .at-state+.at-sim::before { content:"\00b7"; margin-right:6px; }
+.app.style-acira .at-spacer { flex:1; min-width:8px; }
+.app.style-acira .at-btn { height:28px; padding:0 10px; font-size:12px; font-weight:500; }
+.app.style-acira .at-more-wrap { position:relative; flex:none; }
+.app.style-acira .at-more[aria-expanded=true] { background:var(--ip-well); color:var(--ed-ink); }
+.app.style-acira .at-details { position:absolute; top:calc(100% + 6px); right:0; width:320px; max-height:min(480px,70vh); overflow:auto; padding:14px 16px; border-radius:8px; background:var(--raised); box-shadow:0 0 0 1px rgb(var(--ink) / .08),0 18px 40px -18px rgb(var(--shade) / .45); color:var(--ed-ink); font-size:12.5px; line-height:18px; animation:at-pop .18s cubic-bezier(.16,1,.3,1); }
+@keyframes at-pop { from { opacity:0; transform:translateY(-4px) scale(.985); } }
+.app[data-reduced-motion=true] .at-details { animation:none; }
+.app.style-acira .at-details-title { margin:0 0 12px; font-size:13px; line-height:19px; font-weight:500; overflow-wrap:anywhere; }
+.app.style-acira .at-details-facts { display:grid; gap:6px; margin:0 0 14px; }
+.app.style-acira .at-details-facts>div { display:grid; grid-template-columns:88px minmax(0,1fr); gap:8px; }
+.app.style-acira .at-details-facts dt { color:var(--ip-fg-3); }
+.app.style-acira .at-details-facts dd { margin:0; overflow-wrap:anywhere; }
+.app.style-acira .at-details-label { margin:0 0 6px; color:var(--ip-fg-3); font-size:12px; }
+.app.style-acira .at-details-log { display:grid; gap:4px; margin:0 0 14px 7.5px; padding:0 0 0 12px; list-style:none; box-shadow:inset 1px 0 0 var(--ip-line-2); color:var(--ip-fg-2); }
+.app.style-acira .at-details-note { margin:0; padding-top:10px; box-shadow:inset 0 1px 0 var(--ip-line); color:var(--ip-fg-3); font-size:12px; }
+
+/* Thread */
+/* Acira's lines share the step grid: a plain line icon in the icon column (no logo); a block takes the accent lock. */
+
+/* Work: the live line (lights + shimmer) and the folded steps. No checkmarks; the reply is the result. */
+.app.style-acira .at-work { display:grid; justify-items:start; }
+.app.style-acira .at-fold { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0; border:0; background:none; color:var(--ip-fg-3); font-size:12.5px; line-height:20px; cursor:default; transition:color .16s var(--ease-out,ease); }
+.app.style-acira .at-fold:hover,.app.style-acira .at-fold[aria-expanded=true] { color:var(--ed-ink); }
+.app.style-acira .at-fold svg { transition:transform .2s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .at-fold[aria-expanded=true] svg { transform:rotate(90deg); }
+.app.style-acira .at-steps-wrap { display:grid; grid-template-rows:0fr; width:100%; transition:grid-template-rows .2s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .at-steps-wrap[data-open] { grid-template-rows:1fr; }
+.app.style-acira .at-steps { min-height:0; overflow:hidden; display:grid; gap:6px; margin:0 0 0 7.5px; padding:0 0 0 18px; list-style:none; box-shadow:inset 1px 0 0 var(--ip-line-2); color:var(--ip-fg-2); font-size:12.5px; line-height:18px; }
+.app.style-acira .at-steps>li:first-child { margin-top:6px; }
+.app.style-acira .at-steps>li:last-child { margin-bottom:2px; }
+.app.style-acira .at-live { display:grid; grid-template-columns:var(--at-icon,16px) minmax(0,1fr); column-gap:var(--at-gap,10px); align-items:center; min-height:20px; }
+.app.style-acira .at-fold~.at-live { margin-top:8px; }
+.app.style-acira .at-live .dot-matrix { justify-self:center; }
+.app.style-acira .at-live-text { min-width:0; color:var(--ip-fg-2); font-size:13px; line-height:20px; font-weight:500; }
+@media (prefers-reduced-motion:reduce) { .app.style-acira :is(.at-steps-wrap,.at-fold svg) { transition:none; } }
+.app[data-reduced-motion=true] :is(.at-steps-wrap,.at-fold svg) { transition:none; }
+
+/* Composer: column width, raised, the account and boundaries as chips beside "+", and an ink send button. */
+.app.style-acira .at-composer { position:relative; border-radius:8px; background:var(--raised); box-shadow:0 0 0 1px var(--ip-line-2),0 8px 24px -16px rgb(var(--shade) / .35); transition:box-shadow .16s var(--ease-out,ease); }
+.app.style-acira .at-composer:focus-within { box-shadow:0 0 0 1px rgb(var(--ink) / .2),0 10px 28px -16px rgb(var(--shade) / .42); }
+.app.style-acira .at-composer textarea { display:block; width:100%; height:44px; min-height:44px; max-height:200px; padding:12px 14px 4px; border:0; outline:0; border-radius:8px 8px 0 0; resize:none; background:none; box-shadow:none; color:var(--ed-ink); font-size:13.5px; line-height:21px; }
+.app.style-acira .at-composer textarea::placeholder { color:var(--ip-fg-3); }
+.app.style-acira .at-composer-row { display:flex; align-items:center; gap:6px; padding:4px 8px 8px; }
+.app.style-acira .at-plus { color:var(--ip-fg-2); }
+.app.style-acira .at-chip { flex:0 1 auto; min-width:0; display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 8px; border:0; border-radius:6px; background:none; box-shadow:inset 0 0 0 1px var(--ip-line); color:var(--ip-fg-2); font-size:12px; font-weight:500; line-height:24px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .at-chip svg { flex:none; }
+.app.style-acira .at-chip:hover { background:var(--ip-well); color:var(--ed-ink); }
+.app.style-acira .at-send { flex:none; display:grid; place-items:center; width:28px; height:28px; margin-left:auto; padding:0; border:0; border-radius:6px; background:rgb(var(--ink)); color:var(--raised); cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .at-send:hover:not(:disabled) { background:rgb(var(--ink) / .86); }
+.app.style-acira .at-send:disabled { background:var(--ip-well); color:var(--ip-fg-3); cursor:default; }
+.app.style-acira .at-advanced { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 12px 10px; box-shadow:inset 0 1px 0 var(--ip-line); color:var(--ip-fg-2); font-size:12px; }
+.app.style-acira .at-advanced label { display:inline-flex; align-items:center; gap:6px; }
+.app.style-acira .at-advanced p { margin:0; }
+
+/* Empty: the lights, one question, the composer and three starting points. */
+.app.style-acira .at-empty { display:flex; flex-direction:column; align-items:center; gap:14px; padding:48px 0 14vh; }
+.app.style-acira .at-empty>h2 { margin:0 0 4px; color:var(--ed-ink); font-size:15px; line-height:22px; font-weight:500; letter-spacing:0; }
+.app.style-acira .at-empty>.at-composer { align-self:stretch; }
+.app.style-acira .at-suggestions { align-self:stretch; display:grid; gap:2px; }
+.app.style-acira .at-suggestions button { display:flex; align-items:center; gap:8px; height:32px; padding:0 10px; border:0; border-radius:6px; background:none; color:var(--ip-fg-2); font-size:12.5px; text-align:left; cursor:default; }
+.app.style-acira .at-suggestions button>span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.app.style-acira .at-suggestions button>svg { flex:none; opacity:0; transition:opacity .16s var(--ease-out,ease); }
+.app.style-acira .at-suggestions button:hover { background:var(--ip-well); color:var(--ed-ink); }
+.app.style-acira .at-suggestions button:hover>svg { opacity:1; }
+
+/* With a live view: a narrow chat column beside the browser; the browsers strip is the live pane's top row. */
+
+/* An agent chat has no address to type: the toolbar keeps its actions and an empty, draggable middle. */
+
+/* Agent chat, second pass (22 Oct): replies stream in word by word, Acira's new lines settle in, Copy waits under a
+   message until you hover (always under the latest reply), Stop lives in the composer, and a pill brings you back to
+   the end or to a waiting approval. */
+.app.style-acira .at-word { animation:at-word-in .42s cubic-bezier(.16,1,.3,1) both; }
+@keyframes at-word-in { from { opacity:0; filter:blur(3px); } }
+@keyframes at-line-in { from { opacity:0; transform:translateY(4px); } }
+
+.app.style-acira .at-msg-actions { position:absolute; top:calc(100% + 1px); left:-6px; display:flex; gap:2px; opacity:0; transition:opacity .16s var(--ease-out,ease); }
+.app.style-acira .at-msg-action { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-width:22px; height:22px; padding:0 5px; border:0; border-radius:6px; background:none; color:var(--ip-fg-3); font-size:12px; cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .at-msg-action:hover { background:var(--ip-well); color:var(--ed-ink); }
+
+.app.style-acira .at-send.is-stop { background:rgb(var(--ink)); color:var(--raised); }
+.app.style-acira .at-send.is-stop svg { width:10px; height:10px; }
+.app.style-acira .at-jump { position:absolute; left:50%; bottom:calc(100% + 10px); z-index:2; display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:30px; height:30px; padding:0 8px; border:0; border-radius:4px; background:var(--raised); box-shadow:0 0 0 1px var(--ip-line-2),0 8px 18px -10px rgb(var(--shade) / .45); color:var(--ip-fg-2); font-size:12px; font-weight:500; cursor:default; transform:translateX(-50%); animation:at-jump-in .24s cubic-bezier(.16,1,.3,1); }
+.app.style-acira .at-jump:hover { color:var(--ed-ink); }
+.app.style-acira .at-jump-down { transform:rotate(180deg); }
+.app.style-acira .at-jump.is-waiting { padding:0 12px; background:var(--ed-accentSoft); box-shadow:0 0 0 1px var(--ip-accent-line),0 8px 18px -10px rgb(var(--shade) / .4); color:var(--ed-accentInk); }
+@keyframes at-jump-in { from { opacity:0; transform:translate(-50%,4px); } }
+.app[data-reduced-motion=true] .at-jump { animation:none; }
+
+/* Start page: the full demo, one click under the search field. */
+.app.style-acira .ed-demo-row { display:grid; grid-template-columns:16px minmax(0,1fr) auto; column-gap:10px; align-items:center; width:100%; margin-top:10px; padding:10px 14px; border:0; border-radius:8px; background:color-mix(in srgb,var(--raised) 70%,transparent); box-shadow:0 0 0 1px rgb(var(--ink) / .07); color:var(--ed-ink); text-align:left; cursor:default; transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease); }
+.app.style-acira .ed-demo-row:hover { background:var(--raised); box-shadow:0 0 0 1px rgb(var(--ink) / .12),0 8px 20px -14px rgb(var(--shade) / .4); }
+.app.style-acira .ed-demo-row>.dot-matrix { justify-self:center; }
+.app.style-acira .ed-demo-row>span { display:grid; gap:1px; min-width:0; }
+.app.style-acira .ed-demo-row b { font-size:13px; line-height:19px; font-weight:500; }
+.app.style-acira .ed-demo-row small { overflow:hidden; color:var(--ip-fg-2,rgb(var(--ink) / .64)); font-size:12px; line-height:17px; white-space:nowrap; text-overflow:ellipsis; }
+.app.style-acira .ed-demo-row>svg { color:var(--text-secondary); }
+/* Page loading: Apple's dash spinner. One turn is .8s; dash n lights at n/8 of it and steps down to a quarter, so the
+   brightest dash travels clockwise. */
+.ac-spinner { flex:none; display:block; color:currentColor; }
+.ac-spinner rect { fill:currentColor; opacity:.22; animation:ac-spoke .8s steps(8,jump-none) infinite; animation-delay:calc((var(--spoke) - var(--spokes)) * .1s); }
+@keyframes ac-spoke { from { opacity:1; } to { opacity:.22; } }
+.app[data-reduced-motion=true] .ac-spinner rect { animation:none; opacity:calc(1 - .78 * (var(--spokes) - 1 - var(--spoke)) / (var(--spokes) - 1)); }
+@media (prefers-reduced-motion:reduce) { .ac-spinner rect { animation:none; opacity:calc(1 - .78 * (var(--spokes) - 1 - var(--spoke)) / (var(--spokes) - 1)); } }
+
+/* Agent browser, third pass (22 Oct), from Strawberry's shipped source.
+   Window controls: 28px ghost icon buttons as in pane headers (16px icons, radius 6, a 60ms hover on its ease-out
+   curve, a slight press). The page glows inward from every edge while the agent drives (Strawberry's inset glow), with a
+   light that runs once round the edge as it takes over (an arrival ring). The cursor glides in JS, so it has no CSS
+   transition; a press leaves a gesture ring. Minimised, the live view is Strawberry's page card. */
+.app.style-acira .ab-icon { flex:none; display:grid; place-items:center; width:28px; height:28px; padding:0; border:0; border-radius:6px; background:none; color:var(--ip-fg-2,rgb(var(--ink) / .64)); cursor:default; transition:background-color 60ms cubic-bezier(.165,.84,.44,1),color 60ms cubic-bezier(.165,.84,.44,1),transform .45s linear(0,.2459,.6526,.9468,1.0764,1.0915,1.0585,1.0219,.9993,.9914,.9921,.9957,.9988,1.0004,1); }
+.app.style-acira .ab-icon:hover { background:rgb(var(--ink) / .06); color:var(--ed-ink); }
+.app.style-acira .ab-icon:active { transform:scale(.94); transition:transform 60ms ease-out; }
+
+@property --edge-turn { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+@keyframes agent-aura-breathe { from { opacity:.62; } to { opacity:1; } }
+@keyframes agent-aura-arrive { 0% { --edge-turn:-95deg; opacity:0; } 12%,88% { opacity:1; } to { --edge-turn:265deg; opacity:0; } }
+@keyframes agent-press-halo { 0% { transform:translate(-50%,-50%) scale(1); } 17% { transform:translate(-50%,-50%) scale(.75); } 100% { transform:translate(-50%,-50%) scale(2.5); opacity:0; } }
+@keyframes agent-press-ring { 0% { transform:translate(-50%,-50%) scale(1); opacity:0; } 30% { opacity:.9; } 100% { transform:translate(-50%,-50%) scale(4); opacity:0; } }
+@keyframes agent-press-life { to { opacity:0; } }
+
+/* Expanded: the live view fills the tab; the chat waits behind the collapse button. */
+
+/* Minimised: a small live card over the chat's bottom right. */
+@keyframes agent-mini-in { from { opacity:0; transform:translateY(8px) scale(.97); } }
+
+
+/* Shared semantic states. Geometry and the existing Motion choreography stay owned by their components. */
+.app.style-acira{color-scheme:light;accent-color:var(--primary)}
+.app.style-acira[data-appearance=dark]{color-scheme:dark}
+.app.style-acira[data-chrome=dark] :is(.ed-rail,.browser-shell){color-scheme:dark}
+.app.style-acira[data-chrome=light] :is(.ed-rail,.browser-shell){color-scheme:light}
+.app.style-acira :is(button,a,[role=separator]):focus-visible{outline-color:var(--focus-ring)}
+.app.style-acira :is(input,textarea)::placeholder{color:var(--text-placeholder);opacity:1}
+.app.style-acira :is(.address-bar,.ed-search-glass):has(input[aria-invalid=true]){border-color:var(--danger-edge)}
+.app.style-acira :is(.address-bar,.ed-search-glass):has(input:disabled){background:var(--disabled-fill);border-color:var(--divider-subtle);box-shadow:none}
+.app.style-acira :is(.btn,.bs-button):disabled{background:var(--disabled-fill);color:var(--disabled-text);opacity:1}
+.app.style-acira .browser-settings :is(input,select):disabled{background-color:var(--disabled-fill);color:var(--disabled-text);opacity:1}
+.app.style-acira :is(.address-field input,.ed-list-search input,.popup-search input){color:var(--text-primary)}
+.app.style-acira :is(.address-field input,.ed-list-search input,.popup-search input):focus-visible{outline:none}
+.app.style-acira .has-cover>.ed-start-heading h1,.app.style-acira .has-cover .ed-workspace-profile{color:var(--cover-text)}
+.app.style-acira .has-cover .ed-workspace-profile .ed-profile-initial{background:rgb(var(--cover-scrim-rgb) / .86)}
+.app.style-acira .has-cover .ed-workspace-profile:hover{background:rgb(var(--cover-scrim-rgb) / .86)}
+.app.style-acira .has-cover>.ed-cover-toggle{background:rgb(var(--cover-scrim-rgb) / .86);color:var(--cover-text)}
+.app.style-acira .has-cover>.ed-cover-toggle:hover{background:rgb(var(--cover-scrim-rgb) / .94)}
+.app.style-acira.opaque-glass :is(.acira-popup-surface:not([data-material-provider="live"]):not([data-material-provider="opaque"]) .popup-material,.ed-mode-menu,.m-dialog,.toast){background:var(--overlay);backdrop-filter:none}
+@media(prefers-reduced-transparency:reduce){
+ .app.style-acira :is(.acira-popup-surface:not([data-material-provider="live"]):not([data-material-provider="opaque"]) .popup-material,.ed-mode-menu,.m-dialog,.toast){background:var(--overlay);backdrop-filter:none}
+}
+
+
+/* Selected surfaces stay tonal; focus is an independent keyboard-only cue. */
+.app.style-acira :is(.tab-strip-selection,.acira-compact-selection){background:var(--chrome-selection-bg);box-shadow:none}
+.app.style-acira .ed-rail-button[aria-current=page]::before{background:var(--sidebar-selection-marker)}
+.app.style-acira .ed-rail-button[aria-current=page] .ed-editor-icon{color:var(--ed-ink)}
+.app.style-acira :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.app.style-acira .tab-group-tray[data-collapsed=true][data-hover=true]{background:var(--chrome-hover)}
+
+/* A translucent floating plane has its own paired ink, distinct from page ink. */
+.app.style-acira :is(.acira-popup-surface,.ed-mode-menu,.m-dialog,.toast){
+ --text-primary:var(--popup-ink);--text-secondary:var(--popup-muted);--text-placeholder:var(--popup-muted);
+ --ink:var(--popup-ink-rgb);--ed-ink:var(--popup-ink);--ed-muted:var(--popup-muted);--ed-icon:var(--popup-icon);
+ --text:var(--popup-ink);--muted:var(--popup-muted);--focus-ring:var(--popup-focus-ring);
+ --danger:var(--popup-danger);--warning:var(--popup-warning);--success:var(--popup-success);--info:var(--popup-info);
+}
+.app.style-acira .acira-popup-surface.native-popup-surface{
+ --popup-ink:var(--native-popup-ink);--popup-ink-rgb:var(--native-popup-ink-rgb);--popup-muted:var(--native-popup-muted);
+ --popup-icon:var(--native-popup-icon);--popup-focus-ring:var(--native-popup-focus-ring);
+ --popup-danger:var(--native-popup-danger);--popup-warning:var(--native-popup-warning);--popup-success:var(--native-popup-success);--popup-info:var(--native-popup-info);
+ --popup-selection-fg:var(--native-popup-ink);--popup-selection-muted:var(--native-popup-muted);
+}
+.app.style-acira.opaque-glass .acira-popup-surface.native-popup-surface:not([data-material-provider="live"]):not([data-material-provider="opaque"]) .popup-material{background:transparent;backdrop-filter:none}
+@media(prefers-reduced-transparency:reduce){.app.style-acira .acira-popup-surface.native-popup-surface:not([data-material-provider="live"]):not([data-material-provider="opaque"]) .popup-material{background:transparent;backdrop-filter:none}}
+.app.style-acira .ed-start-lists .ed-page-row{min-height:32px}
+.app.style-acira .ed-start-lists .ed-page-section>header{border-bottom:0}
+/* Supported profile names and shortcuts stay inside modular new-tab columns. */
+.app.style-acira .newtab-profile-name{min-width:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.app.style-acira .newtab-shortcuts>button{min-width:0;max-width:min(200px,100%)}
+.app.style-acira .toast:not([data-artwork-toast]){min-width:0;overflow-wrap:anywhere}
+
+/* Advanced seeds affect separate section treatments, never whole-subtree opacity. */
+.app.style-acira .ed-rail :is(.ed-rail-button,.ed-rail-saved>button,.ed-rail-more,.ed-rail-section-body>button):hover{background:var(--sidebar-hover);color:var(--chrome-fg)}
+.app.style-acira .ed-rail .ed-rail-brand>.ed-rail-button:is(:hover,:active){background:transparent;transform:none}
+.app.style-acira .browser-tab:not(.selected):hover::before{background:var(--tab-hover)}
+
+/* A restrained DOM-only corner trial; native popup/page clips keep their radius
+   contract. Unsupported runtimes retain the existing border-radius unchanged. */
+@supports(corner-shape:superellipse(1.15)){
+ .app.style-acira :is(.ed-search-glass,.browser-settings .bs-toolbar>label,.ed-lib-panel,.ed-lib-card){corner-shape:superellipse(1.15)}
+}
+
+/* Opt-in favorite apps share the actual sidebar's finish and focus roles. */
+.app.style-acira .ed-rail .ed-rail-apps{
+ --sidebar-app-fill:var(--chrome-input-fill);--sidebar-app-edge:var(--chrome-input-edge);
+ display:grid;grid-template-columns:repeat(auto-fill,44px);grid-auto-rows:44px;
+ gap:6px;width:auto;min-width:0;min-height:48px;max-height:152px;flex:0 1 auto;align-self:stretch;margin:6px 12px 8px;padding:2px;
+ overflow:auto;scrollbar-width:thin;align-content:start;align-items:start;justify-content:start;justify-items:start;
+}
+.app.style-acira .ed-rail .ed-rail-apps:empty,.app.style-acira .ed-rail .ed-rail-apps[hidden]{display:none}
+.app.style-acira .ed-rail .ed-rail-app{
+ position:relative;display:grid;place-items:center;width:44px;max-width:44px;height:44px;min-width:44px;min-height:44px;
+ padding:8px;border:1px solid var(--sidebar-app-edge);border-radius:6px;box-shadow:none;
+ background:var(--sidebar-app-fill);color:var(--chrome-fg);-webkit-app-region:no-drag;
+}
+.app.style-acira .ed-rail .ed-rail-app:hover{background:var(--sidebar-hover);color:var(--chrome-fg)}
+.app.style-acira .ed-rail .ed-rail-app:is([aria-current=page],[aria-pressed=true]){
+ background:var(--sidebar-selection-bg);color:var(--chrome-fg);box-shadow:inset 0 -2px var(--sidebar-selection-marker);
+}
+.app.style-acira .ed-rail .ed-rail-app:focus-visible{outline:2px solid var(--chrome-focus-ring);outline-offset:-3px}
+.app.style-acira .ed-rail .ed-rail-app[data-reordering=true]{outline:1px dashed var(--chrome-focus-ring);outline-offset:-3px}
+.app.style-acira .ed-rail .ed-rail-app>:is(img,svg,.site-identity-icon){width:20px;height:20px;object-fit:contain;flex:none}
+.app.style-acira .ed-rail .ed-rail-app-fallback{display:grid;place-items:center;width:24px;height:24px;font-size:13px;line-height:1;font-weight:500}
+.app.style-acira .ed-rail .ed-rail-app-label{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.app.style-acira .ed-rail .ed-rail-tab>button:first-child{color:var(--chrome-text-secondary)}
+.app.style-acira .ed-rail .ed-rail-tab:hover{background:var(--sidebar-hover)}
+.app.style-acira .ed-rail .ed-rail-tab[aria-current=true]>button:first-child{color:var(--chrome-fg)}
+.app.style-acira .ed-rail :is(.ed-rail-tab>button,.ed-rail-tab-group-name):focus-visible{outline:2px solid var(--chrome-focus-ring);outline-offset:-2px}
+@media(forced-colors:active){
+ .app.style-acira .ed-rail .ed-rail-app{background:ButtonFace;color:ButtonText;border-color:ButtonText;box-shadow:none}
+ .app.style-acira .ed-rail .ed-rail-app:is([aria-current=page],[aria-pressed=true]){background:Highlight;color:HighlightText;border-color:Highlight;box-shadow:none}
+ .app.style-acira .ed-rail .ed-rail-app:focus-visible{outline-color:Highlight}
+}
+
+/* Error recovery keeps one clear action and reserves warning paint for risk. */
+.app.style-acira .navigation-error{--error-motif-color:var(--ed-icon);--error-detail-fill:var(--surface-alt);color:var(--text-primary)}
+.app.style-acira .navigation-error h1{font-size:24px;line-height:1.3;font-weight:500;letter-spacing:-.4px;color:var(--text-primary)}
+.app.style-acira .navigation-error-motif{color:var(--error-motif-color)}
+.app.style-acira .navigation-error :is(p,li){color:var(--text-secondary)}
+.app.style-acira .navigation-error .navigation-error-destination{color:var(--text-primary);font-size:13px;line-height:1.5}
+.app.style-acira .navigation-error .btn{border-color:var(--input-edge);background:var(--input-fill);color:var(--text-primary);box-shadow:none}
+.app.style-acira .navigation-error .btn:hover{background:var(--input-hover)}
+.app.style-acira .navigation-error .btn.primary{border-color:transparent;background:var(--primary);color:var(--on-primary)}
+.app.style-acira .navigation-error .btn.primary:hover{background:var(--primary-hover)}
+.app.style-acira .navigation-error .btn:disabled{opacity:1;background:var(--disabled-fill);color:var(--disabled-text)}
+.app.style-acira .navigation-error summary{color:var(--text-secondary);font-size:13px;font-weight:500}
+.app.style-acira .navigation-error summary:hover{color:var(--text-primary)}
+.app.style-acira .navigation-error input{border-color:var(--input-edge);background:var(--input-fill);color:var(--text-primary)}
+.app.style-acira .navigation-error input::placeholder{color:var(--text-placeholder)}
+.app.style-acira .navigation-error [data-error-risk]{padding:12px 14px;border:1px solid var(--warning-edge);border-radius:6px;background:var(--warning-fill);color:var(--warning-text)}
+.app.style-acira .navigation-error [data-error-risk] :is(p,li){color:inherit}
+.app.style-acira .navigation-error :focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+@media(forced-colors:active){
+ .app.style-acira .navigation-error [data-error-risk]{background:Canvas;color:CanvasText;border-color:CanvasText}
+ .app.style-acira .navigation-error .btn.primary{background:Highlight;color:HighlightText;border-color:Highlight}
+ .app.style-acira .navigation-error :focus-visible{outline-color:Highlight}
+}
+
+/* Dedicated Downloads shares the library rhythm; popup rows keep their scope. */
+.app.style-acira .ed-library .download-row{
+ display:grid;grid-template-columns:20px minmax(0,1fr);grid-auto-flow:column;grid-auto-columns:max-content;
+ align-items:center;gap:10px;min-width:0;min-height:64px;padding:12px 10px;color:var(--text-primary);
+}
+.app.style-acira .ed-library .download-row+.download-row{border-top:1px solid var(--divider-subtle)}
+.app.style-acira .ed-library .download-row>span{display:block;min-width:0}
+.app.style-acira .ed-library .download-row strong{font-size:13px;line-height:18px;font-weight:500;color:var(--text-primary)}
+.app.style-acira .ed-library .download-row small{font-size:12px;line-height:18px;color:var(--text-secondary);white-space:normal;overflow-wrap:anywhere}
+.app.style-acira .ed-library .download-row progress{display:block;width:100%;height:3px;margin:8px 0 0;border:0;border-radius:2px;overflow:hidden;accent-color:var(--primary)}
+.app.style-acira .ed-library .download-row progress::-webkit-progress-bar{background:var(--divider-subtle);border-radius:2px}
+.app.style-acira .ed-library .download-row progress::-webkit-progress-value{background:var(--primary);border-radius:2px}
+.app.style-acira .ed-library .download-row>.ed-icon{width:28px;height:28px;color:var(--ed-icon)}
+.app.style-acira .ed-library .download-row>.btn{min-height:28px;padding:4px 10px;border:1px solid var(--input-edge);border-radius:6px;background:var(--input-fill);color:var(--text-primary);font-size:12px;line-height:18px}
+.app.style-acira .ed-library .download-row>.btn:hover{background:var(--input-hover)}
+.app.style-acira .ed-library .download-row>button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.app.style-acira :is(.ed-lib-row,.ed-lib-card) .ed-row-action{pointer-events:none}
+.app.style-acira :is(.ed-lib-row,.ed-lib-card):is(:hover,:focus-within) .ed-row-action{pointer-events:auto}
+@media(hover:none){.app.style-acira :is(.ed-lib-row,.ed-lib-card) .ed-row-action{opacity:1;pointer-events:auto}}
+@media(forced-colors:active){
+ .app.style-acira .ed-library .download-row>.btn{background:ButtonFace;color:ButtonText;border-color:ButtonText}
+ .app.style-acira .ed-library .download-row progress{accent-color:Highlight}
+ .app.style-acira .ed-library .download-row progress::-webkit-progress-value{background:Highlight}
+}
+
+/* Responsive native caption and rail allocation; saved rail preference is retained. */
+/* Native Windows caption units; interface-scale is the canonical renderer zoom factor. */
+html[data-native=true][data-platform=win32] .app.style-acira:not(.native-layer){--caption-width:calc(var(--geometry-caption) / var(--interface-scale,1))}
+@media(max-width:780px){
+  html[data-native=true][data-platform=win32] .app.style-acira:not(.native-layer):has(>.ed-rail.is-expanded){grid-template-columns:128px minmax(0,1fr)}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded .ed-rail-brand{padding-inline:8px;gap:4px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded .ed-rail-brand>.ed-rail-button{width:64px;flex-basis:64px;padding:0}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded .ed-rail-brand>.ed-icon{width:24px;height:24px;flex:0 0 24px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded :is(nav,footer){padding-inline:8px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded .ed-rail-button{gap:8px;padding-inline:6px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail.is-expanded .ed-rail-label{font-size:12px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail-sections{padding-inline:8px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail-section>header{height:auto;min-height:32px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail-section-toggle{height:auto;min-height:28px;padding:3px 0;gap:4px}
+  html[data-native=true][data-platform=win32] .app.style-acira .ed-rail-section-toggle>span{min-width:0;line-height:14px;white-space:normal}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{grid-template-columns:minmax(170px,1fr) minmax(148px,1fr) 54px var(--caption-width);gap:2px;padding-left:1px}
+  html[data-native=true][data-platform=win32] .app.style-acira .compact-workspace-toggle:empty{display:none}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .navigation-controls{--toolbar-control-size:26px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .compact-navigation{gap:3px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .compact-navigation>.toolbar-tab-overview{width:26px;min-width:26px;max-width:26px;height:26px;flex-basis:26px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .compact-navigation>.acira-compact-tabs{min-width:28px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-compact-new{width:28px;height:28px;flex-basis:28px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .toolbar-actions{gap:2px}
+  html[data-native=true][data-platform=win32] .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .toolbar-actions>.icon-button{width:26px;min-width:26px;height:26px;flex-basis:26px}
+}
+
+/* Enforce the existing app preference after all component-specific motion rules. */
+.app.style-acira[data-reduced-motion=true],
+.app.style-acira[data-reduced-motion=true] *,
+.app.style-acira[data-reduced-motion=true] *::before,
+.app.style-acira[data-reduced-motion=true] *::after{transition:none!important;animation:none!important}

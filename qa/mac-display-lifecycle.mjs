@@ -1,0 +1,30 @@
+// Real Mac transition regression with production throttling and normal motion.
+import {createRequire} from 'node:module';import fs from 'node:fs/promises';import path from 'node:path';import assert from 'node:assert/strict';
+import {startApp,poll,httpFixture,sleep} from './d-harness.mjs';
+const candidate=path.resolve(process.argv[2]||'.'),out=path.resolve(process.env.DISPLAY_QA_OUT||'qa/artifacts/mac-display-'+Date.now()),visible=process.env.DISPLAY_QA_VISIBLE==='1';
+await fs.mkdir(out,{recursive:true});
+let app,server;const report={passed:false,candidate,slowSettleRequested:process.env.DISPLAY_QA_SLOW_SETTLE==='1',scope:'Owned actual main, production throttling and full motion. Native layer visibility, page frames and UI layout; no canonical profile or public websites.',checks:[],states:[]};
+const native=async()=>app.main(({BaseWindow})=>{function view(v){return {url:v.webContents?.getURL(),visible:v.getVisible(),bounds:v.getBounds(),children:v.children?.map(view),throttle:v.webContents?.getBackgroundThrottling()}}return {windows:BaseWindow.getAllWindows().map(w=>({visible:w.isVisible(),bounds:w.getBounds(),layers:w.contentView.children.map(view)})),stills:(global.__aciraDisplayLayers||[]).map(s=>({file:s.file,holding:s.api.holding,primedKey:s.api.primedKey,calls:s.calls.slice(-8),views:s.views.map(v=>v.webContents.isDestroyed()?{destroyed:true}:view(v))}))};});
+async function snapshot(label){const n=await native();n.chrome=await app.ui.evaluate(()=>({visibility:document.visibilityState,layout:window.acira.getBrowserLayout()}));report.states.push({label,...n});await fs.writeFile(path.join(out,'probe-current.json'),JSON.stringify({label,...n},null,2));return n;}
+const address=()=>app.ui.getByRole('combobox',{name:'Address and search',exact:true});
+const navigate=async(url)=>{await address().fill(url);await address().press('Enter');await poll(()=>app.state(),s=>s.tabs.find(t=>t.id===s.activeTabId)?.url===url,'Navigation');};
+async function settled(label){await sleep(1400);const state=await app.state(),n=await snapshot(label),web=state.tabs.find(t=>t.id===state.activeTabId)?.contentKind==='web';const pages=n.windows.flatMap(w=>w.layers).filter(l=>l.url?.startsWith('http://127.0.0.1:'));assert.equal(pages.filter(l=>l.visible).length,web?1:0,label+' requested native page visible');for(const layer of n.windows.flatMap(w=>w.layers).filter(l=>l.url==='data:text/html,<body>'))assert(!layer.visible||layer.bounds.x<0,label+' no screenshot layer remains above the page');for(const s of n.stills)for(const v of s.views)assert(v.destroyed||!v.visible||v.bounds.x<0,label+' no old still covers the content');report.checks.push(label);}
+try{
+ server=await httpFixture((req,res)=>{const blue=req.url?.includes('blue');res.writeHead(200,{'content-type':'text/html','cache-control':'no-store'});res.end(`<!doctype html><title>${blue?'Blue':'Red'} display fixture</title><style>body{margin:0;background:${blue?'#124ac4':'#c42025'};color:white;font:48px system-ui}h1{padding:50px}button{font:32px system-ui}</style><h1>${blue?'BLUE LIVE PAGE':'RED LIVE PAGE'}</h1><button onclick="document.querySelector('h1').textContent='BUTTON UPDATED';document.body.style.background='#158044'">Update live page</button><div id=frame>0</div><script>let frames=0;function tick(){document.querySelector('#frame').textContent=++frames;requestAnimationFrame(tick)}tick()</script>`);});
+ const profileRoot=path.resolve('.qa-profiles/display-probe-'+Date.now());await fs.mkdir(profileRoot,{recursive:true});if(process.env.DISPLAY_QA_COMPLETE==='1')new(createRequire(import.meta.url)('../desktop/accounts/onboarding.cjs').OnboardingStore)({directory:path.join(profileRoot,'setup')}).update('profile-personal',{complete:true,step:'finish'});
+ app=await startApp({root:profileRoot,skipSetup:process.env.DISPLAY_QA_COMPLETE!=='1',main:path.resolve('qa/mac-display-entry.cjs'),env:{ACIRA_QA_MAIN:path.join(candidate,'desktop/main.cjs'),ACIRA_BROWSER_TEST_HIDDEN:visible?'0':'1',ACIRA_PERF:'1',ACIRA_QA_VIEW_LOG:'1'}});
+ await app.context.route('https://**/*',r=>r.abort());await app.act({type:'settings.update',patch:{askBeforeClosing:false,reducedMotion:false,animationSpeed:'premium',addressSuggestions:false,...(process.env.DISPLAY_QA_COMPLETE==='1'?{verticalTabs:true}:{}),...(process.env.DISPLAY_QA_LIGHT==='1'?{appearance:'light',colorPreset:'Porcelain',glassOpacity:40,browserTint:'#f8fbff'}:{})}});
+ if(process.env.DISPLAY_QA_FULLSCREEN==='1')await app.main(({BaseWindow,app})=>{for(const w of BaseWindow.getAllWindows()){w.show();w.setFullScreen(true);w.focus();}app.focus({steal:true});});
+ if(visible)await app.main(({BaseWindow})=>BaseWindow.getAllWindows().forEach(w=>w.setTitle('Acira display verification')));
+ const base=`http://127.0.0.1:${server.port}`;await navigate(base+'/red');await settled('Initial real website');
+ const redId=(await app.state()).activeTabId;
+ for(let i=0;i<(visible?2:5);i++){
+  await app.act({type:'tab.new',url:'acira://settings'});await settled('Website to Settings '+i);
+  await app.act({type:'tab.select',id:redId});await settled('Settings back to website '+i);
+  await navigate(base+(i%2?'/red':'/blue'));await settled('Website navigation '+i);
+  await app.act({type:'tab.new'});await sleep(400);await app.act({type:'tab.select',id:redId});await settled('Primed new-tab back to website '+i);
+ }
+ await navigate(base+'/red');await settled('Final red website');
+ if(visible){await fs.writeFile(path.join(out,'visible-ready.json'),JSON.stringify({pid:app.app.process().pid,profile:app.root,base,tabId:redId}));console.log('VISIBLE_READY');await poll(()=>fs.access(path.join(out,'visible-done')).then(()=>true,()=>false),Boolean,'Visible evidence',180000);}
+ report.passed=true;
+}catch(e){report.error=String(e.stack||e);process.exitCode=1;}finally{if(app){report.logs=app.logs.slice(-80);await app.close();}await server?.close();await fs.writeFile(path.join(out,visible?'display-probe-visible.json':'display-probe-hidden.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({passed:report.passed,checks:report.checks,error:report.error}));}

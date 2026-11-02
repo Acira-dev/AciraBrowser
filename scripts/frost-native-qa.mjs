@@ -1,0 +1,164 @@
+import { _electron } from 'playwright';
+import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import http from 'node:http';
+import assert from 'node:assert/strict';
+
+const require = createRequire(import.meta.url), root = process.cwd(), out = path.join(root, 'qa/frost-rework');
+const { createInitialState, reduceDemo, persistedSnapshot } = require('../desktop/runtime.cjs');
+const tokens=require('../design-tokens.json');
+await fs.mkdir(out, { recursive: true });
+const report = { checks: [], layouts: [], errors: [] };
+const check = (name, value) => { assert.ok(value, name); report.checks.push(name); console.log('PASS ' + name); };
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const server = http.createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Frost material test</title><style>body{margin:0;font:16px sans-serif;background:#fff;color:#222}.light,.dark{height:50vh;padding:40px;box-sizing:border-box}.dark{background:#202124;color:#fff}b{display:inline-block;padding:16px;border:2px solid currentColor;margin:8px}</style><div class="light"><h1>Light page content</h1><b>Content beneath the frost</b><button id="probe" onclick="this.textContent=\'Clicked\'">Website input</button><input aria-label="Website draft"></div><div class="dark"><h1>Dark page content</h1><b>Content beneath the frost</b></div>'); });
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+let app;
+try {
+  for (const scale of [1, 1.25, 1.5]) {
+    const profile = path.join(out, 'profile-' + scale);
+    await fs.mkdir(profile, { recursive: true });
+    let seed = reduceDemo(createInitialState(), { type: 'demo.journey', context: 'personal' });
+    seed.demo.frozen = true; seed.settings.panelWidth = 360; seed.settings.interfaceScale = 100;
+    seed.settings.automaticCompact = false; seed.settings.bookmarksBar = false;
+    seed.windowUi.workspaceOpen = false; seed.windowUi.webWorkspaceOpen = false;
+    seed.tabs.forEach(tab => { tab.panelOpen = false; });
+    seed = reduceDemo(seed, { type: 'tab.new', url: 'acira://new' });
+    await fs.writeFile(path.join(profile, 'demo-state.json'), JSON.stringify(persistedSnapshot(seed)));
+    app = await _electron.launch({ executablePath: require('electron'), args: [path.join(root, 'desktop/main.cjs'), `--force-device-scale-factor=${scale}`], env: { ...process.env, ACIRA_DEV: '1', ACIRA_DEMO_TEST_HIDDEN: '1', ACIRA_DEMO_TEST_DATA: profile } });
+    const ui = await app.firstWindow();
+    ui.on('pageerror', error => report.errors.push(error.message));
+    await ui.waitForFunction(() => window.acira && window.__acira);
+    await app.evaluate(({ View }) => {
+      global.__frostBlurCalls = [];
+      const original = View.prototype.setBackgroundBlur;
+      View.prototype.setBackgroundBlur = function(blur) {
+        global.__frostBlurCalls.push({ blur, assistant: this.children?.some(child => child.webContents?.getURL().includes('view=assistant')) || false });
+        return original.call(this, blur);
+      };
+    });
+    const act = action => ui.evaluate(action => window.acira.dispatch(action), action);
+    const snapshot = () => ui.evaluate(() => window.acira.getSnapshot());
+    const layout = () => ui.evaluate(() => window.acira.getBrowserLayout());
+    const resize = async (width, height) => { await app.evaluate(({ BaseWindow }, size) => BaseWindow.getAllWindows()[0].setContentSize(...size), [width, height]); await delay(220); };
+    const overlay = () => app.context().pages().find(page => page.url().includes('view=overlay'));
+    const assistant = () => app.context().pages().find(page => page.url().includes('view=assistant'));
+    const dismiss = async () => { await ui.evaluate(() => window.acira.closeOverlay()); await delay(380); };
+
+    for (const [width, height] of [[1440, 900], [1920, 1080], [900, 700]]) {
+      await resize(width, height);
+      const geometry = await ui.evaluate(() => {
+        const rail = document.querySelector('.ed-rail').getBoundingClientRect(), field = document.querySelector('.ed-search-glass').getBoundingClientRect();
+        const canvas = document.querySelector('.ed-workspace').getBoundingClientRect(), composition = document.querySelector('.ed-start-composition').getBoundingClientRect();
+        const shell = document.querySelector('.browser-shell').getBoundingClientRect();
+        const grain = getComputedStyle(document.querySelector('.ed-search-glass'), '::before');
+        const gradients = [...document.querySelectorAll('.browser-shell *, .ed-workspace *, .ed-rail *')].filter(node => getComputedStyle(node).backgroundImage.includes('gradient')).map(node => node.className);
+        return { rail: rail.width, toolbarBottom: shell.bottom, search: field.width, centeredX: Math.abs(composition.x+composition.width/2-canvas.x-canvas.width/2), centeredY: Math.abs(composition.y+composition.height/2-canvas.y-canvas.height/2), compositionFits: composition.height<=canvas.height-64, headingWeight:getComputedStyle(document.querySelector('.ed-start-heading>h1')).fontWeight, white: getComputedStyle(document.querySelector('.ed-workspace')).backgroundColor, grain: grain.backgroundImage, grainOpacity: grain.opacity, gradients, dpr: devicePixelRatio, horizontalOverflow: document.documentElement.scrollWidth > innerWidth };
+      });
+      check(`${scale} / ${width}: rail, white surface, bounded search, and no overflow`, geometry.rail === 0 && geometry.search <= 721 && geometry.white === 'rgb(255, 255, 255)' && !geometry.horizontalOverflow);
+      check(`${scale} / ${width}: grain material, no decorative gradients`, geometry.grain.includes('frost-grain') && Number(geometry.grainOpacity) > 0 && geometry.gradients.length === 0);
+      check(`${scale} / ${width}: composition centered in page canvas`, geometry.centeredX <= 2 && (!geometry.compositionFits || geometry.centeredY <= 2));
+      check(`${scale} / ${width}: restrained heading`, geometry.headingWeight === '500');
+      report.layouts.push({ scale, width, height, ...geometry });
+    }
+    await resize(1440, 900);
+    await ui.getByRole('button', {name:'Expand sidebar', exact:true}).click();
+    await ui.waitForFunction(()=>document.querySelector('.ed-rail').getBoundingClientRect().width===232);
+    check(`${scale}: sidebar expands`, await ui.locator('.ed-rail').evaluate(node=>node.getBoundingClientRect().width) === 232);
+    check(`${scale}: expanded sidebar uses Geist and labeled navigation`, await ui.locator('.ed-rail.is-expanded .ed-rail-label').first().evaluate(node=>getComputedStyle(node).fontFamily.includes('Geist')));
+    await ui.getByRole('button', {name:'Collapse sidebar', exact:true}).click();
+    await ui.waitForFunction(()=>document.querySelector('.ed-rail').getBoundingClientRect().width===0);
+    check(`${scale}: sidebar collapses`, await ui.locator('.ed-rail').evaluate(node=>node.getBoundingClientRect().width) === 0);
+    const search = ui.getByRole('textbox', { name: 'Search the web or enter a URL', exact: true });
+    await search.fill('independent search draft');
+    await ui.getByRole('button', { name: 'Search mode', exact: true }).click();
+    await ui.getByRole('menuitemradio', { name: 'Ask Acira', exact: true }).click();
+    await ui.getByRole('textbox', { name: 'Ask Acira', exact: true }).fill('independent assistant draft');
+    await ui.getByRole('button', { name: 'Search mode', exact: true }).click();
+    await ui.getByRole('menuitemradio', { name: 'Search', exact: true }).click();
+    check(`${scale}: Search and Ask drafts remain distinct`, await search.inputValue() === 'independent search draft');
+    await search.fill(''); await search.blur();
+    await ui.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
+    await ui.getByRole('button', { name: 'Bookmarks', exact: true }).click();
+    await ui.getByRole('textbox', { name: 'Find a bookmark' }).fill('not-a-saved-page');
+    check(`${scale}: bookmark filter`, await ui.getByText('No matching bookmarks.').isVisible());
+    await ui.getByRole('button', { name: 'Workspace', exact: true }).click();
+    await ui.getByRole('button', { name: 'Search tabs · Alt+T', exact: true }).click();
+    await overlay().getByRole('textbox', { name: 'Search tabs', exact: true }).waitFor();
+    check(`${scale}: rail opens native tab switcher`, (await layout()).overlay?.kind === 'tabs');
+    await dismiss();
+    await ui.getByRole('button', { name: 'Agent tasks', exact: true }).click();
+    check(`${scale}: task list has one navigation rail`, await ui.locator('.ed-rail').count() === 1 && !(await ui.locator('.m-sidebar').isVisible()));
+    const state = await snapshot();
+    check(`${scale}: sample journey available only in QA profile`, state.runs.length > 0);
+    await act({ type: 'run.open', id: state.runs[0].id });
+    await ui.locator('.at-head').waitFor();
+    check(`${scale}: a task opens as a chat with a slim header and no details column`, await ui.locator('.at-head').evaluate(node => Math.round(node.getBoundingClientRect().height)) === 44 && await ui.locator('.task-editor-context').count() === 0);
+    await ui.getByRole('button', { name: 'Task details', exact: true }).click();
+    check(`${scale}: task details and activity open from the header`, await ui.locator('.at-details').isVisible() && await ui.locator('.at-details-log li').count() > 0);
+    await ui.keyboard.press('Escape');
+    check(`${scale}: Escape closes task details`, await ui.locator('.at-details').count() === 0);
+    await resize(900, 700);
+    check(`${scale}: the chat column fits a narrow window`, await ui.locator('.task-conversation .at-col').first().evaluate(node => { const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && box.width > 300; }));
+    await resize(1440, 900);
+    await act({ type: 'tab.new', url: origin });
+    await ui.waitForFunction(() => window.__acira.getState().tabs.find(tab => tab.id === window.__acira.getState().activeTabId)?.title === 'Frost material test');
+    const web = app.context().pages().find(page => page.url().startsWith(origin));
+    await ui.getByRole('button', {name:'Expand sidebar',exact:true}).click();
+    await ui.waitForFunction(()=>document.querySelector('.ed-rail')?.getBoundingClientRect().width===232);
+    await ui.getByRole('button', {name:'Collapse sidebar',exact:true}).click();
+    // A hidden chrome WebContents can suspend CSS transition frames while a
+    // native website is active. Request paint without showing/focusing the app.
+    await app.evaluate(async({webContents})=>{const chrome=webContents.getAllWebContents().find(w=>w.getURL()==='http://127.0.0.1:5188/');for(let i=0;i<4;i++){await chrome.capturePage(undefined,{stayHidden:true,stayAwake:true});await new Promise(r=>setTimeout(r,120));}});
+    report.layouts.push({scale,collapsedNative:await ui.evaluate(()=>({rail:document.querySelector('.ed-rail').getBoundingClientRect().toJSON(),page:document.querySelector('.page-area').getBoundingClientRect().toJSON(),root:document.querySelector('.browser-root').getBoundingClientRect().toJSON(),navWidth:document.querySelector('.app').style.getPropertyValue('--navigation-width'),active:window.__acira.getState().tabs.find(t=>t.id===window.__acira.getState().activeTabId)?.url,windowUi:window.__acira.getState().windowUi}))});
+    await delay(100);
+    check(`${scale}: collapsing navigation releases native website bounds to the left edge`,(await layout()).views.every(view=>view.bounds.x===0));
+    await web.getByRole('button', { name: 'Website input' }).click();
+    check(`${scale}: native website input aligns with page bounds`, await web.getByRole('button', { name: 'Clicked' }).isVisible());
+    await web.getByRole('textbox', { name: 'Website draft' }).fill('preserved live website draft');
+    const liveState = await snapshot();
+    await act({ type: 'tab.update', id: liveState.activeTabId, patch: { panelOpen: false } });
+    await delay(320);
+    await ui.getByRole('button', { name: 'Toggle Acira agent', exact: true }).click();
+    await assistant().getByRole('textbox', { name: 'Message Acira', exact: true }).waitFor();
+    await delay(350);
+    const nativeLayout = await layout();
+    report.layouts.push({ scale, assistantLayout: nativeLayout.assistant, viewport: nativeLayout.viewport });
+    check(`${scale}: native assistant floats with 12px insets`, nativeLayout.assistant?.floating && Math.abs(nativeLayout.assistant.bounds.y - 92) <= 1 && Math.abs(nativeLayout.viewport.width - nativeLayout.assistant.bounds.x - nativeLayout.assistant.bounds.width - 12) <= 1);
+    const nativeMaterial = await app.evaluate(({ BaseWindow }) => {
+      const children = BaseWindow.getAllWindows()[0].contentView.children;
+      const host = children.find(view => view.children?.some(child => child.webContents?.getURL().includes('view=assistant')));
+      return { visible: host?.getVisible(), tint: host?.getBackgroundColor?.(), blur: host?.getBackgroundBlur?.(), bounds: host?.getBounds() };
+    });
+    report.layouts.push({ scale, nativeMaterial });
+    await assistant().getByRole('textbox', { name: 'Message Acira' }).fill('floating draft survives close');
+    await assistant().getByRole('button', { name: 'Close assistant', exact: true }).click();
+    await delay(300);
+    await ui.getByRole('button', { name: 'Toggle Acira agent', exact: true }).click();
+    check(`${scale}: assistant draft survives native close/reopen`, await assistant().getByRole('textbox', { name: 'Message Acira' }).inputValue() === 'floating draft survives close');
+    check(`${scale}: website draft survives assistant`, await web.getByRole('textbox', { name: 'Website draft' }).inputValue() === 'preserved live website draft');
+    check(`${scale}: native compositor receives shared assistant blur`, await app.evaluate((_electron,blur) => global.__frostBlurCalls.some(call => call.assistant && call.blur === blur),tokens.material.blur));
+    await act({ type: 'settings.update', patch: { reducedTransparency: true } });
+    await delay(220);
+    const solid = await app.evaluate(({ BaseWindow }) => { const host = BaseWindow.getAllWindows()[0].contentView.children.find(view => view.children?.some(child => child.webContents?.getURL().includes('view=assistant'))); return { tint: host?.getBackgroundColor?.(), blur: host?.getBackgroundBlur?.() }; });
+    report.layouts.push({ scale, solidMaterial: solid });
+    check(`${scale}: reduced transparency state reaches native assistant`, (await snapshot()).settings.reducedTransparency === true);
+    check(`${scale}: reduced transparency clears native blur`, await app.evaluate(() => global.__frostBlurCalls.filter(call => call.assistant).at(-1)?.blur === 0));
+    await assistant().getByRole('button', { name: 'Close assistant', exact: true }).click();
+    await ui.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
+    await ui.getByRole('button', { name: 'Settings', exact: true }).click();
+    await ui.locator('.browser-settings').waitFor();
+    check(`${scale}: settings render in preview`, await ui.locator('.browser-settings').isVisible());
+    check(`${scale}: settings share Geist`, await ui.locator('.browser-settings').evaluate(node=>getComputedStyle(node).fontFamily.includes('Geist')));
+    await ui.getByRole('button',{name:'Appearance',exact:true}).click();
+    check(`${scale}: preview theme is accurately labeled`, await ui.getByText('Light · White',{exact:true}).isVisible());
+    await ui.getByRole('button', { name: 'History', exact: true }).click();
+    await ui.getByRole('textbox', { name: 'Search history', exact: true }).waitFor();
+    check(`${scale}: History shows actual browsing with AI enabled`, await ui.locator('.ed-history-open').filter({hasText:'Frost material test'}).isVisible());
+    await app.close(); app = null;
+  }
+  check('No renderer errors', report.errors.length === 0);
+} catch (error) { report.errors.push(error.stack); throw error; }
+finally { if (app) await app.close().catch(() => {}); server.close(); await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2)); }

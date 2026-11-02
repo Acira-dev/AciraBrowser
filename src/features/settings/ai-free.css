@@ -1,0 +1,12 @@
+/* "What it hides": quiet, two columns (engine, surfaces), dimmed while the mode is off so it reads as a preview of what the switch does. */
+.ai-hides { display: block; padding-top: 4px; padding-bottom: 14px; }
+.ai-hides::before { display: none !important; }
+.ai-hides-body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 12px; border-radius: 10px; background: color-mix(in srgb, var(--st-text, var(--text-1, #1f2328)) 3.5%, transparent); transition: opacity 0.16s; }
+.ai-hides:not([data-on]) .ai-hides-body { opacity: 0.9; } /* R3-B04: 0.72 took the muted text to 3.9:1 in dark; 0.9 keeps the "off" look and stays above 4.5:1 */
+.ai-hides-title { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--st-muted, var(--text-2)); }
+.ai-hides-list { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.ai-hides-list > div { display: grid; grid-template-columns: minmax(96px, 150px) minmax(0, 1fr); column-gap: 14px; align-items: baseline; }
+.ai-hides-list dt { margin: 0; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--st-text, var(--text-1)); }
+.ai-hides-list dd { margin: 0; font-size: 13px; line-height: 18px; color: var(--st-muted, var(--text-2)); text-wrap: pretty; }
+.ai-hides-note { margin: 2px 0 0; font-size: 12px; line-height: 17px; color: var(--st-muted, var(--text-2)); text-wrap: pretty; }
+@container (max-width: 560px) { .ai-hides-list > div { grid-template-columns: 1fr; row-gap: 0; } }

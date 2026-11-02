@@ -1,0 +1,23 @@
+.scroll-region{display:flex;flex:1 1 auto;min-height:0;min-width:0;--fade-top:0px;--fade-bottom:0px}
+.scroll-region[data-overflow-top=true]{--fade-top:18px}
+.scroll-region[data-overflow-bottom=true]{--fade-bottom:18px}
+.scroll-region>.popup-scroll{width:100%;mask-image:linear-gradient(to bottom,transparent,#000 var(--fade-top),#000 calc(100% - var(--fade-bottom)),transparent);scroll-behavior:auto;overflow-anchor:none}
+/* Include first/last child margins in the measured natural content height. */
+.popup-body-content{display:flow-root;min-width:0}
+.popup-content-profile .profile-row strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.popup-fixed-search,.popup-fixed-footer{flex:none;min-width:0}
+.browser-popup .popup-fixed-search .popup-search{position:relative;flex:none}
+.popup-fixed-footer{padding-top:10px}
+.popup-content-tabs .scroll-region{flex:1 1 auto}
+.popup-content-tabs .popup-fixed-footer .menu-row{min-height:38px}
+
+/* No stock scrollbar in a popup (V02): the native bar is hidden and a thin overlay thumb sits inside the radius, 3px from
+   the material edge, 6px clear of the corners. It shows while the list is hovered or scrolling (160ms fade) and takes
+   no width, so rows keep their columns. */
+.scroll-region{position:relative}
+.scroll-region>.popup-scroll{scrollbar-width:none}
+.scroll-region>.popup-scroll::-webkit-scrollbar{display:none}
+.scroll-region>.scroll-thumb{position:absolute;top:0;right:-1px;width:4px;border-radius:2px;background:color-mix(in srgb,currentColor 32%,transparent);pointer-events:none;opacity:1;transition:opacity 160ms cubic-bezier(.23,1,.32,1),width 120ms cubic-bezier(.23,1,.32,1)}
+.scroll-region>.scroll-thumb[data-idle]{opacity:0}
+.scroll-region:hover>.scroll-thumb{opacity:1}
+.scroll-region>.scroll-thumb[hidden]{display:none}

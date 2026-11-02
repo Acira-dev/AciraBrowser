@@ -1,0 +1,36 @@
+.app .sidebar-tab-drag-preview{position:fixed;left:0;top:0;z-index:1000;display:flex;align-items:center;gap:8px;box-sizing:border-box;margin:0;padding:0 8px;min-width:0;border-radius:8px;pointer-events:none;background:var(--surface);box-shadow:inset 0 0 0 1px rgb(var(--ink)/.12),0 3px 12px #0002;font:var(--carry-font);will-change:transform,width,height}
+.app .sidebar-tab-drag-preview::before{border-radius:8px}
+.app .sidebar-tab-drag-preview .sidebar-drag-icon{display:grid;place-items:center;flex:none;width:16px;height:16px;pointer-events:none}
+.sidebar-drag-icon .sb-tab-icon{display:grid;place-items:center;width:16px;height:16px}
+.sidebar-drag-icon img,.sidebar-drag-icon svg{width:16px;height:16px}
+.sidebar-drag-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.app .sidebar-tab-drag-preview{padding-inline-start:calc(6px + var(--row-p,1)*2px);background:color-mix(in srgb,var(--surface) calc(var(--row-p,1)*100%),transparent)}
+.app .sidebar-tab-drag-preview{box-shadow:inset 0 0 0 1px rgb(var(--ink)/calc(.12*var(--row-p,1))),0 3px 12px rgb(0 0 0/calc(.12*var(--row-p,1)))}
+.app .sidebar-bookmark-return>:not(:first-child){opacity:max(0,calc(1 - var(--chip-p,0)*2.4))}
+.app .sidebar-bookmark-return{border-radius:var(--drop-r,8px)}
+.app .sidebar-bookmark-return::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:var(--drop-r,8px);background:var(--split-tint,var(--glass));opacity:var(--chip-p,0);box-shadow:inset 0 0 0 1px rgb(var(--ink)/.1),0 3px 12px #0002}
+.app .sidebar-bookmark-return[data-liquid]::before{opacity:0}
+/* Its own liquid draws its plate while it merges into the tab's row (liquidSnap.ts --liquid-on), as the carried chip's does. */
+.app .sidebar-bookmark-return::before{opacity:calc(var(--chip-p,0) * (1 - var(--liquid-on,0)))}
+.app [data-sidebar-drag-source]{opacity:0!important}
+.app [data-bookmark-arriving]{opacity:0!important;pointer-events:none}
+.app .acira-sidebar .sb-bookmark-landing{flex:none;height:var(--sb-row,32px);margin:0 6px;border-radius:6px;box-shadow:inset 0 0 0 1px rgb(var(--ink)/.1);background:rgb(var(--ink)/.035);pointer-events:none}
+.sidebar-tab-drag-gap{position:fixed;left:0;top:0;z-index:998;border-radius:7px;pointer-events:none;opacity:0;background:rgb(var(--ink)/.035);box-shadow:inset 0 0 0 1px rgb(var(--ink)/.1)}
+/* The copy of a row that floats home after a bookmark drop: the carried row's own surface (it is a clone of it). */
+.app .sidebar-bookmark-copy{will-change:transform,opacity;z-index:1001}
+/* Above the rows it is glass: what it passes stays legible through it, softened, and nothing is hidden by it. */
+.app .sidebar-tab-drag-preview.sidebar-bookmark-copy{background:color-mix(in srgb,var(--surface) 58%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5)}
+/* The tab's empty place while a copy of it is saved; the liquid draws it while it reaches for the chip coming home. */
+.sidebar-tab-drag-gap.sidebar-tab-home-slot{transition:none}
+.sidebar-tab-drag-gap[data-liquid]{background:transparent;box-shadow:none}
+.app .sidebar-tab-drag-preview.sidebar-liquid-face{background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+/* A tab dragged over Bookmarks (the zone's data-dropping, one signal): the whole section, header and rows, lights up as one card with its edge drawn in the ring colour. Opacity and transform only; it fades with the drag. */
+.app.style-acira .acira-sidebar .sb-zone{position:relative;isolation:isolate}
+.app.style-acira .acira-sidebar .sb-zone::before{content:'';position:absolute;inset:-3px -6px;z-index:-1;border-radius:calc(var(--sb-radius,4px) + 6px);pointer-events:none;opacity:0;transform:scale(.985);background:linear-gradient(180deg,color-mix(in srgb,var(--sb-ring) 22%,transparent),color-mix(in srgb,var(--sb-ring) 9%,transparent));box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--sb-ring) 65%,transparent),0 0 0 3px color-mix(in srgb,var(--sb-ring) 14%,transparent),0 8px 22px -8px color-mix(in srgb,var(--sb-ring) 55%,transparent);transition:opacity calc(.18s * var(--motion-scale,1)) var(--sb-ease,ease),transform calc(.24s * var(--motion-scale,1)) var(--sb-spring,ease)}
+.app.style-acira .acira-sidebar .sb-zone[data-dropping]::before{opacity:1;transform:none}
+.app.style-acira .acira-sidebar .sb-zone[data-dropping] .sb-zone-mark{color:var(--sb-ring)}
+@media (forced-colors:active){.app.style-acira .acira-sidebar .sb-zone::before{background:transparent;box-shadow:inset 0 0 0 2px Highlight}}
+/* The two halves of a row saved to Bookmarks (sidebarTabDrag.ts bookmark()): each a box clipped to its half whose icon and title are placed by transform. */
+.app .sidebar-tab-drag-preview.sidebar-split-face{display:block;padding:0;overflow:hidden;contain:layout paint style}
+.app .sidebar-split-face>.sidebar-drag-icon,.app .sidebar-split-face>.sidebar-drag-title{position:absolute;left:0;top:0;margin:0;flex:none;will-change:transform,opacity}
+.app .sidebar-split-face>.sidebar-drag-title{display:block}

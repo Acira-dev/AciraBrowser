@@ -1,0 +1,1 @@
+const fs=require('fs');let s=fs.readFileSync('src/App.tsx','utf8');s="import {SiteControls} from './features/BrowserData';\n"+s;s=s.replace("{'Website permissions are managed by the desktop browser.'}</p></>}","{'Website permissions are managed by the desktop browser.'}</p><SiteControls state={state}/></>}");fs.writeFileSync('src/App.tsx',s);

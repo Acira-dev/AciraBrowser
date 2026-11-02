@@ -1,0 +1,14 @@
+/* One keycap rule for every kbd chip (bible §4 edge rule, M's edge scan E03): at least 6px of paint either side of the glyphs, at least 2px above and below.
+   The older per-surface rules (library, tooltip, Rewind, new tab, popups) set their own padding; this loads last and settles them. */
+:root:root:root {
+  --kbd-pad-x: 6px;
+}
+:root:root:root:root :is(.lib kbd, .lib-search kbd, .lib-empty kbd, .lib-empty-hint kbd, .t-tip kbd, .rw-page kbd, .toast-action kbd, .nt-key, .popup-hints kbd) {
+  box-sizing: border-box;
+  padding-inline: var(--kbd-pad-x);
+}
+/* The "/" hint in the library search and the keys in empty states: 20px tall, so the glyph keeps its 2px above and below. */
+:root:root:root:root :is(.lib-search kbd, .lib-empty kbd, .lib-empty-hint kbd, .t-tip kbd) {
+  height: 20px;
+  min-width: 20px;
+}

@@ -1,0 +1,52 @@
+/* Split view (master list §9): the gaps between panes show the frame; handles sit over them. R3-81: every edge between two panes is its own
+   handle. At rest a short grip pill marks it; under the pointer (or focus) only that edge lights, as a full-length accent line, and a junction
+   lights the edges it moves along with it. Opacity transitions only (120ms, on the speed setting); B's Snap Layouts motion lives on top of this. */
+.split-pages{position:relative;background:var(--surface-alt,var(--frame,transparent))}
+.split-handles{position:absolute;inset:0;pointer-events:none;z-index:4}
+.split-handle{position:absolute;pointer-events:auto;touch-action:none;outline:none;-webkit-tap-highlight-color:transparent}
+.split-handle[data-kind=col]{cursor:col-resize}
+.split-handle[data-kind=row]{cursor:row-resize}
+.split-handle[data-kind=corner]{cursor:move;z-index:1}
+.split-handle::before,.split-handle::after{content:'';position:absolute;pointer-events:none;transition:opacity calc(120ms*var(--motion-scale,1)) var(--ease-out,ease-out)}
+.split-handle::before{border-radius:2px;background:var(--muted,currentColor);opacity:.35}
+.split-handle[data-kind=col]::before{width:2px;height:36px;left:calc(50% - 1px);top:calc(50% - 18px)}
+.split-handle[data-kind=row]::before{height:2px;width:36px;top:calc(50% - 1px);left:calc(50% - 18px)}
+.split-handle[data-kind=corner]::before{display:none}
+.split-handle::after{border-radius:1px;background:var(--focus-ring-color,var(--accent));opacity:0}
+.split-handle[data-kind=col]::after{width:2px;left:calc(50% - 1px);top:0;bottom:0}
+.split-handle[data-kind=row]::after{height:2px;top:calc(50% - 1px);left:0;right:0}
+.split-handle[data-kind=corner]::after{width:8px;height:8px;border-radius:50%;left:calc(50% - 4px);top:calc(50% - 4px);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring-color,var(--accent)) 28%,transparent)}
+.split-handle[data-lit]::after,.split-handle:focus-visible::after{opacity:1}
+.split-handle[data-lit]::before,.split-handle:focus-visible::before{opacity:0}
+.app .split-label{background:var(--glass);box-shadow:inset 0 -1px 0 rgb(var(--ink)/.1),inset 0 1px 0 rgb(255 255 255/.06)}
+.app.opaque-glass .split-label{background:var(--overlay)}
+/* R3-60: the pane ribbon is about 25px: the site icon and the title are one left-aligned unit, the close button sits on the same centre line, and the whole ribbon is the pane's drag handle. */
+.app .split-label{height:26px;gap:6px;padding:0 6px 0 10px;cursor:grab;user-select:none;touch-action:none;color:color-mix(in srgb,var(--ed-ink,currentColor) 68%,transparent);font:500 12px/16px var(--font-ui,inherit)}
+.app .split-label[data-active]{color:var(--ed-ink,currentColor)}
+.app .split-label:active{cursor:grabbing}
+/* R3-26: while the pages glide into a new layout their ribbons wait, then ease in. */
+.app .split-label{transition:opacity calc(160ms*var(--motion-scale,1)) ease-out}
+.app .page-content[data-morph] .split-label{opacity:0;transition:none}
+.app .split-label>span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.app .split-label>:first-child{flex:0 0 14px;width:14px;height:14px}
+/* R4 leftovers: the close button is the 20px box above, not the generic 28px `.app.style-acira .icon-button` (that rule has the same weight and
+   loads later, so it won: a 28px box in a 26px ribbon poked 1px above the page edge, into the native caption buttons' strip). 20px in the 26px ribbon
+   keeps 3px above and below, so the whole control sits under the caption strip the chrome row owns (compactRowHeight x interface scale). */
+.app .split-label>.split-label-close.icon-button{flex:0 0 20px;width:20px;min-width:20px;height:20px;padding:0;border-radius:4px;display:inline-grid;place-items:center;cursor:default}
+.app .split-label>.split-label-close.icon-button svg{width:14px;height:14px}
+/* Reload (29 Oct): the same 20px box as the ×, left of it, hidden until the pointer is over the ribbon or a key reaches it. Its slot is always there, so the title
+   and the × never shift; it fades on the ribbon's own opacity timing. A hover on the ribbon is a hover on the button's own slot, so it is never hidden under the pointer. */
+.app .split-label>.split-label-reload.icon-button{flex:0 0 20px;width:20px;min-width:20px;height:20px;padding:0;border-radius:4px;display:inline-grid;place-items:center;cursor:default;opacity:0;transition:opacity calc(160ms*var(--motion-scale,1)) ease-out,background-color calc(120ms*var(--motion-scale,1)) ease-out}
+.app .split-label>.split-label-reload.icon-button svg{width:14px;height:14px}
+.app .split-label:is(:hover,:focus-within)>.split-label-reload.icon-button,.app .split-label>.split-label-reload.icon-button:focus-visible{opacity:1}
+.app .page-content[data-morph] .split-label>.split-label-reload.icon-button{transition:none}
+@media (hover:none){.app .split-label>.split-label-reload.icon-button{opacity:1}}
+.app[data-reduced-motion=true] .split-handle::before,.app[data-reduced-motion=true] .split-handle::after{transition:none}
+/* R5 (founder 27 Oct): each pane reads as one card — the ribbon's top corners take the page's radius (--pane-radius, what the native page view gets, 0
+   when pages are square), its bottom stays square, and the card's bottom corners are the page's own. A native view can only be rounded on all four
+   corners, so its top corners would leave notches under the square ribbon; the ribbon's fill continues behind the page's top edge for one radius
+   (::after, under the native view), so those notches show the ribbon and the card's outline stays straight at the seam. */
+.app .split-pages>.page-pane{border-radius:var(--pane-radius,0px)}
+.app .split-pages>.page-pane>.split-label{border-radius:var(--pane-radius,0px) var(--pane-radius,0px) 0 0}
+.app .split-pages>.page-pane>.split-label::after{content:'';position:absolute;left:0;right:0;top:100%;height:var(--pane-radius,0px);background:inherit;pointer-events:none}
+@media (forced-colors:active){.split-handle::before{background:CanvasText;opacity:1}.split-handle::after{background:Highlight}}

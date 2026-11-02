@@ -1,0 +1,108 @@
+/* Menus and popovers per ACIRA_DESIGN_BIBLE.md §4 Menu and the §3.1 mono budget: clean sans throughout,
+   30px rows with 4px radius, a reserved 16px icon/check column, shortcuts right-aligned in Geist 12 at 44%,
+   hairline dividers, single-surface fields, fill-only selection. Scoped under .browser-popup so it outranks the
+   older frost/preview rules without touching them. */
+.app .browser-popup .popup-header>strong,
+.app .browser-popup .popup-label{font:500 12px/16px var(--font-ui);letter-spacing:0;text-transform:none;color:var(--text-2,var(--muted))}
+.app .browser-popup .popup-label{display:block;margin:8px 8px 4px}
+.app.style-acira .browser-popup :is(.menu-row kbd,.popup-shortcut,.find-actions kbd){font:400 12px/1 var(--font-ui);letter-spacing:0;color:var(--text-3,var(--muted));background:none;border:0;box-shadow:none;padding:0;margin-left:auto;min-width:0;height:auto;white-space:nowrap;flex:none}
+.app .browser-popup .menu-row{min-height:30px;height:30px;padding:0 8px;gap:8px;border-radius:var(--radius-control,4px);font:400 13px/1.2 var(--font-ui)}
+.app .browser-popup .menu-row>span:not(.profile-avatar){flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Profile monograms and photos occupy the same fixed icon column. */
+.app .browser-popup .menu-row>.profile-avatar{flex:0 0 16px;width:16px;height:16px;min-width:16px;aspect-ratio:1}
+/* The icon/check column is always 16px, so labels share one left edge. */
+.app .browser-popup .menu-row>:is(svg,.menu-icon,.editor-glyph){flex:0 0 16px;width:16px;height:16px;color:var(--text-2,currentColor)}
+/* One field surface: a fill, no stacked border or ring around an autofocused search. */
+.app.style-acira .browser-popup .popup-search{border:0;box-shadow:none;outline:none;border-radius:var(--radius-control,4px)}
+.app.style-acira .browser-popup .popup-search:focus-within{outline:none;box-shadow:none}
+.app.style-acira .browser-popup .popup-search input{font:400 13px/1.2 var(--font-ui)}
+/* Rows select with a fill only; the current tab is marked by its check, never a box. */
+.app.style-acira .browser-popup .tab-result,.app.style-acira .browser-popup .profile-row{border:0;box-shadow:none;outline-offset:-2px}
+.app.style-acira .browser-popup .tab-result-list>.tab-switcher-selection{border-radius:var(--radius-control,4px);box-shadow:none;border:0}
+.app.style-acira .browser-popup .tab-result strong{font:500 13px/1.25 var(--font-ui)}
+.app.style-acira .browser-popup .tab-result small{font:400 12px/1.3 var(--font-ui);color:var(--text-3,var(--muted))}
+.app .browser-popup :is(.menu-row,.tab-result,.profile-row):focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px}
+/* §5.4 tab search / palette: no header chrome, a 44px input row with a hairline below, 32px rows with the host
+   right-aligned in Geist 12 at 44%, and a 32px hint footer. Opens without animation (§3.9). */
+.app.style-acira .browser-popup.popup-content-palette>.popup-header{display:none}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-fixed-search{padding:0;margin:0 -4px;border-bottom:1px solid var(--line)}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search{height:44px;margin:0;padding:0 14px;gap:10px;background:none;border-radius:0}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search input{font:400 14px/1.2 var(--font-ui)}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-list{padding-top:6px}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result{min-height:32px;height:32px;padding:0 8px;gap:10px}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label{display:flex;align-items:baseline;gap:12px;min-width:0;flex:1}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label>strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:450}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label>small{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row{min-height:32px}
+.app .browser-popup .popup-hints{display:flex;align-items:center;gap:16px;height:32px;padding:0 14px;margin:0 -4px;border-top:1px solid var(--line);font:400 12px/1 var(--font-ui);color:var(--text-3,var(--muted))}
+.app .browser-popup .popup-hints>span{display:inline-flex;align-items:center;gap:6px}
+.app .browser-popup .popup-hints kbd{display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 3px;font:500 11px/1 var(--font-ui);color:var(--text-2,inherit);background:none;border-radius:var(--radius-kbd,3px);box-shadow:inset 0 0 0 1px var(--line-strong,var(--line))}
+.app.style-acira .browser-popup.popup-content-palette>.popup-header{display:none}
+.app.style-acira .browser-popup.popup-content-palette .popup-search{height:44px;margin:0 -4px 6px;padding:0 14px;gap:10px;background:none;border-radius:0;border-bottom:1px solid var(--line)}
+.app.style-acira .browser-popup.popup-content-palette .popup-search input{font:400 14px/1.2 var(--font-ui)}
+/* The row's close button sits in its own 28px slot after the host, shown on the hovered or cursor row only. */
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row{position:relative}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result{padding-right:36px}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-close{position:absolute;right:4px;top:50%;width:24px;height:24px;margin:0;transform:translateY(-50%);border-radius:var(--radius-control,4px);opacity:0}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row:is(:hover,[data-cursor=true],:focus-within) .tab-result-close{opacity:1}
+/* §5.4b tab viewer: sentence-case header with a count, one 36px row grid, the current tab as a 7% fill with
+   primary text (no box, no check), internal pages without an address, and a New tab footer row. */
+.app.style-acira .browser-popup.popup-content-tabs .popup-header>strong{font:500 13px/18px var(--font-ui);color:var(--text-primary,var(--text))}
+.app .browser-popup .popup-count{margin-left:8px;font:400 12px/1 var(--font-ui);color:var(--text-3,var(--muted));font-variant-numeric:tabular-nums}
+.app.style-acira .browser-popup.popup-content-tabs :is(.tab-result,.tab-result-row){min-height:36px;height:36px}
+.app.style-acira .browser-popup.popup-content-tabs .tab-result-row{border-radius:var(--radius-control,4px)}
+.app.style-acira .browser-popup.popup-content-tabs .tab-result-row:has(>.tab-result[aria-current=page]){background:color-mix(in srgb,var(--text-primary,currentColor) 7%,transparent)}
+.app.style-acira .browser-popup.popup-content-tabs .tab-result[aria-current=page] strong{color:var(--text-primary,var(--text));font-weight:500}
+.app.style-acira .browser-popup.popup-content-tabs .tab-result[aria-current=page]{background:none;box-shadow:none;outline:none}
+.app.style-acira .browser-popup.popup-content-tabs .popup-fixed-footer{margin:4px -4px 0;padding:4px 4px 0;border-top:1px solid var(--line)}
+/* One grid for every row: the 16px icon column holds favicons and the Acira mark alike. */
+.app .browser-popup .tab-result>:is(.acira-symbol,.site-identity-icon,img,svg:first-child){flex:0 0 16px!important;width:16px;height:16px;margin:0}
+.app .browser-popup .tab-result>.tab-result-label{flex:1 1 auto!important;justify-content:flex-start;text-align:left}
+/* Menu rows are concentric with the 8px menu: 4px radius (--radius-menu-row), 30px, in every menu incl. context menus. */
+.app.style-acira .browser-popup .menu-row,.app.style-acira .browser-popup:is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row{min-height:30px;height:30px;padding:0 8px;border-radius:var(--radius-menu-row,4px)}
+/* Defensive: while a row shows its close button the host makes room for it, whatever padding wins. */
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row:is(:hover,[data-cursor=true],:focus-within) .tab-result-label>small{margin-right:8px}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row>.tab-result{padding-right:40px!important}
+/* F39 command bar (§5.4): sentence-case section labels, 32px rows, matched letters at full ink and the rest at 80%,
+   host or shortcut right-aligned in Geist 12 at 44%; the keyboard row is a 7% fill. No motion. */
+.app .browser-popup.popup-content-palette .palette-results{display:flex;flex-direction:column;padding:2px 0 6px}
+.app .browser-popup.popup-content-palette .palette-section{height:28px;padding:10px 8px 0;font:500 12px/18px var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
+.app .browser-popup.popup-content-palette .palette-row{display:flex;align-items:center;gap:10px;width:100%;height:32px;min-height:32px;padding:0 8px;border:0;border-radius:var(--radius-menu-row,4px);background:none;color:var(--text-primary,inherit);font:400 13px/1 var(--font-ui);text-align:left;cursor:default}
+.app .browser-popup.popup-content-palette .palette-row[data-active=true]{background:color-mix(in srgb,var(--text-primary,currentColor) 7%,transparent)}
+.app .browser-popup.popup-content-palette .palette-row>svg,.app .browser-popup.popup-content-palette .palette-row>:first-child{flex:0 0 16px;width:16px;height:16px}
+.app .browser-popup.popup-content-palette .palette-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--text-primary,currentColor) 80%,transparent)}
+.app .browser-popup.popup-content-palette .palette-title:has(+ .palette-hint){flex:0 1 auto}
+.app .browser-popup.popup-content-palette .palette-hint{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 66%,transparent)}
+.app .browser-popup.popup-content-palette .palette-title mark{background:none;color:var(--text-primary,currentColor);font-weight:500}
+.app .browser-popup.popup-content-palette .palette-meta{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 66%,transparent)}
+.app .browser-popup.popup-content-palette .palette-empty{margin:0;padding:14px 8px;font:400 13px/1.4 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
+/* Acira menu: no header (critique round 3); Bookmarks opens its own surface, marked with a trailing chevron. */
+.app.style-acira .browser-popup.popup-content-menu>.popup-header{display:none}
+.app .browser-popup .menu-row-more>svg:last-child{flex:0 0 14px;margin-left:6px;opacity:.44}
+/* Site popover: the title shares the rows' 10px left edge (it sat 6px further in than every row below it). */
+.app.style-acira .browser-popup.popup-content-security>.popup-header{padding-left:0}
+/* Tab viewer rows touch (bible §5.4b, L's bug log): a row's own padding is the space, never a gap between rows. */
+.app.style-acira .browser-popup.popup-content-tabs .tab-result-row+.tab-result-row{margin-top:0}
+/* Find bar (critique round 6): one 40px row under the toolbar's right edge — glyph, input, count, previous, next,
+   close. No title and no second line; the field is the bar, so the input draws no ring of its own. */
+.app.style-acira .browser-popup.popup-content-find{padding:0}
+.app.style-acira .browser-popup.popup-content-find>.popup-header{display:none}
+.app .browser-popup.popup-content-find :is(.popup-scroll,.popup-body-content){padding:0;margin:0}
+.app .find-row{display:flex;align-items:center;gap:2px;height:40px;padding:0 4px 0 12px;box-sizing:border-box}
+.app .find-row>svg:first-child{flex:none;margin-right:6px;color:var(--text-3,rgb(var(--ink) / .44))}
+.app .find-row input{flex:1;min-width:0;height:28px;padding:0;border:0;background:transparent;font:400 13px/1 var(--font-ui,inherit);color:inherit}
+.app .find-row input:focus,.app .find-row input:focus-visible{outline:none;box-shadow:none}
+.app .find-row .find-count{flex:none;padding:0 6px;font:400 12px/1 var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--text-3,rgb(var(--ink) / .44));white-space:nowrap}
+.app .find-row .icon-button{flex:none;width:28px;height:28px}
+/* An extension's items in the page menu (chrome.contextMenus): a heading row names a group (the extension, or a parent item) and its rows sit one step in;
+   the extension's icon fills the 16px icon column; a check or radio mark takes the same column. */
+.app .browser-popup .menu-heading{display:flex;align-items:center;gap:8px;min-height:30px;height:30px;padding:0 8px;font:500 12px/1.2 var(--font-ui);color:var(--text-2,var(--muted));cursor:default}
+.app .browser-popup .menu-heading>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .browser-popup :is(.menu-row,.menu-heading)>img.menu-ext-icon{flex:0 0 16px;width:16px;height:16px;object-fit:contain;border-radius:3px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="1"]{padding-inline-start:22px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="2"]{padding-inline-start:36px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="3"]{padding-inline-start:50px}
+.app .browser-popup .menu-row>i.menu-icon{display:block;font-style:normal}
+.app .browser-popup .menu-row>i.menu-dot{position:relative}
+.app .browser-popup .menu-row>i.menu-dot::after{content:"";position:absolute;inset:5px;border-radius:50%;background:currentColor}
+.browser-popup .menu-preview-label{padding:6px 12px 8px;font-size:11px;line-height:16px;color:var(--text-2,var(--muted));border-bottom:1px solid rgb(var(--ink)/.08);margin-bottom:4px}

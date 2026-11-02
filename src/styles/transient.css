@@ -1,0 +1,485 @@
+/* Transient surfaces (design bible §4 "Transient surfaces"; values: docs/launch/research/TRANSIENT_SURFACES_REFERENCES.md).
+   One material, one motion, one layout grid for toasts, the status pill and (via panels.css) every menu and panel.
+   Only transform and opacity animate (founder, 25 Oct): no blur, no backdrop-filter, no filter in any transition.
+   Toasts and pills are solid (the overlay tone + ring + shadow scale): they move, and a live backdrop blur on a moving
+   card would cost a full re-sample every frame. Rules start from :root:root:root to settle the older toast rules. */
+
+/* Motion tokens (bible §3.9 / §4 Transient surfaces), shared with the popup formation (D wires its timing to these):
+   --motion-popover-enter/-exit   pointer-opened menus, panels, popovers (origin = anchor)
+   --motion-instant               keyboard / 100×-a-day surfaces: context menus, palette, Ctrl+Tab (opacity only)
+   --motion-dialog-enter/-exit    dialogs and their scrim
+   --motion-ease-enter/-exit      decelerate in (expo-like), accelerate out
+   --motion-popover-scale/-shift  start scale and the slide away from the anchor
+   --motion-stagger / -max-items  rows cascade only on hero moments: ≤ 4 items, ≤ 40ms apart; menus never cascade */
+.app,
+.fr-yours {
+  /* --motion-scale (R3-17, Settings › Appearance › Animation speed): Premium 1.7, Fast 1, Off 0. App sets it on .app and
+     on the document root; every duration below is its Fast value times the scale. */
+  --motion-popover-enter: calc(180ms * var(--motion-scale, 1));
+  --motion-popover-exit: calc(120ms * var(--motion-scale, 1));
+  --motion-instant: calc(80ms * var(--motion-scale, 1));
+  --motion-dialog-enter: calc(200ms * var(--motion-scale, 1));
+  --motion-dialog-exit: calc(140ms * var(--motion-scale, 1));
+  --motion-tooltip: calc(140ms * min(var(--motion-scale, 1), 1.3));
+  --motion-ease-enter: cubic-bezier(.23, 1, .32, 1);
+  --motion-ease-exit: cubic-bezier(.4, 0, 1, 1);
+  --motion-ease-expo: cubic-bezier(.16, 1, .3, 1);
+  --motion-popover-scale: .96;
+  --motion-popover-shift: 4px;
+  --motion-stagger: 40ms;
+  --motion-stagger-max-items: 4;
+  --t-enter: calc(240ms * var(--motion-scale, 1));
+  --t-exit: calc(160ms * var(--motion-scale, 1));
+  --t-ease-enter: var(--motion-ease-enter);
+  --t-ease-exit: var(--motion-ease-exit);
+  --t-surface: var(--overlay, #fff);
+  --t-error: #b3382f;
+  /* A toast sits 20px above the page's bottom edge, so its shadow must finish falling off within ~20px below it, and above
+     and beside it too (R3-66: a toast's shadow and rim are never cut by its host, the native overlay or the window). The
+     layered scale of --menu-e2 reaches 32px (light) and 56px (dark) below; this one reaches 16px and 20px, none above. */
+  --t-shadow: 0 1px 1px rgb(0 0 0 / 0.03), 0 2px 6px -1px rgb(0 0 0 / 0.06), 0 8px 14px -6px rgb(0 0 0 / 0.08);
+}
+.app[data-theme='dark'] {
+  --t-error: #f0786f;
+  --t-shadow: 0 1px 2px rgb(0 0 0 / 0.24), 0 4px 10px -2px rgb(0 0 0 / 0.32), 0 10px 18px -8px rgb(0 0 0 / 0.36);
+}
+
+/* ── The slot: bottom-centre of the content area; the pill sits above the stack. ──
+   Pinned to the page area's bottom edge (fc9dae61 dropped the old rule that did this, so page toasts fell below the window). */
+:root:root:root .page-area > .page-toast-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+:root:root:root .overlay-toast {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+/* ── Stack ── */
+:root:root:root .t-stack {
+  position: relative;
+  flex: none;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: auto;
+}
+:root:root:root .t-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  list-style: none;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}
+:root:root:root .t-place {
+  height: 100%;
+  pointer-events: auto;
+  transform: translateY(var(--lift, 0px)) scale(calc(1 - var(--i, 0) * .05));
+  transform-origin: 50% 0;
+  transition: transform var(--t-move, var(--t-enter)) var(--t-move-ease, var(--t-ease-enter));
+}
+:root:root:root .t-stack[data-expanded] .t-place {
+  transform: translateY(var(--lift, 0px));
+}
+/* Collapsed, an older toast shows only its edge: its content fades out with the same progress. */
+:root:root:root .t-slot .t-toast > * {
+  transition: opacity var(--t-enter) var(--t-ease-enter);
+}
+:root:root:root .t-stack:not([data-expanded]) .t-slot:not([data-front]) .t-toast > * {
+  opacity: 0;
+}
+
+/* ── Card: 16px icon column (the × on hover), text on the x = 36 edge, one action (+ key cap). ── */
+:root:root:root .t-toast {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 8px 0 12px;
+  border-radius: 8px;
+  background: var(--t-surface);
+  box-shadow: var(--menu-rim), var(--t-shadow);
+  color: var(--text-1, var(--text-primary));
+  font: 450 13px/18px var(--font-ui);
+  letter-spacing: 0;
+}
+:root:root:root .t-glyph {
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-2, var(--text-secondary));
+}
+:root:root:root .t-toast[data-tone='error'] .t-glyph {
+  color: var(--t-error);
+}
+/* The leading spot (founder, 27 Oct, macOS Notification Center): the status glyph at rest; with the pointer on the card or
+   keyboard focus inside it, the glyph cross-fades into a close × of the same 16px drawing in the same place. The button's
+   22px round hit area overhangs the 16px column by 3px each side (inside the 12px padding, 5px clear of the text); a soft
+   background shows only under the pointer. Opacity + transform only. */
+:root:root:root .t-lead {
+  position: relative;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  --t-swap: calc(140ms * var(--motion-scale, 1));
+}
+:root:root:root .t-lead > .t-glyph {
+  transition: opacity var(--t-swap) var(--t-ease-enter), transform var(--t-swap) var(--t-ease-enter);
+}
+:root:root:root .t-close {
+  position: absolute;
+  inset: -3px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2, var(--text-secondary));
+  opacity: 0;
+  transform: scale(.88);
+  transition: opacity var(--t-swap) var(--t-ease-enter), transform var(--t-swap) var(--t-ease-enter), background-color 120ms var(--t-ease-enter), color 120ms var(--t-ease-enter);
+  cursor: default;
+}
+:root:root:root .t-toast:is(:hover, :has(:focus-visible)) .t-lead > .t-glyph {
+  opacity: 0;
+  transform: scale(.88);
+}
+:root:root:root .t-toast:is(:hover, :has(:focus-visible)) .t-close {
+  opacity: 1;
+  transform: none;
+}
+:root:root:root .t-close:hover {
+  background: var(--menu-hover);
+  color: var(--text-1, var(--text-primary));
+}
+:root:root:root .t-toast:is(:hover, :has(:focus-visible)) .t-close:active {
+  transform: scale(.92);
+}
+/* A collapsed older toast shows only its edge: its × is neither visible nor under the pointer. */
+:root:root:root .t-stack:not([data-expanded]) .t-slot:not([data-front]) .t-close {
+  pointer-events: none;
+}
+:root:root:root .t-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:root:root:root .t-toast[data-lines='2'] .t-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+/* The one text action (ToastAction) and its key cap. */
+:root:root:root .t-toast .toast-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin: 0 0 0 auto;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-1, var(--text-primary));
+  font: 500 13px/18px var(--font-ui);
+  transition: background-color 120ms var(--t-ease-enter);
+}
+:root:root:root .t-toast .toast-action:hover {
+  background: var(--menu-hover);
+}
+:root:root:root .t-toast .toast-action:active {
+  transform: scale(.97);
+}
+:root:root:root .t-toast .toast-action kbd {
+  height: 18px;
+  padding: 0 4px;
+  font: 500 11px/1 var(--font-ui);
+  color: var(--text-2, var(--text-secondary));
+}
+:root:root:root .t-dismiss {
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 0 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3, var(--text-secondary));
+}
+:root:root:root .t-text + .t-dismiss {
+  margin-left: auto;
+}
+:root:root:root .t-dismiss:hover {
+  background: var(--menu-hover);
+  color: var(--text-1, var(--text-primary));
+}
+:root:root:root :is(.t-toast .toast-action, .t-dismiss, .t-close):focus-visible {
+  outline: 2px solid var(--focus-ring-color, var(--accent));
+  outline-offset: -2px;
+}
+
+/* ── Status pill: a compact, actionless toast. ── */
+:root:root:root .t-pill {
+  box-sizing: border-box;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  max-width: calc(100vw - 32px);
+  padding: 0 12px 0 10px;
+  border-radius: 8px;
+  background: var(--t-surface);
+  box-shadow: var(--menu-rim), var(--t-shadow);
+  color: var(--text-1, var(--text-primary));
+  font: 500 13px/18px var(--font-ui);
+  pointer-events: none;
+}
+
+@media (forced-colors: active) {
+  :root:root:root :is(.t-toast, .t-pill) {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:root:root :is(.t-place, .t-slot .t-toast > *) {
+    transition-duration: 100ms;
+  }
+}
+:root:root:root .app[data-reduced-motion='true'] :is(.t-place, .t-slot .t-toast > *) {
+  transition-duration: 100ms;
+}
+/* Reduced motion: the glyph and the × swap at once, with no scale. */
+@media (prefers-reduced-motion: reduce) {
+  :root:root:root :is(.t-lead > .t-glyph, .t-close) { transition: background-color 120ms, color 120ms; transform: none !important; }
+}
+:root:root:root :is(.app[data-reduced-motion='true'], .t-stack[data-instant]) :is(.t-lead > .t-glyph, .t-close) {
+  transition: background-color 120ms, color 120ms;
+  transform: none !important;
+}
+@media (forced-colors: active) {
+  :root:root:root .t-close { color: ButtonText; }
+  :root:root:root .t-close:hover { background: Highlight; color: HighlightText; }
+}
+
+/* ── A toast outside the stack (the new tab's "Artwork hidden"): same card, same slot, same motion. ── */
+:root:root:root .t-solo {
+  position: fixed;
+  left: var(--navigation-width, 0px);
+  right: 0;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+:root:root:root .t-solo > .t-toast {
+  height: 44px;
+  max-width: calc(100% - 32px);
+  pointer-events: auto;
+  animation: t-toast-in var(--t-enter) var(--t-ease-enter) backwards;
+  transition: opacity var(--t-exit) var(--t-ease-exit), transform var(--t-exit) var(--t-ease-exit);
+}
+:root:root:root .t-solo > .t-toast[data-closing] {
+  opacity: 0;
+  transform: scale(.98);
+  pointer-events: none;
+}
+@keyframes t-toast-in {
+  from { opacity: 0; transform: translateY(100%); }
+}
+:root:root:root .app[data-reduced-motion='true'] .t-solo > .t-toast {
+  animation-duration: 100ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:root:root .t-solo > .t-toast { animation: none; }
+}
+
+/* Over a website the stack lives in the native popup host. Each toast is its own card, so the host draws no plate,
+   material, mist or backdrop of its own behind them. */
+:root:root:root .acira-popup-surface[data-bare] :is(.popup-sheet-material, .popup-material, .popup-backdrop-clip) {
+  display: none;
+}
+:root:root:root .acira-popup-surface[data-bare] .popup-sheet-plane {
+  background: none;
+  box-shadow: none;
+}
+:root:root:root .acira-popup-surface[data-bare] .popup-sheet-plane::before {
+  display: none;
+}
+:root:root:root .acira-popup-surface[data-bare] {
+  background: transparent;
+  box-shadow: none;
+}
+/* The card's own rim and layered shadow sit outside its box: the bare host must not clip them (the sheet keeps 24px
+   of paint room on every side for exactly this). */
+:root:root:root .acira-popup-surface[data-bare] .popup-contents {
+  overflow: visible;
+}
+
+/* ── Tooltip: one inverted chip, light and dark alike (I's PREMIUM_COMPONENTS §9). 24px, padding 0 8, radius 4, 12/16
+   500, 1px ring as a shadow; it slides 4px and fades in from its trigger's side over 140ms expo-out. ── */
+:root:root:root .t-tip {
+  position: fixed;
+  z-index: 2147483000;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  max-width: min(320px, calc(100vw - 16px));
+  overflow: hidden;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: rgb(24 24 27);
+  color: #f4f4f5;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .1), 0 1px 2px rgb(0 0 0 / .2), 0 4px 12px -2px rgb(0 0 0 / .25);
+  font: 500 12px/16px var(--font-ui);
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  --tip-from: translate(-50%, calc(-50% - 4px));
+  /* The tip lives in a portal outside .app: it reads the root's --motion-scale itself. */
+  animation: t-tip-in calc(140ms * min(var(--motion-scale, 1), 1.3)) cubic-bezier(.16, 1, .3, 1) both;
+}
+:root:root:root .t-tip[data-side='above'] { --tip-from: translate(-50%, calc(-50% + 4px)); }
+:root:root:root .t-tip[data-side='right'] { --tip-from: translate(calc(-50% - 4px), -50%); }
+:root:root:root .t-tip[data-side='left'] { --tip-from: translate(calc(-50% + 4px), -50%); }
+/* The wrapped tip (R3-05): an explanation, an info button, any label wider than 300px. The same chip, a 300px card:
+   2–3 lines, 8px of space above and below the text and 10px beside it, 6px radius (concentric with its padding). */
+:root:root:root .t-tip[data-wrap] {
+  height: auto;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  align-items: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  font: 450 12px/18px var(--font-ui);
+}
+:root:root:root .t-tip.t-tip-measure {
+  left: -10000px;
+  visibility: hidden;
+  animation: none;
+}
+:root:root:root .t-tip .t-tip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root:root:root .t-tip kbd {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: none;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18);
+  color: rgb(244 244 245 / .72);
+  font: 500 11px/1 var(--font-ui);
+}
+/* A tip with a description (R4-20, e.g. "Turn Focus off · Ctrl+Shift+F" + "Bring back the full toolbar."): line 1 is the title with
+   its key cap on the right (the cap holds only keys), line 2 is the description in secondary text. The card fits its content up
+   to 300px; 7px above, 8px below and 10px beside the text, 6px radius, like the wrapped info card. */
+:root:root:root .t-tip[data-desc] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  height: auto;
+  width: max-content;
+  max-width: 300px;
+  padding: 7px 10px 8px;
+  border-radius: 6px;
+}
+:root:root:root .t-tip .t-tip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-width: 0;
+  white-space: nowrap;
+}
+:root:root:root .t-tip .t-tip-head kbd { flex: none; margin-inline-start: auto; }
+:root:root:root .t-tip .t-tip-desc {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  color: rgb(244 244 245 / .72);
+  font: 450 12px/16px var(--font-ui);
+}
+@keyframes t-tip-in {
+  from { opacity: 0; transform: var(--tip-from); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:root:root .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 100ms; }
+}
+:root:root:root .app[data-reduced-motion='true'] ~ .t-tip,
+:root:root:root body:has(.app[data-reduced-motion='true']) .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 100ms; }
+
+/* ── Mode and appearance switches (sharedMotion startModeTransition): one crossfade of the whole frame, and every
+   element with a view-transition-name glides to its new place, 240ms expo-out. ── */
+:root[data-mode-switch]::view-transition-old(root),
+:root[data-mode-switch]::view-transition-new(root),
+:root[data-mode-switch]::view-transition-group(*) {
+  animation-duration: calc(240ms * var(--motion-scale, 1));
+  animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+}
+/* During an appearance switch's crossfade no color transition starts: the frame changes at once under the crossfade,
+   and nothing has to be finished from script (getAnimations() forced a full style recalc inside the switch: F04). */
+:root[data-theme-settle] *, :root[data-theme-settle] *::before, :root[data-theme-settle] *::after { transition: none !important; }
+
+/* R3-36 experiment (src/ui/dotClick.ts, flag off by default): while the dot grid plays over a toolbar icon, the glyph steps
+   aside and returns. The animation sits on the button's own svg so a glyph the click replaces steps aside too. */
+:root:root:root .app [data-dot-playing] > svg {
+  animation: dot-glyph-step var(--dot-ms, 250ms) linear;
+}
+@keyframes dot-glyph-step {
+  0% { opacity: 1; }
+  16%, 72% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+:root:root:root .t-tip[data-wrap] .t-tip-label{white-space:normal;overflow:visible;text-overflow:clip}

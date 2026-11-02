@@ -1,0 +1,6 @@
+Built-in imagegen edit, background-extraction.
+Edit target: the founder-selected BW01 Void Halo Acira browser icon.
+Preserve the exact black rounded-square tile, silver-white two-part Acira symbol, original proportions, corner curvature, surface lighting and dark finish.
+Remove only the outer white/light-gray canvas outside the black tile. Make all pixels outside the rounded-square silhouette truly transparent, with clean antialiased edges and no white fringe.
+Keep the icon centered and square, retaining the existing canvas padding and all internal artwork. Do not redesign, change symbol geometry, add letters, add objects, or invent a new logo.
+Transparent PNG for production macOS and Windows app icons.

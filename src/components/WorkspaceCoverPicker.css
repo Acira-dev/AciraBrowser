@@ -1,0 +1,40 @@
+.workspace-cover-picker{width:100%;min-width:0;color:var(--ed-ink)}
+.workspace-cover-collection{display:grid;gap:6px;margin-bottom:14px;font-size:12px;color:var(--text-secondary)}
+.workspace-cover-collection select{width:100%;min-width:0;min-height:32px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--text-primary);font:inherit}
+.workspace-cover-collection select:focus-visible{outline:2px solid var(--ed-blue);outline-offset:2px}
+/* Two lines are always reserved for the name: a loading card and a loaded one are the same height, so the popup never changes size
+   after it opens (a name wrapping to a second line re-ran the sheet's size gate and its material mid-open). */
+.workspace-cover-grid>button>span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+/* The dot-matrix loader stands centred in the thumbnail until its picture has decoded; the picture then fades in over it. */
+.workspace-cover-thumbnail[data-loading]{background:none;box-shadow:none}
+.workspace-cover-thumbnail>img{opacity:0;transition:opacity .18s}
+.workspace-cover-thumbnail[data-ready]>img,.workspace-cover-thumbnail:not([data-loading])>img{opacity:1}
+.workspace-cover-thumbnail[data-loading]>img{position:absolute;inset:0}
+/* Just the lit dots, in the sheet's own ink (white on dark, black on light), on nothing: the picture fades in over them. */
+.workspace-cover-loader{position:absolute;inset:0;display:grid;place-items:center;color:var(--text-primary,var(--ed-ink));pointer-events:none;transition:opacity .18s}
+.workspace-cover-loader[data-state=out]{opacity:0}
+.workspace-cover-visibility{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;font-size:13px;line-height:20px}
+.workspace-cover-visibility input{accent-color:var(--ed-blue);width:16px;height:16px;margin:0}
+.workspace-cover-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 12px}
+.workspace-cover-grid>button{display:flex;flex-direction:column;gap:7px;min-width:0;padding:0;border:0;background:transparent;color:var(--ed-muted);text-align:left;font:inherit;font-size:12px;line-height:17px;-webkit-app-region:no-drag}
+.workspace-cover-grid>button>span:last-child{max-width:100%;overflow-wrap:anywhere}
+.workspace-cover-thumbnail{display:block;position:relative;width:100%;aspect-ratio:2.6;border-radius:8px;overflow:hidden;background:var(--well);box-shadow:inset 0 0 0 1px rgb(var(--ink) / .1);transition:box-shadow .15s}
+.workspace-cover-thumbnail>img{width:100%;height:100%;display:block;object-fit:cover}
+.workspace-cover-grid>button[aria-checked=true]{color:var(--ed-ink)}
+.workspace-cover-grid>button[aria-checked=true] .workspace-cover-thumbnail{box-shadow:0 0 0 2px var(--sheet),0 0 0 3.5px var(--ed-blue)}
+.workspace-cover-grid>button:hover:not(:disabled) .workspace-cover-thumbnail{filter:brightness(1.04)}
+.workspace-cover-check{position:absolute;right:6px;bottom:6px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--ed-blue);color:var(--on-accent,#fff);box-shadow:0 1px 4px #0003}
+.workspace-cover-grid>button:focus-visible{outline:2px solid var(--ed-blue);outline-offset:5px;border-radius:8px}
+.workspace-cover-picker.is-compact .workspace-cover-grid{gap:12px 10px}
+.workspace-cover-picker.is-compact .workspace-cover-grid>button{font-size:11px}
+/* Cover browsing is a panel rather than a dense menu. Keep its collection field
+   and thumbnails clear of the shared menu label/button metrics. */
+.browser-popup .workspace-cover-picker{padding:10px 12px 14px;box-sizing:border-box;container-type:inline-size}
+.browser-popup .workspace-cover-collection{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:0 0 18px}
+.browser-popup .workspace-cover-collection select{min-height:36px;padding:7px 10px}
+.browser-popup .workspace-cover-grid{gap:16px 12px;max-height:min(360px,50vh);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:4px;margin:-4px}
+.browser-popup .workspace-cover-thumbnail{aspect-ratio:2}
+@container (max-width:340px){.browser-popup .workspace-cover-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.workspace-cover-notice{font-size:12px;line-height:1.5;margin:12px 0 0;color:var(--text-secondary);overflow-wrap:anywhere}
+.app.style-acira .browser-settings .bs-group:has(.workspace-cover-picker) .bs-group-body{padding:18px 0}
+@container settings (max-width:600px){.workspace-cover-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

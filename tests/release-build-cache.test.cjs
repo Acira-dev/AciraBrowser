@@ -1,0 +1,7 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');
+const {createCacheRename}=require('../scripts/release-build-cache-retry.cjs');
+const cache=path.resolve('qa/artifacts/release-cache-test'),source=path.join(cache,'tool.tmp'),target=path.join(cache,'tool');
+test('transient Windows cache-finalization locks retry a bounded same-directory rename',async()=>{let calls=0,waits=0;const rename=createCacheRename(async()=>{if(++calls<3)throw Object.assign(new Error('Locked'),{code:'EPERM'});return 'done';},cache,async()=>{waits++;});assert.equal(await rename(source,target),'done');assert.equal(calls,3);assert.equal(waits,2);});
+test('outside-cache and other rename shapes never acquire new retries',async()=>{for(const [from,to]of [[path.resolve('other.tmp'),path.resolve('other')],[source,path.join(cache,'different')]]){let calls=0;const rename=createCacheRename(async()=>{calls++;throw Object.assign(new Error('Locked'),{code:'EPERM'});},cache,async()=>{});await assert.rejects(rename(from,to));assert.equal(calls,1);}});
+test('nontransient failures propagate and persistent locks stop after the bound',async()=>{for(const code of ['EACCES','EPERM']){let calls=0;const rename=createCacheRename(async()=>{calls++;throw Object.assign(new Error(code),{code});},cache,async()=>{});await assert.rejects(rename(source,target));assert.equal(calls,code==='EPERM'?25:1);}});

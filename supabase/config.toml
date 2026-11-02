@@ -1,0 +1,9 @@
+# Supabase project settings for the hosted project. Only the `usage` function lives here (see docs/launch/METRICS.md).
+# The project reference is not stored in the repository: scripts/deploy-metrics.mjs takes SUPABASE_PROJECT_REF from the environment.
+project_id = "acira-usage"
+
+[functions.usage]
+enabled = true
+# The app holds no key, so calls cannot carry a token. Safety is the strict schema, 2 KB limit and rate limits inside the function.
+verify_jwt = false
+entrypoint = "./functions/usage/index.ts"

@@ -1,0 +1,35 @@
+/* Inline tab rename (Zen idea 10): one field, in place of the title, in the strip and the sidebar. Radius 4, hairline-free
+   fill, the 2px accent focus outline the address field and the group rename use; text sits 8px from the fill's edges. */
+.app .tab-name-input{
+  display:block;width:100%;min-width:0;height:22px;margin:0;padding:0 8px;border:0;border-radius:4px;
+  background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:400;line-height:22px;letter-spacing:inherit;text-align:left;
+  outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px;box-shadow:none;caret-color:var(--accent);
+  -webkit-app-region:no-drag;text-overflow:ellipsis;
+}
+.app .tab-name-input::placeholder{color:var(--text-3,var(--muted,currentColor));opacity:.7}
+.app .tab-name-input::selection{background:color-mix(in srgb,var(--accent) 38%,transparent)}
+
+/* Strip: the field replaces the title and grows 8px past its text on each side, so the text stays where it was drawn and
+   never touches the fill's edge. The title's own fade mask is off while it is a field. */
+.app .tab-strip-container .browser-tab>.tab-title.tab-title-editing{
+  -webkit-mask-image:none;mask-image:none;overflow:visible;text-overflow:clip;display:flex;align-items:center;
+  margin-inline:-4px -8px;padding:0;min-width:0;
+}
+.app .tab-strip-container .browser-tab>.tab-title.tab-title-editing>.tab-name-input{height:24px;line-height:24px}
+.app .tab-strip-container .browser-tab:has(.tab-title-editing)>:is(.tab-close,.tab-audio){display:none}
+.app .tab-strip-container .browser-tab>.tab-rename-anchor{display:none}
+
+/* Pinned and icon-only tabs have no title to edit: the field floats over the strip at the tab, above its neighbours. */
+.app .tab-name-input.tab-name-floating{
+  position:fixed;z-index:60;height:28px;line-height:28px;border-radius:4px;
+  box-shadow:var(--shadow-popover,0 0 0 1px rgb(0 0 0/.14),0 8px 24px -6px rgb(0 0 0/.35));
+}
+
+/* Sidebar: the row's button becomes a plain row with the same icon column and the field at the title's left edge. */
+.app.style-acira .acira-sidebar .sb-tab-editing{
+  flex:1;min-width:0;display:flex;align-items:center;height:100%;padding:0;
+}
+.app.style-acira .acira-sidebar .sb-tab-editing>.sb-tab-icon{flex:none}
+.app.style-acira .acira-sidebar .sb-tab-editing>.tab-name-input{flex:1;height:24px;line-height:24px;margin-inline:0 8px;width:auto}
+
+@media (forced-colors:active){.app .tab-name-input{outline-color:Highlight;background:Field;color:FieldText}}

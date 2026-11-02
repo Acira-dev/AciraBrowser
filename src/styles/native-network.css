@@ -1,0 +1,3 @@
+.native-network-feedback{scroll-margin-block:8px}
+.native-network-endpoints{display:grid;gap:8px;margin-block:12px}.native-network-endpoints textarea{display:block;box-sizing:border-box;width:100%;max-width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);resize:vertical;overflow-wrap:anywhere}
+.native-network-feedback:focus{outline:2px solid var(--text);outline-offset:3px;border-radius:3px}

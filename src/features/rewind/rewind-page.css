@@ -1,0 +1,117 @@
+/* Rewind page (R3-39): the closed tab is the unit. It sits on the Library frame (Library.tsx / library.css: one 840px column, 24px title,
+   sticky search, fade-ended band heads, 40px rows that hang 12px outside the column), so it reads as History's sibling. What is added here:
+   the group and split chips of a row, Restore on hover, the Windows view's cards, the "…" menu on A's panel surface (panels.css) and one
+   quiet footer. Colour comes from tokens only; radii 4/6/8; text never within 8px of a fill's edge; motion is transform and opacity. */
+.rwp { --rwp-ease: var(--ease-strong, cubic-bezier(.23, 1, .32, 1)); --rwp-speed: var(--motion-scale, 1); }
+
+/* ---- the first-use line and the off note: plain text, no card ---- */
+.rwp-hint { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-hint p { flex: 0 1 auto; margin: 0; max-width: 72ch; }
+.rwp-hint .lib-icon { margin-inline-start: auto; margin-inline-end: -6px; }
+.rwp-off { margin: 4px 0 0; font: 400 12px/16px var(--font-ui); color: var(--lib-muted, var(--text-2)); }
+
+/* ---- Tabs view: Library rows with a group chip, a split chip and Restore ---- */
+.rwp-row[data-busy] { opacity: .55; transition: opacity calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-row .lib-open { gap: 12px; }
+/* Keyboard focus is drawn on the whole row (its fill reaches past the button), inset, one 2px ring. */
+.rwp-row .lib-open:focus-visible { outline: none; }
+.rwp-row:has(.lib-open:focus-visible) { box-shadow: inset 0 0 0 2px var(--lib-ring, var(--focus-ring-color, var(--accent))); }
+.rwp-row .lib-text { flex: 1 1 0; }
+.rwp-chip { display: block; flex: 0 1 auto; min-width: 0; max-width: 156px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/20px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-chip > svg { display: inline-block; vertical-align: -2px; margin-inline-end: 6px; }
+.rwp-swatch { display: inline-block; width: 3px; height: 12px; margin-inline-end: 6px; border-radius: 1px; vertical-align: -2px; }
+.rwp-kept-pin { flex: none; color: var(--lib-quiet, var(--text-3)); }
+.rwp-trail { min-width: 132px; }
+/* The time fades under the actions on hover; it must not catch the pointer meanwhile (an element at opacity < 1 paints over its in-flow siblings). */
+.rwp-trail .lib-time { pointer-events: none; }
+.rwp-trail .lib-actions { gap: 2px; }
+.rwp-trail .lib-actions .acira-button { margin-inline-end: 2px; }
+.rwp-row:is(:hover, :focus-within, [data-selected]) .lib-time { opacity: 0; }
+
+/* ---- the footer: the keys, what is kept and for how long, one link to Settings ---- */
+.rwp-foot { position: relative; display: flex; flex-direction: column; gap: 6px; margin-top: 28px; padding-top: 14px; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-foot::before { content: ''; position: absolute; inset-inline: 0; top: 0; height: 1px; background: var(--sep-line, var(--line)); }
+.rwp-foot p { margin: 0; }
+.rwp-keys { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.rwp-keys > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.rwp-keys kbd + kbd { margin-left: -2px; }
+.rwp-line { max-width: none; }
+.rwp-foot .rw-link:disabled { color: var(--text-disabled, var(--text-3)); }
+
+/* ---- the "…" menu: A's panel surface and menu rows ---- */
+.rwp-menu { z-index: 60; width: 248px; transform-origin: 100% 0; animation: rwp-menu-in calc(140ms * var(--motion-scale, 1)) var(--ease-strong, cubic-bezier(.23, 1, .32, 1)) backwards; }
+.rwp-menu[data-up] { transform-origin: 100% 100%; }
+.rwp-menu[data-from-keyboard] { animation: none; }
+@keyframes rwp-menu-in { from { opacity: 0; transform: scale(.97) translateY(-2px); } }
+.rwp-menu .acira-menu-row { color: var(--menu-t1, var(--text-1)); }
+.rwp-menu:focus { outline: none; }
+.rwp-menu .acira-menu-row:focus-visible { outline: none; background: var(--menu-hover); }
+.rwp-menu-icon { display: grid; place-items: center; width: 16px; height: 16px; color: var(--menu-t2, var(--text-2)); }
+.rwp-menu-icon svg { width: 14px; height: 14px; }
+.rwp-menu-hint { display: inline-flex; gap: 2px; }
+.app .rwp-menu kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-kbd, 3px); background: none; box-shadow: inset 0 0 0 1px var(--line-strong); font: 500 11px/1 var(--font-ui); color: var(--menu-t3, var(--text-3)); }
+.rwp-menu .acira-menu-row-danger .rwp-menu-icon { color: inherit; }
+
+/* ---- Windows view: one card per window ---- */
+.rwp-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.rwp-card { position: relative; padding-block: 14px 8px; padding-inline: 16px 12px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--lib-line, var(--line)); transition: box-shadow calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-card:hover, .rwp-card:focus-within { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.rwp-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; }
+.rwp-stack { display: flex; align-items: center; width: 116px; padding-inline-start: 8px; }
+.rwp-tile { display: grid; place-items: center; width: 28px; height: 28px; margin-inline-start: -8px; border-radius: 6px; background: var(--sheet, var(--surface)); box-shadow: 0 0 0 2px var(--sheet, var(--surface)), inset 0 0 0 1px var(--lib-line, var(--line)); }
+.rwp-tile-more { font: 500 11px/1 var(--font-ui); color: var(--lib-quiet, var(--text-3)); background: var(--lib-hover); }
+.rwp-card-text { min-width: 0; }
+.rwp-card-title { display: flex; align-items: center; gap: 8px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 14px/20px var(--font-ui); letter-spacing: 0; color: var(--lib-text, var(--text-1)); }
+.rwp-kept { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--lib-quiet, var(--text-3)); }
+.rwp-card-meta { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-card-actions { display: flex; align-items: center; gap: 4px; }
+.rwp-card-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.rwp-toggle { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding-inline: 6px 8px; margin-inline-start: -6px; border: 0; border-radius: 4px; background: none; font: 500 12px/16px var(--font-ui); color: var(--lib-muted, var(--text-2)); cursor: default; transition: background-color calc(120ms * var(--rwp-speed)) var(--rwp-ease), color calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-toggle:hover { background: var(--lib-hover); color: var(--lib-text, var(--text-1)); }
+.rwp-toggle:focus-visible, .rwp-state:focus-visible, .rwp-tab:focus-visible { outline: 2px solid var(--lib-ring, var(--focus-ring-color, var(--accent))); outline-offset: -2px; }
+.rwp-chevron { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: rotate calc(140ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-toggle[aria-expanded='true'] .rwp-chevron { rotate: 90deg; }
+
+/* earlier states of the window: one is chosen, and the card shows and restores that one */
+.rwp-states { list-style: none; margin-block: 8px 0; margin-inline: -8px -4px; padding: 8px 0 0; position: relative; }
+.rwp-states::before, .rwp-tabs::before { content: ''; position: absolute; inset-inline: 8px 4px; top: 0; height: 1px; background: var(--lib-line, var(--line)); }
+.rwp-state { display: grid; grid-template-columns: 14px auto minmax(0, 1fr); align-items: center; column-gap: 10px; width: 100%; height: 32px; padding-inline: 16px 8px; border: 0; border-radius: 4px; background: none; text-align: start; font: 400 12px/16px var(--font-ui); color: var(--lib-muted, var(--text-2)); cursor: default; transition: background-color calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-state:hover { background: var(--lib-hover); }
+.rwp-state[aria-checked='true'] { color: var(--lib-text, var(--text-1)); }
+.rwp-radio { width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-strong); transition: box-shadow calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-state[aria-checked='true'] .rwp-radio { box-shadow: inset 0 0 0 1.5px var(--lib-text, var(--text-1)), inset 0 0 0 4px var(--sheet, var(--surface)), inset 0 0 0 8px var(--lib-text, var(--text-1)); }
+.rwp-state-when { white-space: nowrap; }
+.rwp-state-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lib-quiet, var(--text-3)); }
+
+/* the tabs of the chosen state */
+.rwp-tabs { position: relative; margin-block: 8px 0; margin-inline: -8px -4px; padding-top: 8px; }
+.rwp-note { margin-block: 4px; margin-inline: 16px 8px; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-block + .rwp-block { margin-top: 8px; }
+.rwp-block-head { display: flex; align-items: center; gap: 8px; height: 28px; padding-inline: 16px 8px; font: 500 12px/16px var(--font-ui); color: var(--lib-muted, var(--text-2)); }
+.rwp-block-head .rwp-swatch { margin-right: 0; vertical-align: 0; }
+.rwp-block-count { font-weight: 400; color: var(--lib-quiet, var(--text-3)); }
+.rwp-block-head .acira-button { margin-inline-start: auto; margin-inline-end: -4px; }
+.rwp-tab { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; align-items: center; column-gap: 10px; width: 100%; height: 32px; padding-inline: 16px 8px; border: 0; border-radius: 4px; background: none; text-align: start; color: var(--lib-text, var(--text-1)); cursor: default; transition: background-color calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-tab:hover, .rwp-tab:focus-visible { background: var(--lib-hover); }
+.rwp-tab[data-open] { color: var(--lib-muted, var(--text-2)); }
+.rwp-tab[data-open] :is(.rw-favicon, .rw-mark) { opacity: .7; }
+.rwp-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/20px var(--font-ui); }
+.rwp-tab[data-open] .rwp-tab-title { font-weight: 450; }
+.rwp-tab-host { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet, var(--text-3)); }
+.rwp-tab-hint { min-width: 44px; text-align: end; font: 500 12px/16px var(--font-ui); color: var(--lib-muted, var(--text-2)); opacity: 0; transition: opacity calc(120ms * var(--rwp-speed)) var(--rwp-ease); }
+.rwp-tab:is(:hover, :focus-visible) .rwp-tab-hint, .rwp-tab[data-open] .rwp-tab-hint { opacity: 1; }
+.rwp-tab[data-open] .rwp-tab-hint { opacity: .64; }
+
+@media (max-width: 760px) {
+  .rwp-card-head { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .rwp-stack { grid-column: 1 / -1; }
+  .rwp-chip { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .rwp-menu, .rwp-chevron { animation: none; transition: none; } }
+.app[data-reduced-motion='true'] .rwp-menu { animation: none; }
+.app[data-reduced-motion='true'] .rwp-chevron { transition: none; }
+@media (forced-colors: active) {
+  .rwp-card { outline: 1px solid CanvasText; }
+  .rwp-tab:hover, .rwp-state:hover { outline: 1px solid Highlight; }
+  .rwp-tab-hint { opacity: 1; }
+}

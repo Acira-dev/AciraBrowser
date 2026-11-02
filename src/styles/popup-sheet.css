@@ -1,0 +1,48 @@
+/* One reversible clock projects onto actual compositor opacity/transform
+   keyframes. No inherited custom property is animated or restyled per frame. */
+.sheet-popup .popup-sheet-plane{position:absolute;inset:-24px;border-radius:inherit;pointer-events:none;
+ opacity:0;transform:none;transform-origin:var(--formation-origin,50% 50%)}
+.sheet-popup:not([data-formation-ready]) .popup-sheet-plane{will-change:opacity,transform}
+/* Frost that lands before the reveal is simply there; frost that lands while the sheet condenses crossfades in on the
+   formation's own curve, finishing with the motion (never a switch-on after it). */
+.sheet-popup[data-preparing] .popup-captured-material{transition:none}
+.sheet-popup .popup-sheet-material{position:absolute;inset:0;border-radius:inherit;pointer-events:none;mask-image:none}
+.sheet-popup .popup-contents{pointer-events:auto}
+.sheet-popup .popup-backdrop-clip{position:absolute;inset:24px;overflow:hidden;border-radius:inherit;pointer-events:none}
+.sheet-popup .popup-backdrop-base,.sheet-popup .popup-captured-material{position:absolute;inset:0;pointer-events:none}
+.sheet-popup .popup-captured-material{opacity:0;transition:opacity calc(.18s * var(--motion-scale,1)) cubic-bezier(.23,1,.32,1)}
+.sheet-popup .popup-captured-material[data-shown]{opacity:1}
+.sheet-popup .popup-backdrop-sources{position:absolute;inset:-64px;filter:blur(32px);pointer-events:none}
+.sheet-popup .popup-backdrop-video{position:absolute;max-width:none;object-fit:fill;pointer-events:none}
+.sheet-popup .popup-backdrop-tint{position:absolute;inset:0;pointer-events:none}
+/* Sharp rows are readable on frame one. Their own opacity/transform layers
+   resolve the final 18%; a fixed-blur copy supplies restrained vapor. */
+/* At rest nothing is filtered or scaled: text is rasterized crisp at its true size. */
+.sheet-popup .popup-body-content[data-measuring]>[data-sheet-item],.sheet-popup .popup-body-content[data-measuring] :is(.menu-row,.acira-menu-row,.tab-result-row,.palette-row,[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],hr,p,label,details){transform:none!important}
+.sheet-popup[data-formation-ready=true] .popup-sheet-plane,.sheet-popup[data-formation-ready=true] [data-sheet-item]{opacity:1;filter:none;transform:none}
+.sheet-popup[data-formation-ready=true] .popup-contents{filter:none}
+/* The plane carries opacity, focus and scale for material and text together; the material layer must not repeat them. */
+.app .acira-popup-surface.sheet-popup .popup-sheet-plane .popup-sheet-material,.app .acira-popup-surface.sheet-popup .popup-sheet-plane .popup-material{opacity:1;filter:none;transform:none}
+
+/* Menu pick (founder videos, 25 Oct; the macOS pattern): the picked row blinks its highlight once over 80ms before its
+   action runs and the menu fades. Keyboard picks (Enter) run at once. */
+.sheet-popup [data-picked]{animation:sheet-pick 80ms linear both}
+@keyframes sheet-pick{0%,100%{background-color:var(--menu-hover)}40%,60%{background-color:transparent}}
+
+/* The vapor (round 2, the signature open): a copy of the content pinned to the content's box whose rows each carry a fixed
+   4px blur and fade out on the row cascade as the sharp rows form (SheetPopupSurface cascade). Its blur never animates. */
+.sheet-popup .popup-vapor{z-index:2;pointer-events:none}
+
+/* The whole silhouette is present from the first frame: the material never clips or wipes, it condenses (opacity and
+   scale only) while the rows vapor in. The layers that move get their own compositor layers while forming. */
+.sheet-popup:not([data-formation-ready]) :is(.popup-sheet-material,.popup-sheet-mist){will-change:opacity,transform}
+/* A local sheet's glass is a backdrop-filter. A partly transparent, clipped or will-change:opacity ancestor is a backdrop root and
+   hides the page from it (the frost only arrived once the sheet had formed), so its plane and material wrapper only ever move;
+   the opacity and aperture of the formation ride on the text and mist beside the glass (SheetPopupSurface). */
+.sheet-popup[data-material-provider=css] .popup-sheet-plane{opacity:1;will-change:transform}
+.sheet-popup[data-material-provider=css] .popup-sheet-material{will-change:auto}
+/* Mode switches (the Seamless reveals: `edge`; the sidebar and toolbar layout: `layout`) run a view transition that lifts the page
+   into its own layers, above the rest of the window. Those layers would cover a local sheet (and its toast) for the whole switch, so
+   while one is open the page stays in the window's layer, where the sheet and its frost are. */
+:root[data-mode-switch] .app:has(.local-overlay-scrim) :is(.page-area,.page-content){view-transition-name:none!important}
+.app .toolbar-tab-overview[aria-expanded=true]{background:var(--frame-selection-bg,var(--hover));color:var(--frame-selection-fg,var(--text))}

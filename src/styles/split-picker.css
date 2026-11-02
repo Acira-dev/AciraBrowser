@@ -1,0 +1,102 @@
+/* Split picker (Round 2, founder: glassy, "much like the Windows one", clean, smooth and sharp, in our style;
+   components/SplitPicker.tsx). It is made of A's popup material: the card and the preview panes are --glass frosted with
+   the popups' 32px blur, A's 1px rim and the popover shadow, radius 8 (thumbnails 6), with crisp 1px cell outlines.
+   The page underneath takes the centred panels' scrim (black 20% light / 35% dark) and a soft blur. The hovered cell
+   fills with the accent, and one highlight glides between cells; the preview across the page uses the same glass. */
+.app .split-picker-layer{position:absolute;inset:0;z-index:6;pointer-events:none;overflow:hidden;
+ --split-rim:var(--elevation-rim,inset 0 0 0 1px rgb(var(--ink,0 0 0) / .14));--split-outline:rgb(var(--ink,0 0 0) / .2);--split-cell:rgb(var(--ink,0 0 0) / .09);--split-scrim:rgb(0 0 0 / .2);
+ --split-tint:color-mix(in srgb,var(--glass) 62%,transparent);--split-well:rgb(var(--ink,0 0 0) / .06);--split-sheen:rgb(255 255 255 / .34);
+ --split-hairline:inset 0 0 0 1px rgb(var(--ink,0 0 0) / .12),inset 0 1px 0 rgb(255 255 255 / .35);--split-shadow:0 0 0 .5px rgb(0 0 0 / .16),0 22px 44px -14px rgb(0 0 0 / .34),0 6px 14px -6px rgb(0 0 0 / .18)}
+.app[data-chrome=dark] .split-picker-layer{--split-outline:rgb(255 255 255 / .22);--split-cell:rgb(255 255 255 / .08);--split-scrim:rgb(0 0 0 / .35);
+ --split-tint:color-mix(in srgb,var(--glass) 52%,transparent);--split-well:rgb(0 0 0 / .22);--split-sheen:rgb(255 255 255 / .12);
+ --split-hairline:inset 0 0 0 1px rgb(255 255 255 / .14),inset 0 1px 0 rgb(255 255 255 / .2);--split-shadow:0 0 0 .5px rgb(0 0 0 / .5),0 24px 48px -14px rgb(0 0 0 / .6),0 8px 16px -8px rgb(0 0 0 / .4)}
+.app .split-picker-still{position:absolute;object-fit:cover;user-select:none}
+/* The blur is fixed; only the veil's own opacity fades it in and out. It frosts the stills under it. */
+.app .split-picker-veil{position:absolute;inset:0;background:var(--split-scrim);-webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);will-change:opacity}
+
+/* The card: a popup in all but name. */
+/* R3-25 real glass: a translucent tint over a live blur that keeps the page's colour (saturate), a hairline with a top light edge, a soft layered shadow; a sheen falls from the top edge. */
+.app .split-picker-card{position:absolute;border-radius:var(--geometry-materialRadius,8px);background:var(--split-tint);-webkit-backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.55);backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.55);box-shadow:var(--split-hairline),var(--split-shadow);transform-origin:50% 0;will-change:transform,opacity}
+.app .split-picker-card::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,var(--split-sheen),transparent 46%)}
+.app .split-picker-title{position:absolute;top:9px;left:12px;right:12px;text-align:center;font:500 12px/16px var(--font-ui,inherit);color:var(--popup-muted,color-mix(in srgb,var(--ed-ink,currentColor) 64%,transparent));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Each layout is a glass well: recessed (inner shadow above, a light lip below), its panes raised inside it. */
+.app .split-picker-thumb{position:absolute;border-radius:6px;background:var(--split-well);box-shadow:inset 0 1px 3px rgb(0 0 0 / .3),inset 0 -1px 0 rgb(255 255 255 / .1),inset 0 0 0 1px var(--split-outline);transition:box-shadow calc(140ms*var(--motion-scale,1)) var(--ease-out,cubic-bezier(.2,0,0,1))}
+.app .split-picker-thumb[data-active]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent,#3b82f6) 70%,transparent)}
+.app .split-picker-cell{position:absolute;border-radius:3px;background:var(--split-cell);box-shadow:inset 0 0 0 1px var(--split-outline),inset 0 1px 0 rgb(255 255 255 / .12)}
+.app .split-picker-highlight{position:absolute;z-index:1;border-radius:3px;background:var(--accent,#3b82f6);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent,#3b82f6) 70%,#000),0 2px 6px -2px color-mix(in srgb,var(--accent,#3b82f6) 60%,transparent)}
+/* In light the solid accent outweighed everything on screen (A): 88% with the preview's 1.5px ring, closer to Snap. */
+.app:not([data-chrome=dark]) .split-picker-highlight{background:color-mix(in srgb,var(--accent,#3b82f6) 88%,transparent);box-shadow:inset 0 0 0 1.5px var(--accent,#3b82f6),0 2px 6px -2px color-mix(in srgb,var(--accent,#3b82f6) 45%,transparent)}
+
+/* The preview across the page: the same glass, the dragged tab's pane tinted with the accent. */
+.app .split-picker-preview{position:absolute;inset:0}
+.app .split-picker-pane{position:absolute;display:grid;place-items:center;min-width:0;min-height:0;border-radius:var(--geometry-materialRadius,8px);background:var(--glass);-webkit-backdrop-filter:blur(var(--frost-blur,32px));backdrop-filter:blur(var(--frost-blur,32px));box-shadow:var(--split-rim),var(--shadow-popover,0 10px 28px -14px rgb(0 0 0 / .35))}
+.app .split-picker-pane[data-new]{background:color-mix(in srgb,var(--accent,#3b82f6) 16%,var(--glass));box-shadow:inset 0 0 0 1.5px var(--accent,#3b82f6),var(--shadow-popover,0 14px 34px -14px rgb(0 0 0 / .35))}
+.app .split-picker-pane-label{display:inline-flex;align-items:center;gap:8px;max-width:calc(100% - 24px);height:28px;padding:0 12px 0 10px;border-radius:6px;background:var(--glass);box-shadow:var(--split-rim);font:500 12.5px/16px var(--font-ui,inherit);color:var(--ed-ink,currentColor)}
+.app .split-picker-pane-label>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* R4-40 the in-place zone for a tab dropped on a pane: the glass of the picker's preview pane in the accent, over where the dropped page would sit. */
+.app .split-pane-zone{position:absolute;display:grid;place-items:center;min-width:0;min-height:0;border-radius:var(--geometry-materialRadius,8px);background:color-mix(in srgb,var(--accent,#3b82f6) 16%,var(--split-tint));-webkit-backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);box-shadow:inset 0 0 0 1.5px var(--accent,#3b82f6),var(--split-shadow);will-change:left,top,width,height,opacity}
+.app.opaque-glass .split-pane-zone{background:color-mix(in srgb,var(--accent,#3b82f6) 16%,var(--overlay));-webkit-backdrop-filter:none;backdrop-filter:none}
+@media (forced-colors:active){.app .split-pane-zone{background:Highlight}}
+/* R5 the live layout preview while a pane is dragged by its ribbon (SplitRibbon.tsx SplitPaneDragLayer): the panes are frames on the page's own backdrop,
+   each its ribbon over a still of its page; the frames glide to the boxes the release would give (transforms only: a frame is laid out once per re-flow
+   and carried by its transform; ribbon, still and caption are scaled back). Once the drag is under way a frame reads as a box (data-look=box: its still
+   dims under the sheet, a hairline and the soft shadow); the dragged pane's frame is ringed in the accent with a light accent wash. When the drag ends
+   (drop or Esc) the frames turn back into the page (full still) before the pages return. The pointer carries the pane's icon on the tab chip. */
+.app .split-drag-layer{background:var(--surface-alt,var(--frame,transparent))}
+.app .split-drag-frame{position:absolute;left:0;top:0;overflow:hidden;contain:layout paint;transform-origin:0 0;will-change:transform;backface-visibility:hidden;border-radius:var(--geometry-materialRadius,8px);background:var(--sheet,var(--glass));transition:box-shadow calc(140ms*var(--motion-scale,1)) var(--ease-out,ease-out)}
+.app .split-drag-frame[data-source]{z-index:2}
+.app .split-drag-frame[data-look=box]{box-shadow:var(--split-shadow)}
+.app .split-drag-frame::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;box-shadow:var(--split-hairline);transition:opacity calc(140ms*var(--motion-scale,1)) var(--ease-out,ease-out)}
+.app .split-drag-frame[data-source]::after{background:color-mix(in srgb,var(--accent,#3b82f6) 12%,transparent);box-shadow:inset 0 0 0 1.5px var(--accent,#3b82f6)}
+.app .split-drag-frame[data-look=box]::after{opacity:1}
+.app .split-drag-frame-still{position:absolute;left:0;top:0;display:block;max-width:none;object-fit:cover;object-position:top left;transform-origin:0 0;user-select:none;transition:opacity calc(160ms*var(--motion-scale,1)) var(--ease-out,ease-out)}
+.app .split-drag-frame[data-look=box]>.split-drag-frame-still{opacity:.55}
+.app .split-drag-frame:not([data-look=box])>.split-drag-frame-caption{opacity:0}
+.app .split-drag-frame[data-look=box][data-source]>.split-drag-frame-still{opacity:.3}
+.app .split-drag-frame>.split-drag-frame-ribbon{right:auto;z-index:1;transform-origin:0 0;cursor:default}
+.app .split-drag-frame-caption{position:absolute;left:50%;top:50%;z-index:1;transition:opacity calc(120ms*var(--motion-scale,1)) var(--ease-out,ease-out);max-width:80%;height:26px;padding:0 10px;border-radius:6px;transform-origin:50% 50%;background:var(--glass);box-shadow:var(--split-hairline);font:500 12px/26px var(--font-ui,inherit);color:var(--popup-muted,color-mix(in srgb,var(--ed-ink,currentColor) 64%,transparent));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app.opaque-glass .split-drag-frame-caption{background:var(--overlay)}
+/* A pane drag: the layout card waits above the page; this pill at the top centre says so. It takes no input (the panes stay drop zones under it).
+   R5: it lights as the pointer comes near (--reach, 0 from 180 px to 1 on it; an accent wash and ring that only fade), and the carried chip sticks to it. */
+.app .split-picker-dock-hint::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:var(--reach,0);background:color-mix(in srgb,var(--accent,#3b82f6) 22%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent,#3b82f6) 60%,transparent),0 0 0 3px color-mix(in srgb,var(--accent,#3b82f6) 16%,transparent);will-change:opacity}
+.app .split-picker-dock-hint{isolation:isolate}
+.app .split-picker-dock-hint{position:absolute;top:10px;left:50%;z-index:3;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;max-width:calc(100% - 32px);height:26px;padding:0 10px 0 8px;border-radius:6px;background:var(--split-tint);-webkit-backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);box-shadow:var(--split-hairline),var(--split-shadow);font:500 12px/16px var(--font-ui,inherit);color:var(--popup-muted,color-mix(in srgb,var(--ed-ink,currentColor) 64%,transparent));pointer-events:none;white-space:nowrap}
+.app .split-picker-dock-hint>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.app.opaque-glass .split-picker-dock-hint{background:var(--overlay);-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* R3-23/R3-26 the carried tab: out of the strip the pill becomes its site icon on a small glass chip (useTabDragSurface sets --chip-p, 0 pill to 1 chip, and the box); the title and close button leave first. */
+.app .tab-drag-preview{isolation:isolate}
+.app .tab-drag-preview>:not(:first-child){opacity:max(0,calc(1 - var(--chip-p,0) * 2.4))}
+.app .tab-drag-preview::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:var(--chip-p,0);background:var(--split-tint,var(--glass));-webkit-backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);box-shadow:inset 0 0 0 1px rgb(var(--ink,0 0 0)/.14),0 10px 24px -10px rgb(0 0 0/.45)}
+.app.opaque-glass .tab-drag-preview::before{background:var(--overlay);-webkit-backdrop-filter:none;backdrop-filter:none}
+/* The same chip for drags with no strip pill (a sidebar row): the cloned icon centred on the glass, transform and opacity only. */
+.app .tab-drag-chip{display:grid;place-items:center;border-radius:8px;transform-origin:50% 50%;color:var(--text,currentColor)}
+.app .tab-drag-chip>*{width:16px;height:16px;display:grid;place-items:center}
+
+/* R3-26 the morph between split layouts (SplitMorphLayer): boxes move and reshape with transforms only; a page that is still just a tile shows its title on a glass wash. */
+.app .split-morph-layer{z-index:7;background:var(--surface-alt,var(--frame,transparent))}
+.app .split-morph-box{position:absolute;left:0;top:0;overflow:hidden;contain:layout paint;will-change:transform,opacity;backface-visibility:hidden}
+.app .split-morph-still{display:block;max-width:none;object-fit:cover;object-position:top left;user-select:none}
+.app .split-morph-tile{position:relative;overflow:hidden;background:color-mix(in srgb,var(--glass) 94%,transparent);box-shadow:var(--split-hairline)}
+.app .split-morph-tile[data-arriving]>.split-morph-still{position:absolute;inset:0;width:100%;height:100%}
+.app .split-morph-tile>.split-picker-pane-label{position:absolute;left:0;top:0;z-index:1;height:28px;padding:0 12px 0 6px;background:transparent;box-shadow:none}
+.app.opaque-glass .split-morph-tile{background:var(--overlay)}
+
+/* Opaque glass (reduced transparency, or the user's choice): A's opaque material, no blur. */
+.app.opaque-glass :is(.split-picker-card,.split-picker-pane,.split-picker-pane-label){background:var(--overlay);-webkit-backdrop-filter:none;backdrop-filter:none}
+.app.opaque-glass .split-picker-veil{-webkit-backdrop-filter:none;backdrop-filter:none}
+.app.opaque-glass .split-picker-pane[data-new]{background:color-mix(in srgb,var(--accent,#3b82f6) 16%,var(--overlay))}
+/* R3-77/R3-80/R4-28 liquid snap (ui/liquidSnap.ts): near a drop target the chip and the target become one liquid surface, drawn
+   on one small WebGL layer (a transparent fixed canvas sized to the chip and the target, shown only then; no blur, no filter,
+   nothing full-window) in exactly the chip's own fill (R5: no light, rim, gradient or accent tint; the neck grows out of the
+   plate's whole face and only its edge is a little soft) with the chip's soft shadow fading as it merges. While it is drawn there,
+   the chip's CSS plate fades out (--liquid-on) and an owned picker cell's own paint steps aside (data-liquid), so nothing is
+   painted twice; the icon is never scaled. */
+.app .liquid-layer{position:fixed;left:0;top:0;z-index:999;pointer-events:none;visibility:hidden;transform-origin:0 0;will-change:transform}
+.app .split-picker-cell[data-liquid]{background:transparent;box-shadow:none}
+/* R5: the highlight steps aside only for the targeted cell the liquid is drawing (lit at once, below); a target the liquid is not on keeps it. */
+.app .split-picker-card:has(.split-picker-cell[data-liquid][data-hover]) .split-picker-highlight{opacity:0}
+.app .tab-drag-preview::before{opacity:calc(var(--chip-p,0) * (1 - var(--liquid-on,0)));transform:rotate(var(--liquid-rot,0rad)) scale(var(--liquid-sx,1),var(--liquid-sy,1)) rotate(calc(-1 * var(--liquid-rot,0rad)))}
+@media (prefers-reduced-transparency:reduce){.app .split-picker-veil{-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (forced-colors:active){.app .split-picker-highlight,.app:not([data-chrome=dark]) .split-picker-highlight,.app .split-picker-pane[data-new]{background:Highlight}.app .split-picker-card{border:1px solid CanvasText}}

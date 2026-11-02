@@ -1,0 +1,67 @@
+/* The shared acrylic/AppKit frame (A, round 2; founder: "one frame colour wherever it should be one surface", and a toolbar colour of its own).
+   Tokens come from semanticColors: --sidebar-* (the finish unless a sidebar colour is chosen), --toolbar-* (a toolbar
+   colour, else the chrome) and the glass veils --chrome-veil-top/-bottom and --toolbar-veil. Rules start from
+   :root:root so they settle the older frost-preview, toolbar and sidebar rules without !important. The ink sets repeat
+   frost-preview's derived names because custom properties resolve where they are declared (.browser-shell). */
+
+/* Sidebar open: the sidebar, the band above the page card, the strip below it and the margin beside it are ONE surface
+   in the sidebar's colour — one veil over the window, never two colours meeting at the sidebar's edge. "Open" is the
+   sidebar standing in its column: docked, or peeking from the left edge in Full and Compact (that peek pushes the page over and
+   looks docked; founder P0 27 Oct: its toolbar stayed raised, a lighter, greyer band beside the sidebar). Only a peek that floats
+   over the page ([data-edge-float], Seamless) is a card of its own. App's sidebarOnFrame says the same for the page card.
+   With the tabs in the sidebar (Normal with side tabs, Compact, Compact's expanded toolbar) the frame is worn before the sidebar
+   opens too, so the band does not change colour as the sidebar arrives or the toolbar expands. Focus wears it as well: its
+   top bar is the same band as with the sidebar (founder, 30 Oct), not a raised tab surface. */
+:root:root:root:is([data-material=acrylic],[data-material=vibrancy]):not([data-edge-float]) .app.style-acira:not(.native-layer):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) {
+  background: linear-gradient(180deg, rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-top)), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-bottom)));
+}
+/* Inactive window or transparency off (acrylic's flat grey): the same frame as an opaque finish tone with the top lift. */
+:root:root:root[data-material=acrylic]:is([data-window-active=false], [data-system-transparency=off]):not([data-edge-float]) .app.style-acira:not(.native-layer):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) {
+  background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--sidebar-rgb, var(--chrome-rgb))) 96%, #fff), rgb(var(--sidebar-rgb, var(--chrome-rgb))) 120px), rgb(var(--sidebar-rgb, var(--chrome-rgb)));
+}
+:root:root:root:not(:is([data-material=acrylic],[data-material=vibrancy])):not([data-edge-float]) .app.style-acira:not(.native-layer):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) {
+  background: rgb(var(--sidebar-rgb, var(--chrome-rgb)));
+}
+/* The toolbar sits on that frame in sidebar mode, so it takes the frame's ink and states. */
+:root:root:root:not([data-edge-float]) .app.style-acira:not([data-toolbar-color]):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) .browser-shell > .browser-toolbar.acira-persistent-toolbar {
+  color: var(--sidebar-ink);
+  --chrome-fg: var(--sidebar-ink); --chrome-ink: var(--sidebar-ink-rgb); --ink: var(--sidebar-ink-rgb);
+  --text-primary: var(--sidebar-ink); --ed-ink: var(--sidebar-ink); --text: var(--sidebar-ink); --frame-text: var(--sidebar-ink); --frame-hover-text: var(--sidebar-ink);
+  --chrome-text-secondary: var(--sidebar-muted); --text-secondary: var(--sidebar-muted); --text-placeholder: var(--sidebar-muted); --ed-muted: var(--sidebar-muted); --muted: var(--sidebar-muted); --frame-muted: var(--sidebar-muted);
+  --chrome-icon: var(--sidebar-muted); --ed-icon: var(--sidebar-muted);
+  --chrome-hover: var(--sidebar-hover); --ed-hover: var(--sidebar-hover); --frame-hover: var(--sidebar-hover);
+  --frame: rgb(var(--sidebar-rgb, var(--chrome-rgb)));
+}
+/* With the sidebar open the toolbar has no surface of its own; with the tabs in the sidebar it keeps none while the sidebar is away. */
+:root:root:root:not([data-edge-float]) .app.style-acira:not([data-toolbar-color]):has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus)) .browser-shell > .browser-toolbar.acira-persistent-toolbar { background: transparent; }
+/* On that frame the address field's backdrop is only the frame's own veil, so its CSS blur painted the veil a second time (a darker
+   field once the sidebar opened), and a view transition draws a captured backdrop over the field's whole morphing box: a dark block
+   beside the field as it glides. The native material is the glass here, as acrylic's is (frost-preview.css). */
+:root:root:root[data-material=vibrancy]:not([data-edge-float]) .app.style-acira:is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) .browser-shell .address-bar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* A toolbar colour (Settings › Appearance, C). The toolbar, the selected tab joined to it and the bookmarks row are one
+   surface (B's --tab-surface), so the colour goes on that surface inside the shell: glass at its own veil while the
+   acrylic shows, solid when it doesn't. The sidebar's own current row keeps its card. Private and Tor windows keep their
+   own finish (App drops the attribute there); a private tab's tint still mixes into it. */
+:root:root .app.style-acira[data-toolbar-color] .browser-shell {
+  --tab-surface: rgb(var(--toolbar-rgb) / var(--toolbar-veil));
+}
+:root:root[data-material=acrylic]:is([data-window-active=false], [data-system-transparency=off]) .app.style-acira[data-toolbar-color] .browser-shell,
+:root:root:not(:is([data-material=acrylic],[data-material=vibrancy])) .app.style-acira[data-toolbar-color] .browser-shell {
+  --tab-surface: rgb(var(--toolbar-rgb));
+}
+:root:root .app.style-acira[data-toolbar-color] .browser-shell > :is(.browser-toolbar.acira-persistent-toolbar, .acira-bookmarks-row),
+:root:root .app.style-acira[data-toolbar-color] .browser-shell .tab-strip-container .browser-tab.selected {
+  color: var(--toolbar-ink);
+  --chrome-fg: var(--toolbar-ink); --chrome-ink: var(--toolbar-ink-rgb); --ink: var(--toolbar-ink-rgb);
+  --text-primary: var(--toolbar-ink); --ed-ink: var(--toolbar-ink); --text: var(--toolbar-ink); --frame-text: var(--toolbar-ink); --frame-hover-text: var(--toolbar-ink); --frame-selection-fg: var(--toolbar-ink);
+  --chrome-text-secondary: var(--toolbar-muted); --text-secondary: var(--toolbar-muted); --text-placeholder: var(--toolbar-muted); --ed-muted: var(--toolbar-muted); --muted: var(--toolbar-muted); --frame-muted: var(--toolbar-muted);
+  --chrome-icon: var(--toolbar-muted); --ed-icon: var(--toolbar-muted);
+  --chrome-hover: var(--toolbar-hover); --ed-hover: var(--toolbar-hover); --frame-hover: var(--toolbar-hover);
+  --input-fill: rgb(var(--toolbar-ink-rgb) / .08); --input-hover: rgb(var(--toolbar-ink-rgb) / .11); --input-edge: rgb(var(--toolbar-ink-rgb) / .1); --ed-line: rgb(var(--toolbar-ink-rgb) / .12);
+  --frame: rgb(var(--toolbar-rgb)); /* the tab-count badge and its ring sit on the toolbar's colour */
+}
+/* In sidebar mode the toolbar otherwise sits clear on the frame (G); with a colour it wears it. */
+:root:root:root:root:not([data-edge-float]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell > .browser-toolbar.acira-persistent-toolbar {
+  background: var(--tab-surface);
+}

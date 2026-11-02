@@ -1,0 +1,70 @@
+/* One quiet control language inside Acira's existing frosted popover. */
+.appearance-panel{padding:0;color:var(--text)}
+.appearance-section{margin:0 0 8px}
+.appearance-section h3,.appearance-section-heading>h3{margin:0;font-size:11px;font-weight:600;line-height:16px;letter-spacing:.02em;color:var(--muted)}
+.appearance-section>h3,.appearance-section-heading{margin-bottom:9px}
+.appearance-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.appearance-section-heading>span{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.app .appearance-mode-picker{isolation:isolate;position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;width:100%;min-width:0;height:32px;padding:2px;border:1px solid color-mix(in srgb,var(--text) 9%,transparent);border-radius:6px;background:color-mix(in srgb,var(--text) 5%,transparent)}
+.appearance-mode-indicator{position:absolute;z-index:-1;top:2px;bottom:2px;left:2px;width:calc((100% - 4px)/3);border-radius:4px;background:var(--surface);box-shadow:0 1px 3px #00000012,inset 0 0 0 .5px color-mix(in srgb,var(--text) 6%,transparent);transform:translateX(calc(var(--mode-index)*100%));transition:transform 200ms cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.app .appearance-mode-picker>button{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding:0 4px;border:0;border-radius:4px;background:transparent;color:var(--muted);font:inherit;font-size:12px;line-height:1;font-weight:500;white-space:nowrap;cursor:default}
+.app .appearance-mode-picker>button>svg{flex:none;width:16px;height:16px}
+.app .appearance-mode-picker>button[aria-checked=true]{color:var(--text)}
+.app .appearance-mode-picker>button:hover{color:var(--text)}
+.app .appearance-mode-picker>button:focus-visible{outline:2px solid var(--selection-marker);outline-offset:-1px}
+/* In the popup the three segments size to their label (de "Automatisch" with its icon was 5px from the picker's edge) and keep 8px either side (R3-B09). */
+.app .appearance-panel .appearance-mode-picker{grid-template-columns:repeat(3,minmax(max-content,1fr))}
+.app .appearance-panel .appearance-mode-picker>button{padding:0 8px}
+.appearance-custom-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:-1px 0 14px;font-size:12px;font-weight:500}
+.appearance-color-field{display:flex;align-items:center;gap:8px;min-width:0}
+.appearance-color-well{position:relative;display:block;flex:0 0 36px;width:36px;height:30px;padding:4px;border:1px solid color-mix(in srgb,var(--text) 16%,transparent);border-radius:6px;background:color-mix(in srgb,var(--surface) 72%,transparent);box-shadow:inset 0 1px #ffffff16}
+.appearance-color-well>span{display:block;width:100%;height:100%;border-radius:4px;background:var(--well-color);box-shadow:inset 0 0 0 .5px #0000001a;pointer-events:none}
+.app .appearance-color-well>input[type=color]{position:absolute;inset:0;width:100%;height:100%;padding:0;margin:0;opacity:0;cursor:default}
+.appearance-color-well:has(input:focus-visible){outline:2px solid var(--selection-marker);outline-offset:2px}
+.app .appearance-hex{display:block;width:82px;min-width:0;height:30px;padding:0 8px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;background:color-mix(in srgb,var(--surface) 55%,transparent);color:var(--text);font:12px/1.2 var(--font-ui);font-variant-numeric:tabular-nums;outline:none}
+.app .appearance-hex:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
+.appearance-preferences{padding:4px 0}
+.appearance-preferences>label{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:32px;padding:0 8px 0 32px;font-size:13px;cursor:default}
+/* Window opacity: the label and its value share one line and the slider takes the full width beneath, so a long label in any language (fr "Opacité de la fenêtre") never wraps or squeezes the slider (R3-B02). */
+.appearance-preferences>.appearance-opacity{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label value" "slider slider";align-items:center;gap:2px 12px;min-height:0;padding:6px 8px 6px 32px}
+/* The switch rows carry no icon: drop the empty icon slot so their labels sit on the same 32px text edge as Window opacity and Open settings (R3-B03). */
+.appearance-preferences .menu-toggle>.menu-toggle-blank{display:none}
+.appearance-opacity>span{grid-area:label;min-width:0}
+.appearance-opacity output{grid-area:value;min-width:34px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.app .appearance-opacity input[type=range]{appearance:none;grid-area:slider;width:100%;height:16px;margin:0;background:transparent;cursor:default}
+.app .appearance-opacity input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent) var(--opacity-progress,0%),color-mix(in srgb,var(--text) 16%,transparent) var(--opacity-progress,0%))}
+/* Right to left: the thumb already mirrors with the popup's direction, so the filled part grows from the right (R3-B11). */
+.app .appearance-opacity input[type=range]:dir(rtl)::-webkit-slider-runnable-track{background:linear-gradient(270deg,var(--accent) var(--opacity-progress,0%),color-mix(in srgb,var(--text) 16%,transparent) var(--opacity-progress,0%))}
+.app .appearance-opacity input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 22%,transparent),0 1px 3px #0000002e}
+.app .appearance-opacity input[type=range]:focus-visible{outline:2px solid var(--selection-marker);outline-offset:3px;border-radius:4px}
+@media(forced-colors:active){.app .appearance-opacity input[type=range]::-webkit-slider-runnable-track{background:CanvasText}.app .appearance-opacity input[type=range]::-webkit-slider-thumb{background:ButtonFace;box-shadow:0 0 0 1px ButtonText}}
+.app .appearance-more{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:30px;margin:4px 0 0;padding:0 8px 0 32px;border-radius:4px;color:var(--text);font-size:13px;text-align:left}
+.appearance-more:hover{background:var(--hover)}
+.appearance-more>svg{color:var(--muted)}
+.app .bs-customize>h3{margin:20px 0 11px;font-size:12px;font-weight:600;color:var(--text)}
+.app .bs-custom-color{gap:9px;margin-top:18px;font-size:12px;color:var(--muted)}
+.app .bs-custom-color>.appearance-color-field{justify-content:space-between}
+.app .bs-custom-color .appearance-hex{flex:1;max-width:180px}
+.app .bs-row .appearance-mode-picker{max-width:245px;flex:0 1 245px}
+
+
+
+
+.opaque-glass .appearance-color-well,.opaque-glass .appearance-hex{background:var(--surface)}
+@media(prefers-contrast:more){.appearance-mode-picker{outline:1px solid var(--muted)}}
+@media(prefers-reduced-motion:reduce){.appearance-mode-indicator{transition:none}}
+.app[data-reduced-motion=true] .appearance-mode-indicator{transition:none}
+
+.app .appearance-finish-value{display:flex;align-items:center;gap:9px;min-height:34px;padding:0 9px;border-radius:6px;background:color-mix(in srgb,var(--surface) 50%,transparent);color:var(--text)}
+.appearance-finish-value>i{display:block;width:21px;height:15px;border-radius:4px;box-shadow:inset 0 0 0 .5px #0000001a}
+
+
+
+
+.finish-collections{display:grid;gap:14px}
+.finish-collection>h4{margin:0 0 7px;padding:0 7px;font-size:12px;font-weight:500;color:var(--muted)}
+
+/* Menu/panel system (round 9): the mode picker spans the panel; everything else sits on the x = 36 text edge. */
+.appearance-panel>.appearance-section:first-child{padding:4px 4px 0}
+.appearance-panel>.appearance-section+.appearance-section{padding:0 8px 0 32px}
+.app .appearance-more>svg{width:12px;height:12px}

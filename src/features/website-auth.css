@@ -1,0 +1,139 @@
+/* HTTP sign-in dialog. Uses the semantic Acira tokens so it follows finish, light/dark and contrast. */
+.website-auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--scrim, rgb(0 0 0 / 0.4));
+  color: var(--text-primary, var(--text, #1f2328));
+}
+.website-auth-dialog {
+  box-sizing: border-box;
+  width: min(400px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--input-edge, rgba(0, 0, 0, 0.14));
+  border-radius: 8px;
+  background: var(--sheet, var(--surface, #fff));
+  box-shadow: 0 22px 60px rgba(10, 12, 18, 0.28), 0 2px 8px rgba(10, 12, 18, 0.1);
+  padding: 24px;
+  outline: none;
+  font: 14px/1.5 var(--font, system-ui);
+}
+.website-auth-dialog h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 520;
+  letter-spacing: -0.012em;
+  margin: 0 0 12px;
+}
+.website-auth-dialog p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--text-secondary, #5b6470);
+}
+.website-auth-queue {
+  font-size: 12px;
+  color: var(--text-2, var(--text-secondary, #5b6470));
+}
+.website-auth-origin {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 4px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  background: var(--input-fill, rgba(0, 0, 0, 0.05));
+  font: 12.5px/18px var(--mono, ui-monospace, monospace);
+  color: var(--text-primary, #1f2328);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.website-auth-realm span {
+  color: var(--text-primary, #1f2328);
+}
+.website-auth-warning {
+  position: relative;
+  margin: 8px 0;
+  padding: 0 0 0 16px;
+  color: var(--text-primary, #1f2328);
+}
+.website-auth-warning::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning, #b7791f);
+}
+.website-auth-dialog form {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.website-auth-dialog label {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--text-secondary, #5b6470);
+}
+.website-auth-dialog input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 6px;
+  border: 1px solid var(--input-edge, rgba(0, 0, 0, 0.18));
+  background: var(--input-fill, #fff);
+  color: var(--text-primary, inherit);
+  font: inherit;
+}
+.website-auth-dialog input:hover:not(:disabled) {
+  border-color: var(--input-edge-strong, var(--input-edge));
+}
+.website-auth-dialog input:focus-visible,
+.website-auth-dialog button:focus-visible {
+  outline: 2px solid var(--focus-ring, #3b6fd8);
+  outline-offset: 2px;
+}
+.website-auth-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+/* Buttons are acira-button (src/styles/buttons.css); the dialog only sets focus ring spacing. */
+.website-auth-dialog input:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+@media (max-width: 480px) {
+  .website-auth-backdrop {
+    padding: 14px;
+  }
+  .website-auth-dialog {
+    max-height: calc(100dvh - 28px);
+    padding: 18px;
+    border-radius: 14px;
+  }
+}
+@media (forced-colors: active) {
+  .website-auth-dialog,
+  .website-auth-dialog input,
+  .website-auth-dialog button {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .website-auth-warning::before {
+    background: CanvasText;
+  }
+}

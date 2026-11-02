@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Site prompt</title>
+<style>
+/* Site prompts (R3-73): everything a website asks of you, in one card. A small native view above the page (the page is a
+   native view and covers the interface), drawn here in the house style: the opaque popover tone, a hairline ring, the soft
+   layered shadow, radius 8 with 4px buttons, Geist 13. Two forms of the same card:
+   - anchored (permissions, "open this app?"): 320 wide, grows out of the site-identity icon on the aperture, never takes focus;
+   - centred (JavaScript dialogs, "Leave this site?"): 400 wide in the middle of the page, which dims behind it.
+   Text from a website is only ever set with textContent. Motion is transform, opacity and the aperture's clip-path. */
+:root{
+ --card:#1e1e22;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-3:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--line-strong:rgb(255 255 255/.16);--hover:rgb(255 255 255/.07);
+ --np-bg:#ededef;--np-fg:#16171a;--np-hover:#fff;--danger:#f0786f;--ring:#8fb0ff;--field:rgb(255 255 255/.05);--scrim:rgb(17 21 28/.34);--toggle-on:#5b86f0;
+ --shadow:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -6px rgb(0 0 0/.42);
+ --rim:inset 0 0 0 1px rgb(255 255 255/.10),inset 0 1px 0 rgb(255 255 255/.05);
+ --strong:cubic-bezier(.23,1,.32,1);color-scheme:dark;
+}
+body.light{
+ --card:#ffffff;--ink:rgb(0 0 0/.88);--ink-2:rgb(0 0 0/.61);--ink-3:rgb(0 0 0/.48);--line:rgb(0 0 0/.08);--line-strong:rgb(0 0 0/.14);--hover:rgb(0 0 0/.05);
+ --np-bg:#1d1d1f;--np-fg:#fff;--np-hover:#2a2a2e;--danger:#b3261e;--ring:#3b6eea;--field:rgb(0 0 0/.04);--scrim:rgb(17 21 28/.16);--toggle-on:#3b6eea;
+ --shadow:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.18);
+ --rim:none;color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.4 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;cursor:default}
+body[hidden]{display:none}
+#scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none}
+body.centered #scrim{pointer-events:auto}
+#wrap{position:absolute;left:0;top:0;width:320px;visibility:hidden}
+#stage{display:contents}
+/* Centred: the card sits in the middle of the page area, both ways, however the view is sized (a flex stage, so no measuring). */
+body.centered #stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;pointer-events:none}
+body.centered #wrap{position:relative;left:auto;top:auto;width:min(400px,100%);pointer-events:auto}
+#wrap.shown{visibility:visible}
+#card{position:relative;border-radius:8px;background:var(--card);box-shadow:var(--shadow),var(--rim);padding:16px}
+body.centered #card{padding:24px}
+.head{display:flex;align-items:flex-start;gap:12px}
+.fav{flex:none;width:16px;height:16px;margin-top:1px;border-radius:4px;overflow:hidden;display:grid;place-items:center;color:var(--ink-2)}
+.fav img{display:block;width:16px;height:16px;object-fit:contain}
+.fav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.fav [hidden]{display:none}
+.text{flex:1;min-width:0}
+#title{font-size:13px;line-height:18px;font-weight:450;color:var(--ink);overflow-wrap:anywhere;text-wrap:pretty}
+#title b{font-weight:600}
+body.centered #title{font-size:16px;line-height:22px;font-weight:520;letter-spacing:-.012em}
+body.centered #title b{font-weight:600}
+#detail{margin-top:4px;font-size:12px;line-height:16px;color:var(--ink-2);overflow-wrap:anywhere;white-space:pre-wrap}
+body.centered #detail{margin-top:8px;font-size:13px;line-height:20px;max-height:200px;overflow:auto;-webkit-user-select:text;user-select:text}
+#detail[hidden],#field[hidden],#mute[hidden],#foot[hidden],#note[hidden]{display:none}
+#field{display:block;width:100%;height:32px;margin:12px 0 0;padding:0 10px;border:0;border-radius:4px;background:var(--field);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font:inherit;outline:0;-webkit-user-select:text;user-select:text}
+#field:focus{box-shadow:inset 0 0 0 1px var(--ring),0 0 0 1px var(--ring)}
+#mute{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;line-height:16px;color:var(--ink-2)}
+#mute input{appearance:none;-webkit-appearance:none;flex:none;margin:0;width:14px;height:14px;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);transition:background-color 120ms cubic-bezier(.2,0,0,1)}
+#mute input:hover{background:var(--hover)}
+#mute input{position:relative}
+#mute input:checked{background:var(--np-bg);box-shadow:none}
+#mute input:checked::before{content:"";position:absolute;inset:0;background:var(--np-fg);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.6 7.2l2.3 2.3 4.5-4.9' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat}
+#mute input:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.x{flex:none;display:grid;place-items:center;width:24px;height:24px;margin:-3px -5px 0 0;padding:0;border:0;border-radius:4px;background:none;color:var(--ink-3);cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),color 120ms cubic-bezier(.2,0,0,1)}
+.x:hover{background:var(--hover);color:var(--ink)}
+.x svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+body.centered .x{display:none}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+body.centered .actions{justify-content:flex-end;margin-top:24px}
+button.act{flex:1 1 auto;min-width:72px;height:28px;padding:0 12px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--ink);font:500 13px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;white-space:nowrap;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
+body.centered button.act{flex:0 0 auto;height:32px;padding:0 16px}
+button.act:hover{background:var(--hover)}
+button.act:active{transform:scale(.97)}
+button.act[data-role=primary]{background:var(--np-bg);box-shadow:none;color:var(--np-fg)}
+button.act[data-role=primary]:hover{background:var(--np-hover)}
+button.act[data-role=danger]{color:var(--danger)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+#foot{margin-top:12px;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;position:relative}
+#foot::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--line) 24px,var(--line) calc(100% - 24px),transparent)}
+button.link{padding:2px 0;border:0;background:none;color:var(--ink-3);font:400 12px/16px Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;border-radius:4px;transition:color 120ms cubic-bezier(.2,0,0,1)}
+button.link:hover{color:var(--ink)}
+#note{font-size:12px;line-height:16px;color:var(--ink-3);text-align:right;overflow-wrap:anywhere}
+/* R4-47 · the "close" variant (closing the browser, leaving work that is not saved): the Acira mark or the site's icon above a
+   confident title, the open sites (a row of icons) or the unsaved ones (rows), the switch for "Don't ask again", and the buttons
+   with the primary one last (Cancel, then Close Acira). The switch and the button radius are the house ones (28x16, 6). */
+#strip,#sites{display:none}
+body.close #wrap{width:min(420px,100%)}
+body.close #card{padding:28px 28px 24px}
+body.close .head{flex-direction:column;align-items:stretch;gap:0}
+body.close .fav{width:40px;height:40px;margin:0 0 16px;border-radius:10px}
+body.close .fav img{width:100%;height:100%}
+body.close .fav.site{background:var(--hover);box-shadow:inset 0 0 0 1px var(--line)}
+body.close .fav.site img{width:24px;height:24px;border-radius:4px}
+body.close .fav.site svg{width:22px;height:22px}
+body.close #title{font-size:19px;line-height:26px;font-weight:560;letter-spacing:-.016em}
+body.close #detail{margin-top:6px;font-size:13px;line-height:20px;max-height:none;overflow:visible}
+body.close #strip:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:16px}
+.tile{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:var(--hover);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-3)}
+.tile img{display:block;width:16px;height:16px;object-fit:contain;border-radius:3px}
+.tile svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tile svg.glyph{color:var(--ink-2,var(--ink));stroke-width:2.25;stroke-linecap:square;stroke-linejoin:miter}
+.tile svg.glyph .fill{fill:currentColor;stroke:none}
+.more{display:grid;place-items:center;height:28px;padding:0 8px;border-radius:6px;font-size:12px;line-height:16px;color:var(--ink-2);background:var(--hover)}
+body.close #sites:not([hidden]){display:block;margin-top:16px;padding:4px 0;border-radius:6px;background:var(--field);box-shadow:inset 0 0 0 1px var(--line)}
+.row{display:flex;align-items:center;gap:12px;height:40px;padding:0 8px;min-width:0}
+.row .tile{flex:none;width:24px;height:24px;border-radius:6px}
+.row .host{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500;letter-spacing:-.005em;color:var(--ink)}
+.row.rest{height:32px}
+.row.rest .host{font-size:13px;font-weight:400;color:var(--ink-3)}
+.tile.mono{box-shadow:none;color:#fff;font:600 12px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;text-transform:uppercase}
+.strip-mono{font-size:12px}
+#caption{display:none}
+body.close #caption:not([hidden]){display:block;margin-top:16px;font-size:12px;line-height:16px;color:var(--ink-3)}
+body.close #caption:not([hidden])+#sites:not([hidden]){margin-top:8px}
+#bodyline{display:none}
+body.close #bodyline:not([hidden]){display:block;margin-top:16px;font-size:13px;line-height:20px;color:var(--ink-2);overflow-wrap:anywhere}
+/* The unsaved-work card for a tab or a window sits by the tab strip, not in the middle (the quit question stays centred). */
+body.top #stage{align-items:flex-start;padding-top:16px}
+body.close #mute:not([hidden]){position:relative;flex-direction:row-reverse;justify-content:space-between;margin-top:20px;padding-top:16px;font-size:13px;line-height:20px;color:var(--ink-2)}
+body.close #mute::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--line) 24px,var(--line) calc(100% - 24px),transparent)}
+body.close #mute input{width:28px;height:16px;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px var(--line-strong);transition:background-color 140ms cubic-bezier(.45,.05,.55,.95),box-shadow 140ms cubic-bezier(.45,.05,.55,.95)}
+body.close #mute input:hover{background:var(--field);box-shadow:inset 0 0 0 1px var(--ink)}
+body.close #mute input::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--ink-3);transition:transform 140ms cubic-bezier(.45,.05,.55,.95),background-color 140ms cubic-bezier(.45,.05,.55,.95)}
+body.close #mute input:checked{background:var(--toggle-on);box-shadow:none}
+body.close #mute input:checked::before{content:none}
+body.close #mute input:checked::after{transform:translateX(12px);background:#fff}
+body.close .actions{margin-top:24px;gap:8px}
+body.close button.act{height:34px;min-width:88px;padding:0 18px;border-radius:6px}
+body.close button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+body.close #mute input:focus-visible{outline-offset:2px}
+@media (forced-colors:active){#card{border:1px solid CanvasText;box-shadow:none}button.act[data-role=primary]{outline:1px solid Highlight}}
+</style>
+</head>
+<body hidden>
+<div id="scrim"></div>
+<div id="stage">
+<div id="wrap">
+ <div id="card" role="alertdialog" aria-labelledby="title" aria-describedby="detail">
+  <div class="head">
+   <span class="fav" aria-hidden="true"><img id="favImg" alt="" hidden><svg id="globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.75"/><path d="M2.25 8h11.5M8 2.25c1.7 1.6 2.55 3.5 2.55 5.75S9.7 12.15 8 13.75C6.3 12.15 5.45 10.25 5.45 8S6.3 3.85 8 2.25z"/></svg></span>
+   <div class="text"><div id="title"></div><div id="detail" hidden></div>
+    <div id="strip" hidden></div><div id="caption" hidden></div><div id="sites" hidden></div><div id="bodyline" hidden></div>
+    <input id="field" type="text" autocomplete="off" spellcheck="false" hidden>
+    <label id="mute" hidden><input id="muteBox" type="checkbox"><span id="muteText"></span></label></div>
+   <button class="x" id="close" type="button"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+  </div>
+  <div class="actions" id="actions"></div>
+  <div id="foot" hidden><button class="link" id="manage" type="button"></button><span id="note" hidden></span></div>
+ </div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id),body=document.body,wrap=$('wrap'),card=$('card'),scrim=$('scrim');
+//#spring — the springs of src/ui/springs.ts and the tokens of src/ui/motionTokens.ts, ported (tests/peek-frame.test.ts holds them equal).
+const TAU=Math.PI*2,POINTS=44;
+const springAt=(spec,from,to,t,velocity=0)=>{
+ const duration=Math.max(.05,spec.duration),omega=TAU/duration,zeta=1-Math.max(0,Math.min(.95,spec.bounce)),y0=from-to;
+ if(t<=0)return {value:from,velocity};
+ if(zeta>=.9999){const a=y0,b=velocity+omega*y0,e=Math.exp(-omega*t);return {value:to+(a+b*t)*e,velocity:(b-omega*(a+b*t))*e};}
+ const wd=omega*Math.sqrt(1-zeta*zeta),decay=zeta*omega,e=Math.exp(-decay*t),a=y0,b=(velocity+decay*y0)/wd,cos=Math.cos(wd*t),sin=Math.sin(wd*t);
+ return {value:to+e*(a*cos+b*sin),velocity:e*((b*wd-decay*a)*cos-(a*wd+decay*b)*sin)};
+};
+const springSettle=(spec,tolerance=.004,velocity=0)=>{const step=1/240;let last=0;for(let i=1;i<=240*6;i++){const t=i*step;if(Math.abs(springAt(spec,0,1,t,velocity).value-1)>tolerance)last=t;else if(t-last>.1)break;}return last+step;};
+const springEasing=(spec,scale=1,velocity=0)=>{
+ if(!(scale>0))return {duration:0,easing:'linear'};
+ velocity=Math.round(velocity*20)/20;
+ const stretched={duration:spec.duration*scale,bounce:spec.bounce},settle=springSettle(stretched,.004,velocity),stops=[];
+ for(let i=0;i<POINTS;i++){const t=settle*Math.pow(i/(POINTS-1),1.35),value=i===POINTS-1?1:springAt(stretched,0,1,t,velocity).value;stops.push(`${Math.round(value*10000)/10000}`);}
+ const positions=stops.map((_,i)=>Math.round(Math.pow(i/(POINTS-1),1.35)*10000)/100);
+ return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
+};
+const TOKENS={'materialize':['E',.170,0],'menu.content':['E',.130,0],'popover.grow':['S',.210,0],'menu.fade':['E',.085,0]};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
+//#endspring
+let speed='premium',off=false,running=[],shown=null,answered=false,spec=null;
+const play=(el,keyframes,id,opening=false,extra={})=>{
+ const s=tokenSpring(id,speed),velocity=opening?KICK[speed]*TAU/s.duration:0,{duration,easing}=springEasing(s,1,velocity);
+ const a=el.animate(keyframes,{duration,easing,fill:'both',...extra});running.push(a);return a;
+};
+const settle=()=>{for(const a of running.splice(0))a.cancel();};
+const GLOBE_OK=/^data:image\/(?:png|jpeg|x-icon|vnd\.microsoft\.icon|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+/** Sets the sentence, bolding the first occurrence of the site name; everything is text, never markup. */
+function sentence(node,message,host){
+ node.textContent='';
+ const at=host?message.indexOf(host):-1;
+ if(at<0){node.textContent=message;return;}
+ node.append(document.createTextNode(message.slice(0,at)));
+ const strong=document.createElement('b');strong.textContent=host;node.append(strong);
+ node.append(document.createTextNode(message.slice(at+host.length)));
+}
+
+function render(state){
+ spec=state;answered=false;
+ body.hidden=false;
+ body.classList.toggle('light',state.dark===false);body.classList.toggle('centered',state.mode==='centered');
+ speed=state.speed==='fast'?'fast':'premium';off=state.speed==='off'||!!state.reducedMotion;
+ settle();
+ wrap.classList.remove('shown');wrap.style.cssText='';card.style.cssText='';scrim.style.cssText='';
+ if(state.mode!=='centered'){wrap.style.left=state.inset.left+'px';wrap.style.top=state.inset.top+'px';}
+ sentence($('title'),state.message||'',state.host||'');
+ const detail=$('detail');detail.textContent=state.detail||'';detail.hidden=!state.detail;
+ const img=$('favImg'),has=typeof state.favicon==='string'&&GLOBE_OK.test(state.favicon);
+ if(has)img.src=state.favicon;else img.removeAttribute('src');img.hidden=!has;$('globe').toggleAttribute('hidden',has); // an SVG has no .hidden property: only the attribute hides it
+ // R4-47: the close variant (closing the browser, unsaved work) is a bigger card: the mark or the site's icon, the open sites, the unsaved ones.
+ const closing=state.variant==='close'&&state.mode==='centered';
+ body.classList.toggle('close',closing);
+ const fav=document.querySelector('.fav');fav.classList.toggle('site',closing&&!state.app);
+ const tile=item=>{const t=document.createElement('span');t.className='tile';
+  if(Array.isArray(item.glyph)){ // one of Acira's own pages: the same stroke glyph the sidebar and tab use
+   const NS='http://www.w3.org/2000/svg',g=document.createElementNS(NS,'svg');g.setAttribute('viewBox','0 0 24 24');g.setAttribute('class','glyph');
+   for(const s of item.glyph.slice(0,8)){if(typeof s.s==='string'||typeof s.f==='string'){const p=document.createElementNS(NS,'path');p.setAttribute('d',s.s||s.f);if(s.f)p.setAttribute('class','fill');g.append(p);}
+    else if(Array.isArray(s.d)){const c=document.createElementNS(NS,'circle');c.setAttribute('cx',+s.d[0]);c.setAttribute('cy',+s.d[1]);c.setAttribute('r','1.55');c.setAttribute('class','fill');g.append(c);}}
+   t.append(g);}
+  else if(typeof item.favicon==='string'&&GLOBE_OK.test(item.favicon)){const i=document.createElement('img');i.alt='';i.src=item.favicon;t.append(i);}
+  else if(item.host){ // no icon stored for this site: a clean monogram tile in a colour taken from its name
+   let hue=0;for(const c of item.host)hue=(hue*31+c.charCodeAt(0))>>>0;
+   t.classList.add('mono');t.style.background='hsl('+(hue%360)+' 52% 44%)';t.textContent=[...item.host][0];}
+  else{const g=$('globe').cloneNode(true);g.removeAttribute('id');g.removeAttribute('hidden');t.append(g);}return t;};
+ const strip=$('strip'),sites=$('sites');strip.replaceChildren();sites.replaceChildren();
+ strip.hidden=!(closing&&state.strip&&state.strip.items.length);sites.hidden=!(closing&&state.list&&state.list.items.length);
+ if(!strip.hidden){for(const item of state.strip.items){const t=tile(item);t.title='';strip.append(t);}
+  if(state.strip.more){const m=document.createElement('span');m.className='more';m.textContent='+'+state.strip.more;strip.append(m);}}
+ if(!sites.hidden){for(const item of state.list.items){const r=document.createElement('div');r.className='row';const h=document.createElement('span');h.className='host';h.textContent=item.host;r.title=item.host;r.append(tile(item),h);sites.append(r);}
+  if(state.list.more){const r=document.createElement('div');r.className='row rest';const h=document.createElement('span');h.className='host';h.textContent=state.list.moreLabel||('+'+state.list.more);r.append(h);sites.append(r);}}
+ const caption=$('caption'),line=$('bodyline');caption.textContent=closing?state.caption||'':'';caption.hidden=!(closing&&state.caption);line.textContent=closing?state.body||'':'';line.hidden=!(closing&&state.body);
+ body.classList.toggle('top',closing&&!!state.top);
+ const field=$('field');field.hidden=!state.input;field.value=state.input?state.input.value||'':'';
+ const mute=$('mute');mute.hidden=!state.mute;$('muteBox').checked=false;$('muteText').textContent=state.mute?state.mute.label:'';
+ $('close').setAttribute('aria-label',state.closeLabel||'Dismiss');$('close').hidden=state.mode==='centered';
+ const actions=$('actions');
+ actions.replaceChildren(...state.buttons.map(item=>{
+  const b=document.createElement('button');b.type='button';b.className='act';b.textContent=item.label;b.dataset.role=item.role;b.dataset.index=String(item.index);
+  b.addEventListener('click',()=>answer(item.index,false));return b;
+ }));
+ const foot=$('foot'),manage=$('manage'),note=$('note');
+ manage.hidden=!state.manage;manage.textContent=state.manage?state.manage.label:'';
+ note.hidden=!state.note;note.textContent=state.note||'';
+ foot.hidden=!state.manage&&!state.note;
+ card.setAttribute('role',state.mode==='centered'?'alertdialog':'dialog');
+ card.setAttribute('aria-modal',state.mode==='centered'?'true':'false');
+ // Centred: the flex stage puts the card in the middle of the page area, both ways (it used to be measured at show time, which put the
+ // very first card at the top of a view that had not been resized yet).
+}
+const measure=()=>({height:Math.ceil(card.getBoundingClientRect().height),width:Math.ceil(card.getBoundingClientRect().width)});
+
+function answer(index,dismissed){
+ if(answered||!spec)return;answered=true;
+ sitePrompt.send({type:'answer',token:spec.token,index,dismissed:!!dismissed,value:spec.input?$('field').value:undefined,muted:spec.mute?$('muteBox').checked:undefined});
+}
+function reveal(state){
+ settle();
+ wrap.classList.add('shown');
+ const centered=body.classList.contains('centered');
+ if(state.inset&&!centered){wrap.style.left=state.inset.left+'px';wrap.style.top=state.inset.top+'px';}
+ if(off||state.instant){scrim.style.opacity='1';if(state.focus)focusDefault();return;}
+ const {width,height}=measure();
+ if(centered){
+  play(scrim,[{opacity:0},{opacity:1}],'materialize');
+  play(wrap,[{opacity:0},{opacity:1}],'materialize');
+  // The house popup formation: the card condenses out of a soft blur while it grows from .96 on the spring (the close variant).
+  if(body.classList.contains('top')){ // by the tab strip: it comes down out of the tab direction, soft blur to sharp, on the popup spring
+   wrap.style.transformOrigin='50% 0%';
+   play(wrap,[{transform:'translateY(-14px) scale(.97)',filter:'blur(6px)'},{transform:'none',filter:'blur(0px)'}],'popover.grow',true).onfinish=function(){this.cancel();};
+  }else if(body.classList.contains('close'))play(wrap,[{transform:'scale(.96)',filter:'blur(6px)'},{transform:'none',filter:'blur(0px)'}],'popover.grow',true).onfinish=function(){this.cancel();};
+  else play(wrap,[{transform:'scale(.96)'},{transform:'none'}],'popover.grow',true);
+  scrim.style.opacity='1';
+ }else{
+  // The aperture (bible §4 Morph): the plane never scales; a rounded clip grows from the icon's corner of the card to the whole
+  // card, the text fades in inside it and rises 3px. The clip ends 80px past the card so the shadow is revealed, never cut.
+  const ox=Math.max(0,Math.min(width,(state.origin&&Number.isFinite(state.origin.x)?state.origin.x:width/2))),sw=Math.min(38,width),sh=Math.min(34,height);
+  const left=Math.max(0,Math.min(width-sw,ox-sw/2));
+  const from=`inset(0px ${width-left-sw}px ${height-sh}px ${left}px round 18px)`,to='inset(-80px -80px -80px -80px round 8px)';
+  play(wrap,[{clipPath:from},{clipPath:to}],'popover.grow',true).onfinish=function(){this.cancel();};
+  play(card,[{opacity:0},{opacity:1}],'materialize');
+  const head=card.querySelector('.head'),actions=$('actions'),foot=$('foot');
+  for(const part of [head,actions,foot])play(part,[{opacity:0,transform:'translateY(3px)'},{opacity:1,transform:'none'}],'menu.content');
+ }
+ if(state.focus)focusDefault();
+}
+function leave(state){
+ settle();
+ if(off){wrap.classList.remove('shown');scrim.style.opacity='0';return;}
+ const centered=body.classList.contains('centered');
+ const top=body.classList.contains('top');
+ wrap.style.transformOrigin=top?'50% 0%':centered?'50% 50%':(state.origin?state.origin.x+'px 0px':'50% 0');
+ play(wrap,[{opacity:1,transform:'none'},{opacity:0,transform:top?'translateY(-8px) scale(.98)':'scale(.98)'}],'menu.fade');
+ if(centered)play(scrim,[{opacity:1},{opacity:0}],'menu.fade');
+}
+function focusDefault(){
+ const f=$('field');if(!f.hidden){f.focus();f.select();return;}
+ const target=document.querySelector('#actions [data-index="'+(spec&&spec.defaultIndex)+'"]');if(target)target.focus();
+}
+
+addEventListener('keydown',event=>{
+ if(!spec||answered)return;
+ if(event.key==='Escape'){event.preventDefault();answer(spec.cancelIndex,true);}
+ else if(event.key==='Enter'&&event.target.tagName!=='BUTTON'){event.preventDefault();answer(spec.defaultIndex,false);}
+ else if(event.key==='Tab'&&body.classList.contains('centered')){
+  const stops=[...document.querySelectorAll('#field:not([hidden]),#muteBox:not([hidden]),#actions button')].filter(n=>!n.closest('[hidden]'));
+  if(!stops.length)return;const at=stops.indexOf(document.activeElement),next=stops[(at+(event.shiftKey?-1:1)+stops.length)%stops.length];
+  event.preventDefault();next.focus();
+ }
+});
+$('close').addEventListener('click',()=>{if(spec)answer(spec.cancelIndex,true);});
+$('manage').addEventListener('click',()=>sitePrompt.send({type:'manage',token:spec&&spec.token}));
+// The dimmed page is a modal moment: a press on it does nothing (the dialog has to be answered), but it never reaches the page.
+scrim.addEventListener('mousedown',event=>event.preventDefault());
+
+sitePrompt.onState(state=>{
+ if(state.type==='show'){render(state);const m=measure();sitePrompt.send({type:'size',token:state.token,height:m.height});}
+ else if(state.type==='reveal')reveal(state);
+ else if(state.type==='leave')leave(state);
+ else if(state.type==='hide'){settle();wrap.classList.remove('shown');scrim.style.opacity='0';body.hidden=true;spec=null;}
+ else if(state.type==='focus')focusDefault();
+});
+sitePrompt.send({type:'ready'});
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+/* A tab the memory saver put to sleep keeps its place; only its icon goes quiet. It wakes (and reloads) when opened. */
+[data-sleeping] .site-identity-icon { opacity: 0.45; }
+@media (forced-colors: active) { [data-sleeping] .site-identity-icon { opacity: 1; } }
+/* A tab using the camera, microphone or screen shows a recording dot; the sidebar row also gets a one-click stop. */
+.sb-tab-capture > span, .browser-tab[data-capturing]::before { width: 7px; height: 7px; border-radius: 50%; background: var(--danger, #d93025); }
+.sb-tab-capture { display: grid; place-items: center; }
+.browser-tab[data-capturing] { position: relative; }
+.browser-tab[data-capturing]::before { content: ''; position: absolute; left: 5px; top: 5px; z-index: 2; pointer-events: none; box-shadow: 0 0 0 1.5px var(--frame, #fff); }
+/* The same dot in the address bar, as a button that stops the sharing. */
+.address-capture { flex: 0 0 27px; width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: none; cursor: default; }
+.address-capture > span { width: 8px; height: 8px; border-radius: 50%; background: var(--danger, #d93025); }
+.address-capture:hover { background: var(--hover, rgb(var(--ink, 0 0 0) / 0.08)); }
+.address-capture:focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: -2px; }
+@media (forced-colors: active) { .address-capture > span { background: Highlight; } }
+@media (forced-colors: active) { .sb-tab-capture > span, .browser-tab[data-capturing]::before { background: Highlight; } }

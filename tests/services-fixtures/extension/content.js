@@ -1,0 +1,1 @@
+chrome.runtime.sendMessage({type:'qualify'},result=>{const element=document.createElement('pre');element.id='extension-result';element.textContent=JSON.stringify(result||{error:chrome.runtime.lastError?.message});document.body.appendChild(element);});

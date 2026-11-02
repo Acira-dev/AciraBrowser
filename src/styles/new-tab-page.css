@@ -1,0 +1,364 @@
+/* New tab page (docs/launch/ACIRA_DESIGN_BIBLE.md §5.5, founder revision).
+   A neutral page with a luminous layer: the search is the hero (48px glass field, 640px), one quiet row of links, then the
+   painting as an image (8px radius, hairline, layered shadow, 880px at most) with an ambient glow of its own colors behind it.
+   Caption 12px under the image. Full background is an opt-in setting. Built on the shared tokens (--line*, --radius-*, --font-*, --text-*). */
+.app.style-acira .nt-page {
+  --nt-glass: rgb(var(--overlay-rgb) / var(--overlay-opacity));
+  --nt-hover: rgb(var(--ink) / .04);
+  --nt-press: rgb(var(--ink) / .07);
+  --nt-text-2: var(--text-2, var(--text-secondary));
+  --nt-text-3: var(--text-3, color-mix(in srgb, var(--text-primary) 44%, transparent));
+  --nt-ease: var(--ease-out, cubic-bezier(.2, 0, 0, 1));
+  --nt-ring: var(--focus-ring-color, var(--focus-ring));
+  --nt-field: rgb(255 255 255 / .7);
+  --nt-field-line: rgb(0 0 0 / .10);
+  --nt-field-rim: inset 0 1px 0 rgb(255 255 255 / .8);
+  --nt-glow-opacity: .12;
+  position: relative; isolation: isolate; height: 100%; min-height: 0; overflow: hidden;
+  background: var(--page-tint, var(--ed-surface)); color: var(--text-primary); font-size: var(--text-13, 13px); line-height: var(--leading-body, 1.4); container-type: size;
+}
+.app.style-acira[data-theme='dark'] .nt-page {
+  --nt-field: rgb(255 255 255 / .05);
+  --nt-field-line: rgb(255 255 255 / .10);
+  --nt-field-rim: inset 0 1px 0 rgb(255 255 255 / .06);
+  --nt-glow-opacity: .12;
+}
+/* Light (round 12): the field is a card on the shell — the shadow scale's ring and layers, no border on the same edge. */
+.app.style-acira:not([data-theme='dark']) .nt-page[data-style=framed] { background: var(--page-tint, #fafafa); --nt-field: #fff; --nt-field-line: transparent; --nt-field-rim: var(--shadow-card); }
+.app.style-acira[data-theme='dark'] .nt-page .nt-glow { mix-blend-mode: screen; }
+
+/* ---- full background (opt-in): the painting is the page ---- */
+.nt-art { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: var(--nt-art-color, transparent); transition: opacity 240ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); }
+.nt-art[data-leaving] { opacity: 0; }
+.nt-art > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: var(--nt-art-position, 50% 50%); opacity: 0; transition: opacity 600ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); user-select: none; }
+.nt-art > img { position:absolute; inset:0; transition:none !important; }
+.nt-art[data-state=ready] > img { opacity: 1; }
+/* On the painting everything is light on dark glass, whichever theme the chrome has: a placeholder, a link label or a letter must
+   stay readable over any brush stroke (a 48px field, 56px tiles and 11px labels cannot rely on the artwork being calm). */
+.app.style-acira .nt-page[data-style=full][data-art=on] {
+  --nt-field: rgb(14 14 16 / .72); --nt-field-hover: rgb(14 14 16 / .82); --nt-field-line: rgb(255 255 255 / .2); --nt-field-rim: inset 0 1px 0 rgb(255 255 255 / .08);
+  --nt-text-2: rgb(255 255 255 / .9); --nt-text-3: rgb(255 255 255 / .74); --text-placeholder: rgb(255 255 255 / .74);
+}
+.app.style-acira .nt-page[data-style=full][data-art=on] :is(.nt-search, .nt-search .address-field input) { color: #fff; }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile-icon { background: var(--nt-field); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile:hover .nt-tile-icon { background: var(--nt-field-hover); }
+.app.style-acira .nt-page[data-style=full][data-art=on] :is(.nt-letter, .nt-tile:hover) { color: #fff; }
+/* R3-76: no pill per label and no shelf behind the row (founder: "remove this gray rectangle", then "the black halo looks heavy").
+   The ink of each label follows the painting behind it (newtab/labelInk.ts sets data-ink once per picture, layout and tile set): pale ground gets
+   near-black ink with a very soft light glow, dark ground white ink with a very soft dark glow, so the contrast comes from the ink, not from a halo.
+   The shadows are drop-shadow filters (a text-shadow is clipped by the label's own ellipsis box and shows as a rectangle) and always two layers, so a change
+   of ink crossfades with the painting. No data-ink (a picture whose pixels cannot be read, no catalog average) keeps white ink with a firm shadow. */
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile-label { padding: 0; color: #fff; font-weight: 500; filter: drop-shadow(0 0 2px rgb(0 0 0 / .9)) drop-shadow(0 1px 6px rgb(0 0 0 / .7)); transition: color calc(360ms * var(--motion-f, 1)) var(--nt-ease), filter calc(360ms * var(--motion-f, 1)) var(--nt-ease); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile-label[data-ink=light] { color: #fff; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .65)) drop-shadow(0 0 7px rgb(0 0 0 / .45)); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile-label[data-ink=dark] { color: var(--nt-ink-pale); filter: drop-shadow(0 1px 2px rgb(255 255 255 / .65)) drop-shadow(0 0 7px rgb(255 255 255 / .45)); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-tile:active .nt-tile-icon { background: var(--nt-field-hover); }
+.nt-art[data-reduced] > img { transition: opacity 90ms linear; }
+
+/* ---- composition: one centred column. Framed: search ~18vh from the top, 32px to the art, 12px to the caption ---- */
+.nt-scroll { position: absolute; z-index: 2; inset: 0; display: flex; padding: var(--space-8, 32px) clamp(24px, 4vw, 72px) var(--space-12, 48px); overflow: auto; scroll-padding: 12px; scrollbar-width: thin; scrollbar-gutter: stable both-edges; }
+.nt-stack { display: flex; flex-direction: column; align-items: stretch; gap: 20px; width: min(100%, 720px); min-height: min-content; margin: auto; }
+.nt-page[data-style=framed] .nt-stack { margin: 0 auto; width: min(100%, 880px); min-height: 0; }
+.nt-stack > * { flex-shrink: 0; }
+.nt-head { display: flex; align-items: center; justify-content: center; gap: var(--space-3, 12px); min-height: 28px; }
+.nt-logo { flex: none; }
+.nt-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-20, 20px); line-height: 24px; font-weight: var(--weight-560, 560); letter-spacing: var(--tracking-display, -.02em); color: var(--text-primary); }
+
+/* ---- search: the hero. 48px, 8px radius, 640px, glass. Accent ring on focus. ---- */
+.app.style-acira .nt-page .nt-search {
+  align-self: center; display: flex; align-items: center; gap: 12px; width: min(640px, 100%); height: 48px; margin: 0; padding: 0 12px 0 16px;
+  border: 1px solid var(--nt-field-line); border-radius: 8px; background: var(--nt-field); box-shadow: var(--nt-field-rim); color: var(--nt-text-2);
+  transition: border-color 140ms var(--nt-ease);
+}
+/* Glass only where there is a picture behind it to blur: over the framed page's flat ground it changes nothing and costs a blurred pass every frame of the reveal. */
+.app.style-acira .nt-page[data-style=full] .nt-search { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
+.app.style-acira .nt-page .nt-search:hover { border-color: var(--line-emphasis, var(--line-strong)); }
+.app.style-acira .nt-page .nt-search:focus-within { border-color: transparent; outline: 2px solid var(--nt-ring); outline-offset: 1px; color: var(--text-primary); }
+.nt-search > svg { flex: none; width: 18px; height: 18px; }
+.nt-search .address-field { flex: 1; min-width: 0; height: 100%; }
+.app.style-acira .nt-page .nt-search .address-field input { height: 100%; padding-right: var(--space-2, 8px); border: 0; background: transparent; box-shadow: none; outline: none; font-size: 15px; line-height: 24px; color: var(--text-primary); }
+/* Left-aligned like every other field: the shared field centres its text with an inline padding, so pin it. */
+.app.style-acira .nt-page .nt-search .address-field input { padding-left: 0 !important; text-align: left; }
+.app.style-acira .nt-page .nt-search .address-field input::placeholder { color: var(--text-placeholder); opacity: 1; font-size: 15px; }
+.nt-search .address-measure { font-size: 15px; line-height: 24px; }
+/* Engine and the shortcut that gets you to the address bar; replaced by the submit button once there is text. */
+.nt-hint { display: flex; align-items: center; gap: 10px; flex: none; font: 400 var(--text-12, 12px) / 16px var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--nt-text-2); white-space: nowrap; user-select: none; }
+.nt-key { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-kbd, 3px); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--text-11, 11px); font-weight: 500; line-height: 1; }
+.app.style-acira .nt-page .nt-submit { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-control, 4px); background: var(--np-bg); color: var(--np-fg); box-shadow: none; }
+.app.style-acira .nt-page .nt-submit:hover { background: var(--np-hover); }
+.app.style-acira .nt-page .nt-submit:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 1px; }
+
+/* ---- one quiet row of links between the search and the art: 7 + More ---- */
+.nt-tiles { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 0; row-gap: var(--space-4, 16px); width: 100%; }
+.app.style-acira .nt-page .nt-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 76px; min-width: 0; height: auto; padding: 6px; margin: -6px 0; box-sizing: border-box; border: 0; border-radius: var(--radius-row, 6px); background: transparent; color: var(--nt-text-2); }
+.app.style-acira .nt-page .nt-tile-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius-row, 6px); background: rgb(var(--ink) / .05); transition: background-color 120ms var(--nt-ease); }
+.app.style-acira .nt-page .nt-tile:hover .nt-tile-icon { background: rgb(var(--ink) / .09); }
+.app.style-acira .nt-page .nt-tile:active .nt-tile-icon { background: rgb(var(--ink) / .12); }
+.app.style-acira .nt-page .nt-tile:hover { color: var(--text-primary); }
+.nt-tile-icon img, .nt-tile-icon svg { width: 24px; height: 24px; }
+.nt-tile-label { display: block; width: calc(100% + 8px); margin-inline: -4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font: 400 var(--text-11, 11px) / 16px var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--nt-text-2); }
+.nt-tile-label > bdi { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-tile-icon svg.nt-globe { width: 16px; height: 16px; color: var(--nt-text-2); }
+.nt-letter { font: 500 20px/1 var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--text-primary); }
+.nt-more-glyph { color: var(--nt-text-3); }
+.app.style-acira .nt-page .nt-tile:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 1px; box-shadow: none; }
+
+/* ---- the image: 16:9, 8px radius, hairline, layered shadow (never clipped), with an ambient glow of its own colors behind ---- */
+.nt-frame-wrap { display: grid; grid-template-rows: 1fr; margin-top: 12px; transition: grid-template-rows 240ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)), opacity 200ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)), margin-bottom 240ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); }
+.nt-frame-wrap { transition:none; transform-origin:50% 0; }
+.nt-frame-wrap[data-leaving] { grid-template-rows: 0fr; opacity: 0; margin-bottom: -20px; pointer-events: none; }
+.nt-frame-wrap[data-leaving] > .nt-figure { overflow: hidden; }
+.nt-figure { position: relative; min-height: 0; margin: 0; }
+
+/* The saved workspace identity stays together above the new framed composition. */
+.nt-workspace-heading { align-self:center; width:min(640px,100%); display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; min-height:40px; }
+.app.style-acira .nt-workspace-title { display:flex; flex:0 1 auto; align-items:center; gap:12px; min-width:0; max-width:calc(100% - 56px); }
+.nt-workspace-title h1 { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:540 24px/1.3 var(--font-display,var(--font-ui)); letter-spacing:-.032em; }
+.nt-workspace-glyph { display:grid; place-items:center; width:28px; height:28px; flex:none; }
+.nt-workspace-glyph > svg { width:24px; height:24px; }
+.app.style-acira .nt-workspace-profile { display:grid; place-items:center; flex:none; width:40px; height:40px; margin:0; padding:4px; border:0; background:var(--nt-field); box-shadow:var(--nt-field-rim); border-radius:50%; }
+.nt-page[data-style=full][data-art=on] .nt-workspace-title { padding:6px 10px; border-radius:8px; background:rgb(18 20 25 / .68); color:#fff; text-shadow:0 1px 2px #0005; -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); box-shadow:inset 0 1px 0 #ffffff20,0 2px 12px #0002; }
+.nt-workspace-actions { display:flex; flex:none; gap:4px; }
+.app.style-acira .nt-workspace-profile:focus-visible { outline:2px solid var(--nt-ring); outline-offset:2px; }
+@container (max-width:479px) {
+ .nt-workspace-title h1 { font-size:22px; }
+}
+.nt-glow {
+  position: absolute; z-index: 0; left: 50%; top: 50%; width: min(1500px, 124%); height: 124%; translate: -50% -50%; /* taller than the page, so the wash never ends in a visible edge above the bottom */ pointer-events: none; opacity: var(--nt-glow-opacity, .12); transition: opacity 600ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); animation: nt-glow-in 520ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)) 380ms backwards;
+  background:
+    radial-gradient(40% 54% at 24% 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%),
+    radial-gradient(40% 54% at 76% 42%, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),
+    radial-gradient(54% 60% at 50% 92%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
+}
+.nt-glow[data-leaving] { opacity: 0; }
+.nt-frame {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-panel, 8px); background: var(--nt-art-bg, transparent);
+  box-shadow: 0 0 0 1px rgb(var(--ink) / .08), 0 1px 2px rgb(0 0 0 / .12), 0 8px 24px -8px rgb(0 0 0 / .28), 0 24px 56px -20px rgb(0 0 0 / .40);
+}
+/* Light: the artwork frame is a dialog-level card on the shadow scale (round 12), not a 40% drop shadow. */
+.app.style-acira:not([data-theme='dark']) .nt-frame { box-shadow: var(--shadow-dialog); }
+.nt-frame > .nt-art[data-framed] { position: absolute; inset: 0; z-index: auto; border-radius: var(--radius-panel, 8px); transition: none; }
+.nt-frame > .nt-art[data-framed] > img { transition: opacity 200ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); }
+.nt-frame > .nt-art[data-reduced] > img { transition: opacity 90ms linear; }
+
+/* ---- caption under the image: title 12/500 at 64%, artist · year 12 at 44%, Change on the right ---- */
+/* One fixed 32px row under the frame: the caption starts on the frame's left edge, the controls end on its right edge, and two
+   11/15 lines plus a 2px gap fill it exactly, so no title, artist or window size can push the controls down or grow the page. */
+.nt-credit { container: nt-credit / inline-size; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 32px; align-items: center; column-gap: 16px; height: 32px; margin-top: 12px; }
+.nt-credit-text { display: grid; align-content: center; gap: 2px; min-width: 0; border-radius: 4px; outline-offset: 2px; }
+.nt-credit-text[hidden] { display: none; }
+.nt-credit-text:focus-visible { outline: 2px solid var(--nt-ring); }
+.nt-credit-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px/15px var(--font-ui, 'Geist', sans-serif); color: var(--nt-text-2); }
+.nt-credit-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px/15px var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); font-variant-numeric: tabular-nums; color: var(--nt-text-3); }
+.app.style-acira .nt-page .nt-change { flex: none; height: var(--control-compact, 24px); padding: 0 8px; border: 0; border-radius: var(--radius-control, 4px); background: transparent; box-shadow: none; color: var(--nt-text-2); font: 500 var(--text-12, 12px) / 16px var(--font-ui, 'Geist', sans-serif); transition: background-color 120ms var(--nt-ease), color 120ms var(--nt-ease); }
+.app.style-acira .nt-page .nt-change:hover { background: var(--nt-hover); color: var(--text-primary); }
+.app.style-acira .nt-page .nt-change:active { background: var(--nt-press); color: var(--text-primary); }
+.app.style-acira .nt-page .nt-change:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 1px; box-shadow: none; }
+
+/* ---- hide control: 28px glass square on the image, shown on hover or focus only ---- */
+.app.style-acira .nt-page .nt-hide {
+  position: absolute; z-index: 3; top: var(--space-3, 12px); right: var(--space-3, 12px); display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 1px solid rgb(255 255 255 / .18); border-radius: var(--radius-control, 4px); color: #fff; background: rgb(0 0 0 / .42); box-shadow: none;
+  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
+  opacity: .75; transition: opacity 160ms var(--nt-ease), background-color 120ms var(--nt-ease);
+}
+.app.style-acira .nt-page:hover .nt-hide { opacity: 1; }
+.app.style-acira .nt-page .nt-frame .nt-hide { opacity: 0; }
+.app.style-acira .nt-page .nt-frame:is(:hover, :focus-within) .nt-hide, .app.style-acira .nt-page .nt-frame .nt-hide:focus-visible { opacity: 1; }
+@media (hover: none) { .app.style-acira .nt-page .nt-frame .nt-hide { opacity: .85; } }
+.app.style-acira .nt-page .nt-hide[data-leaving] { opacity: 0; pointer-events: none; }
+.app.style-acira .nt-page .nt-hide:hover { background: rgb(0 0 0 / .62); }
+.app.style-acira .nt-page .nt-hide:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 1px; box-shadow: none; }
+
+/* Profile identity stays above the search in either artwork presentation. Full artwork supplies its own small glass backing,
+   matching the workspace title, so the name remains readable without moving it into a separate footer. */
+.nt-page { --nt-ink-pale: rgb(14 14 16); --nt-col: 640px; --nt-edge: max(clamp(24px, 4vw, 72px), calc((100cqw - var(--nt-col)) / 2)); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-head { align-self: center; max-width: 100%; padding: 6px 10px; border-radius: 8px; color: #fff; background: rgb(18 20 25 / .68); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-head :is(.nt-title, .nt-logo) { color: #fff; }
+
+@container (max-width: 639px) { .nt-hint { display: none; } }
+@container (max-width: 639px) { .app.style-acira .nt-page .nt-tile { flex-basis: 64px; padding: 6px 8px; } .app.style-acira .nt-page .nt-tile-icon { width: 48px; height: 48px; } }
+
+/* ---- reveal: everything rises 4px and fades in. The small, flat elements (title, links, caption) also condense out of a 3px blur (bible vapor); the search and the image never do, because a filter there would re-render the glass and the passes under it every frame, and nothing keeps a filter once it settles ---- */
+@keyframes nt-form {
+  0% { opacity: 0; translate: 0 4px; }
+  100% { opacity: 1; translate: 0 0; }
+}
+@keyframes nt-vapor {
+  0% { opacity: 0; filter: blur(0); translate: 0 4px; }
+  40% { opacity: .55; filter: blur(3px); }
+  100% { opacity: 1; filter: none; translate: 0 0; }
+}
+@keyframes nt-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nt-glow-in { from { opacity: 0; } }
+.nt-vapor { animation: nt-form 240ms var(--nt-ease, cubic-bezier(.2, 0, 0, 1)) calc(var(--nt-i, 0) * 50ms) backwards; }
+.nt-page :is(.nt-head, .nt-tiles, .nt-credit).nt-vapor { animation-name: nt-vapor; }
+.app[data-reduced-motion='true'] .nt-page .nt-vapor { animation: nt-fade 90ms linear 0s backwards; }
+.app[data-reduced-motion='true'] .nt-page .nt-glow { animation: none; }
+.app[data-reduced-motion='true'] .nt-page :is(.nt-frame-wrap, .nt-art, .nt-caption, .nt-change, .nt-hide, .nt-search, .nt-glow, .nt-art > img) { transition-duration: 0ms; }
+@media (prefers-reduced-motion: reduce) {
+  .app.style-acira .nt-page .nt-vapor { animation: nt-fade 90ms linear 0s backwards; }
+  .nt-glow { animation: none; }
+  .nt-art > img, .nt-art, .nt-caption, .nt-hide, .nt-frame-wrap, .nt-change, .nt-search, .nt-glow { transition-duration: 0ms; }
+}
+
+.app.style-acira.opaque-glass .nt-page :is(.nt-caption, .nt-search, .nt-hide) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.app.style-acira.opaque-glass .nt-page .nt-search { background: var(--surface, var(--ed-surface)); }
+/* Full-art controls keep their paired light ink and dark ground when transparency is disabled. */
+.app.style-acira.opaque-glass .nt-page[data-style=full][data-art=on] { --nt-field: rgb(14 14 16); --nt-field-hover: rgb(14 14 16); }
+.app.style-acira.opaque-glass .nt-page[data-style=full][data-art=on] .nt-search { background: var(--nt-field); }
+.app.style-acira.opaque-glass .nt-page .nt-tile-icon { -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (forced-colors: active) {
+  .nt-hide, .nt-tile, .nt-search, .nt-submit { border: 1px solid ButtonText; background: ButtonFace; color: ButtonText; box-shadow: none; }
+  .nt-caption { background: Canvas; border-color: CanvasText; }
+  .nt-glow { display: none; }
+  .nt-frame { box-shadow: none; outline: 1px solid CanvasText; }
+  .nt-caption > h1 { color: CanvasText; }
+  .app.style-acira .nt-page :is(.nt-hide, .nt-tile, .nt-change, .nt-submit):focus-visible, .app.style-acira .nt-page .nt-search:focus-within { outline-color: Highlight; }
+}
+
+/* A scrim sits under every glass element over the painting (bible 3.5: add a scrim, not more blur). */
+.nt-art:not([data-framed])::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgb(0 0 0 / .30), rgb(0 0 0 / .10) 38%, rgb(0 0 0 / .10) 62%, rgb(0 0 0 / .38)); }
+.app.style-acira .nt-page .nt-hide { background: rgb(0 0 0 / .5); }
+.app.style-acira .nt-page .nt-change { margin-left: auto; }
+
+/* ---- framed layout (26 Oct): the room measured under the search and links sets the stack's width at 16:9, so the frame,
+   the caption row and the controls share both edges, and the search is min(640px, that width), as in the approved layout.
+   The page never scrolls; a very short window shrinks the picture instead. ---- */
+.nt-page[data-style=framed] .nt-scroll { overflow: hidden; padding-top: max(24px, calc(var(--nt-top, 18cqh) - var(--nt-head, 0px))); padding-bottom: var(--space-8, 32px); scrollbar-gutter: auto; }
+.nt-page[data-style=framed] .nt-stack { width: min(100%, 880px, max(240px, calc(var(--nt-frame-height, 36cqh) * 16 / 9))); }
+.nt-credit:not([data-caption]) { grid-template-columns: minmax(0, 1fr); }
+@container (max-height: 440px) {
+  .nt-page[data-style=framed] .nt-scroll { padding-top: 12px; padding-bottom: 12px; }
+  .nt-stack { gap: 12px; }
+  .nt-frame-wrap { margin-top: 0; }
+  .app.style-acira .nt-page .nt-tile-icon { width: 36px; height: 36px; }
+  .app.style-acira .nt-page .nt-tile { gap: 3px; }
+}
+
+/* ---- retained cross-fade: the previous picture stays underneath until the decoded one has settled ---- */
+.nt-art > img { position: absolute; inset: 0; }
+.nt-art[data-state=ready] > img[data-current] { animation: nt-image-swap 360ms cubic-bezier(.23, 1, .32, 1) both; }
+.nt-art[data-state=ready] > img.nt-art-previous { opacity: 1; }
+@keyframes nt-image-swap { from { opacity: 0; transform: scale(1.008); } to { opacity: 1; transform: none; } }
+/* A page that is resumed (a tab coming back, or a workspace switch landing on it) does not replay its reveal: it is the page that was there, and the crossfade into it never dips to the bare ground. */
+.nt-page[data-resumed][data-resumed] :is(.nt-vapor, .nt-glow) { animation: none; }
+/* A page that starts from a picture it already has (its own tab's, or the one the page it replaced was showing) paints it on the first frame, with no entrance. */
+.nt-art[data-seeded] > img[data-current] { animation: none; }
+/* Round 3: the picture that replaces a carried one fades on the workspace length (130ms x --motion-scale, the same curve) once it has decoded, over the one it replaces. */
+.nt-art[data-crossfade] > img[data-current] { animation-duration: calc(130ms * var(--motion-scale, 1)); animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
+.nt-art[data-reduced] > img[data-current] { animation: nt-fade 80ms linear; }
+
+/* ---- collection loading: the classic square DotMatrix on a small glass chip at the frame's centre. It waits 120ms, so a
+   cached picture never flashes it, then condenses in; the painting already shown stays until the new one is decoded. ---- */
+.nt-art-loading {
+  position: absolute; z-index: 2; left: 50%; top: 50%; display: grid; place-items: center; width: 40px; height: 40px; margin: -20px 0 0 -20px;
+  border-radius: 8px; background: var(--menu-surface); -webkit-backdrop-filter: var(--menu-backdrop); backdrop-filter: var(--menu-backdrop); box-shadow: var(--menu-rim), var(--menu-e2);
+  color: var(--text-primary); pointer-events: none; animation: nt-loading-in 200ms var(--motion-ease-expo, cubic-bezier(.16, 1, .3, 1)) 120ms both;
+}
+@keyframes nt-loading-in { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+
+/* Next picture, the cover browser's arrow and the eye: three quiet buttons (buttons.css), no borders of their own.
+   Both fit the existing 32px caption row without crowding the credit. */
+.nt-art-controls { display: flex; align-items: center; flex: none; gap: 2px; min-width: 0; margin-inline-start: auto; --btn-quiet-ink: var(--nt-text-2); --btn-quiet-ink-hover: var(--text-primary); --btn-quiet-fill-hover: var(--nt-hover); }
+.app.style-acira .nt-page .nt-cover-choose { width:30px; justify-content:center; padding-inline:0; }
+.app.style-acira .nt-page .nt-art-extra { animation: nt-art-extra-in calc(180ms * var(--motion-scale, 1)) var(--motion-ease-expo, cubic-bezier(.16, 1, .3, 1)) both; }
+@keyframes nt-art-extra-in { from { opacity: 0; } }
+.app.style-acira .nt-page .nt-art-controls .nt-change { display: inline-flex; align-items: center; gap: 4px; margin: 0; white-space: nowrap; }
+.app.style-acira .nt-page .nt-art-controls .nt-change { height:30px; }
+.app.style-acira .nt-page .nt-art-controls .nt-cover-visibility { width:30px; justify-content:center; padding:0; border-radius:6px; }
+.app.style-acira .nt-page .nt-art-controls .nt-collection { padding-inline-end: 6px; }
+/* At the 240px stack floor (short window or 150%) the label would leave the credit about 44px: the next-picture button keeps only its icon so the title stays readable. */
+.nt-art-controls .nt-next-icon { display: none; }
+@container nt-credit (max-width: 320px) {
+  .app.style-acira .nt-page .nt-next { width: 30px; justify-content: center; padding-inline: 0; }
+  .nt-next-label { display: none; }
+  .nt-art-controls .nt-next-icon { display: block; }
+}
+.app.style-acira .nt-page .nt-collection[aria-expanded=true] { background: var(--nt-hover); color: var(--text-primary); }
+.nt-collection > svg { flex: none; color: var(--nt-text-3); transition: transform 200ms var(--motion-ease-expo, cubic-bezier(.16, 1, .3, 1)); }
+.nt-collection[aria-expanded=true] > svg { transform: rotate(180deg); }
+/* The cover arrow turns up as its popup opens (the sheet's 200ms) and back down as it closes (the sheet's 130ms exit). */
+.nt-cover-choose > svg { transition: transform 130ms var(--motion-ease-expo, cubic-bezier(.16, 1, .3, 1)); }
+.nt-cover-choose[aria-expanded=true] > svg { transform: rotate(180deg); transition-duration: 200ms; }
+.app[data-reduced-motion='true'] .nt-cover-choose > svg { transition-duration: 0ms; }
+@media (prefers-reduced-motion: reduce) { .nt-cover-choose > svg { transition-duration: 0ms; } }
+.nt-art-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Full artwork needs only the eye, kept at the page corner instead of sharing a footer with the profile name. */
+.nt-full-art-controls { position: absolute; z-index: 4; right: 12px; top: 12px; max-width: calc(100% - 24px); }
+.nt-full-art-controls .nt-art-controls { padding: 2px; border-radius: 6px; background: var(--nt-field); box-shadow: var(--nt-field-rim), inset 0 0 0 1px var(--nt-field-line); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
+.app.style-acira .nt-page .nt-full-art-controls .nt-change { color: var(--nt-text-2); }
+.app.style-acira .nt-page .nt-full-art-controls .nt-change:is(:hover, [aria-expanded=true]) { background: var(--nt-hover); color: var(--nt-text-2); }
+.app.style-acira .nt-page .nt-full-art-controls .nt-collection > svg { color: var(--nt-text-3); }
+.app.style-acira.opaque-glass .nt-full-art-controls .nt-art-controls { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---- collection menu: the shared menu (panels.css: glass .92 surface, rim, e2, radius 8, padding 4, .acira-menu-row).
+   The material morphs out of the Collection control (ArtworkControls: transform + opacity, 200ms, started on the click frame);
+   the rows keep their final geometry and resolve in just behind it. ---- */
+.app.style-acira .nt-page .nt-artwork-menu { position: fixed; inset: auto; box-sizing: border-box; width: max-content; min-width: 220px; max-width: min(340px, calc(100vw - 16px)); margin: 0; padding: 0; overflow: visible; border: 0; background: transparent; color: var(--text-primary); box-shadow: none; transition: display 160ms allow-discrete, overlay 160ms allow-discrete; }
+.nt-artwork-menu:popover-open { display: block; }
+.nt-artwork-menu:focus, .nt-artwork-menu:focus-visible { outline: none; }
+.nt-artwork-menu:not(:popover-open) { pointer-events: none; }
+.nt-artwork-material { position: absolute; inset: 0; border-radius: 8px; background: var(--menu-surface); -webkit-backdrop-filter: var(--menu-backdrop); backdrop-filter: var(--menu-backdrop); box-shadow: var(--menu-rim), var(--menu-e2); transform-origin: 0 0; pointer-events: none; }
+.nt-artwork-items { position: relative; display: grid; max-height: calc(100vh - 16px); padding: 4px; overflow-y: auto; border-radius: 8px; }
+
+/* ---- full title on hover or focus: the house tooltip (.t-tip, transient.css), wrapped, opening over the caption itself ---- */
+:root:root:root .t-tip.nt-credit-tip {
+  inset: auto; left: 0; top: 0; margin: 0; border: 0; display: grid; gap: 2px; width: max-content; height: auto; max-width: min(560px, calc(100vw - 16px));
+  padding: 8px; border-radius: 6px; font: 400 12px/16px var(--font-ui); white-space: normal; overflow: visible; overflow-wrap: anywhere;
+}
+:root:root:root .t-tip.nt-credit-tip:not(:popover-open) { display: none; }
+.nt-credit-tip > strong { font-weight: 500; }
+.nt-credit-tip > span { color: var(--menu-t2); }
+
+.app[data-reduced-motion='true'] .nt-art > img[data-current] { animation: nt-fade 80ms linear; }
+.app[data-reduced-motion='true'] .nt-art-loading { animation: nt-fade 80ms linear 120ms both; }
+@media (prefers-reduced-motion: reduce) { .nt-art > img[data-current] { animation: nt-fade 80ms linear; } .nt-art-loading { animation: nt-fade 80ms linear 120ms both; } }
+@media (forced-colors: active) {
+  .nt-artwork-material, .nt-full-art-controls .nt-art-controls, .nt-art-loading { background: Canvas; color: CanvasText; outline: 1px solid CanvasText; backdrop-filter: none; }
+  .app.style-acira .nt-page .nt-full-art-controls .nt-change { color: ButtonText; }
+}
+
+/* ---- press (R3-75): one press state for every control on the new tab ----
+   Down: scale .96 and a pressed fill, on the input frame (60ms, not stretched: latency-bound). Up: a spring release (a damped spring, about 8% overshoot
+   of the travel) whose duration follows the speed setting (--motion-f: Premium 1.28, Fast 1, Off 0, so Off is instant). `scale` is its own property,
+   so it composes with the hover lift and the entrance animations and never touches layout. Controls: Another image, Collection, the hide eye, the
+   shortcut tiles (and More), the search submit, and the collection menu rows. */
+.app.style-acira .nt-page {
+  --nt-press-scale: .96;
+  --nt-press-in: calc(60ms * min(var(--motion-scale, 1), 1));
+  --nt-press-out: calc(360ms * var(--motion-f, 1));
+  --nt-spring: linear(0, 0.125, 0.383, 0.649, 0.859, 0.995, 1.064, 1.083, 1.075, 1.053, 1.031, 1.013, 1.001, 0.995, 0.993, 0.994, 0.995, 0.997, 0.999, 1, 1, 1.001, 1);
+}
+.app.style-acira .nt-page[data-style=full][data-art=on] { --nt-hover: rgb(255 255 255 / .10); --nt-press: rgb(255 255 255 / .18); }
+.app.style-acira .nt-page :is(.nt-change, .nt-hide, .nt-tile, .nt-submit, .nt-artwork-menu .acira-menu-row) { scale: 1; }
+.app.style-acira .nt-page .nt-change { transition: background-color 120ms var(--nt-ease), color 120ms var(--nt-ease), scale var(--nt-press-out) var(--nt-spring); }
+.app.style-acira .nt-page .nt-hide { transition: opacity 160ms var(--nt-ease), background-color 120ms var(--nt-ease), scale var(--nt-press-out) var(--nt-spring); }
+.app.style-acira .nt-page .nt-tile { transition: scale var(--nt-press-out) var(--nt-spring); }
+.app.style-acira .nt-page .nt-submit { transition: background-color 120ms var(--nt-ease), scale var(--nt-press-out) var(--nt-spring); }
+.app.style-acira .nt-page .nt-artwork-menu .acira-menu-row { transition: background-color 120ms var(--nt-ease), scale var(--nt-press-out) var(--nt-spring); }
+.app.style-acira .nt-page .nt-change:active { background: var(--nt-press); color: var(--text-primary); scale: var(--nt-press-scale); transition-duration: 60ms, 60ms, var(--nt-press-in); transition-timing-function: var(--nt-ease), var(--nt-ease), cubic-bezier(.2, 0, 0, 1); }
+.app.style-acira .nt-page .nt-full-art-controls .nt-change:active { background: var(--nt-press); color: var(--nt-text-2); }
+.app.style-acira .nt-page .nt-hide:active { background: rgb(0 0 0 / .72); scale: var(--nt-press-scale); transition-duration: 60ms, 60ms, var(--nt-press-in); transition-timing-function: var(--nt-ease), var(--nt-ease), cubic-bezier(.2, 0, 0, 1); }
+.app.style-acira .nt-page .nt-tile:active { scale: var(--nt-press-scale); transition-duration: var(--nt-press-in); transition-timing-function: cubic-bezier(.2, 0, 0, 1); }
+.app.style-acira .nt-page .nt-submit:active { background: var(--np-press, var(--np-hover)); scale: var(--nt-press-scale); transition-duration: 60ms, var(--nt-press-in); transition-timing-function: var(--nt-ease), cubic-bezier(.2, 0, 0, 1); }
+.app.style-acira .nt-page .nt-artwork-menu .acira-menu-row:active { scale: .98; transition-duration: 60ms, var(--nt-press-in); transition-timing-function: var(--nt-ease), cubic-bezier(.2, 0, 0, 1); }
+/* The collection control is held open while its menu shows: it keeps the pressed fill but not the scale. */
+.app.style-acira .nt-page .nt-collection[aria-expanded=true]:active { scale: 1; }
+
+/* ---- full background: the loader to the left of "Another image" (R3-75) ----
+   The same classic square DotMatrix as the framed loader, 20px (5 x 5). It stands outside the control row's layout, so the label never moves.
+   On the strip it is bare dots on the glass; on the corner rail it gets its own small glass chip. It appears (90ms delay, set in ArtworkControls)
+   with the pressed control still in view, and fades out while the new picture crossfades in (360ms). */
+.nt-art-controls { position: relative; }
+.nt-art-pending { position: absolute; z-index: 1; right: calc(100% + 6px); top: 50%; display: grid; place-items: center; width: 24px; height: 24px; margin-top: -12px; color: var(--nt-text-2); pointer-events: none; opacity: 0; }
+.nt-art-pending[data-state=in] { animation: nt-pending-in calc(180ms * var(--motion-scale, 1)) var(--motion-ease-expo, cubic-bezier(.16, 1, .3, 1)) both; }
+.nt-art-pending[data-state=out] { animation: nt-pending-out calc(220ms * var(--motion-scale, 1)) cubic-bezier(.4, 0, 1, 1) both; }
+.nt-full-art-controls:not([data-caption]) .nt-art-pending { right: calc(100% + 8px); width: 28px; height: 28px; margin-top: -14px; border-radius: 6px; background: var(--nt-field); box-shadow: var(--nt-field-rim), inset 0 0 0 1px var(--nt-field-line); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
+@keyframes nt-pending-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes nt-pending-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.92); } }
+.nt-page[data-style=framed] .nt-art-pending { display: none; }
+@media (prefers-reduced-motion: reduce) { .nt-art-pending[data-state=in], .nt-art-pending[data-state=out] { animation-duration: 80ms; } }
+@media (forced-colors: active) { .nt-art-pending { color: CanvasText; } }
+/* Off (and the OS setting) is instant and moves nothing: the pressed fill alone says the click landed. */
+.app[data-reduced-motion='true'] .nt-page { --nt-press-scale: 1; }

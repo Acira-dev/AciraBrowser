@@ -1,0 +1,42 @@
+/* The profile panel is built from A's shared round 9 classes (src/styles/panels.css): rows, avatar, title, check and
+   divider come from there. This file only covers what a profile adds: a photo in the avatar slot. */
+.acira-menu-avatar.profile-photo {
+  object-fit: cover;
+}
+@media (forced-colors: active) {
+  .acira-menu-avatar {
+    forced-color-adjust: none;
+  }
+}
+/* Another profile's row switches this window; its trailing button opens that profile in its own window instead. */
+.pf-profile {
+  position: relative;
+}
+/* Its name stops before the button. */
+.pf-profile:has(> .pf-own-window) > .acira-menu-row {
+  padding-right: 38px;
+}
+.pf-own-window {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  transform: translateY(-50%);
+  cursor: default;
+  transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1), background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.pf-own-window:is(:hover, [data-highlighted='true'], :focus-visible) {
+  background: var(--menu-hover);
+  opacity: 1;
+  outline: none;
+}

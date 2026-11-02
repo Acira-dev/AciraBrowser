@@ -1,0 +1,11 @@
+/* Site data rows live on the panel system (components/PanelParts.css): no padding, no lines under rows; the body text sits on x = 36. */
+.site-information{display:flex;flex-direction:column;gap:0;padding:0;margin:0;font-size:12px;line-height:16px}.site-information p{margin:0;overflow-wrap:anywhere}.site-information details{padding:0}.site-information summary{margin:0}.site-information .site-data-choice{display:flex;align-items:center;gap:8px;margin:2px 0}
+.site-permission{display:flex;align-items:center;gap:12px;padding:4px 0}.site-permission>span{flex:1;min-width:0}.site-permission :is(strong,small){display:block;overflow-wrap:anywhere}.site-permission small{font-size:11px;color:var(--menu-t3,var(--text-secondary))}.site-certificate{font-size:11px}.site-certificate dt{color:var(--menu-t3,var(--text-secondary));margin-top:6px}.site-certificate dd{margin:2px 0;overflow-wrap:anywhere}
+.site-protection-status{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;margin:6px 0 10px}.site-protection-status strong{font-size:13px;font-weight:550}.site-protection-status small{font-size:11px;color:var(--text-secondary)}.site-protection-actions{display:flex;flex-wrap:wrap;gap:6px}.site-change-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;margin:10px 0}.site-information .site-storage-scope{font-size:11px}.site-information h3{margin-top:12px}.site-information .site-data-disclosure{padding:0}
+
+/* Temporary certificate exception: deliberate, visible, easy to end. */
+.certificate-notice{margin:0 0 6px;padding:0 8px 10px;border:0;border-radius:0;background:var(--sep-line) 8px 100%/calc(100% - 16px) 1px no-repeat;font-size:12px;line-height:16px}
+.certificate-notice strong{display:block;font-size:13px;line-height:18px;font-weight:500;color:var(--btn-danger-ink,#c42b1c)}
+.certificate-notice p{margin:2px 0 8px;color:var(--text-2,var(--text-secondary))}
+.certificate-notice p.certificate-notice-error{margin:8px 0 0;color:var(--btn-danger-ink,#c42b1c)}
+@media(forced-colors:active){.certificate-notice{border-color:CanvasText}.certificate-notice .btn{border-color:ButtonText;background:ButtonFace;color:ButtonText}.certificate-notice p.certificate-notice-error{color:CanvasText}}

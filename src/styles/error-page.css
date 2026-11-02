@@ -1,0 +1,55 @@
+/* Navigation error and certificate warning (design bible §5.7, founder: centred).
+   One centred column (560px) at the optical centre: a stroke cross (never dot-matrix), display statement, one-sentence lede, actions,
+   then a technical box with left-aligned rows. No kicker, no large illustration. */
+.navigation-error{--ne-line:var(--line,rgb(0 0 0/.08));--ne-line-strong:var(--line-strong,rgb(0 0 0/.14));--ne-line-emph:var(--line-emphasis,rgb(0 0 0/.22));--ne-danger:#b3382f;
+ box-sizing:border-box;display:flex;justify-content:center;width:100%;min-height:100%;padding:clamp(40px,14vh,150px) clamp(24px,4vw,72px) 64px;color:var(--text-1,var(--text-primary,var(--text)));text-align:center;font-size:13px;line-height:1.4;font-weight:400;font-synthesis:none}
+[data-theme=dark] .navigation-error{--ne-danger:#f0786f}
+.navigation-error .ne-body{width:min(560px,100%);display:flex;flex-direction:column;align-items:center}
+.navigation-error p{margin:0}
+.navigation-error .ne-glyph{display:grid;place-items:center;width:40px;height:40px;margin:0 0 20px;border-radius:50%;background:rgb(var(--ink,17 17 19)/.055);color:var(--text-2,currentColor)}
+.navigation-error .ne-glyph[data-danger]{background:color-mix(in srgb,var(--ne-danger) 11%,transparent);color:var(--ne-danger)}
+.navigation-error .ne-title{margin:0;overflow-wrap:anywhere}
+.navigation-error .ne-message{margin:14px auto 0;max-width:46ch;text-align:center;text-wrap:balance}
+/* Technical box: mono 12px, 6px hairline, one row per fact, Copy at the corner. */
+.navigation-error .ne-tech{position:relative;width:min(480px,100%);margin:32px 0 0;text-align:left;padding:4px 0;border:1px solid var(--ne-line);border-radius:6px;font-family:var(--font-mono,'Geist Mono',ui-monospace,Consolas,monospace);font-size:12px;line-height:18px}
+.navigation-error .ne-tech>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;padding:3px 12px;align-items:baseline}
+.navigation-error .ne-tech dt{margin:0;color:var(--text-3,var(--text-secondary));font-family:var(--font-ui,'Geist','Inter','Segoe UI',sans-serif);font-size:11px}
+.navigation-error .ne-tech dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--text-1,var(--text-primary));font-variant-numeric:tabular-nums}
+.navigation-error .ne-tech>div:first-child dd{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:56px}
+.navigation-error .ne-copy{position:absolute;top:4px;right:4px;height:22px;padding:0 8px;border-radius:4px;color:var(--text-2,var(--text-secondary));font:inherit;font-size:11px;background:var(--surface,transparent)}
+.navigation-error .ne-copy:hover{color:var(--text-1,var(--text-primary));background:color-mix(in srgb,var(--text-1,#000) 6%,var(--surface,transparent))}
+.navigation-error .ne-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin-top:28px}
+.ne-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 12px;border-radius:6px;font:inherit;font-size:13px;font-weight:500;line-height:1;letter-spacing:0;cursor:default;transition:background-color .12s cubic-bezier(.2,0,0,1),border-color .12s cubic-bezier(.2,0,0,1),opacity .12s cubic-bezier(.2,0,0,1)}
+.ne-button[data-primary]{height:36px;padding:0 18px;border-radius:8px;font-size:14px}
+/* One crisp ring. Specificity beats the global button and .navigation-error focus rules so they cannot stack. */
+.app.style-acira .navigation-error.navigation-error :is(button,summary,a):focus-visible,.navigation-error.navigation-error :is(button,summary,a):focus-visible{outline:2px solid var(--focus-ring-color,var(--accent,Highlight));outline-offset:1px;box-shadow:none}
+/* Continue is a tertiary text button; the risk statement and the real confirm sit behind a second click. */
+.navigation-error .ne-unsafe{margin-top:16px;width:min(480px,100%);text-align:center}
+.navigation-error .ne-link{height:24px;padding:0 6px;border-radius:4px;color:var(--text-2,var(--text-secondary));font-size:13px}
+.navigation-error .ne-link:hover{color:var(--ne-danger)}
+.navigation-error .ne-unsafe [role=group]{text-align:left;padding:12px 16px 16px;border:1px solid var(--ne-line);border-radius:6px}
+.navigation-error .ne-unsafe p{color:var(--text-2,var(--text-secondary));text-wrap:pretty}
+.navigation-error .ne-unsafe .ne-note{margin-top:4px}
+.navigation-error .ne-unsafe .ne-button{margin-top:12px;max-width:100%;height:auto;min-height:28px;padding-block:6px;text-align:left;white-space:normal;overflow-wrap:anywhere;font-family:var(--font-mono,'Geist Mono',ui-monospace,Consolas,monospace);font-size:12px;line-height:16px}
+.navigation-error .ne-note{font-size:12px;line-height:16px}
+.navigation-error .ne-problem{width:min(480px,100%);text-align:left;margin-top:12px;padding:8px 12px;border:1px solid color-mix(in srgb,var(--ne-danger) 50%,transparent);border-radius:6px;color:var(--ne-danger)}
+.navigation-error .ne-details{width:min(480px,100%);margin-top:24px;border-top:0;background:var(--sep-line,linear-gradient(90deg,transparent,var(--ne-line) 16%,var(--ne-line) 84%,transparent)) center top/100% 1px no-repeat;text-align:left}
+.navigation-error .ne-details summary{display:flex;align-items:center;justify-content:center;gap:10px;list-style:none;cursor:default;min-height:36px;border-radius:4px;color:var(--text-2,var(--text-secondary));font-size:13px}
+.navigation-error .ne-details summary:hover{color:var(--text-1,var(--text-primary))}
+.navigation-error .ne-details summary::-webkit-details-marker{display:none}
+.navigation-error .ne-details summary::before{content:'';width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .12s cubic-bezier(.2,0,0,1)}
+.navigation-error .ne-details[open] summary::before{transform:rotate(45deg)}
+.navigation-error .ne-detail{margin:4px 0 12px;max-width:60ch;color:var(--text-2,var(--text-secondary));text-wrap:pretty}
+.navigation-error .ne-try{margin:12px 0 4px;color:var(--text-1,var(--text-primary));font-weight:500}
+.navigation-error .ne-details ul{margin:0;padding:0;list-style:none}
+.navigation-error .ne-details li{position:relative;margin:4px 0;padding-left:16px;color:var(--text-2,var(--text-secondary))}
+.navigation-error .ne-details li::before{content:'';position:absolute;left:1px;top:.72em;width:6px;height:1px;background:currentColor;opacity:.55}
+/* Motion: one 160ms content fade; no stagger, no residual filter. */
+@keyframes ne-in{from{opacity:0}to{opacity:1}}
+.navigation-error .ne-body{animation:ne-in .16s cubic-bezier(.2,0,0,1)}
+.navigation-error[data-motion=reduced] .ne-body{animation:none}
+.web-placeholder:has(>.navigation-error){display:block;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--ed-controlEdge) transparent}
+@media(max-width:520px){.navigation-error{padding-top:72px}.navigation-error .ne-tech>div{grid-template-columns:1fr;gap:0}}
+@media(prefers-reduced-motion:reduce){.navigation-error .ne-body{animation:none}.ne-button{transition:none}}
+@media(forced-colors:active){.ne-button,.ne-button[data-primary],.ne-button[data-danger]{border-color:ButtonText;background:ButtonFace;color:ButtonText}.ne-button[data-primary]{border-width:2px}.navigation-error .ne-unsafe [role=group],.navigation-error .ne-details,.navigation-error .ne-problem,.navigation-error .ne-tech{border-color:CanvasText}.navigation-error .ne-problem{color:CanvasText}.navigation-error .ne-details summary::before{border-color:CanvasText}.navigation-error .ne-glyph{color:CanvasText}}
+.navigation-error .ne-waiting{margin:8px 0 0;font-size:12px;color:var(--text-3,var(--text-2))}

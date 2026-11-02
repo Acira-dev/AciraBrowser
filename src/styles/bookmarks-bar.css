@@ -1,0 +1,17 @@
+/* R3-35: a disclosure chevron turns with the menu it opens (right to down), back when it closes; --motion-scale is the speed setting. */
+.bookmark-overflow>svg,.toolbar-overflow>svg{transition:transform calc(.2s * var(--motion-scale,1)) cubic-bezier(.2,.8,.2,1)}
+.bookmark-overflow[aria-expanded=true]>svg{transform:rotate(90deg)}
+.toolbar-overflow[aria-expanded=true]>svg{transform:rotate(90deg)}
+.app[data-reduced-motion=true] :is(.bookmark-overflow,.toolbar-overflow)>svg{transition:none}
+.bookmarks-bar{position:relative;padding-left:16px}.bookmarks-measure{position:absolute;inset:auto auto auto 0;display:flex;gap:4px;width:max-content;height:0;visibility:hidden;pointer-events:none;overflow:visible}.bookmarks-measure .bookmark-overflow{margin-left:0}.bookmarks-bar>.bookmark-overflow{margin-left:auto}.bookmarks-bar>button{min-width:0}.bookmarks-bar>button span{min-width:0}
+/* Drag to reorder, or drop a link: one accent line shows where it lands. */
+.bookmarks-bar>button[data-bookmark]{position:relative}
+.bookmarks-bar>button[data-dragging]{opacity:.45}
+/* R3-B06: an empty bar says what it is for instead of showing a blank band. Dropping a link on it still saves it. */
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>.bookmarks-bar-hint{min-width:0;padding:0 8px;overflow:hidden;color:color-mix(in srgb,var(--text-primary,currentColor) 66%,transparent);white-space:nowrap;text-overflow:ellipsis;cursor:default}
+.bookmarks-bar>button[data-drop]::before{content:'';position:absolute;top:5px;bottom:5px;width:2px;border-radius:1px;background:var(--accent,#3b6eea);pointer-events:none}
+.bookmarks-bar>button[data-drop='before']::before{left:-3px}
+.bookmarks-bar>button[data-drop='after']::before{right:-3px}
+/* A Tor bookmark ends with the Tor tab's onion, in the Tor mark colour. */
+.bookmarks-bar>button>.bookmark-tor-mark{display:grid;place-items:center;flex:none;color:var(--tor-mark,#6a3f86)}
+.app[data-chrome=dark] .bookmarks-bar>button>.bookmark-tor-mark{color:var(--tor-mark,#dcc7f6)}

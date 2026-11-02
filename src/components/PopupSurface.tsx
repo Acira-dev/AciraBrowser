@@ -1,0 +1,3 @@
+import type {ReactNode} from 'react';import type {BrowserSnapshot} from '../runtime/types';import type {PopupGeometry} from '../ui/popup';import {SheetPopupSurface} from './SheetPopupSurface';import '../styles/popup-material.css';import '../styles/popup-menu.css';
+export interface PopupSurfaceProps{geometry:PopupGeometry;state:BrowserSnapshot;sceneKey:string;native?:boolean;closing?:boolean;captionHeight?:number;overlayId?:number;appearance?:'light'|'dark';sizePending?:boolean;keyboard?:boolean;from?:{x:number;y:number};trigger?:import('../runtime/types').Rectangle;children:ReactNode}
+export function PopupSurface(props:PopupSurfaceProps){return <SheetPopupSurface {...props}/>;}

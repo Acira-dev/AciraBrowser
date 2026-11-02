@@ -1,0 +1,72 @@
+{
+  "color": {
+    "surface": "#FFFFFF",
+    "ink": "#25262B",
+    "muted": "#686B73",
+    "icon": "#5D6068",
+    "line": "#EAEBEE",
+    "hover": "#F6F6F7",
+    "selected": "#F0F1F3",
+    "chrome": "#F5F6F8",
+    "chromeHover": "#ECEDF0",
+    "blue": "#3B6EEA",
+    "accentInk": "#2C58C9",
+    "accentSoft": "#EDF2FD",
+    "controlEdge": "#C7CAD1"
+  },
+  "geometry": {
+    "rail": 0,
+    "tabRow": 36,
+    "toolbar": 36,
+    "caption": 138,
+    "controlRadius": 4,
+    "materialRadius": 8,
+    "pageRadius": 8,
+    "overlayInset": 12,
+    "startWidth": 720,
+    "contextWidth": 320
+  },
+  "material": {
+    "tint": 0.64,
+    "blur": 32,
+    "grain": 0.012,
+    "grainSize": 160,
+    "edge": "rgba(255,255,255,0.78)",
+    "addressFill": "rgba(244,245,247,0.88)",
+    "addressFocus": "rgba(237,239,242,0.94)",
+    "fieldShadow": "none",
+    "searchShadow": "none",
+    "overlayShadow": "0 0 0 1px rgb(0 0 0 / .06),0 1px 2px rgb(0 0 0 / .06),0 8px 24px -6px rgb(0 0 0 / .12),0 24px 56px -16px rgb(0 0 0 / .16)",
+    "vaporSeed": 0.02,
+    "identityTint": 0.84,
+    "identityBlur": 40
+  },
+  "motion": {
+    "materialScale": 0.985,
+    "hover": 100,
+    "menu": 180,
+    "switcher": 180,
+    "assistant": 560,
+    "content": 260,
+    "material": 180,
+    "vapor": 180,
+    "vaporExit": 160,
+    "inlineExit": 100,
+    "exit": 180,
+    "assistantExit": 120,
+    "morph": 320,
+    "page": 100,
+    "formationEase": [
+      0.16,
+      1,
+      0.3,
+      1
+    ],
+    "ease": [
+      0.16,
+      1,
+      0.3,
+      1
+    ]
+  }
+}

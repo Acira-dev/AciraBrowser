@@ -1,0 +1,51 @@
+{
+ "note": "Text of the installer window and the uninstall question in every language the installer follows (the Windows display language; English otherwise). Read by scripts/installer-frames-main.cjs and scripts/uninstall-art-main.cjs, which render it into the art. The C# message boxes and the NSIS question carry the same sentences (AciraUninstall.cs, acira-installer.nsh).",
+ "en": {
+  "lang": "en",
+  "states": [["Installing Acira", "Preparing…"], ["Installing Acira", "Copying files…"], ["Installing Acira", "Adding Acira to Start…"], ["Installing Acira", "Finishing up…"], ["Acira is ready", "Opening Acira…"]],
+  "uninstall": {"q": ["Remove Acira?", "Choose what happens to your bookmarks, history and sign-ins."], "r": ["Removing Acira", "Closing the browser and removing files…"], "k": ["Acira was removed", "Your data is still on this PC."], "d": ["Acira was removed", "Your data was deleted too."]},
+  "labels": ["Cancel", "Remove and delete my data", "Remove, keep my data"]
+ },
+ "es": {
+  "lang": "es",
+  "states": [["Instalando Acira", "Preparando…"], ["Instalando Acira", "Copiando archivos…"], ["Instalando Acira", "Añadiendo Acira al menú Inicio…"], ["Instalando Acira", "Últimos detalles…"], ["Acira está listo", "Abriendo Acira…"]],
+  "uninstall": {"q": ["¿Quitar Acira?", "Elige qué pasa con tus marcadores, tu historial y tus inicios de sesión."], "r": ["Quitando Acira", "Cerrando el navegador y borrando archivos…"], "k": ["Acira se ha quitado", "Tus datos siguen en este equipo."], "d": ["Acira se ha quitado", "Tus datos también se han borrado."]},
+  "labels": ["Cancelar", "Quitar y borrar mis datos", "Quitar y conservar mis datos"]
+ },
+ "fr": {
+  "lang": "fr",
+  "states": [["Installation d’Acira", "Préparation…"], ["Installation d’Acira", "Copie des fichiers…"], ["Installation d’Acira", "Ajout d’Acira au menu Démarrer…"], ["Installation d’Acira", "Finalisation…"], ["Acira est prêt", "Ouverture d’Acira…"]],
+  "uninstall": {"q": ["Supprimer Acira ?", "Choisissez ce que deviennent vos favoris, votre historique et vos connexions."], "r": ["Suppression d’Acira", "Fermeture du navigateur et suppression des fichiers…"], "k": ["Acira a été supprimé", "Vos données restent sur ce PC."], "d": ["Acira a été supprimé", "Vos données ont aussi été supprimées."]},
+  "labels": ["Annuler", "Supprimer avec mes données", "Supprimer, garder mes données"]
+ },
+ "de": {
+  "lang": "de",
+  "states": [["Acira wird installiert", "Wird vorbereitet …"], ["Acira wird installiert", "Dateien werden kopiert …"], ["Acira wird installiert", "Acira wird zum Startmenü hinzugefügt …"], ["Acira wird installiert", "Letzte Schritte …"], ["Acira ist bereit", "Acira wird geöffnet …"]],
+  "uninstall": {"q": ["Acira entfernen?", "Wähle, was mit deinen Lesezeichen, deinem Verlauf und deinen Anmeldungen geschieht."], "r": ["Acira wird entfernt", "Browser wird geschlossen, Dateien werden entfernt …"], "k": ["Acira wurde entfernt", "Deine Daten sind weiterhin auf diesem PC."], "d": ["Acira wurde entfernt", "Deine Daten wurden ebenfalls gelöscht."]},
+  "labels": ["Abbrechen", "Entfernen und Daten löschen", "Entfernen, Daten behalten"]
+ },
+ "pt": {
+  "lang": "pt-BR",
+  "states": [["Instalando o Acira", "Preparando…"], ["Instalando o Acira", "Copiando arquivos…"], ["Instalando o Acira", "Adicionando o Acira ao menu Iniciar…"], ["Instalando o Acira", "Finalizando…"], ["O Acira está pronto", "Abrindo o Acira…"]],
+  "uninstall": {"q": ["Remover o Acira?", "Escolha o que acontece com seus favoritos, seu histórico e seus logins."], "r": ["Removendo o Acira", "Fechando o navegador e removendo arquivos…"], "k": ["O Acira foi removido", "Seus dados continuam neste computador."], "d": ["O Acira foi removido", "Seus dados também foram apagados."]},
+  "labels": ["Cancelar", "Remover e apagar os dados", "Remover, manter meus dados"]
+ },
+ "it": {
+  "lang": "it",
+  "states": [["Installazione di Acira", "Preparazione…"], ["Installazione di Acira", "Copia dei file…"], ["Installazione di Acira", "Aggiunta di Acira al menu Start…"], ["Installazione di Acira", "Ultimi ritocchi…"], ["Acira è pronto", "Apertura di Acira…"]],
+  "uninstall": {"q": ["Rimuovere Acira?", "Scegli cosa fare di segnalibri, cronologia e accessi."], "r": ["Rimozione di Acira", "Chiusura del browser e rimozione dei file…"], "k": ["Acira è stato rimosso", "I tuoi dati sono ancora su questo PC."], "d": ["Acira è stato rimosso", "Anche i tuoi dati sono stati eliminati."]},
+  "labels": ["Annulla", "Rimuovi ed elimina i miei dati", "Rimuovi, conserva i miei dati"]
+ },
+ "ja": {
+  "lang": "ja",
+  "states": [["Acira をインストールしています", "準備しています…"], ["Acira をインストールしています", "ファイルをコピーしています…"], ["Acira をインストールしています", "Acira をスタートに追加しています…"], ["Acira をインストールしています", "仕上げています…"], ["Acira の準備ができました", "Acira を開いています…"]],
+  "uninstall": {"q": ["Acira を削除しますか？", "ブックマーク、履歴、サインイン情報をどうするか選んでください。"], "r": ["Acira を削除しています", "ブラウザーを閉じて、ファイルを削除しています…"], "k": ["Acira を削除しました", "データはこのパソコンに残っています。"], "d": ["Acira を削除しました", "データも削除しました。"]},
+  "labels": ["キャンセル", "削除してデータも消す", "削除してデータは残す"]
+ },
+ "zh": {
+  "lang": "zh-CN",
+  "states": [["正在安装 Acira", "正在准备…"], ["正在安装 Acira", "正在复制文件…"], ["正在安装 Acira", "正在将 Acira 添加到“开始”菜单…"], ["正在安装 Acira", "即将完成…"], ["Acira 已就绪", "正在打开 Acira…"]],
+  "uninstall": {"q": ["要卸载 Acira 吗？", "请选择如何处理你的书签、历史记录和登录信息。"], "r": ["正在卸载 Acira", "正在关闭浏览器并删除文件…"], "k": ["Acira 已卸载", "你的数据仍保留在这台电脑上。"], "d": ["Acira 已卸载", "你的数据也已删除。"]},
+  "labels": ["取消", "卸载并删除我的数据", "卸载，保留我的数据"]
+ }
+}

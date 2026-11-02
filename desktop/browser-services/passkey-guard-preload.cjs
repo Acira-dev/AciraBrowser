@@ -1,0 +1,129 @@
+'use strict';
+// Passkeys and security keys (R3-37, P0 28 Oct; off by default 28 Oct). Windows' passkey dialog ("Choose a passkey" / "Create a passkey",
+// Windows Security) opens for every WebAuthn call a page makes: Electron has no autofill list to answer a sign-in page's background
+// requests (navigator.credentials.get with mediation 'conditional') the way Chrome does, so the modal dialog used to open on load, on
+// focus and whenever the page re-armed it (Google's sign-in does this all the time). The person decides in Settings > Privacy >
+// "Passkeys and security keys"; the answer is read from the main process at every call, so a change applies to open pages at once.
+//  - OFF (the default): no passkey (publicKey) request ever reaches Windows. get()/create() are rejected at once with NotAllowedError, the
+//    error a cancelled dialog gives; isUserVerifyingPlatformAuthenticatorAvailable() and isConditionalMediationAvailable() answer false;
+//    getClientCapabilities() reports every capability false, so sites show their password form. A conditional get() (autofill sign-in)
+//    waits until the page aborts it, as in Chrome with no passkey to offer, and still never reaches Windows.
+//  - ON: today's guarded behaviour. get()/create() needs a fresh press on this page (transient user activation) and one dialog per press;
+//    without one the call is refused with NotAllowedError. Conditional requests never reach Windows: get() waits until the page aborts
+//    it, create() is refused. isConditionalMediationAvailable() answers false and getClientCapabilities() reports no conditional get or
+//    create, so sites show their normal "Sign in with a passkey" button instead.
+// Windows only: macOS and Linux keep their native WebAuthn methods and capability answers. Applying this Windows workaround there
+// can suppress a sign-in request after navigation, when the initiating click belonged to the previous document.
+// Passwords, federated sign-in and every other credential call are untouched (the check is for `publicKey` options only). Runs before
+// any page script in every website frame (tabs, pop-ups and Peek load preloads in iframes; every session registers it, private, Tor and
+// secured ones included) and in the page's own world; a child frame that is still about:blank is covered by its parent the moment the
+// parent reaches it. The main process backs this up for pages loaded after a change: with the choice off it adds a Permissions-Policy
+// header (publickey-credentials-get / -create denied) to every web response, so the engine itself refuses the call in the frame and
+// its children (content-blocking.cjs). If the browser has no navigator.userActivation the guard does nothing. A sandboxed preload cannot
+// require other files, so the guard is one function that executeInMainWorld serialises; tests/passkey-guard.test.cjs runs it against
+// stand-in windows. `allowed` is the bridged answer from the main process (true only when the person turned passkeys on).
+const {ipcRenderer,contextBridge}=require('electron');
+const guard = function (allowed) {
+  // The page's own globals can be replaced by page scripts later: everything the guard calls at request time is taken now, before any
+  // page script runs. (A page that swapped Reflect.apply used to be handed the unguarded original on its next ordinary call.)
+  const apply = Reflect.apply, keysOf = Object.keys, define = Object.defineProperty, createBare = Object.create, describe = Object.getOwnPropertyDescriptor;
+  const covered = new WeakSet();
+  const open = () => { try { return allowed() === true; } catch (error) { return false; } };
+  const install = w => {
+    try {
+      if (!w || covered.has(w)) return;
+      covered.add(w);
+      const Container = w.CredentialsContainer, activation = w.navigator && w.navigator.userActivation;
+      if (!Container || !Container.prototype || !activation) return;
+      const proto = Container.prototype, Exception = w.DOMException, PromiseOf = w.Promise;
+      // One passkey dialog per press: count trusted presses in this frame and remember which one the last request used.
+      let presses = 0, spent = -1;
+      for (const type of ['pointerdown', 'keydown', 'click', 'touchend']) w.addEventListener(type, event => { if (event.isTrusted) presses++; }, { capture: true, passive: true });
+      // The engine's own isActive getter, taken now: a page that redefines UserActivation.prototype.isActive cannot fake a press.
+      const activeGetter = (() => { try { const d = w.UserActivation && describe(w.UserActivation.prototype, 'isActive'); return d && typeof d.get === 'function' ? d.get : null; } catch (error) { return null; } })();
+      const isActive = () => (activeGetter ? apply(activeGetter, activation, []) : activation.isActive) === true;
+      const fresh = () => { if (!isActive() || presses === spent) return false; spent = presses; return true; };
+      const refuse = message => PromiseOf.reject(new Exception(message, 'NotAllowedError'));
+      const untilAborted = signal => new PromiseOf((resolve, reject) => {
+        if (!signal || typeof signal.addEventListener !== 'function') return;
+        if (signal.aborted) { reject(signal.reason); return; }
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+      // The engine converts any object as the options dictionary (a function too, and document.all, whose typeof is 'undefined') and reads
+      // its members again. So the options are read once, here, into a plain copy: the decision and the engine see the same values, and a
+      // getter cannot hide publicKey from the guard and show it to the engine.
+      const dictionary = options => options !== undefined && options !== null && (typeof options === 'object' || typeof options === 'function' || typeof options === 'undefined');
+      // The copy has no prototype and only own data properties, so nothing the page puts on Object.prototype answers for it.
+      const own = (object, key, value) => define(object, key, { value, writable: true, enumerable: true, configurable: true });
+      const snapshot = options => {
+        if (!dictionary(options)) return options;
+        const copy = createBare(null);
+        for (const key of keysOf(options)) own(copy, key, options[key]);
+        for (const key of ['publicKey', 'mediation', 'signal']) own(copy, key, options[key]);
+        return copy;
+      };
+      const passkey = options => Boolean(options && typeof options === 'object' && options.publicKey !== undefined && options.publicKey !== null);
+      const wrap = (owner, name, decide, copyOptions) => {
+        const original = owner[name];
+        if (typeof original !== 'function') return;
+        const guarded = new Proxy(original, { apply(target, self, args) {
+          let given = args;
+          // Only the first argument means anything to get()/create(); an array literal is built without setters or iterators.
+          if (copyOptions && args.length) { try { given = [snapshot(args[0])]; } catch (error) { return PromiseOf.reject(error); } }
+          const answer = decide(given); return answer === undefined ? apply(target, self, given) : answer;
+        } });
+        define(owner, name, { value: guarded, writable: true, configurable: true, enumerable: true });
+      };
+      // args[0], not a destructured ([options]): destructuring would go through Array.prototype[Symbol.iterator], which the page can replace.
+      wrap(proto, 'get', args => {
+        const options = args[0];
+        if (!passkey(options)) return undefined;
+        if (options.mediation === 'conditional') return untilAborted(options.signal);
+        if (!open()) return refuse('The operation either timed out or was not allowed.');
+        return fresh() ? undefined : refuse('Signing in with a passkey needs a click or tap on this page first.');
+      }, true);
+      wrap(proto, 'create', args => {
+        const options = args[0];
+        if (!passkey(options)) return undefined;
+        if (!open()) return refuse('The operation either timed out or was not allowed.');
+        if (options.mediation === 'conditional') return refuse('Automatic passkey creation is not available.');
+        return fresh() ? undefined : refuse('Creating a passkey needs a click or tap on this page first.');
+      }, true);
+      const Key = w.PublicKeyCredential;
+      if (Key) {
+        wrap(Key, 'isConditionalMediationAvailable', () => PromiseOf.resolve(false));
+        wrap(Key, 'isUserVerifyingPlatformAuthenticatorAvailable', () => (open() ? undefined : PromiseOf.resolve(false)));
+        const capabilities = Key.getClientCapabilities;
+        if (typeof capabilities === 'function') Object.defineProperty(Key, 'getClientCapabilities', { value: new Proxy(capabilities, { apply(target, self, args) {
+          return PromiseOf.resolve(apply(target, self, args)).then(found => {
+            if (open()) return Object.assign({}, found, { conditionalGet: false, conditionalCreate: false });
+            // Off: nothing is supported, whatever the engine knows (the known names stay present so a page reads false, not undefined).
+            const none = {};
+            for (const name of ['conditionalCreate', 'conditionalGet', 'hybridTransport', 'passkeyPlatformAuthenticator', 'userVerifyingPlatformAuthenticator', 'relatedOrigins', 'signalAllAcceptedCredentials', 'signalCurrentUserDetails', 'signalUnknownCredential']) none[name] = false;
+            if (found && typeof found === 'object') for (const name of Object.keys(found)) none[name] = false;
+            return none;
+          });
+        } }), writable: true, configurable: true, enumerable: true });
+      }
+      // Child frames with nothing loaded yet share this page's origin: guard them the moment this frame reaches them.
+      const cover = child => { try { if (child && child !== w && child.location.href === 'about:blank') install(child); } catch (error) { /* Another origin. */ } return child; };
+      for (const Frame of [w.HTMLIFrameElement, w.HTMLFrameElement, w.HTMLObjectElement]) {
+        if (!Frame) continue;
+        for (const [name, reach] of [['contentWindow', value => cover(value)], ['contentDocument', value => { try { if (value) cover(value.defaultView); } catch (error) { /* Another origin. */ } return value; }]]) {
+          const descriptor = Object.getOwnPropertyDescriptor(Frame.prototype, name);
+          if (!descriptor || typeof descriptor.get !== 'function') continue;
+          const read = descriptor.get;
+          Object.defineProperty(Frame.prototype, name, { ...descriptor, get: new Proxy(read, { apply(target, self, args) { return reach(apply(target, self, args)); } }) });
+        }
+      }
+    } catch (error) { /* A page without credentials support. */ }
+  };
+  install(window);
+};
+if(process.platform==='win32'&&(/^(?:blob:)?https?:/.test(location.href)||location.href==='about:srcdoc')){
+ try{
+  // The live answer is asked of the main process at each call (a closed or missing answer reads as off), never cached in the page.
+  const allowed=()=>{try{return ipcRenderer.sendSync('acira:passkeys-allowed')===true;}catch{return false;}};
+  contextBridge.executeInMainWorld({func:guard,args:[allowed]});
+ }catch{/* A closing window. */}
+}

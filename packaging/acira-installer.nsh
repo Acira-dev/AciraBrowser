@@ -1,0 +1,423 @@
+﻿; Acira premium one-click installer: a borderless branded window (pre-rendered scene bitmaps, real progress line), no wizard.
+; Scene bitmaps come from scripts/installer-art-main.cjs (packaging/installer/*.bmp at 100/125/150/200%).
+!include "LogicLib.nsh"
+; Registry and data names. A QA build (acira-installer-qa.nsh, from `node scripts/release.mjs --qa-identity`) defines ACIRA_QA first, so a
+; QA install or uninstall writes and removes only its own keys and never the real Acira's (its uninstall GUID, Start-menu name and default
+; folder differ too: packaging/signing-config.cjs). tests/qa-identity.test.cjs keeps every name here distinct.
+!ifdef ACIRA_QA
+  !define AC_REG_KEY "Software\AciraBrowserQA"
+  !define AC_REG_APP "Acira Browser QA"
+  !define AC_PROGID "AciraBrowserQA.Url"
+  !define AC_DATA_DIR "AciraBrowserQA"
+  !define AC_APP_EXE "AciraBrowserQA.exe"
+!else
+  !define AC_REG_KEY "Software\AciraBrowser"
+  !define AC_REG_APP "Acira Browser"
+  !define AC_PROGID "AciraBrowser.Url"
+  !define AC_DATA_DIR "AciraBrowser"
+  !define AC_APP_EXE "AciraBrowser.exe"
+!endif
+; Defining customCheckAppRunning replaces the stock include of these, so bring them in here.
+!include "getProcessInfo.nsh"
+Var pid
+!ifndef BUILD_UNINSTALLER
+ManifestDPIAware true
+Var acTheme
+Var acScale
+Var acWnd
+!define AC_W 560
+!define AC_H 340
+!define AC_TX 28
+!define AC_TY 314
+!define AC_TW 504
+!define AC_TH 1
+
+; The stock one-click window (title bar, "Installing, please wait…", grey bar) must never reach the screen: from the moment the GUI
+; exists it is fully transparent and has no taskbar button, so the first thing anyone sees is Acira's own window (AcStyleBanner).
+!define MUI_CUSTOMFUNCTION_GUIINIT AcHideStockWindow
+Function AcHideStockWindow
+  IfSilent acHideDone
+  Push $0
+  Push $1
+  System::Call 'user32::GetWindowLongW(p $HWNDPARENT, i -20) i .r0'
+  ; + WS_EX_LAYERED | WS_EX_TOOLWINDOW, - WS_EX_APPWINDOW
+  IntOp $0 $0 | 0x80080
+  IntOp $1 0x40000 ~
+  IntOp $0 $0 & $1
+  System::Call 'user32::SetWindowLongW(p $HWNDPARENT, i -20, i r0)'
+  ; LWA_ALPHA, alpha 0
+  System::Call 'user32::SetLayeredWindowAttributes(p $HWNDPARENT, i 0, i 0, i 2)'
+  Pop $1
+  Pop $0
+  acHideDone:
+FunctionEnd
+
+; The scene player (frames embedded): used by the installer window and by /preview.
+Function AcExtractHelper
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\acira-progress.exe" "${BUILD_RESOURCES_DIR}\installer\acira-progress.exe"
+FunctionEnd
+
+Function AcStyleBanner
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
+  Push $6
+  Push $7
+  Push $8
+  Push $9
+  ; The visible one-click window is $HWNDPARENT; the stock banner dialog (with the progress bar) is a child of it.
+  FindWindow $6 "#32770" "" $HWNDPARENT
+  FindWindow $6 "#32770" "" $HWNDPARENT $6
+  ; Hide the stock window and banner before anything else (they are already transparent, see AcHideStockWindow).
+  ShowWindow $HWNDPARENT 0
+  ${If} $6 <> 0
+    ShowWindow $6 0
+  ${EndIf}
+  InitPluginsDir
+  ; The installer is always dark, whatever the Windows theme is (founder decision, 25 Oct).
+  StrCpy $acTheme "dark"
+  ; Pick the bitmap that matches the screen scale ($9 = 100, 150 or 200).
+  System::Call 'user32::GetDC(p 0) p .r0'
+  System::Call 'gdi32::GetDeviceCaps(p r0, i 88) i .r1'
+  System::Call 'user32::ReleaseDC(p 0, p r0)'
+  ${If} $1 < 96
+    StrCpy $1 96
+  ${EndIf}
+  IntOp $2 $1 * 100
+  IntOp $2 $2 / 96
+  StrCpy $9 100
+  ${If} $2 >= 125
+    StrCpy $9 150
+  ${EndIf}
+  ${If} $2 >= 175
+    StrCpy $9 200
+  ${EndIf}
+  StrCpy $acScale $9
+  ; Only this screen's two scenes are unpacked before the window goes up (the scene player follows once the window is on screen).
+  ${If} $9 = 200
+    File "/oname=$PLUGINSDIR\ac-dark-1-200.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-1-200.bmp"
+    File "/oname=$PLUGINSDIR\ac-dark-2-200.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-2-200.bmp"
+  ${ElseIf} $9 = 150
+    File "/oname=$PLUGINSDIR\ac-dark-1-150.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-1-150.bmp"
+    File "/oname=$PLUGINSDIR\ac-dark-2-150.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-2-150.bmp"
+  ${Else}
+    File "/oname=$PLUGINSDIR\ac-dark-1-100.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-1-100.bmp"
+    File "/oname=$PLUGINSDIR\ac-dark-2-100.bmp" "${BUILD_RESOURCES_DIR}\installer\install-dark-2-100.bmp"
+  ${EndIf}
+  ; $3 = width, $4 = height in pixels
+  IntOp $3 ${AC_W} * $9
+  IntOp $3 $3 / 100
+  IntOp $4 ${AC_H} * $9
+  IntOp $4 $4 / 100
+  ; The stock banner (second dialog) owns the progress bar that SpiderBanner keeps updating (control 1001); move it onto the main window.
+  StrCpy $2 0
+  ${If} $6 <> 0
+    GetDlgItem $2 $6 1001
+  ${EndIf}
+  ; Our own borderless, topmost popup window (no stray stock controls), centred on the screen.
+  System::Call 'user32::GetSystemMetrics(i 0) i .r0'
+  System::Call 'user32::GetSystemMetrics(i 1) i .r1'
+  IntOp $0 $0 - $3
+  IntOp $0 $0 / 2
+  IntOp $1 $1 - $4
+  IntOp $1 $1 / 2
+  System::Call 'user32::CreateWindowExW(i 136, w "STATIC", w "Acira Browser Setup", i -1879048178, i r0, i r1, i r3, i r4, p 0, p 0, p 0, p 0) p .r7'
+  StrCpy $acWnd $7
+  System::Call 'user32::LoadImageW(p 0, w "$PLUGINSDIR\ac-$acTheme-1-$acScale.bmp", i 0, i 0, i 0, i 0x10) p .r8'
+  SendMessage $7 0x172 0 $8
+  ; Rounded corners: native on Windows 11, a window region on Windows 10.
+  System::Call 'dwmapi::DwmSetWindowAttribute(p r7, i 33, *i 2, i 4) i .r0'
+  ${If} $0 <> 0
+    IntOp $1 $9 * 16
+    IntOp $1 $1 / 100
+    IntOp $5 $3 + 1
+    IntOp $8 $4 + 1
+    System::Call 'gdi32::CreateRoundRectRgn(i 0, i 0, i r5, i r8, i r1, i r1) p .r0'
+    System::Call 'user32::SetWindowRgn(p r7, p r0, i 1)'
+  ${EndIf}
+  System::Call 'user32::SetWindowPos(p r7, p -1, i 0, i 0, i 0, i 0, i 0x43)'
+  System::Call 'user32::UpdateWindow(p r7)'
+  Call AcExtractHelper
+  ; The progress line is drawn by a tiny helper (its own thread, per-pixel alpha), so it stays smooth while this thread extracts.
+  ; Payload temp file first (copied out of the installer), then the install directory; see AciraProgress.cs.
+  Exec '"$PLUGINSDIR\acira-progress.exe" $acWnd $acTheme $acScale "$PLUGINSDIR\ac-done.flag" "$INSTDIR" ${ESTIMATED_SIZE} "$PLUGINSDIR\app-64.7z" "$EXEPATH"'
+  Pop $9
+  Pop $8
+  Pop $7
+  Pop $6
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; Second scene (light has bloomed) for the end of the copy; called from customInstall.
+Function AcStage2
+  Push $0
+  Push $1
+  FileOpen $0 "$PLUGINSDIR\ac-done.flag" w
+  ${If} $0 != ""
+    FileClose $0
+  ${EndIf}
+  ${If} $acWnd <> 0
+    System::Call 'user32::LoadImageW(p 0, w "$PLUGINSDIR\ac-$acTheme-2-$acScale.bmp", i 0, i 0, i 0, i 0x10) p .r0'
+    ${If} $0 <> 0
+      SendMessage $acWnd 0x172 0 $0 $1
+      System::Call 'gdi32::DeleteObject(p r1)'
+    ${EndIf}
+  ${EndIf}
+  ; let the finish bloom play before the app opens (the player closes itself)
+  ${If} $acWnd <> 0
+    Sleep 2400
+  ${EndIf}
+  Pop $1
+  Pop $0
+FunctionEnd
+
+!endif
+
+; `setup.exe /preview` plays the installer window (scene, line, finish) in a loop until it is closed; it installs nothing and writes no registry.
+!macro preInit
+  !ifndef BUILD_UNINSTALLER
+    ${GetParameters} $R0
+    ${GetOptions} $R0 "/preview" $R1
+    ${IfNot} ${Errors}
+      Call AcExtractHelper
+      ExecWait '"$PLUGINSDIR\acira-progress.exe" --preview'
+      Quit
+    ${EndIf}
+    ClearErrors
+  !endif
+!macroend
+
+; The one-click installer shows a small banner window; restyle it as soon as it exists, then run the standard running-app check.
+!macro customCheckAppRunning
+  !ifndef BUILD_UNINSTALLER
+    ; silent runs (the updater) show nothing
+    IfSilent acNoBanner
+    Call AcStyleBanner
+    acNoBanner:
+  !endif
+  !insertmacro IS_POWERSHELL_AVAILABLE
+  !insertmacro _CHECK_APP_RUNNING
+!macroend
+
+; Electron 44 (Chromium 152) needs Windows 10 or later. electron-builder's own check stops at Windows 7, so Windows 7, 8 and 8.1 would install a browser
+; that can never open. Say so plainly instead (in the PC's language; silent runs, such as the updater, just exit with code 2). GetVersion reports the
+; real version because the installer's manifest lists Windows 10.
+!macro customInit
+  !ifndef BUILD_UNINSTALLER
+    Push $0
+    Push $1
+    System::Call 'kernel32::GetVersion() i .r0'
+    IntOp $0 $0 & 0xFF
+    ${If} $0 < 10
+      IfSilent acOldWindowsQuit
+      System::Call 'kernel32::GetUserDefaultUILanguage() i .r0'
+      IntOp $1 $0 & 0x3ff
+      ${If} $1 = 10
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser necesita Windows 10 o posterior (64 bits). Este equipo usa una versión anterior de Windows."
+      ${ElseIf} $1 = 12
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser nécessite Windows 10 ou version ultérieure (64 bits). Ce PC utilise une version plus ancienne de Windows."
+      ${ElseIf} $1 = 7
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser benötigt Windows 10 oder neuer (64 Bit). Dieser PC verwendet eine ältere Windows-Version."
+      ${ElseIf} $1 = 22
+        MessageBox MB_OK|MB_ICONSTOP "O Acira Browser precisa do Windows 10 ou posterior (64 bits). Este computador usa uma versão mais antiga do Windows."
+      ${ElseIf} $1 = 16
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser richiede Windows 10 o versioni successive (64 bit). Questo PC usa una versione precedente di Windows."
+      ${ElseIf} $1 = 17
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser には Windows 10 以降（64 ビット）が必要です。このパソコンの Windows は古いバージョンです。"
+      ${ElseIf} $0 = 2052
+      ${OrIf} $0 = 4100
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser 需要 Windows 10 或更高版本（64 位）。这台电脑运行的 Windows 版本较旧。"
+      ${Else}
+        MessageBox MB_OK|MB_ICONSTOP "Acira Browser needs Windows 10 or later (64-bit). This PC is running an older version of Windows."
+      ${EndIf}
+      acOldWindowsQuit:
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    Pop $1
+    Pop $0
+    Call AcAskExisting
+  !endif
+!macroend
+
+!ifndef BUILD_UNINSTALLER
+; An Acira is already in the install folder (re-running setup): one branded question first, never the stock flow. Same version: Repair /
+; Open Acira / Cancel; older: Update to this version / Open / Cancel; newer: Open / Cancel (no downgrade). A running Acira is asked to quit
+; the ordinary way first (its session comes back). See AciraChoose.cs. Silent runs (the updater) never ask; /preview never gets here.
+Function AcAskExisting
+  IfSilent acAskDone
+  IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acAskDone
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\acira-choose.exe" "${BUILD_RESOURCES_DIR}\installer\acira-uninstall.exe"
+  Delete "$PLUGINSDIR\ac-choice.txt"
+  Exec '"$PLUGINSDIR\acira-choose.exe" --choose "$INSTDIR" "${VERSION}" "$PLUGINSDIR\ac-choice.txt"'
+  ; Wait for the answer. The question stays up until the installer's own card covers it, so the answer comes first and the window
+  ; leaves later. If the window was seen and is gone without an answer, that is Cancel; if it never shows in 10 s, install as before.
+  StrCpy $2 0
+  StrCpy $3 0
+  acAskWait:
+    Sleep 40
+    IntOp $2 $2 + 1
+    IfFileExists "$PLUGINSDIR\ac-choice.txt" acAskAnswered
+    System::Call 'user32::FindWindowW(p 0, w "Acira Browser Setup") p .r0'
+    ${If} $0 <> 0
+      StrCpy $3 1
+    ${ElseIf} $3 = 1
+      Goto acAskAnswered
+    ${ElseIf} $2 > 250
+      Goto acAskGo
+    ${EndIf}
+    Goto acAskWait
+  acAskAnswered:
+  StrCpy $4 "cancel"
+  ClearErrors
+  FileOpen $1 "$PLUGINSDIR\ac-choice.txt" r
+  ${IfNot} ${Errors}
+    FileRead $1 $4
+    FileClose $1
+  ${EndIf}
+  ${If} $4 == "proceed"
+    Goto acAskGo
+  ${EndIf}
+  ; Cancel, or Acira was opened: nothing was changed
+  ${If} $4 == "opened"
+    SetErrorLevel 0
+  ${Else}
+    SetErrorLevel 1223
+  ${EndIf}
+  Quit
+  acAskGo:
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+  acAskDone:
+FunctionEnd
+!endif
+
+; Acira-owned per-user capabilities only. Windows chooses defaults through its UI.
+!macro customInstall
+  !ifndef BUILD_UNINSTALLER
+    Call AcStage2
+    ; Branded uninstall question for Settings > Apps. QuietUninstallString stays the real uninstaller, and the launcher hands any /S run
+    ; (the updater removing the previous version) straight to the real uninstaller, so silent paths never see a window.
+    File "/oname=$INSTDIR\AciraRemove.exe" "${BUILD_RESOURCES_DIR}\installer\acira-uninstall.exe"
+    WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" UninstallString '"$INSTDIR\AciraRemove.exe" /currentuser'
+  !endif
+  WriteRegStr HKCU "${AC_REG_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${AC_REG_KEY}\Capabilities" "ApplicationName" "${AC_REG_APP}"
+  WriteRegStr HKCU "${AC_REG_KEY}\Capabilities" "ApplicationDescription" "An independent local web browser."
+  WriteRegStr HKCU "${AC_REG_KEY}\Capabilities" "ApplicationIcon" '$\"$INSTDIR\${AC_APP_EXE}$\",0'
+  WriteRegStr HKCU "${AC_REG_KEY}\Capabilities\URLAssociations" "http" "${AC_PROGID}"
+  WriteRegStr HKCU "${AC_REG_KEY}\Capabilities\URLAssociations" "https" "${AC_PROGID}"
+  WriteRegStr HKCU "Software\RegisteredApplications" "${AC_REG_APP}" "${AC_REG_KEY}\Capabilities"
+  WriteRegStr HKCU "Software\Classes\${AC_PROGID}" "" "${AC_REG_APP} URL"
+  WriteRegStr HKCU "Software\Classes\${AC_PROGID}" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\${AC_PROGID}\DefaultIcon" "" '$\"$INSTDIR\${AC_APP_EXE}$\",0'
+  WriteRegStr HKCU "Software\Classes\${AC_PROGID}\shell\open\command" "" '$\"$INSTDIR\${AC_APP_EXE}$\" $\"%1$\"'
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
+; Uninstaller: a short branded splash (not when run silently, e.g. by the updater), then an optional data removal question.
+!macro customUnInit
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "/S" $R1
+  ${If} ${Errors}
+    ; the splash picture carries English text: other languages skip it (the branded launcher AciraRemove.exe is what people normally see, in their language)
+    ReadEnvStr $R3 ACIRA_INSTALLER_LANG
+    ${If} $R3 == ""
+      System::Call 'kernel32::GetUserDefaultUILanguage() i .r0'
+      IntOp $R4 $0 & 0x3ff
+      StrCpy $R3 "en"
+      ${If} $R4 = 10
+      ${OrIf} $R4 = 12
+      ${OrIf} $R4 = 7
+      ${OrIf} $R4 = 22
+      ${OrIf} $R4 = 16
+      ${OrIf} $R4 = 17
+      ${OrIf} $0 = 2052
+      ${OrIf} $0 = 4100
+        StrCpy $R3 "other"
+      ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "en"
+      InitPluginsDir
+      File "/oname=$PLUGINSDIR\ac-un-dark.bmp" "${BUILD_RESOURCES_DIR}\installer\uninstall-dark-100.bmp"
+      StrCpy $R2 "ac-un-dark"
+      advsplash::show 1600 200 300 -1 "$PLUGINSDIR\$R2"
+      Pop $R1
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro customUnInstall
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "/S" $R1
+  ${If} ${Errors}
+    ReadEnvStr $R3 ACIRA_INSTALLER_LANG
+    ${If} $R3 == ""
+      System::Call 'kernel32::GetUserDefaultUILanguage() i .r0'
+      IntOp $R4 $0 & 0x3ff
+      ${If} $R4 = 10
+        StrCpy $R3 "es"
+      ${ElseIf} $R4 = 12
+        StrCpy $R3 "fr"
+      ${ElseIf} $R4 = 7
+        StrCpy $R3 "de"
+      ${ElseIf} $R4 = 22
+        StrCpy $R3 "pt"
+      ${ElseIf} $R4 = 16
+        StrCpy $R3 "it"
+      ${ElseIf} $R4 = 17
+        StrCpy $R3 "ja"
+      ${ElseIf} $0 = 2052
+        StrCpy $R3 "zh"
+      ${ElseIf} $0 = 4100
+        StrCpy $R3 "zh"
+      ${Else}
+        StrCpy $R3 "en"
+      ${EndIf}
+    ${EndIf}
+    ${If} $R3 == "es"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "¿Borrar también tus datos de Acira en este equipo (perfiles, marcadores, historial, inicios de sesión guardados)?$\n$\nElige No para conservarlos para una futura instalación." IDNO acKeepData
+    ${ElseIf} $R3 == "fr"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Supprimer aussi vos données Acira sur ce PC (profils, favoris, historique, connexions enregistrées) ?$\n$\nChoisissez Non pour les conserver pour une future installation." IDNO acKeepData
+    ${ElseIf} $R3 == "de"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Auch deine Acira-Daten auf diesem PC löschen (Profile, Lesezeichen, Verlauf, gespeicherte Anmeldungen)?$\n$\nWähle Nein, um sie für eine spätere Installation zu behalten." IDNO acKeepData
+    ${ElseIf} $R3 == "pt"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Apagar também seus dados do Acira neste computador (perfis, favoritos, histórico, logins salvos)?$\n$\nEscolha Não para mantê-los para uma instalação futura." IDNO acKeepData
+    ${ElseIf} $R3 == "it"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Eliminare anche i tuoi dati di Acira su questo PC (profili, segnalibri, cronologia, accessi salvati)?$\n$\nScegli No per conservarli per una futura installazione." IDNO acKeepData
+    ${ElseIf} $R3 == "ja"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "このパソコン上の Acira のデータ（プロファイル、ブックマーク、履歴、保存済みのサインイン情報）も削除しますか？$\n$\n今後の再インストールのために残す場合は「いいえ」を選んでください。" IDNO acKeepData
+    ${ElseIf} $R3 == "zh"
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除这台电脑上的 Acira 数据（配置文件、书签、历史记录、已保存的登录信息）？$\n$\n选择“否”可保留数据，以便将来重新安装。" IDNO acKeepData
+    ${Else}
+      MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete your Acira data on this PC (profiles, bookmarks, history, saved sign-ins)?$\n$\nChoose No to keep it for a future install." IDNO acKeepData
+    ${EndIf}
+    RMDir /r "$APPDATA\${AC_DATA_DIR}"
+    acKeepData:
+  ${EndIf}
+  ReadRegStr $R0 HKCU "${AC_REG_KEY}" "InstallLocation"
+  ${If} $R0 == $INSTDIR
+    DeleteRegValue HKCU "Software\RegisteredApplications" "${AC_REG_APP}"
+    DeleteRegKey HKCU "Software\Classes\${AC_PROGID}"
+    DeleteRegKey HKCU "${AC_REG_KEY}"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  ${EndIf}
+!macroend

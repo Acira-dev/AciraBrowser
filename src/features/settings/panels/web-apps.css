@@ -1,0 +1,7 @@
+/* Settings › Apps rows: icon on the shared left edge, then the usual copy and actions. */
+.st-row.wa-row{align-items:center;gap:12px}
+.wa-icon{flex:none;width:20px;height:20px;border-radius:4px;object-fit:contain}
+.wa-initial{display:grid;place-items:center;font-size:12px;font-weight:500;color:var(--st-text-2,rgb(var(--ink) / .64));border:1px solid var(--line,rgb(var(--ink) / .08))}
+.wa-actions{display:flex;gap:8px}
+.wa-remove{color:var(--danger,#d9474f)}
+.st-row.wa-row[data-unavailable]{opacity:.55}

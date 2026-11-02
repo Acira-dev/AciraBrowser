@@ -1,0 +1,19 @@
+/* R4-16 + R4-19: the main menu's Layout rows (BrowserMenu LayoutRows). Two 30px rows on the menu grid: the label on the rows'
+   text edge (8px padding + 16px icon column + 8px gap), the shared segmented track (Segmented.css .acira-seg) sized down to
+   24px so it sits inside the row with 3px above and below, right-aligned 4px from the row edge. No divider of their own:
+   they join the page group (Find, Zoom, Split view). */
+.app .browser-popup .menu-layout{display:grid}
+.app .browser-popup .menu-layout-row{display:flex;align-items:center;gap:8px;height:30px;min-height:30px;padding:0 3px 0 8px}
+.app .browser-popup .menu-layout-row>span{flex:1;min-width:0;padding-left:24px;font:400 13px/1.2 var(--font-ui);color:var(--text-1,currentColor);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app .browser-popup .menu-seg{height:24px;padding:2px;flex:none;--seg-track:var(--menu-hover,rgb(var(--ink,17 17 19)/.06))}
+.app .browser-popup .menu-seg .acira-seg-thumb{top:2px;bottom:2px}
+.app .browser-popup .menu-seg button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:20px;min-width:28px;padding:0 6px;font:500 12px/16px var(--font-ui)}
+.app .browser-popup .menu-seg button>svg{flex:0 0 16px;width:16px;height:16px}
+.app .browser-popup .menu-seg-labelled button{padding:0 8px 0 6px}
+.app .browser-popup .menu-seg button:hover:not([aria-checked='true']){color:var(--seg-ink,var(--text-1))}
+/* The menu's dense rows (F02, panels.css: a short window or 150%): 26px like every other row, the track 22px (2px above and below). */
+:root:root:root .browser-popup.popup-content-menu[data-density=compact] .menu-layout-row{height:26px;min-height:26px}
+:root:root:root .browser-popup.popup-content-menu[data-density=compact] .menu-seg{height:22px}
+:root:root:root .browser-popup.popup-content-menu[data-density=compact] .menu-seg button{height:18px}
+/* A view the row doesn't list (Focus) shows no thumb rather than a wrong one. */
+.app .browser-popup .menu-seg[data-empty] .acira-seg-thumb{opacity:0}

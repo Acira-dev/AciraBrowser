@@ -1,0 +1,100 @@
+{
+  "appId": "computer.acira.browser",
+  "productName": "Acira Browser",
+  "executableName": "AciraBrowser",
+  "asar": true,
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
+  "forceCodeSigning": false,
+  "directories": {
+    "buildResources": "packaging",
+    "output": "release/installers"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "packaging/acira-icon.ico",
+    "signAndEditExecutable": true,
+    "artifactName": "AciraBrowser-portable.${ext}",
+    "signExecutable": false
+  },
+  "mac": {
+    "category": "public.app-category.productivity",
+    "target": [{"target": "dmg", "arch": ["x64", "arm64"]}, {"target": "zip", "arch": ["x64", "arm64"]}],
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "packaging/mac/entitlements.mac.plist",
+    "entitlementsInherit": "packaging/mac/entitlements.mac.inherit.plist",
+    "artifactName": "AciraBrowser-${version}-mac-${arch}.${ext}",
+    "icon": "packaging/mac/acira-icon.icns"
+  },
+  "dmg": {
+    "title": "Acira Browser ${version}"
+  },
+  "nsis": {
+    "oneClick": true,
+    "multiLanguageInstaller": true,
+    "installerLanguages": ["en_US", "es_ES", "fr_FR", "de_DE", "pt_BR", "it_IT", "ja_JP", "zh_CN"],
+    "perMachine": false,
+    "allowElevation": false,
+    "packElevateHelper": false,
+    "runAfterFinish": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": false,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Acira Browser",
+    "uninstallDisplayName": "${productName}",
+    "installerIcon": "packaging/acira-icon.ico",
+    "uninstallerIcon": "packaging/acira-icon.ico",
+    "include": "packaging/acira-installer.nsh",
+    "warningsAsErrors": true,
+    "artifactName": "AciraBrowserSetup.${ext}"
+  },
+  "copyright": "Copyright © 2026 Acira, Inc.",
+  "extraMetadata": {
+    "author": {
+      "name": "Acira, Inc."
+    }
+  },
+  "files": [
+    "desktop/**/*",
+    "dist/**/*",
+    "resources/**/*",
+    "design-tokens.json",
+    "page-zoom-levels.json",
+    "package.json",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "!desktop/browser-services/tor-engine/win-x64/**",
+    "!**/*.map"
+  ],
+  "extraResources": [
+    {
+      "from": "desktop/browser-services/tor-engine/win-x64",
+      "to": "tor",
+      "filter": [
+        "tor.exe",
+        "LICENSE.tor.txt",
+        "pluggable_transports/lyrebird.exe",
+        "pluggable_transports/conjure-client.exe",
+        "pluggable_transports/LICENSE.lyrebird.txt",
+        "pluggable_transports/LICENSE.conjure.txt"
+      ]
+    }
+  ],
+  "asarUnpack": [
+    "**/*.node"
+  ]
+}

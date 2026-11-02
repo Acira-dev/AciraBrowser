@@ -1,0 +1,70 @@
+/* Selection colors are paired with the surface underneath them. Adaptive backgrounds identify selection; keyboard cursor uses one moving fill. */
+.app :is(.tab-strip-selection,.acira-compact-selection){background:var(--frame-selection-bg);box-shadow:none}
+.app.style-acira .tab-selection,.app.style-chrome .tab-selection,.app.style-dia .browser-tab.selected .tab-selection{background:var(--frame-selection-bg);box-shadow:none}
+.app .browser-tab.selected,.app .acira-compact-tab.selected{color:var(--frame-selection-fg)}
+/* Light tabs are neutral raised cards even on a coloured frame. Keep the ink
+   paired with the card when it is selected, reordered or cloned for dragging. */
+.app.style-acira[data-appearance=light] :is(.tab-strip-container,.acira-compact-tabs){--frame-selection-bg:var(--tab-selection-bg);--frame-selection-fg:var(--tab-selection-fg)}
+:root .app.style-acira[data-appearance=light] :is(.tab-strip-container,.acira-compact-tabs) :is(.browser-tab,.acira-compact-tab).selected{color:var(--tab-selection-fg)}
+/* The strip's selected tab is the toolbar surface (toolbar-controls.css), not a white card, so on a dark finish in light mode its ink is the
+   frame's, like every other tab on the strip (founder, 31 Oct: dark "New tab" on a dark tab). A private tab keeps its card and its ink. */
+:root:root .app.style-acira[data-appearance=light][data-chrome=dark] .tab-strip-container .tabs-strip>.browser-tab.selected:not([data-privacy]){color:var(--frame-text)}
+.app.style-acira[data-appearance=light] :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface=held]{background:var(--tab-carry-bg);color:var(--tab-carry-fg)}
+.app .browser-tab:not(.selected):hover,.app .acira-compact-tab:not(.selected):hover{background:var(--frame-hover);color:var(--frame-hover-text)}
+.app :is(.browser-tab,.acira-compact-tab)[data-tab-group]:not(.selected):hover:not([data-drag-surface]){background:var(--group-tray-hover);color:var(--group-tab-text)}
+.app .browser-tab .tab-close:hover,.app .acira-compact-tab-close:hover{background:var(--frame-hover);color:var(--frame-hover-text)}
+.app.style-chrome .browser-tab.selected:before{background:radial-gradient(circle at 0 0,transparent 12px,var(--frame-selection-bg) 12.5px)}
+.app.style-chrome .browser-tab.selected:after{background:radial-gradient(circle at 100% 0,transparent 12px,var(--frame-selection-bg) 12.5px)}
+.app.style-chrome .vertical-sidebar{--frame-selection-bg:var(--selection-bg);--frame-selection-fg:var(--selection-fg);--frame-selection-marker:var(--selection-marker);--frame-hover:var(--hover);--frame-hover-text:var(--hover-text)}
+
+/* Sharp spec: the keyboard cursor is one quiet moving fill (7% ink), never an outlined box. */
+.app .tab-result-list>.tab-switcher-selection{background:rgb(from var(--popup-ink,currentColor) r g b / .07);box-shadow:none}
+.app .popup-content-tabs .tab-result{color:var(--text);background:transparent}
+/* The Acira page icon wrapper keeps its own width; a stretched wrapper pushed titles to the middle of the row. */
+.app .browser-popup .tab-result>span.acira-symbol{flex:none}.app .browser-popup .tab-result>span.acira-symbol+span{flex:1 1 0%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .popup-content-tabs .tab-result[data-cursor=true]{color:var(--popup-selection-fg);background:transparent}
+.app .popup-content-tabs .tab-result[data-cursor=true] small{color:var(--popup-selection-muted)}
+.app .popup-content-tabs .tab-result-row[data-cursor=true]>.tab-result-close{color:var(--popup-selection-fg)}
+.app .popup-content-tabs .tab-result[aria-current=page]>span:last-child{color:var(--popup-selection-marker)}
+.app .popup-content-tabs .tab-result[aria-current=page] strong{font-weight:600}
+.app .popup-content-tabs .tab-result:focus-visible{outline:none}
+.app .popup-content-tabs .tab-result-close:hover{background:var(--hover);color:var(--hover-text)}
+.app .popup-content-tabs[data-input-mode=keyboard] .tab-result-close:hover{background:transparent;color:var(--text)}
+.app .popup-content-tabs[data-input-mode=keyboard] .tab-result-row[data-cursor=true]>.tab-result-close:hover{color:var(--popup-selection-fg)}
+
+.app .browser-settings .bs-sidebar nav>button.selected,.app .m-sidebar nav button.active{background:var(--selection-bg);color:var(--selection-fg);box-shadow:none}
+.app .browser-settings .bs-sidebar nav>button:not(.selected):hover,.app .m-sidebar nav button:not(.active):hover{background:var(--hover);color:var(--hover-text)}
+.app .segmented button.selected,.app .bs-mode>button.selected{background:var(--selection-bg);color:var(--selection-fg);box-shadow:none;border-color:var(--subtle-line)}
+.app .segmented button:not(.selected):hover,.app .bs-mode>button:not(.selected):hover{background:var(--hover);color:var(--hover-text)}
+.app .m-tabs button.active,.app .m-code-tabs button.active{color:var(--selection-fg);border-color:var(--selection-marker)}
+.app .m-tabs button.active::after{background:var(--selection-marker)}
+.app .m-coverage-toolbar .m-view-tabs button.active{background:var(--selection-bg);color:var(--selection-fg);box-shadow:none}
+
+.app :is(.browser-toolbar,.workspace-rail,.vertical-sidebar,.focus-toolbar,.titlebar) :is(.icon-button,.assistant-toggle,.profile-button,.current-tab-control,.rail-brand):hover:not(:disabled){background:var(--hover);color:var(--hover-text)}
+.app :is(.acira-shell,.workspace-rail,.vertical-sidebar,.titlebar) :is(.icon-button,.assistant-toggle,.profile-button,.current-tab-control,.rail-brand):hover:not(:disabled){background:var(--frame-hover);color:var(--frame-hover-text)}
+.app :is(.acira-shell,.workspace-rail) :is(.icon-button.active,.assistant-toggle.active){background:var(--frame-selection-bg);color:var(--frame-selection-fg);box-shadow:none}
+.app .bookmarks-bar button:hover{background:var(--hover);color:var(--hover-text)}
+.app.style-acira .bookmarks-bar button:hover{background:var(--frame-hover);color:var(--frame-hover-text)}
+.app .acira-compact-scroll:not(:disabled){background:var(--frame);color:var(--frame-text)}
+.app .acira-compact-scroll:hover:not(:disabled),.app .acira-compact-new:hover{background:var(--frame-hover);color:var(--frame-hover-text)}
+.app .chrome-shell .tab-search{background:var(--frame-hover);color:var(--frame-hover-text)}
+.app :is(.acira-shell,.workspace-rail,.vertical-sidebar,.titlebar) :focus-visible{outline-color:var(--frame-selection-marker)}
+.app .browser-settings :focus-visible,.app .segmented :focus-visible{outline-color:var(--selection-marker)}
+
+/* Reorder supplies an inline z-index of 1, shared by resting tabs. The moving
+   surface must cover sibling text, through the full snap/layout return. */
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface],
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface]:hover{background:var(--frame);color:var(--frame-text);z-index:2!important}
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface].selected,
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface].selected:hover{background:var(--frame-selection-bg);color:var(--frame-selection-fg)}
+
+/* Light pages can have a dark device finish. Frosted toolbar wells use page
+   ink; bare controls continue to inherit the independently readable frame ink. */
+.app.style-acira .acira-shell .expanded-navigation .navigation-controls,.app.style-acira .acira-shell .assistant-toggle:not(.active){color:var(--text)}
+.app.style-acira .acira-shell .expanded-navigation .navigation-controls .icon-button:hover:not(:disabled),.app.style-acira .acira-shell .assistant-toggle:hover{background:var(--hover);color:var(--hover-text)}
+.app.style-acira .acira-shell:is([data-layout=compact],[data-layout=focus]) .current-tab-control:not(:hover){color:var(--hover-text)}
+.app :is(.browser-tab,.acira-compact-tab)[data-drag-surface=held],
+.app :is(.browser-tab,.acira-compact-tab)[data-drag-surface=held]:hover{z-index:3!important}
+
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface=layout],
+.app :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface=layout]:hover{z-index:1!important}

@@ -1,0 +1,678 @@
+/* Menus and panels: ONE system (round 9; spec and drawing in docs/launch/concepts/panel-system-concept.html, bible §4).
+   Container  radius 8 · padding 4 · one dense glass surface (.92) + rim + e2 shadow · menus 260, panels 320 · no title
+              bar, no ×: Esc and click-away close.
+   Rows       radius 4 (concentric: 8 − 4) · padding 0 8 · height 30 menu / 32 fact / 44 identity (two lines) · the 16px
+              icon column + 8px gap is ALWAYS reserved, so every row's text starts at x = 4 + 8 + 16 + 8 = 36.
+              Title 13/450; secondary, values and shortcuts 12 at 44% (values 64%), right-aligned, tabular, not mono.
+   Groups     never a filled box inside the panel and never a divider between rows of one group; groups are separated
+              only by THE divider (--divider, below): 1px, the full content width, 24px soft fade at both ends. Optional group label
+              11/16 500 at 44% on the text edge.
+   States     one highlight for hover and keyboard: 6% (light 5%). Selected = trailing 16px accent check only.
+              Disabled 32%. Destructive = red text only. Disclosure = one 12px chevron, rotating 90° in 140ms.
+
+   Shared classes (new and rebuilt panels use these, no local restyling):
+     .acira-panel (+ .acira-panel-menu | .acira-panel-wide)   the container, for panels outside the popup surface
+     .acira-menu-row (+ -fact | -identity | -danger)           a row: [icon column] [title] [trailing]
+     .acira-menu-icon · .acira-menu-avatar                     what sits in the 16px icon column (avatar 20px, -2px)
+     .acira-menu-title · .acira-menu-sub                       title, and an identity row's second line
+     .acira-menu-meta · .acira-menu-value                      trailing shortcut/count (44%) · trailing value (64%)
+     .acira-menu-check · .acira-menu-chevron                   trailing selection check (accent) · disclosure chevron
+     .acira-menu-sep · .acira-menu-label                       the divider between groups · an optional group label
+   A row always has three children: the icon-column item (or an empty <span>), the title, the trailing item (or an empty
+   <span>). The existing popup rows (.menu-row, popup <hr>, tab results) are mapped onto the same metrics
+   below. Rules start from :root:root:root so they settle the older popup rules without !important. */
+
+.app,
+.fr-yours[data-tone='light'] {
+  --menu-line: rgb(0 0 0 / 0.1);
+  --menu-hover: rgb(0 0 0 / 0.05);
+  --menu-t3: color-mix(in srgb, currentColor 66%, transparent); /* R3-B05: 52% measured 3.44:1 on real pixels; 66% is 5.4:1 on white and 4.6:1 on a hovered row */
+  /* Light glass (round 12, Linear popup #ffffffe6 / 32px): mostly white, a 1px 8% ring, Geist's popover layers. */
+  --menu-surface: rgb(255 255 255 / 0.9);
+  --menu-rim: 0 0 0 1px rgb(0 0 0 / 0.08);
+  --menu-e2: 0 1px 1px rgb(0 0 0 / 0.02), 0 4px 8px -4px rgb(0 0 0 / 0.04), 0 16px 24px -8px rgb(0 0 0 / 0.06);
+  --menu-backdrop: blur(32px) saturate(1.1);
+}
+.app[data-theme='dark'],
+.fr-yours:not([data-tone='light']) {
+  --menu-line: rgb(255 255 255 / 0.1);
+  --menu-hover: rgb(255 255 255 / 0.06);
+  --menu-t3: color-mix(in srgb, currentColor 58%, transparent); /* R3-B05: 44% was 3.8:1; 58% is 5.5:1 on the dark surface and 4.7:1 on a hovered row */
+  --menu-surface: rgb(30 30 34 / 0.92);
+  --menu-rim: inset 0 0 0 1px rgb(255 255 255 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --menu-e2: 0 1px 2px rgb(0 0 0 / 0.24), 0 8px 24px -4px rgb(0 0 0 / 0.36), 0 24px 48px -16px rgb(0 0 0 / 0.4);
+  --menu-backdrop: blur(24px) saturate(1.2);
+}
+/* THE divider (founder, 25 Oct: "faded at the end in the premium way", never "floating"): every list divider in the app is
+   this one 1px line. It spans its container's full width from the left edge (never from the text indent) and fades in and
+   out over 24px at both ends. --menu-sep and --sep-line are the same token under the names older rules use. */
+.app,
+.fr-yours {
+  --menu-t2: color-mix(in srgb, currentColor 64%, transparent);
+  --divider-fade: 24px;
+  --divider-ink: var(--menu-line);
+  --divider: linear-gradient(90deg, transparent, var(--divider-ink) var(--divider-fade), var(--divider-ink) calc(100% - var(--divider-fade)), transparent);
+  --menu-sep: var(--divider);
+  --sep-line: var(--divider);
+  --sep-ink: var(--divider-ink);
+}
+
+/* ── Container ── */
+.acira-panel {
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--menu-surface);
+  -webkit-backdrop-filter: var(--menu-backdrop);
+  backdrop-filter: var(--menu-backdrop);
+  box-shadow: var(--menu-rim), var(--menu-e2);
+}
+.acira-panel-menu {
+  width: 260px;
+}
+.acira-panel-wide {
+  width: 320px;
+}
+
+/* ── Rows ── */
+.acira-menu-row {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: 400 13px/20px var(--font-ui);
+  text-align: left;
+  cursor: default;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.acira-menu-row-fact {
+  height: 32px;
+}
+.acira-menu-row-identity {
+  height: 44px;
+}
+.acira-menu-row:is(:hover, [data-highlighted='true'], :focus-visible) {
+  background: var(--menu-hover);
+  outline: none;
+}
+.acira-menu-row:is(:disabled, [aria-disabled='true']) {
+  color: color-mix(in srgb, currentColor 32%, transparent);
+  background: none;
+}
+.acira-menu-row-danger {
+  color: var(--btn-danger-ink, #c42b1c);
+}
+.acira-menu-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 450;
+}
+.acira-menu-sub {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 400 12px/16px var(--font-ui);
+  color: var(--menu-t3);
+}
+.acira-menu-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--menu-t2);
+}
+.acira-menu-avatar {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px;
+  overflow: hidden;
+  border-radius: 50%;
+  font: 500 11px/1 var(--font-ui);
+  color: #fff;
+}
+.acira-menu-meta {
+  font: 400 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--menu-t3);
+}
+.acira-menu-value {
+  font: 400 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--menu-t2);
+}
+.acira-menu-check {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+.acira-menu-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--menu-t3);
+  transition: transform 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+[aria-expanded='true'] > .acira-menu-chevron,
+details[open] > summary .acira-menu-chevron {
+  transform: rotate(90deg);
+}
+
+/* ── Groups ── */
+.acira-menu-sep,
+:root:root:root .browser-popup hr {
+  display: block;
+  flex: none;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--divider);
+  transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.acira-menu-label {
+  padding: 8px 8px 2px 36px;
+  font: 500 11px/16px var(--font-ui);
+  color: var(--menu-t3);
+}
+
+/* ── The popup container (the existing popup surface) ── */
+:root:root:root .browser-popup {
+  padding: 4px;
+}
+/* Panels have no title bar and no ×: the first row is content; Esc and click-away close. */
+:root:root:root .browser-popup:is(.popup-content-profile, .popup-content-security, .popup-content-tor, .popup-content-extensions, .popup-content-appearance, .popup-content-downloads, .popup-content-protection, .popup-content-vpn, .popup-content-update, .popup-content-whats-new) > .popup-header {
+  display: none;
+}
+/* Panels that keep a header (the tab viewer's "Your tabs 3"): a quiet label on the text edge. */
+:root:root:root .browser-popup .popup-header {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 4px 0 36px;
+}
+:root:root:root .browser-popup .popup-header > strong {
+  flex: 1;
+  font: 500 12px/16px var(--font-ui);
+  color: var(--menu-t3);
+}
+:root:root:root .acira-popup-surface .popup-material {
+  box-shadow: var(--menu-rim), var(--menu-e2);
+}
+
+/* ── Existing menu rows on the system ── */
+:root:root:root .browser-popup .menu-row {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  gap: 8px;
+  border-radius: 4px;
+}
+/* A row without a leading icon still reserves the 16px column, so its text starts at x = 36. */
+:root:root:root .browser-popup .menu-row:not(:has(> :is(svg, .menu-icon, .editor-glyph, .acira-symbol, .site-identity-icon, img, .profile-avatar))) {
+  padding-left: 32px;
+}
+:root:root:root .browser-popup :is(.menu-row, .tab-result-row, .profile-row):is(:hover, [data-cursor='true']) {
+  background: var(--menu-hover);
+}
+:root:root:root .browser-popup :is(.menu-row kbd, .popup-shortcut, .popup-count) {
+  font: 400 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--menu-t3);
+}
+
+/* The menu's zoom row: its label on the same text edge. */
+/* Its − value + group ends on the shortcut column: the + glyph sits 8px inside its 28px button, so a 20px right padding
+   puts the glyph's right edge where every shortcut ends (row padding 8 + chevron column 20). */
+:root:root:root .browser-popup .zoom-row {
+  min-height: 30px;
+  gap: 0;
+  padding: 0 20px 0 32px;
+}
+/* The zoom value is a value: 64%, tabular, centred between − and + in a fixed slot so 25% and 500% don't move them. */
+:root:root:root .browser-popup .zoom-row > button:not(.icon-button) {
+  min-width: 48px;
+  padding: 0;
+  justify-content: center;
+  text-align: center;
+  color: var(--menu-t2);
+  font: 400 12px/16px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+/* One shortcut column: in a menu with a submenu row, the 12px disclosure chevron gets its own trailing column and every
+   other row's shortcut ends where the submenu row's shortcut ends (12px chevron + 8px gap). */
+:root:root:root .browser-popup .menu-row-more > svg:last-child {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  margin-left: 0;
+  color: var(--menu-t3);
+  opacity: 1;
+}
+:root:root:root .browser-popup:has(.menu-row-more) .menu-row:not(.menu-row-more) > kbd {
+  margin-right: 20px;
+}
+
+/* Tab viewer and command bar: rows on the same grid; the search, hints and footer set apart by fade-ended lines. */
+:root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) :is(.tab-result, .tab-result-row) {
+  height: 32px;
+  min-height: 32px;
+}
+:root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) .tab-result {
+  gap: 8px;
+  padding-left: 8px;
+}
+:root:root:root .browser-popup :is(.tab-result-row, .tab-result-list > .tab-switcher-selection) {
+  border-radius: 4px;
+}
+:root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) .popup-fixed-search,
+:root:root:root .browser-popup.popup-content-palette .popup-search {
+  border-bottom: 0;
+  background: var(--menu-sep) center bottom / 100% 1px no-repeat;
+}
+:root:root:root .browser-popup .popup-search > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+:root:root:root .browser-popup .popup-hints,
+:root:root:root .browser-popup.popup-content-tabs .popup-fixed-footer {
+  border-top: 0;
+  background: var(--menu-sep) center top / 100% 1px no-repeat;
+}
+/* The tab viewer footer's space is padding, not margin: the popup measures its height from offsetHeight, which leaves
+   margins out, so a margin here made the list 1px short and faded its last row. */
+:root:root:root .browser-popup.popup-content-tabs .popup-fixed-footer {
+  margin-top: 0;
+  padding-top: 4px;
+}
+
+/* The profile panel is built from the shared classes above (F, 024c1db); nothing profile-specific is needed here. */
+
+/* ── Site popover and extensions (until E's rebuild): one divider style, no line above each row. ── */
+:root:root:root .site-information {
+  border-top: 0;
+  background: var(--menu-sep) center top / 100% 1px no-repeat;
+}
+:root:root:root .extension-row {
+  border-top: 0;
+}
+/* A note inside a panel is a line of secondary text on the text edge, never a filled box. */
+:root:root:root .browser-popup .info-note {
+  margin: 0;
+  padding: 6px 8px 8px 32px;
+  border-radius: 0;
+  background: none;
+  font-size: 12px;
+  line-height: 16px;
+  /* R3-B05: --menu-t3 is a share of currentColor, and a note sits inside a disclosure body whose own colour is already translucent, so
+     it compounded to 37 to 40% (2.8:1). The note takes its share of the popup ink instead. */
+  color: color-mix(in srgb, var(--text-primary, currentColor) 66%, transparent);
+}
+
+/* ── Appearance popup: the preferences block sits between two fade-ended dividers. ── */
+:root:root:root .appearance-preferences {
+  border-top: 0;
+  border-bottom: 0;
+  background:
+    var(--menu-sep) center top / 100% 1px no-repeat,
+    var(--menu-sep) center bottom / 100% 1px no-repeat;
+}
+
+/* ── Downloads popover: the list or empty state starts on the text edge, under no title bar. ── */
+:root:root:root .browser-popup .lib-empty {
+  padding: 12px 8px 12px 36px;
+}
+
+/* ── Make it yours: rows on the glass; one divider above the footer. ── */
+:root:root:root .fr-yours-row {
+  border-top: 0;
+  min-height: 44px;
+  padding: 6px 0;
+}
+:root:root:root .fr-yours-foot {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 0;
+  background: var(--menu-sep) center top / 100% 1px no-repeat;
+}
+
+/* ── Settings (a page of setting rows, so its rows keep a divider each): the same fade-ended divider. ── */
+:root:root:root
+  :is(
+    .st-row + .st-row,
+    ul.newtab-shortcut-editor > li + li,
+    ul.newtab-personal-images > li + li,
+    .acira-import-panel .aip-source + .aip-source,
+    .acira-import-panel .aip-file-row + .aip-file-row,
+    .acira-import-panel .aip-previous li + li,
+    .acira-import-panel .aip-results li + li
+  )::before {
+  background: var(--menu-sep);
+}
+:root:root:root .st-subgroup {
+  border-top: 0;
+  background: var(--menu-sep) center top / 100% 1px no-repeat;
+}
+
+/* ── Toasts: the panel surface; 40px rows on the x = 36 text edge; stacked toasts are separate messages, so a
+   fade-ended divider sits between them (never a full-width rule). ── */
+:root:root:root .page-toast {
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--menu-surface);
+  -webkit-backdrop-filter: var(--menu-backdrop);
+  backdrop-filter: var(--menu-backdrop);
+  box-shadow: var(--menu-rim), var(--menu-e2);
+}
+:root:root:root .app.opaque-glass .page-toast {
+  background: var(--overlay, var(--surface));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:root:root .toast-row {
+  flex: 0 0 40px;
+  height: 40px;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 4px;
+}
+/* The status tick is the 14px stroke check / cross (CheckMark), centred in the 16px icon column. */
+:root:root:root .toast-row > :first-child {
+  flex: 0 0 14px;
+  margin: 0 1px;
+}
+/* Equal inner padding: the action's key cap ends 8px inside the row, mirroring the 8px before the glyph column; the
+   action's hover fill stays 4px inside the row edge. The cap uses the one key-cap metric (padding 0 4). */
+:root:root:root .toast-row .toast-action {
+  margin-right: -4px;
+  padding: 0 4px 0 8px;
+}
+:root:root:root .toast-row .toast-action kbd {
+  padding: 0 4px;
+}
+:root:root:root .toast-row + .toast-row {
+  flex-basis: 49px;
+  height: 49px;
+  padding-top: 9px;
+  border-top: 0;
+  background: var(--menu-sep) center 4px / 100% 1px no-repeat;
+}
+
+/* ── Downloads rows in the popover: on the system grid, no bleed, radius 4. ── */
+:root:root:root .browser-popup .lib-row {
+  margin: 0;
+  padding: 4px 8px;
+  gap: 8px;
+  min-height: 44px;
+  border-radius: 4px;
+}
+
+/* ── Light popover glass (round 12): the captured backdrop is blurred 32px but barely saturated (1.1), so a colorful
+   page tints the menu instead of glowing through it. Dark keeps its 1.7. ── */
+:root:root:root .app:not([data-theme='dark']) .acira-popup-surface:is([data-material-provider='live'], [data-material-provider='opaque']) .popup-backdrop-sources {
+  filter: blur(var(--frost-blur, 32px)) saturate(1.1);
+}
+:root:root:root .app:not([data-theme='dark']) .acira-popup-surface.sheet-popup:is([data-material-provider='live'], [data-material-provider='opaque']) .popup-backdrop-sources {
+  filter: blur(var(--frost-blur, 32px)) saturate(1.1);
+}
+:root:root:root .app:not([data-theme='dark']) .acira-popup-surface.sheet-popup[data-formation-ready='true']:is([data-material-provider='live'], [data-material-provider='opaque']) .popup-backdrop-sources {
+  filter: blur(var(--frost-blur, 32px)) saturate(1.1);
+}
+
+/* ── Page / link right-click menu (bible §4): the menu material and rows; no title bar. ── */
+:root:root:root .browser-popup.popup-content-page-context > .popup-header {
+  display: none;
+}
+/* A row that cannot run: 32% ink, its glyph with it, no hover. */
+:root:root:root .browser-popup .menu-row:disabled {
+  color: color-mix(in srgb, currentColor 32%, transparent);
+  background: none;
+}
+:root:root:root .browser-popup .menu-row:disabled > svg {
+  opacity: .32;
+}
+
+/* ── Equal insets in every panel (founder, 25 Oct: "the spacing above it"): the body's 2px sits at the top, not the
+   bottom, so the first and last rows are both 6px from the edge (4px container + 2px) and no height changes. ── */
+:root:root:root .browser-popup .popup-body-content {
+  padding-top: 2px;
+  padding-bottom: 0;
+}
+
+/* The host column ends on one edge whichever row has the cursor (D, M07; restored after dca47e8d removed it with the
+   old edge block): the close button's space is already reserved by the row's right padding. */
+:root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) .tab-result-row:is(:hover, [data-cursor=true], :focus-within) .tab-result-label > small {
+  margin-right: 0;
+}
+/* Command bar (D, M08; restored after dca47e8d removed it with the old edge block): the section label sits on the row
+   titles' edge. */
+:root:root:root .browser-popup.popup-content-palette .palette-row {
+  gap: 8px;
+}
+:root:root:root .browser-popup.popup-content-palette .palette-section {
+  padding-left: 32px;
+}
+/* ── Tab viewer (Alt+T; founder, 25 Oct: "clearer"; M07): the header, the search text and the row titles share the one
+   x = 36 edge; the header is in full ink (its count and Alt+T stay quiet); the search is a field (a 1px ring, 32px)
+   set apart from the rows rather than another row; no "New tab" footer, which repeated the New tab page's own row. ── */
+:root:root:root .browser-popup.popup-content-tabs > .popup-header {
+  padding-left: 32px;
+  padding-right: 8px;
+}
+:root:root:root .browser-popup.popup-content-tabs > .popup-header > strong {
+  color: var(--text-1, var(--text-primary));
+  font: 500 13px/20px var(--font-ui);
+}
+:root:root:root .browser-popup.popup-content-tabs .popup-fixed-search {
+  margin: 0;
+  padding: 6px 0;
+  background: none;
+}
+:root:root:root .browser-popup.popup-content-tabs .popup-search {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 8px;
+  gap: 8px;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent);
+}
+:root:root:root .browser-popup.popup-content-tabs .popup-search:focus-within {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
+}
+:root:root:root .browser-popup.popup-content-tabs .popup-search > svg {
+  color: var(--menu-t2, var(--text-2));
+}
+:root:root:root .browser-popup.popup-content-tabs .popup-search input {
+  padding: 0;
+  font: 400 13px/20px var(--font-ui);
+}
+/* One host column (M07): the row's 40px end padding already clears the ×, so the selected row's host does not shift. */
+:root:root:root .browser-popup.popup-content-tabs .tab-result-row .tab-result-label > small {
+  margin-right: 0;
+}
+
+/* ══ Divider sweep (founder, 25 Oct): every list divider is THE divider (--divider, top of file). ══
+   It spans its container from the left edge to the right edge (never from the text indent) with a 24px fade at both
+   ends. A hover, keyboard or selected fill hides the dividers that touch it, so a filled row never shows a seam. Lists
+   that drew a solid 1px border keep that border's 1px (now transparent) and draw the divider in it, so no row moves. */
+
+/* Menus and panels: the group divider next to a filled row steps out of the way. */
+:root:root:root :is(hr, .acira-menu-sep):has(+ :is(.menu-row, .acira-menu-row, .acira-disclosure):is(:hover, :focus-visible, [data-highlighted='true'], [data-cursor='true'])),
+:root:root:root :is(.menu-row, .acira-menu-row, .acira-disclosure):is(:hover, :focus-visible, [data-highlighted='true'], [data-cursor='true']) + :is(hr, .acira-menu-sep) {
+  opacity: 0;
+}
+
+/* Settings (its rules sit under this scope, so these do too): a row divider spans the content column, from its left edge
+   (the text edge) to its right edge (the controls' edge; V06), never into a row's 12px hover bleed; a found or focused
+   row hides the dividers above and below it. */
+:root:root:root .app.style-acira .browser-settings.settings-acira {
+  & :is(.st-row + .st-row, .profile-cleanup__origins.st-row, .profile-cleanup__categories, .profile-cleanup__origins,
+      ul.newtab-shortcut-editor > li + li, ul.newtab-personal-images > li + li,
+      .acira-import-panel .aip-source + .aip-source, .acira-import-panel .aip-file-row + .aip-file-row,
+      .acira-import-panel .aip-previous li + li, .acira-import-panel .aip-results li + li)::before {
+    left: 0;
+    right: 0;
+    background: var(--divider);
+    transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  & :is(.st-row + .st-row, .profile-cleanup__origins.st-row, .acira-import-panel .aip-source + .aip-source)::before {
+    left: 12px;
+    right: 12px;
+  }
+  & :is(.st-row[data-found], .st-row[data-found] + .st-row, .st-row:focus-visible, .st-row:focus-visible + .st-row,
+      .acira-import-panel .aip-source:hover:enabled, .acira-import-panel .aip-source:hover:enabled + .aip-source)::before {
+    opacity: 0;
+  }
+  & .st-subgroup {
+    border-top-color: transparent;
+    background: var(--divider) left top / 100% 1px no-repeat border-box;
+  }
+}
+
+/* Solid 1px rules between list rows and page sections → the divider, drawn in the border's own pixel. */
+:root:root:root :is(
+  .bs-row + .bs-row, .bs-profile-row + .bs-profile-row, .bs-preference + .bs-preference,
+  .pn-row, .rt-facts, .rt-steps, .rt-review-actions, .tor-facts li,
+  .tab-switcher-foot, .pm-editor, .content-filter-controls:not(.acira-disclosure-body *), .toolbar-customize-footer, .rw-foot
+) {
+  border-top-color: transparent;
+  background-image: var(--divider);
+  background-origin: border-box;
+  background-position: left top;
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+}
+:root:root:root :is(
+  .rt-facts > div, .rt-step,
+  .settings-acira :is(.browser-imports, section[aria-label='Import browser data']) > .bs-group
+) {
+  border-bottom-color: transparent;
+  background-image: var(--divider);
+  background-origin: border-box;
+  background-position: left bottom;
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+}
+:root:root:root .tor-facts li:last-child {
+  border-bottom-color: transparent;
+  background-image: var(--divider), var(--divider);
+  background-position: left top, left bottom;
+}
+
+/* Site information: the certificate note's rule spans the panel content. */
+:root:root:root .certificate-notice {
+  background: var(--divider) left bottom / 100% 1px no-repeat;
+}
+
+/* The sidebar's zone dividers and footer rule span the sidebar from its left edge, in the sidebar's own ink. */
+:root:root:root .app.style-acira .acira-sidebar .sb-sep {
+  margin: 6px 0;
+  background: linear-gradient(90deg, transparent, var(--sb-line) var(--divider-fade), var(--sb-line) calc(100% - var(--divider-fade)), transparent);
+}
+:root:root:root .app.style-acira .acira-sidebar .sb-foot::before {
+  left: 0;
+  right: 0;
+  background: linear-gradient(90deg, transparent, var(--sb-line) var(--divider-fade), var(--sb-line) calc(100% - var(--divider-fade)), transparent);
+}
+
+/* ── On/off rows (founder, 25 Oct: "turn blue if it's on"): every toggle row in a menu (MenuToggle) carries the panel
+   switch (28×16, C's metrics, the accent when on) on the right, its glyph takes the accent when on, and it flips in place
+   while the menu stays open. Checks stay only for "choose one of" lists. In a menu with switch rows the switch gets its
+   own trailing column and every shortcut ends before it (28 + 8); a submenu chevron sits at that column's right edge. ── */
+:root:root:root .browser-popup .menu-toggle > .menu-switch {
+  flex: 0 0 28px;
+  overflow: visible;
+  margin-left: auto;
+  pointer-events: none;
+}
+:root:root:root .browser-popup .menu-toggle > .menu-toggle-blank {
+  flex: 0 0 16px;
+}
+:root:root:root .browser-popup .menu-toggle > :is(svg, .ed-editor-icon):first-child {
+  transition: color 140ms cubic-bezier(.45, .05, .55, .95);
+}
+:root:root:root .browser-popup .menu-toggle[aria-checked='true'] > :is(svg, .ed-editor-icon):first-child {
+  color: var(--toggle-on, var(--accent));
+}
+:root:root:root .browser-popup:has(.menu-toggle) .menu-row:not(.menu-toggle):not(.menu-row-more) > kbd {
+  margin-right: 36px;
+}
+:root:root:root .browser-popup:has(.menu-toggle) .menu-row-more > kbd {
+  margin-right: 16px;
+}
+:root:root:root .browser-popup:has(.menu-toggle) .zoom-row {
+  padding-right: 36px;
+}
+/* A switch row's own shortcut ends on the same column as every other (the switch is its trailing item). */
+:root:root:root .browser-popup:has(.menu-toggle) .menu-row.menu-toggle > kbd {
+  margin-right: 0;
+}
+
+/* More tools (V02): the Acira menu's second step, the same rows and no title bar. */
+:root:root:root .browser-popup.popup-content-more-tools > .popup-header {
+  display: none;
+}
+
+/* Site information (V03): the panel's group divider already sits above it, so the section draws no second line. */
+:root:root:root .site-controls > hr + .site-information {
+  background: none;
+}
+
+/* F02 (M's sweep, 900×600): when the window is too short for the Acira menu (menuDense in ui/popup.ts), its rows step
+   down to 26px and the whole menu fits without scrolling (490px). Where even that can't fit (a short window at 150%), the
+   list scrolls with a clear cue: its bottom edge fades and a chevron shows until the end is reached, both driven by the
+   scroll position itself (no script), so no row ever reads as cut. */
+:root:root:root .browser-popup.popup-content-menu[data-density=compact] :is(.menu-row, .zoom-row) {
+  min-height: 26px;
+  height: 26px;
+}
+@property --menu-scroll-fade { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@keyframes menu-scroll-cue { from, 92% { --menu-scroll-fade: 28px; opacity: 1; } to { --menu-scroll-fade: 0px; opacity: 0; } }
+@keyframes menu-scroll-mask { from, 92% { --menu-scroll-fade: 28px; } to { --menu-scroll-fade: 0px; } }
+:root:root:root .browser-popup.popup-content-menu { timeline-scope: --menu-scroll; }
+:root:root:root .browser-popup.popup-content-menu .popup-scroll {
+  scroll-timeline: --menu-scroll block;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--menu-scroll-fade)), transparent);
+  animation: menu-scroll-mask linear both;
+  animation-timeline: --menu-scroll;
+}
+:root:root:root .browser-popup.popup-content-menu::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-right: 1.5px solid var(--menu-t3, currentColor);
+  border-bottom: 1.5px solid var(--menu-t3, currentColor);
+  transform: rotate(45deg);
+  pointer-events: none;
+  opacity: 0;
+  animation: menu-scroll-cue linear both;
+  animation-timeline: --menu-scroll;
+}
+/* While the popup forms (SheetPopupSurface's cascade) its rows rise 3px and a haze copy repeats the list: both briefly
+   overflow it, so the cue waits until the rows have settled instead of flashing on every open. */
+:root:root:root [data-forming] .browser-popup.popup-content-menu .popup-scroll,
+:root:root:root [data-forming] .browser-popup.popup-content-menu::after { animation: none; }
+/* These timelines describe scroll position, not decorative motion. Keep their information in reduced motion, and
+   only fade the chevron: fading the scrolling list itself would hide its last commands at the end. */
+:root:root:root .app[data-reduced-motion=true] .browser-popup.popup-content-menu .popup-scroll {
+  animation: menu-scroll-mask linear both !important;
+  animation-timeline: --menu-scroll !important;
+}
+:root:root:root .app[data-reduced-motion=true] .browser-popup.popup-content-menu::after {
+  animation: menu-scroll-cue linear both !important;
+  animation-timeline: --menu-scroll !important;
+}

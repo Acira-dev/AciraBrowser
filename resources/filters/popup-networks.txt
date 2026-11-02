@@ -1,0 +1,29 @@
+! Acira pop-up ad networks. Written in the uBlock $popup syntax and matched with the page that opened the window as the source (desktop/browser-services/popup-policy.cjs).
+! These are ad networks whose business is pop-ups, pop-unders and redirect tabs. They are added to the $popup rules that come with the uBlock filter lists.
+||adcash.com^$popup,third-party
+||ad-maven.com^$popup,third-party
+||admaven.com^$popup,third-party
+||adsterra.com^$popup,third-party
+||bidvertiser.com^$popup,third-party
+||clickadu.com^$popup,third-party
+||clickaine.com^$popup,third-party
+||ero-advertising.com^$popup,third-party
+||exdynsrv.com^$popup,third-party
+||exoclick.com^$popup,third-party
+||exosrv.com^$popup,third-party
+||highperformanceformat.com^$popup,third-party
+||hilltopads.net^$popup,third-party
+||juicyads.com^$popup,third-party
+||onclickads.net^$popup,third-party
+||onclkds.com^$popup,third-party
+||oclasrv.com^$popup,third-party
+||plugrush.com^$popup,third-party
+||popads.net^$popup,third-party
+||popcash.net^$popup,third-party
+||profitablegatecpm.com^$popup,third-party
+||propellerads.com^$popup,third-party
+||richads.com^$popup,third-party
+||topcreativeformat.com^$popup,third-party
+||trafficfactory.biz^$popup,third-party
+||trafficstars.com^$popup,third-party
+||tsyndicate.com^$popup,third-party

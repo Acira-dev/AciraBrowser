@@ -1,0 +1,88 @@
+/* R4-21: a window-view switch (Full · Compact · Focus · Seamless, the menu's View row, Settings cards, Ctrl+Shift+F) morphs
+   the toolbar instead of swapping it. It rides the shared layout view transition (sharedMotion startModeTransition 'layout',
+   data-mode-switch=layout): every control of the top row carries its own view-transition-name, so the controls that stay
+   glide to their new place on the spring, the ones that leave fade and shrink into place, and the ones that arrive grow in
+   with a short stagger. Content is never stretched: the address field and the tab chips keep their pixels and are revealed
+   by their morphing box (Apple morph research §4). Durations follow the speed setting (--motion-scale); Off has no
+   transition at all (startModeTransition applies the change at once). Scoped to the one persistent toolbar so no name is
+   ever used twice (a duplicate cancels the whole transition).
+   Every name carries the setup guard (`:root:not([data-fr-finale]) .app…:not(:has(>.setup-dialog))`, tests/setup-chrome-names):
+   a named element is captured on its own and drawn ABOVE the whole frame, so while setup is on screen (its theme crossfade,
+   an Auto flip) or leaving (the finale) these controls flashed over the setup scene without their toolbar (R4-50). */
+.app.style-acira .browser-shell>.acira-persistent-toolbar :is(.navigation-controls>*,.address-bar,.toolbar-menu-control,.toolbar-tab-overview,.acira-compact-tabs,.toolbar-actions>[data-toolbar-item],.expanded-navigation>.sidebar-toggle-control,.compact-workspace-toggle>.sidebar-toggle-control){view-transition-class:acira-control}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .navigation-controls>.icon-button:nth-child(1){view-transition-name:acira-nav-1}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .navigation-controls>.icon-button:nth-child(2){view-transition-name:acira-nav-2}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .navigation-controls>.icon-button:nth-child(3){view-transition-name:acira-nav-3}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .navigation-controls>.icon-button:nth-child(4){view-transition-name:acira-nav-4}
+/* The sidebar button: unnamed, it rode the toolbar's own picture and slid over the back / forward / reload buttons while the sidebar came or
+   went, and started over the traffic lights in Seamless. Named, it glides to its place like the other controls (edge and layout switches). */
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar :is(.expanded-navigation>.sidebar-toggle-control,.compact-workspace-toggle>.sidebar-toggle-control){view-transition-name:acira-sidebar-toggle}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .address-bar{view-transition-name:acira-address}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-menu-control{view-transition-name:acira-menu-button}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-tab-overview{view-transition-name:acira-tab-overview}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .acira-compact-tabs{view-transition-name:acira-mini-tabs}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=focus]{view-transition-name:acira-tb-focus}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=profile]{view-transition-name:acira-tb-profile}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=extensions]{view-transition-name:acira-tb-extensions}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=bookmarks]{view-transition-name:acira-tb-bookmarks}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=downloads]{view-transition-name:acira-tb-downloads}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=history]{view-transition-name:acira-tb-history}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=split]{view-transition-name:acira-tb-split}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=appearance]{view-transition-name:acira-tb-appearance}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=protection]{view-transition-name:acira-tb-protection}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=vpn]{view-transition-name:acira-tb-vpn}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .toolbar-actions>[data-toolbar-item=routines]{view-transition-name:acira-tb-routines}
+
+/* Controls that stay: the box glides and resizes on the house spring, in step with the toolbar row (sidebar.css). */
+:root[data-mode-switch=layout]::view-transition-group(*.acira-control){animation-duration:calc(280ms * var(--motion-scale, 1));animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+/* The address field changes width (the sidebar opening in Full, a view switch): a crossfade showed the old and the new field
+   side by side inside the box while it morphed, two fields over the toolbar. Only the new one glides, at its own width. */
+:root:root[data-mode-switch=layout]::view-transition-old(acira-address){animation:none!important;opacity:0!important}
+:root:root[data-mode-switch=layout]::view-transition-new(acira-address){animation:none!important;opacity:1!important}
+/* Never stretch text or glyphs: both images keep their size, anchored at the start, and crossfade inside the moving box. */
+:root[data-mode-switch=layout]::view-transition-old(*.acira-control),
+:root[data-mode-switch=layout]::view-transition-new(*.acira-control){height:100%;width:auto;object-fit:none;object-position:left center}
+/* The box clips its images, so the wider old field never shows its star beyond the shrinking field. Its corners stay round
+   through the morph: an overflow clip's radius does not reach the captured images (it cut the field's ends square until the
+   switch ended), a clip-path does; the address field keeps its own 4px. */
+:root[data-mode-switch=layout]::view-transition-image-pair(*.acira-control){overflow:hidden;border-radius:6px;clip-path:inset(0 round 6px)}
+:root[data-mode-switch=layout]::view-transition-image-pair(acira-address){clip-path:inset(0 round 4px)}
+:root[data-mode-switch=layout]::view-transition-old(*.acira-control):not(:only-child){animation:calc(120ms * var(--motion-scale, 1)) linear both acira-control-fade-out}
+:root[data-mode-switch=layout]::view-transition-new(*.acira-control):not(:only-child){animation:calc(120ms * var(--motion-scale, 1)) linear both acira-control-fade-in}
+/* A control that leaves fades and shrinks where it is; one that arrives grows in, a beat after the row starts to move. */
+:root[data-mode-switch=layout]::view-transition-old(*.acira-control):only-child{animation:calc(150ms * var(--motion-scale, 1)) cubic-bezier(.3,0,.8,.15) both acira-control-leave}
+:root[data-mode-switch=layout]::view-transition-new(*.acira-control):only-child{animation:calc(220ms * var(--motion-scale, 1)) cubic-bezier(.16,1,.3,1) calc(60ms * var(--motion-scale, 1)) both acira-control-arrive}
+/* The short list stagger for arrivals, left to right along the row. */
+:root[data-mode-switch=layout]::view-transition-new(acira-nav-2):only-child{animation-delay:calc(70ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-nav-3):only-child{animation-delay:calc(85ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-nav-4):only-child{animation-delay:calc(100ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-tb-profile):only-child{animation-delay:calc(70ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-tb-extensions):only-child{animation-delay:calc(85ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-tb-bookmarks):only-child{animation-delay:calc(100ms * var(--motion-scale, 1))}
+:root[data-mode-switch=layout]::view-transition-new(acira-tb-downloads):only-child{animation-delay:calc(115ms * var(--motion-scale, 1))}
+@keyframes acira-control-leave{to{opacity:0;transform:scale(.6)}}
+@keyframes acira-control-arrive{from{opacity:0;transform:scale(.6)}}
+@keyframes acira-control-fade-out{to{opacity:0}}
+@keyframes acira-control-fade-in{from{opacity:0}}
+
+/* The same controls in an edge reveal or hide of Compact / Full (seamless.css): each glides to its place on the edge's timing,
+   keeping its pixels; the address field is revealed by its morphing box, round at both ends; never two copies crossfading. */
+:root[data-mode-switch=edge]::view-transition-old(*.acira-control),
+:root[data-mode-switch=edge]::view-transition-new(*.acira-control){height:100%;width:auto;object-fit:none;object-position:left center}
+:root[data-mode-switch=edge]::view-transition-image-pair(*.acira-control){overflow:hidden;clip-path:inset(0 round 6px)}
+:root[data-mode-switch=edge]::view-transition-image-pair(acira-address){clip-path:inset(0 round 4px)}
+:root[data-mode-switch=edge]::view-transition-old(*.acira-control):not(:only-child){animation:none;opacity:0}
+:root[data-mode-switch=edge]::view-transition-new(*.acira-control):not(:only-child){animation:none;opacity:1}
+
+/* The docked sidebar hiding or arriving (a layout switch): the glass column goes with it. Its tint used to be the first layer of the
+   frame's own background (frost-preview.css), so the frame's 240ms expo-out crossfade swapped it for the plain frame tint within a few
+   frames while the sidebar was still leaving, and the glassy column seemed to vanish (founder, 1 Nov). The tint now sits on the
+   sidebar itself during the switch, and the sidebar slides out or in on the page's own 480ms spring, so the glass travels with the
+   page's edge. A fixed 480ms, not scaled by --motion-scale: the page card's group (sidebar.css) and the native page glide are 480ms at every
+   animation speed, and a sidebar scaled by Premium's 1.7 trailed the page by up to a quarter of the travel (sidebar-hunt, 1 Nov). Only where the frame is veiled over glass (the same materials as the frame rule) and not for the floating sidebar. */
+html:is([data-material=acrylic],[data-material=vibrancy]):root[data-mode-switch=layout]:not([data-edge-float]) .app.style-acira:not(.native-layer):has(>.ed-rail.is-expanded:not(.is-peek)){background:linear-gradient(180deg,rgb(var(--chrome-rgb) / var(--chrome-veil-top)),rgb(var(--chrome-rgb) / var(--chrome-veil-bottom))) var(--navigation-width,0px) 0/100% 100% no-repeat}
+html:is([data-material=acrylic],[data-material=vibrancy]):root[data-mode-switch=layout]:not([data-edge-float]) .app.style-acira:not(.native-layer)>.ed-rail.is-expanded:not(.is-peek){background:linear-gradient(180deg,rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-top)),rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-bottom)))}
+:root[data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-leave}
+:root[data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-arrive}
+@keyframes acira-sidebar-leave{from{transform:none}to{transform:translateX(-100%)}}
+@keyframes acira-sidebar-arrive{from{transform:translateX(-100%)}to{transform:none}}

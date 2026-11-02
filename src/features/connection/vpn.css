@@ -1,0 +1,42 @@
+.vpn-panel { display: flex; flex-direction: column; gap: 12px; width: 100%; min-width: 0; color: var(--text-primary, var(--text-1)); font: 400 13px/1.45 var(--font-ui); }
+.vpn-note { margin: 0; color: var(--text-secondary, var(--text-2)); font-size: 12px; overflow-wrap: anywhere; }
+.vpn-provider { display: flex; flex-direction: column; gap: 8px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.vpn-provider-title { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.vpn-provider-title strong { font-size: 13px; font-weight: 500; }
+.vpn-state { color: var(--text-secondary, var(--text-2)); font-size: 12px; }
+.vpn-state[data-state=connected] { color: var(--text-primary, var(--text-1)); }
+.vpn-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.vpn-actions > button:not(.acira-button), .vpn-refresh:not(.acira-button) { min-height: 28px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; color: inherit; font: inherit; }
+.vpn-actions > button:not(.acira-button):hover, .vpn-refresh:not(.acira-button):hover { background: var(--hover-bg, rgb(127 127 127 / .08)); }
+.vpn-actions > button:not(.acira-button):focus-visible, .vpn-refresh:not(.acira-button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vpn-actions > button:not(.acira-button):disabled, .vpn-refresh:not(.acira-button):disabled { opacity: .45; }
+.vpn-actions > .vpn-help { margin-inline-start: auto; }
+.vpn-refresh { align-self: flex-start; }
+.vpn-panel[data-compact] { gap: 8px; }
+.vpn-panel[data-compact] .vpn-provider { padding-block: 8px; }
+.vpn-provider-pick { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 4px 0; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: start; font: inherit; }
+.vpn-provider-pick > strong { flex: 1; font-weight: 500; }
+.vpn-provider-pick > svg { flex: none; }
+.vpn-provider-pick[aria-expanded=true] > svg { transform: rotate(180deg); }
+.vpn-provider-pick[aria-expanded=true] > strong { color: var(--fr-text, var(--text-primary)); }
+.vpn-provider-pick:focus-visible { outline: 2px solid var(--fr-accent, var(--accent)); outline-offset: 2px; }
+.vpn-panel[data-setup] { margin-top: 12px; color: var(--fr-text); }
+.vpn-panel[data-setup] :is(.vpn-note,.vpn-state) { color: var(--fr-text-2); }
+.vpn-panel[data-setup] .vpn-provider { padding-block: 0; gap: 4px; border-color: var(--fr-line); }
+.vpn-panel[data-setup] .vpn-actions { padding-bottom: 8px; }
+.popup-content-vpn .popup-header { display: none; }
+/* The toolbar VPN popup on the panel system (R3-20): rows on one grid (16px icon column, text at x = 36), THE divider between
+   providers, notes as quiet sub-copy on the text edge, buttons from buttons.css. Settings and setup keep their own layout. */
+.popup-content-vpn .vpn-panel { padding: 0; gap: 0; box-sizing: border-box; }
+.popup-content-vpn .vpn-note { padding: 6px 8px 6px 36px; font: 400 12px/16px var(--font-ui); color: var(--menu-t3, var(--text-2)); }
+.popup-content-vpn .vpn-note.vpn-warning { color: var(--menu-t2, var(--text-2)); }
+.popup-content-vpn .vpn-provider { position: relative; gap: 0; padding: 0 0 8px; border: 0; }
+.popup-content-vpn .vpn-provider::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--divider); pointer-events: none; }
+.popup-content-vpn .vpn-provider-title { justify-content: flex-start; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.popup-content-vpn .vpn-provider-title > .acira-menu-title { flex: 1; }
+.popup-content-vpn .vpn-state { color: var(--menu-t2, var(--text-2)); font: 400 12px/16px var(--font-ui); white-space: nowrap; }
+.popup-content-vpn .vpn-actions { padding: 0 8px 0 36px; gap: 8px; }
+.popup-content-vpn .vpn-actions > .vpn-help { margin-inline-start: auto; }
+.popup-content-vpn .vpn-refresh { align-self: flex-start; margin: 4px 8px 4px 28px; }
+.fr-sheet-main > .vpn-panel { max-height: 100%; overflow-y: auto; padding-inline: 2px; box-sizing: border-box; text-align: start; }
+@media (forced-colors: active) { .vpn-actions > button, .vpn-refresh { border-color: ButtonText; } }

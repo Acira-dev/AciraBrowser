@@ -1,0 +1,7 @@
+.workspace-playback-glyph { position:relative; display:grid; place-items:center; width:16px; height:16px; flex:none; }
+.workspace-playback-identity { display:grid; place-items:center; width:16px; height:16px; }
+.workspace-playback-identity > svg { width:16px; height:16px; }
+:root .workspace-playback-glyph[data-playing] > .workspace-playback-identity { display:none; }
+:root .workspace-playback-glyph[data-playing] > .tab-sound-meter { display:grid; place-items:center; width:16px; height:16px; color:inherit; }
+:root button:is(:hover,:focus-visible) .workspace-playback-glyph[data-playing] > .workspace-playback-identity { display:grid; }
+:root button:is(:hover,:focus-visible) .workspace-playback-glyph[data-playing] > .tab-sound-meter { display:none; }

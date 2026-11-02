@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "excluded": [
+    {
+      "file": "public/workspace-coast.png",
+      "sha256": "b2f5055dad1dbf670f23232cfaea687eea45387eac4caaa1df494e95d2760c36",
+      "reason": "Inherited bitmap has unresolved creator/license evidence; private original and historical Git remain preserved, no distribution approval."
+    }
+  ],
+  "catalog": "dist/artwork/museum-catalog.json",
+  "qualification": "Source provenance and primary metadata verification in docs/release/artwork-source-qualification.json; packaging checks byte identity and exclusion only."
+}

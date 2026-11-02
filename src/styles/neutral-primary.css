@@ -1,0 +1,4 @@
+/* One primary button color for every Acira page moment (design bible §11): neutral and high-contrast on every finish.
+   Dark: near-white fill, near-black text. Light: near-black fill, white text. The finish accent is for selection and focus. */
+.app { --np-bg: #111113; --np-fg: #fff; --np-hover: #2a2a2e; }
+.app[data-theme='dark'] { --np-bg: #ededef; --np-fg: #0e0e10; --np-hover: #ffffff; }

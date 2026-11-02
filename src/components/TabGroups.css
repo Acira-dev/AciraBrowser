@@ -1,0 +1,72 @@
+/* One neutral container owns membership; the existing raised glass owns selection. */
+.tab-group-tray{position:absolute;pointer-events:none;z-index:-1;display:block;height:36px;margin:0;padding:2px;border-radius:11px;background:var(--group-tray);box-shadow:inset 0 1px 1.5px color-mix(in srgb,var(--frame-text) 7%,transparent);overflow:visible;box-sizing:border-box}
+.tab-group-tray.compact{height:34px}
+.tab-group-tray[data-collapsed=true][data-hover=true]{background:var(--group-tray-hover)}
+.tab-group-header{position:relative;z-index:1;display:flex;align-items:center;flex:0 0 auto;min-width:0;height:32px;border-radius:9px;overflow:hidden}
+.tab-group-header.compact{height:30px}
+.app .tab-group-label{position:relative;bottom:auto;left:auto;right:auto;display:flex;align-items:center;gap:6px;width:100%;min-width:0;height:100%;margin:0;padding:0 10px 0 11px;border:0;border-radius:9px;background:transparent;color:var(--group-label);font:inherit;font-size:12.5px;font-weight:600;line-height:1;cursor:pointer;user-select:none;transition:background-color .15s}
+.tab-group-label>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.tab-group-label>small{flex:0 0 auto;font:inherit;font-weight:500;color:var(--group-count);font-variant-numeric:tabular-nums}
+.tab-group-label>svg{flex:0 0 11px;color:var(--group-count);stroke-width:2.2}
+.tab-group-label:hover{background:var(--group-tray-hover)}
+.tab-group-label:active{background:var(--group-tray-hover)}
+.tab-group-label:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--frame-selection-marker)}
+.app .tab-group-rename{width:100%;min-width:0;height:100%;border:0;border-radius:9px;background:var(--surface);box-shadow:inset 0 0 0 2px var(--accent);color:var(--text);padding:0 8px;font:inherit;font-size:12.5px;font-weight:600;outline:none}
+.app .tab-group-rename[aria-invalid=true]{box-shadow:inset 0 0 0 2px var(--danger)}
+.app .tab-group-tray[data-group-drop-target]{background:var(--group-tray-hover);box-shadow:inset 0 0 0 2px var(--accent)}
+.tab-group-drop-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.app :is(.tab-strip-selection,.acira-compact-selection){z-index:0}
+.app :is(.browser-tab,.acira-compact-tab){z-index:1}
+.browser-tab[data-tab-group]::before,.browser-tab[data-tab-group]::after{display:none}
+.tab-group-controls{display:grid;gap:0;padding:0;color:var(--text);font-size:13px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context){padding:5px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context)>.popup-header{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0;margin:-1px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row{min-height:24px;height:24px;padding:0 7px;gap:8px;border-radius:6px;font-size:13px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row>:is(svg,.menu-icon):first-child{flex:0 0 16px;width:16px;height:16px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row>span{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row:is(:hover,:focus-visible){outline:none;background:var(--hover);color:var(--hover-text)}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row:is(:hover,:focus-visible)>svg{color:inherit!important}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) hr{margin:5px 10px}
+/* Destructive choices read red and stay red under the hover tint (the cancel button is the focused default). */
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row[data-danger]:not(:disabled),.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row[data-danger]:is(:hover,:focus-visible){color:var(--danger)}
+/* Drilling into a submenu replaces the whole list, not one row of it. */
+.app .popup-content-tab-context [data-drilled]>:not(.tab-group-controls){display:none!important}
+.app .popup-content-group-preview{padding:10px;border-radius:16px}
+.app .popup-content-group-preview>.popup-header{padding:0 3px 7px;min-height:24px}
+.app .popup-content-group-preview .group-preview-row{display:flex;align-items:center;gap:8px;height:28px;width:100%;padding:0 6px;border-radius:6px;color:var(--text);text-align:left;font-size:12px}
+.group-preview-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .group-preview-row:hover,.app .group-preview-row:focus-visible{background:var(--hover)}
+[data-theme=dark] .tab-group-tray{box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--frame-text) 5%,transparent)}
+@media(prefers-contrast:more){.tab-group-tray{outline:1px solid color-mix(in srgb,var(--frame-text) 35%,transparent);outline-offset:-1px}.tab-group-label,.tab-group-label>small{color:var(--frame-text)}}
+@media(prefers-reduced-motion:reduce){.tab-group-label{transition:none}}
+
+.opaque-glass .tab-group-tray{background:var(--group-tray)}
+.opaque-glass .tab-group-tray[data-collapsed=true][data-hover=true]{background:var(--group-tray-hover)}
+.browser-tab[data-tab-group]>.tab-close{opacity:0;pointer-events:none}
+.browser-tab[data-tab-group]:is(:hover,:focus-within)>.tab-close{opacity:1;pointer-events:auto}
+
+/* More finishes use the existing swatch size and spacing on a wrapping row. */
+.color-presets{flex-wrap:wrap}
+
+.app :is(.browser-tab,.acira-compact-tab)[data-tab-group]:not(.selected):not(:hover):not([data-drag-surface]){color:var(--group-tab-text)}
+
+/* The finish supplies tray depth; optional group colors stay in the editor
+   and sidebar glyphs so membership never competes with the raised selection. */
+.group-editor{padding:5px 7px 8px;display:grid;gap:8px}
+.group-editor>label{display:grid;gap:6px;font-size:12px;font-weight:500;color:var(--muted)}
+.group-editor input{width:100%;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:13px}
+.group-editor input:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
+.group-color-label{font-size:12px;color:var(--muted)}
+.group-color-options{display:grid;grid-template-columns:repeat(5,1fr);justify-items:center;gap:4px}
+.group-color-swatch{position:relative;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:transparent;border:1px solid transparent;flex:0 0 28px}
+.group-color-swatch>span{height:17px;width:17px;border-radius:50%;background:currentColor}
+.group-color-swatch[aria-pressed=true]{border-color:var(--text)}
+.group-color-swatch:hover{background:var(--hover)}
+.group-color-check{position:absolute;inset:0;margin:auto;color:#fff;pointer-events:none;filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .45))}
+.group-color-swatch:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
+.group-name-error{font-size:12px;color:var(--danger)}
+
+/* Only the moving visual escapes clipping; the scroll plane never leaks other tabs. */
+.app [data-drag-preview-source]{opacity:0!important}
+.app :is(.tabs-strip,.acira-compact-tabs-track):has(>.selected[data-drag-preview-source])>:is(.tab-strip-selection,.acira-compact-selection){visibility:hidden}
+.app .tab-drag-preview{box-shadow:0 4px 12px #00000014;contain:layout style;overflow:hidden;will-change:transform}

@@ -1,0 +1,140 @@
+/* Seamless (R3-68): the Window view with nothing on screen but the page. The toolbar shows when the pointer rests on the top edge or a key
+   asks for it, the sidebar on the left edge; main (desktop/edge-reveal.cjs) decides when, ui/chromeEdge.ts plays it.
+
+   Tier B (docs/launch/research/SEAMLESS_MODE_SPEC.md §4.1): the page glides and reflows once, driven by main's 'slide' page motion on the
+   same spring the chrome uses. The spring comes from the motion tokens `seamless.reveal` (stiffness 400, damping 33: +1% overshoot) and
+   `seamless.hide` (critically damped, about two thirds as long), stretched by the animation speed; it is set as --edge-ms and
+   --edge-ease just before the view transition starts. Everything that moves is transform or opacity, on the compositor. */
+
+/* At rest nothing of the toolbar is in the layout: the header has no height and its rows are not rendered, so they cannot be
+   tabbed to, read by a screen reader or cost a frame. A private or Tor window keeps a 2px line in its own colour so the mode is
+   never invisible (the Tor and private tokens are the tab strip's, toolbar-controls.css). */
+.app .browser-shell[data-seamless='hidden'] { height: 0 !important; min-height: 0 !important; overflow: hidden; border: 0 !important; box-shadow: none !important; }
+.app .browser-shell[data-seamless='hidden'] > * { display: none !important; }
+.app .browser-shell[data-seamless='hidden'][data-privacy] { height: 2px !important; }
+:root .app .browser-shell[data-seamless='hidden'][data-privacy='tor'] { background: color-mix(in srgb, var(--tor-wash, #8a4cb8) 78%, transparent) !important; }
+:root .app .browser-shell[data-seamless='hidden'][data-privacy='private'] { background: color-mix(in srgb, var(--private-wash, #119a93) 78%, transparent) !important; }
+
+/* R4-24 border (Zen's "element separation": github.com/zen-browser/desktop zen-browser-ui.css, 8px margin, rounded content): in Seamless
+   the page is a card 6px in from the window's edges, radius 8 (the native page view takes the same radius, layout pageRadius), with the
+   window's own colour showing round it as the frame. With the toolbar shown the card starts under it (no gap at the top), as Full's
+   sidebar card does (sidebar.css). The 6px is a step on the spacing scale and the radius the page token. */
+:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0 6px 6px; border-radius: var(--geometry-pageRadius, 8px); box-shadow: 0 0 0 1px rgb(0 0 0 / .08); }
+:root .app[data-chrome=dark]:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { box-shadow: 0 0 0 1px rgb(255 255 255 / .06); }
+/* A pinned sidebar docks the page beside it with its own page-area margins, which beat this rule on specificity: the card stood flush against the window's top edge (inset 0, the other three sides 6). Ported from upstream 94791f7b. */
+:root:root .app.style-acira:has(.browser-shell[data-seamless='hidden']) .browser-root .browser-body > .page-area { margin-top: 6px; }
+:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area :is(.page-content, .page-pane) { border-radius: inherit; }
+
+/* R4-24 Tier A, the side: the sidebar floats over the page (ui/chromeEdge.ts setFloat; main raises the interface over the page views).
+   The window's background moves onto a fixed layer with the page's rect cut out (the copy and the mask are set from JS when the float
+   starts), the page placeholder is hidden, and the sidebar becomes a card 6px in from the window's edges: radius 8, the sidebar's finish
+   (the same top lift the opaque finish uses), a hairline and the soft layered shadow. The page under it never moves. */
+:root[data-edge-float='native'] .app.style-acira { background: none !important; }
+:root[data-edge-float='native'] .app.style-acira::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: var(--sf-bg-image); background-size: var(--sf-bg-size); background-position: var(--sf-bg-position); background-repeat: var(--sf-bg-repeat); background-color: var(--sf-bg-color); -webkit-mask: var(--sf-mask) 0 0 / 100% 100% no-repeat; mask: var(--sf-mask) 0 0 / 100% 100% no-repeat; }
+:root[data-edge-float='native'] .app .browser-body > .page-area { visibility: hidden; }
+:root[data-edge-float='native'] .app .browser-body > .page-area .page-pane[data-pane]:not([data-web]) { visibility: visible; }
+/* A split keeps its pane titles (drawn by the interface above each pane's hole). */
+:root[data-edge-float='native'] .app .browser-body > .page-area .split-label { visibility: visible; }
+/* R4-54: on every page kind (a website, a split, Settings, History, the new tab page, Peek, private and Tor windows) the floating sidebar
+   and toolbar leave the layout, so the page card keeps its place and size: the grid's first column stays at rest and the browser keeps
+   the second; the sidebar is a fixed card over the page; the toolbar a slab over its top. Nothing under them moves or reflows. */
+:root[data-edge-float] .app.style-acira:not(.native-layer):has(> .ed-rail.is-peek) { --navigation-width: var(--geometry-rail, 0px) !important; transition: none; }
+:root[data-edge-float] .app.style-acira:not(.native-layer) > .browser-root { grid-column: 2; grid-row: 1; }
+:root[data-edge-float] .app .ed-rail.is-peek { position: fixed; top: 0; bottom: 0; left: 0; z-index: 10; width: calc(var(--sidebar-rail, var(--sidebar-width, 240px)) - 6px); }
+:root[data-edge-float] .app .browser-root > .browser-shell[data-seamless='shown'] { position: absolute !important; top: 0; left: 0; right: 0; }
+:root[data-edge-float] .app:has(> .ed-rail.is-peek) .browser-root > .browser-shell[data-seamless='shown'] { left: var(--sidebar-rail, var(--sidebar-width, 240px)); }
+:root[data-edge-float] .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin-top: 6px; isolation: isolate; }
+:root[data-edge-float] .app .browser-root:has(> .browser-shell[data-seamless='shown'][data-privacy]) .browser-body > .page-area { margin-top: 8px; }
+:root[data-edge-float] .app .ed-rail.is-peek { margin: 6px 0 6px 6px; max-height: calc(100% - 12px); align-self: stretch; border-radius: var(--geometry-pageRadius, 8px); overflow: hidden; background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--sidebar-rgb, var(--chrome-rgb))) 96%, #fff), rgb(var(--sidebar-rgb, var(--chrome-rgb))) 120px); box-shadow: 0 0 0 1px rgb(0 0 0 / .08), 0 2px 6px rgb(0 0 0 / .10), 0 14px 36px rgb(0 0 0 / .22); }
+:root[data-edge-float] .app[data-chrome=dark] .ed-rail.is-peek { background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--sidebar-rgb, var(--chrome-rgb))) 94%, #fff), rgb(var(--sidebar-rgb, var(--chrome-rgb))) 120px); box-shadow: 0 0 0 1px rgb(255 255 255 / .07), 0 2px 6px rgb(0 0 0 / .24), 0 14px 36px rgb(0 0 0 / .40); }
+/* The toolbar floats too: a slab flush to the top, its own finish (the window background is no longer behind it over the page), bottom
+   corners radius 8, hairline and the soft shadow. */
+:root[data-edge-float] .app .browser-shell[data-seamless='shown'] { z-index: 6; background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--chrome-rgb)) 96%, #fff), rgb(var(--chrome-rgb)) 120px) !important; border-radius: 0 0 var(--geometry-pageRadius, 8px) var(--geometry-pageRadius, 8px); box-shadow: 0 1px 0 rgb(0 0 0 / .08), 0 2px 6px rgb(0 0 0 / .10), 0 14px 36px rgb(0 0 0 / .20) !important; }
+:root[data-edge-float] .app[data-chrome=dark] .browser-shell[data-seamless='shown'] { background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--chrome-rgb)) 94%, #fff), rgb(var(--chrome-rgb)) 120px) !important; box-shadow: 0 1px 0 rgb(255 255 255 / .07), 0 2px 6px rgb(0 0 0 / .24), 0 14px 36px rgb(0 0 0 / .40) !important; }
+/* In the vertical layout the slab IS the toolbar's surface: the toolbar and bookmarks rows on it stay clear, so the slab and the
+   floating sidebar card are the same finish (founder P0 27 Oct: the raised toolbar surface stacked on the slab read lighter and greyer
+   than the sidebar). A toolbar colour of its own still paints its rows; the horizontal layout keeps the raised toolbar its selected
+   tab joins. */
+:root[data-edge-float] .app.style-acira:not([data-toolbar-color]) .browser-root.side-tabs > .browser-shell[data-seamless='shown'] > :is(.browser-toolbar.acira-persistent-toolbar, .acira-bookmarks-row) { background: transparent; }
+
+/* RESPONSIVE_QA (902x673 at 125%, sidebar pinned): the sidebar's resize grip ran 0.7px past a fractional viewport (538.4 CSS px); it stops 1px short. */
+:root .app:has(.browser-shell[data-seamless]) .acira-sidebar .sb-resize { bottom: 1px; }
+
+/* ── The reveal and the hide (startModeTransition kind 'edge') ── */
+/* A 1ms crossfade still paints one partly transparent frame at the start of a hide.
+   The sidebar and page have their own moving snapshots; the backing must stay solid. */
+:root:root[data-mode-switch='edge']::view-transition-old(root) { animation:none;opacity:0; }
+:root:root[data-mode-switch='edge']::view-transition-new(root) { animation:none;opacity:1;mix-blend-mode:normal; }
+:root:root[data-mode-switch='edge']::view-transition-group(*) { animation-duration: var(--edge-ms, 200ms); animation-timing-function: var(--edge-ease, ease-out); }
+
+/* The toolbar's rows drop in from above (or lift away) together, so they move as one slab with the page under them: every row
+   travels the whole height of the header (--edge-h). Opacity follows the first 60% on the way in and the last half on the way out. */
+:root:root[data-mode-switch='edge']::view-transition-new(acira-tab-row):only-child,
+:root:root[data-mode-switch='edge']::view-transition-new(acira-toolbar):only-child,
+:root:root[data-mode-switch='edge']::view-transition-new(acira-bookmarks):only-child {
+  animation: edge-drop var(--edge-ms) var(--edge-ease) both, edge-fade-in calc(var(--edge-ms) * .6) ease-out both;
+}
+:root:root[data-mode-switch='edge']::view-transition-old(acira-tab-row):only-child,
+:root:root[data-mode-switch='edge']::view-transition-old(acira-toolbar):only-child,
+:root:root[data-mode-switch='edge']::view-transition-old(acira-bookmarks):only-child {
+  animation: edge-lift var(--edge-ms) var(--edge-ease) both, edge-fade-out calc(var(--edge-ms) * .5) ease-in calc(var(--edge-ms) * .5) both;
+}
+@keyframes edge-drop { from { translate: 0 calc(-1 * var(--edge-h, 72px)); } }
+@keyframes edge-lift { to { translate: 0 calc(-1 * var(--edge-h, 72px)); } }
+@keyframes edge-fade-in { from { opacity: 0; } }
+@keyframes edge-fade-out { to { opacity: 0; } }
+
+/* R4-59 (founder: "the icons stay in their place and then disappear after the background has disappeared"): the toolbar's controls carry
+   their own view-transition names for the window-view morph (view-morph.css), so in a reveal or hide they were separate layers that
+   only faded where they stood while the panel slid away. During a Seamless reveal or hide the shown toolbar is ONE layer (panel and
+   every control, captured together) and nothing inside it or inside the sidebar keeps a name of its own. */
+:root[data-mode-switch='edge']:not([data-edge-toolbar='stays']) .app.style-acira :is(.browser-shell[data-seamless], .ed-rail.acira-sidebar) * { view-transition-name: none !important; }
+/* The exception: a toolbar that stays shown while only the sidebar comes or goes keeps its controls' names and glides like Compact's
+   (data-edge-toolbar, set by chromeEdge applyEdge); the sidebar is still one layer. */
+:root[data-mode-switch='edge'][data-edge-toolbar='stays'] .app.style-acira .ed-rail.acira-sidebar * { view-transition-name: none !important; }
+/* The sidebar button keeps its name too (view-morph.css) and so glides with the other controls. */
+/* Compact / Full keep their toolbar while the side comes or goes; its controls move to the page's corner as the sidebar arrives
+   (platform.css). They keep their own names there and glide on the edge's timing, as in the window-view morph (view-morph.css),
+   instead of the toolbar's one picture stretching and jumping (founder, 30 Oct: "morphy, not cutty"). The toolbar is named
+   for its surface. */
+:root[data-mode-switch='edge']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell:not([data-seamless='shown'])>.browser-toolbar.acira-persistent-toolbar { view-transition-name:acira-toolbar!important; }
+:root[data-mode-switch='edge'][data-edge-toolbar='stays']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell[data-seamless='shown']>.browser-toolbar.acira-persistent-toolbar { view-transition-name:acira-toolbar!important; }
+:root[data-mode-switch='edge'][data-edge-toolbar='slab']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell[data-seamless='shown'] { view-transition-name: acira-edge-shell; }
+:root:root[data-mode-switch='edge']::view-transition-new(acira-edge-shell):only-child { animation: edge-drop var(--edge-ms) var(--edge-ease) both, edge-fade-in calc(var(--edge-ms) * .3) ease-out both; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-edge-shell):only-child { opacity:1; animation: edge-lift var(--edge-ms) var(--edge-ease) both, edge-fade-out calc(var(--edge-ms) * .4) ease-in calc(var(--edge-ms) * .6) both; }
+/* The toolbar staying while the sidebar comes or goes glides to its new left edge; its pixels never stretch. */
+:root:root[data-mode-switch='edge']::view-transition-old(acira-edge-shell),
+:root:root[data-mode-switch='edge']::view-transition-new(acira-edge-shell) { width: auto; height: 100%; object-fit: none; object-position: left top; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-edge-shell) { animation: none; opacity: 0; }
+:root:root[data-mode-switch='edge']::view-transition-new(acira-edge-shell) { animation: none; opacity: 1; }
+
+/* The sidebar slides in from the window's edge and the toolbar glides to its narrower place, as for the docked sidebar (sidebar.css),
+   on the edge spring. */
+:root:root[data-mode-switch='edge']::view-transition-new(acira-sidebar):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-in; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-sidebar):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-out; }
+/* Beside the page's frame the sidebar slides on whole screen pixels with its corners and the card's edge (chromeEdge syncPixelEase). */
+:root:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition-new(acira-sidebar):only-child,
+:root:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition-old(acira-sidebar):only-child { animation-timing-function: var(--edge-ease-px, var(--edge-ease)); }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-toolbar),
+:root:root[data-mode-switch='edge']::view-transition-new(acira-toolbar) { width: auto; height: 100%; object-fit: none; object-position: left center; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-toolbar) { animation: none; opacity: 0; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-toolbar):only-child { opacity:1; }
+:root:root[data-mode-switch='edge']::view-transition-new(acira-toolbar) { animation: none; opacity: 1; }
+
+/* The address field and Compact's tab strip glide by their left edge alone, from the offset chromeEdge measures (--edge-*-dx): the UA group
+   animation also animates their width, which cannot run on the compositor, so they started a frame after the buttons beside them and the
+   tab-count icon sat on the field in the first frame. Their pictures are anchored left and never stretch, so the width moved nothing visible. */
+:root[data-mode-switch='edge']::view-transition-group(acira-address) { animation-name: edge-glide-address; animation-fill-mode: both; }
+:root[data-mode-switch='edge']::view-transition-group(acira-mini-tabs) { animation-name: edge-glide-tabs; animation-fill-mode: both; }
+@keyframes edge-glide-address { from { translate: var(--edge-address-dx, 0px) 0; } }
+@keyframes edge-glide-tabs { from { translate: var(--edge-tabs-dx, 0px) 0; } }
+
+/* Animation Off (and a system that asks for less motion): no travel, an 80ms fade of what appears. */
+:root[data-edge-fade] .app .browser-shell:not([data-seamless='hidden']) > *:not(.navigation-progress),
+:root[data-edge-fade] .app .acira-sidebar.is-peek { animation: edge-fade-in 80ms linear both; }
+
+/* The View group in the toolbar menu (MenuChoice): the choice's check takes the column the switches use, and a shortcut ends before it. */
+:root:root:root .browser-popup .menu-choice > .menu-choice-check { flex: 0 0 28px; display: grid; justify-items: end; margin-left: auto; pointer-events: none; }
+:root:root:root .browser-popup .menu-choice > kbd { margin-left: 8px; margin-right: 0; }
+:root:root:root .browser-popup:has(.menu-toggle) .menu-row.menu-choice > kbd { margin-right: 0; }
+:root:root:root .browser-popup .menu-choice[aria-checked='true'] > :is(svg, .ed-editor-icon):first-child { color: var(--toggle-on, var(--accent)); }

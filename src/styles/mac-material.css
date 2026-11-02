@@ -1,0 +1,37 @@
+/* AppKit supplies the native blur. The shared frame rules paint one finish/sidebar/toolbar
+   veil above it, using the same live color and opacity controls as Windows. */
+/* Light AppKit glass stays thin on deep finishes too. Its foregrounds and lifted
+   controls follow the material's lightness; the finish and page retain their hue. */
+html[data-material=vibrancy][data-material-appearance=light] .app.style-acira[data-chrome=dark] :is(.ed-rail,.browser-shell) {
+ --chrome-ink:var(--mac-light-ink); --chrome-sheet:var(--mac-light-sheet); --chrome-sheet-rgb:var(--mac-light-sheet-rgb); --chrome-hi-k:1;
+ --chrome-accent:var(--mac-light-accent); --chrome-accent-soft:var(--mac-light-accent-soft); --chrome-accent-ink:var(--mac-light-accent-ink);
+ --frame-selection-bg:var(--chrome-sheet); --frame-selection-fg:rgb(var(--chrome-ink)); --frame-selection-muted:rgb(var(--chrome-ink) / .78); --frame-selection-marker:var(--chrome-accent);
+ --tab-group-grey:var(--mac-tab-group-grey); --selected-tab-group-grey:var(--mac-tab-group-grey);
+ --tab-group-blue:var(--mac-tab-group-blue); --selected-tab-group-blue:var(--mac-tab-group-blue);
+ --tab-group-red:var(--mac-tab-group-red); --selected-tab-group-red:var(--mac-tab-group-red);
+ --tab-group-yellow:var(--mac-tab-group-yellow); --selected-tab-group-yellow:var(--mac-tab-group-yellow);
+ --tab-group-green:var(--mac-tab-group-green); --selected-tab-group-green:var(--mac-tab-group-green);
+ --tab-group-pink:var(--mac-tab-group-pink); --selected-tab-group-pink:var(--mac-tab-group-pink);
+ --tab-group-purple:var(--mac-tab-group-purple); --selected-tab-group-purple:var(--mac-tab-group-purple);
+ --tab-group-cyan:var(--mac-tab-group-cyan); --selected-tab-group-cyan:var(--mac-tab-group-cyan);
+ --tab-group-orange:var(--mac-tab-group-orange); --selected-tab-group-orange:var(--mac-tab-group-orange);
+}
+html[data-material=vibrancy][data-material-appearance=light] .app.style-acira[data-chrome=dark] .ed-rail :is(.ed-rail-saved>header,.ed-rail-more,.ed-rail-count,.ed-rail-groups small,.ed-rail-section-toggle,.ed-rail-section-toggle>small,.ed-rail-section-body>p,.ed-rail-section-body>button>small,.ed-rail-recent>button>small,.ed-rail-tab-group-name,.ed-rail-new-tab,.ed-rail-section-body>button:not(.ed-rail-button),.ed-rail-recent>button,.ed-rail-tab>button:first-child) { color:rgb(var(--chrome-ink) / .86); }
+html[data-material=vibrancy][data-material-appearance=light] .app.style-acira[data-chrome=dark] .ed-rail .brand-logo img.brand-light { display:block; }
+html[data-material=vibrancy][data-material-appearance=light] .app.style-acira[data-chrome=dark] .ed-rail .brand-logo img.brand-dark { display:none; }
+/* Coloured glass keeps its original finish ink. Stronger secondary labels keep
+   the actual native backdrop visible without needing an opaque protective coat. */
+html[data-material=vibrancy] .app.style-acira:not([data-finish=Porcelain]) :is(.ed-rail,.browser-shell) { --ed-muted:rgb(var(--chrome-ink) / .94); --ed-icon:rgb(var(--chrome-ink) / .94); --muted:rgb(var(--chrome-ink) / .94); --group-count:rgb(var(--chrome-ink) / .94); }
+html[data-material=vibrancy] .app.style-acira:not([data-finish=Porcelain]) :is(.ed-rail,.browser-shell) :is(.ed-rail-button,.ed-rail-saved>button,.browser-tab) { color:rgb(var(--chrome-ink) / .94); }
+html[data-material=vibrancy] .app.style-acira:not([data-finish=Porcelain]) .ed-rail :is(.ed-rail-saved>header,.ed-rail-more,.ed-rail-count,.ed-rail-groups small,.ed-rail-section-toggle,.ed-rail-section-toggle>small,.ed-rail-section-body>p,.ed-rail-section-body>button>small,.ed-rail-recent>button>small,.ed-rail-tab-group-name,.ed-rail-new-tab,.ed-rail-section-body>button:not(.ed-rail-button),.ed-rail-recent>button,.ed-rail-tab>button:first-child) { color:rgb(var(--chrome-ink) / .94); }
+
+
+/* Chrome controls retain the same quiet hover hierarchy on both platforms. */
+.app.style-acira .browser-tab:not(.selected):not([data-tab-group]):not([data-drag-surface]):hover{background:var(--tab-hover)}
+.app.style-acira .browser-tab:not(.selected):not([data-tab-group]):hover::before{content:none}
+.app.style-acira :is(.browser-tab .tab-close,.acira-compact-tab-close){background:transparent;transition:background-color .12s ease-out,color .12s ease-out,opacity .12s ease-out}
+.app.style-acira :is(.browser-tab .tab-close,.acira-compact-tab-close):hover{background:var(--chrome-pressed);color:var(--chrome-fg)}
+.app.style-acira .ed-rail-button[aria-current=page]:hover{background:var(--sidebar-selection-bg)}
+/* Use the existing contrast-checked strong edge without altering field geometry. */
+@media not (forced-colors:active){.app.style-acira .ed-search-glass.ed-frost:not(:focus-within){border-color:var(--input-edge-strong)}}
+.app[data-reduced-motion=true] :is(.browser-tab .tab-close,.acira-compact-tab-close){transition:none}

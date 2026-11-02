@@ -1,0 +1,3137 @@
+{
+ "generated": "2026-10-27T23:03:34.709Z",
+ "basis": "Static reading of electron-chrome-extensions 4.9.0, Acira desktop/browser-services, Electron 44.9.3 docs/binary strings, Chromium 152 schemas; no app was launched.",
+ "sources": {
+  "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js": "ECE 4.9.0 renderer preload: builds the chrome.* surface (apiDefinitions), ExtensionEvent, ChromeSetting stubs, noop stubs.",
+  "node_modules/electron-chrome-extensions/dist/cjs/index.js": "ECE 4.9.0 main process: router + handlers for browserAction, windows, tabs, webNavigation, contextMenus, runtime (native msg), cookies, notifications, commands, permissions.",
+  "node_modules/electron-chrome-extensions/README.md": "ECE support matrix (which members are implemented, unchecked = missing) and the Electron webRequest limitation.",
+  "node_modules/electron/dist/electron.exe (api names in binary)": "Strings scanned for registered extension function/feature names (C:\\ae\\r9\\shim-tools\\scan-electron.cjs); evidence of native names only.",
+  "electron docs api/extensions.md": "Electron docs \"Supported Extensions APIs\" (fetched from github main): native runtime, tabs, storage, scripting, webRequest, management, extension, devtools.",
+  "desktop/browser-services/extension-apis.cjs": "Acira main-process side of offscreen, identity, sidePanel, userScripts, idle, bookmarks/history/sessions/search, runtime.getContexts, tabs.captureVisibleTab, permissions.contains and windows fixes.",
+  "desktop/browser-services/extension-apis-renderer.cjs": "Acira renderer side (written into the ECE preload): namespace definitions, DNR wrappers, constants, browser mirror, runtime additions.",
+  "desktop/browser-services/extension-shims.cjs": "storage.sync -> storage.local shim added to store-package content scripts.",
+  "desktop/browser-services/extension-runtime-patch.cjs": "Patches the ECE preload text: lastError for native messaging, drops Object.freeze, hasListener/hasListeners, injects Acira definitions.",
+  "desktop/browser-services/extension-store-apis.cjs": "Read-only bookmarks/history/sessions API answers from Acira stores.",
+  "desktop/browser-services/extension-side-panel.cjs": "Native views that dock the chrome.sidePanel page beside the page area.",
+  "desktop/browser-services/extension-tab-context.cjs": "Replaces ECE tabs.getCurrent so it returns the caller's tab.",
+  "desktop/browser-services/extension-new-tab.cjs": "chrome_url_overrides.newtab shown as an explicit per-extension choice (manifest feature, no chrome.* API).",
+  "desktop/browser-services/extension-toolbar.cjs": "Attaches the ECE runtime and <browser-action-list> to Acira's UI (+ extension-toolbar-preload.cjs, extension-action-sizing.cjs popup sizing).",
+  "desktop/browser-services/extension-manager.cjs": "Creates the ECE runtime per profile session, wires native messaging, Acira APIs, patched preload, requestPermissions dialog, install/load/remove.",
+  "desktop/browser-services/dnr-host.cjs": "DNR host: loads rulesets, handles getMatchedRules/setExtensionActionOptions/aciraSync, badge counts, request-pipeline participants.",
+  "desktop/browser-services/dnr-engine.cjs": "DNR matcher (block, redirect, allow, upgradeScheme, modifyHeaders, allowAllRequests).",
+  "desktop/browser-services/user-scripts.cjs": "chrome.userScripts registry, validation and match patterns.",
+  "desktop/browser-services/native-messaging.cjs": "Replaces the library's runtime.connectNative/disconnectNative/sendNativeMessage handlers.",
+  "desktop/main.cjs": "extensionBrowser(profile) (lines 139-169): the ECE impl callbacks createTab/createWindow/removeWindow/selectTab/removeTab/assignTabDetails/stores/sidePanel; extensionCreateTab (756).",
+  "desktop/request-pipeline.cjs": "Registers Electron session.webRequest listeners (onBeforeRequest/onHeadersReceived/onBeforeSendHeaders/onCompleted/onErrorOccurred) which shadow chrome.webRequest.",
+  "desktop/content-blocking.cjs": "Calls the DNR host from the request pipeline (lines 81-98).",
+  "docs/launch/EXTENSION_COMPATIBILITY.md": "Acira's measured compatibility notes and API fixture results.",
+  "C:\\ae\\r4\\ext\\evidence": "Real-app probes: Object.keys(chrome) per extension, API fixture result (used to confirm which namespaces exist natively).",
+  "C:\\ae\\r9\\chromium-api": "Chromium 152.0.7977.167 extension API schemas used to list the members each namespace should have (chrome-members.cjs)."
+ },
+ "members": {
+  "action.setTitle": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Stored per tab or globally; manifest default restored on null. tabId 0 is treated as global (falsy check).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:217"
+  },
+  "action.getTitle": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns per-tab title, else the global one.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:218"
+  },
+  "action.setIcon": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "path works; MV3 imageData is dropped with a console warning; MV2 imageData is converted by canvas.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:219"
+  },
+  "action.setPopup": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Per tab or global popup path; relative or absolute URL.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:242"
+  },
+  "action.getPopup": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Per-tab value wins over the global one.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:243"
+  },
+  "action.setBadgeText": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Per tab or global; also driven by Acira DNR badge counts (dnr-host.cjs:137).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:244"
+  },
+  "action.getBadgeText": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns the stored text.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:245"
+  },
+  "action.setBadgeBackgroundColor": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Value stored as given and drawn by <browser-action-list>.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:246"
+  },
+  "action.getBadgeBackgroundColor": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns the value as set (string or array), not Chrome's normalised [r,g,b,a].",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:247"
+  },
+  "action.enable": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop: logs \"not yet implemented\" and resolves undefined; button stays enabled.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:249"
+  },
+  "action.disable": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop: logs \"not yet implemented\"; the button is never greyed out per tab.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:250"
+  },
+  "action.getUserSettings": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Always {isOnToolbar:true}; Acira pin state is not reported (extension-manager pin).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:382"
+  },
+  "action.openPopup": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Opens the popup of the active tab at a fixed 64px top-right anchor (TODO in source); no user-gesture check.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:322"
+  },
+  "action.onClicked": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Fires only when no popup is set; payload is the cached tab details.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:611"
+  },
+  "browserAction.setTitle": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Stored per tab or globally; manifest default restored on null. tabId 0 is treated as global (falsy check).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:217"
+  },
+  "browserAction.getTitle": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Returns per-tab title, else the global one.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:218"
+  },
+  "browserAction.setIcon": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. path works; MV3 imageData is dropped with a console warning; MV2 imageData is converted by canvas.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:219"
+  },
+  "browserAction.setPopup": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Per tab or global popup path; relative or absolute URL.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:242"
+  },
+  "browserAction.getPopup": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Per-tab value wins over the global one.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:243"
+  },
+  "browserAction.setBadgeText": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Per tab or global; also driven by Acira DNR badge counts (dnr-host.cjs:137).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:244"
+  },
+  "browserAction.getBadgeText": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Returns the stored text.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:245"
+  },
+  "browserAction.setBadgeBackgroundColor": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Value stored as given and drawn by <browser-action-list>.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:246"
+  },
+  "browserAction.getBadgeBackgroundColor": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Returns the value as set (string or array), not Chrome's normalised [r,g,b,a].",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:247"
+  },
+  "browserAction.enable": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. noop: logs \"not yet implemented\" and resolves undefined; button stays enabled.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:249"
+  },
+  "browserAction.disable": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. noop: logs \"not yet implemented\"; the button is never greyed out per tab.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:250"
+  },
+  "browserAction.getUserSettings": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Always {isOnToolbar:true}; Acira pin state is not reported (extension-manager pin).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:382"
+  },
+  "browserAction.openPopup": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Opens the popup of the active tab at a fixed 64px top-right anchor (TODO in source); no user-gesture check.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:322"
+  },
+  "browserAction.onClicked": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "MV2 browser_action: same implementation as action. Fires only when no popup is set; payload is the cached tab details.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:611"
+  },
+  "commands.getAll": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Lists manifest commands (name, description) but shortcut is always \"\" and suggested_key is ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2202"
+  },
+  "commands.onCommand": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared but never emitted: no sendEvent for it in the library or Acira, and Acira registers no extension shortcuts.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:270"
+  },
+  "contextMenus.create": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Page/selection/link/image/video/audio/frame/editable/all + browser_action; no checked state; dup id or missing title silently ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:289"
+  },
+  "contextMenus.update": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop: logs \"not yet implemented\"; items cannot be changed after create.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:301"
+  },
+  "contextMenus.remove": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Removes one item by id (children of a removed parent stay).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1586"
+  },
+  "contextMenus.removeAll": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Removes all items of the calling extension.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1595"
+  },
+  "contextMenus.onClicked": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "info.checked/wasChecked always false, frameId -1, parentMenuItemId -1; menus shown via desktop/main.cjs:234 extensionItems.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1701"
+  },
+  "cookies.get": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Only url+name used; storeId/partitionKey ignored; no host-permission check; first match returned.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2031"
+  },
+  "cookies.getAll": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Filters url,name,domain,path,secure,session only; storeId/partitionKey ignored; no host-permission check.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2038"
+  },
+  "cookies.set": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Passes details to session.cookies.set then reads the cookie back; storeId ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2049"
+  },
+  "cookies.remove": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns the input details (not {url,name,storeId}); errors swallowed as null; storeId ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2054"
+  },
+  "cookies.getAllCookieStores": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "One store \"0\" listing every tracked tab id; no private/other stores.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2062"
+  },
+  "cookies.onChanged": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Broadcast for every cookie change of the session; cause \"expired-overwrite\" translated; storeId always \"0\".",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2012"
+  },
+  "downloads.acceptDanger": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.cancel": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.download": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.erase": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.getFileIcon": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.open": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.pause": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.removeFile": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.resume": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.search": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.setUiOptions": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.show": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.showDefaultFolder": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop {noop:true}: logs \"not yet implemented\", resolves undefined (search returns undefined, not an array).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "downloads.onChanged": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (no downloads events in the library or Acira).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:340"
+  },
+  "downloads.onCreated": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (no downloads events in the library or Acira).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:340"
+  },
+  "downloads.onDeterminingFilename": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (no downloads events in the library or Acira).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:340"
+  },
+  "downloads.onErased": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (no downloads events in the library or Acira).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:340"
+  },
+  "extension.isAllowedFileSchemeAccess": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop: always false.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:351"
+  },
+  "extension.isAllowedIncognitoAccess": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "noop: always false (extensions are off in private windows).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:355"
+  },
+  "extension.getViews": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Always [] (overrides Electron's own getViews); popups/tabs of the extension are never listed.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:360"
+  },
+  "extension.getBackgroundPage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (MV2 background pages; MV3 gets null as in Chrome).",
+   "file": "electron docs api/extensions.md#chrome.extension"
+  },
+  "extension.getURL": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Deprecated alias of runtime.getURL; native.",
+   "file": "electron docs api/extensions.md#chrome.extension"
+  },
+  "extension.lastError": {
+   "status": "full",
+   "kind": "property",
+   "provider": "electron-native",
+   "notes": "Native alias of runtime.lastError.",
+   "file": "electron docs api/extensions.md#chrome.extension"
+  },
+  "extension.inIncognitoContext": {
+   "status": "full",
+   "kind": "property",
+   "provider": "electron-native",
+   "notes": "Native property; always false since extensions are disabled in private windows.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "i18n.getMessage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium (locale from Electron). Library fallback (returns the key / \"en-US\") is only used if native getMessage is absent.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:364"
+  },
+  "i18n.getUILanguage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium (locale from Electron). Library fallback (returns the key / \"en-US\") is only used if native getMessage is absent.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:364"
+  },
+  "i18n.getAcceptLanguages": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium (locale from Electron). Library fallback (returns the key / \"en-US\") is only used if native getMessage is absent.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:364"
+  },
+  "i18n.detectLanguage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium (locale from Electron). Library fallback (returns the key / \"en-US\") is only used if native getMessage is absent.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:364"
+  },
+  "notifications.create": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Native Notification: title/message/icon/priority/silent/requireInteraction only; no buttons/progress/image; id-less call always uses id \"guid\".",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2109"
+  },
+  "notifications.update": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Only priority and silent applied; returns false if unknown id, undefined otherwise (Chrome: boolean).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2171"
+  },
+  "notifications.clear": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Closes the notification but returns undefined instead of the wasCleared boolean.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2103"
+  },
+  "notifications.getAll": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns an array of ids; Chrome returns an object map {id:true}.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2165"
+  },
+  "notifications.getPermissionLevel": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "\"granted\" when Electron Notification.isSupported().",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2168"
+  },
+  "notifications.onClicked": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Fires with the id on click.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2154"
+  },
+  "notifications.onClosed": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "byUser is always true.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2157"
+  },
+  "notifications.onButtonClicked": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (README:382 unchecked), buttons are not shown.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:394"
+  },
+  "permissions.contains": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira patch: host patterns are matched by coverage (<all_urls> covers http://x/*); grants live in memory only.",
+   "file": "desktop/browser-services/extension-apis.cjs:215"
+  },
+  "permissions.getAll": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "manifest permissions + host_permissions + in-memory grants; optional grants are not persisted across restarts.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2629"
+  },
+  "permissions.request": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Needs declared (optional_)permissions; asks via Acira dialog (extension-manager.cjs:22); origins not checked against optional_host_permissions.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2635"
+  },
+  "permissions.remove": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Always returns true and removes nothing.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:2632"
+  },
+  "permissions.onAdded": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted after permissions.request.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:407"
+  },
+  "permissions.onRemoved": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:408"
+  },
+  "privacy.network.networkPredictionEnabled": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub: get/set/clear do nothing, return undefined and never call the callback; onChange.addListener is a noop.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:417"
+  },
+  "privacy.network.webRTCIPHandlingPolicy": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub; the policy is never applied (extensions that force proxy-only WebRTC get nothing).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:418"
+  },
+  "privacy.network.webRTCIPHandlingPolicy.get": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Returns undefined; callback never invoked, no {value,levelOfControl}.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:150"
+  },
+  "privacy.network.webRTCIPHandlingPolicy.set": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "No-op; nothing is applied and callback never invoked.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:150"
+  },
+  "privacy.network.webRTCIPHandlingPolicy.clear": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "No-op.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:150"
+  },
+  "privacy.network.webRTCIPHandlingPolicy.onChange": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "addListener is an empty function; no removeListener/hasListener.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:145"
+  },
+  "privacy.services.autofillAddressEnabled": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub (get/set/clear do nothing).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:421"
+  },
+  "privacy.services.autofillCreditCardEnabled": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub (get/set/clear do nothing).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:421"
+  },
+  "privacy.services.passwordSavingEnabled": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub (get/set/clear do nothing).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:421"
+  },
+  "privacy.websites.hyperlinkAuditingEnabled": {
+   "status": "stub",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "ChromeSetting stub (get/set/clear do nothing).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:426"
+  },
+  "privacy.services.autofillEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.safeBrowsingEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.safeBrowsingExtendedReportingEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.searchSuggestEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.spellingServiceEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.translationServiceEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.services.alternateErrorPagesEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.services (only 3 settings exist).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:420"
+  },
+  "privacy.websites.referrersEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.doNotTrackEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.thirdPartyCookiesAllowed": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.topicsEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.fledgeEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.adMeasurementEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.relatedWebsiteSetsEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "privacy.websites.protectedContentEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Not defined on privacy.websites (only hyperlinkAuditingEnabled exists).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:425"
+  },
+  "runtime.id": {
+   "status": "full",
+   "kind": "property",
+   "provider": "electron-native",
+   "notes": "Native property.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.lastError": {
+   "status": "full",
+   "kind": "property",
+   "provider": "electron-native",
+   "notes": "Native; Acira patch sets it for native messaging/own APIs (extension-runtime-patch.cjs:22); library calls never set it.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.getManifest": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.getURL": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.getPlatformInfo": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.connect": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.sendMessage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.reload": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported by Electron natively (documented).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.getBackgroundPage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively; MV2 only (returns the background page).",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.getVersion": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe; not in the Electron supported list; behaviour not verified.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.setUninstallURL": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe, not in Electron's supported list; unverified. Acira has no uninstall page or extension auto-update.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.requestUpdateCheck": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe, not in Electron's supported list; unverified. Acira has no uninstall page or extension auto-update.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.restart": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe, not in Electron's supported list; unverified. Acira has no uninstall page or extension auto-update.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.restartAfterDelay": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe, not in Electron's supported list; unverified. Acira has no uninstall page or extension auto-update.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.getPackageDirectoryEntry": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name present in electron.exe, not in Electron's supported list; unverified. Acira has no uninstall page or extension auto-update.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.connectNative": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira replaces the library handler: Chrome-style lastError/onDisconnect, byte framing, extra registry keys, --parent-window; needs nativeMessaging.",
+   "file": "desktop/browser-services/native-messaging.cjs:100"
+  },
+  "runtime.sendNativeMessage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira replaces the library handler; failure sets lastError or rejects; needs nativeMessaging permission (router gate).",
+   "file": "desktop/browser-services/native-messaging.cjs:113"
+  },
+  "runtime.openOptionsPage": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Always opens options_ui/options_page as a tab (never embedded); resolves undefined; no options -> silent noop.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1977"
+  },
+  "runtime.getContexts": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Native list merged with Acira's (worker, offscreen, side panel, extension tabs); popups show as TAB; incognito filter fixed false.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:165"
+  },
+  "runtime.ContextType": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added for MV3 manifests only.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:165"
+  },
+  "runtime.onUserScriptMessage": {
+   "status": "full",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Delivers messages from USER_SCRIPT worlds with messaging on; sendResponse answered through userScripts.reply (extension-apis.cjs:276).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:188"
+  },
+  "runtime.onUserScriptConnect": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Event object whose add/removeListener do nothing and never fires; runtime.connect from user scripts is not implemented.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:189"
+  },
+  "runtime.onStartup": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onInstalled": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onSuspend": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onSuspendCanceled": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onConnect": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onMessage": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented). README:488: background scripts are persistent.",
+   "file": "electron docs api/extensions.md#chrome.runtime"
+  },
+  "runtime.onConnectExternal": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified (no external messaging peers/updates in Acira).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.onMessageExternal": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified (no external messaging peers/updates in Acira).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.onUpdateAvailable": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified (no external messaging peers/updates in Acira).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.onRestartRequired": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified (no external messaging peers/updates in Acira).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "runtime.onConnectNative": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified (no external messaging peers/updates in Acira).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.local.get": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.set": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.remove": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.clear": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.getBytesInUse": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.getKeys": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.local.setAccessLevel": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium StorageArea (documented).",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.session.get": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.set": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.remove": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.clear": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.getBytesInUse": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.getKeys": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.session.setAccessLevel": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native; not in Electron docs but works in the real app (Bitwarden popup uses it); in-memory, cleared at browser restart.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "storage.sync.get": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.set": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.remove": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.clear": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.getBytesInUse": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.getKeys": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.sync.setAccessLevel": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Pages/workers: the same object as storage.local (no sync, local quotas). Content scripts: only via Acira shim for store-installed packages.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:454"
+  },
+  "storage.managed.get": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.set": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.remove": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.clear": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.getBytesInUse": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.getKeys": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.managed.setAccessLevel": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Alias of storage.local (reads/writes real local data); Chrome's managed store is read-only policy data and empty here.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:453"
+  },
+  "storage.onChanged": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native; fires for local/session. Because sync/managed alias local, areaName \"sync\"/\"managed\" is never reported (the Acira content-script shim fakes \"sync\").",
+   "file": "electron docs api/extensions.md#chrome.storage"
+  },
+  "storage.sync": {
+   "status": "partial",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Content-script shim (extension-shims.cjs) aliases sync to local for store packages Acira unpacked; user-chosen folders get none.",
+   "file": "desktop/browser-services/extension-shims.cjs:11"
+  },
+  "tabs.get": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "groupId always -1, discarded/frozen/highlighted false, no openerTabId/lastAccessed/splitViewId; index/pinned/active from Acira; unknown id returns {id:-1}.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:951"
+  },
+  "tabs.getCurrent": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira patch: returns the calling tab, undefined from popups/workers (library answered with the last active tab).",
+   "file": "desktop/browser-services/extension-tab-context.cjs:12"
+  },
+  "tabs.create": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Acira honours url (web or own extension page) and active:false; ignores index, pinned, openerTabId, groupId; windowId picks the window.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:970"
+  },
+  "tabs.query": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "No currentWindow/lastFocusedWindow/index/windowType filters; overwrites cached tab.index with the result position; only loaded pages are tracked.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:986"
+  },
+  "tabs.reload": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "reload / bypassCache; tabId optional (active tab).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1027"
+  },
+  "tabs.update": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Handles url, muted, active only; ignores pinned, highlighted, autoDiscardable, openerTabId.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1038"
+  },
+  "tabs.remove": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Single id or array; closes through Acira's page model (extensionRemove, main.cjs:769).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1052"
+  },
+  "tabs.goBack": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "navigationHistory.goBack of the tab.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1066"
+  },
+  "tabs.goForward": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "navigationHistory.goForward of the tab.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1060"
+  },
+  "tabs.getAllInWindow": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Deprecated MV2 call; lists tabs of the window (WINDOW_ID_CURRENT = last focused).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:956"
+  },
+  "tabs.insertCSS": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Only details.code is injected; details.file, allFrames, frameId, runAt, cssOrigin ignored (MV3 extensions use scripting).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:979"
+  },
+  "tabs.executeScript": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native MV2 call; library only resolves the active tab when called without a tabId. Present for MV3 too.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:466"
+  },
+  "tabs.removeCSS": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe; not in Electron's supported list and not in the README matrix; unverified.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "tabs.sendMessage": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (documented).",
+   "file": "electron docs api/extensions.md#chrome.tabs"
+  },
+  "tabs.connect": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (README matrix).",
+   "file": "node_modules/electron-chrome-extensions/README.md:416"
+  },
+  "tabs.setZoom": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "README lists as supported by Electron; acts on webContents zoom, not Acira's per-origin zoom store (unverified).",
+   "file": "node_modules/electron-chrome-extensions/README.md:429"
+  },
+  "tabs.getZoom": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "README lists as supported by Electron; acts on webContents zoom, not Acira's per-origin zoom store (unverified).",
+   "file": "node_modules/electron-chrome-extensions/README.md:429"
+  },
+  "tabs.setZoomSettings": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "README lists as supported by Electron; acts on webContents zoom, not Acira's per-origin zoom store (unverified).",
+   "file": "node_modules/electron-chrome-extensions/README.md:429"
+  },
+  "tabs.getZoomSettings": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "README lists as supported by Electron; acts on webContents zoom, not Acira's per-origin zoom store (unverified).",
+   "file": "node_modules/electron-chrome-extensions/README.md:429"
+  },
+  "tabs.onZoomChange": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "README lists as supported by Electron; acts on webContents zoom, not Acira's per-origin zoom store (unverified).",
+   "file": "node_modules/electron-chrome-extensions/README.md:429"
+  },
+  "tabs.captureVisibleTab": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira: web pages only, needs <all_urls>/host access or activeTab click, 2/s limit, PNG or JPEG data URL; only when native lacks it.",
+   "file": "desktop/browser-services/extension-apis.cjs:228"
+  },
+  "tabs.onCreated": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Fires when a page is attached to the extension store (attachTab).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1072"
+  },
+  "tabs.onRemoved": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Fires on destroy/close with {windowId,isWindowClosing}.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1115"
+  },
+  "tabs.onActivated": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Fires when Acira reselects the active tab (main.cjs:643); previousTabId absent; one active tab per window.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1125"
+  },
+  "tabs.onUpdated": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Only on webContents events; Acira never emits \"tab-updated\", so pin/group/sleep changes are silent; Chrome's filter argument is ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1078"
+  },
+  "tabs.onReplaced": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (README:444 unchecked).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:495"
+  },
+  "tabs.TAB_ID_NONE": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Constant added by Acira (library defines none).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:138"
+  },
+  "tabs.TAB_INDEX_NONE": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Constant added by Acira (library defines none).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:138"
+  },
+  "tabs.MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Constant added by Acira (library defines none).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:138"
+  },
+  "tabs.TabStatus": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added by Acira with upper-case keys as in Chrome.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:139"
+  },
+  "tabs.WindowType": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added by Acira with upper-case keys as in Chrome.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:139"
+  },
+  "tabs.MutedInfoReason": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added by Acira with upper-case keys as in Chrome.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:139"
+  },
+  "tabs.ZoomSettingsMode": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added by Acira with upper-case keys as in Chrome.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:139"
+  },
+  "tabs.ZoomSettingsScope": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum added by Acira with upper-case keys as in Chrome.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:139"
+  },
+  "topSites.get": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Always resolves [] ({noop:true}); namespace object has no ...base members.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:503"
+  },
+  "webNavigation.getFrame": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "documentId is the string \"not-implemented\"; documentLifecycle always \"active\"; errorOccurred false; processId/documentId inputs ignored.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1307"
+  },
+  "webNavigation.getAllFrames": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Same detail limits as getFrame; lists the tab's frame tree.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1320"
+  },
+  "webNavigation.onBeforeNavigate": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "From did-start-navigation (not same-document); no documentId; the UrlFilter argument is ignored (all events delivered).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1192"
+  },
+  "webNavigation.onCommitted": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "transitionType \"\" and transitionQualifiers [] (TODO in source).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1211"
+  },
+  "webNavigation.onDOMContentLoaded": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Top frame and subframes; may also emit onCompleted when the main frame is not loading.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1252"
+  },
+  "webNavigation.onCompleted": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "From did-frame-finish-load (and the DOMContentLoaded shortcut) so can fire twice for a frame.",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1268"
+  },
+  "webNavigation.onHistoryStateUpdated": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "transitionType \"\" and transitionQualifiers [].",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1233"
+  },
+  "webNavigation.onCreatedNavigationTarget": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "tab.once(\"will-navigate\"): first navigation of each tab only, with sourceTabId = tabId (not the opener).",
+   "file": "node_modules/electron-chrome-extensions/dist/cjs/index.js:1180"
+  },
+  "webNavigation.onErrorOccurred": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted (README:462 unchecked).",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:520"
+  },
+  "webNavigation.onReferenceFragmentUpdated": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:522"
+  },
+  "webNavigation.onTabReplaced": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Declared; never emitted.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:525"
+  },
+  "webRequest.onHeadersReceived": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Library replaces Electron's event with an ExtensionEvent that main never sends; also shadowed by Acira's session.webRequest.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:533"
+  },
+  "webRequest.onBeforeRequest": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event, but Acira's session.webRequest handlers suppress chrome.webRequest listeners (README:492); unverified.",
+   "file": "desktop/request-pipeline.cjs:8"
+  },
+  "webRequest.onBeforeSendHeaders": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event, but Acira's session.webRequest handlers suppress chrome.webRequest listeners (README:492); unverified.",
+   "file": "desktop/request-pipeline.cjs:8"
+  },
+  "webRequest.onCompleted": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event, but Acira's session.webRequest handlers suppress chrome.webRequest listeners (README:492); unverified.",
+   "file": "desktop/request-pipeline.cjs:8"
+  },
+  "webRequest.onErrorOccurred": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event, but Acira's session.webRequest handlers suppress chrome.webRequest listeners (README:492); unverified.",
+   "file": "desktop/request-pipeline.cjs:8"
+  },
+  "webRequest.onSendHeaders": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event; Electron suppresses extension webRequest while any session.webRequest listener exists (Acira has some); unverified.",
+   "file": "node_modules/electron-chrome-extensions/README.md:492"
+  },
+  "webRequest.onAuthRequired": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event; Electron suppresses extension webRequest while any session.webRequest listener exists (Acira has some); unverified.",
+   "file": "node_modules/electron-chrome-extensions/README.md:492"
+  },
+  "webRequest.onResponseStarted": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event; Electron suppresses extension webRequest while any session.webRequest listener exists (Acira has some); unverified.",
+   "file": "node_modules/electron-chrome-extensions/README.md:492"
+  },
+  "webRequest.onBeforeRedirect": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event; Electron suppresses extension webRequest while any session.webRequest listener exists (Acira has some); unverified.",
+   "file": "node_modules/electron-chrome-extensions/README.md:492"
+  },
+  "webRequest.onActionIgnored": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native event; Electron suppresses extension webRequest while any session.webRequest listener exists (Acira has some); unverified.",
+   "file": "node_modules/electron-chrome-extensions/README.md:492"
+  },
+  "webRequest.handlerBehaviorChanged": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native function; moot because extension webRequest listeners are not called.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "webRequest.MAX_HANDLER_BEHAVIOR_CHANGED_CALLS_PER_10_MINUTES": {
+   "status": "full",
+   "kind": "property",
+   "provider": "electron-native",
+   "notes": "Native constant.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "windows.get": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "Chromium 152's windows_util / WindowsGetFunction: the caller's window for WINDOW_ID_CURRENT, populate, windowTypes, 'No window with id: N.'. Web pop-ups opened by pages (window.open) are not listed.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.getCurrent": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "The caller's own window (the tab's window, or the window an engine popup belongs to); a service worker gets the focused window, else the one created last.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.getLastFocused": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "Most recently active window of the asked types (activation order); populate and windowTypes honoured.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.getAll": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "Every window of the profile an extension may see (ordinary windows and extension popup windows; never private, Tor, web-app or other-profile windows), populate and windowTypes honoured.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.create": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "left/top/width/height (checked against the displays, size-only fitted onto a display), focused, state, type normal | popup | panel, url(s) with Chromium's errors; popup = a chromeless window in the profile's session. tabId opens the tab's address in the new window and closes the old tab (Acira's own Move to new window: the page loads again, the tab id changes). Deferred: setSelfAsOpener, focused:false for ordinary windows (Acira shows them itself), an extension page in type normal opens as a popup-style window, only the first url of a popup; incognito refused ('Incognito mode is disabled.').",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.update": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "state (normal, minimized, maximized, fullscreen; locked-fullscreen as fullscreen), left/top/width/height, focused, drawAttention, with Chromium's validation errors; answers the window as it became.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.remove": {
+   "status": "full",
+   "kind": "function",
+   "provider": "ext-api",
+   "notes": "Closes the window (Acira's own close prompts apply); 'No window with id: N.' for anything the extension may not see.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.onCreated": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ext-api",
+   "notes": "Sent when the engine is handed a new window (its first page), once; windowTypes filter; no tabs in the event.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.onRemoved": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ext-api",
+   "notes": "Sent when the window closes (by the extension or the person), windowTypes filter by the type this context learnt.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.onFocusChanged": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ext-api",
+   "notes": "The focused window id; WINDOW_ID_NONE when focus leaves every window of the profile (80 ms debounce so a switch between two windows has no gap).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.onBoundsChanged": {
+   "status": "full",
+   "kind": "event",
+   "provider": "ext-api",
+   "notes": "resized and moved, one event per burst (80 ms), with the new Window object.",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.WINDOW_ID_NONE": {
+   "status": "full",
+   "kind": "property",
+   "provider": "ext-api",
+   "notes": "Chromium 152 constants and enums from the schema (acira.build).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.WINDOW_ID_CURRENT": {
+   "status": "full",
+   "kind": "property",
+   "provider": "ext-api",
+   "notes": "Chromium 152 constants and enums from the schema (acira.build).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.WindowType": {
+   "status": "full",
+   "kind": "property",
+   "provider": "ext-api",
+   "notes": "Chromium 152 constants and enums from the schema (acira.build).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.WindowState": {
+   "status": "full",
+   "kind": "property",
+   "provider": "ext-api",
+   "notes": "Chromium 152 constants and enums from the schema (acira.build).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "windows.CreateType": {
+   "status": "full",
+   "kind": "property",
+   "provider": "ext-api",
+   "notes": "Chromium 152 constants and enums from the schema (acira.build).",
+   "file": "desktop/browser-services/ext-api/windows/service.cjs"
+  },
+  "alarms.create": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "alarms.get": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "alarms.getAll": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "alarms.clear": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "alarms.clearAll": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "alarms.onAlarm": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Native Chromium alarms; namespace appears when the manifest declares \"alarms\" (seen in the real-app probe).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.getAll": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.get": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.getSelf": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.getPermissionWarningsById": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.getPermissionWarningsByManifest": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.onEnabled": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.onDisabled": {
+   "status": "full",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Supported natively (documented); all but getSelf/getPermissionWarningsByManifest need the management permission.",
+   "file": "electron docs api/extensions.md#chrome.management"
+  },
+  "management.setEnabled": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.uninstall": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.uninstallSelf": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.launchApp": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.createAppShortcut": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.setLaunchType": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.generateAppForLink": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.installReplacementWebApp": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.onInstalled": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "management.onUninstalled": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "electron-native",
+   "notes": "Name in electron.exe, not in Electron's supported list; unverified. Acira manages extensions only from Settings > Extensions.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "scripting.executeScript": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.insertCSS": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.removeCSS": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.registerContentScripts": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.getRegisteredContentScripts": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.unregisterContentScripts": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "scripting.updateContentScripts": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Electron docs: all features supported (native); needs the scripting permission to appear.",
+   "file": "electron docs api/extensions.md#chrome.scripting"
+  },
+  "dom.openOrClosedShadowRoot": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native chrome.dom for content scripts (namespace present in every probed extension).",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.updateDynamicRules": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Native validates/stores, then Acira's matcher gets the same dynamic change (dnr-host.cjs:110); rules are enforced by Acira.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:93"
+  },
+  "declarativeNetRequest.updateSessionRules": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Native validates/stores, then Acira's matcher gets the same session change (dnr-host.cjs:110); rules are enforced by Acira.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:93"
+  },
+  "declarativeNetRequest.updateEnabledRulesets": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Native validates/stores, then Acira's matcher gets the same enabled change (dnr-host.cjs:110); rules are enforced by Acira.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:93"
+  },
+  "declarativeNetRequest.updateStaticRules": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Native validates/stores, then Acira's matcher gets the same static change (dnr-host.cjs:110); rules are enforced by Acira.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:93"
+  },
+  "declarativeNetRequest.getMatchedRules": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "From Acira's matcher (tabId, minTimeStamp); no declarativeNetRequestFeedback/activeTab check.",
+   "file": "desktop/browser-services/dnr-host.cjs:148"
+  },
+  "declarativeNetRequest.setExtensionActionOptions": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "displayActionCountAsBadgeText and tabUpdate.increment driven by Acira's matcher; badge via browserAction.setBadgeText.",
+   "file": "desktop/browser-services/dnr-host.cjs:149"
+  },
+  "declarativeNetRequest.onRuleMatchedDebug": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Only with declarativeNetRequestFeedback; request.frameId/parentFrameId are -1.",
+   "file": "desktop/browser-services/dnr-host.cjs:142"
+  },
+  "declarativeNetRequest.getDynamicRules": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.getSessionRules": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.getEnabledRulesets": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.getDisabledRuleIds": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.getAvailableStaticRuleCount": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.isRegexSupported": {
+   "status": "full",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native (rule storage lives in Chromium); Acira only enforces the rules.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "declarativeNetRequest.testMatchOutcome": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native matcher with the same rules; per its own comment it does not see real requests (dnr-engine.cjs:2); unverified vs Acira results.",
+   "file": "node_modules/electron/dist/electron.exe (api names in binary)"
+  },
+  "devtools.panels.create": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "API exists natively but Acira's developer tools do not show extension panels (React DevTools shows none).",
+   "file": "docs/launch/EXTENSION_COMPATIBILITY.md:251"
+  },
+  "devtools.inspectedWindow.eval": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "electron-native",
+   "notes": "Native API; only reachable from a devtools_page, which Acira's DevTools do not host.",
+   "file": "docs/launch/EXTENSION_COMPATIBILITY.md:251"
+  },
+  "offscreen.createDocument": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Hidden WebContentsView, one per extension, validated reasons/justification/url, closed on unload; other chrome.* APIs are not restricted as in Chrome.",
+   "file": "desktop/browser-services/extension-apis.cjs:61"
+  },
+  "offscreen.closeDocument": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Closes the extension's offscreen document; error text as in Chrome when none.",
+   "file": "desktop/browser-services/extension-apis.cjs:78"
+  },
+  "offscreen.hasDocument": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "True while the extension's offscreen document exists.",
+   "file": "desktop/browser-services/extension-apis.cjs:79"
+  },
+  "offscreen.Reason": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum of Chrome's reasons.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:28"
+  },
+  "identity.launchWebAuthFlow": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Small Acira window titled with the site; ends at https://<id>.chromiumapp.org/ without requesting it; interactive and non-interactive.",
+   "file": "desktop/browser-services/extension-apis.cjs:94"
+  },
+  "identity.getRedirectURL": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "https://<id>.chromiumapp.org/<path>.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:41"
+  },
+  "identity.getAuthToken": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always rejects \"The user is not signed in.\" (Acira has no Google account).",
+   "file": "desktop/browser-services/extension-apis.cjs:124"
+  },
+  "identity.getProfileUserInfo": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always {email:\"\",id:\"\"}.",
+   "file": "desktop/browser-services/extension-apis.cjs:125"
+  },
+  "identity.getAccounts": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always [].",
+   "file": "desktop/browser-services/extension-apis.cjs:126"
+  },
+  "identity.removeCachedAuthToken": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "No-op.",
+   "file": "desktop/browser-services/extension-apis.cjs:126"
+  },
+  "identity.clearAllCachedAuthTokens": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "No-op.",
+   "file": "desktop/browser-services/extension-apis.cjs:126"
+  },
+  "identity.onSignInChanged": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:44"
+  },
+  "identity.AccountStatus": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum SYNC/ANY.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:40"
+  },
+  "idle.queryState": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "powerMonitor.getSystemIdleState, interval floor 15 s.",
+   "file": "desktop/browser-services/extension-apis.cjs:309"
+  },
+  "idle.setDetectionInterval": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Stored per extension, used by the onStateChanged poll; min 15 s.",
+   "file": "desktop/browser-services/extension-apis.cjs:310"
+  },
+  "idle.getAutoLockDelay": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always 0 (never auto-locks).",
+   "file": "desktop/browser-services/extension-apis.cjs:311"
+  },
+  "idle.onStateChanged": {
+   "status": "partial",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Polled every 5 s only while a listener exists, so changes arrive with up to 5 s delay.",
+   "file": "desktop/browser-services/extension-apis.cjs:312"
+  },
+  "idle.IdleState": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum ACTIVE/IDLE/LOCKED.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:48"
+  },
+  "sidePanel.setOptions": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Global or per-tab path/enabled; validates the path; closes or navigates a live panel.",
+   "file": "desktop/browser-services/extension-apis.cjs:146"
+  },
+  "sidePanel.getOptions": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Per-tab, else global, else manifest side_panel.default_path.",
+   "file": "desktop/browser-services/extension-apis.cjs:156"
+  },
+  "sidePanel.setPanelBehavior": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "openPanelOnActionClick toggles the panel from the toolbar button (extension-apis.cjs:195).",
+   "file": "desktop/browser-services/extension-apis.cjs:157"
+  },
+  "sidePanel.getPanelBehavior": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Returns the stored behavior.",
+   "file": "desktop/browser-services/extension-apis.cjs:158"
+  },
+  "sidePanel.getLayout": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always {side:\"right\"}; the panel is docked right only.",
+   "file": "desktop/browser-services/extension-apis.cjs:159"
+  },
+  "sidePanel.open": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "One panel per window; needs windowId or tabId; refused when the window is too narrow; no user-gesture check.",
+   "file": "desktop/browser-services/extension-apis.cjs:160"
+  },
+  "sidePanel.close": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Closes the extension's panel (animated).",
+   "file": "desktop/browser-services/extension-apis.cjs:161"
+  },
+  "sidePanel.onOpened": {
+   "status": "full",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Emitted when the panel is shown (windowId, path, tabId).",
+   "file": "desktop/browser-services/extension-apis.cjs:142"
+  },
+  "sidePanel.onClosed": {
+   "status": "full",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Emitted when the panel closes (windowId, path).",
+   "file": "desktop/browser-services/extension-apis.cjs:140"
+  },
+  "sidePanel.Side": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum left/right.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:32"
+  },
+  "userScripts.register": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Chrome-style validation, MAIN and isolated USER_SCRIPT worlds, persisted per profile. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:254"
+  },
+  "userScripts.update": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Updates stored scripts; errors as Chrome. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:255"
+  },
+  "userScripts.unregister": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Filter by ids; unknown id is an error. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:256"
+  },
+  "userScripts.getScripts": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Returns public script shapes. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:257"
+  },
+  "userScripts.configureWorld": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "csp and messaging per worldId. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:258"
+  },
+  "userScripts.getWorldConfigurations": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Lists world configs. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:259"
+  },
+  "userScripts.resetWorldConfiguration": {
+   "status": "full",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Deletes a world config. Throws unless \"Allow user scripts\" is on.",
+   "file": "desktop/browser-services/extension-apis.cjs:260"
+  },
+  "userScripts.execute": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "target.tabId only (no frameIds/allFrames/documentIds); result is a single {frameId:0} entry; needs host permission.",
+   "file": "desktop/browser-services/extension-apis.cjs:261"
+  },
+  "userScripts.ExecutionWorld": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum MAIN/USER_SCRIPT.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:117"
+  },
+  "bookmarks.get": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.getChildren": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.getRecent": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.getTree": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.getSubTree": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.search": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Read-only from Acira's store; tree is root 0 + one \"Bookmarks bar\" (id 1); no Other/Mobile folders.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:30"
+  },
+  "bookmarks.create": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read bookmarks but not change them.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:44"
+  },
+  "bookmarks.update": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read bookmarks but not change them.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:44"
+  },
+  "bookmarks.move": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read bookmarks but not change them.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:44"
+  },
+  "bookmarks.remove": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read bookmarks but not change them.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:44"
+  },
+  "bookmarks.removeTree": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read bookmarks but not change them.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:44"
+  },
+  "bookmarks.onCreated": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onRemoved": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onChanged": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onMoved": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onChildrenReordered": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onImportBegan": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "bookmarks.onImportEnded": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires (Acira sends no bookmark events).",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:56"
+  },
+  "history.search": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Acira history; defaults 24 h / 100 results; typedCount 0; no title-only/URL-prefix semantics.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:50"
+  },
+  "history.getVisits": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "transition always \"link\", referringVisitId \"0\".",
+   "file": "desktop/browser-services/extension-store-apis.cjs:50"
+  },
+  "history.addUrl": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read history but not change it.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:62"
+  },
+  "history.deleteUrl": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read history but not change it.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:62"
+  },
+  "history.deleteRange": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read history but not change it.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:62"
+  },
+  "history.deleteAll": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira lets extensions read history but not change it.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:62"
+  },
+  "history.onVisited": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:62"
+  },
+  "history.onVisitRemoved": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:62"
+  },
+  "sessions.getRecentlyClosed": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Closed http(s) tabs only (max 25), no windows or groups, windowId -1.",
+   "file": "desktop/browser-services/extension-store-apis.cjs:68"
+  },
+  "sessions.getDevices": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Always [] (no Chrome Sync).",
+   "file": "desktop/browser-services/extension-store-apis.cjs:72"
+  },
+  "sessions.restore": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Rejects \"Acira does not let extensions reopen tabs.\"",
+   "file": "desktop/browser-services/extension-store-apis.cjs:73"
+  },
+  "sessions.onChanged": {
+   "status": "stub",
+   "kind": "event",
+   "provider": "acira",
+   "notes": "Declared; never fires.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:66"
+  },
+  "sessions.MAX_SESSION_RESULTS": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Constant 25.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:66"
+  },
+  "search.query": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Opens the profile search engine in a new active tab; disposition and tabId are ignored.",
+   "file": "desktop/browser-services/extension-apis.cjs:302"
+  },
+  "search.Disposition": {
+   "status": "full",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Enum CURRENT_TAB/NEW_TAB/NEW_WINDOW.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:70"
+  },
+  "events.hasListener": {
+   "status": "partial",
+   "kind": "function",
+   "provider": "acira",
+   "notes": "Library threw \"Method not implemented.\"; Acira patch tracks listeners per event object in this context.",
+   "file": "desktop/browser-services/extension-runtime-patch.cjs:27"
+  },
+  "events.addRules": {
+   "status": "stub",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Declarative event rules (declarativeContent, webRequest) throw \"Method not implemented.\"",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:136"
+  },
+  "action.setBadgeTextColor": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:257"
+  },
+  "action.getBadgeTextColor": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:257"
+  },
+  "action.isEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:257"
+  },
+  "action.onUserSettingsChanged": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:257"
+  },
+  "bookmarks.ROOT_NODE_ID": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "acira",
+   "notes": "Chrome 152 member not defined by Acira's namespace object.",
+   "file": "desktop/browser-services/extension-apis-renderer.cjs:51"
+  },
+  "contextMenus.ACTION_MENU_TOP_LEVEL_LIMIT": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:274"
+  },
+  "cookies.getPartitionKey": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:309"
+  },
+  "downloads.setShelfEnabled": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:323"
+  },
+  "extension.setUpdateUrlData": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:347"
+  },
+  "notifications.onPermissionLevelChanged": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:384"
+  },
+  "notifications.onShowSettings": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:384"
+  },
+  "permissions.addHostAccessRequest": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:399"
+  },
+  "permissions.removeHostAccessRequest": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:399"
+  },
+  "tabs.duplicate": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.highlight": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.move": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.group": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.ungroup": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.detectLanguage": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined (README:425); the call throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.discard": {
+   "status": "missing-but-namespace-present",
+   "kind": "function",
+   "provider": "ece",
+   "notes": "Not defined by the library or Acira (README unchecked); calling it throws \"is not a function\".",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.onMoved": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.onHighlighted": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.onDetached": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.onAttached": {
+   "status": "missing-but-namespace-present",
+   "kind": "event",
+   "provider": "ece",
+   "notes": "Event not defined on the namespace object; addListener on it throws.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  },
+  "tabs.SPLIT_VIEW_ID_NONE": {
+   "status": "missing-but-namespace-present",
+   "kind": "property",
+   "provider": "ece",
+   "notes": "Chrome 152 member with no implementation in the library or Acira.",
+   "file": "node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js:461"
+  }
+ },
+ "namespaces": {
+  "action": {
+   "provider": "ece",
+   "gate": "MV3 manifest with an \"action\" key (preload:258); no permission needed (as Chrome).",
+   "notes": "Most members stored in a per-extension map; toolbar UI is <browser-action-list> in Acira's UI (extension-toolbar-preload.cjs). enable/disable/getUserSettings are stubs."
+  },
+  "browserAction": {
+   "provider": "ece",
+   "gate": "MV2 manifest with \"browser_action\" (preload:262).",
+   "notes": "Same implementation object as action."
+  },
+  "commands": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Shortcuts are listed but empty and onCommand never fires."
+  },
+  "contextMenus": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Works without the contextMenus permission. Items are merged into Acira's page context menu through context-commands.cjs."
+  },
+  "cookies": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Works without the cookies permission or host permissions: any extension can read/write the profile session's cookies. Backed by Electron session.cookies."
+  },
+  "downloads": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Every method is a noop stub that logs \"not yet implemented\" and resolves undefined."
+  },
+  "extension": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Electron's native members kept except where overridden: getViews/isAllowed* stubs."
+  },
+  "i18n": {
+   "provider": "electron-native",
+   "gate": "Native always present; the library supplies fallbacks only for MV3 when native getMessage is missing (preload:364).",
+   "notes": "Native Chromium localisation."
+  },
+  "notifications": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Backed by Electron Notification; works without the notifications permission."
+  },
+  "permissions": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Grants live in memory; remove is a stub; Acira overrides contains for host patterns."
+  },
+  "privacy": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Only ChromeSetting stubs for 5 settings; nothing is applied and callbacks are never called."
+  },
+  "runtime": {
+   "provider": "electron-native",
+   "gate": "Native; the library adds connectNative/openOptionsPage/sendNativeMessage (nativeMessaging permission checked by the router); Acira adds getContexts/ContextType/onUserScript*.",
+   "notes": "Native messaging handlers are replaced by native-messaging.cjs. Library calls that fail resolve undefined instead of setting lastError."
+  },
+  "storage": {
+   "provider": "electron-native",
+   "gate": "Always defined by the library (preload:450); local/session native.",
+   "notes": "sync and managed are aliases of local in pages/workers; content scripts have no sync except through the Acira shim."
+  },
+  "tabs": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Works without the tabs permission (url/title always returned). Only pages that Acira attached are visible; extension-created windows are included via attachTab."
+  },
+  "topSites": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Single stub returning []."
+  },
+  "webNavigation": {
+   "provider": "ece",
+   "gate": "Always injected in extension pages and workers (preload apiDefinitions has no shouldInject); main handlers check no manifest permission.",
+   "notes": "Works without the webNavigation permission; the UrlFilter argument of listeners is ignored."
+  },
+  "webRequest": {
+   "provider": "electron-native",
+   "gate": "Native (always present); the library adds an onHeadersReceived stub.",
+   "notes": "Acira's own session.webRequest handlers likely prevent extension webRequest listeners from firing (Electron limitation); DNR is the working path."
+  },
+  "windows": {
+   "provider": "ext-api",
+   "gate": "None (Chromium exposes chrome.windows to every extension).",
+   "notes": "ext-api/windows.cjs + windows-renderer.cjs (package P2); the older engine handlers and Acira shims are replaced. Host hook: extensionBrowser().windows in main.cjs (ext-api/windows/host.cjs)."
+  },
+  "alarms": {
+   "provider": "electron-native",
+   "gate": "Native; present when the manifest declares \"alarms\".",
+   "notes": "Native Chromium implementation."
+  },
+  "management": {
+   "provider": "electron-native",
+   "gate": "Native; present for every probed extension.",
+   "notes": "Electron documents getAll/get/getSelf/permission-warnings and onEnabled/onDisabled only."
+  },
+  "scripting": {
+   "provider": "electron-native",
+   "gate": "Native; present when the manifest declares \"scripting\".",
+   "notes": "Electron documents the whole API as supported."
+  },
+  "declarativeNetRequest": {
+   "provider": "acira",
+   "gate": "Native; present with declarativeNetRequest or declarativeNetRequestWithHostAccess (Acira renderer wraps it, extension-apis-renderer.cjs:77).",
+   "notes": "Chromium stores/validates rules; Acira's dnr-engine.cjs enforces them inside the request pipeline after Acira's blocker."
+  },
+  "devtools": {
+   "provider": "electron-native",
+   "gate": "Native in devtools_page contexts.",
+   "notes": "Acira's developer tools do not host extension panels."
+  },
+  "dom": {
+   "provider": "electron-native",
+   "gate": "Native, always present.",
+   "notes": "chrome.dom.openOrClosedShadowRoot."
+  },
+  "offscreen": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists offscreen (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "One hidden document per extension; native name strings exist in electron.exe but Acira uses base only if base.createDocument is a function."
+  },
+  "identity": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists identity (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "launchWebAuthFlow works; account-based calls are stubs."
+  },
+  "idle": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists idle (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "Native idle API is not enabled in Electron; Acira uses powerMonitor."
+  },
+  "sidePanel": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists sidePanel (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "Docked right of the page by extension-side-panel.cjs; one per window."
+  },
+  "userScripts": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists userScripts (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178). Also requires the per-extension \"Allow user scripts\" switch; calls throw when off.",
+   "notes": "Registry in user-scripts.cjs; page preload only registered while a switch is on."
+  },
+  "bookmarks": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists bookmarks (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "Read-only view of Acira's bookmarks for the extension's profile."
+  },
+  "history": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists history (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "Read-only view of Acira's history."
+  },
+  "sessions": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists sessions (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "Recently closed tabs read-only; restore refused."
+  },
+  "search": {
+   "provider": "acira",
+   "gate": "Injected only when manifest.permissions (required, not optional_permissions) lists search (extension-apis-renderer.cjs); main handlers re-check with guard() (extension-apis.cjs:178).",
+   "notes": "query opens a new tab."
+  },
+  "events": {
+   "provider": "ece",
+   "gate": "Pseudo-namespace: every chrome.<ns>.on* object the library builds (ExtensionEvent) in extension pages and workers.",
+   "notes": "addListener(callback) only: filters ignored; hasListener(s) fixed by Acira; declarative addRules/getRules/removeRules throw \"Method not implemented.\""
+  },
+  "browser": {
+   "provider": "acira",
+   "gate": "Chromium 152 gives extension pages a separate `browser` object; Acira mirrors every chrome namespace onto it (extension-apis-renderer.cjs:127).",
+   "notes": "webextension-polyfill uses it."
+  },
+  "tabGroups": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "proxy": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "contentSettings": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "fontSettings": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "EXTENSION_COMPATIBILITY.md:254: not yet."
+  },
+  "tabCapture": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "EXTENSION_COMPATIBILITY.md:252: no tabCapture/desktopCapture (Loom)."
+  },
+  "desktopCapture": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "EXTENSION_COMPATIBILITY.md:252: no tabCapture/desktopCapture (Loom)."
+  },
+  "debugger": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "browsingData": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "pageCapture": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "power": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "system.cpu/memory/display/storage": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "tts": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "ttsEngine": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "readingList": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "gcm": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "instanceId": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "processes": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "declarativeContent": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "omnibox": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "webAuthenticationProxy": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "printing": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "dns": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "documentScan": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "enterprise.*": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "wallpaper": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "platformKeys": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  },
+  "vpnProvider": {
+   "provider": "none",
+   "present": false,
+   "gate": "Not defined by the library or Acira; not seen in the 16-extension real-app probe (C:\\ae\\r4\\ext\\evidence).",
+   "notes": "Absent; strings may exist in electron.exe but the namespace was not exposed in probed extension contexts."
+  }
+ },
+ "crossCutting": [
+  "ECE invokeExtension swallows handler errors: the promise resolves undefined and the error goes to console.error; chrome.runtime.lastError is never set for ECE-backed calls (preload:58-64). Acira's own APIs use call() which rejects / sets lastError.",
+  "The ECE preload logs every API call, result and event to the extension console (\"if (true) console.log\", preload:24, 47, 65): noisy and includes arguments.",
+  "Event objects ignore Chrome's filter arguments (UrlFilter, UpdateFilter, extraInfoSpec): addListener(callback) only; hasListener/hasListeners fixed by Acira (extension-runtime-patch.cjs:27).",
+  "ECE injects tabs, windows, cookies, notifications, webNavigation, contextMenus, commands, permissions, downloads, topSites, privacy regardless of manifest permissions, and its handlers do not check permissions.",
+  "Only tabs whose page exists are tracked (attachTab); sleeping or not-yet-loaded tabs are invisible to tabs.query. Acira never emits \"tab-updated\", so pin, group and sleep changes do not reach tabs.onUpdated.",
+  "Extensions are disabled in private windows and Tor windows; one ECE runtime exists per ordinary profile session.",
+  "Library \"if (shouldInject)\" definitions are overwritten with spread(...base) first, so native members stay unless the library lists the same name (e.g. extension.getViews, webRequest.onHeadersReceived, topSites)."
+ ],
+ "counts": {
+  "total": 389,
+  "byStatus": {
+   "full": 147,
+   "partial": 116,
+   "stub": 86,
+   "missing-but-namespace-present": 40
+  },
+  "byProvider": {
+   "ece": 179,
+   "electron-native": 109,
+   "acira": 101
+  },
+  "matrix": {
+   "ece": {
+    "full": 31,
+    "partial": 53,
+    "stub": 56,
+    "missing-but-namespace-present": 39
+   },
+   "electron-native": {
+    "full": 68,
+    "partial": 40,
+    "stub": 1
+   },
+   "acira": {
+    "partial": 23,
+    "full": 48,
+    "stub": 29,
+    "missing-but-namespace-present": 1
+   }
+  }
+ }
+}

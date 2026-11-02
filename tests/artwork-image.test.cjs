@@ -1,0 +1,12 @@
+const{test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const{artworkImageInfo,MAX_INPUT_BYTES}=require('../desktop/artwork-image.cjs');
+test('the reviewed museum bytes match their recorded bounded JPEG dimensions',()=>{const catalog=JSON.parse(fs.readFileSync('public/artwork/museum-catalog.json'));for(const item of catalog.paintings){const bytes=fs.readFileSync('public'+item.src),info=artworkImageInfo(bytes);assert.equal(info.mime,'image/jpeg');assert.equal(info.width,item.width);assert.equal(info.height,item.height);assert.equal(require('node:crypto').createHash('sha256').update(bytes).digest('hex'),item.sha256);assert.equal(item.isPublicDomain,true);assert.equal(new URL(item.imageURL).hostname,'images.metmuseum.org');}});
+test('raster admission rejects compressed-size limits, malformed data and oversized headers before decode',()=>{for(const bytes of[Buffer.alloc(MAX_INPUT_BYTES+1),Buffer.from('not an image'),fs.readFileSync('public/artwork/dunes.svg')])assert.throws(()=>artworkImageInfo(bytes));const png=Buffer.alloc(40);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(13,8);png.write('IHDR',12);png.writeUInt32BE(8192,16);png.writeUInt32BE(8192,20);assert.throws(()=>artworkImageInfo(png),/megapixels/);png.writeUInt32BE(32,16);png.writeUInt32BE(32,20);assert.deepEqual(artworkImageInfo(png),{width:32,height:32,mime:'image/png'});});
+test('a JPEG cannot use a second frame header to evade the pre-decode dimension limit',()=>{const frame=Buffer.from([255,192,0,11,8,0,32,0,32,1,1,17,0]),bytes=Buffer.concat([Buffer.from([255,216]),frame,frame,Buffer.from([255,217])]);assert.throws(()=>artworkImageInfo(bytes),/multiple image frames/);});
+test('the messages a person reads when an image is refused keep a space before every number',()=>{
+ const png=Buffer.alloc(40);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(13,8);png.write('IHDR',12);png.writeUInt32BE(8192,16);png.writeUInt32BE(8192,20);
+ assert.throws(()=>artworkImageInfo(png),/no larger than 24 megapixels or 8192 pixels on either side/);
+ const source=fs.readFileSync('desktop/workspace-artwork.cjs','utf8');
+ assert.match(source,/up to 8 MB/);assert.match(source,/keep up to 5\./);assert.doesNotMatch(source,/up to[0-9]/);
+ const image=fs.readFileSync('desktop/artwork-image.cjs','utf8');assert.match(image,/image up to 8 MB/);assert.doesNotMatch(image,/(?:up to|than)[0-9]/);
+});

@@ -1,0 +1,118 @@
+{
+  "comment": "Official Tor Project Mac Expert Bundles. Archives verified against pinned Tor Browser Developers OpenPGP keys before file hashes were recorded.",
+  "torBrowserVersion": "15.0.26",
+  "tor": "0.4.9.14",
+  "signingKey": "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290",
+  "platforms": {
+    "arm64": {
+      "archive": {
+        "url": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-macos-aarch64-15.0.26.tar.gz",
+        "name": "tor-expert-bundle-macos-aarch64-15.0.26.tar.gz",
+        "signature": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-macos-aarch64-15.0.26.tar.gz.asc",
+        "sha256": "a3febb6179152b0b4f56a0f5cc57bf5cc8ecef7db35e7c3e9d5a044c8158c26c"
+      },
+      "updateFeed": "https://aus1.torproject.org/torbrowser/update_3/release/download-macos.json",
+      "files": {
+        "tor.txt": {
+          "from": "docs/tor.txt",
+          "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
+        },
+        "libevent-2.1.7.dylib": {
+          "from": "tor/libevent-2.1.7.dylib",
+          "sha256": "6dde3faf59255b7cf0cc20d0b3cdf78622266fbf13c534300b8884c76d89b739"
+        },
+        "tor": {
+          "from": "tor/tor",
+          "sha256": "7d5a89b6cec99aab47420040ad86dd5fd5174192e71b6c201b0b10170ba57ebb"
+        },
+        "pluggable_transports/lyrebird": {
+          "from": "tor/pluggable_transports/lyrebird",
+          "sha256": "94f64abef19dc481f32e41f87ec5f999ad64f04e37ac779121533f1c5b42c9a1"
+        },
+        "pluggable_transports/conjure-client": {
+          "from": "tor/pluggable_transports/conjure-client",
+          "sha256": "80a77a507025d78ec2c17a67eb8640092185bd415ff5f7d657f80b0cf8042dfb"
+        },
+        "pluggable_transports/pt_config.json": {
+          "from": "tor/pluggable_transports/pt_config.json",
+          "sha256": "2f7cf039710e96b70ea7d45473b905f9a6ce9a8b65e9f03e2507135ae8c75407"
+        },
+        "pluggable_transports/README.CONJURE.md": {
+          "from": "tor/pluggable_transports/README.CONJURE.md",
+          "sha256": "f7e9211dd0e0089c93a0a84329fed41b2ac7b988531475b5eb2c86d38ad64d6c"
+        },
+        "pluggable_transports/LICENSE.lyrebird.txt": {
+          "from": "docs/lyrebird.txt",
+          "sha256": "2331e6517a15ce87e2a1d2838c314ca1b8f3c7a347ac28d370a7fccdb5964f40"
+        },
+        "pluggable_transports/LICENSE.conjure.txt": {
+          "from": "docs/conjure.txt",
+          "sha256": "0522541e3505d6669334f6eb488d4fde9c4af2234daec13170a0cf4d46d99e92"
+        },
+        "geoip": {
+          "from": "data/geoip",
+          "sha256": "3099e91a4c8c87a1e6ab8a0b1e7407aea0314a2d8d048d654b4087b9ae103d9f"
+        },
+        "geoip6": {
+          "from": "data/geoip6",
+          "sha256": "10f50daba4156a5b1ae782c0db0478b4584901b1ed72cd619cddd4b9f2b03d6a"
+        }
+      }
+    },
+    "x64": {
+      "archive": {
+        "url": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-macos-x86_64-15.0.26.tar.gz",
+        "name": "tor-expert-bundle-macos-x86_64-15.0.26.tar.gz",
+        "signature": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-macos-x86_64-15.0.26.tar.gz.asc",
+        "sha256": "e1ae4d4a734d28bb590839188511deb3cebc26fcbce9df66d01b2c452060fe95"
+      },
+      "updateFeed": "https://aus1.torproject.org/torbrowser/update_3/release/download-macos.json",
+      "files": {
+        "tor.txt": {
+          "from": "docs/tor.txt",
+          "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
+        },
+        "libevent-2.1.7.dylib": {
+          "from": "tor/libevent-2.1.7.dylib",
+          "sha256": "38aea0316e01e1fc52a15941bf523c8bc018ca90655cfa90de568b4a86a82b4b"
+        },
+        "tor": {
+          "from": "tor/tor",
+          "sha256": "e249a521aa5b0ff44a39c1dc4b5707ae8cb109d8a26c637b6acbbf6832bf2f14"
+        },
+        "pluggable_transports/lyrebird": {
+          "from": "tor/pluggable_transports/lyrebird",
+          "sha256": "14b953cb65813857b1492d64ce48a4e981d7d5bff9bc67fa3a899c33daa20fcf"
+        },
+        "pluggable_transports/conjure-client": {
+          "from": "tor/pluggable_transports/conjure-client",
+          "sha256": "639b6efc3ca0a1d4267a68ed038a2eaa98f8fa7d29bce546e70e1da2f6c6892d"
+        },
+        "pluggable_transports/pt_config.json": {
+          "from": "tor/pluggable_transports/pt_config.json",
+          "sha256": "2f7cf039710e96b70ea7d45473b905f9a6ce9a8b65e9f03e2507135ae8c75407"
+        },
+        "pluggable_transports/README.CONJURE.md": {
+          "from": "tor/pluggable_transports/README.CONJURE.md",
+          "sha256": "f7e9211dd0e0089c93a0a84329fed41b2ac7b988531475b5eb2c86d38ad64d6c"
+        },
+        "pluggable_transports/LICENSE.lyrebird.txt": {
+          "from": "docs/lyrebird.txt",
+          "sha256": "2331e6517a15ce87e2a1d2838c314ca1b8f3c7a347ac28d370a7fccdb5964f40"
+        },
+        "pluggable_transports/LICENSE.conjure.txt": {
+          "from": "docs/conjure.txt",
+          "sha256": "0522541e3505d6669334f6eb488d4fde9c4af2234daec13170a0cf4d46d99e92"
+        },
+        "geoip": {
+          "from": "data/geoip",
+          "sha256": "3099e91a4c8c87a1e6ab8a0b1e7407aea0314a2d8d048d654b4087b9ae103d9f"
+        },
+        "geoip6": {
+          "from": "data/geoip6",
+          "sha256": "10f50daba4156a5b1ae782c0db0478b4584901b1ed72cd619cddd4b9f2b03d6a"
+        }
+      }
+    }
+  }
+}

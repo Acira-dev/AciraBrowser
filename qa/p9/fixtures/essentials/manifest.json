@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Acira essentials probe",
+  "version": "1.0",
+  "description": "QA fixture for the P9 essentials: identity (launchWebAuthFlow against a local fake OAuth server), sidePanel.open, idle, system.display.",
+  "permissions": ["identity", "sidePanel", "idle", "system.display"],
+  "oauth2": {"client_id": "000000000000.apps.googleusercontent.com", "scopes": ["email"]},
+  "side_panel": {"default_path": "panel.html"},
+  "background": {"service_worker": "sw.js"},
+  "action": {"default_title": "Essentials probe"}
+}

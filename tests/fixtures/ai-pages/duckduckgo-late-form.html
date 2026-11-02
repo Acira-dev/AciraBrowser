@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>how do solar panels work at DuckDuckGo</title></head><body>
+<!-- DuckDuckGo-shaped, hostile and late: the app root is a form that holds only the Duck.ai button when the page is first scanned; the header, search box,
+     Search Assist answer and results arrive afterwards (window.__fill, called by the runner after the filter is injected, as a script-rendered page fills in). -->
+<form id="web-root-form" action="/" method="get"><button type="button" data-testid="ask" aria-label="Expand Duck.ai chat input"></button></form>
+<script>
+window.__fill = function () {
+  const form = document.getElementById('web-root-form');
+  const results = Array.from({length: 6}, (_, i) => '<li><article data-testid="result"><h2><a href="https://site' + (i + 1) + '.example/">Organic result ' + (i + 1) + '</a></h2><p>Snippet ' + (i + 1) + '</p></article></li>').join('');
+  form.insertAdjacentHTML('beforeend',
+    '<header id="header"><input name="q" type="search" value="how do solar panels work" aria-label="Search"><div id="react-ai-button-slot"><span><a href="/?q=x&amp;ia=chat&amp;entry"><span>Duck.ai</span></a></span></div></header>' +
+    '<nav><ul><li><a href="/?q=x&amp;ia=web">All</a></li></ul></nav>' +
+    '<main><section data-testid="mainline"><ol><li><div><div><div><button type="button" data-assist-icon-trigger aria-hidden="true"><span>Search Assist</span></button><p>Solar panels turn sunlight into electricity.</p></div></div></div></li>' + results + '</ol></section></main>');
+};
+</script>
+</body></html>

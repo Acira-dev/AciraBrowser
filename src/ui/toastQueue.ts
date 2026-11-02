@@ -1,0 +1,35 @@
+import type { BrowserSnapshot, ToastAction } from '../runtime/types';
+
+/** Bible §4 Toast: at most three on screen, newest at the bottom; each row is 44px with a 1px rule between rows. */
+export const toastLimit = 3, toastRowHeight = 44;
+export interface QueuedToast { key: number; id: number; text: string; action?: ToastAction; tone?: 'error' | 'info' }
+type Incoming = NonNullable<BrowserSnapshot['toast']>;
+
+/** The same undo batch ("2 tabs closed" after "Tab closed"), or the same plain text, updates its row instead of stacking. */
+const sameToast = (row: QueuedToast, toast: Incoming) => row.action || toast.action
+  ? JSON.stringify(row.action?.command) === JSON.stringify(toast.action?.command)
+  : row.text === toast.text;
+
+/** Adds main's newest toast. Returns the new list, the row's key (its timer), and the keys pushed past the limit. */
+export function pushToast(list: QueuedToast[], toast: Incoming): { list: QueuedToast[]; key: number; dropped: number[] } {
+  const same = list.find(row => sameToast(row, toast)), key = same ? same.key : toast.id;
+  // Status toasts never reach the stack (they go to the pill lane), so only error/info tones are kept here.
+  const entry: QueuedToast = { key, id: toast.id, text: toast.text, action: toast.action, ...(toast.tone === 'error' || toast.tone === 'info' ? { tone: toast.tone } : {}) };
+  const next = same ? list.map(row => row === same ? entry : row) : [...list, entry];
+  return { list: next.slice(-toastLimit), key, dropped: next.slice(0, Math.max(0, next.length - toastLimit)).map(row => row.key) };
+}
+
+/** Undo rows whose batch has left closed tabs (undone from the toast, Ctrl+Shift+T or another window) are spent. */
+export const spentToasts = (list: QueuedToast[], closedTabs: BrowserSnapshot['closedTabs']) => list.filter(row => {
+  const command = row.action?.command;
+  return command?.type === 'tab.restore.batch' && !closedTabs.some(tab => tab.closedBatch === command.id);
+}).map(row => row.key);
+
+/** Errors and notices stay until dismissed or timed out and carry a × (bible §4); plain confirmations do not. */
+export const dismissible = (tone?: string) => tone === 'error' || tone === 'info';
+
+export const toastStackHeight = (rows: number) => rows * toastRowHeight + Math.max(0, rows - 1);
+
+/** The room the native toast host keeps: it grows with the list in the same render and shrinks only when `kept` (the delayed copy) lets go.
+ *  Reading the delayed copy alone left a new toast's first render with no room (a 0×0 host layout that main rejects). */
+export const toastRoom = <T,>(list: T[], kept: T[]): T[] => list.length >= kept.length ? list : kept;

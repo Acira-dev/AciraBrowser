@@ -1,0 +1,5 @@
+.st-value { font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums; color: var(--st-muted); white-space: nowrap; }
+.st-value[data-state='on'] { color: var(--st-text); }
+.st-value[data-state='unavailable'] { color: var(--st-muted); }
+
+.st-payload { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--st-fill, rgba(127,127,127,.1)); font: 12px/16px var(--mono, ui-monospace, monospace); color: var(--st-text); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; user-select: text; }

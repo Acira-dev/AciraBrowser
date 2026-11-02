@@ -1,0 +1,2 @@
+.dl-glyph { display: inline-grid; place-items: center; flex: none; line-height: 0; }
+.dl-glyph > .dot-matrix { display: block; }

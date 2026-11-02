@@ -1,0 +1,12 @@
+/* Structure only. Rows, switches, text and color come from Settings (settings.css, .profile-cleanup block). */
+.profile-cleanup { box-sizing: border-box; container-type: inline-size; width: 100%; min-width: 0; }
+.profile-cleanup * { box-sizing: border-box; }
+.profile-cleanup p { margin: 0; overflow-wrap: anywhere; }
+.profile-cleanup fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.profile-cleanup summary { width: fit-content; max-width: 100%; cursor: default; }
+.profile-cleanup__sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.profile-cleanup__feedback:empty { flex: 1; }
+.profile-cleanup__tag { white-space: nowrap; }
+
+.profile-cleanup :is(input,textarea,button,summary),.profile-cleanup__error {scroll-margin-block:8px}
+.profile-cleanup__error:focus-visible {outline:2px solid var(--st-focus,var(--accent,#365fbe));outline-offset:3px}

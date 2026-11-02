@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acira</title>
+<style>
+@font-face{font-family:'Geist';font-weight:100 900;src:url('/fonts/Geist.woff2') format('woff2')}
+/* "Choose what to share" (bible §4 Transient surfaces: picker 680 wide, padding 24, title 16/520, body 13/20 at 61%, 32px buttons,
+   Windows order with the action first) and the sharing pill. Tokens follow native-dialog.html (round 12 ladder, neutral primary);
+   radii 4/6/8, hairlines, soft layered shadow. Motion is transform/opacity only and stops for reduced motion. */
+:root{color-scheme:light;--bg:#fff;--text:rgb(0 0 0/.88);--muted:rgb(0 0 0/.61);--faint:rgb(0 0 0/.45);--line:rgb(0 0 0/.08);--line-strong:rgb(0 0 0/.14);--hover:rgb(0 0 0/.05);--field:rgb(0 0 0/.04);--raised:#fff;--primary:#1d1d1f;--primary-hover:#2a2a2e;--on-primary:#fff;--ring:#3b6eea;--live:#e5484d;--shadow:0 1px 2px rgb(0 0 0/.06),0 1px 1px rgb(0 0 0/.04);--pill-shadow:0 0 0 1px rgb(0 0 0/.08),0 2px 6px rgb(0 0 0/.08),0 10px 28px rgb(0 0 0/.16);--ease:cubic-bezier(.23,1,.32,1)}
+:root[data-dark]{color-scheme:dark;--bg:#232428;--text:#ededef;--muted:rgb(237 237 239/.64);--faint:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--line-strong:rgb(255 255 255/.16);--hover:rgb(255 255 255/.06);--field:rgb(255 255 255/.05);--raised:#34353a;--primary:#ededef;--primary-hover:#fff;--on-primary:#16171a;--ring:#8fb0ff;--live:#ff6369;--shadow:0 1px 2px rgb(0 0 0/.3);--pill-shadow:0 0 0 1px rgb(255 255 255/.10),0 2px 6px rgb(0 0 0/.28),0 10px 28px rgb(0 0 0/.42)}
+*{box-sizing:border-box}
+html,body{margin:0;color:var(--text);font:13px/1.4 'Geist','Inter','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
+html:not([data-pill]),html:not([data-pill]) body{background:var(--bg)}
+html[data-pill],html[data-pill] body{background:transparent}
+[hidden]{display:none!important}
+button{font:inherit;font-weight:500;height:32px;padding:0 14px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text);cursor:default;transition:background-color 120ms var(--ease),transform 120ms var(--ease)}
+button:hover{background:var(--hover)}
+button:active{transform:scale(.98)}
+button[data-primary]{background:var(--primary);box-shadow:none;color:var(--on-primary)}
+button[data-primary]:hover{background:var(--primary-hover)}
+button:disabled{opacity:.4;pointer-events:none}
+button:focus-visible,input:focus-visible+.switch{outline:2px solid var(--ring);outline-offset:2px}
+
+/* Picker */
+#picker{padding:24px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}
+h1{margin:0;font-size:16px;line-height:22px;font-weight:520;letter-spacing:-.012em;overflow-wrap:anywhere}
+#detail{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.seg{display:inline-flex;max-width:100%;gap:2px;margin-top:16px;padding:2px;border-radius:6px;background:var(--field);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{height:28px;min-width:0;padding:0 12px;box-shadow:none;color:var(--muted);border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg button:hover{background:transparent;color:var(--text)}
+.seg button[aria-selected=true]{background:var(--raised);color:var(--text);box-shadow:var(--shadow),inset 0 0 0 1px var(--line)}
+.seg button:focus-visible{outline-offset:-2px}
+/* The list scrolls inside a fixed height (the window keeps one size between groups); a row cut by the edge fades out instead of being cut. */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px;height:318px;overflow:auto;padding:2px;align-content:start;scrollbar-width:thin}
+.grid[data-more]{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 40px),transparent)}
+.card{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;height:auto;padding:6px 6px 8px;text-align:left;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
+.card:hover{background:var(--hover)}
+.card[aria-checked=true]{box-shadow:inset 0 0 0 2px var(--ring);background:var(--field)}
+.card:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+.thumb{position:relative;aspect-ratio:16/9;border-radius:4px;background:var(--field);overflow:hidden}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 180ms var(--ease)}
+.thumb img[data-shown]{opacity:1}
+.thumb .initial{position:absolute;inset:0;display:grid;place-items:center;font-size:20px;font-weight:520;color:var(--faint)}
+.meta{display:flex;flex-direction:column;min-width:0;padding:0 4px}
+.name{display:block;min-width:0;font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{display:block;min-width:0;font-size:11px;line-height:16px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{grid-column:1/-1;align-self:center;margin:120px 8px 0;text-align:center;color:var(--muted);overflow-wrap:anywhere}
+footer{display:flex;align-items:center;gap:8px;margin-top:24px;min-width:0}
+footer .grow{flex:1}
+footer>button{flex:none;white-space:nowrap}
+.audio{display:inline-flex;align-items:center;gap:8px;min-width:0;height:32px;padding:0 8px 0 2px;color:var(--text);font-weight:450}
+.audio #audio-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.switch{flex:none}
+.audio input{position:absolute;opacity:0;pointer-events:none}
+.switch{position:relative;width:28px;height:16px;border-radius:8px;background:var(--line-strong);transition:background-color 160ms var(--ease)}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:#fff;box-shadow:0 1px 2px rgb(0 0 0/.25);transition:transform 220ms var(--ease)}
+.audio input:checked+.switch{background:var(--primary)}
+:root[data-dark] .audio input:checked+.switch::after{background:var(--on-primary)}
+.audio input:checked+.switch::after{transform:translateX(12px)}
+
+/* Pill: at the bottom of the screen while something is shared. 16px around it holds the shadow (the window is transparent). */
+#pill{display:inline-flex;align-items:center;gap:10px;margin:16px;height:44px;padding:0 6px 0 16px;border-radius:8px;background:var(--bg);box-shadow:var(--pill-shadow);white-space:nowrap;animation:arrive 260ms var(--ease) both}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--live);flex:none;animation:pulse 1.8s ease-in-out infinite}
+#pill-label{display:inline-flex;min-width:0;font-size:13px;line-height:20px;font-weight:500;white-space:pre}
+#pill-label .fixed{flex:none}
+#pill-label .who{min-width:0;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+#pill-more{flex:none;font-size:12px;line-height:18px;color:var(--faint)}
+#pill button{flex:none;height:32px;padding:0 12px;white-space:nowrap}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes arrive{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*,*::after{animation:none!important;transition:none!important}}
+@media (forced-colors:active){button,.card{border:1px solid ButtonText}.card[aria-checked=true]{border-color:Highlight}}
+</style>
+</head>
+<body>
+<main id="picker" role="dialog" aria-modal="true" aria-labelledby="title" aria-describedby="detail" hidden>
+ <h1 id="title"></h1>
+ <p id="detail"></p>
+ <div class="seg" id="groups" role="tablist"></div>
+ <div class="grid" id="items" role="radiogroup" aria-labelledby="title"></div>
+ <footer>
+  <label class="audio" id="audio-row" hidden><input type="checkbox" id="audio"><span class="switch" aria-hidden="true"></span><span id="audio-label"></span></label>
+  <span class="grow"></span>
+  <button type="button" id="share" data-primary></button>
+  <button type="button" id="cancel"></button>
+ </footer>
+</main>
+<div id="pill" role="status" aria-live="polite" hidden><span class="dot" aria-hidden="true"></span><span id="pill-label"></span><span id="pill-more"></span><button type="button" id="stop" data-primary></button></div>
+<script src="share.js"></script>
+</body>
+</html>

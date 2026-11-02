@@ -1,0 +1,21 @@
+.address-suggestions{padding:4px;color:var(--text);width:100%;min-width:0}
+.address-suggestions>ul{position:relative;list-style:none;margin:0;padding:0;min-width:0;overflow:hidden}
+.address-suggestion{position:relative;display:flex;align-items:center;gap:12px;height:44px;padding:0 8px;border-radius:4px;cursor:default;color:var(--text);user-select:none}
+.address-suggestion-selection{position:absolute;inset:0 0 auto;height:44px;border-radius:4px;background:var(--menu-hover,rgb(128 128 128 / .06));pointer-events:none;list-style:none}
+.address-suggestion[aria-selected=true]{color:var(--text)}
+.address-suggestion-icon{flex:0 0 16px;display:grid;place-items:center;width:16px;height:16px}
+.address-suggestion-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.address-suggestion-copy>span{font-size:13px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.address-suggestion-copy strong{font-weight:600}
+.address-suggestion-copy small{font-size:11px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.address-suggestion[aria-selected=true] .address-suggestion-copy small{color:var(--muted)}
+.address-suggestion-source,.address-suggestion-action{font-size:11px;white-space:nowrap;color:inherit}
+.address-suggestion-enter{flex:0 0 16px;visibility:hidden;color:var(--menu-t3,var(--muted))}
+.address-suggestion-remove{flex:0 0 28px;width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
+.address-suggestion-remove:hover{background:color-mix(in srgb,currentColor 10%,transparent)}
+.address-suggestion-remove:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+.address-suggestion[aria-selected=true] .address-suggestion-enter{visibility:visible}
+.address-suggestion-empty{display:flex;align-items:center;height:44px;padding:0 8px;font-size:13px;color:var(--muted)}
+@media(max-width:600px){.address-suggestion-source{display:none}.address-suggestion-action{font-size:10px}}
+
+.address-suggestions-a11y{position:absolute;width:1px;height:1px;padding:0;margin:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}

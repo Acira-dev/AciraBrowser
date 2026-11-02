@@ -1,0 +1,72 @@
+// Mac-specific committed-source entry point. The shared/Windows builder is intentionally unchanged.
+// Capture the new release-target module from Git rather than loading an unrecorded working-tree dependency.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {build as esbuild} from 'esbuild';
+import {build as viteBuild} from 'vite';
+import {root,sha,filesIn,copyMacMaterial} from './release-build.mjs';
+import {bundleSharedExtensionSDK} from './release-shared-sdk.mjs';
+import {bundleDesktop,runtimeAlias,rewriteDirname,PATH_LOADED} from './desktop-bundle.mjs';
+const require=createRequire(import.meta.url);
+const git=(args,options={})=>execFileSync('git',args,{cwd:root,maxBuffer:128*1024*1024,...options});
+const relative=file=>path.relative(root,path.resolve(file.split('?')[0])).replaceAll('\\','/');
+
+export async function buildCommittedMac(output){
+ if(process.platform!=='darwin')throw new Error('This committed-source entry point is for Mac builds only.');
+ output=path.resolve(output);if(!output.startsWith(path.join(root,'qa/artifacts/release-'))&&!output.startsWith(path.join(root,'release')+path.sep))throw new Error('Use ignored release output');
+ try{if((await fs.readdir(output)).length)throw new Error('Use a fresh output directory');}catch(error){if(error.code!=='ENOENT')throw error;}
+ const commit=git(['rev-parse','HEAD'],{encoding:'utf8'}).trim(),tree=new Map();
+ for(const row of git(['ls-tree','-rz',commit],{encoding:'utf8'}).split('\0').filter(Boolean)){const tab=row.indexOf('\t'),[mode,type,blob]=row.slice(0,tab).split(' '),file=row.slice(tab+1);if(type==='blob'&&(/^(src|desktop|resources|public)\//.test(file)||/^packaging\/release-target\.(?:cjs|json)$/.test(file)||['package.json','package-lock.json','index.html','vite.config.ts','tsconfig.json','design-tokens.json','page-zoom-levels.json','LICENSE','THIRD_PARTY_NOTICES.md'].includes(file))){if(!/^100(?:644|755)$/.test(mode))throw new Error('Unsupported source mode: '+file);tree.set(file,{blob,mode});}}
+ const oids=[...new Set([...tree.values()].map(entry=>entry.blob))],batch=git(['cat-file','--batch'],{input:oids.join('\n')+'\n'}),blobs=new Map();let offset=0;
+ for(const oid of oids){const end=batch.indexOf(10,offset),header=batch.subarray(offset,end).toString('ascii').split(' '),size=Number(header[2]);if(header[0]!==oid||header[1]!=='blob'||!Number.isSafeInteger(size))throw new Error('Invalid captured object');const start=end+1;blobs.set(oid,batch.subarray(start,start+size));offset=start+size+1;}
+ const bytes=file=>{const entry=tree.get(file);if(!entry)throw new Error('Committed source dependency missing: '+file);return blobs.get(entry.blob);},text=file=>bytes(file).toString('utf8');
+ const pkg=JSON.parse(text('package.json')),lock=JSON.parse(text('package-lock.json'));
+ for(const [location,pinned]of Object.entries(lock.packages||{})){if(!location.startsWith('node_modules/'))continue;let installed;try{installed=JSON.parse(await fs.readFile(path.join(root,location,'package.json'),'utf8'));}catch(error){if(error.code==='ENOENT'&&pinned.optional)continue;throw new Error('Missing dependency from committed lock: '+location);}if(installed.version!==pinned.version)throw new Error('Installed dependency differs from committed lock: '+location+' ('+pinned.version+' required)');}
+ const dependencyState=async()=>{const values=[];for(const file of ['package.json','package-lock.json','node_modules/.package-lock.json']){try{values.push(sha(await fs.readFile(path.join(root,file))));}catch(error){if(error.code!=='ENOENT')throw error;values.push(null);}}return JSON.stringify(values);},beforeDependencies=await dependencyState();
+ await fs.mkdir(output,{recursive:true});
+ if(tree.has('desktop/native/mac-material.mm'))await copyMacMaterial(output,bytes('desktop/native/mac-material.mm'),Object.fromEntries(['mac-passkeys.mm','mac-passkeys.h'].filter(name=>tree.has('desktop/native/'+name)).map(name=>[name,bytes('desktop/native/'+name)])));
+ const resolve=(request,importer)=>{if(request.startsWith('\0'))return;let target;if(path.isAbsolute(request))target=request.startsWith('/src/')?path.join(root,request):request;else if(request.startsWith('.'))target=path.resolve(path.dirname(importer),request);else return;const rel=relative(target);if(rel.startsWith('node_modules/')||rel.startsWith('../'))return;for(const suffix of ['', '.ts','.tsx','.js','.mjs','.cjs','.json','.css','/index.ts','/index.tsx','/index.js'])if(tree.has(rel+suffix))return path.join(root,rel+suffix);};
+ const sourceOverlay=(externalizeSiblings=true)=>({name:'immutable-committed-source',setup(builder){if(externalizeSiblings)builder.onResolve({filter:/^\.{1,2}\/.*\.cjs$/},args=>relative(args.importer).startsWith('desktop/')?{path:args.path,external:true}:undefined);builder.onResolve({filter:/.*/},args=>{const resolved=resolve(args.path,args.importer||path.join(root,'index.html'));return resolved?{path:resolved}:undefined;});builder.onLoad({filter:/.*/},args=>{const rel=relative(args.path);if(!tree.has(rel)){if(!externalizeSiblings&&!rel.startsWith('node_modules/')&&!rel.startsWith('../'))throw new Error('Sandbox preload dependency is absent from committed source: '+rel);return;}const ext=path.extname(args.path),loader=({'.tsx':'tsx','.ts':'ts','.json':'json','.css':'css'})[ext]||'js';return {contents:externalizeSiblings?text(rel):rewriteDirname(rel,text(rel)),loader,resolveDir:path.dirname(args.path)};});}});
+ const overlay=sourceOverlay();
+ const roots=['main.cjs','preload.cjs','page-input-preload.cjs'];if(tree.has('desktop/browser-services/optional-filtering.cjs'))roots.push('browser-services/content-filter-preload.cjs');
+ const native=[],queue=roots.map(file=>'desktop/'+file),seen=new Set();
+ while(queue.length){const file=queue.shift();if(seen.has(file)||['desktop/runtime.cjs','desktop/i18n.cjs'].includes(file))continue;seen.add(file);native.push(file);for(const match of text(file).matchAll(/require\(['"](\.{1,2}\/[^'"]+\.cjs)['"]\)/g)){const next=path.posix.normalize(path.posix.join(path.posix.dirname(file),match[1]));if(!next.startsWith('desktop/')&&next!=='packaging/release-target.cjs')throw new Error('Mac native dependency escaped the committed source allowlist');queue.push(next);}}
+ const sharedSDK=await bundleSharedExtensionSDK(output);
+ // The main process is one bundle (scripts/desktop-bundle.mjs): siblings come from the committed tree, ./runtime.cjs from src/runtime/core.ts.
+ const bundled=await bundleDesktop({root,output,plugins:[runtimeAlias(root),sourceOverlay(false)]});
+ // Sandboxed UI preloads cannot require sibling CommonJS files at runtime.
+ // Build the approved source entry as one bundle; never copy a shared generated preload.
+ const uiPreload=tree.has('desktop/ui-preload-entry.cjs')?await esbuild({absWorkingDir:root,entryPoints:['desktop/ui-preload-entry.cjs'],outfile:path.join(output,'desktop/ui-preload.cjs'),bundle:true,platform:'node',format:'cjs',target:'node24',external:['electron'],metafile:true,logLevel:'silent',plugins:[sourceOverlay(false)]}):null;
+ if(uiPreload&&Object.values(uiPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox UI preload must bundle every dependency except electron');
+ await esbuild({absWorkingDir:root,entryPoints:['src/runtime/core.ts'],outfile:path.join(output,'desktop/runtime.cjs'),bundle:true,platform:'node',format:'cjs',target:'node22',logLevel:'silent',plugins:[overlay]});
+ const write=async(file,target)=>{await fs.mkdir(path.dirname(target),{recursive:true});await fs.writeFile(target,bytes(file));};
+ const config=path.join(output,'captured-vite.config.ts');await write('vite.config.ts',config);
+ await viteBuild({root,configFile:config,publicDir:false,plugins:[{name:'immutable-committed-renderer',enforce:'pre',resolveId(request,importer){return resolve(request,importer||path.join(root,'index.html'));},load(id){const rel=relative(id);if(!tree.has(rel))return;if(/\.(?:tsx?|m?js|cjs|json|css|html)$/.test(id))return text(rel);const reference=this.emitFile({type:'asset',name:path.basename(id),source:bytes(rel)});return `export default import.meta.ROLLUP_FILE_URL_${reference};`;},transformIndexHtml:{order:'pre',handler(){return text('index.html');}}}],build:{outDir:path.join(output,'dist'),emptyOutDir:false},logLevel:'warn'});
+ const builtHTML=await fs.readFile(path.join(output,'dist/index.html'),'utf8'),scripts=[...builtHTML.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)/g)].map(match=>match[1]);if(!scripts.length||scripts.some(file=>!/^\.\/assets\/[^/]+\.js$/.test(file)))throw new Error('Renderer HTML does not reference its built module bundle');for(const script of scripts)await fs.access(path.join(output,'dist',script));
+ for(const file of tree.keys())if(file.startsWith('public/'))await write(file,path.join(output,'dist',file.slice(7)));else if(file.startsWith('resources/'))await write(file,path.join(output,file));else if(file.startsWith('desktop/')&&/\.(?:txt|json)$/.test(file))await write(file,path.join(output,file));
+ if(process.platform==='darwin'){
+  const pin='desktop/browser-services/tor-engine/tor-mac-version.json';if(tree.has(pin)){if(!bytes(pin).equals(await fs.readFile(path.join(root,pin))))throw new Error('Mac Tor pins differ from committed source');const {fetchMacTor}=await import('./fetch-tor-mac.mjs');await fetchMacTor();await fs.cp(path.join(root,'desktop/browser-services/tor-engine','darwin-'+process.arch),path.join(output,'resources/tor'),{recursive:true});}
+ }
+ // A first run would otherwise spend about a second parsing the bundled filter lists: ship the compiled engine (ignored when the lists differ).
+ execFileSync(process.execPath,[path.join(root,'scripts','fetch-baseline-filters.mjs'),path.join(output,'resources','filters'),'--soft'],{stdio:'inherit'});
+ execFileSync(process.execPath,[path.join(root,'scripts','build-filter-engine.cjs'),path.join(output,'resources','filters')],{stdio:'inherit'});
+ // Files the main process opens by path rather than require(): copied as they are.
+ for(const file of PATH_LOADED)if(tree.has(file))await write(file,path.join(output,file));
+ if(roots.includes('browser-services/content-filter-preload.cjs'))await write('desktop/browser-services/content-filter-preload.cjs',path.join(output,'desktop/browser-services/content-filter-preload.cjs'));
+ if(native.includes('desktop/browser-services/reader.cjs'))for(const file of tree.keys())if(file.startsWith('desktop/browser-services/vendor/'))await write(file,path.join(output,file));
+ if(native.includes('desktop/browser-services/annoyance-rules.cjs'))for(const name of ['easylist-cookie.txt','README.md','LICENSE.CC-BY-3.0.txt']){const file='desktop/browser-services/annoyance-lists/'+name;await write(file,path.join(output,file));}
+ for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md','page-zoom-levels.json'])if(tree.has(file))await write(file,path.join(output,file));
+ for(const [source,target]of [['src/features/onboarding/upstream/LICENSE','helium-onboarding-GPL-3.0.txt'],['src/ui/LICENSE.iphone-solo.txt','iphone-solo-MIT.txt']])if(tree.has(source))await write(source,path.join(output,'source-licenses',target));
+ await write('package-lock.json',path.join(output,'package-lock.source.json'));
+ for(const [module,file]of [['electron-chrome-extensions','chrome-extension-api.preload.js'],['electron-chrome-web-store','chrome-web-store.preload.js']])await fs.copyFile(require.resolve(module+'/preload'),path.join(output,'desktop',file));
+ // R4-37: Ghostery's cosmetic preload is no longer used (content-filter-preload.cjs feeds the engine) and is not shipped; see desktop-bundle.mjs ghosteryPreloadPathStub.
+ await fs.writeFile(path.join(output,'package.json'),JSON.stringify({name:pkg.name,version:pkg.version,description:pkg.description,license:pkg.license,main:'desktop/main.cjs'},null,2)+'\n');
+ const source=[...tree.keys()].filter(file=>file!=='desktop/runtime.cjs').sort().map(file=>({file,sha256:sha(bytes(file))})),stable=beforeDependencies===await dependencyState()&&git(['rev-parse','HEAD'],{encoding:'utf8'}).trim()===commit,artifacts=[];
+ for(const file of await filesIn(output))artifacts.push({file:path.relative(output,file).replaceAll('\\','/'),sha256:sha(await fs.readFile(file))});
+ const identity={schema:1,createdAt:new Date().toISOString(),commit,sourceRef:'HEAD',committedSource:true,sourceDigest:sha(JSON.stringify(source)),stable,source,version:pkg.version,electron:require('electron/package.json').version,lockSha256:sha(bytes('package-lock.json')),host:{platform:process.platform,arch:process.arch,node:process.version},artifacts,warnings:[...bundled.warnings,...(uiPreload?.warnings||[])].map(w=>w.text).concat(sharedSDK.warnings),dependenciesBundled:[...new Set([...Object.keys(bundled.metafile.inputs),...Object.keys(uiPreload?.metafile.inputs||{}),...sharedSDK.dependenciesBundled].filter(file=>file.startsWith('node_modules/')))],sharedNativeSDK:sharedSDK,...(uiPreload?{uiPreload:{entry:'desktop/ui-preload-entry.cjs',output:'desktop/ui-preload.cjs',sha256:sha(await fs.readFile(path.join(output,'desktop/ui-preload.cjs'))),source:'Committed Git blobs; sibling sources and browser-action facade bundled for the sandbox'}}:{}),qualification:'Mac-only immutable committed-source build, including the release-target dependency; native acceptance is separate. No duplicate checkout/dependency tree or shared build output.'};
+ await fs.writeFile(path.join(output,'build-identity.json'),JSON.stringify(identity,null,2)+'\n');if(!stable)throw new Error('HEAD/dependency installation changed during build; candidate invalid');return identity;
+}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){const identity=await buildCommittedMac(process.argv[2]||'qa/artifacts/release-committed-'+Date.now());console.log(JSON.stringify({commit:identity.commit,committedSource:identity.committedSource,sourceDigest:identity.sourceDigest,stable:identity.stable,files:identity.artifacts.length,warnings:identity.warnings},null,2));}

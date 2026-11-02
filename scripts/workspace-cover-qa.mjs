@@ -1,0 +1,67 @@
+import {_electron} from 'playwright';
+import {createRequire} from 'node:module';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),root=process.cwd(),out=path.join(root,'qa/workspace-cover');
+const {createInitialState,reduceDemo,persistedSnapshot}=require('../desktop/runtime.cjs');
+await fs.mkdir(out,{recursive:true});
+let seed=reduceDemo(createInitialState(),{type:'tab.new'});
+seed.demo.frozen=true;seed.settings.interfaceScale=100;seed.settings.automaticCompact=false;seed.settings.bookmarksBar=false;seed.settings.reducedMotion=true;seed.windowUi.workspaceOpen=true;
+seed.tabs.forEach(tab=>tab.panelOpen=false);
+seed=reduceDemo(seed,{type:'browser.profile.create',name:'Cover QA'});
+const profile=await fs.mkdtemp(path.join(out,'profile-'));
+await fs.writeFile(path.join(profile,'demo-state.json'),JSON.stringify(persistedSnapshot(seed)));
+const report={checks:[],layouts:[],errors:[],captures:[],scope:'Hidden Electron layout and interaction checks; physical Windows dragging is reviewed separately.'};
+const check=(name,result)=>{assert.ok(result,name);report.checks.push(name);console.log('PASS '+name);};
+let app;
+try{
+ app=await _electron.launch({executablePath:require('electron'),args:[path.join(root,'desktop/main.cjs')],env:{...process.env,ACIRA_DEV:'1',ACIRA_DEMO_TEST_HIDDEN:'1',ACIRA_DEMO_TEST_DATA:profile}});
+ const ui=await app.firstWindow();ui.on('pageerror',e=>report.errors.push(e.message));
+ await ui.locator('.ed-workspace-identity').waitFor();await ui.evaluate(()=>document.fonts.ready);
+ const act=action=>ui.evaluate(action=>window.acira.dispatch(action),action);
+ const state=()=>ui.evaluate(()=>window.acira.getSnapshot());
+ const capture=async(name)=>{const data=await app.evaluate(async({webContents})=>{const wc=webContents.getAllWebContents().find(w=>w.getURL()==='http://127.0.0.1:5188/');for(let i=0;i<2;i++){await wc.capturePage(undefined,{stayHidden:true,stayAwake:true});await new Promise(r=>setTimeout(r,100));}return(await wc.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG().toString('base64');});await fs.writeFile(path.join(out,name+'.png'),Buffer.from(data,'base64'));report.captures.push(name);};
+ const size=async(w,h)=>{await app.evaluate(({BaseWindow},v)=>BaseWindow.getAllWindows()[0].setContentSize(...v),[w,h]);await ui.waitForTimeout(250);};
+ const original=await state(),originalProfile=original.activeBrowserProfileId;
+ await ui.getByRole('textbox',{name:'Search the web or enter a URL',exact:true}).fill('retained workspace search');
+ await ui.getByRole('button',{name:'Hide workspace cover',exact:true}).click();
+ check('Hiding the cover preserves the search input and its draft',await ui.locator('.ed-workspace-cover').count()===0&&await ui.getByRole('textbox',{name:'Search the web or enter a URL',exact:true}).inputValue()==='retained workspace search');
+ await ui.reload();await ui.locator('.ed-workspace-identity').waitFor();
+ check('Cover preference survives a renderer reload',await ui.getByRole('button',{name:'Show workspace cover',exact:true}).count()===1);
+ const second=(await state()).browserProfiles.find(p=>p.name==='Cover QA');
+ await act({type:'browser.profile.select',id:second.id});
+ await ui.getByRole('button',{name:'Hide workspace cover',exact:true}).waitFor();
+ check('Another browsing profile retains its own cover preference',await ui.locator('.ed-workspace-cover').count()===1);
+ await act({type:'browser.profile.select',id:originalProfile});
+ await ui.getByRole('button',{name:'Show workspace cover',exact:true}).click();
+ await ui.getByRole('button',{name:/^Browsing profile:/}).click();
+ const overlay=app.context().pages().find(page=>page.url().includes('view=overlay'));
+ await overlay.waitForFunction(()=>document.body.textContent.includes('Cover QA'));
+ check('The cover header opens the real profile switcher',true);
+ await ui.evaluate(()=>window.acira.closeOverlay());
+ await ui.getByRole('textbox',{name:'Search the web or enter a URL',exact:true}).fill('');
+ await ui.getByRole('textbox',{name:'Search the web or enter a URL',exact:true}).blur();
+ for(const [w,h,scale] of [[1440,900,100],[1920,1080,100],[900,700,100],[900,700,125]]){
+  await act({type:'settings.update',patch:{interfaceScale:scale}});await size(w,h);
+  const layout=await ui.evaluate(()=>{
+   const rect=selector=>document.querySelector(selector).getBoundingClientRect(),cover=rect('.ed-workspace-identity'),heading=rect('.ed-start-heading'),search=rect('.ed-search-glass'),canvas=rect('.ed-workspace'),composition=rect('.ed-start-composition'),rail=rect('.ed-rail'),viewer=rect('.tab-strip-tools'),strip=rect('.tab-strip-container');
+   const controls=[...document.querySelectorAll('.acira-persistent-toolbar button,.acira-persistent-toolbar .address-bar,.tab-strip-tools')].filter(n=>n.getBoundingClientRect().width>0).map(n=>{const r=n.getBoundingClientRect();return{label:n.getAttribute('aria-label')||n.className,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});
+   return{width:innerWidth,coverHeight:cover.height,headingInside:heading.top>=cover.top&&heading.bottom<=cover.bottom+.1,searchBelow:search.top>=cover.bottom+15,searchHeight:search.height,viewerLeft:viewer.left,railRight:rail.right,viewerBeforeTabs:viewer.right<strip.left,centerX:Math.abs(composition.x+composition.width/2-canvas.x-canvas.width/2),centerY:Math.abs(composition.y+composition.height/2-canvas.y-canvas.height/2),fits:composition.height<=canvas.height-64,overflow:document.documentElement.scrollWidth-innerWidth,controls,dragArea:document.querySelector('.tab-strip-drag').getBoundingClientRect().width};
+  });
+  report.layouts.push({w,h,scale,...layout});
+  check(`${w}/${scale}: cover identifies workspace and search remains separate`,layout.coverHeight===176&&layout.headingInside&&layout.searchBelow&&layout.searchHeight===48);
+  check(`${w}/${scale}: tabs control has a stable leading position`,Math.abs(layout.viewerLeft-layout.railRight-9)<=2&&layout.viewerBeforeTabs);
+  check(`${w}/${scale}: no toolbar controls or canvas clip horizontally`,layout.overflow<=1&&layout.controls.every(r=>r.left>=0&&r.right<=layout.width+1));
+  check(`${w}/${scale}: composition centers when it fits`,layout.centerX<2&&(!layout.fits||layout.centerY<2));
+  await capture(`workspace-${w}-${h}-ui${scale}`);
+ }
+ await act({type:'settings.update',patch:{interfaceScale:100}});await size(900,700);
+ for(let i=0;i<14;i++)await act({type:'tab.new'});
+ await ui.waitForTimeout(250);
+ check('Overflow leaves the tabs button and new-tab action inside the strip',await ui.evaluate(()=>{const row=document.querySelector('.acira-tab-row').getBoundingClientRect(),buttons=[...document.querySelectorAll('.tab-strip-tools button,.tab-strip-add button')];return buttons.every(n=>{const r=n.getBoundingClientRect();return r.left>=row.left&&r.right<=row.right&&r.top>=row.top&&r.bottom<=row.bottom;});}));
+ await capture('many-tabs-900');
+ await ui.route('**/workspace-coast.png',route=>route.abort());await ui.reload();await ui.locator('.ed-workspace-identity').waitFor();
+ check('Artwork failure keeps fixed cover geometry and usable search',await ui.locator('.ed-workspace-identity').evaluate(n=>n.getBoundingClientRect().height===176)&&await ui.getByRole('textbox',{name:'Search the web or enter a URL',exact:true}).isEditable());
+ check('No renderer errors',report.errors.length===0);
+}finally{if(app)await app.close().catch(()=>{});await fs.writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2));}

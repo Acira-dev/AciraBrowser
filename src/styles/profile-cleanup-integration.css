@@ -1,0 +1,9 @@
+.profile-cleanup-recovery{padding:20px 0;color:var(--text)}
+.profile-cleanup-recovery-copy{max-width:620px;margin:auto}
+.profile-cleanup-recovery h2{margin:0 0 10px;font-size:20px;line-height:1.35;font-weight:600}
+.profile-cleanup-recovery p{margin:8px 0;font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.profile-cleanup-recovery details{margin:14px 0;max-height:180px;overflow:auto;font-size:13px}
+.profile-cleanup-recovery-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.profile-cleanup-recovery-actions .btn:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+.profile-cleanup-page{position:absolute;inset:0;z-index:5;display:grid;place-items:center;overflow:auto;padding:32px;box-sizing:border-box;background:var(--surface)}
+@media(max-width:600px){.profile-cleanup-page{padding:22px}.profile-cleanup-recovery-actions{align-items:stretch;flex-direction:column}}

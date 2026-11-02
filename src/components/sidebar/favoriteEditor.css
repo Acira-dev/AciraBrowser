@@ -1,0 +1,15 @@
+/* Edit favorite (G, on A's panel spec): the header's favicon in the panel's icon column and its title on the x=36 text
+   edge, the fields on the same edge, the divider across, Remove left and Done right. */
+.fav-edit { padding: 8px 12px 12px 8px; gap: 4px; }
+.fav-edit-head { gap: 8px; margin: 0 0 4px; }
+.fav-edit-head > div { flex: 1; min-width: 0; display: grid; }
+.fav-edit-head strong, .fav-edit-head small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-edit > .bm-edit-label, .fav-edit > .bm-edit-input, .fav-edit > .fav-edit-error { margin-left: 24px; }
+.fav-edit > .acira-sep { margin: 8px -12px 4px -8px; }
+/* Footer: Remove (quiet) left with its box on the x=36 edge like the fields, Done (primary) right. */
+.fav-edit-actions { justify-content: flex-end; margin: 4px 0 0 24px; }
+.fav-edit-remove { flex: none; margin-right: auto; }
+.fav-edit-error { margin-top: 2px; margin-bottom: 0; font: 400 12px/16px var(--font-ui); color: var(--danger, #d4183d); }
+.fav-edit .bm-edit-input[aria-invalid=true] { border-color: var(--danger, #d4183d); }
+/* Its own header row is the panel's title: no generic popup title bar above it (as for page menus). */
+:root:root:root .browser-popup.popup-content-favorite-edit > .popup-header { display: none; }

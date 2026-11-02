@@ -1,0 +1,13 @@
+{
+  "name": "electron/rcedit",
+  "version": "2.0.0",
+  "sourceCommit": "28a13190599ed35f472fbaea1179116a29ff8f10",
+  "url": "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe",
+  "bytes": 1360384,
+  "sha256": "3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a",
+  "license": "MIT",
+  "licenseFile": "packaging/LICENSE.rcedit.txt",
+  "sourceRepositoryArchived": true,
+  "usage": "Pinned build-only Windows resource editor; never bundled as a runtime dependency or represented as a signing tool.",
+  "verification": "Retrieved from the exact official GitHub release over HTTPS and independently resolved tag source commit. Upstream asset digest is absent; this SHA256 pins the retrieved tool for repeat builds, not a claim of an upstream signed checksum."
+}

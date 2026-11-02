@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Peek</title>
+<style>
+/* Peek frame (bible §3.3 elevation, §4 Morph). A transparent layer under the native page view: it dims the page and draws
+   the card the page lands on, with its header (back, reload, title and address, Open in split view, Open as tab, Close).
+   The card grows out of the link that was clicked on a spring and shrinks back into it on close; the page view appears on the
+   formed card. Light and dark follow the chrome; the primary button takes the app's accent. */
+:root{
+ --scrim:rgb(0 0 0/.40);--card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-quiet:rgb(237 237 239/.44);--hover:rgb(255 255 255/.08);--press:rgb(255 255 255/.12);
+ --glass:rgb(32 32 35/.74);--line:rgb(255 255 255/.10);--highlight:inset 0 1px 0 rgb(255 255 255/.06);--ring:#6ea8ff;--accent:#3b6eea;--on-accent:#fff;--danger:#f0867d;
+ --e2:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -4px rgb(0 0 0/.32),0 24px 64px -12px rgb(0 0 0/.36);
+ --e3:var(--e2),0 32px 80px -16px rgb(0 0 0/.42);
+ --strong:cubic-bezier(.23,1,.32,1);--out:cubic-bezier(.2,0,0,1);
+ color-scheme:dark;
+}
+body.light{
+ --scrim:rgb(15 18 24/.32);--card:#ffffff;--ink:rgb(29 31 36/.90);--ink-2:rgb(29 31 36/.66);--ink-quiet:rgb(29 31 36/.46);--hover:rgb(0 0 0/.06);--press:rgb(0 0 0/.10);
+ --glass:rgb(255 255 255/.78);--line:rgb(0 0 0/.08);--highlight:inset 0 1px 0 rgb(255 255 255/.7);--ring:#2563eb;--danger:#b3261e;
+ --e2:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.12),0 24px 56px -16px rgb(0 0 0/.16);
+ --e3:var(--e2),0 32px 80px -16px rgb(0 0 0/.28);
+ color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#scrim{position:fixed;inset:0;background:var(--scrim);opacity:0}
+/* The card: the surface (hairline ring, soft shadow) the page view sits on. Its header is 44px; the page view starts below it. */
+#card{position:absolute;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--e3);opacity:0;transform-origin:50% 50%}
+#fill{position:absolute;inset:44px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink-quiet);font-size:13px;letter-spacing:.01em;padding:0 16px;text-align:center}
+/* While the page loads: the dot-matrix loader (the app's "Working" lights, a square grid lighting up only) over the site's name. */
+#matrix{width:32px;height:32px;flex:none;color:var(--ink-2)}
+#fill span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bar{position:absolute;inset:0 0 auto;height:44px;display:flex;align-items:center;gap:8px;padding:0 8px;container-type:inline-size;opacity:0}
+#bar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.group{display:flex;align-items:center;gap:2px;flex:none}
+.group.right{gap:6px}
+button{display:grid;place-items:center;flex:none;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink);cursor:default;font:inherit;
+ transition:background-color 120ms var(--out),transform 80ms var(--out),opacity 120ms var(--out)}
+button.icon{width:28px;height:28px}
+button:hover{background:var(--hover)}
+button:active{background:var(--press);transform:scale(.97)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+button:disabled{opacity:.32;pointer-events:none}
+button.act{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;font-size:12.5px;font-weight:500;line-height:1;white-space:nowrap}
+button.act.ghost{box-shadow:inset 0 0 0 1px var(--line);color:var(--ink)}
+button.act.primary{background:var(--accent);color:var(--on-accent)}
+button.act.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--on-accent))}
+button.act.primary:active{background:color-mix(in srgb,var(--accent) 80%,var(--on-accent))}
+button.act.primary:focus-visible{outline-color:var(--ink);outline-offset:1px}
+kbd{display:inline-block;padding:0 6px;border-radius:3px;font:500 11px/16px Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;background:color-mix(in srgb,currentColor 18%,transparent);color:inherit;opacity:.82}
+svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#id{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 6px}
+#ttl{font-size:13px;line-height:16px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#addr{display:flex;min-width:0;font-size:11.5px;line-height:14px;color:var(--ink-quiet);white-space:nowrap;overflow:hidden}
+#addr b{flex:none;max-width:70%;font-weight:400;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis}
+#addr #rest{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#addr em{flex:none;margin-left:8px;font-style:normal;color:var(--danger)}
+#addr em:empty{display:none}
+#copy .done{color:var(--accent)}
+/* Loading: a hairline sweeps under the header (transform only); still and quiet with reduced motion. */
+#load{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;opacity:0;transition:opacity 160ms var(--out);pointer-events:none}
+#load::before{content:'';position:absolute;inset:0 auto 0 0;width:34%;background:var(--accent);animation:sweep 1.15s cubic-bezier(.4,0,.2,1) infinite}
+body.loading #load{opacity:1}
+body.reduced #load::before{width:100%;opacity:.4;animation:none}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+@container (max-width:760px){#split>span{display:none}#split{width:28px;padding:0;justify-content:center}}
+@container (max-width:520px){#tab>span,#tab>kbd{display:none}#tab{width:28px;padding:0;justify-content:center}}
+#notice{position:absolute;max-width:420px;padding:9px 14px;border-radius:6px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+ box-shadow:0 0 0 1px var(--line),var(--e2);color:var(--ink);opacity:0;transform:translateY(4px);transition:opacity 220ms var(--strong),transform 220ms var(--strong);pointer-events:none}
+#notice.show{opacity:1;transform:none}
+body.formed #scrim,body.formed #card,body.formed #bar{opacity:1}
+body.gone #scrim,body.gone #card,body.gone #bar,body.gone #notice{opacity:0}
+@media (forced-colors:active){#scrim{background:Canvas;opacity:.6}#card{border:1px solid CanvasText}button:focus-visible{outline-color:Highlight}button.act.primary{background:ButtonText;color:ButtonFace}}
+</style>
+</head>
+<body>
+<div id="scrim"></div>
+<div id="card" role="dialog" aria-modal="false">
+ <div id="fill"><canvas id="matrix" aria-hidden="true"></canvas><span id="host"></span></div>
+ <div id="bar" role="toolbar">
+  <div class="group">
+   <button id="back" class="icon" type="button"><svg viewBox="0 0 16 16"><path d="M13 8H3.5M7.5 3.75 3.25 8l4.25 4.25"/></svg></button>
+   <button id="reload" class="icon" type="button"><svg id="reload-glyph" viewBox="0 0 16 16"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71M13.25 2.75v2.75H10.5"/></svg><svg id="stop-glyph" viewBox="0 0 16 16" hidden><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+  </div>
+  <div id="id"><span id="ttl"></span><span id="addr"><b id="domain"></b><span id="rest"></span><em id="warn"></em></span></div>
+  <div class="group right">
+   <button id="copy" class="icon" type="button"><svg id="copy-glyph" viewBox="0 0 16 16"><path d="M6.75 9.25a2.75 2.75 0 0 0 3.9 0l2.1-2.1a2.75 2.75 0 0 0-3.9-3.9l-.7.7M9.25 6.75a2.75 2.75 0 0 0-3.9 0l-2.1 2.1a2.75 2.75 0 0 0 3.9 3.9l.7-.7"/></svg><svg id="done-glyph" class="done" viewBox="0 0 16 16" hidden><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+   <button id="split" class="act ghost" type="button"><svg viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M8 3v10"/></svg><span></span></button>
+   <button id="tab" class="act primary" type="button"><svg viewBox="0 0 16 16"><path d="M9.5 2.75h3.75V6.5M13 3L8 8M11.25 9.25v3.5a.5.5 0 0 1-.5.5h-7.5a.5.5 0 0 1-.5-.5v-7.5a.5.5 0 0 1 .5-.5h3.5"/></svg><span></span><kbd></kbd></button>
+   <button id="close" class="icon" type="button"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+  </div>
+  <div id="load"></div>
+ </div>
+</div>
+<div id="notice" role="status"></div>
+<script>
+const $=id=>document.getElementById(id),body=document.body,card=$('card'),root=document.documentElement;
+//#spring — the springs of src/ui/springs.ts and the tokens of src/ui/motionTokens.ts, ported (tests/peek.test.cjs holds them equal).
+const TAU=Math.PI*2,POINTS=44;
+const springAt=(spec,from,to,t,velocity=0)=>{
+ const duration=Math.max(.05,spec.duration),omega=TAU/duration,zeta=1-Math.max(0,Math.min(.95,spec.bounce)),y0=from-to;
+ if(t<=0)return {value:from,velocity};
+ if(zeta>=.9999){const a=y0,b=velocity+omega*y0,e=Math.exp(-omega*t);return {value:to+(a+b*t)*e,velocity:(b-omega*(a+b*t))*e};}
+ const wd=omega*Math.sqrt(1-zeta*zeta),decay=zeta*omega,e=Math.exp(-decay*t),a=y0,b=(velocity+decay*y0)/wd,cos=Math.cos(wd*t),sin=Math.sin(wd*t);
+ return {value:to+e*(a*cos+b*sin),velocity:e*((b*wd-decay*a)*cos-(a*wd+decay*b)*sin)};
+};
+const springSettle=(spec,tolerance=.004,velocity=0)=>{const step=1/240;let last=0;for(let i=1;i<=240*6;i++){const t=i*step;if(Math.abs(springAt(spec,0,1,t,velocity).value-1)>tolerance)last=t;else if(t-last>.1)break;}return last+step;};
+const springEasing=(spec,scale=1,velocity=0)=>{
+ if(!(scale>0))return {duration:0,easing:'linear'};
+ velocity=Math.round(velocity*20)/20;
+ const stretched={duration:spec.duration*scale,bounce:spec.bounce},settle=springSettle(stretched,.004,velocity),stops=[];
+ for(let i=0;i<POINTS;i++){const t=settle*Math.pow(i/(POINTS-1),1.35),value=i===POINTS-1?1:springAt(stretched,0,1,t,velocity).value;stops.push(`${Math.round(value*10000)/10000}`);}
+ const positions=stops.map((_,i)=>Math.round(Math.pow(i/(POINTS-1),1.35)*10000)/100);
+ return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
+};
+const TOKENS={'popover.grow':['S',.210,0],'menu.content':['E',.130,0],'materialize':['E',.170,0]};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
+//#endspring
+const APERTURE_END='inset(-128px -128px -128px -128px round 8px)';
+let entered=false,started=false,leaving=false,speed='premium',latest=null,anim=[];
+const play=(el,keyframes,spec,{opening=false,delay=0,fill='both'}={})=>{
+ const velocity=opening?KICK[speed]*TAU/spec.duration:0,{duration,easing}=springEasing(spec,1,velocity);
+ const a=el.animate(keyframes,{duration,easing,fill,delay});anim.push(a);return a;
+};
+const timeTo=(spec,velocity,target)=>{for(let t=0;t<2;t+=1/240)if(springAt(spec,0,1,t,velocity).value>=target)return t*1000;return 0;};
+const apertureAt=(link,g)=>link?`inset(${link.y}px ${g.width-link.x-link.width}px ${g.height-link.y-link.height}px ${link.x}px round 4px)`:`inset(${Math.round(g.height/2)}px ${Math.round(g.width/2)}px ${Math.round(g.height/2)}px ${Math.round(g.width/2)}px round 4px)`;
+
+const originAt=(link,g)=>link?`${Math.round(link.x+link.width/2)}px ${Math.round(link.y+link.height/2)}px`:'50% 50%';
+//#matrix — the "Working" lights of src/components/DotMatrix.tsx (loader preset), ported: 7x7 round dots on a square grid, unlit dots faint.
+const bezier=(x1,y1,x2,y2)=>x=>{let t=x;for(let i=0;i<6;i++){const cx=3*x1*t*(1-t)*(1-t)+3*x2*t*t*(1-t)+t*t*t-x,dx=3*x1*(1-t)*(1-3*t)+3*x2*t*(2-3*t)+3*t*t;if(Math.abs(cx)<1e-4||!dx)break;t=Math.max(0,Math.min(1,t-cx/dx));}return 3*y1*t*(1-t)*(1-t)+3*y2*t*t*(1-t)+t*t*t;};
+const DIAMOND={dur:2.2,ease:bezier(.16,1,.3,1),keys:[[0,0],[.1,1],[.55,.85],[1,0]]},PLUSX={dur:2.2,ease:bezier(.65,0,.35,1),keys:[[0,.08],[.14,1],[.72,.95],[1,.08]]},NEEDLE={dur:2.4,ease:x=>x,keys:[[0,0],[.08,1],[.36,.05],[1,0]]};
+const keyAt=(spec,s)=>{const k=spec.keys,u=s/spec.dur;if(u<=0)return k[0][1];if(u>=1)return k[k.length-1][1];for(let i=1;i<k.length;i++)if(u<=k[i][0])return k[i-1][1]+(k[i][1]-k[i-1][1])*spec.ease((u-k[i-1][0])/(k[i][0]-k[i-1][0]));return k[k.length-1][1];};
+const working=(t,r,c,R,C)=>{const n=Math.min(R,C)>>1,dr=r-(R-1)/2,dc=c-(C-1)/2,ar=Math.abs(dr),ac=Math.abs(dc),u=((t*1.45%7.3)+7.3)%7.3,onPlus=!dr||!dc,onX=ar===ac;
+ let v=keyAt(DIAMOND,u-(ar+ac)*.733/(2*n));const up=u-1.8;if(up>0)v=Math.max(v,onPlus?keyAt(PLUSX,up):onX?keyAt(PLUSX,up-1.1):0);
+ const un=u-4.3;if(un>0&&(onPlus||onX)){const direction=Math.round(((Math.atan2(dc,-dr)/(Math.PI/4))+8)%8)%8;v=Math.max(v,!dr&&!dc?keyAt(NEEDLE,un):keyAt(NEEDLE,un-direction*.3));}return v;};
+let matrixFrame=0,matrixLast=0,revealed=false;
+function paintMatrix(t){const node=$('matrix'),ctx=node.getContext('2d');if(!ctx)return;const scale=Math.max(2,devicePixelRatio||1),size=Math.round(32*scale);if(node.width!==size){node.width=size;node.height=size;}
+ const R=7,C=7,cell=size/C,radius=cell*.35,ink=getComputedStyle(node).color,m=/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/.exec(ink)||[0,128,128,128];ctx.clearRect(0,0,size,size);
+ for(let r=0;r<R;r++)for(let c=0;c<C;c++){const x=cell*(c+.5),y=cell*(r+.5),v=Math.max(0,Math.min(1,working(t,r,c,R,C)));ctx.globalAlpha=1;ctx.fillStyle=`rgba(${m[1]},${m[2]},${m[3]},.085)`;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();if(v){ctx.globalAlpha=v;ctx.fillStyle=ink;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();}}ctx.globalAlpha=1;}
+// About 30 frames a second (as DotMatrix), only until the page is shown; reduced motion keeps one resting frame.
+function runMatrix(){if(matrixFrame||revealed)return;if(speed==='off'||body.classList.contains('reduced')){paintMatrix(.6);return;}const loop=now=>{matrixFrame=0;if(revealed||leaving)return;if(now-matrixLast>=28){matrixLast=now;paintMatrix(now/1000);}matrixFrame=requestAnimationFrame(loop);};matrixFrame=requestAnimationFrame(loop);}
+//#endmatrix
+const formed=()=>{if(entered||leaving)return;entered=true;for(const a of anim.splice(0))a.cancel();card.style.clipPath='';card.style.transform='';body.classList.add('formed');peekFrame.command('entered');};
+$('scrim').addEventListener('click',()=>peekFrame.command('close'));
+$('close').addEventListener('click',()=>peekFrame.command('close'));
+$('back').addEventListener('click',()=>peekFrame.command('back'));
+$('reload').addEventListener('click',()=>peekFrame.command(body.classList.contains('loading')?'stop':'reload'));
+$('split').addEventListener('click',()=>peekFrame.command('split'));
+$('tab').addEventListener('click',()=>peekFrame.command('tab'));
+$('copy').addEventListener('click',()=>peekFrame.command('copy'));
+
+function enter(state){
+ started=true;
+ const g=state.geometry.card;
+ if(speed==='off'||state.reducedMotion){body.classList.add('formed');entered=true;peekFrame.command('entered');return;}
+ const grow=tokenSpring('popover.grow',speed),velocity=KICK[speed]*TAU/grow.duration;
+ card.style.opacity='1';
+ // Scrim and material arrive on the effects spring; the card's aperture opens from the link; the header's content follows (bible §4).
+ play($('scrim'),[{opacity:0},{opacity:1}],tokenSpring('materialize',speed));
+ card.style.transformOrigin=originAt(state.link,g);
+ const aperture=play(card,[{clipPath:apertureAt(state.link,g),transform:'scale(.94)'},{clipPath:APERTURE_END,transform:'none'}],grow,{opening:true});
+ const content=speed==='premium'?50:30,rise=speed==='premium'?4:3;
+ play($('bar'),[{opacity:0,transform:`translateY(${rise}px)`},{opacity:1,transform:'none'}],tokenSpring('menu.content',speed),{delay:content});
+ // The page view appears once the card is ~95% open, on a card that is already there.
+ setTimeout(()=>{if(!leaving)peekFrame.command('entered');},Math.round(timeTo(grow,velocity,.95)));
+ aperture.finished.then(()=>{if(!leaving)formed();},()=>{});
+}
+function leave(state){
+ if(leaving)return;leaving=true;started=true;body.classList.remove('formed');
+ const g=state.geometry?.card||latest?.geometry?.card,link=state.link||latest?.link;
+ if(speed==='off'||state.reducedMotion||!g){body.classList.add('gone');setTimeout(()=>peekFrame.command('gone'),0);return;}
+ for(const a of anim.splice(0))a.cancel();
+ const grow=tokenSpring('popover.grow',speed),exit={duration:grow.duration*.7,bounce:0},fade=tokenSpring('materialize',speed);
+ card.style.opacity='1';
+ // Exit is ~two thirds of the enter, critically damped: the card shrinks back into the link and the scrim lets go.
+ card.style.transformOrigin=originAt(link,g);
+ const aperture=play(card,[{clipPath:APERTURE_END,transform:'none'},{clipPath:apertureAt(link,g),transform:'scale(.96)'}],exit);
+ play($('bar'),[{opacity:1},{opacity:0}],{duration:fade.duration*.5,bounce:0});
+ play($('scrim'),[{opacity:1},{opacity:0}],{duration:fade.duration*.8,bounce:0});
+ aperture.finished.then(()=>peekFrame.command('gone'),()=>peekFrame.command('gone'));
+ setTimeout(()=>peekFrame.command('gone'),Math.round(springSettle(exit)*1000)+60);
+}
+/* The address field's rule (ui/urlDisplay.ts): plain HTTP is "Not secure" only off this machine and off the local network, and never for an onion address. */
+const local=host=>host==='localhost'||host.endsWith('.localhost')||host==='[::1]'||/^127\./.test(host)||/\.onion$/i.test(host)||/^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host);
+const parts=url=>{try{const u=new URL(url);return {host:u.host.replace(/^www\./,''),rest:(u.pathname==='/'?'':u.pathname)+u.search+u.hash,insecure:u.protocol==='http:'&&!local(u.hostname)};}catch{return {host:'',rest:'',insecure:false};}};
+peekFrame.onState(state=>{
+ body.classList.toggle('light',state.dark===false);body.classList.toggle('reduced',!!state.reducedMotion||state.speed==='off');
+ if(state.accent){root.style.setProperty('--accent',state.accent);const n=parseInt(state.accent.slice(1),16),lum=(.2126*(n>>16&255)+.7152*(n>>8&255)+.0722*(n&255))/255;root.style.setProperty('--on-accent',lum>.62?'#111214':'#ffffff');}
+ speed=state.speed==='fast'?'fast':state.speed==='off'?'off':'premium';
+ if(state.leaving){leave({...latest,...state});return;}
+ latest=state;const g=state.geometry;
+ if(g){Object.assign(card.style,{left:g.card.x+'px',top:g.card.y+'px',width:g.card.width+'px',height:g.card.height+'px'});Object.assign($('notice').style,{left:(g.card.x+g.card.width/2)+'px',top:Math.max(8,g.card.y-48)+'px',translate:'-50% 0'});}
+ const labels=state.labels||{},keys=state.keys||{},{host,rest,insecure}=parts(state.url||'');
+ $('host').textContent=host;$('ttl').textContent=state.title||host;$('domain').textContent=host;$('rest').textContent=rest;$('warn').textContent=insecure?(labels.notSecure||''):'';
+ document.title=state.title||host||'Peek';card.setAttribute('aria-label',labels.frameLabel||'');card.setAttribute('aria-busy',state.loading?'true':'false');body.classList.toggle('loading',!!state.loading);
+ const loading=!!state.loading,name={back:labels.back||'',reload:loading?labels.stop||'':labels.reload||'',split:labels.openInSplit||'',tab:labels.openAsTab||'',close:labels.close||'',copy:state.copied?labels.copied||'':labels.copy||''};
+ const tip=(id,text,key)=>{const el=$(id);el.setAttribute('aria-label',text);el.title=key?`${text}  ${key}`:text;};
+ tip('back',name.back,keys.back);tip('reload',name.reload,keys.reload);tip('split',name.split,keys.split);tip('tab',name.tab,keys.tab);tip('close',name.close,keys.close);tip('copy',name.copy);$('copy-glyph').hidden=!!state.copied;$('done-glyph').hidden=!state.copied;
+ $('back').disabled=!state.canGoBack;$('reload-glyph').hidden=loading;$('stop-glyph').hidden=!loading;
+ $('split').querySelector('span').textContent=name.split;$('tab').querySelector('span').textContent=name.tab;$('tab').querySelector('kbd').textContent=keys.tab||'';
+ $('notice').textContent=state.notice||'';$('notice').classList.toggle('show',!!state.notice);
+ revealed=!!state.revealed;if(revealed&&matrixFrame){cancelAnimationFrame(matrixFrame);matrixFrame=0;}else if(!revealed&&g)runMatrix();
+ if(!started&&g)requestAnimationFrame(()=>{if(!started&&!leaving)enter(latest);});
+});
+peekFrame.command('ready');
+</script>
+</body>
+</html>

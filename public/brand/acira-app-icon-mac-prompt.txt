@@ -1,0 +1,5 @@
+Built-in imagegen edit: preserve the supplied BW01 two-part silver Acira symbol and its polished shading, geometry and orientation.
+Remove outer padding, transparent margins, gray surround, light-gray bezel and gray rim.
+The black tile fills the complete square edge-to-edge: genuinely opaque rich black at every corner, since macOS supplies its own rounded-square mask.
+No inner tile, border, second surrounding tile, white or gray frame. Proportionally scale the silver symbol with balanced internal black breathing room.
+Crisp silhouette, smooth silver gradients, no fuzzy outline, no text or extra symbols. High-resolution square PNG, opaque background.

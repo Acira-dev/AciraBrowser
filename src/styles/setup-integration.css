@@ -1,0 +1,3 @@
+.setup-dialog{position:fixed;inset:0;z-index:100;overflow:hidden;background:transparent;color:var(--text)}
+/* The dialog takes focus when it opens (App.tsx) so screen readers announce it; the surface itself never shows a ring. */
+.setup-dialog:focus,.setup-dialog:focus-visible{outline:none}

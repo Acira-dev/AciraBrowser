@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Acira P3 install probe",
+  "version": "1.0",
+  "permissions": ["storage", "contextMenus"],
+  "background": {"service_worker": "sw.js"}
+}

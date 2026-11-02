@@ -1,0 +1,22 @@
+/* Subtitles and ledes: IBM Plex Sans, sharper and more technical than the Inter display titles above them (founder,
+   24 Oct: the Geist subline read soft). Family, weight and tracking come from the --font-subtitle tokens (styles.css);
+   each surface keeps its own size and line-height (welcome 17/28, setup 15/24, pages and Settings 13/20, notes 12/16).
+   New code: font: var(--subtitle-weight) var(--subtitle-md) var(--font-subtitle); letter-spacing: var(--subtitle-tracking).
+   Rules start from :root:root so they win over each surface's font shorthand without !important. */
+:root:root
+  :is(
+    .lede,
+    .fr-w-lede,
+    .fr-hero-lede,
+    .fr-sub,
+    .fr-yours-sub,
+    .st-lede,
+    .st-note,
+    .ne-message,
+    .m-page-header p
+  ) {
+  font-family: var(--font-subtitle);
+  font-weight: var(--subtitle-weight);
+  letter-spacing: var(--subtitle-tracking);
+  font-feature-settings: normal;
+}

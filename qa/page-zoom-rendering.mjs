@@ -1,0 +1,105 @@
+// Cross-platform acceptance: measure rendered website pixels, not just the zoom
+// number. Run on Windows/Mac; D_APP_EXE also exercises a packaged distribution.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {startApp,httpFixture,poll,sleep} from './d-harness.mjs';
+const require=createRequire(import.meta.url),levels=require('../page-zoom-levels.json');
+const scales=[80,90,100,110,125,150],root=path.resolve('.qa-profiles/page-rendered-zoom-'+Date.now());
+const out=path.resolve(process.env.PAGE_ZOOM_OUT||'qa/artifacts/page-rendered-zoom-'+Date.now());await fs.mkdir(out,{recursive:true});
+const report={passed:false,platform:process.platform,checks:[],errors:[],scope:'Actual native website viewport, DPR and input on owned loopback sites and a disposable browser profile; no external accounts.'};let app,one,two,pumping=true;
+// The test window is hidden, so Chromium makes no frames of its own and gestures crawl: capturePage of each website view stands in for vsync.
+const pump=async()=>{while(pumping){await app?.main(({webContents})=>Promise.all(webContents.getAllWebContents().filter(w=>/^https?:/.test(w.getURL())).map(w=>w.capturePage().catch(()=>null)))).catch(()=>null);await sleep(60);}};
+const check=async(name,fn)=>{try{const detail=await fn();report.checks.push({name,passed:true,detail});console.log('PASS '+name);}catch(error){report.checks.push({name,passed:false,error:String(error.stack||error)});throw error;}};
+const metrics=p=>p.evaluate(()=>({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,visual:visualViewport.scale,scroll:scrollY}));
+const native=async p=>app.main(({webContents},u)=>{const wc=webContents.getAllWebContents().find(w=>w.getURL()===u),ui=webContents.getAllWebContents().find(w=>w.getURL()==='acira-browser-ui://ui/index.html');return {page:wc.getZoomFactor(),ui:ui.getZoomFactor(),mode:wc.getZoomMode()};},p.url());
+let id,page,cdp;
+const key=async(code,mods)=>{await app.main(({webContents},[u,keyCode,modifiers])=>{const w=webContents.getAllWebContents().find(w=>w.getURL()===u);w.focus();for(const type of ['keyDown','keyUp'])w.sendInputEvent({type,keyCode,modifiers});},[page.url(),code,mods||[process.platform==='darwin'?'meta':'control']]);};
+const zoom=async value=>{await app.cmd({type:'zoom',tabId:id,zoom:value});await poll(()=>native(page),n=>Math.abs(n.page-value/100)<.001,'Actual native zoom value');};
+try{
+ two=await httpFixture((q,r)=>{r.setHeader('Content-Type','text/html');r.end('<title>Owned embedded frame</title><input aria-label="Frame draft"><div style="height:2000px"></div><script>addEventListener("wheel",e=>{if(!e.ctrlKey)e.preventDefault()},{passive:false})</script>');});
+ one=await httpFixture((q,r)=>{r.setHeader('Content-Type','text/html');r.end('<title>Owned website zoom '+q.url+'</title><style>body{margin:0;font:20px sans-serif}iframe{display:block;width:90%;height:200px;border:0}input{max-width:90vw}</style><h1>Rendered zoom fixture</h1><input aria-label="Website draft"><iframe src="http://127.0.0.1:'+two.port+'/frame"></iframe><div style="height:2400px">Long page</div><script>addEventListener("keydown",e=>e.preventDefault());addEventListener("wheel",e=>{if(!e.ctrlKey)e.preventDefault()},{passive:false})</script>');});
+ await fs.mkdir(root,{recursive:true});
+ const {BrowserDatabase}=require('../desktop/database.cjs'),{createInitialState}=require('../desktop/runtime.cjs'),initial=createInitialState();
+ Object.assign(initial.settings,{onboardingComplete:true,askBeforeClosing:false,reducedMotion:true});
+ const db=new BrowserDatabase(path.join(root,'browser.sqlite'));db.saveWindow('main',initial);db.close();
+ app=await startApp({root,skipSetup:false,main:path.resolve('qa/mac-interface-entry.cjs'),env:{ACIRA_QA_MAIN:path.resolve(process.argv[2]||'.','desktop/main.cjs'),ACIRA_TEST_QUIET_NETWORK:'1'}});void pump();await app.act({type:'settings.update',patch:{askBeforeClosing:false,reducedMotion:true}});await poll(()=>app.ui.evaluate(()=>window.acira.getBrowserLayout()),l=>l?.visible===true,'Native browsing area ready',60000);
+ const url='http://127.0.0.1:'+one.port+'/a';await app.act({type:'tab.new',url});id=(await app.state()).activeTabId;page=await app.waitWeb(url);await page.locator('h1').waitFor();cdp=await app.context.newCDPSession(page);const base=await metrics(page);report.baseline=base;
+ for(const scale of scales){
+  await app.act({type:'settings.update',patch:{interfaceScale:scale}});
+  for(const value of levels)await check(`Website ${value}% with interface ${scale}%`,async()=>{
+   await zoom(value);const m=await poll(async()=>{const m=await metrics(page),layout=await app.ui.evaluate(()=>window.acira.getBrowserLayout());return {...m,layoutReady:layout.visible===true,expected:layout.views.find(v=>v.tabId===id)?.bounds.width*(scale/100)/(value/100)};},m=>m.layoutReady&&Math.abs(m.dpr/base.dpr-value/100)<.02&&Math.abs(m.width-m.expected)<4,'Rendered website pixels and native layout settle at requested zoom');const n=await native(page);assert(Math.abs(n.ui-scale/100)<.001,'Website zoom does not zoom browser chrome');return {width:m.width,dpr:m.dpr};
+  });
+ }
+ await app.act({type:'settings.update',patch:{interfaceScale:100}});await zoom(100);
+ await check('Keyboard zoom works over an editable website that cancels page keys',async()=>{await page.getByLabel('Website draft').click();await key('=');await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1.1)<.01,'Zoom in from website input');await key('-');await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1)<.01,'Zoom out');await key('numadd');await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1.1)<.01,'Keypad zoom');await key('0');await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1)<.01,'Reset');});
+ // A device wheel notch: Chromium turns Ctrl+wheel into zoom-changed itself (CDP's mouseWheel has no page-zoom action), so inject it through Electron's own input path. Electron's deltaY is the opposite sign to the DOM's.
+ // A person holds Control before the wheel moves (macOS zooms on that held key, a pinch has none): press it, give the page a moment to hear it, then wheel.
+ const control=type=>app.main(({webContents},[u,t])=>{const w=webContents.getAllWebContents().find(w=>w.getURL()===u);w.sendInputEvent({type:t,keyCode:'Control',modifiers:t==='keyDown'?['control']:[]});},[page.url(),type]);
+ const wheel=async(target,deltaY,modifiers=2)=>{const box=await target.boundingBox();assert(box);if(modifiers){await control('keyDown');await sleep(150);}await app.main(({webContents},[u,x,y,dy,mods])=>{const w=webContents.getAllWebContents().find(w=>w.getURL()===u);w.sendInputEvent({type:'mouseWheel',x,y,deltaX:0,deltaY:-dy,wheelTicksX:0,wheelTicksY:-Math.sign(dy),hasPreciseScrollingDeltas:false,modifiers:mods?['control']:[]});},[page.url(),Math.round(box.x+Math.min(20,box.width/2)),Math.round(box.y+Math.min(10,box.height/2)),deltaY,modifiers]);if(modifiers){await sleep(60);await control('keyUp');}};
+ await check('Ctrl+wheel zooms once over the website; plain wheel scrolls without zooming',async()=>{await page.getByLabel('Website draft').scrollIntoViewIfNeeded();await wheel(page.getByLabel('Website draft'),-120);await poll(()=>native(page),n=>Math.abs(n.page-1.1)<.001,'One wheel step');await sleep(160);await wheel(page.getByLabel('Website draft'),120);await poll(()=>native(page),n=>Math.abs(n.page-1)<.001,'Reverse wheel');await wheel(page.getByLabel('Website draft'),120,0);await sleep(200);assert.equal((await native(page)).page,1);});
+ // A trackpad's Control + two-finger scroll is a stream of small precise deltas (about 60 a second, then momentum), not notches.
+ // The running-total scroll adapter is deliberately macOS-only in page-input-preload.cjs.
+ // Windows uses Chromium native wheel ticks; synthetic precise events with zero ticks are not Windows wheel input.
+ if(process.platform==='darwin'){
+ await check('Trackpad Ctrl+scroll steps a website like an Acira page, a notch is one step at any zoom, and releasing Control stops it',async()=>{
+  const swipe12=Array.from({length:12},(_,i)=>3+i%6),swipe40=Array.from({length:40},(_,i)=>(i%4===3?-1:1)*(3+i%6)); // 40 events of 3-8 px, mostly one way with reversals
+  const send=(who,events)=>app.main(({webContents},[who,pageUrl,events])=>{const w=webContents.getAllWebContents().find(w=>who==='ui'?w.getURL()==='acira-browser-ui://ui/index.html':w.getURL()===pageUrl);for(const e of events){if(e.key)w.sendInputEvent({type:e.key,keyCode:'Control',modifiers:e.key==='keyDown'?['control']:[]});else w.sendInputEvent({type:'mouseWheel',x:300,y:250,deltaX:0,deltaY:-e.d,wheelTicksX:0,wheelTicksY:0,hasPreciseScrollingDeltas:true,modifiers:['control']});}},[who,page.url(),events]);
+  const siteZoom=async()=>Math.round((await native(page)).page*100);
+  // One entry per event: the zoom just after it. A positive entry in the list scrolls up, which zooms in.
+  const swipe=async(who,list,read)=>{const seen=[];for(const d of list){await send(who,[{d:-d}]);await sleep(24);seen.push(await read());}await sleep(400);seen.push(await read());return seen;};
+  const steps=seen=>seen.filter((z,i)=>i&&z!==seen[i-1]).length;
+  const overSite=async list=>{await zoom(100);await send('page',[{key:'keyDown'}]);await sleep(150);const seen=await swipe('page',list,siteZoom);await send('page',[{key:'keyUp'}]);await sleep(150);return seen;};
+  const site12=await overSite(swipe12),site40=await overSite(swipe40);
+  await app.act({type:'tab.new',url:'acira://settings'});const internal=(await app.state()).activeTabId;await sleep(1200);
+  const tabZoom=async()=>(await app.state()).tabs.find(t=>t.id===internal).zoom,overPage=async list=>{await app.cmd({type:'zoom',tabId:internal,zoom:100});await sleep(300);return swipe('ui',list,tabZoom);};
+  const page12=await overPage(swipe12),page40=await overPage(swipe40);
+  await app.act({type:'tab.close',id:internal});await app.act({type:'tab.select',id});await sleep(600);
+  assert.equal(site12.at(-1),page12.at(-1),'the same 12-event swipe over a website and over an Acira page ('+site12.at(-1)+' and '+page12.at(-1)+')');assert.ok(site12.at(-1)>100&&site12.at(-1)<=200,'a 66 px swipe is a few steps, not the top preset: '+site12.at(-1));
+  assert.equal(steps(site40),steps(page40),'the same 40-event swipe takes the same number of steps over a website ('+site40.join(',')+') and over an Acira page ('+page40.join(',')+')');assert.ok(steps(site40)<20,'40 small events are well under 40 steps: '+steps(site40));
+  await zoom(300);await wheel(page.getByLabel('Website draft'),-120);await poll(()=>native(page),n=>Math.abs(n.page-4)<.001,'A notch at 300% is one step');await sleep(200);assert.equal(await siteZoom(),400);await zoom(100);
+  await send('page',[{key:'keyDown'}]);await sleep(150);const held=(await swipe('page',swipe12.slice(0,6),siteZoom)).at(-1);await send('page',[{key:'keyUp'}]);await sleep(150);
+  const momentum=await swipe('page',Array.from({length:20},(_,i)=>3+i%6),siteZoom);
+  assert.ok(held>100,'the swipe zoomed while Control was held');assert.ok(momentum.every(z=>z===held),'the rest of the stream (momentum) does not zoom once Control is released: '+momentum.join(','));await zoom(100);
+ });
+ }else{
+ await check('Windows native Ctrl+wheel steps once and releasing Control returns wheel ownership to the website',async()=>{
+  await zoom(300);await page.getByLabel('Website draft').scrollIntoViewIfNeeded();await wheel(page.getByLabel('Website draft'),-120);await poll(()=>native(page),n=>Math.abs(n.page-4)<.001,'Native Windows notch at 300% is one step');
+  await zoom(100);await page.evaluate(()=>scrollTo(0,0));await sleep(150);await page.evaluate(()=>{window.releaseWheelProbe=[];addEventListener('wheel',e=>releaseWheelProbe.push({trusted:e.isTrusted,ctrl:e.ctrlKey,cancelled:e.defaultPrevented}),{passive:true});});const before=await metrics(page);await wheel(page.getByLabel('Website draft'),120,0);await sleep(250);const after=await metrics(page);assert.equal((await native(page)).page,1,'Released Control leaves page zoom unchanged');const delivered=await page.evaluate(()=>releaseWheelProbe);assert.ok(delivered.length>0&&delivered.every(e=>e.trusted&&!e.ctrl&&e.cancelled),'Native wheel reaches the website and its intentional cancellation is respected');assert.equal(after.scroll,before.scroll,'This fixture cancels ordinary scrolling');
+ });
+ }
+ await check('Keyboard and Ctrl+wheel work inside a cross-origin embedded frame',async()=>{const frame=page.frameLocator('iframe').getByLabel('Frame draft');await frame.click();await key('=');await poll(()=>native(page),n=>Math.abs(n.page-1.1)<.001,'Frame keyboard');await key('0');await page.locator('iframe').scrollIntoViewIfNeeded();await wheel(page.locator('iframe'),-120);await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1.1)<.01,'Frame wheel renders real zoom');await key('0');});
+ // A trackpad pinch ('mouse' source = Chromium's touchpad path, which sends the page a Ctrl+wheel first) is visual-viewport zoom on both platforms: the page magnifies like a magnifier (no reflow, no text-size change), the layout width and
+ // zoom factor stay put, and actual size clears it. (Chromium sends a pinch to a page as a cancelable Ctrl+wheel first; Acira must not cancel it.)
+ await check('Native pinch magnifies the page without reflow, and actual size clears the pinch',async()=>{const before=await metrics(page);await cdp.send('Input.synthesizePinchGesture',{x:150,y:120,scaleFactor:1.5,relativeSpeed:800,gestureSourceType:'mouse'});await poll(()=>metrics(page),m=>m.visual>1.3&&Math.abs(m.dpr/base.dpr-1)<.01&&Math.abs(m.width-before.width)<2,'Native pinch magnifies without reflowing the page',4000);assert.equal((await native(page)).page,1,'Pinch leaves the page zoom factor alone');assert(Math.abs((await native(page)).ui-1)<.001,'Pinch keeps browser chrome at its own scale');await key('0');await poll(()=>metrics(page),m=>Math.abs(m.visual-1)<.01&&Math.abs(m.dpr/base.dpr-1)<.01,'Actual size resets native pinch and page zoom');});
+ await check('Page zoom survives same-site tabs and reload and stays separate from another site',async()=>{await zoom(175);await app.act({type:'tab.new',url:'http://127.0.0.1:'+one.port+'/b'});const sibling=await app.waitWeb('http://127.0.0.1:'+one.port+'/b');await sibling.locator('h1').waitFor();await poll(()=>metrics(sibling),m=>Math.abs(m.dpr/base.dpr-1.75)<.01,'Same-site tab rendered zoom');await page.reload();await page.locator('h1').waitFor();await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1.75)<.01,'Reload rendered zoom');await app.act({type:'tab.new',url:'http://127.0.0.1:'+two.port+'/other'});const other=await app.waitWeb('http://127.0.0.1:'+two.port+'/other');await other.locator('input').waitFor();await poll(()=>metrics(other),m=>Math.abs(m.dpr/base.dpr-1)<.01,'Other origin stays 100%');});
+
+ await check('Every interface size keeps new tabs and browser controls usable',async()=>{
+  for(const scale of scales){
+   await app.main(({BaseWindow})=>BaseWindow.getAllWindows().find(w=>w.contentView.children.some(v=>v.webContents?.getURL()==='acira-browser-ui://ui/index.html')).setSize(900,680));
+   await app.act({type:'settings.update',patch:{interfaceScale:scale,verticalTabs:false,windowView:'full'}});await app.act({type:'ui.update',patch:{view:'full'}});await app.act({type:'tab.new'});
+   const title=app.ui.locator('.nt-workspace-title h1').filter({visible:true});await title.waitFor();const room=await title.evaluate(el=>({width:el.clientWidth,textWidth:el.scrollWidth,height:el.clientHeight,line:parseFloat(getComputedStyle(el).lineHeight)}));assert(room.width>0&&room.textWidth<=room.width+1&&room.height<=room.line+1,'The actual workspace name fits on one line at '+scale+'%: '+JSON.stringify(room));
+   const address=app.ui.getByRole('combobox',{name:'Address and search',exact:true});assert(await address.isVisible());await address.fill('Owned address input');assert.equal(await address.inputValue(),'Owned address input');await address.press('Escape');await app.act({type:'tab.select',id});
+  }
+ });
+ const splitPages=[{id,page}];
+ for(const [port,leaf]of [[two.port,'split-b'],[one.port,'split-c'],[two.port,'split-d']]){const url='http://127.0.0.1:'+port+'/'+leaf;await app.act({type:'tab.new',url});const p=await app.waitWeb(url);await p.locator('input').waitFor();splitPages.push({id:(await app.state()).activeTabId,page:p});}
+ await app.main(({BaseWindow})=>BaseWindow.getAllWindows().find(w=>w.contentView.children.some(v=>v.webContents?.getURL()==='acira-browser-ui://ui/index.html')).setSize(1800,1200));
+ await app.cmd({type:'zoom',tabId:id,zoom:25});await app.cmd({type:'zoom',tabId:splitPages[1].id,zoom:500});
+ // Split layout publication and native resize settle asynchronously; do not
+ // compare the renderer against a frozen rectangle from the previous layout.
+ for(const scale of scales)for(const layout of ['columns','rows','grid'])await check(`Split ${layout} at interface ${scale}% renders each website at its own zoom`,async()=>{
+  await app.act({type:'settings.update',patch:{interfaceScale:scale}});await poll(()=>app.ui.evaluate(()=>window.acira.getBrowserLayout()),l=>Math.abs(l.viewport.width-1800/(scale/100))<2,'Interface layout settled');await app.act({type:'split.close'});await app.act({type:'tab.select',id});const panes=splitPages.slice(0,layout==='grid'?4:2);await app.act({type:'split.open',tabIds:panes.map(p=>p.id),layout});
+  for(let i=0;i<panes.length;i++){const target=panes[i],factor=i%2?5:.25;const readBounds=()=>app.main(({BaseWindow},url)=>{for(const w of BaseWindow.getAllWindows())for(const v of w.contentView.children)if(v.webContents?.getURL()===url&&v.getVisible())return v.getBounds();},target.page.url());await poll(async()=>{const before=await readBounds(),rendered=await metrics(target.page),bounds=await readBounds();return {...rendered,bounds,stable:JSON.stringify(before)===JSON.stringify(bounds)};},m=>m.stable&&m.bounds&&Math.abs(m.dpr/base.dpr-factor)<.02&&Math.abs(m.width-m.bounds.width/factor)<4,'Rendered split website viewport');}
+ });
+ await app.act({type:'split.close'});await app.act({type:'settings.update',patch:{interfaceScale:100}});
+ await check('Private tabs keep rendered zoom independent of the ordinary site',async()=>{
+  const url='http://127.0.0.1:'+one.port+'/private';await app.act({type:'tab.new',url,privacy:'private'});const privateId=(await app.state()).activeTabId,p=await app.waitWeb(url);await p.locator('h1').waitFor();await poll(()=>metrics(p),m=>Math.abs(m.dpr/base.dpr-1)<.01,'Private tab starts at 100%');await app.cmd({type:'zoom',tabId:privateId,zoom:150});await poll(()=>metrics(p),m=>Math.abs(m.dpr/base.dpr-1.5)<.01,'Private tab renders 150%');assert.equal((await app.state()).originZooms['profile-personal']['http://127.0.0.1:'+one.port],25);await app.act({type:'tab.select',id});await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-.25)<.01,'Ordinary tab stays 25%');
+ });
+ await check('Site zoom restores actual rendered pixels after a normal app restart',async()=>{
+  await app.close();app=await startApp({root,skipSetup:false,main:path.resolve('qa/mac-interface-entry.cjs'),env:{ACIRA_QA_MAIN:path.resolve(process.argv[2]||'.','desktop/main.cjs'),ACIRA_TEST_QUIET_NETWORK:'1'}});await app.act({type:'tab.select',id});page=await app.waitWeb(url);await page.locator('h1').waitFor();await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-.25)<.01,'Restored tab really renders saved site zoom');
+ });
+ report.passed=true;
+}catch(error){report.error=String(error.stack||error);process.exitCode=1;}
+finally{pumping=false;await sleep(200);if(app){report.snapshot=await app.state().then(s=>({activeTabId:s.activeTabId,tabs:s.tabs.map(t=>({id:t.id,url:t.url,profile:t.browserProfileId,workspace:t.workspaceId,privacy:t.privacy})),windowUi:s.windowUi})).catch(()=>null);report.layout=await app.ui.evaluate(()=>window.acira.getBrowserLayout()).catch(()=>null);report.nativeViews=await app.main(({BaseWindow})=>BaseWindow.getAllWindows().map(w=>({size:w.getContentSize(),views:w.contentView.children.map(v=>({url:v.webContents?.getURL(),visible:v.getVisible(),bounds:v.getBounds()}))}))).catch(()=>null);}if(app)await app.ui.screenshot({path:path.join(out,'interface.png')}).catch(()=>{});await app?.close();await one?.close();await two?.close();await fs.writeFile(path.join(out,'result.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({passed:report.passed,checks:report.checks.length,failed:report.checks.filter(c=>!c.passed).map(c=>c.name),error:report.error,out},null,2));}

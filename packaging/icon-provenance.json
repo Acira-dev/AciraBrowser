@@ -1,0 +1,40 @@
+{
+  "schema": 2,
+  "variant": "BW01 — Void Halo",
+  "source": "public/brand/acira-app-icon.png",
+  "sourceSha256": "a23c5805dc8f869007b6e395dcfdfb4599a593a0cf952c0ba5397089ea019b0e",
+  "macSource": "public/brand/acira-app-icon-mac.png",
+  "macSourceSha256": "a23c5805dc8f869007b6e395dcfdfb4599a593a0cf952c0ba5397089ea019b0e",
+  "windowsFraming": "The tile fills the whole slot with small corners, so it reads as large as Windows allows; the mark keeps the artwork proportions",
+  "macFraming": "Opaque black fills the canvas; macOS supplies the rounded-square mask, without a second gray backplate",
+  "original": "public/brand/acira-bw01-original.png",
+  "canonicalSha256": "a23c5805dc8f869007b6e395dcfdfb4599a593a0cf952c0ba5397089ea019b0e",
+  "icoSha256": "6ad9478b70d0f610d027a528f5db96d783df0593db01e549d68baa15a507a350",
+  "icns": "packaging/mac/acira-icon.icns",
+  "icnsSha256": "0d745c1e5fad336d0c56be54ca07354cfe18662f750fc959148ff3ed91e0e03d",
+  "png512Sha256": "dfa7ff669915d413da246b1b4f00de73015b6a64142dbcf89a2c53a742346ea6",
+  "sizes": [
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64,
+    96,
+    128,
+    256
+  ],
+  "macSizes": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "renderer": "Chromium PNG resampling from high-resolution masters",
+  "backgroundRemoval": "Built-in imagegen; Windows transparent tile and Mac full-bleed icon. Prompts: public/brand/acira-app-icon-prompt.txt and public/brand/acira-app-icon-mac-prompt.txt",
+  "rights": "Founder-selected BW01 from Acira-Monochrome-Aura-12-Variants.zip"
+}

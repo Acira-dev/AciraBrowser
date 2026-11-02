@@ -1,0 +1,57 @@
+// Refreshes the offline filter baseline in resources/filters from the same official sources the in-app updater uses (mirrors included).
+//   node scripts/fetch-baseline-filters.mjs [filters directory] [--soft]
+//   --soft: release builds. If a download fails, say so loudly and keep the lists already in the directory instead of failing the build.
+// Release builds run this before build-filter-engine.cjs, so an installer never ships last month's lists. Everything is downloaded and validated first and written only if all of it is good.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
+const {SOURCES, SCRIPTLET_SOURCE, validateList, validateResources} = createRequire(import.meta.url)('../desktop/browser-services/filter-updates.cjs');
+const args = process.argv.slice(2), soft = args.includes('--soft'), directory = args.find(arg => !arg.startsWith('--'));
+const root = path.resolve(directory || fileURLToPath(new URL('../resources/filters/', import.meta.url)));
+await fs.mkdir(root, {recursive: true});
+
+async function fetchText(source, validate) {
+  let failure;
+  for (const url of [source.url, ...(source.mirrors || [])]) {
+    try {
+      const response = await fetch(url, {signal: AbortSignal.timeout(60000), headers: {'user-agent': 'AciraBrowser filter baseline'}});
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return {url, value: validate(await response.text(), source)};
+    } catch (error) { failure = new Error(source.id + ' from ' + url + ': ' + (error.message || error)); }
+  }
+  throw failure;
+}
+
+let fetched;
+try { fetched = await Promise.all([...SOURCES.map(source => fetchText(source, validateList)), fetchText(SCRIPTLET_SOURCE, text => validateResources(text))]); } catch (error) {
+  if (!soft) throw error;
+  const kept = await fs.readFile(path.join(root, 'NOTICE.md'), 'utf8').then(text => /Downloaded on (\S+)/.exec(text)?.[1], () => undefined);
+  console.warn(`\n!!! FILTER BASELINE NOT REFRESHED: ${error.message || error}\n!!! This build ships the lists and scriptlets already in ${root}${kept ? ` (downloaded ${kept})` : ''}. Run it again online before publishing.\n`);
+  process.exit(0);
+}
+const lists = fetched.slice(0, SOURCES.length), scriptlets = fetched[SOURCES.length];
+const lines = [];
+for (let i = 0; i < SOURCES.length; i++) {
+  const {url, value} = lists[i], modified = /^! (?:Last modified|Version): ?(.+)$/m.exec(value.text)?.[1] || 'unknown';
+  await fs.writeFile(path.join(root, SOURCES[i].id), value.text);
+  lines.push(`- ${SOURCES[i].title}: ${url} (${modified}; sha256 ${value.sha256.slice(0, 16)}…)`);
+  console.log(SOURCES[i].id, value.text.length, modified);
+}
+// uBlock Origin scriptlet resources, converted for @ghostery/adblocker by Ghostery (MPL-2.0 package; scriptlets are GPL-3.0-or-later from uBlock Origin).
+await fs.writeFile(path.join(root, 'resources.json'), scriptlets.value.text);
+console.log('resources.json', scriptlets.value.text.length);
+lines.push('- uBlock Origin scriptlet resources: ' + scriptlets.url + ` (sha256 ${scriptlets.value.sha256.slice(0, 16)}…)`);
+const date = new Date().toISOString().slice(0, 10);
+await fs.writeFile(path.join(root, 'NOTICE.md'), `# Offline filter baseline
+
+Downloaded on ${date} by \`scripts/fetch-baseline-filters.mjs\` (run by every release build) from the official list sources, the same endpoints the in-app updater uses:
+
+${lines.join('\n')}
+
+- The uBlock Origin lists are uBlock's compiled \`.min.txt\` files with the rules for other browsers (Firefox, Safari, uBlock Origin Lite) removed. EasyList, EasyPrivacy and the uBlock Origin lists keep their original authors and license declarations (GPL-3.0-or-later / CC-BY-SA where specified upstream) in the list headers.
+- Peter Lowe's list is a hosts file; its entries are converted to network rules, the way uBlock Origin reads it.
+- Ghostery Electron integration: MPL-2.0.
+
+These lists block ads and trackers. They are not a phishing/malware reputation service and they do not reject or accept cookie consent. The baseline works without an account or network refresh; Acira checks the same endpoints in the background on every start and every few hours (only downloading what changed) unless turned off.
+`);

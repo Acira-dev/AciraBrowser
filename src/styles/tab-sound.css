@@ -1,0 +1,113 @@
+/* R4-30 · A tab playing sound shows a small dot-matrix equaliser in the close slot (tab strip, compact strip, sidebar row), and
+   on the site icon where a tab has no room for a slot (icon-only, pinned, narrow). The pointer or the keyboard on the tab
+   crossfades it to the x so the tab can always be closed. A muted tab keeps its speaker-off button (the unmute control); where a tab has no room for a button the same glyph, small,
+   sits on the icon's corner. A quiet tab has neither.
+   Opacity and transform only. Every duration reads the frequent-surface speed (--motion-f: Premium 1.28, Fast 1, Off 0).
+   Specificity is deliberately high (:root): the close slot already has a dozen hover and container rules to step over. */
+
+.app{--ts-dur:calc(140ms * var(--motion-f,1));--ts-ease:cubic-bezier(.2,0,0,1);--ts-out:.88}
+
+.tab-sound-meter{display:none;pointer-events:none;color:var(--ed-ink,currentColor);line-height:0}
+.tab-sound-meter>.dot-matrix{display:block}
+
+/* ---- Tab strip: the slot ---------------------------------------------------------------------------------------------- */
+@container (min-width:105px){
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true])>.tab-close[data-sound]{display:grid;place-items:center;opacity:1;background:transparent}
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true])>.tab-close[data-sound]:hover{background:var(--well,var(--frame-hover))}
+:root .app .browser-tab>.tab-close[data-sound]>:is(svg,.tab-sound-meter){grid-area:1/1;transition:opacity var(--ts-dur) var(--ts-ease),transform var(--ts-dur) var(--ts-ease)}
+:root .app .browser-tab>.tab-close[data-sound]>.tab-sound-meter[data-variant=slot]{display:block;opacity:1;transform:none}
+:root .app .browser-tab>.tab-close[data-sound]>svg{opacity:0;transform:scale(var(--ts-out))}
+:root .app .browser-tab:is(:hover,:focus-visible,:has(:focus-visible),.tab-drag-preview)>.tab-close[data-sound]>svg{opacity:1;transform:none}
+:root .app .browser-tab:is(:hover,:focus-visible,:has(:focus-visible),.tab-drag-preview)>.tab-close[data-sound]>.tab-sound-meter{opacity:0;transform:scale(var(--ts-out))}
+/* A private or Tor mark normally hides in the close slot of a resting tab; with sound playing the slot is the equaliser's, so the mark stays beside it. */
+:root .app .tab-strip-container .browser-tab[data-privacy][data-sound=playing]:not(.selected):not([data-icon-only=true])>.tab-privacy-mark:not(.tab-privacy-icon){margin-right:0;transform:none}
+:root .app .tab-strip-container .browser-tab[data-privacy][data-sound=playing]:not(.selected):is(:hover,:focus-within)>.tab-privacy-mark:not(.tab-privacy-icon){opacity:1}
+}
+
+/* ---- The badge: icon-only (pinned, crowded) and narrow strip tabs, compact icon-only tabs (R4-38) -------------------------------
+   No box and no border: the matrix's square dots sit straight on a clean cut-out. The site icon is masked with a hard-edged square
+   hole (the badge plus a 2px ring) in its lower right corner (upper right on a private or Tor tab, whose own mark keeps the lower
+   right), so whatever is behind the tab (glass, selection, hover) shows through the ring and the icon never touches the dots. The badge
+   is the matrix canvas itself (whole device pixels), its outer corner on the icon's corner. */
+.tab-sound-meter[data-variant=badge]{position:absolute;z-index:1;transition:opacity var(--ts-dur) var(--ts-ease)}
+/* Strip, icon-only: the icon is centred, 16px, so its lower right corner is 8px right of and below the tab's centre. */
+:root .app .tab-strip-container .browser-tab[data-icon-only=true]>.tab-sound-meter[data-variant=badge]{display:block;left:50%;top:50%}
+:root .app .tab-strip-container .browser-tab[data-icon-only=true][data-privacy]>.tab-sound-meter[data-variant=badge]{top:calc(50% - 8px)}
+/* The active icon-only tab shows its x over the icon on hover: the badge steps aside. */
+:root .app .tab-strip-container .browser-tab[data-icon-only=true].selected:is(:hover,:focus-visible,:has(:focus-visible))>.tab-sound-meter[data-variant=badge]{opacity:0}
+/* Strip, narrow but not icon-only (64 to 104 px): the site icon sits at the left edge (10px padding), its right edge 26px in. */
+@container (max-width:104px){
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true])>.tab-sound-meter[data-variant=badge]{display:block;left:18px;top:50%}
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true])[data-privacy]>.tab-sound-meter[data-variant=badge]{top:calc(50% - 8px)}
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true]):is(:hover,:focus-visible,:has(:focus-visible))>.tab-sound-meter[data-variant=badge]{opacity:0}
+}
+/* The cut-out in the icon (a square hole, hard edges), only where the badge is showing. */
+:root .app .tab-strip-container .browser-tab[data-sound][data-icon-only=true]>.site-identity-icon{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,var(--ts-cut,right -2px bottom -2px);mask-composite:exclude}
+:root .app .tab-strip-container .browser-tab[data-sound][data-icon-only=true][data-privacy]>.site-identity-icon{--ts-cut:right -2px top -2px}
+@container (max-width:104px){
+:root .app .tab-strip-container .browser-tab[data-sound]:not([data-icon-only=true])>.site-identity-icon{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,var(--ts-cut,right -2px bottom -2px);mask-composite:exclude}
+:root .app .tab-strip-container .browser-tab[data-sound]:not([data-icon-only=true])[data-privacy]>.site-identity-icon{--ts-cut:right -2px top -2px}
+}
+
+/* ---- Muted: the speaker-off glyph, never beside the icon ------------------------------------------------------------------------
+   A roomy strip tab keeps its speaker-off button between the title and the close slot. Below that width, and on icon-only and pinned tabs, there
+   is no room for a button beside the icon (it used to sit against it), so the button leaves and the same glyph, small, takes the icon's corner
+   where the equaliser's badge sits (the rules above), with the same cut-out. It stays through hover, apart from the active icon-only tab, whose x
+   takes the icon. The glyph is the editor family's solid speaker with a hairline cross: drawn at 12px in the button it matches the x beside it in
+   optical size (ink 9 x 7.5 against 8 x 8), and takes the x's colour, so it is no larger or heavier than its neighbours. */
+.tab-sound-meter[data-state=muted]>svg{display:block;width:10px;height:10px;margin:-1px}
+.tab-sound-meter[data-state=muted]{width:8px;height:8px}
+:root .app.style-acira .tab-strip-container .browser-tab>.tab-audio>svg{width:12px;height:12px;color:var(--ed-muted)}
+:root .app.style-acira .tab-strip-container .browser-tab>.tab-audio:hover>svg{color:var(--ed-ink)}
+:root .app .tab-strip-container .browser-tab[data-icon-only=true]>.tab-audio{display:none}
+@container (max-width:104px){
+:root .app .tab-strip-container .browser-tab>.tab-audio{display:none}
+:root .app .tab-strip-container .browser-tab:not([data-icon-only=true]):is(:hover,:focus-visible,:has(:focus-visible))>.tab-sound-meter[data-variant=badge][data-state=muted]{opacity:1}
+}
+
+/* ---- Compact strip ------------------------------------------------------------------------------------------------------ */
+/* Labelled tabs wide enough for a slot: a background tab shows the equaliser where its speaker used to be; the active tab shows it
+   over its close x, which is invisible at rest and arrives on hover, so the two swap. */
+@container (min-width:63px){
+:root .app .acira-compact-tab[data-labels=true] .acira-compact-tab-inner>.tab-sound-meter[data-variant=slot]{display:grid;flex:0 0 20px;width:20px;height:20px;place-items:center;transition:opacity var(--ts-dur) var(--ts-ease),transform var(--ts-dur) var(--ts-ease)}
+:root .app .acira-compact-tab.selected:not([data-pinned=true])[data-labels=true] .acira-compact-tab-inner>.tab-sound-meter[data-variant=slot]{margin-right:-26px}
+:root .app .acira-compact-tab.selected:not([data-pinned=true])[data-labels=true]:is(:hover,:focus-visible,:has(:focus-visible),.tab-drag-preview) .acira-compact-tab-inner>.tab-sound-meter[data-variant=slot]{opacity:0;transform:scale(var(--ts-out))}
+}
+/* A muted compact tab's speaker-off button leaves where the badge takes over. */
+@container (max-width:62px){:root .app .acira-compact-tab .acira-compact-tab-audio{display:none}}
+/* Icon-only or narrow compact tabs: the badge on the site icon's corner, with the same cut-out. */
+:root .app .acira-compact-tab-icon>.tab-sound-meter[data-variant=badge]{right:0;bottom:0}
+:root .app .acira-compact-tab[data-privacy] .acira-compact-tab-icon>.tab-sound-meter[data-variant=badge]{bottom:auto;top:0}
+:root .app .acira-compact-tab[data-labels=false] .acira-compact-tab-icon>.tab-sound-meter[data-variant=badge]{display:block}
+:root .app .acira-compact-tab[data-labels=false][data-sound] .acira-compact-tab-icon>.site-identity-icon{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,var(--ts-cut,right -2px bottom -2px);mask-composite:exclude}
+:root .app .acira-compact-tab[data-labels=false][data-sound][data-privacy] .acira-compact-tab-icon>.site-identity-icon{--ts-cut:right -2px top -2px}
+@container (max-width:62px){
+:root .app .acira-compact-tab .acira-compact-tab-icon>.tab-sound-meter[data-variant=badge]{display:block}
+:root .app .acira-compact-tab[data-sound] .acira-compact-tab-icon>.site-identity-icon{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,var(--ts-cut,right -2px bottom -2px);mask-composite:exclude}
+:root .app .acira-compact-tab[data-sound][data-privacy] .acira-compact-tab-icon>.site-identity-icon{--ts-cut:right -2px top -2px}
+}
+
+/* ---- Sidebar rows ------------------------------------------------------------------------------------------------------- */
+:root .app.style-acira .acira-sidebar .sb-tab-close[data-sound]{display:grid;place-items:center;opacity:1}
+:root .app.style-acira .acira-sidebar .sb-tab-close[data-sound]>:is(svg,.tab-sound-meter){grid-area:1/1;transition:opacity var(--ts-dur) var(--ts-ease),transform var(--ts-dur) var(--ts-ease)}
+:root .app.style-acira .acira-sidebar .sb-tab-close[data-sound]>.tab-sound-meter[data-variant=slot]{display:block;color:var(--sb-fg,currentColor);opacity:1;transform:none}
+:root .app.style-acira .acira-sidebar .sb-tab-close[data-sound]>svg{opacity:0;transform:scale(var(--ts-out))}
+:root .app.style-acira .acira-sidebar .sb-tab:is(:hover,:has(:focus-visible))>.sb-tab-close[data-sound]>svg{opacity:1;transform:none}
+:root .app.style-acira .acira-sidebar .sb-tab:is(:hover,:has(:focus-visible))>.sb-tab-close[data-sound]>.tab-sound-meter{opacity:0;transform:scale(var(--ts-out))}
+/* A dragged row never shows the equaliser over its x. */
+:root .app.style-acira .acira-sidebar .sb-tabs[data-dragging] .sb-tab-close[data-sound]>svg{opacity:0}
+/* A pinned row has no close: the equaliser takes its slot, still. */
+:root .app.style-acira .acira-sidebar .sb-tab-sound{flex:none;display:grid;place-items:center;width:var(--tab-control,20px);height:var(--tab-control,20px);margin-right:6px;color:var(--sb-fg,currentColor);pointer-events:none}
+:root .app.style-acira .acira-sidebar .sb-tab-sound>.tab-sound-meter[data-variant=slot]{display:block}
+/* A private or Tor mark normally hides in the close slot of a resting row; with sound playing the slot is the equaliser's. */
+:root .app.style-acira .acira-sidebar .sb-tab:not([aria-current=true]) .sb-tab-mark:has(+.sb-tab-close[data-sound]){margin-right:6px;opacity:1}
+:root .app.style-acira .acira-sidebar .sb-tab:not([aria-current=true]):is(:hover,:has(:focus-visible)) .sb-tab-mark:has(+.sb-tab-close[data-sound]){opacity:1}
+
+/* ---- The dragged copy of a tab is a clone: its canvas is blank, so it shows the x, as a held tab would. ------------------ */
+.tab-drag-preview .tab-sound-meter[data-variant=slot]{opacity:0}
+.tab-drag-preview .tab-close[data-sound]>svg{opacity:1;transform:none}
+
+@media (forced-colors:active){
+.tab-sound-meter{color:CanvasText}
+.tab-sound-meter[data-variant=badge]{color:CanvasText}
+}

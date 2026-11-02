@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Acira P3 probe",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "background": {"service_worker": "sw.js"},
+  "options_ui": {"page": "options.html", "open_in_tab": true},
+  "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["config.js", "cs.js"], "run_at": "document_idle"}],
+  "storage": {"managed_schema": "schema.json"}
+}

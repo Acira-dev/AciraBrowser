@@ -1,0 +1,66 @@
+/* The update beside the Acira menu button. While it downloads: a bare dot matrix (24px, the toolbar's icon ink) that fills with the real progress,
+   no fill, no line. When it is downloaded: the dots resolve into a check and the calm "Update" pill (the accent at a whisper: a 13% tint, accent ink,
+   24px) fades in. Colours come from the toolbar's own tokens, so every layout and finish (full, compact, seamless, sidebar open or closed, private and
+   Tor windows) reads it the same way. */
+.app .update-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin: 0 4px 0 2px;
+  padding: 0 10px 0 7px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--accent-ink, var(--accent, #3b6eea));
+  background: color-mix(in srgb, var(--accent, #3b6eea) 13%, transparent);
+  font: 500 12px/1 var(--font-ui, 'Geist', sans-serif);
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  animation: update-pill-in calc(0.32s * var(--motion-scale, 1)) cubic-bezier(0.2, 0, 0, 1) both;
+  transition: background-color 0.12s cubic-bezier(0.2, 0, 0, 1), transform 0.08s cubic-bezier(0.2, 0, 0, 1);
+}
+.app .update-pill:hover { background: color-mix(in srgb, var(--accent, #3b6eea) 22%, transparent); }
+.app .update-pill:active { transform: scale(0.97); }
+.app .update-pill:focus-visible { outline: 2px solid var(--focus-ring-color, var(--accent, #3b6eea)); outline-offset: 1px; }
+.app .update-pill:disabled { opacity: 0.6; }
+.app .update-pill[aria-expanded='true'] { background: color-mix(in srgb, var(--accent, #3b6eea) 22%, transparent); }
+/* Downloading: an indicator, not a control. Nothing to press, so no hover fill and no press. */
+.app .update-pill[data-phase='downloading'] { width: 24px; justify-content: center; margin: 0 2px; padding: 0; background: transparent; color: var(--ed-icon, currentColor); }
+.app .update-pill[data-phase='downloading']:active { transform: none; }
+.update-pill-mark { flex: none; display: inline-grid; width: 16px; height: 16px; line-height: 0; }
+.update-pill-mark > .dot-matrix { display: block; }
+@keyframes update-pill-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .app .update-pill { animation: none; } }
+@media (forced-colors: active) { .app .update-pill[data-phase='ready'] { border: 1px solid ButtonText; color: ButtonText; background: ButtonFace; } }
+
+/* The question: one glass panel (panels.css rows and buttons.css buttons). It opens at the height of its short note; Read more swaps the note for the
+   release notes, which stop growing at 11 lines and scroll inside. The note and the notes start on the title's text edge (the identity row's 8px
+   inset + 16px mark + 12px gap). */
+.update-popover { display: flex; flex-direction: column; }
+.update-pop-mark { display: grid; place-items: center; }
+.update-pop-mark > .dot-matrix { display: block; }
+.update-pop-note,
+.update-pop-notes {
+  min-height: 0;
+  margin: 0;
+  padding: 2px 12px 8px 36px;
+  font: 400 12px/16px var(--font-ui, 'Geist', sans-serif);
+  color: var(--menu-t2, var(--menu-t3, inherit));
+  text-align: left;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+/* The notes scroll in the popup system's own scroll region (overlay thumb, edge fades); the box stops at 11 lines (+ its 2px and 8px padding). */
+.update-popover { --notes-max: 186px; }
+.update-whatsnew { --notes-max: 250px; } /* centred in the window with room to spare: 15 lines */
+.update-pop-scroll { display: flex; min-height: 0; max-height: var(--notes-max); }
+.update-pop-scroll > .scroll-region > .popup-scroll { overflow-y: auto; max-height: var(--notes-max); overscroll-behavior: contain; }
+.update-pop-notes { flex: none; white-space: pre-wrap; outline: none; }
+.update-pop-notes:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring-color, var(--accent, #3b6eea)); border-radius: 6px; }
+.update-pop-actions { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }
+.update-pop-gap { flex: 1 1 auto; }
+.update-pop-actions .acira-button { flex: 0 0 auto; white-space: nowrap; }
+.update-pop-actions .acira-button-quiet { margin-left: 0; padding-inline: 8px; }

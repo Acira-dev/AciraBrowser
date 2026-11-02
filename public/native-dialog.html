@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acira</title>
+<style>
+@font-face{font-family:'Geist';font-weight:100 900;src:url('/fonts/Geist.woff2') format('woff2')}
+/* Dialog and Prompt (bible §4 Transient surfaces). Dialog: 400 wide (680 with a picker), padding 24, title 16/520, body
+   13/20 at 61%, 32px buttons right-aligned in Windows order (actions first, the safe one last), the default accented.
+   Prompt (permission, anchored): 320 wide, padding 16, title 13/500, detail 12/16, 28px buttons, the action accented and
+   the safe answer focused. No kicker (retired). Tokens follow the app: round 12 light ladder, neutral primary. */
+:root{color-scheme:light;--bg:#fff;--text:rgb(0 0 0/.88);--muted:rgb(0 0 0/.61);--faint:rgb(0 0 0/.45);--line:rgb(0 0 0/.08);--line-strong:rgb(0 0 0/.14);--hover:rgb(0 0 0/.05);--field:rgb(0 0 0/.04);--primary:#1d1d1f;--primary-hover:#2a2a2e;--on-primary:#fff;--danger:#b3261e;--ring:#3b6eea}
+:root[data-dark]{color-scheme:dark;--bg:#232428;--text:#ededef;--muted:rgb(237 237 239/.64);--faint:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--line-strong:rgb(255 255 255/.16);--hover:rgb(255 255 255/.06);--field:rgb(255 255 255/.05);--primary:#ededef;--primary-hover:#fff;--on-primary:#16171a;--danger:#f0786f;--ring:#8fb0ff}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 'Geist','Inter','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
+main{padding:24px;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}
+.kicker{display:none}
+h1{margin:0;font-size:16px;line-height:22px;font-weight:520;letter-spacing:-.012em;overflow-wrap:anywhere}
+p{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:20px;white-space:pre-wrap;overflow-wrap:anywhere}
+.items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:16px;max-height:318px;overflow:auto;padding:2px}
+.items[hidden]{display:none}
+.item{display:flex;flex-direction:column;align-items:stretch;gap:4px;min-height:0;height:auto;padding:8px;text-align:left;overflow:hidden;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
+.item img{width:100%;aspect-ratio:16/9;object-fit:contain;background:var(--field);border-radius:4px}
+.item small{font:500 11px/14px 'Geist','Inter','Segoe UI',sans-serif;color:var(--faint)}
+.item span{font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item[aria-checked=true]{box-shadow:inset 0 0 0 2px var(--ring)}
+.actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:24px}
+button{font:inherit;font-weight:500;height:32px;padding:0 14px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--text);cursor:default;transition:background-color 120ms cubic-bezier(.23,1,.32,1)}
+button:hover{background:var(--hover)}
+button:active{transform:scale(.98)}
+button[data-primary]{background:var(--primary);box-shadow:none;color:var(--on-primary)}
+button[data-primary]:hover{background:var(--primary-hover)}
+button[data-danger]{color:var(--danger)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+:root[data-popover] main{padding:16px}
+:root[data-popover] h1{font-size:13px;line-height:18px;font-weight:500;letter-spacing:0}
+:root[data-popover] p{margin-top:4px;font-size:12px;line-height:16px}
+:root[data-popover] .actions{margin-top:16px}
+:root[data-popover] button{height:28px;padding:0 12px}
+@media (forced-colors:active){button{border:1px solid ButtonText}button[data-primary]{border-color:Highlight}}
+</style>
+</head>
+<body>
+<main id="root" role="alertdialog" aria-modal="true" aria-labelledby="title" aria-describedby="detail">
+<div class="kicker" id="kicker"></div>
+<h1 id="title"></h1>
+<p id="detail" hidden></p>
+<div class="items" id="items" role="radiogroup" aria-label="Choose what to share" hidden></div>
+<div class="actions" id="actions"></div>
+</main>
+<script src="native-dialog.js"></script>
+</body>
+</html>

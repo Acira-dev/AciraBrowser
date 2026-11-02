@@ -1,0 +1,47 @@
+/* Hide-artwork toast (design bible §4 Toast, §5.12): bottom-left of the content, 16px inset, 320-420px wide, 40-48px high, 6px radius,
+   hairline edge, the shared popover shadow, 13px text, a text-button action. It condenses in over 220ms from 8px below and leaves in 120ms. */
+.app.style-acira .toast[data-artwork-toast] {
+  --toast-edge: calc(var(--navigation-width, 0px) + 16px);
+  position: fixed; top: auto; right: auto; bottom: 16px; left: var(--toast-edge); margin: 0; transform: none; translate: none;
+  box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2, 8px);
+  width: max-content; min-width: min(320px, calc(100vw - var(--toast-edge) - 16px)); max-width: min(420px, calc(100vw - var(--toast-edge) - 16px)); min-height: 40px; max-height: 48px; padding: 5px 6px 5px 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-card, 6px); box-shadow: var(--shadow-popover);
+  background: rgb(var(--overlay-rgb) / var(--overlay-opacity)); color: var(--text-primary);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1); backdrop-filter: blur(16px) saturate(1.1);
+  font-size: var(--text-13, 13px); line-height: 18px;
+  animation: artwork-toast-in 220ms var(--ease-out, cubic-bezier(.2, 0, 0, 1)) backwards;
+}
+.app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-out 120ms var(--ease-out, cubic-bezier(.2, 0, 0, 1)) forwards; pointer-events: none; }
+.app.style-acira.opaque-glass .toast[data-artwork-toast] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.app.style-acira .toast[data-artwork-toast] .toast-status { display: grid; place-items: center; flex: none; width: 16px; height: 16px; color: var(--success); }
+.app.style-acira .toast[data-artwork-toast] .toast-message { flex: 1; min-width: 0; }
+.app.style-acira .toast[data-artwork-toast] .toast-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+/* Undo is a tertiary text button; dismiss is a 24px square. */
+.app.style-acira .toast[data-artwork-toast] :is(.toast-undo, .toast-dismiss) {
+  display: inline-grid; place-items: center; min-height: 0; height: var(--control-compact, 24px); border: 0; border-radius: var(--radius-control, 4px); background: transparent; color: var(--text-primary); box-shadow: none;
+}
+.app.style-acira .toast[data-artwork-toast] .toast-undo { padding: 0 8px; font-size: var(--text-13, 13px); font-weight: 500; }
+.app.style-acira .toast[data-artwork-toast] .toast-dismiss { width: var(--control-compact, 24px); padding: 0; color: var(--text-2, var(--text-secondary)); }
+.app.style-acira .toast[data-artwork-toast] :is(.toast-undo, .toast-dismiss):hover { background: rgb(var(--ink) / .06); color: var(--text-primary); }
+.app.style-acira .toast[data-artwork-toast] :is(.toast-undo, .toast-dismiss):focus-visible { outline: 2px solid var(--focus-ring-color, var(--focus-ring)); outline-offset: 1px; box-shadow: none; }
+/* Vapor: soft to sharp in one progress, nothing blurred on frame 0, no filter left at rest. */
+@keyframes artwork-toast-in {
+  0% { opacity: 0; filter: blur(0); translate: 0 8px; }
+  40% { opacity: .6; filter: blur(3px); }
+  100% { opacity: 1; filter: none; translate: 0 0; }
+}
+@keyframes artwork-toast-out {
+  from { opacity: 1; filter: none; }
+  to { opacity: 0; filter: blur(3px); }
+}
+@keyframes artwork-toast-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes artwork-toast-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.app[data-reduced-motion='true'] .toast[data-artwork-toast] { animation: artwork-toast-fade 90ms linear backwards; }
+.app[data-reduced-motion='true'] .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out 90ms linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .app.style-acira .toast[data-artwork-toast] { animation: artwork-toast-fade 90ms linear backwards; }
+  .app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out 90ms linear forwards; }
+}
+@media (forced-colors: active) {
+  .app.style-acira .toast[data-artwork-toast] { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
+}

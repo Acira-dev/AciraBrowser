@@ -1,0 +1,348 @@
+/* Consistent control height and optical alignment across the two toolbar rows. */
+
+.app .acira-shell :is(.toolbar-actions,.focus-actions){align-items:center;gap:4px}
+
+.app .acira-shell :is(.toolbar-actions,.focus-actions)>:is(.icon-button,.profile-button){width:32px;min-width:32px;height:32px;flex:0 0 32px}
+
+.app .acira-shell :is(.toolbar-actions,.focus-actions) .profile-button span{width:24px;height:24px;font-size:11px;line-height:1}
+
+.app .acira-shell .assistant-control-group{display:flex;align-items:center;height:32px;border-radius:10px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--rim);color:var(--text)}
+
+.app .acira-shell .assistant-control-group .assistant-toggle{height:32px;border:0;box-shadow:none;background:transparent;padding:0 9px;gap:7px;border-radius:9px}
+
+.app .acira-shell .assistant-control-group .assistant-toggle.active{background:var(--selection-bg);color:var(--selection-fg)}
+
+.app .acira-shell .assistant-attention{display:flex;align-items:center;justify-content:center;gap:4px;height:28px;min-width:38px;padding:0 7px;margin:2px 2px 2px 0;border-radius:8px;background:transparent;color:var(--text);font-size:11px;font-weight:500;font-variant-numeric:tabular-nums;-webkit-app-region:no-drag}
+
+.app .acira-shell .assistant-control-group :is(.assistant-toggle,.assistant-attention):hover{background:var(--hover);color:var(--hover-text)}
+
+.app .acira-shell .assistant-attention:focus-visible{outline:2px solid var(--selection-marker);outline-offset:-2px}
+
+.app .acira-shell .compact-workspace-toggle{display:flex;align-items:center;gap:2px}
+
+.app .acira-shell .compact-view-toggle{width:30px;min-width:30px;height:30px;flex:0 0 30px}
+
+/* A 28px control in the 36px focus row leaves four visible pixels at each edge. */
+
+.app .acira-shell .focus-actions>:is(.icon-button,.profile-button){height:28px}
+
+.app .acira-focus-row .navigation-controls{margin-right:0}
+
+/* A saved page fills its star with the accent: one glance tells saved from not saved. */
+
+.app .acira-shell .address-star.bookmarked{color:var(--accent)}
+.app .acira-shell .address-star[aria-disabled=true]{color:var(--text-disabled);cursor:default;opacity:.55}
+.app .acira-shell .address-bar .address-star[aria-disabled=true]:hover{background:transparent}
+
+.app .acira-shell .address-star.bookmarked .toolbar-icon{fill:currentColor;stroke:currentColor}
+
+.app .acira-shell .address-star .toolbar-icon{transition:fill .15s,color .15s}
+
+.app[data-reduced-motion=true] .address-star .toolbar-icon{transition:none}
+
+@media(prefers-reduced-motion:reduce){.app .acira-shell .address-star .toolbar-icon{transition:none}}
+
+
+
+/* One 28px navigation/viewer rhythm in both collapsed compositions. The badge
+
+ * overlays its own control and never reserves a phantom slot before the tabs. */
+
+.app .acira-shell :is(.acira-focus-row,.compact-navigation){--toolbar-control-size:28px;gap:4px;min-width:0}
+
+.app .acira-shell :is(.acira-focus-row,.compact-navigation) .navigation-controls{gap:2px;padding:0;margin:0;height:28px}
+
+.app .acira-shell :is(.acira-focus-row,.compact-navigation) .navigation-controls .icon-button{width:var(--toolbar-control-size);min-width:var(--toolbar-control-size);height:var(--toolbar-control-size);flex:0 0 var(--toolbar-control-size)}
+
+/* The tab viewer keeps its place in every layout (founder, 25 Oct), including sidebar tabs' one toolbar row. */
+.app .acira-shell :is(.acira-focus-row,.compact-navigation,.expanded-navigation)>.toolbar-tab-overview{position:relative;display:grid;place-items:center;flex:0 0 28px;width:28px;min-width:28px;max-width:28px;height:28px;padding:0;border-radius:7px;gap:0;-webkit-app-region:no-drag}
+
+.app .acira-shell .toolbar-tab-count{position:absolute;right:-1px;top:-1px;min-width:12px;height:12px;padding:0 2px;border-radius:4px;font-size:9px;line-height:12px;font-variant-numeric:tabular-nums;background:var(--frame);color:var(--frame-text);pointer-events:none}
+
+.app .acira-shell :is(.acira-focus-row,.compact-navigation)>.acira-compact-tabs{min-width:34px}
+
+.app .acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{grid-template-columns:minmax(0,1fr) minmax(120px,30%) max-content var(--caption-width);gap:8px}
+
+.app .acira-shell:is([data-layout=compact],[data-layout=focus]) .address-bar{min-width:0}
+
+.app .acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-leading-controls{width:100%;min-width:0}
+
+.app .acira-shell:is([data-layout=compact],[data-layout=focus]) .compact-navigation{gap:4px}
+
+.app .acira-shell .tab-strip-tools[hidden]{display:none}
+
+@media(max-width:1000px){.app .acira-shell:is([data-layout=compact],[data-layout=focus]) .toolbar-optional-extension{display:none}}
+
+
+
+
+/* Keep essential return paths visible when legacy responsive rules hide optional icons. */
+
+.app.style-acira .acira-shell .toolbar-actions>.icon-button:is(.compact-view-toggle,.toolbar-menu-control){display:flex}
+
+
+
+/* Reserve real Windows caption space in Compact as in Focus, including zoom. */
+
+.app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,30%) max-content var(--caption-width);gap:8px;padding-right:0}
+
+.app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .compact-caption-space{display:block;min-width:var(--caption-width);width:var(--caption-width);height:100%}
+
+
+
+.app.style-acira .browser-shell.acira-shell:is([data-layout=focus],[data-layout=compact]) :is(.acira-focus-row,.compact-navigation) .navigation-controls{gap:2px;padding:0;margin:0;height:28px}
+
+.app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{grid-template-columns:minmax(226px,1.4fr) minmax(120px,1fr) max-content var(--caption-width)}
+
+.app.style-acira .browser-shell.acira-shell .acira-focus-row>.titlebar-drag{min-width:12px;flex:1 1 12px}
+
+@media(max-width:1000px){.app.style-acira .browser-shell.acira-shell:is([data-layout=focus],[data-layout=compact]) .toolbar-optional-extension{display:none}}
+
+
+
+.page-pane>.page-zoom-content{zoom:var(--page-zoom,1);width:calc(100% / var(--page-zoom,1));height:calc(100% / var(--page-zoom,1));min-height:calc(100% / var(--page-zoom,1));}
+
+/* UF-001: one rhythm in Compact and Focus — 2px inside a control group, 6px between groups.
+   The tab-count badge sits inside its own 28px control (ringed in the frame color), so the
+   first tab is spaced from the control, never from a badge hanging past it. */
+.app.style-acira .browser-shell.acira-shell :is(.acira-focus-row,.compact-navigation){gap:6px}
+.app.style-acira .browser-shell.acira-shell :is(.acira-focus-row,.compact-navigation) .navigation-controls{gap:2px}
+.app.style-acira .browser-shell.acira-shell .toolbar-tab-count{right:1px;top:1px;min-width:11px;height:11px;padding:0 2px;border-radius:4px;font-size:8.5px;line-height:11px;font-weight:600;box-shadow:0 0 0 1.5px var(--frame)}
+/* UF-003: the tab strip, not the drag spacer, takes spare width, so fitted tabs keep their titles;
+   the strip's own trailing area after the plus remains a window drag region. */
+.app.style-acira .browser-shell.acira-shell .acira-focus-row>.titlebar-drag{flex:0 0 8px;min-width:8px}
+.app.style-acira .browser-shell.acira-shell .acira-focus-row>.acira-compact-tabs{flex:1 1 0;width:auto}
+/* Round 2 (founder): the Focus mode button never moves when toggled. With tabs in the sidebar the focus row has no
+   strip to take the spare width, so the drag spacer does and the actions stay at the right edge; the actions are the
+   same 28px buttons as the toolbar's, and the profile button, which only the focus row shows, sits at their left end,
+   so the toggle keeps its place next to the menu in both states. */
+.app.style-acira .browser-shell.acira-shell .acira-focus-row:not(:has(>.acira-compact-tabs))>.titlebar-drag{flex:1 1 12px}
+.app.style-acira .browser-shell.acira-shell .focus-actions>:is(.icon-button,.profile-button){width:28px;min-width:28px;flex:0 0 28px}
+.app.style-acira .browser-shell.acira-shell :is(.focus-actions,.toolbar-actions)>.toolbar-optional-profile{order:-1}
+.app.style-acira .browser-shell.acira-shell .focus-actions{margin-right:6px}
+/* UF-042: in sidebar-only tabs the sidebar toggle joins the navigation group on the single top row. */
+.app.style-acira .browser-shell.acira-shell .expanded-navigation:not([hidden]){display:flex;align-items:center;gap:6px}
+/* UF-008's top-bar auto-hide strip is gone: Seamless (seamless.css) replaces it. */
+/* §5.1 address field: 28px, 4px radius, one surface and one 2px focus ring; left-aligned URL in Geist 13 with the
+   registrable domain at full strength and the rest at 56%. No motion on focus. */
+.app.style-acira .browser-shell .address-bar{height:28px;border-radius:var(--radius-control,4px);box-shadow:none}
+/* Round 2: the field's own buttons (site information, bookmark star) are 22px circles set 3px in from its edges, so
+   their hover fill never meets the field's border or gets clipped by it. In compact the field is 26px, 3px off the
+   32px row's edges instead of touching them. */
+.app.style-acira .browser-shell .address-bar :is(.address-security,.address-star){width:22px;height:22px;min-width:22px;flex:0 0 22px;border-radius:50%}
+.app.style-acira .browser-shell .address-bar .address-security{margin-left:3px}
+.app.style-acira .browser-shell .address-bar .address-star{margin-right:3px}
+.app.style-acira .browser-shell .address-bar :is(.address-security,.address-star){transition:background-color 120ms var(--ease-out,cubic-bezier(.2,0,0,1))}
+.app.style-acira .browser-shell .address-bar :is(.address-security,.address-star):hover{background:color-mix(in srgb,currentColor 11%,transparent)}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .address-bar{height:26px}
+/* Founder, 24 Oct: the focus ring sits inside the field (inset 2px, radius concentric with the field's 4px), so the
+   focused field keeps 4px clear above and below inside the 36px toolbar at every zoom and never touches its edges. */
+.app.style-acira .browser-shell .address-bar:focus-within{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px;box-shadow:none}
+.app.style-acira .browser-shell .address-bar .address-field{position:relative;flex:1;min-width:0;height:100%;display:flex;align-items:center}
+.app.style-acira .browser-shell .address-bar .address-field>input{width:100%;height:100%;padding:0 8px!important;font:400 13px/1 var(--font-ui);text-align:left;background:none;border:0;outline:none}
+.app.style-acira .browser-shell .address-bar .address-field[data-display]>input{color:transparent;caret-color:transparent}
+.app.style-acira .browser-shell .address-bar .address-field[data-display]>input::placeholder{color:transparent}
+.app .address-display{position:absolute;left:8px;right:8px;top:50%;transform:translateY(-50%);pointer-events:none;font:400 13px/1.25 var(--font-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary,var(--text))}
+/* The quiet parts dim their colour, not their layer, so a drag painted over the at-rest text (::highlight below) reads
+ evenly; while a press holds the at-rest text over the focused field, the input's own selection stays invisible. */
+.app .address-display .address-quiet{color:color-mix(in srgb,currentColor 56%,transparent)}
+.app .address-field[data-display]>input::selection{background:transparent;color:transparent}
+.app .address-display::highlight(acira-address-drag),.app .address-display ::highlight(acira-address-drag){background-color:Highlight;color:HighlightText}
+.app .address-insecure{margin-right:8px;font-size:12px;color:var(--status-error,#c93b3b)}
+.app .nt-search .address-display{display:none}
+/* §5.1 thin chrome: 28px icon buttons (16px glyphs) in the 36px toolbar. */
+.app.style-acira .browser-shell .acira-persistent-toolbar :is(.toolbar-actions,.navigation-controls,.expanded-navigation)>:is(.icon-button,.profile-button){width:28px;min-width:28px;height:28px;flex:0 0 28px}
+.app.style-acira .browser-shell .acira-persistent-toolbar .navigation-controls{gap:4px}
+.app.style-acira .browser-shell .acira-tab-row>:is(.icon-button,.tab-strip-tools .icon-button){width:28px;height:28px;min-width:28px}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{height:32px;align-items:center}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) :is(.acira-compact-tabs,.acira-compact-tabs-viewport,.acira-compact-tabs-track){height:32px}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .acira-compact-tab{height:28px}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .acira-compact-selection{top:2px;height:28px}
+.app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) :is(.compact-navigation .icon-button,.toolbar-tab-overview,.acira-compact-new,.toolbar-actions>.icon-button,.toolbar-actions>.profile-button){width:28px;min-width:28px;height:28px;flex-basis:28px}
+/* Bible §3.1 mono budget / §4 kbd: key caps are Geist 11/500 in a hairline box, never mono. */
+.app kbd{font-family:var(--font-ui);font-weight:500}
+/* Split drop zone: the right half of a previewing split while a tab rests over it (the page already sits left). */
+.app .split-drop-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;margin:0;border-radius:var(--page-radius,8px);background:color-mix(in srgb,var(--accent,#3b82f6) 8%,transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent,#3b82f6) 45%,transparent);color:color-mix(in srgb,var(--text-primary,currentColor) 72%,transparent);font:500 13px/1.3 var(--font-ui);animation:split-zone-in 140ms cubic-bezier(.23,1,.32,1) both}
+.app .split-drop-zone>svg{color:var(--accent,currentColor)}
+.app[data-reduced-motion=true] .split-drop-zone{animation:none}
+@keyframes split-zone-in{from{opacity:0}}
+/* Capture indicator (D's camera / microphone / screen state, bible §3.9 + danger tone). One recording red per theme,
+   one calm 0.5Hz pulse on every dot (tab strip, sidebar, address chip), static under reduced motion. The address chip
+   names what is shared with its glyphs and says "Stop": tinted, not solid, so it never shouts over the page. */
+.app{--capture:#c4362b}
+.app[data-theme=dark]{--capture:#f0786f}
+.app .browser-tab[data-capturing]::before,.app .sb-tab-capture>span,.app .address-capture>.address-capture-dot{background:var(--capture);animation:capture-pulse 2s ease-in-out infinite}
+.app .address-capture{flex:0 0 auto;width:auto;height:22px;display:inline-flex;align-items:center;gap:5px;margin:0 4px 0 2px;padding:0 8px 0 7px;border:0;border-radius:var(--radius-control,4px);
+ background:color-mix(in srgb,var(--capture) 12%,transparent);color:var(--capture);font:500 12px/1 var(--font-ui);cursor:default;transition:background-color 120ms var(--ease-out,cubic-bezier(.2,0,0,1))}
+.app .address-capture:hover{background:color-mix(in srgb,var(--capture) 20%,transparent)}
+.app .address-capture:active{background:color-mix(in srgb,var(--capture) 26%,transparent)}
+.app .address-capture:focus-visible{outline:2px solid var(--capture);outline-offset:1px}
+.app .address-capture>.address-capture-dot{flex:0 0 6px;width:6px;height:6px;border-radius:50%}
+.app .address-capture>svg{flex:0 0 14px}
+.app .address-capture>.address-capture-label{width:auto;height:auto;border-radius:0;background:none;animation:none}
+.app .address-capture:hover>.address-capture-label{text-decoration:underline;text-underline-offset:2px}
+@keyframes capture-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.app[data-reduced-motion=true] .browser-tab[data-capturing]::before,.app[data-reduced-motion=true] .sb-tab-capture>span,.app[data-reduced-motion=true] .address-capture>.address-capture-dot{animation:none}
+@media (forced-colors:active){.app .address-capture{border:1px solid ButtonText;background:ButtonFace;color:ButtonText}.app .address-capture>.address-capture-dot{background:Highlight}}
+/* Private windows say so, quietly (Chrome shows its incognito mark in the same place). */
+.app .toolbar-private-chip{display:inline-flex;align-items:center;flex:none;height:22px;padding:0 8px;margin-right:4px;border-radius:var(--radius-control,4px);box-shadow:inset 0 0 0 1px var(--chrome-line,rgb(var(--ink) / .14));font:500 12px/1 var(--font-ui,inherit);color:var(--chrome-text-2,rgb(var(--ink) / .64));white-space:nowrap;user-select:none;-webkit-app-region:no-drag}
+/* The raised toolbar surface (founder, 24 Oct) and its rim, shared with the sidebar's current row. The tab strip itself
+   keeps the original design (founder, 25 Oct): BrowserTabs.css and selection.css. */
+.app.style-acira{--tab-surface:rgb(255 255 255 / .92);--tab-rim:rgb(0 0 0 / .06);--tab-hover:rgb(0 0 0 / .05);--tab-lift:0 1px 2px rgb(0 0 0 / .05)}
+/* The chrome tone (not the page theme) decides: some finishes pair dark chrome with light pages. Values match G's sidebar. */
+.app.style-acira[data-chrome=dark]{--tab-surface:rgb(255 255 255 / .10);--tab-rim:rgb(255 255 255 / .10);--tab-hover:rgb(255 255 255 / .05);--tab-lift:0 -1px 0 rgb(255 255 255 / .03)}
+:root .app.style-acira .browser-shell>.browser-toolbar.acira-persistent-toolbar{background:var(--tab-surface)}
+/* Founder, 24 Oct: the raised toolbar and the page are one surface with one outline. Under the toolbar the page has
+   square corners and no ring (native views get pageRadius 0 from App), so the left and right edges run straight from
+   the page bottom to the top. With the sidebar open, G's frame takes over (sidebar.css: the toolbar joins the frame
+   and the page is an inset card), so no corner rounds here. */
+.app.style-acira .browser-root .browser-body>.page-area{border-radius:0;box-shadow:none}
+/* Private and Tor tabs (founder, 25 Oct; Round 2 review; R3-59), in the strip and the compact strip, with the same tokens as
+   G's sidebar rows and the Tor address field. Two hues, never alike (founder, 26 Oct): Tor keeps its purple, private is a deep
+   teal, far from it on the wheel, in both themes. Each has a WASH (the fill: a richer, more saturated colour) and a MARK (the
+   glyph, ring and pill ink: the same hue, tuned for contrast on the strip). At rest a tab carries the wash as a left-to-right
+   gradient, clear to full at the right edge where its glyph sits (a little more on hover), and when active it is the normal
+   selected tab plus a gentle wash and a 1px ring in its mark colour. The glyph, F's mask or N's onion, takes the icon's place on
+   the new-tab state and otherwise sits at the end of the row, in the close button's slot: hovering the tab swaps it for the
+   close x; on the active tab both show, side by side. Title ink stays the strip's ink: at least 4.5:1 on every wash. */
+.app.style-acira{--private-mark:#0c746f;--private-wash:#119a93;--tor-mark:#6a3f86;--tor-wash:#8a4cb8;--private-rest:30%;--private-hover:40%;--private-current:14%;--private-ring:62%;--tor-rest:32%;--tor-hover:37%;--tor-current:14%;--tor-ring:62%;--tor-field:24%}
+.app.style-acira[data-chrome=dark]{--private-mark:#7ee3da;--private-wash:#1fb3a9;--tor-mark:#dcc7f6;--tor-wash:#a26ad8;--private-rest:38%;--private-hover:48%;--private-current:18%;--tor-rest:40%;--tor-hover:50%;--tor-current:18%;--tor-field:30%}
+.app :is(.browser-tab,.tab-strip-selection,.acira-compact-tab,.acira-compact-selection)[data-privacy=private]{--tab-mark:var(--private-mark);--tab-wash:var(--private-wash);--mark-rest:var(--private-rest);--mark-hover:var(--private-hover);--mark-current:var(--private-current);--mark-ring:var(--private-ring)}
+.app :is(.browser-tab,.tab-strip-selection,.acira-compact-tab,.acira-compact-selection)[data-privacy=tor]{--tab-mark:var(--tor-mark);--tab-wash:var(--tor-wash);--mark-rest:var(--tor-rest);--mark-hover:var(--tor-hover);--mark-current:var(--tor-current);--mark-ring:var(--tor-ring)}
+.app .tab-strip-container .browser-tab[data-privacy]:not(.selected),.app .acira-compact-tab[data-privacy]:not(.selected){background:linear-gradient(to right,transparent 12%,color-mix(in srgb,var(--tab-wash) var(--mark-rest),transparent))}
+.app.style-acira .tab-strip-container .tabs-strip>.browser-tab[data-privacy]:not(.selected){color:var(--frame-text)}
+.app .tab-strip-container .browser-tab[data-privacy]:not(.selected):hover,.app .acira-compact-tab[data-privacy]:not(.selected):hover{background:linear-gradient(to right,color-mix(in srgb,var(--tab-wash) 6%,transparent),color-mix(in srgb,var(--tab-wash) var(--mark-hover),transparent))}
+.app.style-acira .tab-strip-container .tab-strip-selection[data-privacy]{background:linear-gradient(to right,transparent 12%,color-mix(in srgb,var(--tab-wash) var(--mark-current),transparent)),var(--tab-surface);box-shadow:var(--tab-lift-active)}
+.app.style-acira .acira-compact-selection[data-privacy]{background-image:linear-gradient(to right,transparent 12%,color-mix(in srgb,var(--tab-wash) var(--mark-current),transparent))}
+.app :is(.browser-tab,.acira-compact-tab-inner)>.tab-privacy-mark{flex:0 0 16px;display:grid;place-items:center;width:16px;height:16px;color:var(--tab-mark)}
+.app .acira-compact-tab-icon>.tab-privacy-mark{display:grid;place-items:center;color:var(--tab-mark)}
+/* P0 28 Oct: a mark is a picture. Where it slides over the × slot and fades out on hover (the current compact tab, background strip tabs), its transform paints it above the × and it took the click: closing the current Tor tab only re-selected it. It never takes the pointer. */
+.app :is(.browser-tab,.acira-compact-tab) :is(.tab-privacy-mark,.tab-privacy-badge){pointer-events:none}
+/* The trailing mark and the close x share one slot (R3-59): a resting tab shows its glyph at the end of the row, hovering swaps it for
+   the x (the mark is laid out at zero width over the x's slot and fades; the x was already there). The active tab keeps both side by
+   side, so its identity never disappears. Compact tabs show the x only on the active one, so only there is there a swap. */
+@container (min-width:105px){
+.app .tab-strip-container .browser-tab[data-privacy]:not(.selected):not([data-icon-only=true])>.tab-privacy-mark:not(.tab-privacy-icon){margin-right:-16px;transform:translateX(calc((var(--tab-control,20px) - 16px) / 2));transition:opacity 90ms cubic-bezier(.2,0,0,1)}
+.app .tab-strip-container .browser-tab[data-privacy]:not(.selected):is(:hover,:focus-within)>.tab-privacy-mark:not(.tab-privacy-icon){opacity:0}
+}
+.app .acira-compact-tab.selected[data-privacy][data-labels=true] .acira-compact-tab-inner>.tab-privacy-mark{margin-right:-16px;transform:translateX(calc((20px - 16px) / 2));transition:opacity 90ms cubic-bezier(.2,0,0,1)}
+.app .acira-compact-tab.selected[data-privacy]:is(:hover,:focus-within) .acira-compact-tab-inner>.tab-privacy-mark{opacity:0}
+/* Icon-only tabs (pinned, crowded, or the compact strip without titles) have no room for the trailing mark, so it
+   becomes a 12px badge on the favicon's lower right corner, filled with the tab's colour. */
+.app.style-acira{--mark-on:#fff}
+.app.style-acira[data-chrome=dark]{--mark-on:#17161f}
+.app .tab-strip-container .browser-tab[data-icon-only=true][data-privacy],.app .acira-compact-tab-icon{position:relative}
+.app .tab-strip-container .browser-tab[data-icon-only=true]>.tab-privacy-mark:not(.tab-privacy-icon){position:absolute;left:calc(50% + 2px);top:calc(50% + 1px);width:12px;height:12px;border-radius:50%;background:var(--tab-mark);color:var(--mark-on)}
+.app .acira-compact-tab-icon>.tab-privacy-badge{display:none;position:absolute;right:-5px;bottom:-4px;width:12px;height:12px;place-items:center;border-radius:50%;background:var(--tab-mark);color:var(--mark-on)}
+.app :is(.tab-strip-container .browser-tab[data-icon-only=true]>.tab-privacy-mark:not(.tab-privacy-icon),.acira-compact-tab-icon>.tab-privacy-badge)>svg{width:9px;height:9px}
+.app .acira-compact-tab[data-labels=false] .acira-compact-tab-inner>.tab-privacy-mark{display:none}
+.app .acira-compact-tab[data-labels=false] .acira-compact-tab-icon>.tab-privacy-badge{display:grid}
+@container (max-width:96px){.app .acira-compact-tab-inner>.tab-privacy-mark{display:none}.app .acira-compact-tab-icon>.tab-privacy-badge{display:grid}}
+@media (forced-colors:active){.app :is(.browser-tab,.acira-compact-tab)[data-privacy] .tab-privacy-mark{color:CanvasText}.app :is(.tab-strip-selection,.acira-compact-selection)[data-privacy]{box-shadow:inset 0 0 0 1px CanvasText}.app :is(.browser-tab,.acira-compact-tab-icon) :is(.tab-privacy-mark,.tab-privacy-badge)[class]{background:Canvas;color:CanvasText}}
+/* Long tab titles (founder, Round 2): the title fades out at its end instead of an ellipsis, and on hover scrolls like a
+   marquee inside that fade (ui/titleMarquee.ts moves .tab-title-text); while it scrolls, both ends fade. */
+.app .tab-strip-container:not(.vertical) .browser-tab>.tab-title,.app .acira-compact-tab-label{text-overflow:clip;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 20px),transparent)}
+.app .tab-strip-container:not(.vertical) .browser-tab>.tab-title[data-marquee],.app .acira-compact-tab-label[data-marquee]{-webkit-mask-image:linear-gradient(to right,transparent,#000 14px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(to right,transparent,#000 14px,#000 calc(100% - 20px),transparent)}
+.app :is(.tab-title,.acira-compact-tab-label)>.tab-title-text{display:inline-block;vertical-align:top;white-space:nowrap}
+/* Keyboard focus is never clipped and never touches an edge (bible §3.10, M's E04). Every control in the chrome band
+   draws its 2px ring inset, inside its own hit box, so the 36px rows keep air around it: a 28px button keeps 4px each
+   side (the general 2px offset made its ring exactly 36px, flush with the band). Tabs fill their strip's height and the
+   first one sits on the strip's left edge, so their ring sits 2px further in (at 150% the edges snap to a third of a
+   pixel, and 1px left only 0.7px of air). A split pane's 32px label bar (E08) is
+   clipped with its pane, so its × draws the same inset ring. */
+.app .browser-shell :is(button,[role=button]):focus-visible,
+.app .split-label :is(button,[role=button]):focus-visible,
+.app .address-bar :is(button,[role=button]):focus-visible,
+.app .titlebar :is(.tab-strip-tools,.tab-strip-add) :is(button,[role=button]):focus-visible{outline-offset:-2px}
+.app.style-acira .tab-strip-viewport .browser-tab:focus-visible,
+.app .acira-compact-tab:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-4px}
+/* Windows contrast themes (forced colors): the chrome is a solid Canvas surface, never the acrylic behind a
+   transparent window, and the URL is plain field text (the styled overlay relies on a transparent input, which forced
+   colors repaints, so both drew on top of each other: "…/article.htmle.html"). */
+@media (forced-colors:active){
+ html,body,.app,.app .browser-root,.app .browser-shell{background:Canvas!important;color:CanvasText}
+ .app .address-display{display:none}
+}
+/* Compact toolbar (founder, 25 Oct): one row with the address field at its heart, not pushed to one side. The field sits
+   at the window's centre with a deliberate width (Safari, Orion); navigation and tabs balance it on the left and the
+   actions on the right. The two sides are equal columns, so the field is centred on the window, not on what is left. */
+:root:root:root .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar{--compact-field:clamp(220px,calc(66vw - 380px),560px);display:grid;grid-template-columns:minmax(var(--fit-lead,0px),1fr) minmax(0,var(--compact-field)) minmax(max-content,1fr);column-gap:12px;padding:0 12px}
+:root:root:root .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar>.acira-leading-controls{grid-column:1;width:100%;max-width:none;min-width:0}
+:root:root:root .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar>.address-bar{grid-column:2;width:100%;min-width:0}
+:root:root:root .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar>.toolbar-actions{grid-column:3;justify-self:end;margin-right:calc(var(--caption-width,138px) - 12px)}
+:root:root:root .app.style-acira .browser-shell.acira-shell:is([data-layout=compact],[data-layout=focus]) .acira-persistent-toolbar>.compact-caption-space{display:none}
+/* Bookmarks bar (founder, 25 Oct): the same surface as the toolbar above it, one chrome with no colour step, and its
+   items on the toolbar's grid: 28px rows of favicon and title starting where the back button does, a 4px-radius hover
+   fill, and the overflow chevron at the end. */
+.app.style-acira .browser-shell>.acira-bookmarks-row{background:var(--tab-surface)}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar{height:36px;gap:2px;padding:0 12px;font:450 12px/16px var(--font-ui,inherit)}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>button{height:28px;gap:6px;padding:0 8px;border-radius:var(--radius-control,4px);background:transparent;color:color-mix(in srgb,var(--text-primary,currentColor) 84%,transparent);transition:background-color 120ms var(--ease-out,cubic-bezier(.2,0,0,1)),color 120ms var(--ease-out,cubic-bezier(.2,0,0,1))}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>button:hover{background:color-mix(in srgb,var(--text-primary,currentColor) 6%,transparent);color:var(--text-primary,currentColor)}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>button:active{background:color-mix(in srgb,var(--text-primary,currentColor) 10%,transparent)}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>button:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px}
+.app.style-acira .acira-bookmarks-row .bookmarks-bar>.bookmark-overflow{flex:0 0 28px;width:28px;min-width:28px;padding:0;justify-content:center}
+/* A tab dragged over the bookmarks bar: the bar lights up as the drop target (the split zone's accent), and releasing
+   bookmarks the tab's page at that place. */
+.app .acira-bookmarks-row .bookmarks-bar[data-tab-drop]{border-radius:var(--radius-control,4px);background:color-mix(in srgb,var(--accent,#3b82f6) 8%,transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent,#3b82f6) 45%,transparent)}
+/* The address field in the full toolbar (bible §5.1, benchmark I#3): never wider than 720px, centred in the space between
+   navigation and actions, so a wide window gets a balanced field instead of a full-width bar. */
+.app.style-acira .browser-shell.acira-shell[data-layout=standard] .acira-persistent-toolbar>.address-bar{flex:1 1 auto;width:auto;min-width:0;max-width:720px;margin-inline:auto}
+/* A private window says so at a glance (benchmark part 2): its whole chrome wears the private finish (theme.ts) and the
+   toolbar carries the mask and "Private" on a soft pill of the window's own violet. Tor windows have N's live Tor chip. */
+.app .toolbar-private-chip{gap:6px;height:24px;padding:0 10px 0 8px;border-radius:12px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--private-mark,#7ee3da) 42%,transparent);background:color-mix(in srgb,var(--private-mark,#7ee3da) 16%,transparent);font:500 12px/1 var(--font-ui,inherit);color:rgb(var(--chrome-ink,255 255 255))}
+.app .toolbar-private-chip>svg{flex:none;color:var(--private-mark,#7ee3da)}
+.app[data-chrome=dark] .toolbar-private-chip{--private-mark:#8fe9e1}
+@media (forced-colors:active){.app .toolbar-private-chip{box-shadow:none;border:1px solid CanvasText;background:Canvas;color:CanvasText}.app .toolbar-private-chip>svg{color:CanvasText}}
+/* Sidebar open (G's frame, 75325fe2): the toolbar sits on the window frame and the page is a card set into it, so the
+   bookmarks bar joins the frame too: transparent, with the frame's own private/Tor tint showing through (no second tint). */
+:root:not([data-edge-float]) .app.style-acira:has(>.ed-rail.is-expanded)>.browser-root .browser-shell>.acira-bookmarks-row{background:transparent}
+/* The active tab, unmistakable (founder, 25 Oct; Chrome, Safari, Arc): the original strip keeps its shape and motion, but
+   the active tab is now made of the raised toolbar surface and lifts off a strip that sits a step back (Chrome's frame
+   is recessed under its tabs), with a hairline rim and a soft shadow. Inactive titles stay one ink step quieter, still
+   6:1 or better. Measured on real pixels: the active surface is at least .06 OKLab lighter than the strip in every finish,
+   light and dark (it used to be darker than the strip in light finishes, which read as a hollow, not a selection). */
+.app.style-acira{--tab-strip-recess:rgb(0 0 0 / .05);--tab-lift-active:0 0 0 .5px rgb(0 0 0 / .07),0 1px 2px rgb(0 0 0 / .08),0 2px 8px -3px rgb(0 0 0 / .12)}
+.app.style-acira[data-chrome=dark]{--tab-strip-recess:rgb(0 0 0 / .22);--tab-lift-active:inset 0 0 0 1px rgb(255 255 255 / .07),0 1px 3px rgb(0 0 0 / .4)}
+:root:root .app.style-acira .browser-shell>.acira-tab-row{background-image:linear-gradient(var(--tab-strip-recess),var(--tab-strip-recess))}
+.app.style-acira .tab-strip-container .tab-strip-selection:not([data-privacy]){background:var(--tab-surface);box-shadow:var(--tab-lift-active)}
+.app.style-acira .tab-strip-container .tabs-strip>.browser-tab:not(.selected){color:color-mix(in srgb,var(--frame-text) 80%,transparent)}
+.app.style-acira .tab-strip-container .tabs-strip>.browser-tab.selected{color:var(--frame-text)}
+
+/* Scam-page caution (ClickFix, look-alike sign-in): a red ring on the tab; the tooltip says what Acira saw. */
+.app :is(.browser-tab,.sb-tab)[data-risk]{outline:1.5px solid color-mix(in srgb,var(--danger,#d93025) 78%,transparent);outline-offset:-1.5px}
+/* Round 2 (A's layout view transition, src/runtime/client.ts): when the toolbar layout, the bookmarks bar, Focus mode or
+   the sidebar switches, the tab row, the bookmarks bar and the focus row glide to their new place with the toolbar
+   (G names the toolbar and the sidebar). One element per name: a duplicate aborts the transition. */
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-tab-row{view-transition-name:acira-tab-row}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-bookmarks-row{view-transition-name:acira-bookmarks}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-focus-row{view-transition-name:acira-focus-row}
+/* Round 2 (M, P02): one size per role, with A's controls (28px, radius 6) and bible §5.1. Chrome icon buttons (the
+   toolbar, the tab row's tools, the + in every strip, the Focus row): a 28×28 hit area, radius 6, a 16px glyph (the
+   glyphs are drawn on a 16px grid, so they land on whole pixels). Buttons inside the address field: 22px circles
+   (above). Controls inside a tab (close, mute): 20×20, radius 4, a 14px glyph. */
+.app.style-acira{--chrome-button:28px;--chrome-glyph:16px;--tab-control:20px;--tab-control-glyph:14px}
+:root .app.style-acira .acira-shell :is(.icon-button,.toolbar-tab-overview,.acira-compact-new,.focus-tab-overview){width:var(--chrome-button);min-width:var(--chrome-button);max-width:var(--chrome-button);height:var(--chrome-button);flex:0 0 var(--chrome-button);padding:0;border-radius:6px}
+:root .app.style-acira .acira-shell :is(.icon-button,.toolbar-tab-overview,.acira-compact-new,.focus-tab-overview) svg{width:var(--chrome-glyph);height:var(--chrome-glyph)}
+:root .app.style-acira :is(.tab-strip-container :is(.tab-close,.tab-audio,.standard-tab-icon-close),.acira-compact-tab :is(.acira-compact-tab-close,.acira-compact-tab-audio)){width:var(--tab-control);height:var(--tab-control);min-width:var(--tab-control);flex:0 0 var(--tab-control);border-radius:4px}
+:root .app.style-acira :is(.tab-strip-container :is(.tab-close,.tab-audio,.standard-tab-icon-close),.acira-compact-tab :is(.acira-compact-tab-close,.acira-compact-tab-audio))>svg{width:var(--tab-control-glyph);height:var(--tab-control-glyph)}
+/* P09 (M): the toolbar's overflow ». Shown only while its row hides one of its enabled buttons (ui/toolbarOverflow.ts marks
+   the row with their ids); its menu lists exactly those and has no title bar. */
+.app .acira-shell .toolbar-overflow{display:none}
+:root .app.style-acira .acira-shell :is(.toolbar-actions,.focus-actions)[data-overflow]:not([data-overflow="profile"])>.toolbar-overflow{display:grid;place-items:center}
+.app .acira-shell .toolbar-overflow-profile{display:none}
+:root .app.style-acira .acira-shell :is(.toolbar-actions,.focus-actions)[data-overflow="profile"]>.toolbar-overflow-profile{display:grid;place-items:center}
+:root:root:root .browser-popup.popup-content-toolbar-overflow>.popup-header{display:none}
+/* Enabled profile controls stay direct in every layout. A sole-profile overflow
+   uses the same avatar and hit area; explicit toolbar preferences still decide
+   whether the control exists. Focus remains on the button, never the avatar. */
+.app.style-acira .browser-root .acira-shell :is(.toolbar-actions,.focus-actions)>.toolbar-optional-profile{display:grid;place-items:center}
+.app.style-acira .browser-root .acira-shell :is(.toolbar-actions,.focus-actions)>:is(.toolbar-optional-profile,.toolbar-overflow-profile){width:28px;min-width:28px;height:28px;flex:0 0 28px;padding:0;border-radius:6px}
+.app.style-acira .acira-shell .profile-button>.profile-avatar{flex:none}
+/* Toolbar fit (ui/toolbarFit.ts, toolbarOverflow.ts): the address field shrinks first; once it is down to its minimum
+   (fitMetrics.addressMin, 140px) what still does not fit leaves the row for the » menu. The field's own min-width is 0 so
+   the Acira menu and the caption buttons never move, even in a window too small for the minimum. */
+:root .app .acira-shell [data-fit-hidden]{display:none!important}
+
+/* Seamless changes chrome visibility, not the address field's finish. A hover
+   keeps the correct resting fill; focus still has its normal editing treatment. */
+.app.style-acira .browser-shell[data-seamless] .address-bar:not(:focus-within):hover { background:var(--address-fill); }

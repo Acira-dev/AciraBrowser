@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Passwords</title>
+<style>
+/* Password suggestions and the save/update prompt, to the Transient surfaces spec (bible §4): the opaque popover tone, radius 8, rows 4,
+   320 wide with 16px padding, title 13/500 over a 12px detail, 28px buttons right-aligned with the default first. Motion is transform and
+   opacity only: the prompt enters in 180ms (ease-strong) and leaves in 120ms (ease-in); the list is a keyboard surface (80ms fade).
+   Text only, never HTML from a page. */
+:root{
+ --bg:#1e1e22;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-3:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--hover:rgb(255 255 255/.07);
+ --edge:rgb(255 255 255/.14);
+ --np-bg:#ededef;--np-fg:#0e0e10;--np-hover:#fff;--ring:#6ea8ff;--strong:cubic-bezier(.23,1,.32,1);color-scheme:dark;
+}
+body.light{
+ --bg:#ffffff;--ink:rgb(29 31 36/.92);--ink-2:rgb(29 31 36/.64);--ink-3:rgb(29 31 36/.44);--line:rgb(0 0 0/.09);--hover:rgb(0 0 0/.05);
+ --edge:rgb(0 0 0/.16);
+ --np-bg:#17171a;--np-fg:#fff;--np-hover:#26262b;--ring:#2563eb;color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
+#panel{position:absolute;inset:0;margin:0;border-radius:8px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--edge);overflow:auto}
+#panel[hidden]{display:none}
+/* suggestions */
+#list{display:flex;flex-direction:column;gap:2px;padding:4px;min-height:100%}
+#list[hidden]{display:none}
+.row{flex:none;display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:4px;cursor:default;color:var(--ink)}
+.row[data-active]{background:var(--hover)}
+.row svg{width:16px;height:16px;fill:none;stroke:var(--ink-2);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.row .label{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .secondary{font-size:12px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+/* prompt */
+#save{display:flex;flex-direction:column;gap:12px;padding:16px;min-height:100%;height:max-content}
+#save[hidden]{display:none}
+.top{display:flex;align-items:flex-start;gap:8px}
+.top h1{margin:0;flex:1;font:500 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+.top .host{display:block;margin-top:2px;font:400 12px/1.3 Geist,system-ui,sans-serif;color:var(--ink-2)}
+.close{flex:none;display:grid;place-items:center;width:24px;height:24px;margin:-2px -4px 0 0;padding:0;border:0;border-radius:4px;background:none;color:var(--ink-2);cursor:default}
+.close:hover{background:var(--hover);color:var(--ink)}
+.close svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+dl{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px 8px;margin:0}
+dt{font-size:12px;color:var(--ink-3);align-self:center}
+dd{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:450}
+dd.dots{letter-spacing:.12em;color:var(--ink-2)}
+.buttons{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin-top:auto}
+button.act{height:28px;padding:0 12px;border:0;border-radius:4px;font:500 13px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
+button.act:active{transform:scale(.97)}
+button.quiet{background:none;color:var(--ink-2)}
+button.quiet:hover{background:var(--hover);color:var(--ink)}
+button.primary{background:var(--np-bg);color:var(--np-fg)}
+button.primary:hover{background:var(--np-hover)}
+button:focus-visible,.row:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+#panel{transform-origin:100% 0}
+#panel.in{animation:in 180ms var(--strong)}
+#panel.fast{animation:fade 80ms linear}
+#panel.out{animation:out 120ms cubic-bezier(.4,0,1,1) forwards}
+@keyframes in{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes out{to{opacity:0;transform:scale(.98)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes fade-out{to{opacity:0}}
+body.reduced #panel.in{animation:fade 80ms linear}
+body.reduced #panel.out{animation:fade-out 80ms linear forwards}
+@media (forced-colors:active){#panel{outline:1px solid CanvasText}.row[data-active]{outline:1px solid Highlight}button.primary{outline:1px solid ButtonText}}
+</style>
+</head>
+<body>
+<div id="panel" hidden>
+ <div id="list" role="listbox" aria-label="Saved passwords" hidden></div>
+ <div id="save" role="dialog" aria-labelledby="title" hidden>
+  <div class="top"><h1 id="title"><span id="titleText"></span><span class="host" id="host"></span></h1>
+   <button class="close" id="close" type="button" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></div>
+  <dl><dt id="lblUser">Username</dt><dd id="user"></dd><dt id="lblPass">Password</dt><dd id="pass" class="dots"></dd></dl>
+  <div class="buttons"><button class="act primary" id="primary" type="button"></button><button class="act quiet" id="never" type="button">Never for this site</button></div>
+ </div>
+</div>
+<script>
+const $=id=>document.getElementById(id),body=document.body;
+const ICONS={login:'<svg viewBox="0 0 16 16"><circle cx="5.5" cy="10.5" r="2.5"/><path d="M7.5 8.75L13 3.25M11 5.25l1.75 1.75M9.25 7l1.25 1.25"/></svg>',generate:'<svg viewBox="0 0 16 16"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3zM12.5 11.5v3M11 13h3"/></svg>'};
+let hover=-1,current=null;
+function esc(text){const node=document.createElement('span');node.textContent=String(text??'');return node.innerHTML;}
+function render(state){
+ const w=state.t||{};
+ $('list').setAttribute('aria-label',w.list||'Saved passwords');$('close').setAttribute('aria-label',w.close||'Close');$('lblUser').textContent=w.username||'Username';$('lblPass').textContent=w.password||'Password';$('never').textContent=w.never||'Never for this site';
+ body.classList.toggle('light',state.dark===false);body.classList.toggle('reduced',!!state.reducedMotion);
+ const panel=$('panel'),was=current&&!panel.hidden&&!panel.classList.contains('out')?current.mode:'';
+ const enter=kind=>{if(was===kind)return;panel.classList.remove('in','fast','out');void panel.offsetWidth;panel.classList.add(kind==='save'?'in':'fast');};
+ if(state.mode==='none'||!state.mode){panel.hidden=true;panel.classList.remove('in','fast','out');$('list').hidden=true;$('save').hidden=true;current=null;return;}
+ if(state.mode==='leave'){if(current){panel.classList.remove('in','fast');panel.classList.add('out');}return;}
+ panel.hidden=false;
+ if(state.mode==='suggest'){
+  $('save').hidden=true;const list=$('list');list.hidden=false;enter('suggest');
+  const active=hover>=0?hover:state.index;
+  list.innerHTML=state.items.map((item,i)=>`<div class="row" role="option" id="o${i}" data-i="${i}" ${i===active?'data-active aria-selected="true"':'aria-selected="false"'}>${ICONS[item.kind]||ICONS.login}<span class="label">${esc(item.label)}</span><span class="secondary">${esc(item.secondary)}</span></div>`).join('');
+  list.setAttribute('aria-activedescendant',active>=0?'o'+active:'');
+  current={mode:'suggest',count:state.items.length};
+  if(active>=0)$('o'+active)?.scrollIntoView({block:'nearest'});
+ }else{
+  $('list').hidden=true;const save=$('save');
+  save.hidden=false;enter('save');
+  $('titleText').textContent=state.kind==='update'?(w.titleUpdate||'Update password?'):(w.titleSave||'Save password?');$('host').textContent=state.host;
+  $('user').textContent=state.username||w.noUsername||'No username';$('pass').textContent=state.masked;$('primary').textContent=state.kind==='update'?(w.update||'Update'):(w.save||'Save');
+  current={mode:'save'};
+  if(state.focus)setTimeout(()=>$('primary').focus(),0);
+ }
+}
+$('list').addEventListener('mousemove',event=>{const row=event.target.closest('.row');const i=row?Number(row.dataset.i):-1;if(i!==hover){hover=i;for(const node of document.querySelectorAll('.row')){const on=Number(node.dataset.i)===i;node.toggleAttribute('data-active',on);node.setAttribute('aria-selected',on?'true':'false');}}});
+$('list').addEventListener('mouseleave',()=>{hover=-1;});
+$('list').addEventListener('mousedown',event=>event.preventDefault());
+$('list').addEventListener('click',event=>{const row=event.target.closest('.row');if(row)pwFrame.choose(Number(row.dataset.i));});
+$('primary').addEventListener('click',()=>pwFrame.action('save'));
+$('never').addEventListener('click',()=>pwFrame.action('never'));
+$('close').addEventListener('click',()=>pwFrame.action('dismiss'));
+addEventListener('keydown',event=>{if(current?.mode!=='save')return;if(event.key==='Escape'){event.preventDefault();pwFrame.action('dismiss');}else if(event.key==='Enter'&&event.target.tagName!=='BUTTON'){event.preventDefault();pwFrame.action('save');}});
+pwFrame.onState(render);
+pwFrame.ready();
+</script>
+</body>
+</html>

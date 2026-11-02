@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "paintings": [
+    {
+      "id": "met-436535",
+      "name": "Wheat Field with Cypresses",
+      "artist": "Vincent van Gogh",
+      "date": "1889",
+      "provider": "The Metropolitan Museum of Art",
+      "rights": "CC0 1.0",
+      "rightsURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "policyURL": "https://www.metmuseum.org/hubs/open-access",
+      "source": "https://www.metmuseum.org/art/collection/search/436535",
+      "metadataURL": "https://collectionapi.metmuseum.org/public/collection/v1/objects/436535",
+      "imageURL": "https://images.metmuseum.org/CRDImages/ep/web-large/DP-42549-001.jpg",
+      "isPublicDomain": true,
+      "checkedAt": "2026-10-24T00:44:45.644Z",
+      "src": "/artwork/met-436535.jpg",
+      "alt": "Wheat Field with Cypresses, Vincent van Gogh",
+      "sha256": "af0e3486621c210b54932d055294051b5601aa3362af4b84ab97e2831f8163bc",
+      "bytes": 221383,
+      "width": 599,
+      "height": 477,
+      "mime": "image/jpeg"
+    },
+    {
+      "id": "met-435877",
+      "name": "Mont Sainte-Victoire and the Viaduct of the Arc River Valley",
+      "artist": "Paul Cézanne",
+      "date": "1882–85",
+      "provider": "The Metropolitan Museum of Art",
+      "rights": "CC0 1.0",
+      "rightsURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "policyURL": "https://www.metmuseum.org/hubs/open-access",
+      "source": "https://www.metmuseum.org/art/collection/search/435877",
+      "metadataURL": "https://collectionapi.metmuseum.org/public/collection/v1/objects/435877",
+      "imageURL": "https://images.metmuseum.org/CRDImages/ep/web-large/DP-20099-001.jpg",
+      "isPublicDomain": true,
+      "checkedAt": "2026-10-24T00:44:45.644Z",
+      "src": "/artwork/met-435877.jpg",
+      "alt": "Mont Sainte-Victoire and the Viaduct of the Arc River Valley, Paul Cézanne",
+      "sha256": "e0bbcef82fa9c86a08ebb3e76a9ad4ef5c5562c67913ea23cf935245bab98a44",
+      "bytes": 178287,
+      "width": 599,
+      "height": 483,
+      "mime": "image/jpeg"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+/* Offline game: a field of 8px dots under the error copy, hairline-framed, no fill, no glow. */
+.offline-game{
+ --og-ink:rgb(var(--ink, 37 38 43));--og-accent:var(--focus-ring-color,var(--chrome-focus-ring,#3b6eea));
+ display:grid;gap:8px;width:100%;max-width:480px;margin:32px auto 0;padding:12px 12px 10px;
+ border:1px solid var(--line,rgb(var(--ink, 37 38 43) / .08));border-radius:var(--radius-card,6px);outline:0;cursor:default;
+}
+.offline-game:focus-visible{outline:2px solid var(--og-accent);outline-offset:1px}
+.offline-game-field{display:block;width:100%;height:104px}
+.offline-game-bar{display:flex;justify-content:space-between;gap:12px;font:500 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:rgb(var(--ink, 37 38 43) / .50)}
+.offline-game[data-phase=playing] .offline-game-bar>span:first-child{color:rgb(var(--ink, 37 38 43) / .72)}
+.offline-game .sr-only{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(forced-colors:active){.offline-game{--og-ink:CanvasText;--og-accent:Highlight;border-color:CanvasText}}

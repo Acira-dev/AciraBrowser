@@ -1,0 +1,13 @@
+.nt-personal-library { margin: 16px 0; padding-top: 8px; border-top: 1px solid var(--st-line); }
+.nt-personal-toolbar { display: flex; justify-content: flex-end; padding: 8px 0 12px; }
+.nt-personal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 2px 0 12px; }
+.nt-personal-item { position: relative; min-width: 0; }
+.nt-personal-item > .cc-card { width: 100%; height: 100%; }
+.nt-personal-item .cc-name { min-width: 0; overflow-wrap: anywhere; }
+.nt-personal-item .cc-name small { display: block; color: var(--st-muted); font-size: 11px; font-weight: 400; }
+.nt-personal-remove { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgb(255 255 255 / .2); border-radius: 8px; color: white; background: rgb(20 21 24 / .78); cursor: pointer; }
+.nt-personal-remove:hover { background: rgb(20 21 24 / .95); }
+.nt-personal-remove:focus-visible { outline: 2px solid var(--st-ring, var(--accent)); outline-offset: 2px; }
+.nt-personal-collection-empty { display: grid; place-items: center; height: 100%; padding: 12px; color: var(--st-muted); font-size: 12px; text-align: center; }
+@container (max-width: 560px) { .nt-personal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 380px) { .nt-personal-grid { grid-template-columns: 1fr; } }

@@ -1,0 +1,166 @@
+name: Source and unsigned Windows qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_installers:
+        description: 'Build and qualify the unsigned Windows installer (manual only)'
+        type: boolean
+        required: false
+        default: false
+      upload_installers:
+        description: 'Also upload installer binaries to private Actions artifacts'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: Build and unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.11.1
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Verify Windows tabs, workspaces, split views and scaled popup placement
+        if: runner.os == 'Windows'
+        run: node qa/windows-browser-flows.mjs
+      - name: Verify release tooling and profile exclusions
+        run: node --test tests/release-source-audit.test.mjs tests/release-commit.test.mjs tests/release-session-cookie.test.cjs tests/release-session-failure.test.cjs tests/release-session-shutdown.test.cjs tests/release-runtime-policy.test.mjs tests/release-build-cache.test.cjs tests/release-installer-payload.test.mjs
+      - name: Audit publishable history
+        run: node scripts/release-source-audit.mjs qa/artifacts/release-ci-history.json
+
+  windows-portable:
+    name: Unsigned Windows portable and installer qualification
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_installers == true }}
+    needs: source
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.11.1
+          cache: npm
+      - run: npm ci
+      - name: Require patched and frontend-qualified Windows runtime
+        run: node scripts/release-runtime-policy.mjs
+      - name: Build isolated product output
+        run: node scripts/release-build-head.mjs qa/artifacts/release-ci
+      - name: Verify fresh native key startup and first-credential crash recovery
+        run: node qa/release-fresh-profile.mjs qa/artifacts/release-ci
+      - name: Verify integrated local browsing and profile Settings
+        shell: pwsh
+        run: |
+          node qa/release-browser-journeys.mjs qa/artifacts/release-ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-profile-settings.mjs qa/artifacts/release-ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify ordinary cleanup and private cancellation/shutdown
+        shell: pwsh
+        run: |
+          node qa/release-profile-cleanup.mjs qa/artifacts/release-ci --committed-fixture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-profile-cleanup.mjs qa/artifacts/release-ci --committed-fixture --worker
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-private-close.mjs qa/artifacts/release-ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-private-close.mjs qa/artifacts/release-ci --last-window
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:ACIRA_PRIVATE_WORKER_SOURCE = (Resolve-Path -LiteralPath qa/artifacts/release-ci).Path
+          node qa/accounts-private-worker-source.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assemble pinned runtime and licenses
+        run: node scripts/release-package.mjs qa/artifacts/release-ci
+      - name: Verify native standalone launch without source dependency loads
+        shell: pwsh
+        run: |
+          $candidate = Get-ChildItem -LiteralPath release -Directory | Where-Object Name -Like 'AciraBrowser-*-unsigned' | Select-Object -First 1
+          if (-not $candidate) { throw 'No portable candidate was built' }
+          node qa/release-fresh-profile.mjs qa/artifacts/release-ci $candidate.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-package-launch.mjs $candidate.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-packaged-filtering.mjs $candidate.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-external-url.mjs $candidate.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $reports = @(Get-ChildItem -LiteralPath qa/artifacts -File -Filter 'release-package-*.json' | Where-Object { (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).status -eq 'PASS' })
+          if ($reports.Count -ne 1) { throw 'Expected exactly one current portable qualification report' }
+          $reportName = $reports[0].Name
+          node qa/release-profile-cleanup.mjs $candidate.FullName --committed-fixture $reportName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-profile-cleanup.mjs $candidate.FullName --committed-fixture $reportName --worker
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-private-close.mjs $candidate.FullName $reportName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/release-private-close.mjs $candidate.FullName $reportName --last-window
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node qa/accounts-private-worker.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify protected local session restoration
+        run: node qa/release-session-cookie.mjs
+      - name: Verify bundled Reader dynamic assets and inert extraction
+        run: node qa/release-reader-assets.mjs
+      - name: Compile unsigned installer and verify its entire embedded portable payload
+        shell: pwsh
+        run: |
+          $candidate = Get-ChildItem -LiteralPath release -Directory | Where-Object Name -Like 'AciraBrowser-*-unsigned' | Select-Object -First 1
+          if (-not $candidate) { throw 'No qualified portable candidate was built' }
+          node scripts/release-installer.mjs $candidate.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve bounded synthetic qualification receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: acira-windows-qualification-${{ github.sha }}
+          path: |
+            qa/artifacts/release-ci/build-identity.json
+            qa/artifacts/release-ci/browser-journeys-*.json
+            qa/artifacts/release-fresh-*/result.json
+            qa/artifacts/release-profile-settings-*/result.json
+            qa/artifacts/release-profile-cleanup-*/result.json
+            qa/artifacts/release-private-*/result.json
+            qa/artifacts/release-package-*.json
+            qa/artifacts/release-packaged-filter-*.json
+            qa/artifacts/release-external-url-*.json
+            qa/artifacts/accounts-private-worker-*/result.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload installer binaries only when explicitly requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_installers == true && inputs.upload_installers == true }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: acira-windows-unsigned-${{ github.sha }}
+          path: |
+            release/AciraBrowser-*-unsigned/**
+            release/installers/**
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          include-hidden-files: false

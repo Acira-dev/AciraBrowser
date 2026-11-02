@@ -1,0 +1,77 @@
+import { platform } from "./platform";
+import { SvelteSet } from "svelte/reactivity";
+import { derived, get, writable } from "svelte/store";
+
+import {
+    canBeDefaultBrowser,
+    isDefaultBrowser,
+    preferences,
+} from "./browser";
+
+export const flow = [
+    "Welcome",
+    "HeliumServices",
+    "SearchEngine",
+    "DataImport",
+    "PasswordManager",
+    "DefaultBrowser",
+    "Finish"
+] as const;
+
+const index = writable(0);
+
+export const currentPage = derived(
+    index,
+    $index => flow[$index]
+);
+
+const shouldSkip = (page: typeof flow[number]): boolean => {
+    switch (page) {
+        case 'DataImport':
+            return platform.is.android;
+        case 'PasswordManager':
+            // skip if we aren't allowed to install extensions
+            const pref = get(preferences);
+            return platform.is.android
+                || !pref['services.ext_proxy']
+                || !pref['services.enabled'];
+        case 'DefaultBrowser':
+            // skip if we're already default (we can't undefault ourselves)
+            return platform.is.android || !canBeDefaultBrowser || get(isDefaultBrowser);
+        default:
+            return false;
+    }
+}
+
+const getPageNumber = (current: number, direction = 1) => {
+    let next = current + direction;
+
+    while (
+        next >= 0 &&
+        next < flow.length &&
+        shouldSkip(flow[next])
+    ) {
+        next += direction;
+    }
+
+    return Math.max(0, Math.min(next, flow.length - 1));
+}
+
+export const nextPage = () => {
+    index.update((current) => getPageNumber(current));
+}
+
+export const previousPage = () => {
+    index.update((current) => getPageNumber(current, -1));
+}
+
+export const ONBOARDING_INTRO_DELAY_MS = 800;
+
+export const hasSeenIntro = writable(false);
+export const markIntroSeen = () => {
+    hasSeenIntro.set(true);
+}
+
+export const userChoseHeliumAsDefault = writable(true);
+export const selectedProfiles = writable(new SvelteSet<number>());
+export const previouslyImportedProfiles = writable(new SvelteSet<number>());

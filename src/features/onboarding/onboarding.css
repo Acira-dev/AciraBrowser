@@ -1,0 +1,2362 @@
+/* Acira first run — DESIGN_LANGUAGE.md, editorial layer.
+   One luminous layer (the prism field) seen through crisp glass; website typography: a large display line between a
+   kicker and a lede, hairline-ruled rows, one left edge. Mono budget (bible 3.1): Geist Mono only for the kicker and its
+   step counter; every label, list, value and key is Geist. Uses A's tokens and editorial classes (.kicker,
+   .display-hero, .lede, .rules); the stage maps their color inputs to its own tone. */
+
+/* Labels over groups and rows: Geist 12/500 at 50%, sentence case. */
+.fr-label {
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  letter-spacing: 0;
+  color: rgb(from var(--fr-text) r g b / 0.5);
+}
+
+.fr-stage {
+  /* Dark: graphite with the finish mixed in at low chroma (deep burgundy-black on Burgundy). */
+  /* Near-black with a whisper of the finish accent (warm on Burgundy, cool on Porcelain). R4: deeper (was 4% on #050506). */
+  --fr-bg: color-mix(in srgb, var(--ed-blue, #3b6eea) 2.5%, #020203);
+  --fr-glass: 17 14 16;
+  --fr-text: #ededef;
+  --fr-text-2: rgb(237 237 239 / 0.84);
+  --fr-text-3: rgb(237 237 239 / 0.66);
+  --fr-text-4: rgb(237 237 239 / 0.32);
+  --fr-line: rgb(255 255 255 / 0.08);
+  --fr-line-2: rgb(255 255 255 / 0.14);
+  --fr-line-3: rgb(255 255 255 / 0.22);
+  --fr-hover: rgb(255 255 255 / 0.04);
+  --fr-selected: rgb(255 255 255 / 0.07);
+  /* Brand blue in both tones: a solid primary with white text reads crisply on graphite and on white. */
+  --fr-accent: #3b6eea;
+  --fr-on-accent: #ffffff;
+  --fr-error: #f07178;
+  --fr-ease: var(--ease-ui, cubic-bezier(0.2, 0, 0, 1));
+  --fr-hero: cubic-bezier(0.16, 1, 0.3, 1);
+  --text-1: var(--fr-text);
+  --text-2: var(--fr-text-2);
+  --text-3: var(--fr-text-3);
+  --line: var(--fr-line);
+  --line-strong: var(--fr-line-2);
+  --accent: var(--fr-accent);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--fr-bg);
+  color: var(--fr-text);
+  font: 400 var(--text-13, 13px) / 1.4 var(--font-ui, Geist, Inter, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+.fr-yours {
+  --fr-glass: 20 20 23;
+  --fr-text: #ededef;
+  --fr-text-2: rgb(237 237 239 / 0.84);
+  --fr-text-3: rgb(237 237 239 / 0.66);
+  --fr-text-4: rgb(237 237 239 / 0.32);
+  --fr-line: rgb(255 255 255 / 0.08);
+  --fr-line-2: rgb(255 255 255 / 0.14);
+  --fr-line-3: rgb(255 255 255 / 0.22);
+  --fr-hover: rgb(255 255 255 / 0.04);
+  --fr-selected: rgb(255 255 255 / 0.07);
+  --fr-accent: #3b6eea;
+  --fr-on-accent: #ffffff;
+  --fr-ease: var(--ease-ui, cubic-bezier(0.2, 0, 0, 1));
+}
+.fr-stage,
+.fr-yours {
+  --fr-rule: linear-gradient(90deg, transparent, var(--fr-line) 14%, var(--fr-line) 86%, transparent);
+  --fr-rule-v: linear-gradient(180deg, transparent, var(--fr-line-2) 18%, var(--fr-line-2) 82%, transparent);
+}
+.fr-yours[data-tone="light"] {
+  --fr-glass: 252 252 253;
+  --fr-text: #111113;
+  --fr-text-2: rgb(17 17 19 / 0.7);
+  --fr-text-3: rgb(17 17 19 / 0.62);
+  --fr-text-4: rgb(17 17 19 / 0.32);
+  --fr-line: rgb(0 0 0 / 0.08);
+  --fr-line-2: rgb(0 0 0 / 0.14);
+  --fr-line-3: rgb(0 0 0 / 0.22);
+  --fr-hover: rgb(0 0 0 / 0.04);
+  --fr-selected: rgb(0 0 0 / 0.07);
+}
+.fr-stage {
+  --brand-tone: dark;
+}
+.fr-stage[data-tone="light"] {
+  --brand-tone: light;
+}
+.fr-stage[data-tone="light"] {
+  /* Mid-grey so the white beams read (concept). */
+  /* Pearl: the fog lifts it toward white; white shafts still read against it. */
+  --fr-bg: #d4d3da;
+  --fr-glass: 252 252 253;
+  --fr-text: #111113;
+  /* Secondary and tertiary text clear 4.5:1 on the warm glass and on the white groups (12px meta included). */
+  --fr-text-2: rgb(17 17 19 / 0.7);
+  --fr-text-3: rgb(17 17 19 / 0.62);
+  --fr-text-4: rgb(17 17 19 / 0.32);
+  --fr-line: rgb(0 0 0 / 0.08);
+  --fr-line-2: rgb(0 0 0 / 0.14);
+  --fr-line-3: rgb(0 0 0 / 0.22);
+  --fr-hover: rgb(0 0 0 / 0.04);
+  --fr-selected: rgb(0 0 0 / 0.07);
+  --fr-error: #c4323a;
+}
+.fr-stage button,
+.fr-stage input {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  -webkit-app-region: no-drag;
+}
+.fr-stage :focus-visible {
+  outline: 2px solid var(--fr-accent);
+  outline-offset: 1px;
+}
+.fr-stage h1:focus,
+.fr-stage h1:focus-visible {
+  outline: none;
+}
+.fr-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────── */
+
+.fr-light,
+.fr-prism {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.fr-stage-light {
+  z-index: -2;
+  animation: fr-fade-in 1.6s var(--fr-hero) both;
+}
+/* A tone change in setup is one crossfade of the whole frame (a view transition, set off by Onboarding's switchTone):
+   the compositor fades the old frame's snapshot out over the new, live one. */
+:root[data-fr-switch]::view-transition,
+:root[data-fr-switch]::view-transition-group(root),
+:root[data-fr-switch]::view-transition-image-pair(root),
+:root[data-fr-switch]::view-transition-old(root),
+:root[data-fr-switch]::view-transition-new(root) { pointer-events: none; }
+:root[data-fr-switch]::view-transition-old(root),
+:root[data-fr-switch]::view-transition-new(root) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.fr-grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.fr-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 32px;
+  -webkit-app-region: drag;
+}
+.fr-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding: 48px 32px;
+  overflow: hidden;
+}
+.fr-skip {
+  position: absolute;
+  z-index: 2;
+  top: 44px;
+  right: 24px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fr-text-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.12s var(--fr-ease), background-color 0.12s var(--fr-ease);
+  animation: fr-fade-in 0.6s 1s both;
+}
+.fr-skip:hover {
+  color: var(--fr-text);
+  background: var(--fr-hover);
+}
+@keyframes fr-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── Vapor text and shimmer (ported from the website) ─────────────────── */
+
+.vt-w {
+  display: inline-block;
+}
+.vt-shimmer {
+  display: inline-block;
+  padding: 0.1em 0;
+  margin: -0.1em 0;
+  color: transparent;
+  --base: rgb(from var(--fr-text) r g b / 0.46);
+  --shine: var(--fr-text);
+  background-image:
+    linear-gradient(90deg, transparent calc(50% - var(--spread)), var(--shine), transparent calc(50% + var(--spread))),
+    linear-gradient(var(--base), var(--base));
+  background-size: 250% 100%, auto;
+  background-repeat: no-repeat, padding-box;
+  background-position: 100% center;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.vt-shimmer[data-reduced] {
+  color: var(--fr-text-2);
+  background: none;
+}
+
+/* ── Welcome (the one centred hero moment) ────────────────────────────── */
+
+.fr-welcome {
+  justify-items: center;
+  text-align: center;
+}
+.fr-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.fr-mark-dots {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: opacity 0.45s ease 0.08s;
+}
+.fr-mark-vector {
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  filter: blur(4px);
+  transition: opacity 0.45s ease, filter 0.55s var(--fr-hero);
+}
+.fr-mark[data-resolved] .fr-mark-vector {
+  opacity: 1;
+  filter: none;
+}
+.fr-mark[data-resolved] .fr-mark-dots {
+  opacity: 0;
+}
+/* The mark, with a quiet "Beta" beside it (Geist 12 at 50%), sitting on the wordmark's baseline. */
+.fr-brand {
+  position: relative;
+}
+.fr-brand .fr-reveal {
+  position: absolute;
+  left: calc(100% + 12px);
+  bottom: 6px;
+}
+.fr-beta {
+  font: 500 12px/1 var(--font-ui, Geist, Inter, sans-serif);
+  color: rgb(from var(--fr-text) r g b / 0.5);
+  white-space: nowrap;
+}
+.fr-stage .fr-hero {
+  margin-top: 52px;
+  color: var(--fr-text);
+}
+.fr-hold {
+  visibility: hidden;
+}
+.fr-stage .fr-hero-lede {
+  margin: 22px auto 0;
+  max-width: none;
+  white-space: nowrap;
+}
+.fr-welcome .fr-hero + .fr-reveal {
+  margin-top: 0;
+}
+.fr-welcome .fr-reveal:last-child {
+  margin-top: 36px;
+}
+.fr-fallback {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+.fr-fallback p {
+  margin: 0;
+}
+.fr-quiet {
+  color: var(--fr-text-2);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+
+.fr-primary,
+.fr-secondary,
+.fr-tertiary,
+.fr-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-control, 4px);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.12s var(--fr-ease),
+    border-color 0.12s var(--fr-ease),
+    color 0.12s var(--fr-ease),
+    filter 0.12s var(--fr-ease);
+}
+.fr-primary {
+  height: var(--control-large, 32px);
+  padding: 0 12px;
+  border: 1px solid transparent;
+}
+.fr-large {
+  padding: 0 14px;
+}
+.fr-secondary {
+  height: var(--control-height, 28px);
+  padding: 0 10px;
+}
+.fr-tertiary {
+  height: var(--control-height, 28px);
+  padding: 0 8px;
+  margin-left: -8px;
+  border: 0;
+  background: transparent;
+  color: var(--fr-text-2) !important;
+}
+.fr-tertiary:hover:not(:disabled) {
+  color: var(--fr-text) !important;
+  background: var(--fr-hover);
+}
+/* Text links reserve their focus padding in the sentence so the ring cannot cover adjacent punctuation (E07).
+   At 150% the card scales to 0.74: 12px keeps at least 8.8px beside the text. */
+.fr-link {
+  padding: 3px 12px;
+  margin: -3px 0;
+  border: 0;
+  border-radius: var(--radius-control, 4px);
+  background: none;
+  color: var(--fr-accent) !important;
+  font-size: inherit;
+  cursor: pointer;
+}
+.fr-link:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fr-stage button:disabled {
+  cursor: default;
+}
+.fr-secondary:disabled,
+.fr-tertiary:disabled,
+.fr-link:disabled,
+.fr-close:disabled {
+  color: var(--fr-text-4) !important;
+}
+
+/* ── Leaving: the mark, in glass, over the browser (finale.ts) ──
+   The setup frame leaves in one view transition (fr-scene, fr-card: the card's glass, fr-words + fr-foot: its words);
+   the browser is the live new frame and never moves. Over it, two plain overlays: the veil (a constant blur whose
+   opacity fades) and the mark (Liquid Glass stripes that draw out). Durations come from finale.ts as custom
+   properties set on the transition's pseudo-elements only (a style sheet of its own), so the click never restyles
+   the document. */
+
+/* While a transition runs, only the setup images carry names, so the browser's own named parts (sidebar, toolbar, tab
+   row, bookmarks and focus rows: sidebar.css, toolbar-controls.css) stay in the browser frame. Named parts only, not
+   every element: a universal rule here restyles the whole app on the click frame. The same while setup is on screen
+   at all, and through the Look step's theme crossfade (data-fr-switch): a named part is captured on its own and drawn
+   ABOVE the old and new frames, so the browser's toolbar and tab strip flashed over setup on a theme pick (R4-04).
+   This list is the backstop; the rule is in the names themselves: every view-transition-name outside setup is written
+   under `:root:not([data-fr-finale]) .app…:not(:has(>.setup-dialog))`, so no browser element (the toolbar's own controls,
+   view-morph.css, flashed without their toolbar: R4-50) has a name while setup is on screen or leaving
+   (tests/setup-chrome-names.test.ts fails on any name without it). */
+:root:is([data-fr-finale], [data-fr-prewarm], [data-fr-switch]) .app :is(.acira-sidebar, .acira-persistent-toolbar, .acira-tab-row, .acira-bookmarks-row, .acira-focus-row, .page-area, .page-content),
+.app:has(> .setup-dialog) :is(.acira-sidebar, .acira-persistent-toolbar, .acira-tab-row, .acira-bookmarks-row, .acira-focus-row, .page-area, .page-content) {
+  view-transition-name: none !important;
+}
+/* The prewarm (finale.ts): the same captures once, shown exactly as the page is (old hidden, new as is, no motion). */
+:root[data-fr-prewarm]::view-transition-group(*) {
+  animation: none;
+}
+:root[data-fr-prewarm]::view-transition-image-pair(*) {
+  isolation: auto;
+}
+:root[data-fr-prewarm]::view-transition-old(*) {
+  animation: none;
+  opacity: 0;
+}
+:root[data-fr-prewarm]::view-transition-new(*) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root[data-fr-prewarm]::view-transition-group(fr-scene) {
+  z-index: 1;
+}
+:root[data-fr-prewarm]::view-transition-group(fr-card) {
+  z-index: 2;
+}
+:root[data-fr-prewarm]::view-transition-group(fr-words),
+:root[data-fr-prewarm]::view-transition-group(fr-foot) {
+  z-index: 3;
+}
+/* No hover states while the setup leaves (the pointer rests where Start browsing was): a click only skips. */
+:root[data-fr-finale] .app {
+  pointer-events: none;
+}
+:root[data-fr-finale]::view-transition-image-pair(*) {
+  isolation: auto;
+}
+:root[data-fr-finale]::view-transition-old(*),
+:root[data-fr-finale]::view-transition-new(*) {
+  mix-blend-mode: normal;
+}
+/* The browser frame: there from the first frame, under the veil; it never moves. */
+:root[data-fr-finale]::view-transition-group(root) {
+  animation: none;
+}
+:root[data-fr-finale]::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+:root[data-fr-finale]::view-transition-new(root) {
+  animation: none;
+}
+/* The setup leaves: the light fades off the veiled browser, the card's glass gathers toward the mark as it fades, its
+   words go first. */
+:root[data-fr-finale]::view-transition-group(fr-scene) {
+  z-index: 1;
+}
+:root[data-fr-finale]::view-transition-old(fr-scene) {
+  animation: fr-finale-out var(--fr-finale-leave-d) var(--fr-finale-leave-ease) both;
+}
+:root[data-fr-finale]::view-transition-group(fr-card),
+:root[data-fr-finale]::view-transition-group(fr-words),
+:root[data-fr-finale]::view-transition-group(fr-foot) {
+  z-index: 2;
+  animation: none;
+}
+:root[data-fr-finale]::view-transition-old(fr-card) {
+  animation: fr-finale-gather var(--fr-finale-leave-d) var(--fr-finale-leave-ease) both;
+}
+:root[data-fr-finale]::view-transition-old(fr-words),
+:root[data-fr-finale]::view-transition-old(fr-foot) {
+  animation: fr-finale-words var(--fr-finale-words-d) var(--fr-finale-words-ease) both;
+}
+@keyframes fr-finale-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fr-finale-gather {
+  to {
+    opacity: 0;
+    transform: scale(var(--fr-finale-card-x), var(--fr-finale-card-y));
+  }
+}
+@keyframes fr-finale-words {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+/* The veil: the real browser seen through frost (a constant blur and a scrim in the stage's tone, bible 3.5). It opens
+   from the centre outward as the mark retreats: a radial mask whose opening (--fr-veil-open, registered in finale.ts)
+   springs from closed to past the corners; the blur itself never changes. */
+.fr-finale-veil {
+  --fr-veil-open: -30%;
+  position: fixed;
+  inset: 0;
+  z-index: 2147482990;
+  pointer-events: none;
+  background: rgb(12 12 16 / 0.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.25);
+  backdrop-filter: blur(24px) saturate(1.25);
+  -webkit-mask-image: radial-gradient(circle farthest-corner at 50% 50%, transparent var(--fr-veil-open), #000 calc(var(--fr-veil-open) + 30%));
+  mask-image: radial-gradient(circle farthest-corner at 50% 50%, transparent var(--fr-veil-open), #000 calc(var(--fr-veil-open) + 30%));
+}
+.fr-finale-veil[data-tone="light"] {
+  background: rgb(250 250 252 / 0.4);
+}
+/* The mark, centred where the card was: Liquid Glass stripes (finale.ts draws them). */
+.fr-finale-mark {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 2147482995;
+  width: 156px;
+  height: 156px;
+  margin: -78px 0 0 -78px;
+  pointer-events: none;
+}
+.fr-finale-mark > svg:not(.fr-glass-filters) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.fr-finale-mark .fr-glass-filters {
+  position: absolute;
+}
+/* Each stripe is a lens over the frost: the frost behind it bent (finale.ts's displacement filter), brighter, richer. */
+.fr-finale-mark .fr-glass-lens {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  opacity: 0;
+  -webkit-backdrop-filter: brightness(1.18) saturate(1.5);
+  backdrop-filter: brightness(1.18) saturate(1.5);
+}
+/* A faint caustic glow cast on the frost beneath the glass. */
+.fr-finale-mark .fr-glass-caustic {
+  position: absolute;
+  inset: -60%;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(closest-side, rgb(214 236 255 / 0.22), rgb(196 210 255 / 0.08) 55%, transparent);
+}
+.fr-finale-mark[data-tone="light"] .fr-glass-caustic {
+  background: radial-gradient(closest-side, rgb(120 200 255 / 0.28), rgb(160 150 255 / 0.1) 55%, transparent);
+}
+.fr-finale-mark .fr-glass-body {
+  opacity: 0;
+}
+.fr-finale-mark .fr-glass-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+/* The prewarm copies (finale.ts): drawn once, invisibly, inside the stage. */
+.fr-stage > .fr-finale-prewarm {
+  position: absolute;
+  z-index: 3;
+  opacity: 0.01;
+}
+.fr-stage > .fr-finale-prewarm .fr-glass-body,
+.fr-stage > .fr-finale-prewarm .fr-glass-lens {
+  opacity: 1;
+}
+/* The welcome's rehearsal of the first card (Onboarding): the real card at its real size and place, drawn once under the
+   transition's blur sweep so its GPU programs exist before the click. 1% opacity: drawn (never culled), not seen. */
+.fr-stage > .fr-rehearsal {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0.01;
+  pointer-events: none;
+}
+/* The quiet ending (reduced motion, Off; finale.ts quietMark): the drawn mark and a plain frosted veil, faded whole. */
+.fr-finale-veil.fr-finale-quiet {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.fr-finale-veil.fr-finale-quiet + .fr-finale-mark .fr-glass-lens {
+  opacity: 1;
+}
+
+/* Reduced motion and the Off speed: a still copy of the stage fades off the browser. */
+.fr-ghost {
+  position: fixed !important;
+  inset: 0;
+  z-index: 2147483000;
+  display: block !important;
+  background: transparent !important;
+  pointer-events: none;
+}
+.fr-stage[data-leaving] {
+  pointer-events: none;
+}
+/* While setup is open the sidebar is not mounted, so the browser would auto-place into the sidebar's column (0 wide in
+   the top-tabs layout) and lay out for the first time only when setup closes. Keep it in its own column, at its real
+   size, so it is laid out and painted under setup and is simply there when setup leaves. */
+.app.style-acira:not(.native-layer):has(> .setup-dialog) > .browser-root {
+  grid-column: 2;
+}
+/* Onboarding.tsx prewarm: not fully opaque, so the GPU rasters the browser underneath before setup leaves. */
+.fr-stage[data-prewarm] {
+  opacity: 0.998;
+}
+
+/* ── Reduced motion, small windows, forced colors ───────────────────── */
+
+.fr-stage[data-reduced-motion] .fr-stage-light,
+/* Skip setup sits near the dark scene's light source, where a beam can pass right behind it (longer in German and
+   French): a soft dark halo keeps it legible there and is invisible over the dark. */
+.fr-stage[data-tone="dark"] .fr-skip,
+.fr-stage[data-tone="dark"] .fr-w-lang-button {
+  text-shadow:
+    0 0 1px rgb(0 0 0 / 0.5),
+    0 0 12px rgb(0 0 0 / 0.6);
+}
+/* Keep the existing local halo opaque enough where the upper source crosses Skip setup. */
+.fr-stage[data-tone="dark"] .fr-skip,
+.fr-stage[data-tone="dark"] .fr-w-beta {
+  text-shadow: 0 0 2px var(--fr-bg), 0 0 6px var(--fr-bg), 0 0 12px var(--fr-bg);
+}
+.fr-stage[data-reduced-motion] .fr-skip {
+  animation: none;
+}
+.fr-stage[data-reduced-motion] * {
+  transition-duration: 0.01s !important;
+}
+@media (max-height: 700px) {
+  .fr-stage .fr-hero {
+    margin-top: 36px;
+  }
+}
+@media (forced-colors: active) {
+  .fr-light,
+  .fr-prism,
+  .fr-grain {
+    display: none;
+  }
+}
+
+/* Primary buttons are ours: neutral, high-contrast, 36px, radius 8, with a trailing arrow. */
+.fr-stage .fr-primary,
+.fr-yours .fr-primary {
+  height: 36px;
+  padding: 0 18px;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  font: 500 14px/1 var(--font-ui, Geist, Inter, sans-serif);
+}
+.fr-go svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.16s var(--fr-ease);
+}
+.fr-go:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+.fr-welcome-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.fr-stage .fr-defaults {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: 500 14px/1 var(--font-ui, Geist, Inter, sans-serif);
+}
+
+/* ── Setup card: I's Apple concept (onboarding-apple-concept.html) with the bible 11 overrides ──────────
+   One centred, fixed 720×600 card for every step: glyph 32 → 20 → title → 8 → line → 32 → content (440 wide).
+   Overrides: the glass stays translucent (dark .32, light .24) and the haze is never dimmed behind it; primary
+   buttons are neutral; progress is Geist with tabular figures. */
+
+/* On the translucent card the groups carry legibility: 6% white on dark, solid white on light (with its own edge below). */
+.fr-stage {
+  --fr-group: rgb(255 255 255 / 0.06);
+  --fr-field: rgb(255 255 255 / 0.06);
+  --fr-track: rgb(255 255 255 / 0.16);
+  --fr-cta: #f2f2f4;
+  --fr-on-cta: #0b0b0d;
+  --fr-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+.fr-stage[data-tone="light"] {
+  --fr-group: #ffffff;
+  --fr-field: rgb(0 0 0 / 0.045);
+  --fr-track: rgb(0 0 0 / 0.14);
+  --fr-cta: #111114;
+  --fr-on-cta: #ffffff;
+}
+
+.fr-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 64px;
+  width: 720px;
+  height: 600px;
+  border-radius: 8px;
+  isolation: isolate;
+  background: rgb(18 18 21 / 0.32);
+  -webkit-backdrop-filter: blur(40px) saturate(1.25);
+  backdrop-filter: blur(40px) saturate(1.25);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 24px -4px rgb(0 0 0 / 0.32),
+    0 32px 80px -16px rgb(0 0 0 / 0.42);
+}
+/* Fine noise in the glass, so the light reads as frosted rather than smeared. */
+.fr-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Light glass per Linear/Apple (round 12): mostly white, no saturation boost, a half-pixel ring, a top highlight
+   instead of a second inner edge, and a light layered shadow (Geist modal). */
+/* Light: a clean white surface over the spectra, with only a soft hint of the light behind it. */
+.fr-stage[data-tone="light"] .fr-card {
+  background: rgb(255 255 255 / 0.74);
+  -webkit-backdrop-filter: blur(40px) saturate(1.15);
+  backdrop-filter: blur(40px) saturate(1.15);
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.08),
+    inset 0 1.5px 0 rgb(255 255 255 / 0.6),
+    0 1px 1px #00000005,
+    0 8px 16px -4px #0000000a,
+    0 24px 32px -8px #0000000f;
+}
+/* While the scene frosts the card itself (its canvas carries data-glass), the card keeps only its translucent fill:
+   a backdrop-filter here would re-blur the whole animating canvas every frame. */
+.fr-stage:has(> .fr-prism[data-glass]) [data-prism-glass] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.fr-stage[data-reduced-transparency] .fr-card {
+  background: rgb(var(--fr-glass));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.fr-card-main {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  padding: 48px 64px 0;
+}
+.fr-stepwrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.fr-glyph {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  color: var(--fr-text);
+}
+.fr-stage .fr-card-title {
+  margin: 20px 0 0;
+  font: 560 32px/40px var(--font-display, Inter, Geist, sans-serif);
+  letter-spacing: -0.03em;
+  font-feature-settings: "cv11", "ss03";
+  text-wrap: balance;
+  color: var(--fr-text);
+}
+.fr-sub {
+  max-width: 440px;
+  margin: 8px 0 0;
+  font: 400 15px/24px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+  text-wrap: balance;
+}
+.fr-content {
+  width: 440px;
+  margin-top: 32px;
+  text-align: left;
+}
+.fr-card-error {
+  position: absolute;
+  left: 64px;
+  right: 64px;
+  bottom: 12px;
+  margin: 0;
+  text-align: center;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-error);
+}
+
+/* Footer: Back | progress | actions, under a hairline that fades at both ends. */
+/* The footer sits on the content column (440 wide, 140px in from the card): Back's text lines up with the list text,
+   the counter with the centre, the primary's right edge with the lists' right edge. */
+.fr-foot {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 140px;
+}
+.fr-foot::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 140px;
+  right: 140px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fr-line-2) 18%, var(--fr-line-2) 82%, transparent);
+}
+.fr-foot-start {
+  justify-self: start;
+  margin-left: 4px;
+}
+.fr-foot-end {
+  justify-self: end;
+  display: flex;
+  gap: 8px;
+}
+.fr-counter {
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--fr-text-3);
+}
+
+/* Setup buttons (bible 11): 36px, radius 8, Geist 14/500; the primary is neutral (near-white on dark, near-black on
+   light), never accent, with a 14px trailing arrow that moves 2px on hover. Text buttons share the height. The Make it
+   yours panel keeps app-sized buttons (32px, radius 6, Geist 13). Colors, hover, press, focus and disabled come from
+   the shared button component (src/styles/buttons.css). */
+.fr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font: 500 14px/20px var(--font-ui, Geist, Inter, sans-serif);
+  white-space: nowrap;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+.fr-arrow {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.16s var(--fr-ease);
+}
+.fr-btn:hover:not(:disabled) .fr-arrow {
+  transform: translateX(2px);
+}
+/* The footer buttons hold still on hover (fill and arrow still respond): the pointer rests on the next step's button
+   after a click, and the shared half-pixel lift would put it 0.5px off, and soft, on every step but the first (M25). */
+:root:root:root .fr-foot .fr-btn:hover:not(:disabled) {
+  translate: none;
+}
+.fr-yours .fr-btn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font: 500 13px/16px var(--font-ui, Geist, Inter, sans-serif);
+}
+.fr-stage .fr-btn-text,
+.fr-yours .fr-btn-text {
+  padding: 0 12px;
+}
+
+/* ── Groups and rows (inset-grouped: radius 6, 4% fill, no border, separators start after the icon) ── */
+
+.fr-glabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 16px 8px;
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-3);
+}
+.fr-group + .fr-glabel {
+  margin-top: 12px;
+}
+.fr-glabel-more {
+  flex: none;
+  padding: 3px 12px;
+  margin: -3px 0;
+  border: 0;
+  border-radius: var(--radius-control, 4px);
+  white-space: nowrap;
+  background: none;
+  font: inherit;
+  color: var(--fr-text-2);
+  cursor: default;
+}
+.fr-glabel-more:hover {
+  color: var(--fr-text);
+}
+.fr-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fr-group);
+  overflow: hidden;
+}
+/* Light: white on warm near-white glass has no edge of its own, so the group carries one (Geist's material values):
+   a 1px ring and a two-layer lift. Separators inside are a step firmer than the ring so rows stay distinct. */
+.fr-stage[data-tone="light"] .fr-group {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.08),
+    0 4px 8px -4px #0000000a,
+    0 16px 24px -8px #0000000f;
+}
+.fr-stage[data-tone="light"] {
+  --fr-sep-line: rgb(0 0 0 / 0.1);
+}
+/* Stacked group cards keep a clear 24px between them on every step (R4-43). It is a general-sibling rule, not an adjacent one:
+   anything rendered between two groups (a sheet's hidden anchor, a notice) must never glue the cards together. */
+.fr-group ~ .fr-group {
+  margin-top: 24px;
+}
+/* Rows breathe (I's benchmark, Arc and Helium lists): 16px in from the card, 48px for one line, 56 for two, a 20px icon
+   column for 16px glyphs, so every list's text starts 48px in (36 without an icon). */
+.fr-row {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 16px;
+}
+.fr-row[data-two] {
+  min-height: 56px;
+  padding: 8px 16px;
+}
+.fr-row.fr-noicon {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+/* Read-only facts are a little tighter (36px) so Privacy's five fit the fixed card with air above the footer. */
+.fr-row.fr-fact {
+  min-height: 40px;
+}
+/* One rule for every list card, on every step: between rows, a hairline across the card's full width from its left
+   edge, fading in and out at both ends (the panels.css separator: in to 16%, out from 84%). Hover and the chosen row are
+   a soft inset fill, 4px in from the row with a 6px radius (concentric with the card's 10), never a box; the hairlines
+   beside a filled row step aside so nothing crosses it. */
+.fr-stage {
+  --fr-sep-line: var(--fr-line);
+  --fr-sep: linear-gradient(90deg, transparent, var(--fr-sep-line) 16%, var(--fr-sep-line) 84%, transparent);
+}
+.fr-row + .fr-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--fr-sep);
+  transition: opacity 0.14s var(--fr-ease);
+}
+.fr-pick::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  z-index: -1;
+  border-radius: 6px;
+  background: transparent;
+  transition:
+    background-color 0.14s var(--fr-ease),
+    box-shadow 0.14s var(--fr-ease);
+}
+.fr-pick:hover::after {
+  background: var(--fr-hover);
+}
+.fr-pick:has(input:checked)::after {
+  background: var(--fr-selected);
+}
+.fr-pick:has(input:checked):hover::after {
+  background: rgb(from var(--fr-selected) r g b / calc(alpha + 0.02));
+}
+/* Every divider stays visible, hovered or chosen (R3-04): the fill is inset 4px, so the hairline lies in the 8px channel
+   between two fills and never crosses one. (It used to step aside, which made the line under a chosen row vanish.) */
+.fr-pick:has(input:focus-visible)::after {
+  box-shadow: inset 0 0 0 2px var(--fr-accent);
+}
+.fr-row-text {
+  min-width: 0;
+}
+/* A row that opens more (Privacy's Connection): the whole row is one button with the list's hover fill; its value is
+   quiet and ends on a chevron that nudges toward where the row leads. */
+.fr-stage button.fr-more {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+}
+/* A row that is a button keeps its keyboard ring inside the group (E07): the ring is the outline pulled 6px in, so its
+   outer edge lies exactly on the row's 4px fill (radius 10 - 4 = 6, concentric with the group), and the group's
+   rounded clip can never cut it. */
+:root:root .fr-stage .fr-group button.fr-row:focus-visible {
+  outline: 2px solid var(--fr-accent);
+  outline-offset: -6px;
+}
+.fr-more:disabled {
+  opacity: 0.5;
+}
+.fr-more:disabled::after {
+  background: transparent;
+}
+.fr-more-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: -2px;
+}
+.fr-more-val svg {
+  color: var(--fr-text-3);
+  transition:
+    translate 0.14s var(--fr-ease),
+    color 0.14s var(--fr-ease);
+}
+.fr-more:hover:not(:disabled) .fr-more-val svg {
+  translate: 2px 0;
+  color: var(--fr-text-2);
+}
+/* A disclosure row's chevron turns over as it opens; a row that leaves setup (a provider's site) nudges up and out. */
+.fr-more[aria-expanded] .fr-more-val svg {
+  transition:
+    rotate 0.22s var(--fr-ease),
+    translate 0.14s var(--fr-ease),
+    color 0.14s var(--fr-ease);
+}
+.fr-more[aria-expanded="true"] .fr-more-val svg {
+  rotate: 180deg;
+}
+.fr-more[aria-expanded]:hover:not(:disabled) .fr-more-val svg {
+  translate: 0 1px;
+}
+.fr-out:hover:not(:disabled) .fr-more-val svg {
+  translate: 1px -1px;
+}
+/* Folded content opens to its own height (grid rows 0fr → 1fr) and fades in, so nothing below jumps or hard-cuts. */
+.fr-disclose {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.24s var(--fr-ease),
+    opacity 0.18s var(--fr-ease);
+}
+.fr-disclose[data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.fr-disclose-in {
+  min-height: 0;
+  overflow: hidden;
+}
+.fr-disclose-in > .fr-row:first-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--fr-sep);
+  transition: opacity 0.14s var(--fr-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-disclose,
+  .fr-more[aria-expanded] .fr-more-val svg {
+    transition: none;
+  }
+}
+.fr-row b,
+.fr-row dt {
+  display: block;
+  overflow: hidden;
+  font: 500 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fr-row small {
+  display: block;
+  overflow: hidden;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fr-row[data-two] small {
+  white-space: normal;
+}
+.fr-row-text label {
+  display: block;
+}
+/* A line that carries a link wraps rather than truncates, so it needn't clip: the link's focus ring shows in full. */
+.fr-row small:has(.fr-inline-link) {
+  overflow: visible;
+}
+.fr-row small label {
+  display: inline;
+}
+/* An inline link inside a row's line keeps the line's type and sits on its baseline. */
+.fr-stage .fr-inline-link {
+  font: inherit;
+  vertical-align: baseline;
+}
+.fr-val {
+  margin: 0;
+  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--fr-text-2);
+  text-align: right;
+}
+.fr-check {
+  width: 16px;
+  height: 16px;
+  color: var(--fr-accent);
+  opacity: 0;
+  transition: opacity 0.12s var(--fr-ease);
+}
+.fr-pick:has(input:checked) .fr-check,
+.fr-check[data-on] {
+  opacity: 1;
+}
+.fr-ico {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--fr-text-2);
+}
+.fr-ico .fr-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 560;
+  object-fit: cover;
+}
+/* The browser's own icon sits on the profile's avatar, bottom right. */
+.fr-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5));
+}
+.fr-note {
+  margin: 16px 0 0;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-3);
+  text-align: center;
+  text-wrap: balance;
+}
+.fr-card .fr-link {
+  padding: 3px 12px;
+  margin: -3px 0;
+  border: 0;
+  border-radius: var(--radius-control, 4px);
+  background: none;
+  font: inherit;
+  color: var(--fr-text-2) !important;
+  text-decoration: underline;
+  text-decoration-color: var(--fr-line-3);
+  text-underline-offset: 2px;
+  cursor: default;
+}
+.fr-card .fr-link:hover:not(:disabled) {
+  color: var(--fr-text) !important;
+  text-decoration: underline;
+}
+/* A link inside a row's line sits at normal word spacing (R3-10): the shared 12px side padding made a gap of its own, so
+   here it keeps only a 3px hit margin, pulled back over the line's space so the visible gap is one space wide. */
+.fr-card .fr-link.fr-inline-link {
+  padding: 2px 3px;
+  margin: -2px 0 -2px -3px;
+}
+/* Import progress lives on the chosen row: a 2px accent bar along its foot. */
+.fr-bar {
+  position: absolute;
+  left: 48px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fr-accent);
+  transform-origin: left;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The one toggle, 28×16 with a 12px thumb (PREMIUM_COMPONENTS §2): a symmetric ease-in-out for thumb and track, and a
+   press that answers at once (30ms). On = --toggle-on. */
+.fr-toggle {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border-radius: 8px;
+  background: var(--fr-track);
+  appearance: none;
+  cursor: default;
+  transition: background-color 140ms cubic-bezier(.45,.05,.55,.95);
+}
+.fr-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.18);
+  transition: transform 140ms cubic-bezier(.45,.05,.55,.95);
+}
+.fr-toggle:checked {
+  background: var(--toggle-on, var(--fr-accent));
+}
+.fr-toggle:checked::after {
+  transform: translateX(12px);
+}
+.fr-toggle:disabled {
+  opacity: 0.6;
+}
+
+/* ── The Connection sheet: covers the card on the same column and footer grid; solid, so the step beneath never shows ── */
+.fr-stage {
+  --seg-track: rgb(from var(--fr-text) r g b / 0.06);
+  --seg-thumb: rgb(255 255 255 / 0.12);
+  --seg-thumb-rim: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3);
+  --seg-ink: var(--fr-text);
+  --seg-ink-2: var(--fr-text-2);
+  --seg-ring: var(--fr-accent);
+}
+.fr-stage[data-tone="light"] {
+  --seg-thumb: #fff;
+  --seg-thumb-rim: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.08);
+}
+.fr-stage .acira-seg button {
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+}
+/* A sheet is the card's own glass (R3-06: not a flat slab): it has no fill of its own, and the step beneath fades out so
+   nothing shows through but the frosted scene. With reduced transparency the card itself is solid, so is the sheet. */
+.fr-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 64px;
+  border-radius: inherit;
+  background: transparent;
+  animation: fr-sheet-in 0.24s var(--fr-strong) both;
+}
+.fr-card > .fr-card-main,
+.fr-card > .fr-foot {
+  transition: opacity 0.14s var(--fr-ease);
+}
+.fr-card[data-sheet] > .fr-card-main,
+.fr-card[data-sheet] > .fr-foot {
+  opacity: 0;
+}
+@keyframes fr-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.fr-stage[data-reduced-motion] .fr-sheet {
+  animation-name: fr-fade-in;
+  animation-duration: 0.12s;
+}
+/* A sheet's content fits its card in every language as written (qa/k-setup-i18n.mjs); if a longer string ever pushes
+   past the footer, it scrolls inside the sheet instead of running under Cancel and Apply. */
+.fr-sheet-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: 56px 140px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.fr-sheet-title {
+  margin: 0;
+  font: 600 24px/32px var(--font-display, var(--font-ui, Geist, Inter, sans-serif));
+  letter-spacing: -0.02em;
+  color: var(--fr-text);
+}
+.fr-sheet-line {
+  margin: 8px 0 24px;
+  font: 400 14px/22px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+  text-align: center;
+  text-wrap: balance;
+}
+.fr-sheet-main > .acira-seg {
+  justify-self: auto;
+  align-self: stretch;
+}
+.fr-sheet-group {
+  align-self: stretch;
+  margin-top: 16px;
+}
+.fr-sheet-address {
+  display: flex;
+  gap: 8px;
+}
+.fr-sheet-input {
+  width: 196px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  outline: none;
+  background: var(--fr-field);
+  color: var(--fr-text);
+  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+}
+.fr-sheet-input::placeholder {
+  color: var(--fr-text-3);
+}
+.fr-sheet-input:focus-visible {
+  outline: 2px solid var(--fr-accent);
+  outline-offset: -1px;
+}
+.fr-sheet-port {
+  width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+.fr-sheet-note {
+  margin-top: 16px;
+}
+/* The Connection sheet's VPN list (R3-06): the card's own inset group, so it reads like the other steps. Each row is
+   provider mark, name with its audit note in the (i), one state line, one action. Rows that are not installed offer
+   "Get it"; an installed one offers Connect or Disconnect (or Open app). The rule for the whole list sits under it. */
+.fr-sheet-main > .fr-vpn {
+  align-self: stretch;
+  margin-top: 8px;
+}
+.fr-vpn .fr-glabel {
+  margin: 0 16px 8px;
+}
+.fr-vpn .fr-glabel-more {
+  margin: -3px -12px -3px 0;
+}
+.fr-vpn .fr-glabel-more:disabled {
+  opacity: 0.5;
+}
+.fr-vpn-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--fr-text);
+}
+.fr-vpn-letter {
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--fr-field);
+  font: 600 11px/1 var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text);
+}
+.fr-vpn .fr-row[data-state="absent"] svg.fr-vpn-mark {
+  opacity: 0.6;
+}
+.fr-vpn .fr-btn-row {
+  height: 28px;
+  padding: 0 12px;
+  gap: 4px;
+  border-radius: 6px;
+  font: 500 13px/16px var(--font-ui, Geist, Inter, sans-serif);
+}
+.fr-vpn .fr-btn-row svg {
+  flex: none;
+}
+.fr-vpn .fr-note {
+  margin: 12px 8px 0;
+}
+/* "What’s sent" sheet (R4-11): the closing paragraph used to sit on the footer's divider. The sheet keeps 24px clear above the
+   rule, and the paragraph takes the whole column (the sheet's 140px side padding was narrower than the message above it). */
+.fr-sheet-main.fr-sheet-usage {
+  padding: 48px 72px 24px;
+}
+.fr-sheet-usage .fr-sheet-note {
+  align-self: stretch;
+  margin: 16px 0 0;
+  text-align: center;
+  text-wrap: balance;
+}
+/* "What’s sent": the exact message, in mono on the list surface, selectable. */
+.fr-sheet-code {
+  align-self: stretch;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  font: 400 12px/18px var(--font-mono, "Geist Mono", ui-monospace, Consolas, monospace);
+  color: var(--fr-text-2);
+  white-space: pre;
+  user-select: text;
+}
+
+/* ── Cover (R3-64): a skeleton of the browser with the new tab's picture where it sits, and a row of collection cards ──
+   The header is as dense as Privacy's so the preview, its one-line caption and the cards all fit above the footer. */
+.fr-card-main:has(.fr-cover) {
+  padding-top: 24px;
+}
+.fr-stage .fr-card-main:has(.fr-cover) .fr-card-title {
+  margin-top: 12px;
+}
+.fr-card-main:has(.fr-cover) .fr-content {
+  margin-top: 16px;
+}
+.fr-cover {
+  --fr-skel: rgb(from var(--fr-text) r g b / 0.09);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.fr-cover-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 212px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--fr-group);
+  box-shadow: 0 0 0 1px var(--fr-line-2);
+}
+.fr-stage[data-tone="light"] .fr-cover-preview {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.08),
+    0 4px 8px -4px #0000000a,
+    0 16px 24px -8px #0000000f;
+}
+/* Loading-style placeholders: blocks that breathe, never a finished page. */
+.fr-skel {
+  display: block;
+  flex: none;
+  border-radius: 3px;
+  background: var(--fr-skel);
+  /* The breath slows with the speed setting and is gone when motion is Off (its depth goes to 0; a 2.4 ms loop would strobe). */
+  animation: fr-skel 2.4s ease-in-out infinite;
+  animation-duration: calc(2.4s * max(var(--motion-scale, 1), 1));
+}
+@keyframes fr-skel {
+  50% {
+    opacity: calc(1 - 0.45 * min(var(--motion-scale, 1), 1));
+  }
+}
+.fr-stage[data-reduced-motion] .fr-skel {
+  animation: none;
+}
+.fr-cp-chrome {
+  flex: none;
+  display: grid;
+  gap: 6px;
+  padding: 7px 10px 0;
+  border-bottom: 1px solid var(--fr-line);
+  background: rgb(from var(--fr-text) r g b / 0.03);
+}
+.fr-cp-tabs,
+.fr-cp-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fr-cp-tab {
+  width: 64px;
+  height: 14px;
+  border-radius: 4px 4px 0 0;
+}
+.fr-cp-tab[data-on] {
+  width: 76px;
+  background: rgb(from var(--fr-text) r g b / 0.14);
+}
+.fr-cp-plus {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.fr-cp-bar {
+  padding-bottom: 7px;
+}
+.fr-cp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.fr-cp-address {
+  flex: 1;
+  height: 12px;
+  margin-left: 4px;
+  border-radius: 6px;
+}
+.fr-cp-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0 14px;
+}
+.fr-cp-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.fr-cp-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.fr-cp-name {
+  width: 54px;
+  height: 5px;
+}
+.fr-cp-search {
+  width: 214px;
+  height: 14px;
+  border-radius: 7px;
+}
+.fr-cp-tiles {
+  display: flex;
+  gap: 8px;
+}
+.fr-cp-tiles .fr-skel {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+/* R4-51 "No image" is the new tab without a picture: the search bar and tiles glide down to the middle of the page (the new
+   tab centres its stack when there is no picture) while the picture fades and shrinks away; picking a collection reverses it.
+   The layout itself never changes (no shift): only transform and opacity move, on the springs CoverStep puts in these vars
+   (Off: 0 ms, instant). The tiles follow the search bar by a beat; the picture comes back a beat after the search bar leaves. */
+.fr-cp-lift {
+  transition: transform var(--fr-cp-in-ms, 0ms) var(--fr-cp-in-ease, linear);
+}
+.fr-cp-lift[data-follow] {
+  transition-delay: var(--fr-cp-follow, 0ms);
+}
+.fr-cp-page[data-none] .fr-cp-lift {
+  transform: translateY(var(--fr-cp-drop, 0px));
+}
+/* The cover, 16:9, in the middle of the page exactly where the framed new tab puts it. */
+.fr-cp-art {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  max-width: calc(100% - 32px);
+  margin-top: 2px;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--fr-line-2);
+  background: var(--fr-skel);
+  transition:
+    opacity var(--fr-cp-fade-in-ms, 0ms) var(--fr-cp-fade-in-ease, linear) var(--fr-cp-follow, 0ms),
+    transform var(--fr-cp-in-ms, 0ms) var(--fr-cp-in-ease, linear) var(--fr-cp-follow, 0ms);
+}
+.fr-cp-page[data-none] .fr-cp-art {
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity var(--fr-cp-fade-out-ms, 0ms) var(--fr-cp-fade-out-ease, linear),
+    transform var(--fr-cp-out-ms, 0ms) var(--fr-cp-out-ease, linear);
+}
+/* The pictures stack: the next one is decoded, then fades in over the one showing, which stays until it is covered. */
+.fr-cp-layers,
+.fr-cp-layer {
+  position: absolute;
+  inset: 0;
+}
+.fr-cover-img,
+.fr-cover-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Every collection is shown here by one bundled sample (nothing is fetched during setup): say so, quietly. It stays put while
+   one collection crossfades to another and fades only when a picture of your own takes the frame. */
+.fr-cp-tag {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.5);
+  color: rgb(255 255 255 / 0.88);
+  font: 500 10px/14px var(--font-ui, Geist, Inter, sans-serif);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity var(--fr-cp-fade-in-ms, 0ms) var(--fr-cp-fade-in-ease, linear);
+}
+.fr-cp-tag[data-shown] {
+  opacity: 1;
+}
+/* "Your image" before one is added: a sample picture, softened, with an add mark on it. */
+.fr-cover-plus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.88);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.25);
+}
+.fr-cover-plus::before,
+.fr-cover-plus::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #111114;
+  border-radius: 1px;
+}
+.fr-cover-plus::before {
+  width: 10px;
+  height: 1.5px;
+  margin: -0.75px 0 0 -5px;
+}
+.fr-cover-plus::after {
+  width: 1.5px;
+  height: 10px;
+  margin: -5px 0 0 -0.75px;
+}
+/* "No image": the new tab as it opens without a picture, its search bar and a row of tiles in the middle (R4-51). */
+.fr-cover-none {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.fr-cover-none-search {
+  display: block;
+  width: 54px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(from var(--fr-text) r g b / 0.16);
+}
+.fr-cover-none-tiles {
+  display: flex;
+  gap: 4px;
+}
+.fr-cover-none-tiles i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgb(from var(--fr-text) r g b / 0.12);
+}
+/* The caption crossfades in place (both lines share one grid cell, so its height never jumps); the same line stays still. */
+.fr-cover-line {
+  display: grid;
+  min-height: 32px;
+  margin: 10px 8px 6px;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+  text-align: center;
+  text-wrap: balance;
+}
+.fr-cover-line > span {
+  grid-area: 1 / 1;
+}
+.fr-cover-set {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* The collection cards scroll sideways; the edge that still has more fades out so the row never looks cut off. CoverStep drives
+   the scroll on a spring and rests it on card edges itself (R4-51), so there is no CSS snapping to fight the glide; the fade
+   widths (--fr-fade-l/-r, 0–40px / 0–64px) follow the distance left to scroll, frame by frame. */
+.fr-cover-row {
+  --fr-fade-l: 0px;
+  --fr-fade-r: 0px;
+  display: flex;
+  gap: 8px;
+  margin: 0 -4px;
+  padding: 4px 4px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fr-fade-l), #000 calc(100% - var(--fr-fade-r)), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fr-fade-l), #000 calc(100% - var(--fr-fade-r)), transparent);
+}
+/* R3-B13: the faded edge carries a round arrow so the row reads as scrollable, not cut off. */
+.fr-cover-set {
+  position: relative;
+}
+.fr-cover-more {
+  position: absolute;
+  top: 20px;
+  inset-inline-end: 2px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--fr-text);
+  background: color-mix(in srgb, var(--fr-text) 16%, transparent);
+  box-shadow: 0 0 0 1px var(--fr-line-2);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  cursor: default;
+  /* Always there; it fades and settles in when its side has more, and out (not clickable) at that end. */
+  opacity: 0;
+  transform: scale(0.86);
+  pointer-events: none;
+  transition:
+    opacity calc(160ms * var(--motion-e, var(--motion-scale, 1))) cubic-bezier(0.2, 0, 0, 1),
+    transform calc(200ms * var(--motion-scale, 1)) cubic-bezier(0.2, 0, 0, 1),
+    background-color calc(140ms * min(var(--motion-scale, 1), 1)) cubic-bezier(0.45, 0.05, 0.55, 0.95);
+}
+.fr-cover-more[data-shown] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.fr-cover-more[data-side='start'] {
+  inset-inline-end: auto;
+  inset-inline-start: 2px;
+}
+.fr-cover-more:hover {
+  background: color-mix(in srgb, var(--fr-text) 26%, transparent);
+}
+.fr-cover-more:dir(rtl) svg {
+  transform: scaleX(-1);
+}
+/* Right to left: the row starts on the right, so its fades swap sides. */
+.fr-cover-row:dir(rtl) {
+  -webkit-mask-image: linear-gradient(270deg, transparent, #000 var(--fr-fade-l), #000 calc(100% - var(--fr-fade-r)), transparent);
+  mask-image: linear-gradient(270deg, transparent, #000 var(--fr-fade-l), #000 calc(100% - var(--fr-fade-r)), transparent);
+}
+.fr-cover-card {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 96px;
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+  cursor: default;
+  transition:
+    color calc(0.12s * var(--motion-e, var(--motion-scale, 1))) var(--fr-ease),
+    opacity calc(0.16s * var(--motion-e, var(--motion-scale, 1))) var(--fr-ease);
+}
+.fr-cover-card[data-busy] {
+  opacity: 0.6;
+}
+.fr-cover-card:has(input:checked) {
+  color: var(--fr-text);
+}
+.fr-cover-thumb {
+  position: relative;
+  display: block;
+  width: 96px;
+  height: 60px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--fr-skel);
+  box-shadow: 0 0 0 1px var(--fr-line-2);
+  transition: transform calc(0.14s * min(var(--motion-scale, 1), 1)) var(--fr-ease);
+}
+/* The selection ring is its own layer 2px outside the thumbnail that only fades (no outline repaint while the row glides, so it
+   never flickers); it lifts with the thumbnail on hover, but nothing lifts while the row is moving under a resting pointer. */
+.fr-cover-ring {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 104px;
+  height: 68px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px var(--fr-ring, var(--fr-accent));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity calc(0.12s * var(--motion-e, var(--motion-scale, 1))) var(--fr-ease),
+    transform calc(0.14s * min(var(--motion-scale, 1), 1)) var(--fr-ease);
+}
+.fr-cover-row:not([data-moving]) .fr-cover-card:hover :is(.fr-cover-thumb, .fr-cover-ring) {
+  transform: translateY(-1px);
+}
+.fr-cover-card:has(input:checked) .fr-cover-ring {
+  opacity: 1;
+}
+.fr-cover-card:has(input:focus-visible) .fr-cover-ring {
+  --fr-ring: var(--fr-text);
+  opacity: 1;
+}
+.fr-cover-tick {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fr-accent);
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity calc(0.12s * var(--motion-e, var(--motion-scale, 1))) var(--fr-ease),
+    transform calc(0.16s * var(--motion-scale, 1)) var(--fr-ease);
+}
+.fr-cover-card:has(input:checked) .fr-cover-tick {
+  opacity: 1;
+  transform: none;
+}
+.fr-cover-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Profile: 72px avatar, a centred name field, square color swatches ── */
+
+.fr-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.fr-profile .fr-profile-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--font-display, Inter, Geist, sans-serif);
+  font-weight: 560;
+  letter-spacing: -0.02em;
+  transition:
+    background-color 0.2s var(--fr-ease),
+    outline-color 0.2s var(--fr-ease);
+}
+/* R3-02 / R4-03, the ONE place a profile avatar carries a ring (founder, 26 and 27 Oct): on this setup step the chosen profile
+   colour is a deliberate ring around the picture, 3px thick with a 4px gap of the scene showing between photo and ring (the
+   first version hugged the picture at 3px and a monogram's disc, already that colour, swallowed it). The ring is an outline,
+   so the 72px picture keeps its size; it follows the round shape. Toolbar, sidebar, menus and Settings stay ringless
+   (tests/avatar-no-ring.test.cjs allows exactly this selector). */
+.fr-profile .fr-profile-avatar {
+  outline: 3px solid var(--fr-profile-color, transparent);
+  outline-offset: 4px;
+}
+.fr-field {
+  display: block;
+  width: 280px;
+  height: 32px;
+  margin: 24px auto 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  outline: none;
+  background: var(--fr-field);
+  color: var(--fr-text);
+  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  text-align: center;
+}
+.fr-field::placeholder {
+  color: var(--fr-text-4);
+}
+.fr-stage .fr-field:focus-visible,
+.fr-field:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--fr-accent);
+}
+.fr-swatches {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  border: 0;
+}
+.fr-swatch {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+.fr-swatch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+}
+.fr-swatch span {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.12s var(--fr-ease);
+}
+.fr-swatch:has(input:checked) span {
+  outline-color: var(--fr-accent);
+}
+/* Keyboard focus is a 2px ring in the text color, distinct from the accent ring that marks the choice. */
+.fr-swatch:has(input:focus-visible) span {
+  outline-color: var(--fr-text);
+}
+
+/* ── Look: three 136×86 miniatures; selected = 2px accent outline ── */
+
+/* Three 136×86 miniatures, 16px apart (440px): exactly the content column. */
+.fr-looks {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fr-look-note {
+  margin-top: 24px;
+}
+.fr-look {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font: 500 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+}
+.fr-look input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+}
+.fr-look:has(input:checked) {
+  color: var(--fr-text);
+}
+.fr-thumb {
+  position: relative;
+  width: 136px;
+  height: 86px;
+  overflow: hidden;
+  border-radius: 6px;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--fr-line);
+  transition: outline-color 0.12s var(--fr-ease);
+}
+.fr-look:has(input:checked) .fr-thumb {
+  outline-color: var(--fr-accent);
+}
+.fr-look:has(input:focus-visible) .fr-thumb {
+  outline-color: var(--fr-text);
+}
+/* The miniature is a thin-line drawing (A's style: one ink, 1px lines, no filled blocks beyond the window's surfaces);
+   these are the window's real surface colors in each theme. */
+.fr-mini {
+  --m-frame: #ebebee;
+  --m-bar: #fff;
+  --m-page: #fafafb;
+  --m-field: #f3f3f5;
+  --m-ink: rgb(0 0 0 / 0.36);
+  --m-ink2: rgb(0 0 0 / 0.17);
+  --m-rule: rgb(0 0 0 / 0.08);
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fr-mini[data-dark] {
+  --m-frame: #141417;
+  --m-bar: #242428;
+  --m-page: #1b1b1e;
+  --m-field: #2c2c31;
+  --m-ink: rgb(255 255 255 / 0.42);
+  --m-ink2: rgb(255 255 255 / 0.2);
+  --m-rule: rgb(255 255 255 / 0.08);
+}
+.fr-thumb[data-auto] .fr-mini[data-dark] {
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.fr-mini .m-frame {
+  fill: var(--m-frame);
+}
+.fr-mini .m-bar {
+  fill: var(--m-bar);
+}
+.fr-mini .m-page {
+  fill: var(--m-page);
+}
+.fr-mini .m-rule {
+  fill: var(--m-rule);
+}
+.fr-mini .m-ink {
+  fill: var(--m-ink);
+}
+.fr-mini .m-ink2 {
+  fill: var(--m-ink2);
+}
+.fr-mini .m-line,
+.fr-mini .m-line2,
+.fr-mini .m-field {
+  stroke-width: 1;
+  stroke-linecap: square;
+}
+.fr-mini .m-line {
+  fill: none;
+  stroke: var(--m-ink);
+}
+.fr-mini .m-line2 {
+  fill: none;
+  stroke: var(--m-ink2);
+}
+.fr-mini .m-field {
+  fill: var(--m-field);
+  stroke: var(--m-ink2);
+}
+
+/* Ready: the profile's color beside its name. */
+.fr-summary-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  vertical-align: top;
+}
+.fr-summary-profile .profile-avatar {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  margin-inline: 3px;
+}
+.fr-profile .fr-profile-note {
+  margin-top: 12px;
+}
+
+/* Smaller windows: the card keeps its proportions and scales as one piece, so it never scrolls. */
+@media (max-height: 740px), (max-width: 800px) {
+  .fr-card {
+    zoom: 0.86;
+  }
+}
+@media (max-height: 640px), (max-width: 680px) {
+  .fr-card {
+    zoom: 0.74;
+  }
+}
+
+/* ── Make it yours: a glass panel over the live browser (concept), A's finish picker inside ── */
+
+/* The host is appended to `.app`, a CSS grid: in flow it became an implicit second row and squeezed the browser to
+   half the window (the acrylic window showed the desktop below). Keep it out of flow (H's fix, tested). */
+.fr-yours-host {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.fr-yours {
+  --fr-glass: 22 22 25;
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  pointer-events: none;
+  color: var(--fr-text);
+  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+.fr-yours[data-tone="light"] {
+  --fr-glass: 252 252 253;
+}
+.fr-yours button {
+  font: inherit;
+  -webkit-app-region: no-drag;
+}
+/* The shared Segmented keeps its own type (12/500, never a weight change on selection); the inherit above would flatten it. */
+.fr-yours .acira-seg button {
+  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+}
+.fr-yours-panel {
+  position: absolute;
+  left: calc(50% - 280px);
+  bottom: 32px;
+  width: 560px;
+  padding: 20px 24px 16px;
+  border-radius: 8px;
+  pointer-events: auto;
+  background: rgb(22 22 25 / 0.62);
+  -webkit-backdrop-filter: blur(36px) saturate(1.4);
+  backdrop-filter: blur(36px) saturate(1.4);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 24px -4px rgb(0 0 0 / 0.32),
+    0 32px 80px -16px rgb(0 0 0 / 0.42);
+}
+.fr-yours[data-tone="light"] .fr-yours-panel {
+  background: rgb(255 255 255 / 0.66);
+  -webkit-backdrop-filter: blur(36px) saturate(1.15);
+  backdrop-filter: blur(36px) saturate(1.15);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.7),
+    0 0 0 1px rgb(0 0 0 / 0.06),
+    0 8px 24px -6px rgb(0 0 0 / 0.12),
+    0 24px 56px -16px rgb(0 0 0 / 0.18);
+}
+.fr-yours-panel h2 {
+  margin: 0;
+  font: 560 20px/28px var(--font-display, Inter, Geist, sans-serif);
+  letter-spacing: -0.02em;
+  font-feature-settings: "cv11", "ss03";
+  outline: none;
+}
+.fr-yours-sub {
+  margin: 2px 0 12px;
+  color: var(--fr-text-2);
+}
+.fr-yours-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 0;
+}
+.fr-yours-row > span {
+  font-weight: 500;
+}
+/* A row with a hint: the hint sits under the control, in its own column, so the label column stays one line. */
+.fr-yours-row[data-hint] {
+  row-gap: 6px;
+}
+.fr-yours-hint {
+  grid-column: 2;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: var(--fr-text-2);
+}
+.fr-yours-row > span em {
+  display: block;
+  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font-style: normal;
+  color: var(--fr-text-3);
+}
+/* One row of A's finish swatches (24px squares by default), 8px apart. */
+.fr-yours-finishes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fr-yours { --seg-track: rgb(from var(--fr-text) r g b / 0.06); --seg-thumb: rgb(255 255 255 / 0.12); --seg-thumb-rim: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 2px rgb(0 0 0 / 0.3); --seg-ink: var(--fr-text); --seg-ink-2: var(--fr-text-2); --seg-ring: var(--fr-accent); }
+.fr-yours[data-tone="light"] { --seg-thumb: #fff; --seg-thumb-rim: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.08); }
+.fr-yours-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+.fr-yours-foot .fr-btn-text {
+  margin-left: -12px;
+}
+.fr-yours[data-reduced-motion] * {
+  transition-duration: 0.01s !important;
+}
+/* High contrast: the glass, fills and accent are replaced by system colors, so everything that carried meaning in
+   a fill gets a system-color edge or Highlight instead: "on" and "chosen" are Highlight, outlines are CanvasText,
+   and the color choices (swatches, miniatures, avatars) keep their real colors. */
+@media (forced-colors: active) {
+  .fr-card,
+  .fr-yours-panel {
+    border: 1px solid CanvasText;
+  }
+  .fr-group {
+    border: 1px solid GrayText;
+  }
+  .fr-field {
+    border: 1px solid CanvasText;
+  }
+  .fr-stage .fr-field:focus-visible,
+  .fr-field:focus {
+    outline: 2px solid Highlight;
+    box-shadow: none;
+  }
+  .fr-toggle {
+    forced-color-adjust: none;
+    background: Canvas;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+  .fr-toggle::after {
+    background: CanvasText;
+    box-shadow: none;
+  }
+  .fr-toggle:checked {
+    background: Highlight;
+    box-shadow: none;
+  }
+  .fr-toggle:checked::after {
+    background: HighlightText;
+  }
+  .fr-check {
+    forced-color-adjust: none;
+    color: Highlight;
+  }
+  .fr-bar {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .fr-swatch span,
+  .fr-thumb,
+  .fr-avatar,
+  .fr-stage .profile-avatar {
+    forced-color-adjust: none;
+  }
+  .fr-thumb {
+    box-shadow: 0 0 0 1px CanvasText;
+  }
+  .fr-swatch:has(input:checked) span,
+  .fr-look:has(input:checked) .fr-thumb {
+    outline-color: Highlight;
+  }
+  .fr-swatch:has(input:focus-visible) span,
+  .fr-look:has(input:focus-visible) .fr-thumb {
+    outline-color: CanvasText;
+  }
+  .fr-yours .acira-seg {
+    border: 1px solid CanvasText;
+  }
+  .fr-yours .acira-seg-thumb {
+    forced-color-adjust: none;
+    background: Highlight;
+    box-shadow: none;
+  }
+  .fr-yours .acira-seg button[aria-checked="true"] {
+    forced-color-adjust: none;
+    color: HighlightText;
+  }
+}
+
+.fr-toggle:active,.fr-toggle:active::after{transition-duration:30ms}
+
+/* ── Import: every found profile in one list (multi-select) ───────────────────────────────────────────────────────────
+   The list keeps the card's group look and scrolls inside its own rounded edge, four rows tall; an edge fades only while
+   more is hidden past it. Rows take K's list rule (.fr-row/.fr-pick); a chosen row shows a filled box, and a quiet word
+   says where it goes ("This profile" for the first, "New profile" for the rest). */
+.fr-import-list {
+  max-height: calc(4 * 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 4px;
+}
+/* A slim thumb only, inside the group's edge: no track, no arrow buttons. */
+.fr-import-list::-webkit-scrollbar {
+  width: 10px;
+}
+.fr-import-list::-webkit-scrollbar-track,
+.fr-import-list::-webkit-scrollbar-button {
+  display: none;
+  background: transparent;
+}
+.fr-import-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 5px;
+  background: var(--fr-line-3) padding-box;
+}
+.fr-import-list .fr-row small {
+  white-space: nowrap;
+}
+.fr-detail-split {
+  display: flex;
+  min-width: 0;
+}
+.fr-detail-who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fr-detail-holds {
+  flex: none;
+  white-space: pre;
+}
+.fr-import-list[data-fade-top] {
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+}
+.fr-import-list[data-fade-bottom] {
+  mask-image: linear-gradient(to top, transparent, #000 24px);
+}
+.fr-import-list[data-fade-top][data-fade-bottom] {
+  mask-image: linear-gradient(to bottom, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+.fr-trail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* An 11px tag sits on a chosen row's fill, which is lighter in dark: at text-3 it measured 3.7:1 there, at text-2 4.4:1,
+   so it takes 90% of the text ink (4.5:1 or better on real pixels at 100% and 150%). */
+.fr-tag {
+  font: 500 11px/16px var(--font-ui, Geist, Inter, sans-serif);
+  color: rgb(from var(--fr-text) r g b / 0.9);
+  white-space: nowrap;
+}
+.fr-box {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--fr-line-3);
+  color: transparent;
+  transition:
+    background-color 0.12s var(--fr-ease),
+    box-shadow 0.12s var(--fr-ease),
+    color 0.12s var(--fr-ease);
+}
+.fr-pick:has(input:checked) .fr-box {
+  background: var(--fr-accent);
+  box-shadow: none;
+  color: #fff;
+}
+.fr-pick:has(input:disabled) {
+  cursor: default;
+}
+@media (forced-colors: active) {
+  .fr-box {
+    forced-color-adjust: none;
+    box-shadow: inset 0 0 0 1.5px ButtonText;
+  }
+  .fr-pick:has(input:checked) .fr-box {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+.fr-note.fr-note-signins {
+  margin-top: 8px;
+}
+.fr-card .fr-note-signins .fr-link {
+  display: block;
+  width: fit-content;
+  margin: 6px auto 0;
+}

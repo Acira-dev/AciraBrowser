@@ -1,0 +1,26 @@
+/* Helpers for the panel system rows that panels.css does not cover: a trailing value + chevron, and a disclosure's body. */
+.acira-trail{display:inline-flex;align-items:center;gap:8px}
+.acira-disclosure>summary{list-style:none}
+.acira-disclosure>summary::-webkit-details-marker{display:none}
+/* the body starts on the text edge: row padding 8 + icon column 16 + gap 8 */
+/* Semantic ink stays stable in nested disclosures; currentColor-based menu mixes
+   otherwise dim each child again, including a heading inside an already muted body. */
+.acira-disclosure-body{display:flex;flex-direction:column;gap:6px;padding:2px 8px 8px 32px;font-size:12px;line-height:16px;color:var(--text-2,var(--text-secondary,inherit))}
+.acira-disclosure-body p{margin:0;overflow-wrap:anywhere}
+.acira-disclosure-body h3{margin:6px 0 0;font:500 11px/16px var(--font-ui,inherit);color:var(--text-1,var(--text-primary,inherit))}
+.shields-switch{position:relative;flex:0 0 auto;width:28px;height:16px;padding:0;border:0;border-radius:8px;background:var(--line-strong,rgba(127,127,127,.35));transition:background-color 140ms cubic-bezier(.45,.05,.55,.95)}
+.shields-switch>span{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform 140ms cubic-bezier(.45,.05,.55,.95)}
+/* the one "on" color of every switch (buttons.css: --toggle-on = the finish accent); never a pale fallback */
+.shields-switch[aria-checked=true]{background:var(--toggle-on,var(--accent,#3b6eea))}
+.shields-switch[aria-checked=true]>span{transform:translateX(12px)}
+.shields-switch:focus-visible{outline:2px solid var(--focus-ring-color,var(--focus-ring,#3b6eea));outline-offset:2px}
+.shields-switch:disabled{opacity:.4}
+@media (forced-colors:active){.shields-switch{border:1px solid ButtonText}}
+.acira-disclosure-body .acira-disclosure.acira-nested{margin:0 -8px 0 -32px}
+
+/* Dividers only ever sit between two non-empty groups: none first, none last, none doubled; an empty section takes no space. */
+:is(.site-controls,.extension-panel)>hr:is(:first-child,:last-child),hr+hr{display:none}
+.site-information:empty,.shields:empty,.extension-panel:empty{display:none}
+.acira-disclosure-body .content-filter-controls{margin:0;padding:0;border:0}
+
+.shields-switch:active,.shields-switch:active>span{transition-duration:30ms}

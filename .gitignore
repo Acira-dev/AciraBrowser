@@ -1,0 +1,30 @@
+node_modules/
+.bootstrap/
+dist/
+desktop/runtime.cjs
+desktop/i18n.cjs
+desktop/ui-preload.cjs
+.profile/
+.preview-profile/
+.qa-profiles/
+qa/artifacts/
+release/
+*.log
+.env*
+!.env.example
+desktop/native/build/
+.scratch-src/
+resources/filters/engine.bin
+
+# Spelling dictionaries mirrored for the GitHub release (scripts/mirror-spellcheck-dictionaries.mjs)
+dist-dictionaries/
+desktop/browser-services/tor-engine/win-x64/
+
+# Supabase CLI scratch
+supabase/.temp/
+supabase/.branches/
+
+.tmp-d/
+
+desktop/browser-services/tor-engine/darwin-*/
+desktop/browser-services/tor-engine/.darwin-tor-*/

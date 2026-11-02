@@ -1,0 +1,22 @@
+/* The private tab page: the Tor page's grid in a deep teal graphite (B's private finish, teal since R3-59) in both themes. */
+.pvt-page { --pvt-bg: oklch(.2 .03 200); --pvt-ink: #e8f4f2; --pvt-ink2: rgb(232 244 242 / .66); --pvt-line: rgb(232 244 242 / .12); --pvt-accent: #8fe9e1;
+  box-sizing: border-box; display: flex; justify-content: center; width: 100%; min-height: 100%; padding: clamp(40px, 12vh, 128px) clamp(24px, 4vw, 72px) 64px; background: var(--pvt-bg); color: var(--pvt-ink); font-size: 13px; line-height: 1.45; }
+.pvt-column { width: min(520px, 100%); display: flex; flex-direction: column; align-items: flex-start; }
+.pvt-glyph { display: block; margin: 0 0 20px; line-height: 0; color: var(--pvt-accent); }
+.pvt-page .display-page { margin: 0; color: var(--pvt-ink); }
+.pvt-page .pvt-lede { margin: 12px 0 0; color: var(--pvt-ink2); max-width: 46ch; }
+.pvt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; margin-top: 28px; }
+.pvt-page h2 { margin: 0 0 8px; font: 500 13px/18px var(--font-ui, Geist, Inter, sans-serif); color: var(--pvt-ink); }
+.pvt-page ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; color: var(--pvt-ink2); }
+.pvt-page li { position: relative; padding-left: 14px; }
+.pvt-page li::before { content: ''; position: absolute; left: 1px; top: .72em; width: 6px; height: 1px; background: currentColor; opacity: .6; }
+.pvt-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 24px; padding: 12px 0; border-top: 1px solid var(--pvt-line); border-bottom: 1px solid var(--pvt-line); }
+.pvt-row small { display: block; font-size: 12px; color: var(--pvt-ink2); }
+.pvt-page .shields-switch { background: rgb(232 244 242 / .16); }
+.pvt-page .shields-switch[aria-checked='true'] { background: var(--pvt-accent); opacity: .55; }
+.pvt-page .shields-switch > span { background: #1b1823; }
+.pvt-foot { margin: 20px 0 0; }
+.pvt-link { padding: 0; border: 0; background: none; color: var(--pvt-accent); font: inherit; cursor: default; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgb(218 196 245 / .4); }
+.pvt-link:hover { text-decoration-color: currentColor; }
+.pvt-link:focus-visible { outline: 2px solid var(--pvt-accent); outline-offset: 2px; }
+@media (max-width: 480px) { .pvt-cols { grid-template-columns: 1fr; } }

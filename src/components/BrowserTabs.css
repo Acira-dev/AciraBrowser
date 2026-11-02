@@ -1,0 +1,25 @@
+/* The full strip uses one scroll plane. Chevrons and New Tab never overlap tabs. */
+.app .tab-strip-container:not(.vertical){gap:0;overflow:visible}
+.tab-strip-viewport{--standard-edge-fade:min(18px,22%);--left-fade:0px;--right-fade:0px;position:relative;isolation:isolate;flex:0 1 auto;min-width:0;height:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;overflow-anchor:none;scroll-padding-inline:18px;mask-image:linear-gradient(to right,transparent 0%,#0005 calc(var(--left-fade)*.2),#000b calc(var(--left-fade)*.5),#000f calc(var(--left-fade)*.8),#000 var(--left-fade),#000 calc(100% - var(--right-fade)),#000f calc(var(--right-fade)*-.8 + 100%),#000b calc(var(--right-fade)*-.5 + 100%),#0005 calc(var(--right-fade)*-.2 + 100%),transparent 100%)}
+.tab-strip-viewport::-webkit-scrollbar{display:none}
+.tab-strip-container[data-scrollable=true][data-overflow-left=true]>.tab-strip-viewport{--left-fade:var(--standard-edge-fade)}
+.tab-strip-container[data-scrollable=true][data-overflow-right=true]>.tab-strip-viewport{--right-fade:var(--standard-edge-fade)}
+.tab-strip-container[data-scrollable=false]>.tab-strip-viewport{mask-image:none}
+.app .tab-strip-viewport>.tabs-strip{position:relative;flex:none;max-width:none;overflow:visible;min-width:0}
+.tab-strip-container:not(.vertical)>.tab-strip-add{flex:0 0 32px;width:32px;margin-left:4px}
+.standard-tabs-scroll{position:relative;flex:0 0 24px;display:grid;place-items:center;width:24px;height:30px;border-radius:7px;background:none;color:var(--frame-text);opacity:0;pointer-events:none;transition:opacity .12s;-webkit-app-region:no-drag}
+.standard-tabs-scroll.previous{margin-right:2px}.standard-tabs-scroll.next{margin-left:2px}
+.tab-strip-container:is(:hover,:focus-within)>.standard-tabs-scroll:not(:disabled),.standard-tabs-scroll:focus-visible{opacity:1;pointer-events:auto}
+.standard-tabs-scroll:hover{background:var(--frame-hover,var(--hover))}
+.app .tab-strip-container:not(.vertical) .browser-tab{container-type:inline-size}
+.app .tab-strip-container:not(.vertical) .browser-tab[data-icon-only=true]{justify-content:center;gap:0}
+.tab-strip-container:not(.vertical) .browser-tab[data-icon-only=true]>.tab-title,.tab-strip-container:not(.vertical) .browser-tab[data-icon-only=true]>.tab-close{display:none}
+.standard-tab-icon-close{position:absolute;left:calc(50% - 12px);top:calc(50% - 12px);width:24px;height:24px;display:grid;place-items:center;border-radius:6px;color:inherit;opacity:0;pointer-events:none;transition:opacity .1s}
+.browser-tab[data-icon-only=true].selected:is(:hover,:focus-within)>.standard-tab-icon-close{opacity:1;pointer-events:auto}
+.app .browser-tab>.standard-tab-icon-close:hover{background:transparent;color:inherit}
+.browser-tab[data-icon-only=true].selected:is(:hover,:focus-within)>:is(.site-identity-icon,.agent-glyph,svg,img){opacity:0}
+.browser-tab[data-icon-only=true]>:is(.site-identity-icon,.agent-glyph,svg,img){transition:opacity .1s}
+.tab-strip-container[data-reduced-motion=true] *{transition:none}
+@container(max-width:104px){.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true])>.tab-close{position:absolute;right:3px;opacity:0;pointer-events:none}.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{opacity:1;pointer-events:auto;background:var(--frame)}.tab-strip-container:not(.vertical) .browser-tab.selected:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{background:var(--frame-selection-bg)}}
+
+.tab-strip-container[data-dragging=true]>.tab-strip-viewport{mask-image:none}

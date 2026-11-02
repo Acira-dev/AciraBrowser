@@ -1,0 +1,197 @@
+/* Library pages: History, Bookmarks, Downloads. One left-aligned column, a search that stays in reach, quiet 40px rows,
+   hairlines that fade out at both ends. Scoped above the shared frost rules so these win without touching them. */
+.app.style-acira .lib {
+  --lib-line: var(--line, var(--divider-subtle, rgb(var(--ink) / 0.1)));
+  --lib-hover: var(--panel-hover, var(--hover, rgb(var(--ink) / 0.05)));
+  --lib-text: var(--text-1, var(--ed-ink));
+  --lib-muted: var(--text-2, var(--ed-muted));
+  --lib-quiet: var(--panel-meta, var(--text-3, var(--ed-muted)));
+  --lib-radius: var(--row-radius, 6px);
+  --lib-ring: var(--focus-ring-color, var(--focus-ring, #3b6fd8));
+  --lib-ease: var(--nt-ease, cubic-bezier(0.2, 0, 0, 1));
+  padding: 40px 40px 80px;
+  transition: padding-bottom 160ms var(--lib-ease);
+  background: var(--sheet, var(--surface));
+  color: var(--lib-text);
+  font-family: var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif);
+}
+.lib * { box-sizing: border-box; }
+/* A toast rises from the bottom of the page area: while one shows, the list has room under its last row (toast 48px + 24px above the edge). */
+.app.style-acira .lib[data-toast] { padding-bottom: 152px; }
+.lib-inner { padding-top: 56px; width: 100%; max-width: 840px; margin: 0 auto; animation: lib-in 240ms var(--lib-ease) backwards; }
+@keyframes lib-in { from { opacity: 0; translate: 0 4px; } }
+
+/* ---- header and search ---- */
+.lib-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.lib-head h1 { margin: 0; font: 560 24px/28px var(--font-ui); letter-spacing: -0.02em; color: var(--lib-text); }
+.lib-head p { margin: 4px 0 0; font: var(--subtitle-weight, 420) 13px/20px var(--font-subtitle, var(--font-ui)); letter-spacing: var(--subtitle-tracking, -0.008em); color: var(--lib-muted); }
+.lib-head-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.lib-toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; margin: 0 -12px 4px; padding: 8px 12px; background: linear-gradient(var(--sheet, var(--surface)) calc(100% - 8px), transparent); }
+.lib-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 6px 0 10px; border: 1px solid transparent; border-radius: 6px; background: var(--input-fill, rgb(var(--ink) / 0.045)); color: var(--lib-muted); transition: border-color 0.12s var(--lib-ease); }
+.lib-search:hover { border-color: var(--line-strong, rgb(var(--ink) / 0.16)); }
+.lib-search:focus-within { border-color: var(--lib-ring); color: var(--lib-text); }
+.lib-search input { flex: 1; min-width: 0; height: 20px; padding: 0; border: 0; border-radius: 4px; background: none; box-shadow: none; outline: 0; font: 400 14px/20px var(--font-ui); color: var(--lib-text); }
+.lib-search input:focus-visible { outline: 2px solid var(--lib-ring); outline-offset: 1px; }
+.lib-search input::placeholder { color: var(--lib-muted); opacity: 1; }
+.lib-search kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-kbd, 3px); box-shadow: inset 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)); font: 500 11px/1 var(--font-ui); color: var(--lib-quiet); }
+/* Keys are Geist in a hairline box, never the browser's monospace default. */
+.app.style-acira .lib kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-kbd, 3px); background: none; box-shadow: inset 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)); font: 500 11px/1 var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--lib-muted); }
+.lib-count { flex: none; font: 400 12px/16px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--lib-quiet); }
+
+/* ---- sections: quiet title and count over a hairline that fades at both ends ---- */
+.lib-section { margin-top: 20px; }
+/* Long histories: sections off screen are not laid out until they are near. */
+.lib-section:not(:first-of-type):not([data-windowed]):not([data-day]) { content-visibility: auto; contain-intrinsic-size: auto 480px; }
+/* A windowed day (Library.tsx useRowWindow) keeps only the rows near the viewport and pads for the rest, so its height is exact at all times. */
+.lib-section[data-windowed] .lib-list { box-sizing: border-box; }
+/* The days of History (BrowserHistory + useDayWindow): the margin belongs to the day, not to its place in the DOM, because days far from the screen are not in the DOM. */
+.lib-days { display: flow-root; }
+.lib-section[data-day] { margin-top: 20px; }
+.lib-section[data-day][data-lead] { margin-top: 12px; }
+.lib-section:first-of-type { margin-top: 12px; }
+.lib-section-head { position: sticky; top: 47px; z-index: 4; background: var(--sheet, var(--surface)); display: flex; align-items: center; gap: 8px; height: 28px; padding-bottom: 8px; }
+.lib-section-head::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--sep-line); }
+.lib-section-head h2 { margin: 0; font: 500 12px/16px var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--lib-muted); }
+.lib-section-count { font: 400 12px/16px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--lib-quiet); }
+.lib-section-action { margin-left: auto; opacity: 0; transition: opacity 0.12s var(--lib-ease); }
+.lib-section:hover .lib-section-action, .lib-section:focus-within .lib-section-action { opacity: 1; }
+.lib-list { display: flex; flex-direction: column; padding-top: 6px; }
+
+/* ---- rows: 40px, hairline-free, a soft fill on hover ---- */
+.lib-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; margin: 0 -12px; padding: 0 12px; border-radius: var(--lib-radius); transition: background-color 0.1s; }
+.lib-row:hover, .lib-row:focus-within, .lib-row[data-selected] { background: var(--lib-hover); }
+.lib-row[data-drop='before']::before, .lib-row[data-drop='after']::after { content: ''; position: absolute; left: 12px; right: 12px; height: 2px; border-radius: 1px; background: var(--accent, var(--lib-ring)); }
+.lib-row[data-drop='before']::before { top: -1px; }
+.lib-row[data-drop='after']::after { bottom: -1px; }
+.lib-row[data-drop='into'] { box-shadow: inset 0 0 0 1px var(--accent, var(--lib-ring)); }
+.lib-row[data-dragging] { opacity: 0.45; }
+.lib-open { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; border: 0; border-radius: var(--lib-radius); background: none; color: inherit; font: inherit; text-align: left; cursor: default; }
+.lib-open:focus-visible, .lib-icon:focus-visible { outline: 2px solid var(--lib-ring); outline-offset: 1px; }
+.lib-open > svg, .lib-site { flex: none; width: 16px; height: 16px; color: var(--lib-muted); }
+.lib-text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.lib-title { flex: 0 1 auto; min-width: 0; max-width: 72%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px/20px var(--font-ui); color: var(--lib-text); }
+.lib-host { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/20px var(--font-ui); color: var(--lib-quiet); }
+.lib-trail { flex: none; display: grid; align-items: center; justify-items: end; min-width: 64px; }
+.lib-trail > * { grid-area: 1 / 1; }
+.lib-time { font: 400 12px/16px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--lib-quiet); transition: opacity 0.1s; pointer-events: none; } /* R4-39: the time shares a grid cell with the row actions and must never take their clicks */
+.lib-actions { display: flex; align-items: center; gap: 2px; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+.lib-row:hover .lib-actions, .lib-row:focus-within .lib-actions, .lib-row[data-selected] .lib-actions { opacity: 1; pointer-events: auto; }
+.lib-row:hover .lib-time, .lib-row:focus-within .lib-time { opacity: 0; }
+.lib-icon { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--lib-muted); cursor: default; }
+.lib-icon:hover { background: rgb(var(--ink) / 0.07); color: var(--lib-text); }
+.lib-icon:active { background: rgb(var(--ink) / 0.1); }
+.lib-icon[data-danger]:hover { color: var(--danger-text, #b3261e); }
+.lib-icon:disabled { opacity: 0.4; }
+
+/* ---- buttons are A's acira-button (src/styles/buttons.css): colors and states live there; this is only the row-sized geometry ---- */
+.lib-compact { height: 24px; padding: 0 8px; font-size: 12px; line-height: 16px; border-radius: 4px; gap: 6px; }
+.lib-compact[data-armed], .lib-compact[data-armed]:hover { --btn-quiet-ink: var(--btn-danger-on); --btn-quiet-ink-hover: var(--btn-danger-on); --btn-quiet-fill-hover: var(--btn-danger-base-hover); background-color: var(--btn-danger-base); color: var(--btn-danger-on); font-weight: 600; }
+.acira-button[aria-pressed='true'] { --btn-glass-fill: var(--selection-bg, var(--lib-hover)); }
+
+/* ---- empty states (bible 5.11): left-aligned, no art ---- */
+.lib-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 48px 0; }
+.lib-empty h2 { margin: 0; font: 520 16px/24px var(--font-ui); letter-spacing: -0.012em; color: var(--lib-text); }
+.lib-empty p { margin: 0; max-width: 46ch; font: var(--subtitle-weight, 420) 13px/20px var(--font-subtitle, var(--font-ui)); letter-spacing: var(--subtitle-tracking, -0.008em); color: var(--lib-muted); }
+.lib-empty-actions { margin-top: 12px; display: flex; gap: 8px; }
+.lib-empty .lib-empty-hint { margin-top: 12px; font-size: 12px; line-height: 16px; color: var(--lib-quiet); }
+.lib-empty kbd { padding: 0 4px; border-radius: var(--radius-kbd, 3px); box-shadow: inset 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)); font: 500 11px/1 var(--font-ui); }
+
+/* ---- downloads ---- */
+.lib-row.dl { min-height: 56px; padding-block: 8px; align-items: center; }
+.lib-glyph { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; background: rgb(var(--ink) / 0.05); color: var(--lib-muted); }
+.dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lib-name { display: flex; min-width: 0; font: 500 13px/20px var(--font-ui); color: var(--lib-text); white-space: nowrap; }
+.lib-name-head { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lib-name-tail { flex: none; }
+.dl-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px/16px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--lib-quiet); }
+.dl-meta [data-warn] { color: var(--danger-text, #b3261e); }
+/* A running download's line is the loading line (components/DownloadLine.tsx) along the row's bottom edge, inset like the row's text. */
+.lib-row.dl > .download-line { left: 12px; width: calc(100% - 24px); bottom: -1px; }
+/* The file icon is the download matrix while it downloads (and when the pointer rests on a finished file's icon or name). */
+.dl-lead { display: flex; flex: none; }
+.dl-lead[data-matrix] .lib-glyph { color: var(--accent, var(--lib-text)); }
+.dl-name { display: flex; align-self: flex-start; max-width: 100%; min-width: 0; }
+.lib-row.dl .lib-actions-live { opacity: 1; pointer-events: auto; }
+
+/* ---- bookmarks: folder tree beside the list ---- */
+.bm-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 24px; margin-top: 12px; }
+.bm-tree { position: sticky; top: 56px; align-self: start; display: flex; flex-direction: column; gap: 1px; min-width: 0; max-height: calc(100vh - 160px); overflow-x: hidden; overflow-y: auto; }
+.bm-tree > div { min-width: 0; }
+.bm-node { min-width: 0; max-width: 100%; position: relative; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; padding-left: calc(8px + var(--depth, 0) * 14px); border: 0; border-radius: 6px; background: none; font: 400 13px/18px var(--font-ui); color: var(--lib-muted); text-align: left; cursor: default; }
+.bm-node:hover { background: var(--lib-hover); color: var(--lib-text); }
+.bm-node[aria-current='true'] { background: color-mix(in srgb, var(--lib-text) 7%, transparent); color: var(--lib-text); font-weight: 500; }
+.bm-node[data-drop='into'] { box-shadow: inset 0 0 0 1px var(--accent, var(--lib-ring)); }
+.bm-node:focus-visible { outline: 2px solid var(--lib-ring); outline-offset: -1px; }
+.bm-node > svg { flex: none; width: 14px; height: 14px; }
+.bm-node-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-node-count { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--lib-quiet); }
+.bm-node-virtual { opacity: 0.55; }
+.lib-icon[data-on] { color: var(--accent, var(--lib-text)); }
+/* The popover under the star: its own heading replaces the shell's (kept for screen readers) */
+.app .popup-content-bookmark-edit > .popup-header { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+.bm-edit { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 6px; font-family: var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--text-1, var(--ed-ink)); }
+.bm-edit-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.bm-edit-head > div { display: flex; flex-direction: column; min-width: 0; }
+.bm-edit-head strong { font: 500 13px/18px var(--font-ui); }
+.bm-edit-head small { font: 400 12px/16px var(--font-ui); color: var(--text-3, var(--ed-muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-edit-label { margin-top: 4px; font: 500 12px/16px var(--font-ui); color: var(--text-2, var(--ed-muted)); }
+.bm-edit-input { height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: var(--input-fill, rgb(var(--ink) / 0.045)); box-shadow: none; outline: 0; font: 400 13px/20px var(--font-ui); color: inherit; }
+.bm-edit-input:hover { border-color: var(--line-strong, rgb(var(--ink) / 0.16)); }
+.bm-edit-input:focus { border-color: var(--focus-ring-color, #3b6fd8); box-shadow: inset 0 0 0 1px var(--focus-ring-color, #3b6fd8); }
+.bm-edit-list { display: flex; flex-direction: column; gap: 0; max-height: 168px; overflow: auto; margin: 0 -2px; padding: 0 2px; }
+.bm-edit .acira-sep { margin-inline: 0; }
+.bm-edit-option { display: flex; align-items: center; gap: 8px; flex: none; height: 32px; padding: 0 8px; padding-left: calc(8px + var(--depth, 0) * 14px); border: 0; border-radius: 6px; background: none; color: var(--text-2, var(--ed-muted)); font: 400 13px/18px var(--font-ui); text-align: left; cursor: default; }
+.bm-edit-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-edit-option:hover { background: var(--panel-hover, rgb(var(--ink) / 0.05)); color: var(--text-1, var(--ed-ink)); }
+.bm-edit-option[aria-selected='true'] { color: var(--text-1, var(--ed-ink)); font-weight: 500; }
+.bm-edit-option:focus-visible { outline: 2px solid var(--focus-ring-color, #3b6fd8); outline-offset: -1px; }
+.bm-edit-new { align-self: flex-start; margin-left: -8px; }
+.bm-edit-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.bm-edit-note { margin: 0; font: 400 13px/20px var(--font-ui); color: var(--text-2, var(--ed-muted)); }
+.bm-main { min-width: 0; }
+.bm-crumb { display: flex; align-items: center; gap: 8px; min-height: 28px; padding-bottom: 8px; position: relative; }
+.bm-crumb::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--sep-line); }
+.bm-crumb h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; font: 520 16px/24px var(--font-ui); letter-spacing: -0.012em; color: var(--lib-text); }
+.bm-crumb .lib-section-count { margin-right: auto; }
+.bm-rename { flex: 1; min-width: 0; height: 28px; padding: 0 8px; margin: 0 -8px; border: 1px solid var(--lib-ring); border-radius: 4px; background: var(--input-fill, transparent); box-shadow: inset 0 0 0 1px var(--lib-ring); outline: 0; font: 500 13px/20px var(--font-ui); color: var(--lib-text); }
+.bm-crumb .bm-rename { font: 520 16px/24px var(--font-ui); }
+.bm-row-folder .lib-title { max-width: 100%; }
+.bm-row-folder .lib-host { flex: none; }
+.lib-error { margin: 0 0 8px; font: 400 12px/16px var(--font-ui); color: var(--danger-text, #b3261e); }
+.lib-undo-slot { position: sticky; bottom: 20px; z-index: 6; display: flex; justify-content: center; pointer-events: none; margin-top: 12px; }
+.lib-undo { pointer-events: auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px; border-radius: 8px; background: var(--sheet-raised, var(--popover, var(--sheet, var(--surface)))); box-shadow: 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)), var(--shadow-popover, 0 8px 24px rgb(0 0 0 / 0.18)); font: 400 13px/20px var(--font-ui); color: var(--lib-text); animation: lib-in 160ms var(--lib-ease) backwards; }
+.lib-undo .lib-compact { --btn-quiet-ink: var(--lib-text); --btn-quiet-ink-hover: var(--lib-text); font-weight: 600; }
+.bm-hint { margin: 12px 0 0; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet); }
+
+@media (max-width: 760px) {
+  .app.style-acira .lib { padding: 24px 16px 56px; }
+  .bm-layout { grid-template-columns: 1fr; gap: 12px; }
+  .bm-tree { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .lib-head { flex-direction: column; align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lib-inner { animation: none; }
+}
+.app[data-reduced-motion='true'] .lib-inner { animation: none; }
+@media (forced-colors: active) {
+  .lib-row:hover, .lib-row:focus-within, .bm-node[aria-current='true'] { outline: 1px solid Highlight; }
+}
+/* A link dragged in from a page: the folder being shown takes a calm accent edge while it is over the list. */
+.bm-layout[data-link-drop] .bm-main { border-radius: 10px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #3b6eea) 55%, transparent); }
+/* The page scrolls under the search field; the day label sticks beneath it. Thin neutral scrollbar like Settings (no arrow buttons), gutter always reserved. */
+.ed-library { scrollbar-gutter: stable both-edges; }
+.ed-library::-webkit-scrollbar { width: 10px; height: 10px; }
+.ed-library::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.ed-library::-webkit-scrollbar-track, .ed-library::-webkit-scrollbar-corner { background: transparent; }
+.ed-library::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 6px; background: transparent; background-clip: padding-box; }
+.ed-library:hover::-webkit-scrollbar-thumb { background: rgb(var(--ink, 0 0 0) / 0.22); background-clip: padding-box; }
+.ed-library::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink, 0 0 0) / 0.4); background-clip: padding-box; }
+/* Sticky offsets count from the scroller's content edge, so the top padding lives inside it and the search field can stick flush. */
+.app.style-acira .ed-library.lib { padding-top: 0; }
+/* A rail or narrow pane can constrain the library inside a wide window. Use the page's available width. */
+.app.style-acira .lib { container: library / inline-size; }
+.lib-head > div:first-child { min-width: 0; }
+.lib-head-actions { max-width: 100%; flex-wrap: wrap; }
+@container library (max-width: 600px) {
+  .lib-head { flex-direction: column; align-items: stretch; }
+}

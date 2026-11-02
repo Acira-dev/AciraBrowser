@@ -1,0 +1,100 @@
+/* Setup's Connection sheet (R4-06 Back, R4-08b "Get it" feedback). Kept apart from onboarding.css so the setup shell and the
+   sheet can change independently. Only transform and opacity animate; durations read --motion-scale (Premium 1.7, Fast 1, Off 0). */
+
+/* ── Back: an arrow at the sheet's top-left, and "Back" on the footer's start, next to Done (Esc does the same) ── */
+.fr-sheet-back {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  z-index: 1;
+  width: 36px;
+  padding: 0;
+}
+.fr-sheet-back svg {
+  flex: none;
+}
+
+/* ── "Get it" → dot-matrix loading → dot-matrix check with "Added" ──
+   One button, three faces stacked in one grid cell so its width never changes; the live face is the only one shown, the
+   others wait scaled down and transparent. The faces cross-fade on a short spring-like curve. */
+.fr-vpn .fr-get {
+  display: inline-grid;
+  position: relative;
+  min-width: 84px;
+}
+.fr-vpn .fr-get > .fr-get-face {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transform: scale(0.88);
+  transition:
+    opacity calc(140ms * var(--motion-scale, 1)) ease,
+    transform calc(260ms * var(--motion-scale, 1)) cubic-bezier(0.34, 1.4, 0.5, 1);
+  pointer-events: none;
+}
+.fr-vpn .fr-get[data-phase="idle"] > [data-face="get"],
+.fr-vpn .fr-get:not([data-phase="idle"]) > [data-face="status"] {
+  opacity: 1;
+  transform: none;
+}
+/* "Added" slides in beside the check once the loader has become one; while loading the matrix sits alone, centred. */
+.fr-vpn .fr-get-label {
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  margin-left: -6px;
+  transition:
+    max-width calc(260ms * var(--motion-scale, 1)) cubic-bezier(0.34, 1.2, 0.5, 1),
+    margin-left calc(260ms * var(--motion-scale, 1)) cubic-bezier(0.34, 1.2, 0.5, 1),
+    opacity calc(180ms * var(--motion-scale, 1)) ease;
+}
+.fr-vpn .fr-get-label[data-shown] {
+  max-width: 64px;
+  margin-left: 0;
+  opacity: 1;
+}
+/* Adding and Added are states, not actions: no hover fill, no pointer, but the button keeps focus (it is not disabled). */
+.fr-vpn .fr-get:not([data-phase="idle"]) {
+  cursor: default;
+  pointer-events: none;
+}
+.fr-vpn .fr-get .dot-matrix {
+  flex: none;
+  display: block;
+}
+.fr-vpn .fr-get-failed {
+  margin: 12px 8px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-vpn .fr-get > .fr-get-face {
+    transition: opacity 80ms linear;
+    transform: none;
+  }
+}
+
+/* ── Setup's status pop-up: the house toast, bottom-centre, in the top layer so the transformed setup card never clips it ── */
+.setup-toast-host {
+  position: fixed;
+  inset: auto 0 20px 0;
+  width: fit-content;
+  height: auto;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+  pointer-events: none;
+}
+.setup-toast-host:not(:popover-open) {
+  display: none;
+}
+.setup-toast-host .t-stack {
+  display: block;
+}

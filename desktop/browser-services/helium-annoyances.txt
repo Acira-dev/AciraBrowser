@@ -1,0 +1,17 @@
+! Title: Helium - Annoyances
+! Last modified: %timestamp%
+! Expires: 5 days
+! Description: Helium-specific fixes for filterlists used by Helium.
+! Homepage: https://github.com/imputnet/helium-services
+! License: https://github.com/imputnet/helium-services/blob/main/LICENSE
+!
+! All filters should include a GitHub comment explaining why
+! they are not in upstream filterlists.
+
+! https://github.com/easylist/easylist/issues/22583
+search.brave.com##dialog:has(.promo-content)
+
+! Google's "Choose Chrome, the browser built by Google" bottom sheet (read from the live page, 26 Oct 2026). The sheet is a g-bottom-sheet
+! labelled by promo_label_id / promo_desc_id; no other Google surface uses those ids.
+google.*##g-bottom-sheet[aria-labelledby="promo_label_id"]
+google.*##g-bottom-sheet[aria-describedby="promo_desc_id"]

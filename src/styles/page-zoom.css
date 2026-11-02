@@ -1,0 +1,63 @@
+.page-zoom-controls{display:flex;align-items:center;gap:8px;white-space:nowrap}.page-zoom-controls button{min-width:28px;height:28px;padding:0 8px;border-radius:6px;color:var(--text);background:var(--surface-alt);border:1px solid var(--line);font-size:13px}.page-zoom-controls button:disabled{opacity:.4}.page-zoom-controls output{min-width:42px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}.page-zoom-controls :focus-visible,.address-zoom-indicator:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.zoom-feedback{padding:8px 10px 12px}/* R3-40: the chip keeps at least 8px of air each side of its figure, which is centred in a hairline outline. */
+.address-zoom-indicator{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:44px;max-width:none;height:24px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:500;line-height:1;text-align:center;font-variant-numeric:tabular-nums;color:var(--text);background:var(--surface-alt);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* Bible §4: secondary buttons are transparent with one hairline and 4px radius; numbers in Geist, tabular. */
+.app .page-zoom-controls button{border:0;border-radius:var(--radius-control,4px);background:transparent;box-shadow:inset 0 0 0 1px var(--line);font:500 13px/1 var(--font-ui);font-variant-numeric:tabular-nums}
+.app .page-zoom-controls button:not(:disabled):hover{background:var(--hover)}
+.app .browser-popup .zoom-row button{font:500 13px/1 var(--font-ui);font-variant-numeric:tabular-nums}
+/* The zoom bubble (bible §4 "Zoom bubble"): one 32px row on the menu grid and no title bar. Glyph 12–28, "Zoom" on the
+   x = 36 text edge, then − value + and Reset on the right: quiet 28px buttons (radius 4, the menu highlight on hover), the
+   − and + glyphs of the editor family, the value 13 tabular at 64%. */
+:root:root:root .browser-popup.popup-content-zoom > .popup-header {
+  display: none;
+}
+:root:root:root .zoom-feedback {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 2px 0 8px;
+}
+:root:root:root .zoom-feedback-glyph {
+  flex: 0 0 16px;
+  color: var(--menu-t2, var(--text-2));
+}
+:root:root:root .zoom-feedback-title {
+  flex: 1;
+  min-width: 0;
+  font: 450 13px/20px var(--font-ui);
+}
+:root:root:root .zoom-feedback .page-zoom-controls {
+  gap: 0;
+}
+:root:root:root .zoom-feedback .page-zoom-controls button {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: 500 13px/1 var(--font-ui);
+  transition: background-color 120ms cubic-bezier(.2, 0, 0, 1);
+}
+:root:root:root .zoom-feedback .page-zoom-controls button:not(:disabled):hover {
+  background: var(--menu-hover);
+}
+:root:root:root .zoom-feedback .page-zoom-controls button:disabled {
+  opacity: .32;
+}
+:root:root:root .zoom-feedback .page-zoom-controls output {
+  min-width: 44px;
+  font: 450 13px/20px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--menu-t2, var(--text-2));
+}
+:root:root:root .zoom-feedback .page-zoom-controls button:last-child {
+  margin-left: 8px;
+  padding: 0 8px;
+}

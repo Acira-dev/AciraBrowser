@@ -1,0 +1,54 @@
+.app .split-group-parent{display:flex;flex-shrink:0;align-items:center;gap:1px;height:28px;margin-block:4px;border-radius:var(--geometry-materialRadius,8px);background:var(--glass);box-shadow:var(--elevation-rim,inset 0 0 0 1px rgb(var(--ink)/.12)),inset 0 1px 0 rgb(255 255 255/.08);color:var(--ed-ink);min-width:0;isolation:isolate}
+.app .split-group-parent[data-active]{background:color-mix(in srgb,var(--accent) 10%,var(--glass));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
+.app .split-group-parent button{border:0;background:transparent;color:inherit;border-radius:5px;height:24px;display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding:0 5px;cursor:default}
+.app .split-group-parent button:hover{background:rgb(var(--ink)/.08)}
+.app .split-group-parent button:active{background:rgb(var(--ink)/.13)}
+.app .split-group-parent button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.app .split-group-disclosure{flex:0 0 22px}
+.app .split-group-open{flex:1;overflow:hidden}
+.app .split-group-open>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.app .split-group-open>small{font-size:10px;opacity:.65;margin-left:2px;padding-right:3px}
+/* R4 responsive sweep: a chip too narrow for "Split view" (a small window) drops the word instead of cutting it: the glyph and count stay, the name is its tooltip and accessible name. */
+.app .split-group-parent.tab-flow{container:splitchip/inline-size}
+@container splitchip (max-width:124px){.app .split-group-open>span{display:none}.app .split-group-open{justify-content:center}}
+.app .split-group-sidebar{width:100%;margin-block:2px;height:30px}
+.app .split-group-sidebar .split-group-open{justify-content:flex-start}
+.app [data-split-child]{border-left:1px solid color-mix(in srgb,var(--ed-ink) 12%,transparent);margin-left:10px;padding-left:4px}
+.app .split-group-parent[data-drop]{box-shadow:inset 0 0 0 2px var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--glass))}
+.app.opaque-glass .split-group-parent{background:var(--overlay)}
+/* R3-30: while the selected tab is hidden inside a collapsed split, its pill must not stay behind as an empty grey slot. */
+.app :is(.tab-strip-selection,.acira-compact-selection)[data-hidden]{opacity:0;transition:opacity calc(120ms*var(--motion-scale,1)) ease-out}
+/* R3-24: one joined container per split (SplitGroupSurfaces): chip and members inside one hairline-ringed wash, the accent when this split is on screen. Distinct from a tab group's coloured tray. */
+.app .split-group-tray{position:absolute;left:0;top:0;z-index:-1;box-sizing:border-box;pointer-events:none;border-radius:var(--geometry-materialRadius,8px);background:rgb(var(--ink)/.055);box-shadow:inset 0 0 0 1px rgb(var(--ink)/.14);transition:background-color calc(160ms*var(--motion-scale,1)) ease-out,box-shadow calc(160ms*var(--motion-scale,1)) ease-out;will-change:transform,width,height}
+.app .split-group-tray[data-active]{background:color-mix(in srgb,var(--accent) 9%,rgb(var(--ink)/.04));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
+.app .split-group-tray[data-nested]{border-radius:6px}
+/* The chip inside the container is its leading cap and has no box of its own. */
+.app .split-group-parent.tab-flow,.app .split-group-parent.tab-flow[data-active]{background:transparent;box-shadow:none;height:24px;margin-block:6px}
+.app .split-group-parent.tab-flow[data-drop]{background:color-mix(in srgb,var(--accent) 14%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}
+.app .split-group-icons{display:inline-flex;align-items:center;gap:3px;margin-left:auto;padding-right:3px}
+.app .split-group-icons>:is(img,svg){width:14px;height:14px;border-radius:3px;object-fit:contain}
+@media(forced-colors:active){.app .split-group-parent{border:1px solid CanvasText}.app .split-group-parent[data-active]{border-color:Highlight}}
+/* R3-79: the whole split takes a dragged tab (its chip, any member, the gap between two): the members tint, a 2px accent bar marks the slot. */
+.app :is(.tab-flow,.sb-tab)[data-split-hover]{background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:var(--geometry-materialRadius,8px)}
+.app .tab-flow[data-split-insert=before]{box-shadow:inset 2px 0 0 var(--accent)}
+.app .tab-flow[data-split-insert=after]{box-shadow:inset -2px 0 0 var(--accent)}
+/* Sidebar rows draw the slot as the sidebar's own drop line (sidebar.css): an inset bar was hidden under a current row's card. */
+/* Strip tabs, chips and group labels are grabbed, never selected as text (ui/rowSelectionGuard.ts); rename fields stay selectable. */
+.app :is(.tabs-strip,.acira-compact-tabs) :is(.tab-flow,[data-group-header],.split-group-parent){-webkit-user-select:none;user-select:none}
+.app :is(.tabs-strip,.acira-compact-tabs) :is(input,textarea,[contenteditable=true]){-webkit-user-select:text;user-select:text}
+/* Linked copies (founder, 28 Oct): a tab of a tab group that is also drawn in a loose split, one tab in two chips. Both chips wear a small badge
+   on the site icon (it costs no width, so titles keep their room): the tab's own chip a split glyph on a neutral disc ("Also in split view"),
+   its copy in the split's tray a link glyph on a disc in the group's colour ("In group G"), plus a fainter title. Both read as current together
+   (two selection pills on one spring). A chip too narrow for its icon and badge side by side keeps the badge at its corner. */
+.app :is(.browser-tab,.acira-compact-tab):is(.link-copy,.link-home){position:relative}
+.app :is(.browser-tab>.tab-link-mark,.acira-compact-tab-link){position:absolute;z-index:2;left:21px;bottom:4px;width:12px;height:12px;display:grid;place-items:center;border-radius:50%;background:rgb(91 96 104);color:#fff;box-shadow:0 0 0 1.5px rgb(0 0 0/.28);pointer-events:auto;cursor:default}
+.app .acira-compact-tab-link{left:17px}
+.app :is(.browser-tab>.tab-link-mark,.acira-compact-tab-link)[data-role=group]{background:color-mix(in srgb,var(--link-color,#8a8f98) 62%,#1d1f22)}
+.app :is(.tab-link-mark,.acira-compact-tab-link)>svg{width:8px;height:8px}
+.app :is(.browser-tab[data-icon-only=true]>.tab-link-mark,.acira-compact-tab[data-labels=false] .acira-compact-tab-link){left:auto;right:3px}
+.app :is(.browser-tab.link-copy:not(.selected) .tab-title,.acira-compact-tab.link-copy:not(.selected) .acira-compact-tab-label){opacity:.7}
+.app :is(.tab-strip-selection,.acira-compact-selection)[data-copy][data-hidden]{opacity:0}
+@media(forced-colors:active){.app :is(.tab-link-mark,.acira-compact-tab-link){background:CanvasText;color:Canvas}}
+/* A pane the floating sidebar covers is cut where the sidebar meets it, with the card's rounded left corners, as the page is (sidebar-overlay.css). The page's own cut rounds only the card's top and
+   bottom corners there; stacked panes meet the sidebar's edge in between too. At rest only: while the sidebar slides, the group's clip does it and a pane's own would be taken into the picture. */
+:root:not([data-mode-switch])[data-sidebar-overlay=dom] .app.style-acira:has(>.acira-sidebar.is-peek) .page-area .page-pane[data-pane][data-sf-cover]{clip-path:inset(0 0 0 var(--sf-pane-cover) round var(--geometry-pageRadius,8px) 0 0 var(--geometry-pageRadius,8px))}

@@ -1,0 +1,626 @@
+[
+ {
+  "kind": "menu",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 648
+ },
+ {
+  "kind": "tabs",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 388
+ },
+ {
+  "kind": "palette",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 258
+ },
+ {
+  "kind": "security",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 363
+ },
+ {
+  "kind": "bookmarks",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 154
+ },
+ {
+  "kind": "downloads",
+  "label": "3 downloads",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 3,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 183
+ },
+ {
+  "kind": "downloads",
+  "label": "4 downloads",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 4,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 227
+ },
+ {
+  "kind": "downloads",
+  "label": "5 downloads",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 5,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 271
+ },
+ {
+  "kind": "downloads",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0,
+   "parent": "menu"
+  },
+  "measured": 115
+ },
+ {
+  "kind": "switcher",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 224
+ },
+ {
+  "kind": "extensions",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 155
+ },
+ {
+  "kind": "toolbar-context",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 392
+ },
+ {
+  "kind": "customize-toolbar",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 696
+ },
+ {
+  "kind": "tab-context",
+  "label": "web tab",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0,
+   "target": "web"
+  },
+  "measured": 510
+ },
+ {
+  "kind": "tab-context",
+  "label": "Acira tab",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0,
+   "target": "internal"
+  },
+  "measured": 390
+ },
+ {
+  "kind": "strip-context",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 240
+ },
+ {
+  "kind": "split-context",
+  "label": "split of two tabs",
+  "state": {
+   "tabs": 2,
+   "web": true,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 171
+ },
+ {
+  "kind": "find",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 50
+ },
+ {
+  "kind": "zoom",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 44
+ },
+ {
+  "kind": "bookmark-edit",
+  "label": "new bookmark",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 1,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 317
+ },
+ {
+  "kind": "menu",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 648
+ },
+ {
+  "kind": "tabs",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 596
+ },
+ {
+  "kind": "palette",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 1
+  },
+  "measured": 446
+ },
+ {
+  "kind": "security",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 363
+ },
+ {
+  "kind": "bookmarks",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 310
+ },
+ {
+  "kind": "downloads",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0,
+   "parent": "menu"
+  },
+  "measured": 115
+ },
+ {
+  "kind": "switcher",
+  "label": "9 tabs",
+  "state": {
+   "tabs": 9,
+   "web": true,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 368
+ },
+ {
+  "kind": "menu",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 648
+ },
+ {
+  "kind": "tabs",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 648
+ },
+ {
+  "kind": "palette",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 1
+  },
+  "measured": 446
+ },
+ {
+  "kind": "security",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 97
+ },
+ {
+  "kind": "bookmarks",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 280
+ },
+ {
+  "kind": "downloads",
+  "label": "Acira page",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0,
+   "parent": "menu"
+  },
+  "measured": 115
+ },
+ {
+  "kind": "bookmarks",
+  "label": "Acira page, 6 bookmarks",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 436
+ },
+ {
+  "kind": "profile",
+  "label": "sidebar",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0
+  },
+  "measured": 270
+ },
+ {
+  "kind": "tabs",
+  "label": "1 tab",
+  "state": {
+   "tabs": 1,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 180
+ },
+ {
+  "kind": "palette",
+  "label": "1 tab",
+  "state": {
+   "tabs": 1,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 514
+ },
+ {
+  "kind": "more-tools",
+  "label": "5 tabs",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0,
+   "parent": "menu"
+  },
+  "measured": 392
+ },
+ {
+  "kind": "toolbar-context",
+  "label": "Acira page unavailable bookmark",
+  "state": {
+   "tabs": 10,
+   "web": false,
+   "bookmarks": 3,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 362
+ },
+ {
+  "kind": "recent-closed",
+  "label": "6 recently closed tabs",
+  "state": {
+   "tabs": 1,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 1,
+   "recent": 0,
+   "parent": "menu"
+  },
+  "measured": 395
+ },
+ {
+  "kind": "workspace-menu",
+  "label": "3 workspaces",
+  "state": {
+   "tabs": 4,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 3,
+   "recent": 0
+  },
+  "measured": 519
+ },
+ {
+  "kind": "workspace-menu",
+  "label": "3 workspaces, newest locked",
+  "state": {
+   "tabs": 4,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 3,
+   "recent": 0,
+   "locked": true
+  },
+  "measured": 397
+ },
+ {
+  "kind": "profile",
+  "label": "3 workspaces",
+  "state": {
+   "tabs": 4,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 3,
+   "recent": 0
+  },
+  "measured": 330
+ },
+ {
+  "kind": "workspace-edit",
+  "label": "new",
+  "state": {
+   "tabs": 4,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 1,
+   "workspaces": 3,
+   "recent": 0
+  },
+  "measured": 634
+ },
+ {
+  "kind": "update",
+  "label": "ready (English note)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 124
+ },
+ {
+  "kind": "whats-new",
+  "label": "after an update (eight lines of notes)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 222
+ }
+]

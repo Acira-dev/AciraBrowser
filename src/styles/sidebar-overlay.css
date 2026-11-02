@@ -1,0 +1,195 @@
+/* Compositing only. The existing sidebar, toolbar, frame finish and corner rules remain unchanged. */
+:root[data-sidebar-overlay='native'] .app.style-acira { background:none!important; }
+/* Match the native frame backing while the page occupies the space behind it. */
+:root[data-platform=darwin] .app.style-acira { --sf-base-default:rgb(230 230 230); }
+:root[data-platform=darwin] .app.style-acira[data-chrome=dark] { --sf-base-default:rgb(55 55 55); }
+:root[data-sidebar-overlay='native'] .app.style-acira::before {
+ content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+ /* Preserve the original veil over one backing surface so native page pixels cannot tint the frame. */
+ background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
+ background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
+ background-color:var(--sf-base-default,rgb(var(--sidebar-rgb,var(--chrome-rgb))));
+ mask:var(--sf-mask) 0 0 / 100% 100% no-repeat;
+}
+/* Capture the finish with the sidebar's controls as one moving layer. Its full-height gradient
+   has the same origin as the shared window frame, so the joined header keeps its existing look. */
+:root[data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek { isolation:isolate; }
+:root[data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek::after {
+ content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+ background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
+ background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
+ background-color:var(--sf-base-default,rgb(var(--sidebar-rgb,var(--chrome-rgb))));
+}
+/* Keep the real page's curved cut-out joined to the moving sidebar, including its bottom corner. The pieces sit above the page's own layers (z 4): beneath them a website's top corner stayed square at the sidebar's edge. */
+.sidebar-page-corners { display:none; }
+:root[data-sidebar-overlay] .app.style-acira:has(>.acira-sidebar.is-peek) .sidebar-page-corners {
+ display:block;position:fixed;top:0;bottom:0;left:var(--sf-corner-x);width:8px;z-index:4;pointer-events:none;
+ background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
+ background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
+ background-color:var(--sf-base-default,rgb(var(--sidebar-rgb,var(--chrome-rgb))));
+ mask:var(--sf-corner-mask) 0 0 / 100% 100% no-repeat;
+}
+/* Shown only beside a peeking sidebar (above), so only then captured. */
+:root[data-mode-switch='edge'][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-corners { view-transition-name:acira-sidebar-corners; }
+:root[data-mode-switch='edge']::view-transition-new(acira-sidebar-corners):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-in; }
+:root[data-mode-switch='edge']::view-transition-old(acira-sidebar-corners):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-out; }
+/* The bottom corner is its own piece: it slides with the sidebar like the top one and also follows the card's bottom edge as that
+   moves between the page's resting place and the card beside the sidebar (desktop-page-band), so no corner flashes. It never reaches
+   below the frame's bottom band, which stays still and is already tinted there: the clip holds its lower edge on that line on screen,
+   or the two tints doubled into a dark line under the corner. */
+:root[data-sidebar-overlay] .app.style-acira:has(>.acira-sidebar.is-peek) .sidebar-page-corners.sidebar-page-corners-low { mask:var(--sf-corner-mask-low) 0 0 / 100% 100% no-repeat; } /* The page's top corner at the sidebar's edge is filled like the bottom one, always: left bare, a lighter wedge of glass showed outside the curve. While the top bar arrives or
+   leaves, the page's top edge moves (the group's vertical offset, 6px under the window's edge to under the bar), so the top piece rides it on the same curve and offset: the
+   new piece (arriving) or the old one (leaving) is the only one drawn, lifted by the distance the edge travels (main's --desktop-clip-top-from / -to). It used to be switched off
+   for the whole slide, and 20 to 44 device pixels of bare glass showed at the corner for about a tenth of a second.
+   (The :not(:only-child) selector never matches a transition layer here, so the pair is told apart by the direction alone.) */
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-old(acira-sidebar-corners) { animation:none; opacity:0; }
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-new(acira-sidebar-corners) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-in; opacity:1; mix-blend-mode:normal; }
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-new(acira-sidebar-corners) { animation:none; opacity:0; }
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-old(acira-sidebar-corners) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-out; opacity:1; mix-blend-mode:normal; }
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-new(acira-sidebar-corners):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-in,var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-in; }
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-old(acira-sidebar-corners):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-out,var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-out; }
+/* The bar and the sidebar together (the bar's height is not known when the pieces are captured, so no ride): the new piece comes in once the bar has covered the spot it
+   would show a grey patch on the page, and the old one goes as the bar lifts away. */
+:root[data-mode-switch='edge'][data-edge-top='diag']::view-transition-new(acira-sidebar-corners) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-in,calc(var(--edge-ms) * .1) linear calc(var(--edge-ms) * .25) both edge-fade-in; }
+:root[data-mode-switch='edge'][data-edge-top='diag']::view-transition-old(acira-sidebar-corners) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-out,calc(var(--edge-ms) * .1) linear calc(var(--edge-ms) * .15) both edge-fade-out; }
+:root[data-mode-switch='edge'][data-edge-top]::view-transition-image-pair(acira-sidebar-corners) { clip-path:inset(var(--sf-hole-top,0px) 0 0 0); }
+/* The sidebar stays while the top bar comes or goes (data-edge-top in / out is set only then), so the group holds an old and a new picture and the UA crossfades them.
+   They differ in one place: the sidebar's own copy of the frame's veil starts at --sf-frame-top, which follows the page's top edge, so under the bar's band (6px to the bar's
+   foot) one picture carries the copy and the other does not, while the frame's veil is already whole there (root's new picture, never faded). Arriving, the old copy and the
+   frame's veil tinted that band twice: a dark slab over the sidebar's top, 28 -> 21 in the first frame, back over the slide. Leaving, the new copy over the frame's held veil did
+   the same for the second half and popped away at the end. The picture taken with the bar standing is the right one for the whole slide, and is the only one drawn: the new one
+   for an arriving bar, the old one for a leaving one (the band measures the same in every frame). The sidebar itself does not move, so nothing is lost by not fading. */
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-old(acira-sidebar),
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-new(acira-sidebar) { animation:none; opacity:0; }
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-new(acira-sidebar),
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-old(acira-sidebar) { animation:none; opacity:1; mix-blend-mode:normal; }
+@keyframes edge-corner-lift-in { from { translate:0 calc(var(--desktop-clip-top-from,0px) - var(--desktop-clip-top-to,0px)); } }
+@keyframes edge-corner-lift-out { to { translate:0 calc(var(--desktop-clip-top-to,0px) - var(--desktop-clip-top-from,0px)); } }
+:root[data-mode-switch='edge'][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-root>.sidebar-page-corners.sidebar-page-corners-low { view-transition-name:acira-sidebar-corners-low; }
+:root[data-mode-switch='edge']::view-transition-new(acira-sidebar-corners-low):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-in,var(--edge-ms) var(--edge-ease) both desktop-page-band; translate:0 round(calc(var(--desktop-band-frame-bottom,0px) - var(--desktop-band-bottom)),var(--px,.5px));clip-path:inset(0 0 round(calc(2 * var(--desktop-band-frame-bottom,0px) - var(--desktop-band-bottom)),var(--px,.5px)) 0); }
+:root[data-mode-switch='edge']::view-transition-old(acira-sidebar-corners-low):only-child { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both sidebar-corners-out,var(--edge-ms) var(--edge-ease) both desktop-page-band; translate:0 round(calc(var(--desktop-band-frame-bottom,0px) - var(--desktop-band-bottom)),var(--px,.5px));clip-path:inset(0 0 round(calc(2 * var(--desktop-band-frame-bottom,0px) - var(--desktop-band-bottom)),var(--px,.5px)) 0); }
+/* The floating sidebar slides the same distance as the page's covered edge and the corner pieces (--sf-sidebar-travel: where the page's
+   resting left edge meets the sidebar's right edge), not its own width. Seamless rests the page 6px in from the window, so a full-width
+   slide left a sliver of bare glass between the sidebar and the page that closed as they met, and the 6px margin strip under the sidebar
+   was veiled twice (the frame's and the sidebar's own) and read darker. Docked slides keep sidebar.css's full width. */
+:root[data-mode-switch='edge'][data-sidebar-overlay] { --sb-slide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%))); }
+@keyframes sidebar-corners-in { from { transform:translateX(calc(-1 * var(--sf-sidebar-travel))); } }
+@keyframes sidebar-corners-out { to { transform:translateX(calc(-1 * var(--sf-sidebar-travel))); } }
+:root[data-sidebar-overlay='native'] .app .browser-body>.page-area { visibility:hidden; }
+:root[data-sidebar-overlay='native'] .app .browser-body>.page-area .split-label { visibility:visible; }
+/* A split's interface panes (a new tab, Settings) are not cut out for a website: they stay drawn while the float is native. */
+:root[data-sidebar-overlay='native'] .app .browser-body>.page-area .page-pane[data-pane]:not([data-web]) { visibility:visible; }
+/* Internal pages keep their original content dimensions while the unchanged frame clips the covered portion. */
+:root[data-sidebar-overlay='dom'] .app .page-area>.page-content {
+ position:absolute;top:var(--sidebar-page-top,0px);left:var(--sidebar-page-left);width:var(--sidebar-page-width);height:var(--sidebar-page-height);
+}
+
+/* The card's frame line: its top, right and bottom, the ring the docked card wears (sidebar.css), drawn by chromeEdge
+   paintPageHoles in two pieces that reach back to the page's resting left edge. At rest each holder clips its piece where the left
+   corners' curves end (the low piece also above the card's middle, where the top piece's right edge ends). The ring itself is off
+   while the sidebar floats: it lay in the frame's own picture during the slide and so stood still, cut off short of the moving
+   sidebar (founder, 30 Oct). */
+.sidebar-page-rim { display:none; }
+:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim { display:block; position:fixed; inset:0; z-index:1; pointer-events:none; clip-path:inset(0 0 0 var(--sf-rim-x,0px)); }
+:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim-low { clip-path:inset(var(--sf-rim-mid,0px) 0 0 var(--sf-rim-x,0px)); }
+.sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:rgb(0 0 0 / .08); stroke-width:1; }
+.app[data-chrome=dark] .sidebar-page-rim>svg { stroke:rgb(255 255 255 / .06); }
+:root[data-sidebar-overlay] .app .browser-root .browser-body>.page-area { box-shadow:none!important; }
+/* While the sidebar slides, each piece is captured whole (a capture leaves out its holder's clip) and shown through a clip that
+   travels with the sidebar's edge, on the same whole-pixel steps as the sidebar, while the line itself stays put: its left end
+   stays on the corner, so the line stretches out with a leaving sidebar and shortens before an arriving one. Its right and bottom
+   follow the card's own edges (desktop-page-band). Arriving, it is drawn out from the sidebar along the top and the bottom and the
+   two meet halfway down the right edge; leaving, it stretches all the way with the sidebar and fades as it goes. */
+:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-rim-top>svg { view-transition-name:acira-page-rim; }
+:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-rim-low>svg { view-transition-name:acira-page-rim-low; }
+:root[data-mode-switch=edge]::view-transition-group(acira-page-rim),
+:root[data-mode-switch=edge]::view-transition-group(acira-page-rim-low) { animation:none; }
+:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:inset(-2px -100vw -100vh var(--sf-rim-x,0px)); }
+:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim-low) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:inset(var(--sf-rim-mid,0px) -100vw -100vh var(--sf-rim-x,0px)); }
+:root[data-mode-switch=edge]::view-transition-new(acira-page-rim):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-draw-top var(--edge-ms) cubic-bezier(.4,0,.2,1) both; left:round(calc(var(--desktop-band-right-to,0px) - var(--desktop-band-right)),var(--px,.5px)); }
+:root[data-mode-switch=edge]::view-transition-new(acira-page-rim-low):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-draw-low var(--edge-ms) cubic-bezier(.4,0,.2,1) both; left:round(calc(var(--desktop-band-right-to,0px) - var(--desktop-band-right)),var(--px,.5px)); top:round(calc(var(--desktop-band-bottom-to,0px) - var(--desktop-band-bottom)),var(--px,.5px)); }
+:root[data-mode-switch=edge]::view-transition-old(acira-page-rim):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-fade var(--edge-ms) linear both; left:round(calc(var(--desktop-band-right-from,0px) - var(--desktop-band-right)),var(--px,.5px)); }
+:root[data-mode-switch=edge]::view-transition-old(acira-page-rim-low):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-fade var(--edge-ms) linear both; left:round(calc(var(--desktop-band-right-from,0px) - var(--desktop-band-right)),var(--px,.5px)); top:round(calc(var(--desktop-band-bottom-from,0px) - var(--desktop-band-bottom)),var(--px,.5px)); }
+@keyframes edge-rim-travel { from { translate:var(--sf-rim-shift-from,0px) 0; } to { translate:var(--sf-rim-shift-to,0px) 0; } }
+@keyframes edge-rim-hold { from { translate:calc(-1 * var(--sf-rim-shift-from,0px)) 0; } to { translate:calc(-1 * var(--sf-rim-shift-to,0px)) 0; } }
+@keyframes edge-rim-fade { 0%,35% { opacity:1; } 100% { opacity:0; } }
+/* A front runs from the sidebar along the line, around the right-hand corner and down (or up) the right edge to its middle. */
+@keyframes edge-rim-draw-top {
+ 0% { clip-path:polygon(0 -2px,0 -2px,0 calc(var(--sf-rim-top) + 9px),0 calc(var(--sf-rim-top) + 9px),0 100%,0 100%); }
+ 74% { clip-path:polygon(0 -2px,calc(var(--sf-rim-right) - 12px) -2px,calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-top) + 9px),calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-top) + 9px),calc(var(--sf-rim-right) - 12px) 100%,0 100%); }
+ 78% { clip-path:polygon(0 -2px,calc(var(--sf-rim-right) + 4px) -2px,calc(var(--sf-rim-right) + 4px) calc(var(--sf-rim-top) + 9px),calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-top) + 9px),calc(var(--sf-rim-right) - 12px) 100%,0 100%); }
+ 100% { clip-path:polygon(0 -2px,calc(var(--sf-rim-right) + 4px) -2px,calc(var(--sf-rim-right) + 4px) var(--sf-rim-mid),calc(var(--sf-rim-right) - 12px) var(--sf-rim-mid),calc(var(--sf-rim-right) - 12px) 100%,0 100%); }
+}
+@keyframes edge-rim-draw-low {
+ 0% { clip-path:polygon(0 0,0 0,0 calc(var(--sf-rim-bottom) - 9px),0 calc(var(--sf-rim-bottom) - 9px),0 calc(100% + 2px),0 calc(100% + 2px)); }
+ 74% { clip-path:polygon(0 0,calc(var(--sf-rim-right) - 12px) 0,calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-bottom) - 9px),calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-bottom) - 9px),calc(var(--sf-rim-right) - 12px) calc(100% + 2px),0 calc(100% + 2px)); }
+ 78% { clip-path:polygon(0 0,calc(var(--sf-rim-right) - 12px) 0,calc(var(--sf-rim-right) - 12px) calc(var(--sf-rim-bottom) - 9px),calc(var(--sf-rim-right) + 4px) calc(var(--sf-rim-bottom) - 9px),calc(var(--sf-rim-right) + 4px) calc(100% + 2px),0 calc(100% + 2px)); }
+ 100% { clip-path:polygon(0 0,calc(var(--sf-rim-right) - 12px) 0,calc(var(--sf-rim-right) - 12px) var(--sf-rim-mid),calc(var(--sf-rim-right) + 4px) var(--sf-rim-mid),calc(var(--sf-rim-right) + 4px) calc(100% + 2px),0 calc(100% + 2px)); }
+}
+
+/* macOS supplies the same behind-window material beneath both chrome surfaces.
+   Keep the original veil; an opaque fallback or a webpage blur would change it. */
+:root[data-desktop-material=ready][data-sidebar-overlay=dom] .app.style-acira { background:none!important; }
+:root[data-desktop-material=ready][data-sidebar-overlay=dom] .app.style-acira::before {
+ content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+ background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
+ background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
+ mask:var(--sf-mask) 0 0 / 100% 100% no-repeat;
+}
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira::before,
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek::after,
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira .sidebar-page-corners,
+:root[data-desktop-material=ready][data-edge-float=native] .app.style-acira::before { background-color:transparent; }
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek::after { background-size:var(--desktop-bg-size);background-position:var(--desktop-sidebar-bg-position); }
+/* The corners' own rule names the peeking sidebar, so it outranked the list above and left them solid grey over the glass. */
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira:has(>.acira-sidebar.is-peek) .sidebar-page-corners { background-color:transparent; }
+/* Without their opaque base the two copies of the veil are translucent. The frame's copy already covers its toolbar band
+   and bottom strip, which stay still while the sidebar slides, so the sidebar's copy covers only the span between them:
+   nothing is tinted twice, or left bare ahead of the sidebar, at any point of the slide. */
+:root[data-desktop-material=ready][data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek::after {
+ mask:linear-gradient(#000 0 0) 0 var(--sf-frame-top,0px) / 100% calc(100% - var(--sf-frame-top,0px) - var(--sf-frame-bottom,0px)) no-repeat;
+}
+/* Seamless's toolbar and sidebar float over the page itself (a website, or a page the interface draws), so no window glass can
+   show beneath them: the frame's veil alone read transparent over the page (founder, 30 Oct). They wear the frame's finish as
+   Normal does where the glass cannot show (frame.css, transparency off): its colour, lifted at the top, opaque. */
+:root:root[data-edge-float] .app.style-acira :is(.acira-sidebar.is-peek,.browser-shell[data-seamless=shown]) {
+ background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--sidebar-rgb,var(--chrome-rgb))) 96%,#fff),rgb(var(--sidebar-rgb,var(--chrome-rgb))) 120px),rgb(var(--sidebar-rgb,var(--chrome-rgb)))!important;
+}
+:root[data-desktop-material=ready]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background:transparent!important; }
+:root[data-desktop-material=ready][data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app :is(.page-area,.browser-body,.browser-root) { overflow:visible; }
+:root[data-desktop-material=ready][data-mode-switch=edge]:not([data-fr-finale])[data-sidebar-overlay=dom] .app:not(:has(>.setup-dialog)) .page-content,
+:root[data-desktop-material=ready][data-mode-switch=edge]:not([data-fr-finale])[data-edge-float=dom] .app:not(:has(>.setup-dialog)) .page-content { view-transition-name:acira-desktop-page; }
+/* The page's covered edge follows the sliding sidebar on the compositor: a clip-path animation runs on the main
+   thread and stalled behind the sidebar while the first reveal was busy, showing the page through it. The group (the
+   clip) moves by the covered amount and the image moves back by the same amount, so the page itself never moves.
+   The group's clip carries the page's rounded left corners with the sidebar; the still image keeps its rounded right
+   corners in place, so every visible corner is curved from the first frame. */
+/* The card's right and bottom edges move between the page's resting place and the card beside the sidebar on the same curve
+   (chromeEdge syncDesktopMaterial sets the ends), so the frame's bands below and beside it never blink in or out. */
+:root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-group(acira-desktop-page) { animation:desktop-page-window var(--edge-ms) var(--edge-ease) both,desktop-page-band var(--edge-ms) var(--edge-ease) both;clip-path:inset(0 0 round(var(--desktop-band-bottom),var(--px,.5px)) 0 round 8px 0 0 8px); }
+:root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-image-pair(acira-desktop-page) { animation:desktop-page-hold var(--edge-ms) var(--edge-ease) both,desktop-page-band var(--edge-ms) var(--edge-ease) both;clip-path:inset(var(--desktop-top-now,0px) round(var(--desktop-band-right),var(--px,.5px)) round(var(--desktop-band-bottom),var(--px,.5px)) 0 round 0 8px 8px 0); }
+/* Beside a floating sidebar the card's covered edge takes the sidebar's whole-pixel steps (chromeEdge syncPixelEase). */
+:root[data-desktop-material=ready][data-mode-switch=edge][data-sidebar-overlay]::view-transition-group(acira-desktop-page),
+:root[data-desktop-material=ready][data-mode-switch=edge][data-sidebar-overlay]::view-transition-image-pair(acira-desktop-page) { animation-timing-function:var(--edge-ease-px,var(--edge-ease)),var(--edge-ease); }
+@property --desktop-band-right { syntax:'<length>'; inherits:true; initial-value:0px; }
+@property --desktop-band-bottom { syntax:'<length>'; inherits:true; initial-value:0px; }
+@keyframes desktop-page-band { from { --desktop-band-right:var(--desktop-band-right-from,0px); --desktop-band-bottom:var(--desktop-band-bottom-from,0px); --desktop-top-now:var(--desktop-clip-top-from,0px); } to { --desktop-band-right:var(--desktop-band-right-to,0px); --desktop-band-bottom:var(--desktop-band-bottom-to,0px); --desktop-top-now:var(--desktop-clip-top-to,0px); } }
+:root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-old(acira-desktop-page) { animation:none;opacity:0; }
+:root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-new(acira-desktop-page) { animation:none;opacity:1; }
+@keyframes desktop-page-window { from { translate:var(--desktop-clip-left-from,0px) var(--desktop-clip-top-from,0px); } to { translate:var(--desktop-clip-left-to,0px) var(--desktop-clip-top-to,0px); } }
+/* The held picture's clip starts at the card's moving top edge (--desktop-top-now, animated with the bands above), so its top-right corner stays
+   round while the top bar arrives or leaves: clipped from the picture's resting top, the curve was cut away and the corner showed square until the live page took over.
+   It must NOT be animated in desktop-page-hold: a custom property is not compositable, and the hold's translate then ran on the main thread while the
+   group's ran on the compositor, so the whole page jumped about 25px at the first frame and eased back. */
+@property --desktop-top-now { syntax:'<length>'; inherits:true; initial-value:0px; }
+@keyframes desktop-page-hold { from { translate:calc(-1 * var(--desktop-clip-left-from,0px)) calc(-1 * var(--desktop-clip-top-from,0px)); } to { translate:calc(-1 * var(--desktop-clip-left-to,0px)) calc(-1 * var(--desktop-clip-top-to,0px)); } }
+/* At rest beside the floating sidebar a pictured page is cut where the sidebar meets it, with the card's rounded left corners (what the slide's group clip
+   does while it moves): its square corner at the sidebar's edge showed white page pixels under the corner piece's tint as a grey wedge. */
+:root:not([data-mode-switch])[data-sidebar-overlay=dom] .app.style-acira:has(>.acira-sidebar.is-peek) .page-area>.page-content { clip-path:inset(0 0 0 var(--sf-sidebar-travel,0px) round var(--geometry-pageRadius,8px) 0 0 var(--geometry-pageRadius,8px)); }
+/* A website's picture stands exactly over the page while the sidebar floats over it (chromeEdge.ts takePicture). */
+.page-area .page-content>.edge-page-picture { position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:3;pointer-events:none; }
+/* In a split each website's picture stands in its own pane, below the pane's title (top and height set by chromeEdge). */
+.page-area .page-pane[data-pane] { position:relative; }
+.page-area .page-pane[data-pane]>.edge-page-picture { position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:3;pointer-events:none; }
+/* When the sidebar floats over raised websites instead, only their panes step aside: a split's new tab or Settings is drawn here and stays. */
+:root[data-sidebar-overlay='native'] .app .browser-body>.page-area .page-pane[data-pane]:not([data-web]) { visibility:visible; }

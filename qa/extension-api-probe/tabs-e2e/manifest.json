@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Acira tabs e2e",
+  "version": "1.0",
+  "description": "QA only: runs chrome.tabs calls sent by qa/extension-api-probe/tabs-e2e.mjs and records every chrome.tabs event.",
+  "permissions": ["tabs", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "action": {"default_popup": "popup.html", "default_title": "Acira tabs e2e"},
+  "background": {"service_worker": "sw.js"},
+  "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["cs.js"], "run_at": "document_start"}]
+}

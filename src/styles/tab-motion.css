@@ -1,0 +1,32 @@
+/* The strip spring (stiffness 360, damping ~38) on one CSS timeline, with a
+   small launch velocity so the first frame already moves (motionTokens.ts
+   stripEase; a test keeps the two strings equal). Its long settling tail
+   replaces the abrupt ease-out without reintroducing independently scheduled
+   widths and gaps. */
+.app :is(.tab-strip-container,.acira-compact-tabs) {
+  --tab-duration:calc(.48s * var(--motion-f,1));
+  --tab-ease:linear(0,.10848,.22451,.33768,.4423,.53567,.61695,.6864,.74492,.79365,.83386,.8668,.89359,.91527,.93272,.94672,.9579,.96681,.97388,.97948,.98391,.9874,.99015,.9923,.994,.99532,.99636,.99717,.9978,.99829,.99867,.99897,1);
+}
+.app :is(.tab-flow,.tab-width-motion,.tab-tray-motion) {
+  transition: width var(--tab-duration) var(--tab-ease),
+    margin-left var(--tab-duration) var(--tab-ease),
+    margin-right var(--tab-duration) var(--tab-ease),
+    padding-left var(--tab-duration) var(--tab-ease),
+    padding-right var(--tab-duration) var(--tab-ease);
+}
+.app .tab-flow {
+  width:var(--tab-width);
+  margin-left:var(--tab-space,0px);
+  margin-right:var(--tab-space-after,0px);
+  padding-left:var(--tab-padding,0px);
+  padding-right:var(--tab-padding,0px);
+}
+.app .tab-tray-motion { width:var(--tab-width); }
+@starting-style {
+  /* A DOM reorder can trigger starting-style on an existing tab. Only new
+     session entries grow from zero; joining or leaving a group keeps its body. */
+  .app .tab-flow:is([data-entering=true],.tab-group-header) { width:0; margin-left:0; margin-right:0; padding-left:0; padding-right:0; }
+  .app .tab-tray-motion { width:0; }
+}
+.app .tab-strip-container[data-reduced-motion=true],
+.app .acira-compact-tabs[data-reduced-motion=true] { --tab-duration:0s; }

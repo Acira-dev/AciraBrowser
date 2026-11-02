@@ -1,0 +1,3 @@
+import {_electron} from 'playwright';import path from 'node:path';
+const app=await _electron.launch({executablePath:process.env.ACIRA_TEST_EXECUTABLE,args:[path.resolve('desktop/main.cjs')],env:{...process.env,ACIRA_DEV:'1',ACIRA_QA_RUN:'1',ACIRA_BROWSER_TEST_DATA:path.resolve('.qa-profiles/live-start'),ACIRA_BROWSER_TEST_HIDDEN:'1'}});
+try{const ui=await app.firstWindow();ui.on('pageerror',e=>console.log('PAGE ERROR',e.message));ui.on('console',m=>console.log(m.type(),m.text()));await ui.waitForTimeout(1000);console.log(JSON.stringify({url:ui.url(),body:await ui.locator('body').innerText(),layout:await ui.evaluate(()=>window.acira.getBrowserLayout())}));}finally{await app.close();}

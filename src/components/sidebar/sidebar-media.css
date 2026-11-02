@@ -1,0 +1,60 @@
+/* Media controls in the sidebar footer (Zen idea 9). One row per tab that is playing sound, or was paused from here: the
+   site icon, the tab's name over its site, play or pause, mute. Rows are 46px with a hairline, radius 6; text sits 10px from
+   the row's left edge and 8px clear of the first button; buttons are the footer's 28px targets. Up to three rows show, then the
+   list scrolls. The playing row's dot matrix is real activity (audio is playing); a paused or muted row's grid rests dim. */
+/* R4-31: 8px of clear space on both sides (fills never nearer than 8px to the edge) and 14px under the cards before the workspaces row's rule; the
+   rule above the cards shows only while the list runs into them (SidebarMedia sets data-divider), and fades with the cards. */
+.app.style-acira .acira-sidebar .sb-media{position:relative;flex:none;padding:8px 8px 14px}
+.app.style-acira .acira-sidebar .sb-media::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;background:linear-gradient(90deg,transparent,var(--sb-line) 16%,var(--sb-line) 84%,transparent);opacity:0;transition:opacity calc(160ms * var(--motion-scale,1)) var(--sb-ease);pointer-events:none}
+.app.style-acira .acira-sidebar .sb-media[data-divider]::before{opacity:1}
+.app.style-acira .acira-sidebar .sb-media[data-leaving]{pointer-events:none}
+.app.style-acira .acira-sidebar .sb-media-list{display:flex;flex-direction:column;gap:4px;max-height:min(154px,26vh);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scroll-padding:4px}
+.app.style-acira .acira-sidebar .sb-media-row{position:relative;flex:none;display:flex;align-items:center;gap:0;height:46px;padding-right:4px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--sb-line);transition:background-color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-media-row:hover{background:rgb(var(--ink) / .04)}
+.app.style-acira .acira-sidebar .sb-media-row[data-current]{background:var(--sb-selected)}
+.app.style-acira .acira-sidebar .sb-media-main{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:100%;padding:0 8px 0 10px;border:0;border-radius:6px 0 0 6px;background:none;color:var(--sb-fg);text-align:left;font:inherit;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-media-icon{flex:none;display:grid;place-items:center;width:16px;height:16px}
+.app.style-acira .acira-sidebar .sb-media-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.app.style-acira .acira-sidebar .sb-media-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--text-13,13px);line-height:16px;font-weight:500;color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-media-meta{display:flex;align-items:center;gap:6px;min-width:0;font-size:11.5px;line-height:14px;color:var(--sb-muted)}
+.app.style-acira .acira-sidebar .sb-media-host{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app.style-acira .acira-sidebar .sb-media-meta>.dot-matrix{flex:none;color:var(--sb-muted)}
+.app.style-acira .acira-sidebar .sb-media-act{flex:none;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:none;color:var(--sb-muted);-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease),transform 80ms var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-media-act:hover{background:rgb(var(--ink) / .06);color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-media-act:active{transform:scale(.97)}
+.app.style-acira .acira-sidebar .sb-media-act[aria-pressed=true]{color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-media-row[data-playing] .sb-media-play{color:var(--sb-fg)}
+.app.style-acira .acira-sidebar :is(.sb-media-main,.sb-media-act):focus-visible{outline:2px solid var(--sb-ring);outline-offset:-2px}
+.app.style-acira .acira-sidebar .sb-media-main:focus-visible{border-radius:6px}
+/* The volume slider (founder, 27 Oct): the speaker turns the whole card into a slider of the same height. The card's face and
+   the slider share the row; one shows at a time (SidebarMedia morphs between them on transform and opacity). The speaker glyph
+   sits where the site icon sits (its centre 18px in), then a 4px track with the fill in the sidebar's ink and a 12px white
+   knob, then the level in small tabular figures. The fill and knob move by transform only (--vol, 0..1). */
+.app.style-acira .acira-sidebar .sb-media-face{flex:1;min-width:0;display:flex;align-items:center;height:100%;transform-origin:30% 50%}
+.app.style-acira .acira-sidebar .sb-media-row[data-volume] .sb-media-face{opacity:0;pointer-events:none}
+.app.style-acira .acira-sidebar .sb-media-row:is([data-volume],[data-volume-closing]) .sb-media-speaker{opacity:0}
+.app.style-acira .acira-sidebar .sb-media-volume{position:absolute;inset:0;display:flex;align-items:center;gap:6px;padding:0 10px 0 4px;border-radius:6px;opacity:0;pointer-events:none;direction:ltr;touch-action:none;user-select:none;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-media-row[data-volume] .sb-media-volume{opacity:1;pointer-events:auto}
+.app.style-acira .acira-sidebar .sb-media-row[data-volume-closing] .sb-media-volume{opacity:1}
+.app.style-acira .acira-sidebar .sb-media-vol-glyph{color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-media-vol-body{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:28px}
+.app.style-acira .acira-sidebar .sb-media-vol-track{position:relative;flex:1;min-width:0;display:flex;align-items:center;height:28px;border-radius:6px;outline:none;cursor:default}
+.app.style-acira .acira-sidebar .sb-media-vol-track:focus-visible{outline:2px solid var(--sb-ring);outline-offset:0}
+.app.style-acira .acira-sidebar .sb-media-vol-rail{position:relative;flex:1;height:4px;border-radius:2px;overflow:hidden;background:rgb(var(--ink) / .14);transition:transform calc(115ms * var(--motion-l,1)) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-media-vol-fill{position:absolute;inset:0;border-radius:inherit;background:var(--sb-fg);transform:translateX(calc((var(--vol,1) - 1) * (100% - 12px) - 6px));transition:transform calc(120ms * var(--motion-l,1)) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-media-vol-knob{position:absolute;left:0;right:12px;top:50%;height:0;transform:translateX(calc(var(--vol,1) * 100%));transition:transform calc(120ms * var(--motion-l,1)) var(--sb-ease);pointer-events:none}
+.app.style-acira .acira-sidebar .sb-media-vol-knob::before{content:'';position:absolute;left:0;top:-6px;width:12px;height:12px;border-radius:50%;background:rgb(255 255 255);box-shadow:0 0 0 .5px rgb(0 0 0 / .14),0 1px 3px rgb(0 0 0 / .26);transition:transform calc(115ms * var(--motion-l,1)) var(--sb-ease)}
+/* Held: the fill and knob follow the pointer with no lag, the track thickens a little and the knob grows, so the hand feels it. */
+.app.style-acira .acira-sidebar .sb-media-volume[data-pressing] :is(.sb-media-vol-fill,.sb-media-vol-knob){transition:none}
+.app.style-acira .acira-sidebar .sb-media-volume[data-pressing] .sb-media-vol-rail{transform:scaleY(1.5)}
+.app.style-acira .acira-sidebar .sb-media-volume[data-pressing] .sb-media-vol-knob::before{transform:scale(1.15)}
+.app.style-acira .acira-sidebar .sb-media-vol-value{flex:none;min-width:22px;text-align:right;font-size:11.5px;line-height:14px;font-variant-numeric:tabular-nums;color:var(--sb-muted)}
+/* A narrow sidebar (large interface scale) gives the track the number's room: the level stays in the slider's accessible value. */
+.app.style-acira .acira-sidebar .sb-media-volume{container-type:inline-size}
+@container (max-width:180px){.app.style-acira .acira-sidebar .sb-media-vol-value{display:none}}
+/* The speaker's waves and cross: one drawing, the marks fade in and out with the level. */
+.app.style-acira .acira-sidebar .sb-media-vol-icon path{transition:opacity calc(120ms * var(--motion-e,1)) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-media-vol-icon .sb-media-vol-x,.app.style-acira .acira-sidebar .sb-media-vol-icon[data-level=low] .sb-media-vol-wave2,.app.style-acira .acira-sidebar .sb-media-vol-icon[data-level=mute] :is(.sb-media-vol-wave1,.sb-media-vol-wave2){opacity:0}
+.app.style-acira .acira-sidebar .sb-media-vol-icon[data-level=mute] .sb-media-vol-x{opacity:1}
+@media (forced-colors:active){.app.style-acira .acira-sidebar .sb-media-vol-fill{background:Highlight}.app.style-acira .acira-sidebar .sb-media-vol-rail{background:GrayText}.app.style-acira .acira-sidebar .sb-media-vol-knob::before{forced-color-adjust:none;background:ButtonText}}
+@media (forced-colors:active){.app.style-acira .acira-sidebar .sb-media-row{outline:1px solid ButtonText}.app.style-acira .acira-sidebar .sb-media-row[data-current]{forced-color-adjust:none;background:Highlight;color:HighlightText}}

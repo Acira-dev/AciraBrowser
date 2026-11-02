@@ -1,0 +1,3 @@
+'use strict';
+const {app,BrowserWindow}=require('electron');app.setPath('userData',process.env.ACIRA_SERVICES_DATA);app.setName('Acira isolated cookie controls qualification');
+app.whenReady().then(async()=>{const window=new BrowserWindow({show:false,webPreferences:{partition:'persist:cookie-fixture',sandbox:true,contextIsolation:true,nodeIntegration:false}}),wc=window.webContents;wc.session.setCertificateVerifyProc((details,callback)=>callback(['first.acira-a.test','third.acira-b.test'].includes(details.hostname)?0:-3));global.cookieFixture={wc,window};await wc.loadURL('about:blank');});app.on('window-all-closed',()=>app.quit());

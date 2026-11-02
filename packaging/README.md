@@ -1,0 +1,15 @@
+# Windows distribution work
+
+The current independently qualified product is an unsigned portable Windows x64 application with a compiled unsigned per-user NSIS wrapper. The portable launches bundled renderer/native services without Node, npm, a development server or source-checkout dependency loads. No installation has been performed on the user's account. Signing, verified updater/rollback and native Mac/Linux acceptance remain open.
+
+Release owns this directory, scripts/release-*, qa/release-*, tests/release-* and the release workflow. Frontend owns package/lock, shared builds/runtime and preview restarts. Release builds committed Git blobs into isolated generated output, checks all installed lock entries and records source/runtime identity. It does not copy the dependency tree or alter the shared preview.
+
+The runtime layout follows [Electron distribution documentation](https://www.electronjs.org/docs/latest/tutorial/application-distribution). Required native modules are bundled, with dynamic extension/Reader/filter assets and source/runtime/production dependency notices retained. Packaging accepts only the exact selected patched runtime and upstream executable hash. Resources use the approved symbol and hash-pinned editor; native VersionInfo, icon and unsigned status have bounded verification.
+
+Generate committed output with node scripts/release-build-head.mjs <fresh-candidate-directory>, then node scripts/release-package.mjs <candidate-directory>. Run native package launch and filtering/external-URL qualification before node scripts/release-installer.mjs <portable-directory>. Installer compilation requires a passing native report bound to that exact portable manifest. Final output is preserved rather than silently overwritten.
+
+The wrapper uses exact electron-builder 26.15.3 and reviewed electron-builder.json / acira-installer.nsh. It compiles without publishing, automatic launch, elevation or forced Windows defaults. Post-build verification extracts the embedded product without running setup and compares every file with the qualified portable manifest. Provenance is stored beside artifacts; bounded public evidence is under docs/release/.
+
+Current product digest is cbe0666b7dd8a432b53148e872cb257371eb61cd95f9745ad8b22f18472a8d2e, published source26 f8bbd3591e8a7ef656bfae70fab1887bb19eca8f, Electron44.9.3. Immutable033/034 reproduce134product hashes. The portable262files/397,056,016bytes and installer263embeddedfiles are qualified for bounded native journeys; installer bytes are not claimed deterministic. All old44.7packages are withdrawn; their records are historical. Installation/registration/default selection, installed upgrades, uninstall preservation, provider/password-manager and complete UI/motion acceptance remain separate gates. See docs/release/LAUNCH_VERDICT.md and INSTALLER_QUALIFICATION.md.
+
+Release target: `release-target.json` says where releases and updates live (GitHub repository or own server); electron-builder's publish block, scripts/release.mjs and the dictionary mirror derive from it. See docs/launch/RELEASING.md > Going public.

@@ -1,0 +1,245 @@
+/* Acira buttons: one component, three variants, neutral on every finish (white-ish on dark, near-black on light).
+   Primary  a solid neutral with a soft top-down sheen, a 1px inner top highlight, a crisp hairline rim and a layered
+            shadow; hover brightens (dark #fff, light #2a2a2e), never dims. Secondary  dark: glass (translucent fill,
+            inner highlight, rim, backdrop); light: one surface, a 1px line on transparent. Quiet  text only, a 4–6%
+            fill on hover. Hover lifts half a pixel with a deeper shadow; press is scale .98 over 80ms; focus is the
+            bible's 2px accent ring at 1px; disabled is 32% ink and a hairline, never a pastel fill.
+
+   New code: class="acira-button acira-button-primary | acira-button-secondary | acira-button-quiet", plus
+   acira-button-prominent (32px) or acira-button-large (36px) for size; 28px by default. Destructive (bible):
+   add acira-button-danger for red text on a secondary or quiet button; acira-button-danger acira-button-primary is
+   the solid red, for the final confirm only.
+   Existing families (setup fr-*, Settings st-button/btn, import aip-*, error ne-button) are mapped here too: their own
+   files keep geometry only (height, padding, radius, font). Colors come from the --btn-* tokens below; to tune one
+   context, set tokens on it rather than overriding these rules.
+
+   Specificity floor: older context rules styled buttons at up to four classes deep. Every rule here starts from
+   :root:root:root so the component wins consistently and owners never need !important. */
+
+/* ── Tokens. Light is the default; dark where the app or the setup stage is dark. ── */
+.app,
+.fr-stage[data-tone='light'],
+.fr-yours[data-tone='light'] {
+  --btn-focus: var(--focus-ring-color, var(--accent, #3b6eea));
+  --btn-primary-base: #17171a;
+  --btn-primary-base-hover: #2a2a2e;
+  --btn-primary-ink: #ffffff;
+  --btn-primary-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0) 62%);
+  --btn-primary-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 0 0 1px #0d0d10, 0 1px 2px rgb(0 0 0 / 0.16),
+    0 4px 12px -4px rgb(0 0 0 / 0.3);
+  --btn-primary-shadow-hover: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 0 0 1px #0d0d10, 0 2px 4px rgb(0 0 0 / 0.14),
+    0 8px 18px -6px rgb(0 0 0 / 0.34);
+  --btn-glass-fill: transparent;
+  --btn-glass-fill-hover: rgb(0 0 0 / 0.04);
+  --btn-glass-ink: #16181c;
+  --btn-glass-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.14);
+  --btn-glass-shadow-hover: inset 0 0 0 1px rgb(0 0 0 / 0.2);
+  --btn-glass-backdrop: none;
+  --btn-quiet-ink: rgb(22 24 28 / 0.64);
+  --btn-quiet-ink-hover: #16181c;
+  --btn-quiet-fill-hover: rgb(0 0 0 / 0.05);
+  --btn-danger-ink: #c42b1c;
+  --btn-danger-fill-hover: rgb(196 43 28 / 0.07);
+  --btn-danger-base: #c42b1c;
+  --btn-danger-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0) 62%);
+  --btn-danger-base-hover: #d23a2a;
+  --btn-danger-on: #ffffff;
+  --btn-danger-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px #9f2015, 0 1px 2px rgb(0 0 0 / 0.16),
+    0 4px 12px -4px rgb(196 43 28 / 0.4);
+  --btn-disabled-ink: rgb(22 24 28 / 0.32);
+  --btn-disabled-rim: inset 0 0 0 1px rgb(0 0 0 / 0.1);
+}
+.app[data-theme='dark'],
+.fr-stage:not([data-tone='light']),
+.fr-yours:not([data-tone='light']) {
+  --btn-primary-base: #e8e8eb;
+  --btn-primary-base-hover: #ffffff;
+  --btn-primary-ink: #0b0b0d;
+  --btn-primary-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 70%);
+  --btn-primary-shadow: inset 0 1px 0 #ffffff, inset 0 -1px 0 rgb(0 0 0 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.6),
+    0 1px 2px rgb(0 0 0 / 0.5), 0 6px 16px -6px rgb(0 0 0 / 0.6);
+  --btn-primary-shadow-hover: inset 0 1px 0 #ffffff, inset 0 -1px 0 rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.6),
+    0 2px 4px rgb(0 0 0 / 0.5), 0 10px 24px -8px rgb(0 0 0 / 0.7);
+  --btn-glass-fill: rgb(255 255 255 / 0.07);
+  --btn-glass-fill-hover: rgb(255 255 255 / 0.11);
+  --btn-glass-ink: #ededef;
+  --btn-glass-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 1px 2px rgb(0 0 0 / 0.3);
+  --btn-glass-shadow-hover: inset 0 1px 0 rgb(255 255 255 / 0.14), inset 0 0 0 1px rgb(255 255 255 / 0.18),
+    0 2px 6px rgb(0 0 0 / 0.35);
+  --btn-glass-backdrop: blur(12px) saturate(1.5);
+  --btn-quiet-ink: rgb(237 237 239 / 0.66);
+  --btn-quiet-ink-hover: #ededef;
+  --btn-quiet-fill-hover: rgb(255 255 255 / 0.06);
+  --btn-danger-ink: #ff8f85;
+  --btn-danger-fill-hover: rgb(255 143 133 / 0.1);
+  --btn-danger-base: #d93a30;
+  --btn-danger-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0) 62%);
+  --btn-danger-base-hover: #e74b40;
+  --btn-danger-on: #ffffff;
+  --btn-danger-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 0 0 1px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.5),
+    0 6px 16px -6px rgb(217 58 48 / 0.5);
+  --btn-disabled-ink: rgb(237 237 239 / 0.32);
+  --btn-disabled-rim: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.fr-stage,
+.fr-yours {
+  --btn-focus: var(--fr-accent);
+}
+/* --toggle-on (every switch and checkbox "on") and --toggle-thumb come from the theme tokens (ui/semanticColors.ts):
+   the finish accent's hue at a lightness that keeps 3:1 against the white thumb and the surface in both themes. */
+
+/* ── The component's own geometry (existing families keep theirs). ── */
+.acira-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font: 500 13px/16px var(--font-ui, Geist, Inter, 'Segoe UI', sans-serif);
+  white-space: nowrap;
+  cursor: default;
+}
+.acira-button-prominent {
+  height: 32px;
+  padding: 0 14px;
+}
+.acira-button-large {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ── Every button: glass secondary by default. ── */
+:root:root:root
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn) {
+  border: 0;
+  cursor: default;
+  background-color: var(--btn-glass-fill);
+  background-image: none;
+  color: var(--btn-glass-ink);
+  box-shadow: var(--btn-glass-shadow);
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0, 0, 1),
+    color 150ms cubic-bezier(0.2, 0, 0, 1),
+    translate 150ms cubic-bezier(0.2, 0, 0, 1),
+    scale 80ms cubic-bezier(0.2, 0, 0, 1);
+}
+:root:root:root :is(.acira-button-secondary, .fr-secondary, .fr-btn-secondary) {
+  -webkit-backdrop-filter: var(--btn-glass-backdrop, none);
+  backdrop-filter: var(--btn-glass-backdrop, none);
+}
+:root:root:root
+  :is(.acira-button-primary, .fr-primary, .fr-btn-primary, .st-button.primary, .aip-button.aip-primary, .ne-button[data-primary], .profile-cleanup__save, .btn.primary, .btn.btn-primary) {
+  background-color: var(--btn-primary-base);
+  background-image: var(--btn-primary-sheen);
+  color: var(--btn-primary-ink);
+  box-shadow: var(--btn-primary-shadow);
+}
+:root:root:root :is(.acira-button-quiet, .fr-btn-text, .aip-button.aip-quiet, .ne-button[data-quiet], .st-button.pm-quiet) {
+  background-color: transparent;
+  color: var(--btn-quiet-ink);
+  box-shadow: none;
+}
+:root:root:root :is(.acira-button-danger, .ne-button[data-danger], .btn.danger) {
+  color: var(--btn-danger-ink);
+}
+/* The final destructive confirm: solid red with the primary's sheen, rim and shadow. */
+:root:root:root .acira-button-danger.acira-button-primary {
+  background-color: var(--btn-danger-base);
+  background-image: var(--btn-danger-sheen);
+  color: var(--btn-danger-on);
+  box-shadow: var(--btn-danger-shadow);
+}
+:root:root:root .st-button.pm-quiet[aria-expanded='true'] {
+  color: var(--btn-quiet-ink-hover);
+}
+
+/* ── Hover lifts, press settles. translate and scale are separate properties, so they compose. ── */
+:root:root:root
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn):hover:not(:disabled) {
+  background-color: var(--btn-glass-fill-hover);
+  box-shadow: var(--btn-glass-shadow-hover);
+  translate: 0 -0.5px;
+}
+:root:root:root
+  :is(.acira-button-primary, .fr-primary, .fr-btn-primary, .st-button.primary, .aip-button.aip-primary, .ne-button[data-primary], .profile-cleanup__save, .btn.primary, .btn.btn-primary):hover:not(:disabled) {
+  background-color: var(--btn-primary-base-hover);
+  box-shadow: var(--btn-primary-shadow-hover);
+}
+:root:root:root :is(.acira-button-quiet, .fr-btn-text, .aip-button.aip-quiet, .ne-button[data-quiet], .st-button.pm-quiet):hover:not(:disabled) {
+  background-color: var(--btn-quiet-fill-hover);
+  color: var(--btn-quiet-ink-hover);
+  box-shadow: none;
+  translate: none;
+}
+/* Destructive buttons stay red on hover, over a faint red fill; the solid confirm brightens. */
+:root:root:root .acira-button.acira-button-danger:hover:not(:disabled) {
+  background-color: var(--btn-danger-fill-hover);
+  color: var(--btn-danger-ink);
+}
+:root:root:root .acira-button-danger.acira-button-primary:hover:not(:disabled) {
+  background-color: var(--btn-danger-base-hover);
+  color: var(--btn-danger-on);
+  box-shadow: var(--btn-danger-shadow);
+}
+:root:root:root
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn):active:not(:disabled) {
+  scale: 0.98;
+  translate: none;
+}
+
+/* ── Disabled: 32% ink and a hairline (quiet buttons: the ink only). ── */
+:root:root:root
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn):disabled {
+  background-color: transparent;
+  background-image: none;
+  color: var(--btn-disabled-ink);
+  box-shadow: var(--btn-disabled-rim);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  cursor: default;
+}
+:root:root:root :is(.acira-button-quiet, .fr-btn-text, .aip-button.aip-quiet, .ne-button[data-quiet], .st-button.pm-quiet):disabled {
+  box-shadow: none;
+}
+/* The welcome's Get started is disabled only for the instant it starts setup: keep it looking ready. */
+:root:root:root .fr-welcome .fr-primary:disabled {
+  background-color: var(--btn-primary-base);
+  background-image: var(--btn-primary-sheen);
+  color: var(--btn-primary-ink);
+  box-shadow: var(--btn-primary-shadow);
+}
+
+/* ── Focus: keyboard only, one 2px accent ring at 1px. ── */
+:root:root:root
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn):focus-visible {
+  outline: 2px solid var(--btn-focus);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:root:root
+    :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn) {
+    transition-property: background-color, box-shadow, color;
+    translate: none !important;
+    scale: none !important;
+  }
+}
+.app[data-reduced-motion='true']
+  :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn) {
+  translate: none !important;
+  scale: none !important;
+}
+@media (forced-colors: active) {
+  :root:root:root
+    :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .profile-cleanup__save, .btn) {
+    border: 1px solid ButtonText;
+  }
+  :root:root:root :is(.acira-button, .fr-primary, .fr-secondary, .fr-btn, .st-button, .aip-button, .ne-button, .btn):focus-visible {
+    outline-color: Highlight;
+  }
+}

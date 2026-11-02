@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "supportedMajor": 44,
+  "minimumVersion": "44.9.1",
+  "advisories": [
+    {
+      "id": "GHSA-jr5w-w6x2-84p9",
+      "cve": "CVE-2026-115570",
+      "url": "https://github.com/electron/electron/security/advisories/GHSA-jr5w-w6x2-84p9",
+      "verifiedAt": "2026-10-23T23:11:00Z",
+      "reason": "Compromised eMudhra intermediate-certificate mitigation must cover Chromium networking and Node TLS; no app-side workaround."
+    }
+  ],
+  "selectedRuntime": {
+    "qualified": true,
+    "version": "44.9.3",
+    "chromium": "152.0.7977.167",
+    "node": "24.22.0",
+    "executableSha256": "61f45e6f522c666c6156222680712870b38f3a4acbd2e847b987f53ddb613544",
+    "archiveSha256": "41a1ffa0541cb0f2c9b9fe920dd2cef1793ad0ea2ada1a9582958880f4d1b23c",
+    "qualification": "Frontend staged/installed native checks and preserved preview identity; independent16encrypted-session+3Reader checks pass on exact hash. Package/installer and full release gates remain separate.",
+    "qualificationSource": "docs/workstreams/frontend-runtime-ready.json"
+  },
+  "status": "Exact frontend-qualified44.9.3Windows executable independently verified after root install; independent immutable package qualification follows."
+}

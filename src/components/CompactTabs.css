@@ -1,0 +1,51 @@
+/* One scoped scroll plane for Focus and Compact. Width is supplied by its row. */
+.acira-compact-tabs{position:relative;isolation:isolate;display:flex;align-items:center;flex:1 1 420px;width:420px;min-width:124px;max-width:100%;height:36px;-webkit-app-region:no-drag}
+.acira-compact-tabs-viewport{--compact-edge-fade:min(18px,20%);--left-fade:0px;--right-fade:0px;position:relative;flex:0 1 auto;min-width:0;height:36px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;overflow-anchor:none;scroll-padding-inline:18px;mask-image:linear-gradient(to right,transparent 0%,#0005 calc(var(--left-fade)*.2),#000b calc(var(--left-fade)*.5),#000f calc(var(--left-fade)*.8),#000 var(--left-fade),#000 calc(100% - var(--right-fade)),#000f calc(100% - var(--right-fade)*.8),#000b calc(100% - var(--right-fade)*.5),#0005 calc(100% - var(--right-fade)*.2),transparent 100%)}
+.acira-compact-tabs-viewport::-webkit-scrollbar{display:none}
+.acira-compact-tabs[data-overflow-left=true] .acira-compact-tabs-viewport{--left-fade:var(--compact-edge-fade)}
+.acira-compact-tabs[data-overflow-right=true] .acira-compact-tabs-viewport{--right-fade:var(--compact-edge-fade)}
+.acira-compact-tabs[data-overflow-left=false][data-overflow-right=false] .acira-compact-tabs-viewport{mask-image:none}
+.acira-compact-tabs-track{display:flex;align-items:center;gap:0;position:relative;height:36px;width:max-content}
+.acira-compact-selection{position:absolute;left:0;top:3px;height:30px;border-radius:8px;background:var(--surface);box-shadow:0 1px 3px #00000016,inset 0 1px var(--rim);pointer-events:none}
+.acira-compact-tab{container-type:inline-size;position:relative;z-index:1;flex:0 0 auto;min-width:0;height:30px;border-radius:8px;cursor:pointer;user-select:none;color:var(--frame-text);outline-offset:-2px;transition:background .12s}
+.acira-compact-tab:not(.selected):hover{background:var(--hover)}
+.acira-compact-tab.selected{color:var(--text)}
+.acira-compact-tab:focus-visible{outline:2px solid var(--muted)}
+.acira-compact-tab-inner{display:flex;align-items:center;gap:6px;width:100%;height:100%;padding:0 6px 0 9px;overflow:hidden}
+.acira-compact-tab-icon{display:grid;place-items:center;flex:0 0 16px;width:16px;height:16px;transition:opacity .1s}
+.acira-compact-tab-icon>svg,.acira-compact-tab-icon>img{width:16px;height:16px}
+.acira-compact-tab-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;line-height:18px}
+.acira-compact-tab-close{flex:0 0 20px;display:grid;place-items:center;width:20px;height:20px;border-radius:5px;color:inherit;opacity:0;pointer-events:none;transition:opacity .1s,background .1s}
+.acira-compact-tab.selected:is(:hover,:focus-within) .acira-compact-tab-close{opacity:1;pointer-events:auto}
+.acira-compact-tab .acira-compact-tab-close:disabled{opacity:0;pointer-events:none}
+.acira-compact-tabs .acira-compact-tab .acira-compact-tab-close:hover{background:transparent;color:inherit}
+.acira-compact-tab[data-labels=false] .acira-compact-tab-label{display:none}
+.acira-compact-tab[data-labels=false] .acira-compact-tab-inner{justify-content:center;padding:0}
+.acira-compact-tab[data-labels=false] .acira-compact-tab-close{position:absolute;left:calc(50% - 10px);top:5px}
+.acira-compact-tab.selected[data-labels=false]:is(:hover,:focus-within) .acira-compact-tab-icon{opacity:0}
+@container(max-width:62px){.acira-compact-tab-inner{padding-left:9px;padding-right:7px}.acira-compact-tab-close{position:absolute;left:8px;top:5px}.acira-compact-tab.selected:is(:hover,:focus-within) .acira-compact-tab-icon{opacity:0}}
+@container(max-width:48px){.acira-compact-tab-label{display:none}.acira-compact-tab-inner{justify-content:center;padding:0}.acira-compact-tab-close{left:calc(50% - 10px)}}
+.acira-compact-scroll{position:relative;flex:0 0 24px;display:grid;place-items:center;width:24px;height:30px;border-radius:7px;background:none;color:var(--frame-text);opacity:0;pointer-events:none;transition:opacity .12s}
+.acira-compact-scroll.previous{margin-right:2px}.acira-compact-scroll.next{margin-left:2px}
+.acira-compact-tabs:is(:hover,:focus-within) .acira-compact-scroll:not(:disabled),.acira-compact-scroll:focus-visible{opacity:1;pointer-events:auto}
+.acira-compact-scroll:hover{background:var(--frame-hover,var(--hover))}
+.acira-compact-new{flex:0 0 30px;display:grid;place-items:center;width:30px;height:30px;margin-left:4px;border-radius:8px;color:var(--frame-text)}
+.acira-compact-new:hover{background:var(--hover)}
+.acira-compact-drag{flex:1;align-self:stretch;min-width:0;-webkit-app-region:drag}
+.acira-compact-tabs[data-reduced-motion=true] *{transition:none}
+
+.acira-compact-tabs[data-dragging=true]>.acira-compact-tabs-viewport{mask-image:none}
+
+/* On very narrow rows the viewer/menu retains all tabs; keep one clear plus. */
+.acira-compact-tabs[data-condensed=true] .acira-compact-new{margin-left:0}
+/* Background tabs cannot be closed from the strip, so their title uses the close slot. */
+.acira-compact-tab:not(.selected)[data-labels=true] .acira-compact-tab-close{display:none}
+.acira-compact-tab:not(.selected)[data-labels=true] .acira-compact-tab-inner{padding-right:9px}
+/* F44: an audible or muted tab shows its speaker; it toggles mute without selecting the tab. */
+.acira-compact-tab-audio{flex:0 0 20px;display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:var(--radius-control,4px);background:transparent;color:inherit;opacity:.7}
+.acira-compact-tab-audio:hover{opacity:1;background:var(--frame-hover,var(--hover))}
+.acira-compact-tab-audio.is-muted{opacity:.55}
+.acira-compact-tab[data-labels=false] .acira-compact-tab-audio{display:none}
+
+/* Available scroll controls stay reachable without a hover-only hit target. */
+.acira-compact-tabs[data-scrollable=true] .acira-compact-scroll:not(:disabled){opacity:1;pointer-events:auto}

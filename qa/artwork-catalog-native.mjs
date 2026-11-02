@@ -1,0 +1,19 @@
+import fs from 'node:fs/promises';import path from 'node:path';import {spawn} from 'node:child_process';import {createHash} from 'node:crypto';import {paletteNativeIdentity} from './palette-native-identity.mjs';
+
+// Preserve the existing personal/manual/daily/private lifecycle assertions. Only
+// the qualified engine/code target, initialized-key precondition and two updated
+// built-in image expectations differ from the old two-thumbnail fixture.
+const identity=await paletteNativeIdentity(),original=await fs.readFile('qa/artwork-native.mjs','utf8');let source=original;
+function replace(before,after){if(source.split(before).length!==2)throw Error('Artwork lifecycle fixture changed: '+before.slice(0,90));source=source.replace(before,after);}
+source="import {launchPreparedNative} from './prepared-native.mjs';import {paletteNativeSourceStable} from './palette-native-identity.mjs';\nconst artifact="+JSON.stringify(identity)+";\n"+source;
+replace("require('../desktop/database.cjs')","require("+JSON.stringify(path.join(identity.codeRoot,'desktop/database.cjs'))+")");replace("require('../desktop/runtime.cjs')","require("+JSON.stringify(path.join(identity.codeRoot,'desktop/runtime.cjs'))+")");
+replace("path.resolve('.qa-profiles/artwork-native-'+Date.now())","path.resolve('.qa-profiles/artc-'+Date.now())");replace("path.resolve('qa/artifacts/artwork-native-'+Date.now())","path.resolve('qa/artifacts/artwork-catalog-native-'+Date.now())");
+replace("await _electron.launch({args:[path.resolve('desktop/main.cjs')]","await launchPreparedNative({executablePath:artifact.executable,args:[artifact.entry]");
+replace("assert.equal(fresh.src,'/artwork/met-436535.jpg');assert.equal(fresh.width,599);","assert.equal(fresh.src,'/artwork/catalog-v2/met-436535.jpg');assert.equal(fresh.width,2560);");
+replace("const launch=async()=>{","Object.assign(report,{snapshot:artifact.snapshot,qualifiedRuntime:artifact.runtime,ownerHarnessSha256:"+JSON.stringify(createHash('sha256').update(original).digest('hex'))+",initializedNativeKeyPrecondition:true,artworkRequests:[]});const launch=async()=>{");
+replace("ui.on('request',request=>{if(/^https?:/.test(request.url()))report.requests.push(request.url());});","ui.on('request',request=>{if(/^https?:/.test(request.url()))report.requests.push(request.url());if(request.url().includes('/artwork/'))report.artworkRequests.push(request.url());});");
+replace("report.status='passed';","const hiddenBoundary=report.artworkRequests.length;await ui.reload();await ui.locator('.browser-shell').waitFor();await ui.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));assert.equal(await ui.locator('.ed-workspace-cover img').count(),0);assert.equal(report.artworkRequests.length,hiddenBoundary);report.checks.push('Hidden artwork survives a real UI reload with no built-in artwork protocol request');report.sourceStable=await paletteNativeSourceStable(artifact);assert.equal(report.sourceStable,true);report.status='passed';");
+source=source.replaceAll('ui.screenshot(', 'captureUI(').replaceAll('ui?.screenshot(', 'captureUI(');
+source="const captureUI=async({path:file})=>{const bytes=await app.evaluate(async({BaseWindow})=>{const chrome=BaseWindow.getAllWindows().flatMap(window=>window.contentView.children).find(view=>view.webContents?.getURL()==='acira-browser-ui://ui/index.html');if(!chrome)throw Error('Own native chrome is unavailable.');return(await chrome.webContents.capturePage()).toPNG().toString('base64');});await fs.writeFile(file,Buffer.from(bytes,'base64'));};\n"+source;
+const runner=path.resolve('qa/.artwork-catalog-'+Date.now()+'.mjs');await fs.writeFile(runner,source);
+try{const child=spawn(process.execPath,[runner],{stdio:'inherit',windowsHide:true});const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});if(code!==0)process.exitCode=code||1;}finally{await fs.unlink(runner);}

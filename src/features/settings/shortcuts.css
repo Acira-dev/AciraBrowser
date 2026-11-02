@@ -1,0 +1,69 @@
+/* Settings › Shortcuts (panels/shortcuts.tsx). A's settings language: hairline rows, 4px controls, quiet until touched.
+   The keys are the control: separate key caps, a field that appears on hover and records in place, notes that settle in under the row.
+   Same nested scope as settings.css so these rules outrank its row rules. */
+.app.style-acira .browser-settings.settings-acira {
+  & .sk-toolbar { display: flex; align-items: center; gap: 8px; margin: 0 -12px 18px; padding: 6px 12px; background: var(--st-bg); }
+  & .sk-search { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px; border-radius: 4px; background: var(--st-field); border: 1px solid transparent; color: var(--st-muted); cursor: text; transition: border-color 0.12s, box-shadow 0.12s; }
+  & .sk-search:hover { border-color: var(--st-edge); }
+  & .sk-search:focus-within { border-color: var(--st-ring); box-shadow: inset 0 0 0 1px var(--st-ring); color: var(--st-text); }
+  & .sk-search > svg { flex: none; width: 15px; height: 15px; }
+  & .sk-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: 0; font-size: 13px; color: var(--st-text); }
+  & .sk-search input::placeholder { color: var(--st-muted); opacity: 1; }
+  & .sk-search input:is(:focus, :focus-visible) { outline: 0; box-shadow: none; border: 0; }
+  & .sk-editor > .st-note { margin: 24px 0 20px; }
+  & .sk-search input::-webkit-search-cancel-button { display: none; }
+  & .sk-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 14px; border: 1px solid var(--st-edge); font-size: 12px; font-weight: 500; color: var(--st-muted); transition: background-color 0.12s, color 0.12s, border-color 0.12s; }
+  & .sk-chip > span { min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--st-field); font-size: 11px; line-height: 16px; text-align: center; color: var(--st-text); }
+  & .sk-chip:hover { color: var(--st-text); border-color: var(--st-edge-strong); }
+  & .sk-chip[aria-pressed='true'] { color: var(--st-text); border-color: transparent; background: color-mix(in srgb, var(--st-text) 9%, transparent); }
+  & .sk-error { margin: -8px 0 14px; font-size: 12px; color: var(--danger, #b3261e); }
+  & .sk-empty { margin: 8px 0 28px; font-size: 13px; color: var(--st-muted); }
+  & .sk-groups { position: relative; }
+  & .sk-group { margin-bottom: 0; }
+
+  /* Row: name on the left, keys on the right; a note can open full width underneath. */
+  & .st-row.sk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 16px; row-gap: 0; min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+  & .st-row.sk-row:not([data-state='idle']) { background: color-mix(in srgb, var(--st-text) 3.5%, transparent); transition-duration: 0.12s; }
+  & .st-row.sk-row[data-state='clash'] { background: color-mix(in srgb, var(--warning, #b7791f) 8%, transparent); }
+  & .sk-row .st-copy > p { font-size: 11.5px; }
+  & .sk-control { display: flex; align-items: center; gap: 4px; justify-content: flex-end; min-width: 0; }
+
+  /* The keys. Idle: caps only. Hover/focus: a field edge says "click to change". Recording: the field, the caret, the accent ring. */
+  & .sk-keys { position: relative; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 96px; min-height: 30px; padding: 3px 5px 3px 8px; border-radius: 6px; border: 1px solid transparent; color: var(--st-text); cursor: pointer; transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s; }
+  & .sk-keys:hover { border-color: var(--st-edge); background: var(--st-field); }
+  & .sk-keys:focus-visible { outline: 0; border-color: var(--st-ring); box-shadow: inset 0 0 0 1px var(--st-ring); }
+  & .sk-keys[data-state='recording'] { min-width: 168px; justify-content: flex-start; border-color: var(--st-ring); background: var(--st-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-ring) 22%, transparent); cursor: default; }
+  & .sk-keys[data-state='clash'] { min-width: 168px; justify-content: flex-start; border-color: color-mix(in srgb, var(--warning, #b7791f) 70%, transparent); background: var(--st-bg); }
+  & .sk-caps { display: inline-flex; align-items: center; gap: 3px; }
+  & .sk-cap { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--st-edge); border-bottom-width: 1.5px; background: var(--st-field); font: 500 11.5px/1 var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); font-variant-numeric: tabular-nums; color: var(--st-text); white-space: nowrap; }
+  & .sk-row[data-changed] .sk-keys[data-state='idle'] .sk-cap { border-color: var(--st-edge-strong); }
+  & .sk-more { font-size: 11px; color: var(--st-muted); padding: 0 2px; }
+  & .sk-unset { font-size: 12px; color: var(--st-muted); padding: 0 4px; }
+  & .sk-field { display: inline-flex; align-items: center; gap: 3px; min-height: 22px; }
+  & .sk-field[data-bad] .sk-cap { color: var(--danger, #b3261e); border-color: color-mix(in srgb, var(--danger, #b3261e) 45%, transparent); text-decoration: line-through; text-decoration-thickness: 1px; }
+  & .sk-placeholder { font-size: 12px; color: var(--st-muted); padding: 0 2px; }
+  & .sk-caret { width: 1.5px; height: 14px; margin-left: 2px; border-radius: 1px; background: var(--st-ring); animation: sk-caret 1s steps(1) infinite; }
+  @keyframes sk-caret { 50% { opacity: 0; } }
+
+  & .sk-reset { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--st-muted); opacity: 0; transition: opacity 0.12s, background-color 0.12s, color 0.12s; }
+  & .sk-row:hover .sk-reset, & .sk-reset:focus-visible { opacity: 1; }
+  & .sk-reset:hover { color: var(--st-text); background: var(--hover, var(--st-field)); }
+  & .sk-reset svg { width: 14px; height: 14px; }
+
+  /* The note under a row that is being edited: the hint, a refusal, or the clash question. */
+  & .sk-note { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--st-line); font-size: 12px; line-height: 16px; color: var(--st-muted); }
+  & .sk-note .sk-cap { min-width: 0; height: 18px; padding: 0 5px; font-size: 10.5px; vertical-align: 1px; }
+  & .sk-note[data-tone='bad'] { color: var(--danger, #b3261e); }
+  & .sk-note[data-tone='clash'] { color: var(--st-text); }
+  & .sk-note-actions { display: inline-flex; gap: 6px; flex: none; }
+  & .sk-note-actions .st-button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+
+  @container (max-width: 560px) {
+    & .sk-toolbar { flex-wrap: wrap; }
+    & .sk-search { flex-basis: 100%; }
+    & .st-row.sk-row { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+    & .sk-control { justify-content: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) { & .sk-caret { animation: none; } }
+}
+.app[data-reduced-motion='true'] .sk-caret { animation: none; }

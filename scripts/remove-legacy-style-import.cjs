@@ -1,0 +1,1 @@
+const fs=require('fs');let s=fs.readFileSync('src/App.tsx','utf8');s=s.replace("import './components/AiModeToggle.css';\n",'');s=s.replace('<Spinner size={16} label="Loading page"/>','<DotMatrix preset="loader" size={16} label="Loading page" reducedMotion={s.reducedMotion}/>');fs.writeFileSync('src/App.tsx',s);
