@@ -85,9 +85,9 @@ test('No image is the new tab without a picture, reached by a transform-only mor
   assert.match(cover, /reducedMotion \? 0 : motionScale\(cls\)/, 'Off and reduced motion are instant');
 });
 
-test('the skeleton breath stops when motion is off instead of strobing', () => {
+test('the skeleton breath stops when motion is off instead of strobing, and breathes its full depth at Fast (.6) too', () => {
   assert.match(css, /animation-duration: calc\(2\.4s \* max\(var\(--motion-scale, 1\), 1\)\)/);
-  assert.match(css, /opacity: calc\(1 - 0\.45 \* min\(var\(--motion-scale, 1\), 1\)\)/);
+  assert.match(css, /opacity: calc\(1 - 0\.45 \* min\(var\(--motion-scale, 1\) \* 100, 1\)\)/);
 });
 
 test('the cover row gets keyboard focus back after the file chooser closes (its radios are disabled while it is open)', () => {

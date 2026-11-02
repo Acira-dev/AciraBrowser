@@ -6,12 +6,12 @@ const { SetupError, fail, shape, text } = require("./errors.cjs");
 // Local setup only. No network/provider/remote identity is accepted.
 
 /** The name a profile made from another browser's profile gets: that profile's own name ("Work"), or the browser's when
- *  the name is a placeholder ("Default", "Person 1"); " · Chrome" when that name is already taken here, then a number. */
+ *  the name is a placeholder ("Default", "Person 1", Zen's "Default (release)"); " · Chrome" when that name is already taken here, then a number. */
 function importedProfileName(source, existingNames) {
   const taken = new Set([...existingNames].map((name) => String(name).toLowerCase()));
   const browser = String(source?.browser || "Imported").slice(0, 40);
   const own = String(source?.name || "").trim();
-  const base = (!own || /^(default|person \d+|profile \d+|user|your chrome)$/i.test(own) ? browser : own).slice(0, 60);
+  const base = (!own || /^(default( \([^)]*\))?|person \d+|profile \d+|user|your chrome)$/i.test(own) ? browser : own).slice(0, 60);
   if (!taken.has(base.toLowerCase())) return base;
   const marked = `${base} · ${browser}`.slice(0, 78);
   if (!taken.has(marked.toLowerCase())) return marked;
@@ -30,7 +30,7 @@ function createSetupService({
     defaultBrowser?.status() || {
       supported: false,
       isDefault: false,
-      note: "Default-browser registration is unavailable in this build.",
+      note: tm("defaultbrowser.noteUnavailable"),
     };
   function localProfiles(context) {
     return (context.getProfiles?.() || [])

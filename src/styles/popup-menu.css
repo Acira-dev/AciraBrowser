@@ -1,5 +1,5 @@
 /* Menus and popovers per ACIRA_DESIGN_BIBLE.md §4 Menu and the §3.1 mono budget: clean sans throughout,
-   30px rows with 4px radius, a reserved 16px icon/check column, shortcuts right-aligned in Geist 12 at 44%,
+   30px rows with 4px radius, a reserved 16px icon/check column, shortcuts right-aligned in Inter 12 at 44%,
    hairline dividers, single-surface fields, fill-only selection. Scoped under .browser-popup so it outranks the
    older frost/preview rules without touching them. */
 .app .browser-popup .popup-header>strong,
@@ -23,7 +23,7 @@
 .app.style-acira .browser-popup .tab-result small{font:400 12px/1.3 var(--font-ui);color:var(--text-3,var(--muted))}
 .app .browser-popup :is(.menu-row,.tab-result,.profile-row):focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px}
 /* §5.4 tab search / palette: no header chrome, a 44px input row with a hairline below, 32px rows with the host
-   right-aligned in Geist 12 at 44%, and a 32px hint footer. Opens without animation (§3.9). */
+   right-aligned in Inter 12 at 44%, and a 32px hint footer. Opens without animation (§3.9). */
 .app.style-acira .browser-popup.popup-content-palette>.popup-header{display:none}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-fixed-search{padding:0;margin:0 -4px;border-bottom:1px solid var(--line)}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search{height:44px;margin:0;padding:0 14px;gap:10px;background:none;border-radius:0}
@@ -64,7 +64,7 @@
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row:is(:hover,[data-cursor=true],:focus-within) .tab-result-label>small{margin-right:8px}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row>.tab-result{padding-right:40px!important}
 /* F39 command bar (§5.4): sentence-case section labels, 32px rows, matched letters at full ink and the rest at 80%,
-   host or shortcut right-aligned in Geist 12 at 44%; the keyboard row is a 7% fill. No motion. */
+   host or shortcut right-aligned in Inter 12 at 44%; the keyboard row is a 7% fill. No motion. */
 .app .browser-popup.popup-content-palette .palette-results{display:flex;flex-direction:column;padding:2px 0 6px}
 .app .browser-popup.popup-content-palette .palette-section{height:28px;padding:10px 8px 0;font:500 12px/18px var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
 .app .browser-popup.popup-content-palette .palette-row{display:flex;align-items:center;gap:10px;width:100%;height:32px;min-height:32px;padding:0 8px;border:0;border-radius:var(--radius-menu-row,4px);background:none;color:var(--text-primary,inherit);font:400 13px/1 var(--font-ui);text-align:left;cursor:default}

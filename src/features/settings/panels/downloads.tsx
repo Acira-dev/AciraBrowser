@@ -20,14 +20,14 @@ function Downloads() {
   return (
     <>
       <SettingGroup title={t("downloads.saveFiles")}>
-        <SettingRow id="downloads-folder" title={t("nativeCore.downloadLocation")} detail={prefs.folderMissing ? 'The chosen folder is missing, so the default folder is used.' : 'Files are saved here without asking. Existing files are never overwritten.'}>
+        <SettingRow id="downloads-folder" title={t("nativeCore.downloadLocation")} detail={prefs.folderMissing ? t('downloads.folderMissing') : t('downloads.folderDetail')}>
           <div className="nc-actions">
             <span className="nc-mono nc-path" title={prefs.folder}>{'‪' + prefs.folder}</span>
             <button type="button" className="st-button" onClick={() => apply({ type: 'downloads.choose-folder' })}>{t("downloads.change")}</button>
             {prefs.customFolder && <button type="button" className="nc-link" onClick={() => apply({ type: 'downloads.preferences.set', folder: null })}>{t("downloads.useDefault")}</button>}
           </div>
         </SettingRow>
-        <SettingRow id="downloads-ask" title={t("nativeCore.askWhereToSaveEach")} detail="Show the Save dialog for every download.">
+        <SettingRow id="downloads-ask" title={t("nativeCore.askWhereToSaveEach")} detail={t("nativeCore.showTheSaveDialogFor")}>
           <Switch checked={prefs.askWhere} label={t("nativeCore.askWhereToSaveEach")} onChange={(askWhere) => apply({ type: 'downloads.preferences.set', askWhere })} />
         </SettingRow>
       </SettingGroup>

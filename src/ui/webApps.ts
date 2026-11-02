@@ -12,10 +12,10 @@ const EVENT = 'acira-web-apps';
 
 function call(request: Record<string, unknown>): Promise<Reply> {
   const native = (runtime as unknown as { native?: (request: Record<string, unknown>) => Promise<Reply> }).native;
-  if (!native) return Promise.reject(new Error('Apps need the desktop app.'));
+  if (!native) return Promise.reject(new Error(t('webApps.needsDesktopApp')));
   return native(request);
 }
-const reason = (error: unknown) => error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'That didn’t work. Try again.';
+const reason = (error: unknown) => error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : t('tor.vaultFailed');
 
 export const inspectSite = (tabId?: string) => call({ type: 'webapps.inspect', ...(tabId ? { tabId } : {}) }).then(reply => reply.webApps?.candidate ?? null);
 export async function listWebApps() { return (await call({ type: 'webapps.list' })).webApps?.apps ?? []; }
@@ -27,14 +27,14 @@ export async function installSiteAsApp(state: BrowserSnapshot, dispatch: (action
   try {
     const reply = await call({ type: 'webapps.install', tabId });
     const app = reply.webApps?.installed;
-    if (!app) throw new Error('That site could not be installed.');
+    if (!app) throw new Error(t('webApps.installFailed'));
     if (tab && !profile?.private) {
       const url = normalizeAppUrl(app.startUrl);
       if (url && !readSidebarApps(tab.browserProfileId).apps.some(item => item.url === url)) addSidebarApp(tab.browserProfileId, false, { url: app.startUrl, title: app.name, icon: app.icon || undefined });
       setSidebarAppsHidden(tab.browserProfileId, false, false);
     }
     window.dispatchEvent(new Event(EVENT));
-    dispatch({ type: 'toast', text: app.launcher==='finder' ? t('local.webAppInstalledFinder',{name:app.name}) : app.inStart ? `Installed ${app.name}. It’s in Start and in Favorites.` : `Installed ${app.name}. It’s in Favorites.` });
+    dispatch({ type: 'toast', text: app.launcher==='finder' ? t('local.webAppInstalledFinder',{name:app.name}) : app.inStart ? t('webApps.installedInStart', { name: app.name }) : t('webApps.installedInFavorites', { name: app.name }) });
     return app;
   } catch (error) { dispatch({ type: 'toast', text: reason(error), tone: 'error' }); return null; }
 }
@@ -46,7 +46,7 @@ export async function uninstallWebApp(app: WebApp, dispatch: (action: BrowserAct
     const pinned = readSidebarApps(app.profileId).apps.find(item => item.url === url);
     if (pinned) removeSidebarApp(app.profileId, false, pinned.id);
     window.dispatchEvent(new Event(EVENT));
-    dispatch({ type: 'toast', text: `${app.name} removed` });
+    dispatch({ type: 'toast', text: t('webApps.removedNamed', { name: app.name }) });
   } catch (error) { dispatch({ type: 'toast', text: reason(error), tone: 'error' }); }
 }
 

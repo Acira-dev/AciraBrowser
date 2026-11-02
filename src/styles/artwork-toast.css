@@ -9,9 +9,9 @@
   background: rgb(var(--overlay-rgb) / var(--overlay-opacity)); color: var(--text-primary);
   -webkit-backdrop-filter: blur(16px) saturate(1.1); backdrop-filter: blur(16px) saturate(1.1);
   font-size: var(--text-13, 13px); line-height: 18px;
-  animation: artwork-toast-in 220ms var(--ease-out, cubic-bezier(.2, 0, 0, 1)) backwards;
+  animation: artwork-toast-in calc(220ms * var(--motion-pace, 1)) var(--ease-out, cubic-bezier(.2, 0, 0, 1)) backwards;
 }
-.app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-out 120ms var(--ease-out, cubic-bezier(.2, 0, 0, 1)) forwards; pointer-events: none; }
+.app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-out calc(120ms * var(--motion-pace, 1)) var(--ease-out, cubic-bezier(.2, 0, 0, 1)) forwards; pointer-events: none; }
 .app.style-acira.opaque-glass .toast[data-artwork-toast] { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .app.style-acira .toast[data-artwork-toast] .toast-status { display: grid; place-items: center; flex: none; width: 16px; height: 16px; color: var(--success); }
 .app.style-acira .toast[data-artwork-toast] .toast-message { flex: 1; min-width: 0; }
@@ -36,11 +36,11 @@
 }
 @keyframes artwork-toast-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes artwork-toast-fade-out { from { opacity: 1; } to { opacity: 0; } }
-.app[data-reduced-motion='true'] .toast[data-artwork-toast] { animation: artwork-toast-fade 90ms linear backwards; }
-.app[data-reduced-motion='true'] .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out 90ms linear forwards; }
+.app[data-reduced-motion='true'] .toast[data-artwork-toast] { animation: artwork-toast-fade calc(90ms * var(--motion-pace, 1)) linear backwards; }
+.app[data-reduced-motion='true'] .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out calc(90ms * var(--motion-pace, 1)) linear forwards; }
 @media (prefers-reduced-motion: reduce) {
-  .app.style-acira .toast[data-artwork-toast] { animation: artwork-toast-fade 90ms linear backwards; }
-  .app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out 90ms linear forwards; }
+  .app.style-acira .toast[data-artwork-toast] { animation: artwork-toast-fade calc(90ms * var(--motion-pace, 1)) linear backwards; }
+  .app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-fade-out calc(90ms * var(--motion-pace, 1)) linear forwards; }
 }
 @media (forced-colors: active) {
   .app.style-acira .toast[data-artwork-toast] { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }

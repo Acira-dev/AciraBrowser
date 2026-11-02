@@ -78,7 +78,10 @@ export function usePopupBackdrop({id,enabled,closing,context}:{id?:number;enable
         if(cancelled)return;
         if(runtime.popupBackdropSnapshot){
           try{
-            const snapshot=await runtime.popupBackdropSnapshot(id);
+            // A popup of a measured kind lays out twice (its estimated height, then its measured one) and the broker
+            // discards a frame that straddled the second layout: ask once more against the settled layout.
+            let snapshot=await runtime.popupBackdropSnapshot(id);
+            if(!cancelled&&!snapshot.sources.length)snapshot=await runtime.popupBackdropSnapshot(id);
             if(cancelled)return;
             if(snapshot.id===id&&snapshot.sources.length){
               const decoded=await Promise.all(snapshot.sources.map(async source=>({source:{key:source.key,bounds:source.bounds,radius:source.radius,sourceBounds:source.sourceBounds},frame:await decodePopupSnapshot(source,snapshotController.signal)})));
@@ -102,8 +105,9 @@ export function usePopupBackdrop({id,enabled,closing,context}:{id?:number;enable
         for(const source of descriptor.sources){
           if(cancelled)break;
           const pending:CaptureRequest={id,key:source.key,source,cancelled:false,videos:[],controller:new AbortController(),staged:created,lifetime};request.current=pending;ownedRequest=pending;
-          await runtime.startPopupCapture?.(id,source.key);
-          if(!pending.ready)throw new Error('Material acquisition did not complete');
+          // False: main dropped the request (the popup moved on, or the capture failed) and holds no grant; even a stream that arrived is not used.
+          const started=await runtime.startPopupCapture?.(id,source.key);
+          if(!started||!pending.ready)throw new Error('Material acquisition did not complete');
           const item=pending.videos[0];if(!item)throw new Error('Material stream unavailable');
           item.source=source;created.push(item);acquired.push(pending);if(request.current===pending)request.current=null;
         }

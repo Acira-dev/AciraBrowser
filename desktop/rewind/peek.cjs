@@ -19,9 +19,16 @@ const LOAD_CAP_MS=1600,COPIED_MS=1600;
 const darkChrome=()=>{try{return Boolean(require('electron').nativeTheme?.shouldUseDarkColors);}catch{return true;}};
 
 /** Everything the frame says in words comes from the catalogs (en.json `peek.*`), in the language of the app. */
-const FALLBACK={'peek.frameLabel':'Link preview','peek.openAsTab':'Open as tab','peek.openInSplit':'Open in split view','peek.downloadNotice':'Downloads start from a tab. Open as tab to download.','app.close':'Close','app.back':'Back','error.reload':'Reload','app.stopLoading':'Stop loading','addressfield.notSecure':'Not secure','bookmarkmenu.copyLink':'Copy link','browsermenu.linkCopied':'Link copied'};
-function say(id){try{return require('../tm.cjs').tm(id)||FALLBACK[id];}catch{return FALLBACK[id]||id;}}
-const labels=()=>({frameLabel:say('peek.frameLabel'),openAsTab:say('peek.openAsTab'),openInSplit:say('peek.openInSplit'),close:say('app.close'),back:say('app.back'),reload:say('error.reload'),stop:say('app.stopLoading'),notSecure:say('addressfield.notSecure'),copy:say('bookmarkmenu.copyLink'),copied:say('browsermenu.linkCopied')});
+const FALLBACK={'peek.frameLabel':'Link preview','peek.openAsTab':'Open as tab','peek.openInSplit':'Open in split view','peek.downloadNotice':'Downloads start from a tab. Open as tab to download.','app.close':'Close','app.back':'Back','error.reload':'Reload','app.stopLoading':'Stop loading','addressfield.notSecure':'Not secure','bookmarkmenu.copyLink':'Copy link','browsermenu.linkCopied':'Link copied','error.tryAgain':'Try again','peek.download':'Download','peek.downloadTitle':'This link downloads a file','nf.siteCap':'This site','nf.unreachableTitle':'This site can’t be reached','nf.notWorking':'This page isn’t working','nf.certTitle':'Your connection is not private','nf.offlineTitle':'No internet','nf.offlineMsg':'Acira can’t reach the network.','nf.dnsMsg':'{host}’s server IP address could not be found.','nf.refused':'{host} refused to connect.','nf.timedOut':'{host} took too long to respond.','nf.reset':'The connection was reset.','nf.closed':'{host} unexpectedly closed the connection.','nf.addrUnreachable':'{host} is unreachable.','nf.blockedTitle':'{host} is blocked','nf.blockedExt':'This page was blocked by an extension or content blocker.','nf.fallbackMsg':'{host} couldn’t be opened.'};
+function say(id,params){try{return require('../tm.cjs').tm(id,params)||fill(FALLBACK[id],params);}catch{return fill(FALLBACK[id]||id,params);}}
+const fill=(text,params)=>String(text??'').replace(/\{(\w+)\}/g,(all,key)=>params&&key in params?String(params[key]):all);
+const labels=()=>({frameLabel:say('peek.frameLabel'),openAsTab:say('peek.openAsTab'),openInSplit:say('peek.openInSplit'),close:say('app.close'),back:say('app.back'),reload:say('error.reload'),stop:say('app.stopLoading'),notSecure:say('addressfield.notSecure'),copy:say('bookmarkmenu.copyLink'),copied:say('browsermenu.linkCopied'),tryAgain:say('error.tryAgain'),download:say('peek.download'),downloadTitle:say('peek.downloadTitle')});
+/** A link that failed to load, in the words of the tab's error page (ui/navigationFailure.ts): a title and the reason, with Chromium's code. Pure. */
+function peekFailure(code,url){
+ let host='';try{host=new URL(url).host;}catch{}const site=host||say('nf.siteCap'),name=String(code||'').match(/ERR_[A-Z0-9_]+/)?.[0]||'ERR_FAILED';
+ const [title,message]=/NAME_NOT_RESOLVED|DNS_|NAME_RESOLUTION_FAILED/.test(name)?['nf.unreachableTitle',say('nf.dnsMsg',{host:site})]:/INTERNET_DISCONNECTED/.test(name)?['nf.offlineTitle',say('nf.offlineMsg')]:/CONNECTION_REFUSED/.test(name)?['nf.unreachableTitle',say('nf.refused',{host:site})]:/TIMED_OUT/.test(name)?['nf.unreachableTitle',say('nf.timedOut',{host:site})]:/ADDRESS_UNREACHABLE|ADDRESS_INVALID/.test(name)?['nf.unreachableTitle',say('nf.addrUnreachable',{host:site})]:/CONNECTION_RESET/.test(name)?['nf.unreachableTitle',say('nf.reset')]:/CONNECTION_CLOSED|CONNECTION_ABORTED|EMPTY_RESPONSE/.test(name)?['nf.unreachableTitle',say('nf.closed',{host:site})]:/CERT_|SSL_/.test(name)?['nf.certTitle',say('nf.fallbackMsg',{host:site})]:/BLOCKED_BY_CLIENT/.test(name)?['nf.blockedTitle',say('nf.blockedExt')]:['nf.notWorking',say('nf.fallbackMsg',{host:site})];
+ return {title:say(title,{host:site}),message,code:name,url};
+}
 const keys=()=>{const mod=process.platform==='darwin'?'Cmd':'Ctrl';return {close:'Esc',tab:`${mod}+Enter`,split:`${mod}+Shift+Enter`,back:'Alt+Left',reload:`${mod}+R`};};
 
 /** The card centred in the page area: a 44px header (drawn by the frame) over the page view, which sits 1px inside the
@@ -64,13 +71,13 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
  let current=null;const adopted=new Map();
  const accentOf=()=>{const value=accent();return typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value)?value:'#3b6eea';};
- const frameState=p=>({geometry:p.geometry,title:p.wc.isDestroyed()?'':p.wc.getTitle(),url:p.wc.isDestroyed()?p.url:p.wc.getURL(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),notice:p.notice||'',link:cardLink(p.geometry,p.origin),speed:reducedMotion()?'off':motionSpeed(),reducedMotion:reducedMotion(),revealed:Boolean(p.revealed),copied:Boolean(p.copiedAt&&Date.now()-p.copiedAt<COPIED_MS),dark:darkChrome(),accent:accentOf(),labels:labels(),keys:keys()});
+ const frameState=p=>({geometry:p.geometry,title:p.wc.isDestroyed()?'':p.wc.getTitle(),url:p.wc.isDestroyed()?p.url:p.wc.getURL(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),notice:p.notice||'',link:cardLink(p.geometry,p.origin),speed:reducedMotion()?'off':motionSpeed(),reducedMotion:reducedMotion(),revealed:Boolean(p.revealed),failure:p.failure||null,download:p.download?{name:p.download.name,url:p.download.url}:null,copied:Boolean(p.copiedAt&&Date.now()-p.copiedAt<COPIED_MS),dark:darkChrome(),accent:accentOf(),labels:labels(),keys:keys()});
  const publish=()=>{const p=current;emit({type:'peek-state',peek:p?{sourceTabId:p.sourceTabId,url:p.wc.isDestroyed()?p.url:p.wc.getURL()||p.url,title:p.wc.isDestroyed()?'':p.wc.getTitle(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),bounds:p.geometry?.view||null}:null});if(p&&!p.frame.webContents.isDestroyed())p.frame.webContents.send('acira:peek-frame-state',frameState(p));};
  /** The page view shows once the frame's card has formed (or the frame took too long). */
- function reveal(p){clearTimeout(p.revealTimer);clearTimeout(p.capTimer);if(current!==p||p.wc.isDestroyed()||p.revealed)return;p.revealed=true;p.view.setVisible?.(true);publish();}
+ function reveal(p){clearTimeout(p.revealTimer);clearTimeout(p.capTimer);if(current!==p||p.wc.isDestroyed()||p.revealed)return;p.revealed=true;p.view.setVisible?.(!p.failure&&!p.download);publish();}
  /** Formed (the card is open, or the frame is slow) and painted (the page has a document, or it is slow): then the page shows. */
  function maybeReveal(p){if(current!==p||!p.formed)return;if(p.painted){reveal(p);return;}if(!p.capTimer)p.capTimer=setTimeout(()=>reveal(p),LOAD_CAP_MS);}
  function place(){
@@ -84,9 +91,12 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},pag
  /** One meaning for a key or a header button, whichever view it came from. */
  function act(p,action){
   if(current!==p||p.wc.isDestroyed())return;
-  if(action==='close')close();else if(action==='tab')promote('tab');else if(action==='split')promote('split');
+  if(action==='close')close();else if(action==='tab'&&p.download){/* a file link has no page to keep: the tab opens the link itself */const {url}=p.download;close();dispatch({type:'tab.new',url,browserProfileId:p.profileId,afterId:p.sourceTabId});}
+  else if(action==='tab')promote('tab');else if(action==='split')promote('split');
   else if(action==='back'){if(p.wc.navigationHistory.canGoBack())p.wc.navigationHistory.goBack();}
   else if(action==='reload')p.wc.reload();else if(action==='stop')p.wc.stop();
+  else if(action==='retry'){if(p.failure)p.wc.loadURL(p.failure.url||p.url).catch(()=>{});}
+  else if(action==='download'){if(p.download){const {url}=p.download,source=p.sourceTabId;close();download(source,url);}}
   else if(action==='copy'){try{copyText(webURL(p.wc.getURL())||p.url);}catch{return;}p.copiedAt=Date.now();const copied=say('browsermenu.linkCopied');p.notice=copied;publish();clearTimeout(p.copiedTimer);p.copiedTimer=setTimeout(()=>{if(current===p&&p.notice===copied){p.notice='';publish();}},COPIED_MS);}
  }
  function open({url,sourceTabId,origin=null}){
@@ -109,8 +119,13 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},pag
   const thin=()=>{if(wc.isDestroyed())return;wc.insertCSS('html{scrollbar-width:thin}',{cssOrigin:'user'}).then(key=>{if(current===p&&!wc.isDestroyed())p.thinKey=key;else if(!wc.isDestroyed())wc.removeInsertedCSS(key).catch(()=>{});},()=>{});};
   on(wc,'dom-ready',thin);
   for(const name of ['dom-ready','did-fail-load'])on(wc,name,()=>{p.painted=true;maybeReveal(p);});
+  // A link that fails shows the card's own error state (the address, the reason, Try again) instead of a blank page, and a link that
+  // downloads says so (Download from the source tab, or Open as tab): the page view stays hidden while either shows.
+  on(wc,'did-fail-load',(_event,code,description,url,isMainFrame)=>{if(isMainFrame!==true||code===-3||current!==p)return;p.failure=peekFailure(description,webURL(url)||p.url);p.view.setVisible?.(false);publish();});
+  // Try again or a link that works: the card shows its loader until the next document, as on opening.
+  on(wc,'did-start-navigation',(event,_url,inPlace,isMainFrame)=>{const main=event?.isMainFrame??isMainFrame,same=event?.isSameDocument??inPlace;if(!main||same||current!==p||!p.failure&&!p.download)return;p.failure=null;p.download=null;p.revealed=false;p.painted=false;clearTimeout(p.capTimer);p.capTimer=null;publish();});
   wc.setWindowOpenHandler(details=>{const next=webURL(details.url);if(next&&['foreground-tab','background-tab','default'].includes(details.disposition)&&details.disposition!=='new-window')setImmediate(()=>{if(current===p&&!wc.isDestroyed())wc.loadURL(next).catch(()=>{});});return {action:'deny'};});
-  on(wc.session,'will-download',(event,item,source)=>{if(source===wc){item.cancel();p.notice=say('peek.downloadNotice');publish();}});
+  on(wc.session,'will-download',(event,item,source)=>{if(source!==wc)return;let name='',url='';try{name=item.getFilename();url=item.getURL();}catch{/* a bare item */}item.cancel();if(current!==p)return;p.download={name:String(name||'').slice(0,255),url:webURL(url)||p.url};p.view.setVisible?.(false);publish();});
   // Keys work from the page and from the frame: Esc closes, Ctrl+Enter keeps it as a tab, Ctrl+Shift+Enter beside this page.
   const keyed=(event,input)=>{const action=peekKey(input);if(!action)return;event.preventDefault();act(p,action);};
   on(wc,'before-input-event',keyed);
@@ -174,4 +189,4 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},pag
  }
  return {open,close,promote,adopt,relayout,onState,fromPage,handle,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
 }
-module.exports={createPeek,peekGeometry,cardOrigin,cardLink,peekKey,HEADER};
+module.exports={createPeek,peekGeometry,cardOrigin,cardLink,peekKey,peekFailure,HEADER};

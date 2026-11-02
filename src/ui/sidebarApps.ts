@@ -1,5 +1,6 @@
 import {useSyncExternalStore} from 'react';
 import type {BrowserAction} from '../runtime/types';
+import {favoriteTabOf} from '../runtime/favoriteTabs';
 import { t } from '../i18n';
 /** Profile-scoped sidebar apps (pinned sites above the tab list). Private windows keep them in memory only. */
 export type SidebarApp={id:string;url:string;title:string;icon?:string};
@@ -64,7 +65,7 @@ export const removeSidebarApp=(profile:string,privateMode:boolean,id:string)=>up
  * token in this origin's storage, so the toast's Undo puts it back from whichever renderer shows the toast. A private
  * window's favorites never reach storage, so they go without Undo. Returns the toast to dispatch. */
 const UNDO_KEY='acira-sidebar-apps-undo',UNDO_MS=10*60_000;
-type RemovedApp={token:string;profile:string;app:SidebarApp;index:number;at:number};
+type RemovedApp={token:string;profile:string;app:SidebarApp;index:number;at:number;/** Tabs the favorite owned, handed back to the tab list when it went (noteReleasedTab). */tabIds?:string[]};
 const removedApps=():RemovedApp[]=>{try{const value:unknown=JSON.parse(localStorage.getItem(UNDO_KEY)||'[]');return Array.isArray(value)?value.filter((item:RemovedApp)=>!!item&&typeof item.token==='string'&&typeof item.profile==='string'&&!!item.app&&Date.now()-item.at<UNDO_MS):[];}catch{return [];}};
 export function removeSidebarAppWithUndo(profile:string,privateMode:boolean,id:string):BrowserAction|null{
  const current=read(profile,privateMode),index=current.apps.findIndex(app=>app.id===id),app=current.apps[index];if(!app)return null;
@@ -73,11 +74,17 @@ export function removeSidebarAppWithUndo(profile:string,privateMode:boolean,id:s
  removeSidebarApp(profile,privateMode,id);
  return {type:'toast',text:`${app.title||appHost(app.url)} removed from Favorites`,...(token?{action:{label:t("toast.undo"),command:{type:'favorite.restore',token}}}:{})};
 }
-export function restoreSidebarApp(token:string):boolean{
+export function restoreSidebarApp(token:string,restored?:(appId:string,tabIds:string[])=>void):boolean{
  const list=removedApps(),entry=list.find(item=>item.token===token);if(!entry)return false;
  try{localStorage.setItem(UNDO_KEY,JSON.stringify(list.filter(item=>item!==entry)));}catch{/* the entry expires on its own */}
- update(entry.profile,false,value=>value.apps.some(app=>app.id===entry.app.id||app.url===entry.app.url)||value.apps.length>=SIDEBAR_APPS_MAX?value:{...value,apps:[...value.apps.slice(0,entry.index),entry.app,...value.apps.slice(entry.index)]});
+ let back=false;update(entry.profile,false,value=>{if(value.apps.some(app=>app.id===entry.app.id||app.url===entry.app.url)||value.apps.length>=SIDEBAR_APPS_MAX)return value;back=true;return {...value,apps:[...value.apps.slice(0,entry.index),entry.app,...value.apps.slice(entry.index)]};});
+ if(back)restored?.(entry.app.id,entry.tabIds??[]);
  return true;
+}
+/** A removed favorite's tab handed back to the tab list (AciraSidebar) is noted on the removal's Undo entry, so Undo, from
+ * whichever view shows the toast, makes it the favorite's own tab again. */
+export function noteReleasedTab(appId:string,tabId:string){
+ try{const list=removedApps(),entry=list.filter(item=>item.app.id===appId).at(-1);if(!entry||entry.tabIds?.includes(tabId))return;entry.tabIds=[...(entry.tabIds??[]),tabId].slice(-8);localStorage.setItem(UNDO_KEY,JSON.stringify(list));}catch{/* Undo brings the favorite back without its tab */}
 }
 export function moveSidebarApp(profile:string,privateMode:boolean,id:string,index:number){
  update(profile,privateMode,value=>{const from=value.apps.findIndex(app=>app.id===id);if(from<0)return value;const apps=[...value.apps],[app]=apps.splice(from,1);apps.splice(Math.max(0,Math.min(apps.length,index)),0,app);return {...value,apps};});
@@ -89,25 +96,25 @@ function subscribe(listener:()=>void){window.addEventListener(EVENT,listener);wi
 export const readSidebarApps=(profile='',privateMode=false)=>read(profile,privateMode);
 export function useSidebarApps(profile='',privateMode=false){return useSyncExternalStore(subscribe,()=>read(profile,privateMode));}
 
-/** The tab an app last opened or focused, so a click returns to it even after the page navigated. Session only. */
-const appTabs=new Map<string,string>();
-export const rememberAppTab=(appId:string,tabId:string)=>{appTabs.set(appId,tabId);};
-/** What a click on a favorite tile does (R3-72, founder). A plain click goes to the favorite's tab when it is open and not the
- * tab you are on; when it IS the tab you are on, clicking again opens a fresh tab at the favorite's address (a new YouTube
- * home) and goes there; with no tab open it opens one. Middle-click and Ctrl/Cmd+click always open a new background tab;
- * Shift+click opens a new window. Pure, so the rule is tested without a window. */
+/** What a click on a favorite tile does (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"). A favorite owns
+ * one tab (runtime/favoriteTabs.ts): a plain click opens it the first time, switches back to it after that (bringing it in from
+ * another workspace, its page, scroll, sign-in and media as they were), and on the favorite's own tab, once you have browsed
+ * away, takes it back to the favorite's address (Arc). On its own tab at that address a click does nothing: never a second copy.
+ * Middle-click and Ctrl/Cmd+click still open an ordinary background tab at the address, and Shift+click a new window. Pure,
+ * so the rule is tested without a window. This replaces R3-72 (a second click opened a fresh tab). */
 export interface AppClick{button:number;ctrlKey?:boolean;metaKey?:boolean;shiftKey?:boolean}
-export type AppClickPlan={kind:'none'}|{kind:'select';tabId:string}|{kind:'new-tab';background:boolean;remember:boolean}|{kind:'new-window'};
-export function appClickPlan<T extends {id:string;url:string;browserProfileId:string}>(click:AppClick,app:SidebarApp,tabs:T[],activeTabId:string,profile:string):AppClickPlan{
+export type AppClickPlan={kind:'none'}|{kind:'open'}|{kind:'select';tabId:string}|{kind:'home';tabId:string}|{kind:'new-tab'}|{kind:'new-window'};
+export function appClickPlan<T extends {id:string;url:string;browserProfileId:string;favoriteId?:string}>(click:AppClick,app:SidebarApp,tabs:readonly T[],activeTabId:string,profile:string):AppClickPlan{
  if(click.button!==0&&click.button!==1)return {kind:'none'};
- const modified=Boolean(click.ctrlKey||click.metaKey);
- if(click.button===1||modified)return {kind:'new-tab',background:true,remember:false};
+ if(click.button===1||click.ctrlKey||click.metaKey)return {kind:'new-tab'};
  if(click.shiftKey)return {kind:'new-window'};
- const tab=appTabFor(app,tabs,profile);
- return tab&&tab.id!==activeTabId?{kind:'select',tabId:tab.id}:{kind:'new-tab',background:false,remember:true};
+ const tab=favoriteTabOf(tabs,app.id,profile);
+ if(!tab)return {kind:'open'};
+ if(tab.id!==activeTabId)return {kind:'select',tabId:tab.id};
+ return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
-export function appTabFor<T extends {id:string;url:string;browserProfileId:string}>(app:SidebarApp,tabs:T[],profile:string):T|undefined{
- const remembered=tabs.find(tab=>tab.id===appTabs.get(app.id)&&tab.browserProfileId===profile);if(remembered)return remembered;
- const own=tabs.filter(tab=>tab.browserProfileId===profile);
- return own.find(tab=>tab.url===app.url)||(appHost(app.url)?own.find(tab=>appHost(tab.url)===appHost(app.url)):undefined);
-}
+/** Whether a tab shows in the sidebar's tab list: a favorite's own tab lives in its tile instead, unless Favorites are hidden
+ * (then it is listed like any tab). A tab whose favorite was removed is listed until the sidebar hands it back (AciraSidebar). */
+export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>)=>!(tab.favoriteId&&!favorites.hidden&&favorites.apps.some(app=>app.id===tab.favoriteId));
+/** The favorite's own tab in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
+export const appTabFor=<T extends {browserProfileId:string;favoriteId?:string}>(app:SidebarApp,tabs:readonly T[],profile:string):T|undefined=>favoriteTabOf(tabs,app.id,profile);

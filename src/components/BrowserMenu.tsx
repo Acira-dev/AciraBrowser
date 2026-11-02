@@ -1,7 +1,7 @@
 import { Fragment,useEffect,useRef,useState,type ComponentType,type CSSProperties,type ReactNode } from 'react';
 import { MenuToggle } from './MenuToggle';
 import { ProtectionIcon } from './ProtectionIcon';
-import { formatShortcut, isTorSupported } from '../ui/platform';
+import { formatShortcut, isMac, isTorSupported } from '../ui/platform';
 import { menuShortcut } from '../ui/shortcutKeys';
 import {runtime} from '../runtime/client';
 import { defaultMenuLayout,platformMenuLayout,menuSections,type MenuItemId,type MenuLayout } from '../ui/menuPrefs';
@@ -68,7 +68,7 @@ function menuNodes(p:MenuParts):Record<MenuItemId,ReactNode>{
     newTorTab:row(t("browsermenu.newTorTab"),TorGlyph,()=>{void runtime.dispatch({type:'tab.new',privacy:'tor'});}),
     newWindow:row(t("browsermenu.newWindow"),PanelTop,()=>p.openWindow?p.openWindow('normal'):runtime.openWindow('normal'),'Ctrl N'),
     newPrivateWindow:row(t("browsermenu.newPrivateWindow"),PrivateWindow,()=>p.openWindow?p.openWindow('private'):runtime.openWindow('private'),'Ctrl Shift N'),
-    newTorWindow:row(t("browsermenu.newTorWindow"),TorGlyph,()=>p.openWindow?p.openWindow('tor'):runtime.openWindow('tor'),'Alt Shift N'),
+    newTorWindow:row(t("browsermenu.newTorWindow"),TorGlyph,()=>p.openWindow?p.openWindow('tor'):runtime.openWindow('tor'),isMac()?'Cmd Alt N':'Alt Shift N'),
     find:row(t("browsermenu.findInPage"),Search,p.find,'Ctrl F'),
     zoom:p.zoom,
     split:row(t("browsermenu.splitView"),Columns2,()=>p.open('split'),'Ctrl Shift S'),

@@ -9,7 +9,7 @@ function KnownLimits() {
       <SettingRow
         id="known-limits"
         title={t("knownLimits.streamingServicesThatNeedDrm")}
-        detail="Protected streaming requires a supported browser build and service. Supported Mac builds prepare Widevine automatically when online. Availability and video quality vary by service and device; other builds may not support protected playback."
+        detail={t("knownLimits.streamingDetail")}
       />
     </SettingGroup>
   );

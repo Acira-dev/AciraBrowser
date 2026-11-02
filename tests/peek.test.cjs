@@ -7,16 +7,16 @@ const {createPeek,peekGeometry}=require('../desktop/rewind/peek.cjs');
 class FakeContents extends EventEmitter{
  constructor(options){super();this.options=options;this.url='';this.destroyed=false;this.session=FakeContents.sessions[options?.webPreferences?.partition]??=new EventEmitter();this.ipc=new EventEmitter();this.sent=[];this.calls=[];this.canBack=false;this.navigationHistory={canGoBack:()=>this.canBack,goBack:()=>this.calls.push('back')};}
  loadURL(url){this.url=url;return Promise.resolve();}loadFile(){return Promise.resolve();}getURL(){return this.url;}getTitle(){return 'Title of '+this.url;}isLoading(){return false;}reload(){this.calls.push('reload');}stop(){this.calls.push('stop');}
- isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}focus(){}send(...args){this.sent.push(args);}setWindowOpenHandler(fn){this.openHandler=fn;}setWebRTCIPHandlingPolicy(){}
+ isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}focus(){}insertCSS(){return Promise.resolve('css');}removeInsertedCSS(){return Promise.resolve();}send(...args){this.sent.push(args);}setWindowOpenHandler(fn){this.openHandler=fn;}setWebRTCIPHandlingPolicy(){}
 }
 FakeContents.sessions={};
-class FakeView{constructor(options){this.webContents=new FakeContents(options);this.bounds=null;this.radius=0;}setBounds(b){this.bounds=b;}setBorderRadius(r){this.radius=r;}setBackgroundColor(){}}
-function harness(){
+class FakeView{constructor(options){this.webContents=new FakeContents(options);this.bounds=null;this.radius=0;this.visible=true;}setBounds(b){this.bounds=b;}setBorderRadius(r){this.radius=r;}setBackgroundColor(){}setVisible(v){this.visible=v;}}
+function harness(extra={}){
  let state=createInitialState();state=reduceBrowser(state,{type:'tab.navigate',tabId:state.activeTabId,url:'https://source.test/'});
  const children=[{page:true}],events=[];
  const win={isDestroyed:()=>false,contentView:{children,addChildView(v){const i=children.indexOf(v);if(i>=0)children.splice(i,1);children.push(v);},removeChildView(v){const i=children.indexOf(v);if(i>=0)children.splice(i,1);}}};
  const h={get state(){return state;},children,events,configured:[],select:id=>{state=reduceBrowser(state,{type:'tab.select',id});},dispatch:a=>{state=reduceBrowser(state,a);}};
- h.peek=createPeek({WebContentsView:FakeView,getWindow:()=>win,getState:()=>state,dispatch:a=>{state=reduceBrowser(state,a);h.peek.onState(state);},emit:e=>events.push(e),pageBounds:()=>({x:0,y:68,width:1200,height:800}),configure:(s,id)=>h.configured.push(id),pagePreload:'page.cjs',partitionOf:id=>state.browserProfiles.find(p=>p.id===id)?.partition});
+ h.peek=createPeek({WebContentsView:FakeView,getWindow:()=>win,getState:()=>state,dispatch:a=>{state=reduceBrowser(state,a);h.peek.onState(state);},emit:e=>events.push(e),pageBounds:()=>({x:0,y:68,width:1200,height:800}),configure:(s,id)=>h.configured.push(id),pagePreload:'page.cjs',partitionOf:id=>state.browserProfiles.find(p=>p.id===id)?.partition,...extra});
  return h;
 }
 
@@ -42,13 +42,36 @@ test('open: page view in the source profile session above a frame view; popups r
  for(const bad of ['javascript:alert(1)','file:///C:/x','https://u:p@x.test/'])assert.equal(h.peek.open({url:bad,sourceTabId:source}).ok,false);
 });
 
-test('downloads from a peek are cancelled and explained; other contents are untouched',()=>{
- const h=harness();h.peek.open({url:'https://docs.test/',sourceTabId:h.state.activeTabId});
- const view=h.children.at(-1),cancelled=[];const item={cancel:()=>cancelled.push(true)};
+test('a link that downloads is cancelled in the peek and says so; Download starts it from the source tab; other contents are untouched',()=>{
+ const downloads=[],h=harness({download:(id,url)=>downloads.push([id,url])}),source=h.state.activeTabId;h.peek.open({url:'https://docs.test/file',sourceTabId:source});
+ const view=h.children.at(-1),cancelled=[];const item={cancel:()=>cancelled.push(true),getFilename:()=>'report.pdf',getURL:()=>'https://docs.test/files/report.pdf'};
  view.webContents.session.emit('will-download',{},item,{other:true});assert.equal(cancelled.length,0);
  view.webContents.session.emit('will-download',{},item,view.webContents);assert.equal(cancelled.length,1);
- const frameState=h.children.at(-2).webContents.sent.at(-1)[1];assert.match(frameState.notice,/Open as tab/);
+ const frameState=h.children.at(-2).webContents.sent.at(-1)[1];assert.deepEqual(frameState.download,{name:'report.pdf',url:'https://docs.test/files/report.pdf'},'the card says a file downloads, by its name and address');
+ assert.equal(frameState.notice,'','no toast over it');assert.equal(view.visible,false,'the blank page view is hidden');
+ assert.equal(frameState.labels.download,'Download');assert.equal(frameState.labels.downloadTitle,'This link downloads a file');
+ h.children.at(-2).webContents.ipc.emit('acira:peek-frame',{},'download');
+ assert.deepEqual(downloads,[[source,'https://docs.test/files/report.pdf']],'Download starts it from the tab the peek came from');assert.equal(h.peek.active,false,'and the peek closes');
+ h.peek.open({url:'https://docs.test/file',sourceTabId:source});const again=h.children.at(-1);again.webContents.session.emit('will-download',{},item,again.webContents);
+ const tabs=h.state.tabs.length;h.children.at(-2).webContents.ipc.emit('acira:peek-frame',{},'tab');
+ assert.equal(h.state.tabs.length,tabs+1,'Open as tab opens the file link in a tab of its own');assert.equal(h.state.tabs.find(t=>t.id===h.state.activeTabId).url,'https://docs.test/files/report.pdf');assert.equal(h.peek.active,false);assert.equal(again.webContents.destroyed,true,'the blank peek page is not kept');
 });
+
+test('a link that fails shows the address, the reason and Try again instead of a blank card; Try again loads it again',()=>{
+ const h=harness();h.peek.open({url:'https://nowhere.invalid/page',sourceTabId:h.state.activeTabId});
+ const [frame,view]=h.children.slice(-2);frame.webContents.ipc.emit('acira:peek-frame',{},'entered');
+ view.webContents.emit('did-fail-load',{},-3,'ERR_ABORTED','https://nowhere.invalid/page',true);assert.equal(frame.webContents.sent.at(-1)[1].failure,null,'an aborted load is no failure');
+ view.webContents.emit('did-fail-load',{},-105,'ERR_NAME_NOT_RESOLVED','https://nowhere.invalid/page',false);assert.equal(frame.webContents.sent.at(-1)[1].failure,null,'nor is a frame inside the page');
+ view.webContents.emit('did-fail-load',{},-105,'ERR_NAME_NOT_RESOLVED','https://nowhere.invalid/page',true);
+ const state=frame.webContents.sent.at(-1)[1];
+ assert.deepEqual(state.failure,{title:'This site can’t be reached',message:'nowhere.invalid’s server IP address could not be found.',code:'ERR_NAME_NOT_RESOLVED',url:'https://nowhere.invalid/page'});
+ assert.equal(view.visible,false,'the white error page stays hidden');assert.equal(state.labels.tryAgain,'Try again');
+ view.webContents.url='about:blank';frame.webContents.ipc.emit('acira:peek-frame',{},'retry');assert.equal(view.webContents.url,'https://nowhere.invalid/page','Try again loads the link again');
+ view.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:false});const retrying=frame.webContents.sent.at(-1)[1];
+ assert.equal(retrying.failure,null);assert.equal(retrying.revealed,false,'the loader shows while it tries');
+ view.webContents.emit('dom-ready');assert.equal(view.visible,true,'a page that loads shows');
+});
+
 
 test('Esc, a click outside, closing or leaving the source tab close the peek',()=>{
  const h=harness(),source=h.state.activeTabId;
@@ -171,7 +194,7 @@ test('the frame is told the title, the address, Back, the link box, the speed, t
  const s=frame.webContents.sent.filter(x=>x[0]==='acira:peek-frame-state').at(-1)[1];
  assert.equal(s.title,'Title of https://docs.test/a/b?x=1');assert.equal(s.url,'https://docs.test/a/b?x=1');assert.equal(s.canGoBack,true);assert.equal(s.loading,false);
  assert.deepEqual(s.link,{x:248,y:168,width:90,height:16});assert.equal(s.speed,'premium');assert.equal(s.accent,'#3b6eea');
- assert.deepEqual(Object.keys(s.labels).sort(),['back','close','copied','copy','frameLabel','notSecure','openAsTab','openInSplit','reload','stop']);
+ assert.deepEqual(Object.keys(s.labels).sort(),['back','close','copied','copy','download','downloadTitle','frameLabel','notSecure','openAsTab','openInSplit','reload','stop','tryAgain']);
  assert.equal(s.labels.openAsTab,'Open as tab');assert.equal(s.labels.openInSplit,'Open in split view');assert.equal(s.labels.back,'Back');
  assert.match(s.keys.tab,/^(Ctrl|Cmd)\+Enter$/);assert.equal(s.keys.close,'Esc');
 });
@@ -186,7 +209,7 @@ test('Off and reduced motion tell the frame so; only a real accent colour reache
 
 test('the Peek words come from the catalogs, in the app language, and the hint toast is an exact catalog sentence',()=>{
  const en=require('../src/i18n/en.json'),{TEXT}=require('../desktop/rewind/peek-hint.cjs');
- for(const id of ['peek.frameLabel','peek.openAsTab','peek.openInSplit','peek.downloadNotice','peek.hint'])assert.equal(typeof en[id],'string',id);
+ for(const id of ['peek.frameLabel','peek.openAsTab','peek.openInSplit','peek.download','peek.downloadTitle','peek.hint'])assert.equal(typeof en[id],'string',id);
  assert.equal(en['peek.hint'],TEXT,'the toast text reverse-maps to peek.hint, so it shows translated');
  const {setLanguage,tm}=require('../desktop/tm.cjs');setLanguage('de');
  try{

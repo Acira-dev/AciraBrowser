@@ -26,7 +26,7 @@ export function ProfileScope({ state, dispatch, setting, id }: Props & { setting
     <SettingRow
       id={id}
       title={t("profilescope.appliesTo")}
-      detail={own ? `Only ${profile.name}. Other profiles keep their own.` : 'Every profile, unless a profile sets its own.'}
+      detail={own ? t('profilescope.onlyThisDetail', { name: profile.name }) : t('profilescope.allDetail')}
     >
       <Select
         label={t("profilescope.appliesTo")}

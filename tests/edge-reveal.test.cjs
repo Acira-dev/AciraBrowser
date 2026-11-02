@@ -342,6 +342,30 @@ test('the poller emits chrome-edge when an edge changes, polls at 16ms only whil
   });
 });
 
+test('the page keeps its woken pixel back while an edge shows and gives it back when the edge has gone', () => {
+  const wakes = [];
+  let timeout = null;
+  const clock = { t: 5000 };
+  const screen = { point: { x: 600, y: 400 }, getCursorScreenPoint() { return this.point; } };
+  const win = { isDestroyed: () => false, isFocused: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }), on() {} };
+  const item = { window: win, state: { settings: { verticalTabs: false } }, emit() {}, size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), docked: () => false, suspended: () => false, wake: on => wakes.push(on) };
+  const app = { whenReady: () => Promise.resolve(), on() {} };
+  watchChromeEdges({ app, windows: () => [item], screen, view: () => 'seamless', now: () => clock.t, schedule: fn => { timeout = fn; return { unref() {} }; }, cancel() {} });
+  const run = ms => { for (let i = 0; i < ms / 16; i++) { clock.t += 16; const fn = timeout; timeout = null; fn(); } };
+  return Promise.resolve().then(() => {
+    timeout();
+    run(64);
+    screen.point = { x: 400, y: 2 };
+    run(64);
+    assert.deepEqual(wakes, [true], 'the dwell wakes the interface');
+    run(400);
+    assert.deepEqual(wakes, [true], 'still showing: the page keeps the pixel');
+    screen.point = { x: 600, y: 400 };
+    run(1200);
+    assert.deepEqual(wakes, [true, false], 'the edge has gone: the page gets its pixel back');
+  });
+});
+
 // ---- R4-24: the wider zone, intent, and a push out across the edge -----------------------------------------------------------
 test('R4-24: the zone reaches 10px into the window on the left and 8px at the top; 11px and 9px are the page', () => {
   within(rig().until('side', at(10, 300), 400), DWELL.side);

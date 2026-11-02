@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Tab card</title>
 <style>
 /* Tab hover card (R3-14: the card with a picture that Brave and Helium show). A small native view above the page, drawn here:
    the tab's name, its site and a picture of the page from when you left it (kept in memory, never saved). Solid surface,
    hairline ring, the soft layered shadow; radius 8 (4 for the picture). It arrives on the effects and spatial springs. */
+/* Inter, the browser's one typeface: the same file the interface loads (public/fonts, built into dist/fonts), same features. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
 :root{
  --card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-quiet:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--well:rgb(255 255 255/.06);
  --shadow:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -6px rgb(0 0 0/.42);
@@ -19,7 +22,7 @@ body.light{
  color-scheme:light;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
 #card{position:absolute;width:264px;border-radius:8px;background:var(--card);box-shadow:var(--shadow),0 0 0 1px var(--line);padding:8px;opacity:0;transform-origin:0 0}
 #pic{display:block;width:100%;height:140px;margin:0 0 8px;border-radius:4px;overflow:hidden;background:var(--well)}
 #pic[hidden]{display:none}
@@ -61,7 +64,7 @@ const springEasing=(spec,scale=1,velocity=0)=>{
  return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
 };
 const TOKENS={'menu.grow':['S',.170,0],'menu.fade':['E',.085,0],'materialize':['E',.170,0]};
-const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:.6,E:.6,L:1}},KICK={fast:.15,premium:.4};
 const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
 //#endspring
 let speed='premium',off=false,pending=null,running=[];
@@ -105,7 +108,8 @@ tabCard.onState(state=>{
  render(state);
  tabCard.command({type:'size',height:measure()+0});
 });
-tabCard.command({type:'ready'});
+// Ready once Inter is in, so the first card is measured in it.
+document.fonts.load('400 13px Inter').catch(()=>{}).finally(()=>tabCard.command({type:'ready'}));
 </script>
 </body>
 </html>

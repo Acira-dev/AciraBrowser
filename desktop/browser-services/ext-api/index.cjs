@@ -425,7 +425,9 @@ function rendererRuntime(ctx){
    if(!known(namespace)||Object.prototype.hasOwnProperty.call(definitions,namespace))continue;
    const present=getAt(chrome,namespace)!==undefined,want=available(namespace);
    if(present&&!want){const value=getAt(chrome,namespace);removeAt(chrome,namespace);changes.set(namespace,{before:value,after:undefined});}
-   else if(!present&&want&&def&&typeof def.factory==='function'){
+   // The engine's own shouldInject is honoured as the engine does: its i18n stand-in is for MV3 contexts only, and the engine preload also
+   // runs in websites' service workers (no manifest), where building it threw "chrome.i18n could not be built" at every worker start.
+   else if(!present&&want&&def&&typeof def.factory==='function'&&(()=>{try{return typeof def.shouldInject!=='function'||!!def.shouldInject();}catch(e){return false;}})()){
     let value;try{value=def.factory(getAt(chrome,namespace));}catch(error){report(`Acira: chrome.${namespace} could not be built`,error);continue;}
     if(value!==undefined&&setAt(chrome,namespace,value))changes.set(namespace,{before:undefined,after:value});
    }

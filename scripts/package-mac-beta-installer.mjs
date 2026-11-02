@@ -12,7 +12,9 @@ const {buildInstallerPage}=require('../packaging/macos/installer-page.cjs');
 const {resealArguments,verifySigningDetails}=require('../packaging/macos/signing.cjs');
 const inputs=['scripts/package-mac-beta.mjs','scripts/package-mac-beta-installer.mjs','packaging/macos/installer-main.cjs','packaging/macos/installer-preload.cjs','packaging/macos/installer-page.cjs','packaging/macos/install-engine.cjs','packaging/macos/running-app.cjs','packaging/macos/strings.cjs','packaging/installer/strings.json','docs/launch/concepts/installer-creation.html'];
 
-export async function packageBetaInstaller({repo,browser,output,source,version,policy,archiveApplication=false}){
+// notarization: what the sealed ACIRA-INSTALLER-BUILD.json may say ('requested' when the caller sends the installer to Apple after this, else 'none');
+// payloadNotarized: whether the browser being archived was already notarized and stapled (package-mac-widevine.mjs does that first).
+export async function packageBetaInstaller({repo,browser,output,source,version,policy,archiveApplication=false,notarization='none',payloadNotarized=false}){
  const installer=path.join(output,'Install Acira.app'),resources=path.join(installer,'Contents/Resources');
  const packagingInputs=[];
  for(const file of inputs){
@@ -39,9 +41,9 @@ export async function packageBetaInstaller({repo,browser,output,source,version,p
  if(archiveApplication)await require('../packaging/macos/widevine.cjs').sealAsar(installer);
  const archive=path.join(resources,'payload.zip');
  await run('/usr/bin/ditto',['--norsrc','--noextattr','-c','-k','--keepParent',browser,archive],{maxBuffer:1024*1024});
- const payload={schema:1,appName:'Acira Browser.app',commit:source.commit,sourceDigest:source.sourceDigest,version,notarized:false,archiveSha256:await hashFile(archive),entries:await walk(browser)};
+ const payload={schema:1,appName:'Acira Browser.app',commit:source.commit,sourceDigest:source.sourceDigest,version,notarized:payloadNotarized,archiveSha256:await hashFile(archive),entries:await walk(browser)};
  await fs.writeFile(path.join(resources,'payload.json'),JSON.stringify(payload));
- await fs.writeFile(path.join(resources,'ACIRA-INSTALLER-BUILD.json'),JSON.stringify({version,commit:source.commit,sourceDigest:source.sourceDigest,arch:source.arch,distributionSigned:true,notarized:false,stapled:false,appleSubmission:null,packagingInputs},null,2)+'\n');
+ await fs.writeFile(path.join(resources,'ACIRA-INSTALLER-BUILD.json'),JSON.stringify({version,commit:source.commit,sourceDigest:source.sourceDigest,arch:source.arch,distributionSigned:true,notarization,packagingInputs},null,2)+'\n');
  for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(repo,file),path.join(resources,file));
  await run('/usr/bin/codesign',resealArguments(installer,policy));
  await run('/usr/bin/codesign',['--verify','--deep','--strict',installer]);

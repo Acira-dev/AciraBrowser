@@ -4,6 +4,7 @@ import { SiteIdentityIcon } from '../components/SiteIdentityIcon';
 import type { BookmarkNode, BrowserAction, BrowserSnapshot } from '../runtime/types';
 import { openPage, savedPageIdentity } from '../ui/pageActions';
 import { openBookmarkMenu } from '../ui/bookmarkMenu';
+import { folderTitle } from '../ui/bookmarkFolderName';
 import { openSavedPage } from '../ui/bookmarkControl';
 import { privacyNames } from '../components/TabPrivacyMark';
 import { t, useT } from '../i18n';
@@ -42,10 +43,10 @@ export function BookmarksManager({ state, dispatch, onNavigate }: { state: Brows
   const countIn = (id: string): number => (childrenOf.get(id) ?? []).reduce((total, node) => total + (node.url ? 1 : countIn(node.id)), 0);
   const total = nodes.filter(node => node.url).length, sites = new Set(nodes.filter(node => node.url).map(node => pageHost(node.url!))).size;
   const needle = query.trim().toLowerCase();
-  const pathOf = (node: BookmarkNode) => { const names: string[] = []; let at = node.parentId ? byId.get(node.parentId) : undefined; while (at) { names.unshift(at.title); at = at.parentId ? byId.get(at.parentId) : undefined; } return names.join(' › '); };
+  const pathOf = (node: BookmarkNode) => { const names: string[] = []; let at = node.parentId ? byId.get(node.parentId) : undefined; while (at) { names.unshift(folderTitle(at)); at = at.parentId ? byId.get(at.parentId) : undefined; } return names.join(' › '); };
   const found = needle ? nodes.filter(node => node.url && `${node.title} ${node.url}`.toLowerCase().includes(needle)) : null;
   const here = childrenOf.get(selected) ?? [];
-  const title = (node: BookmarkNode) => node.id === 'bookmarks-bar' ? t('bm.bar') : node.title || (node.url ? pageHost(node.url) : t('bm.untitled'));
+  const title = (node: BookmarkNode) => node.id === 'bookmarks-bar' ? t('bm.bar') : (node.url ? node.title : folderTitle(node)) || (node.url ? pageHost(node.url) : t('bm.untitled'));
 
   /** The node and everything under it, as the restore action needs them. */
   const branchOf = (node: BookmarkNode): BookmarkNode[] => [node, ...(childrenOf.get(node.id) ?? []).flatMap(branchOf)];
@@ -60,7 +61,7 @@ export function BookmarksManager({ state, dispatch, onNavigate }: { state: Brows
     offer(t('bm.removedFrom', { count, title: title(node) }), () => dispatch({ type: 'bookmark.restore', nodes: gone }));
   };
   const toggleBar = (node: BookmarkNode) => move(node.id, onBar.has(node.id) ? 'other-bookmarks' : 'bookmarks-bar', 0);
-  const rename = (node: BookmarkNode, value: string) => { setEditing(null); const next = value.trim(); if (next && next !== node.title) dispatch({ type: 'bookmark.rename', id: node.id, title: next }); };
+  const rename = (node: BookmarkNode, value: string) => { setEditing(null); const next = value.trim(); /* the field shows a special folder's translated name: kept as it is, it is no rename */ if (next && next !== node.title && next !== title(node)) dispatch({ type: 'bookmark.rename', id: node.id, title: next }); };
   const move = (id: string, parentId: string | null, index: number) => dispatch({ type: 'bookmark.move', id, parentId, index });
   const dropOn = (target: BookmarkNode | null, where: 'before' | 'after' | 'into', parent: string) => {
     if (!dragId || dragId === target?.id) return;
@@ -126,7 +127,7 @@ export function BookmarksManager({ state, dispatch, onNavigate }: { state: Brows
     if (next >= 0 && next < here.length) { move(node.id, selected || null, next); requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-bm="${node.id}"] .lib-open`)?.focus()); }
   };
 
-  const renameField = (node: BookmarkNode) => <input className="bm-rename" autoFocus aria-label={t('bm.renameAria', { label: title(node) })} defaultValue={node.title} maxLength={200}
+  const renameField = (node: BookmarkNode) => <input className="bm-rename" autoFocus aria-label={t('bm.renameAria', { label: title(node) })} defaultValue={node.url ? node.title : title(node)} maxLength={200}
     onFocus={event => event.currentTarget.select()} onClick={event => event.stopPropagation()}
     onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') rename(node, event.currentTarget.value); if (event.key === 'Escape') setEditing(null); }}
     onBlur={event => rename(node, event.currentTarget.value)} />;

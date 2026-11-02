@@ -242,7 +242,9 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       // one pixel, which wakes the interface; the reveal's own layout (or the pointer leaving) puts it back.
       const dwelling = ZONES.some(zone => entry.edge.phase(zone) === 'dwelling');
       if (dwelling && !entry.waking) { entry.waking = true; item.wake?.(true); }
-      else if (entry.waking && !dwelling) { entry.waking = false; if (!entry.edge.active()) item.wake?.(false); }
+      // The page gives its pixel back when nothing is dwelling AND nothing is showing: it stayed one short at the bottom when the dwell ended in a
+      // reveal that left the page's bounds as they were (the reveal's own layout then has nothing to change), now that a fullscreen Seamless page covers the whole window.
+      else if (entry.waking && !dwelling && !entry.edge.active()) { entry.waking = false; item.wake?.(false); }
       if (result.top !== entry.last.top || result.side !== entry.last.side || pinned.top !== entry.last.pinned.top || pinned.side !== entry.last.pinned.side) {
         entry.last = { top: result.top, side: result.side, pinned };
         item.emit({ type: 'chrome-edge', top: result.top, side: result.side, pinned });

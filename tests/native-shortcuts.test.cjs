@@ -208,8 +208,9 @@ test('on macOS every default key the editor shows reaches its command, and Rewin
   const base=resolveDefaultShortcut(input,'darwin');
   if(!base||commandForAction(base)!==command.id)dead.push(`${command.id}: ${accel}`);
  }
- // New Tor window (Alt+Shift+N) has no key that works on a Mac yet: Option+letter types a character there. The editor still lists it until the founder picks one.
- assert.deepEqual(dead,['tor-window: Alt+Shift+N']);
+ // Every Mac default works: New Tor window is Option+Cmd+N there (Option+Shift+N, its Windows key, types a character on a Mac).
+ assert.deepEqual(dead,[]);
+ assert.deepEqual(mac.list().find(command=>command.id==='tor-window').bindings,['Alt+Cmd+N']);
  assert.equal(resolveDefaultShortcut({type:'keyDown',key:'h',code:'KeyH',meta:true,shift:true,control:false,alt:false},'darwin').action,'rewind');
  assert.equal(resolveDefaultShortcut({type:'keyDown',key:'h',code:'KeyH',meta:true,shift:false,control:false,alt:false},'darwin'),null,'Cmd+H stays Hide');
  assert.equal(mac.list().find(command=>command.id==='history').bindings[0],'Cmd+Y');

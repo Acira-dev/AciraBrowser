@@ -116,13 +116,14 @@ function readBookmarks(location) {
   return readDatabase(location, 'places.sqlite', bookmarksFrom);
 }
 
-/** Visited pages, newest first: [{url, title, time (ms)}]. Firefox stores microseconds since 1970. */
-function readHistory(location, limit = 50000) {
+/** Visited pages, newest first: [{url, title, time (ms)}]. Firefox stores microseconds since 1970. `skipped.notWeb` (optional) counts the rows left out as not web pages. */
+function readHistory(location, limit = 50000, skipped = null) {
   return readDatabase(location, 'places.sqlite', (database) => {
     const query = database.prepare('SELECT url, title, last_visit_date FROM moz_places WHERE last_visit_date IS NOT NULL AND hidden = 0 ORDER BY last_visit_date DESC LIMIT ?');
     query.setReadBigInts(true);
     return query.all(limit).flatMap((row) => {
       const url = webURL(row.url);
+      if (!url && skipped) skipped.notWeb++;
       return url ? [{ url, title: row.title ? String(row.title) : '', time: Number(row.last_visit_date / 1000n) }] : [];
     });
   });

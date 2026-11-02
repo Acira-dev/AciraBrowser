@@ -71,7 +71,8 @@ export function useBrowser(){
    if(!pending||next.revision>=pending.revision)pending=next;if(!frame){frame=requestAnimationFrame(flush);timer=setTimeout(flush,100);}};
   const unsubscribe=runtime.subscribe(receive);void runtime.getSnapshot().then(full=>apply(complete(full)));return()=>{unsubscribe();cancelAnimationFrame(frame);clearTimeout(timer);};},[]);
  const dispatch=(action:BrowserAction)=>{if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
-  if(action.type==='favorite.restore'){restoreSidebarApp(action.token);return;}
+  // Undo of a removed favorite: it comes back with the live tab it had handed to the tab list, if that tab is still open and unclaimed.
+  if(action.type==='favorite.restore'){restoreSidebarApp(action.token,(appId,tabIds)=>{const tab=latest.current.tabs.find(tab=>tabIds.includes(tab.id)&&!tab.favoriteId);if(tab)dispatch({type:'tab.favorite',id:tab.id,favoriteId:appId});});return;}
   // Opening or closing the sidebar shows on the input frame (G, Round 2); main's snapshot confirms it a frame later.
   if(opensOrClosesSidebar(action)&&action.type==='ui.update'){const patch=action.patch;modeSwitch(()=>flushSync(()=>setState(previous=>{const own=Object.hasOwn(patch,'view')?patch.view??undefined:Object.hasOwn(patch,'focusMode')?viewForFocus(previous.settings,previous.windowUi,patch.focusMode===true)??undefined:previous.windowUi.view;return {...previous,windowUi:{...previous.windowUi,...patch,view:own,focusMode:own==='focus'}};})),'layout');}
   let sent=action,dispatched=false;

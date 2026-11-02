@@ -39,7 +39,8 @@ const COMMANDS=[
  C('close-tabs-right','Close tabs to the right','Tabs',{action:'close-right'}),
  C('new-window','New window','Windows',{action:'new-window'},['Mod+N']),
  C('private-window','New private window','Windows',{action:'private-window'},['Mod+Shift+N']),
- C('tor-window','New Tor window','Windows',{action:'tor-window'},['Alt+Shift+N']),
+ // On a Mac Option+Shift+N types a character, so Option+Cmd+N there (Brave's Mac key for the same window; free in this table and in macOS).
+ C('tor-window','New Tor window','Windows',{action:'tor-window'},['Alt+Shift+N'],['Mod+Alt+N']),
  C('close-window','Close window','Windows',{action:'close-window'},['Mod+Shift+W']),
  C('quit','Close Acira','Windows',{action:'quit'},['Mod+Shift+Q'],[]), // R4-36: asks first with several tabs open; Cmd+Q is the Mac app menu's
  C('fullscreen','Full screen','Windows',{action:'fullscreen'},['F11']),

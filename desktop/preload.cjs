@@ -40,4 +40,11 @@ contextBridge.exposeInMainWorld('acira',{
  openWindow:kind=>send('acira:open',kind),windowControl:command=>ipcRenderer.send('acira:window',command),exportData:(name,content)=>{void invoke('acira:export',name,content);}
 });
 
-window.addEventListener('wheel',event=>{if(event.isTrusted&&event.ctrlKey&&!event.altKey&&Number.isFinite(event.deltaY)&&event.deltaY&&event.target?.closest?.('.page-area')){event.preventDefault();send('acira:internal-wheel-zoom',{deltaY:event.deltaY,deltaMode:event.deltaMode});}},{capture:true,passive:false});
+// Ctrl+wheel over a page the interface draws (Settings, History, the new tab...). A wheel notch, or a trackpad's two-finger scroll with Control held,
+// steps the page zoom in main as on a website. A pinch reaches the interface as a ctrl+wheel too, with small precise deltas and no Control key down:
+// like Chromium on a website it magnifies the page without laying it out again (ui/pageMagnify.ts hears it as 'acira:pinch').
+let controlDown=false;
+window.addEventListener('keydown',event=>{if(event.key==='Control')controlDown=true;},{capture:true,passive:true});
+window.addEventListener('keyup',event=>{if(event.key==='Control')controlDown=false;},{capture:true,passive:true});
+window.addEventListener('blur',()=>{controlDown=false;},{passive:true});
+window.addEventListener('wheel',event=>{if(event.isTrusted&&event.ctrlKey&&!event.altKey&&Number.isFinite(event.deltaY)&&event.deltaY&&event.target?.closest?.('.page-area')){event.preventDefault();if(controlDown||event.deltaMode!==0||Math.abs(event.deltaY)>=40)send('acira:internal-wheel-zoom',{deltaY:event.deltaY,deltaMode:event.deltaMode});else window.dispatchEvent(new CustomEvent('acira:pinch',{detail:JSON.stringify({deltaY:event.deltaY,x:event.clientX,y:event.clientY})}));}},{capture:true,passive:false});

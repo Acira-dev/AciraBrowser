@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cookie banner and site dialog fixture</title>
+<!-- tests/cookie-banner-dialogs.test.cjs: one page, one case per ?case=. Each case puts what a real site has on the page (Reddit's reCAPTCHA badge and
+     sign-in dialog, a picture viewer, a cover video with a tint, Sourcepoint's message and lock, a consent manager's banner, veil and lock) and the runner
+     clicks where a person would. Shapes read from reddit.com, spiegel.de, bild.de and welt.de on 2 Nov 2026. -->
+<style>
+  html, body { margin: 0; font: 16px/1.5 system-ui, sans-serif; }
+  .content p { margin: 0 24px 16px; }
+  .grecaptcha-badge { position: fixed; right: 0; bottom: 14px; width: 256px; height: 60px; background: #f9f9f9; box-shadow: 0 0 5px gray; }
+  body.scroll-is-blocked { overflow: hidden; }
+  body.cmp-open { overflow: hidden !important; }
+  body.modal-open { overflow: hidden !important; }
+  html.sp-message-open body { position: fixed !important; overflow: hidden !important; width: 100%; top: 0; }
+  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 50; }
+  .backdrop.spinner::after { content: ''; position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; border-radius: 50%; border: 3px solid #fff; border-top-color: transparent; }
+  auth-modal { position: fixed; z-index: 60; left: calc(50% - 260px); top: 40px; width: 520px; height: 560px; background: #fff; display: block; border-radius: 16px; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0, 0, 0, .92); z-index: 70; display: grid; place-items: center; }
+  .lightbox img { width: 60vw; height: 60vh; }
+  .hero { position: relative; height: 100vh; background: #123; }
+  .hero video { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero .tint { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); }
+  .cmp-dim { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); z-index: 2147483000; }
+  #onetrust-banner-sdk { position: fixed; left: 0; right: 0; bottom: 0; height: 180px; background: #fff; z-index: 2147483001; }
+  [id^="sp_message_container_"] { position: fixed; inset: 0; background: rgba(0, 0, 0, .4); z-index: 2147483647; }
+  .site-dialog { position: fixed; z-index: 80; left: calc(50% - 200px); top: 120px; width: 400px; height: 300px; background: #fff; }
+  button.big { margin: 24px; width: 160px; height: 48px; }
+</style>
+<body>
+<script>
+const params = new URLSearchParams(location.search), kind = params.get('case');
+const tall = () => { const content = document.createElement('div'); content.className = 'content'; for (let i = 0; i < 80; i++) { const p = document.createElement('p'); p.textContent = 'Story ' + i + ': a paragraph of the page so that it is much taller than the window.'; content.append(p); } document.body.append(content); };
+const button = (id, text, onclick) => { const b = document.createElement('button'); b.id = id; b.className = 'big'; b.textContent = text; b.addEventListener('click', onclick); document.body.prepend(b); return b; };
+const PIXEL = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="teal"/></svg>');
+customElements.define('auth-modal', class extends HTMLElement { connectedCallback() { if (this.shadowRoot) return; const root = this.attachShadow({mode: 'open'}); root.innerHTML = '<style>:host{color:#111}</style><h2>Log In</h2><label>Email or username <input></label><label>Password <input type=password></label><button>Log In</button>'; } });
+function openSignIn({slow = false} = {}) {
+  document.body.classList.add('scroll-is-blocked');
+  const backdrop = document.createElement('div'); backdrop.className = 'backdrop' + (slow ? ' spinner' : ''); backdrop.id = 'backdrop'; document.body.append(backdrop);
+  // The slow kind is a dimmed layer with a spinner that the dialog then arrives in (a sign-in form loaded on demand, as Reddit's is).
+  const show = () => { backdrop.classList.remove('spinner'); const modal = document.createElement('auth-modal'); modal.id = 'dialog'; (slow ? backdrop : document.body).append(modal); };
+  if (slow) setTimeout(show, 1500); else show();
+}
+function badge() { const node = document.createElement('div'); node.className = 'grecaptcha-badge'; node.id = 'badge'; document.body.append(node); }
+if (kind === 'sign-in' || kind === 'sign-in-slow') { tall(); button('login', 'Log In', () => openSignIn({slow: kind === 'sign-in-slow'})); setTimeout(badge, 200); }
+// Reddit's picture viewer: the window-sized layer is inside a shadow tree, under a host that is not positioned itself.
+customElements.define('photo-viewer', class extends HTMLElement { connectedCallback() { if (this.shadowRoot) return; this.attachShadow({mode: 'open'}).innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:70;display:grid;place-items:center"><img style="width:60vw;height:60vh" src="' + PIXEL + '"></div>'; } });
+if (kind === 'shadow-lightbox') { tall(); setTimeout(badge, 200); button('photo', 'Open photo', () => { document.body.classList.add('scroll-is-blocked'); const viewer = document.createElement('photo-viewer'); viewer.id = 'dialog'; document.body.append(viewer); }); }
+if (kind === 'lightbox') { tall(); setTimeout(badge, 200); button('photo', 'Open photo', () => { document.body.classList.add('scroll-is-blocked'); const box = document.createElement('div'); box.className = 'lightbox'; box.id = 'dialog'; const img = document.createElement('img'); img.src = PIXEL; box.append(img); document.body.append(box); }); }
+if (kind === 'hero') { const hero = document.createElement('section'); hero.className = 'hero'; hero.innerHTML = '<video muted playsinline></video><div class="tint" id="tint"></div>'; document.body.append(hero); tall(); const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.textContent = 'We use cookies. Accept all / Reject all'; document.body.append(banner); }
+if (kind === 'sourcepoint') { tall(); document.documentElement.classList.add('sp-message-open'); const box = document.createElement('div'); box.id = 'sp_message_container_1495530'; box.innerHTML = '<iframe id="sp_message_iframe_1495530" srcdoc="<p>Consent and continue / Subscribe</p>" style="width:600px;height:400px;margin:80px auto;display:block;border:0;background:#fff"></iframe>'; document.body.append(box); }
+if (kind === 'consent-page') { const head = document.createElement('header'); head.textContent = 'derStandard'; document.body.append(head); const box = document.createElement('div'); box.id = 'sp_message_container_1408697'; box.innerHTML = '<iframe srcdoc="<p>Mit Werbung weiterlesen / Pur-Abo</p>" style="width:600px;height:400px;margin:80px auto;display:block;border:0;background:#fff"></iframe>'; document.body.append(box); }
+// A page drawn in a shadow tree (nu.nl's consent page, DPG Media) has no text of its own in the document: it is not empty.
+if (kind === 'shadow-page') { const host = document.createElement('div'); host.attachShadow({mode: 'open'}).innerHTML = '<div style="width:600px;height:400px;margin:40px auto">' + 'Jouw privacy-instellingen. '.repeat(40) + '</div>'; document.body.append(host); const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.textContent = 'We use cookies.'; document.body.append(banner); }
+// A OneTrust banner as its script draws it, with the style element it adds (ids from stackoverflow.com and ikea.com, 2 Nov 2026), and one that offers a paid subscription instead of a reject.
+if (kind === 'onetrust' || kind === 'onetrust-pay') {
+  tall(); window.__clicked = [];
+  const sdkStyle = document.createElement('style'); sdkStyle.id = 'onetrust-style'; document.head.append(sdkStyle);
+  const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.setAttribute('role', 'region');
+  banner.innerHTML = kind === 'onetrust' ? '<p>We use cookies to improve your experience.</p><button id="onetrust-accept-btn-handler">Accept all</button><button id="onetrust-reject-all-handler">Reject all</button>' : '<p>Read with ads and cookies, or subscribe for 2,99 € a month without ads.</p><button id="onetrust-accept-btn-handler">Accept and continue</button><button id="onetrust-reject-all-handler">Subscribe</button>';
+  banner.querySelectorAll('button').forEach(button => button.addEventListener('click', () => { window.__clicked.push(button.id); banner.remove(); }));
+  document.body.append(banner);
+}
+if (kind === 'wall' || kind === 'wall-stuck') {
+  tall();
+  const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.textContent = 'We use cookies. Accept all / Reject all'; document.body.append(banner);
+  const dim = document.createElement('div'); dim.className = 'cmp-dim'; dim.id = 'veil'; document.body.append(dim);
+  if (kind === 'wall') document.body.classList.add('cmp-open'); else document.body.setAttribute('style', 'overflow: hidden !important');
+  button('open', 'Open dialog', () => { document.body.classList.add('modal-open'); const d = document.createElement('div'); d.className = 'site-dialog'; d.id = 'dialog'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.innerHTML = '<p>Newsletter preferences</p>'; const close = document.createElement('button'); close.id = 'close'; close.textContent = 'Close'; close.style.cssText = 'width:120px;height:40px'; close.addEventListener('click', () => { d.remove(); document.body.classList.remove('modal-open'); }); d.append(close); document.body.append(d); });
+}
+</script>

@@ -32,11 +32,16 @@ export const ratingOverWebsite = (state: Pick<BrowserSnapshot, 'tabs' | 'activeT
  * rows of 18 (question, 1–2 lines), 32 (stars) and 28 (buttons) with 10px gaps. The overlay host is sized from this before it paints. */
 export const RATING_WIDTH = 320, RATING_EDGE = 16, RATING_SHADOW_ROOM = 16;
 const QUESTION_WIDTH = RATING_WIDTH - 14 - 12 - 28;
-let measure: CanvasRenderingContext2D | null | undefined;
+// A hidden span rather than a canvas, so Inter's features count as they do on screen (canvas ignores them).
+let measure: HTMLSpanElement | null | undefined;
 function questionWidth(text: string) {
-  if (measure === undefined) measure = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  if (measure === undefined && typeof document !== 'undefined' && document.body) {
+    measure = document.createElement('span'); measure.setAttribute('aria-hidden', 'true');
+    measure.style.cssText = 'position:fixed;left:-10000px;top:0;visibility:hidden;white-space:pre;pointer-events:none;contain:layout style';
+    document.body.append(measure);
+  }
   if (!measure || (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded')) return text.length * 7.2;
-  measure.font = '600 13px Geist, Inter, "Segoe UI", sans-serif'; return Math.ceil(measure.measureText(text).width);
+  measure.style.font = '600 13px Inter, "Segoe UI", sans-serif'; measure.textContent = text; return Math.ceil(measure.getBoundingClientRect().width);
 }
 /** The card's box while it asks (the overlay host keeps this room through the thanks and the exit; the card sits at its bottom). */
 export function ratingCardSize(feature: RatingFeature) {

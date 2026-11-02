@@ -14,7 +14,7 @@
   border-radius: 12px;
   color: var(--accent-ink, var(--accent, #3b6eea));
   background: color-mix(in srgb, var(--accent, #3b6eea) 13%, transparent);
-  font: 500 12px/1 var(--font-ui, 'Geist', sans-serif);
+  font: 500 12px/1 var(--font-ui, 'Inter', sans-serif);
   letter-spacing: 0;
   white-space: nowrap;
   cursor: default;
@@ -47,7 +47,7 @@
   min-height: 0;
   margin: 0;
   padding: 2px 12px 8px 36px;
-  font: 400 12px/16px var(--font-ui, 'Geist', sans-serif);
+  font: 400 12px/16px var(--font-ui, 'Inter', sans-serif);
   color: var(--menu-t2, var(--menu-t3, inherit));
   text-align: left;
   text-wrap: pretty;

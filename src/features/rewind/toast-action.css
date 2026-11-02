@@ -1,5 +1,5 @@
 /* Toast text action (bible §4): a neutral text button at the toast's right edge — primary text, 500 weight, a 6% fill on
-   hover — with its keyboard path beside it in a quiet kbd chip (Geist 11, never mono). */
+   hover — with its keyboard path beside it in a quiet kbd chip (Inter 11, never mono). */
 .app .toast-action{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 6px 0 10px;margin-right:-8px;border:0;border-radius:var(--radius-control,4px);background:transparent;color:var(--text-1,var(--text-primary,inherit));font:500 13px/1 var(--font-ui);pointer-events:auto;cursor:default;transition:background-color 120ms var(--ease-out,cubic-bezier(.2,0,0,1)),transform 80ms var(--ease-out,cubic-bezier(.2,0,0,1))}
 .app .toast-action:hover{background:color-mix(in srgb,currentColor 6%,transparent)}
 .app .toast-action:active{background:color-mix(in srgb,currentColor 10%,transparent);transform:scale(.97)}

@@ -167,3 +167,16 @@ test('a tab a page opened outlives that page and leaves no dead entry behind whe
   assert.ok(handler.includes("dispatch({type:'tab.close',id:tab.id})"), 'and the tab leaves the strip');
   assert.ok(handler.includes('entry.closing'), 'a close the browser itself is running is left to closePage');
 });
+
+// A pop-up opened with window.open(url, name, 'width=500,height=420') used to be 640×760 whatever it asked (the browser's options won).
+test('a pop-up opens at the size it asked for, as its page area, kept on the opener\'s screen', () => {
+  const {popupBounds} = require('../desktop/window-open-policy.cjs');
+  const screen = {x: 0, y: 25, width: 1512, height: 920};
+  assert.deepEqual(popupBounds('width=500,height=420', screen), {width: 500, height: 420, useContentSize: true});
+  assert.deepEqual(popupBounds('innerWidth=300, innerHeight = 200', screen), {width: 300, height: 200, useContentSize: true}, 'aliases and spaces');
+  assert.deepEqual(popupBounds('width=5000,height=4000', screen), {width: 1512, height: 892, useContentSize: true}, 'never larger than the screen (less the title bar)');
+  assert.deepEqual(popupBounds('width=50,height=20', screen), {width: 100, height: 100, useContentSize: true}, 'Chromium\'s 100 floor');
+  assert.deepEqual(popupBounds('width=500,height=420,left=2000,top=-50', screen), {width: 500, height: 420, useContentSize: true, x: 1012, y: 25}, 'a position off the screen is pulled back onto it');
+  assert.deepEqual(popupBounds('popup', screen), {width: 640, height: 760, useContentSize: false}, 'no size asked: the old default window');
+  assert.deepEqual(popupBounds('width=500', null), {width: 500, height: 760, useContentSize: true}, 'no display known: unclamped');
+});

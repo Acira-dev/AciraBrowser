@@ -25,7 +25,7 @@ test('public export retains source, licenses, helper/frame inputs and safety/tes
     'packaging/installer/anim/dark-1x-p00.jpg', 'packaging/installer/uninstall/layout.txt',
     'docs/launch/concepts/installer-creation.html', 'docs/release/withdrawals.json',
     'docs/research/privacy-feature-audit/LICENSE.helium', 'docs/research/helium-ui/progress-bar.patch',
-    'public/fonts/Geist.woff2', 'public/fonts/geist-LICENSE.txt', 'qa/prepared-native.mjs',
+    'public/fonts/InterVariable.woff2', 'public/fonts/inter-LICENSE.txt', 'qa/prepared-native.mjs',
     'tests/services-fixtures/certificate.pem', 'scripts/release-helpers.mjs'])
     assert.equal(allowedSource(file), true, file);
 });

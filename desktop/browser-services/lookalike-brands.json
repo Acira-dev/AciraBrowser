@@ -44,7 +44,7 @@
   {"name":"Proton","aliases":["proton mail","protonmail","proton"],"domains":["proton.me","protonmail.com","protonvpn.com"]},
   {"name":"Bitwarden","aliases":["bitwarden"],"domains":["bitwarden.com","bitwarden.eu"]},
   {"name":"1Password","aliases":["1password"],"domains":["1password.com","1password.eu","1password.ca"]},
-  {"name":"Telegram","aliases":["telegram"],"domains":["telegram.org","t.me","telegram.me"]},
+  {"name":"Telegram","aliases":["telegram"],"domains":["telegram.org","t.me","telegram.me"],"distinct":["telegra.ph"]},
   {"name":"TikTok","aliases":["tiktok"],"domains":["tiktok.com","tiktokv.com","tiktokcdn.com"]},
   {"name":"eBay","aliases":["ebay"],"domains":["ebay.com","ebay.co.uk","ebay.de","ebay.fr","ebay.com.au","ebay.ca","ebay.it","ebay.es"]},
   {"name":"Walmart","aliases":["walmart"],"domains":["walmart.com","walmart.ca"]},

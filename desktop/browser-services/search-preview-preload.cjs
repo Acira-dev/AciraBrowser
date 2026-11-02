@@ -52,7 +52,7 @@ const STYLE=`:host{all:initial;position:absolute;left:0;top:0;width:0;height:0;z
 :host([data-dark]){--glass:rgb(40 40 44/.80);--hover:rgb(52 52 57/.92);--line:rgb(255 255 255/.12);--ink:rgb(237 237 239/.92);--ring:#6ea8ff;--highlight:inset 0 1px 0 rgb(255 255 255/.06);
  --shadow:0 0 0 1px rgb(0 0 0/.35),0 1px 2px rgb(0 0 0/.24),0 6px 16px -4px rgb(0 0 0/.36)}
 button{all:unset;box-sizing:border-box;position:absolute;left:0;top:0;display:flex;align-items:center;gap:5px;height:24px;padding:0 9px 0 7px;border-radius:6px;
- font:500 12px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;letter-spacing:.005em;white-space:nowrap;color:var(--ink);background:var(--glass);
+ font:500 12px/1 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;letter-spacing:.005em;white-space:nowrap;color:var(--ink);background:var(--glass);
  -webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--shadow);
  cursor:pointer;pointer-events:none;opacity:0;scale:.94;transform-origin:0 50%;
  transition:opacity calc(110ms*var(--m,1)) cubic-bezier(.2,0,0,1),scale calc(170ms*var(--m,1)) cubic-bezier(.23,1,.32,1),background-color 120ms cubic-bezier(.2,0,0,1)}
@@ -149,7 +149,7 @@ if(engine&&!globalThis.__aciraSearchPreview){
  ipcRenderer.invoke('acira:search-preview',{fixture:engine.fixture===true}).then(answer=>{
   allowed=answer?.allowed===true;on=answer?.on!==false;if(typeof answer?.labels?.preview==='string'&&answer.labels.preview)words={preview:answer.labels.preview};
   // Premium, Fast or Off, as everywhere in Acira (R3-17); Off and reduced motion show and hide the chip at once.
-  motion=answer?.speed==='off'?0:answer?.speed==='fast'?1:1.7;host?.style.setProperty('--m',String(motion));
+  motion=answer?.speed==='off'?0:answer?.speed==='fast'?.6:1.7;host?.style.setProperty('--m',String(motion));
  },()=>{allowed=false;});
 }
 if(typeof module!=='undefined'&&typeof window==='undefined')module.exports={engineOf,resultTarget,ENGINES,GENERIC};

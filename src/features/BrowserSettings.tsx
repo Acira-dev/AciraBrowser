@@ -180,21 +180,20 @@ for (const panel of settingsPanels)
 
 const sectionLede: Record<string, string> = {
   Appearance: tr("settingslede.appearance"),
-  Profiles:
-    "Separate sign-ins, history and bookmarks for each person or purpose.",
+  Profiles: tr("settingslede.profiles"),
   Tabs: tr("settingslede.tabs"),
   Connection: tr("settingslede.connection"),
   "New tab": tr("settingslede.newTab"),
-  Search: "Where address-bar searches go.",
-  Privacy: "Protection, cookies, and what Acira keeps on this device.",
-  Accessibility: "Motion and transparency.",
-  "Import & export": "Bring data in from another browser, or keep a copy.",
-  Extensions: "Add tools from the Chrome Web Store; they are kept separately for each profile.",
-  Downloads: "Where files are saved and how they open.",
-  Shortcuts: "Click a shortcut and press the new keys. Backspace clears it, Esc cancels.",
-  "Web apps": "Sites you use like apps, and how to install more.",
+  Search: tr("settingslede.search"),
+  Privacy: tr("settingslede.privacy"),
+  Accessibility: tr("settingslede.accessibility"),
+  "Import & export": tr("settingslede.importExport"),
+  Extensions: tr("settingslede.extensions"),
+  Downloads: tr("settingslede.downloads"),
+  Shortcuts: tr("settingslede.shortcuts"),
+  "Web apps": tr("settingslede.webApps"),
   Languages: tr("settingslede.languages"),
-  About: "Version, default browser and setup.",
+  About: tr("settingslede.about"),
 };
 
 const profilePanels = settingsPanels.filter(
@@ -363,8 +362,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
         if (live)
           setNotice(
             found
-              ? `${jump.entry.title}. ${jump.entry.section}.`
-              : `${jump.entry.title} is not available right now.`,
+              ? `${jump.entry.title}. ${translateText(jump.entry.section)}.`
+              : tr("browsersettings.settingUnavailable", { title: jump.entry.title }),
           );
       },
     );
@@ -473,7 +472,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="appearance-mode"
               title={tr("app.appearance")}
-              detail="Light, dark, or follow your system."
+              detail={tr("core.lightDarkOrFollowYour")}
               stacked
             >
               <ChoiceCards
@@ -491,7 +490,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="glass-finish"
               title={tr("appearancecontrols.finish")}
-              detail="Tints the toolbar, sidebar and Acira pages. Websites keep their own colors."
+              detail={tr("browsersettings.finishDetail")}
               stacked
             >
               <GlassFinishPicker settings={s} onChange={update} size={20} />
@@ -502,7 +501,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               <SettingRow
                 id="glass-opacity"
                 title={tr("appearancecontrols.windowOpacity")}
-                detail="Higher is more solid. 100% is fully solid and turns on Reduce transparency."
+                detail={tr("browsersettings.opacityDetail")}
               >
                 <GlassOpacityControl
                   value={s.glassOpacity!}
@@ -512,10 +511,10 @@ export function BrowserSettings({ state, dispatch }: Props) {
               </SettingRow>
               {(
                 [
-                  ["surfaceColor", "Pages", "surface-color"],
-                  ["sidebarColor", "Sidebar and frame", "sidebar-color"],
-                  ["toolbarColor", "Toolbar", "toolbar-color"],
-                  ["tabColor", "Tabs", "tab-color"],
+                  ["surfaceColor", tr("core.pages"), "surface-color"],
+                  ["sidebarColor", tr("browsersettings.sidebarAndFrame"), "sidebar-color"],
+                  ["toolbarColor", tr("browsersettings.toolbar"), "toolbar-color"],
+                  ["tabColor", tr("acirasidebar.tabs"), "tab-color"],
                 ] as const
               ).map(([key, label, anchor]) => (
                 <SettingRow
@@ -523,7 +522,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                   id={anchor}
                   title={label}
                   detail={
-                    s[key] ? "Custom color" : "Follows the selected finish"
+                    s[key] ? tr("browsersettings.customColor") : tr("browsersettings.followsFinish")
                   }
                 >
                   <AppearanceColorWell
@@ -553,7 +552,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="interface-size"
               title={tr("browsersettings.interfaceSize")}
-              detail="Size of Acira's tabs, toolbar, sidebar, and menus."
+              detail={tr("browsersettings.interfaceSizeDetail")}
             >
               <Select
                 label={tr("browsersettings.interfaceSize")}
@@ -634,7 +633,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="toolbar-customize"
               title={tr("app.customizeToolbar")}
-              detail="Show, hide and reorder toolbar buttons."
+              detail={tr("browsersettings.customizeToolbarDetail")}
             >
               <button
                 type="button"
@@ -655,7 +654,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               <SettingRow
                 id="toolbar-reset"
                 title={tr("browsersettings.resetToolbarControls")}
-                detail="Restore the default toolbar buttons."
+                detail={tr("browsersettings.resetToolbarDetail")}
               >
                 <button
                   type="button"
@@ -689,7 +688,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="page-zoom-site"
               title={tr("browsersettings.website")}
-              detail="Changes this website’s page size. Interface size is separate."
+              detail={tr("browsersettings.websiteZoomDetail")}
             >
               {zoomTarget ? (
                 <Select
@@ -725,7 +724,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               <SettingRow
                 id="reset-appearance"
                 title={tr("browsersettings.resetAppearance")}
-                detail="Restore the default finish, interface size, and comfort options."
+                detail={tr("browsersettings.resetAppearanceDetail")}
               >
                 <button
                   type="button"
@@ -861,7 +860,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="compact-tab-titles"
               title={tr("browsersettings.showTitlesInCompactTabs")}
-              detail="Show page titles in narrow tabs."
+              detail={tr("browsersettings.compactTitlesDetail")}
             >
               <Switch
                 label={tr("browsersettings.showTitlesInCompactTabs")}
@@ -872,7 +871,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="tab-viewer-density"
               title={tr("browsersettings.allOpenTabsView")}
-              detail={(s.tabViewerDensity ?? "comfortable") === "compact" ? "One line per tab, to see more at once." : "Each tab with its title and address."}
+              detail={(s.tabViewerDensity ?? "comfortable") === "compact" ? tr("browsersettings.compactViewDetail") : tr("browsersettings.comfortableViewDetail")}
             >
               <Select
                 label={tr("browsersettings.allOpenTabsView")}
@@ -923,7 +922,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 value={s.searchEngine}
                 options={[
                   { value: "google", label: tr("browsersettings.google") },
-                  { value: "duckduckgo", label: "DuckDuckGo" },
+                  { value: "duckduckgo", label: "DuckDuckGo" }, // i18n-ignore product name
                   { value: "bing", label: tr("browsersettings.bing") },
                 ]}
                 onChange={(searchEngine) =>
@@ -947,7 +946,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
           <SettingRow
             id="address-suggestions"
             title={tr("browsersettings.localAddressSuggestions")}
-            detail="Use tabs, bookmarks, and history from this profile. Text stays on your computer until you search."
+            detail={tr("browsersettings.addressSuggestionsDetail")}
           >
             <Switch
               label={tr("browsersettings.localAddressSuggestions")}
@@ -970,7 +969,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <SettingRow
               id="incognito"
               title={tr("browsersettings.privateWindow")}
-              detail="Browsing is not saved or restored. Downloaded files remain on your computer."
+              detail={tr("browsersettings.privateWindowDetail")}
             >
               <button
                 type="button"
@@ -989,7 +988,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
           <SettingRow
             id="reduce-motion"
             title={tr("browsersettings.reduceMotion")}
-            detail="Simplify transitions and use a quiet loading indicator."
+            detail={tr("browsersettings.reduceMotionDetail")}
           >
             <Switch
               label={tr("browsersettings.reduceMotion")}
@@ -1002,8 +1001,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
             title={tr("browsersettings.reduceTransparency")}
             detail={
               state.systemReducedTransparency
-                ? "Your system currently requires opaque surfaces. Your preference is saved separately."
-                : "Use readable, opaque surfaces."
+                ? tr("browsersettings.systemOpaqueDetail")
+                : tr("browsersettings.reduceTransparencyDetail")
             }
           >
             <Switch
@@ -1034,7 +1033,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
           <SettingRow
             id="browser-setup"
             title={tr("browsersettings.runSetupAgain")}
-            detail="Go through the first-run setup again."
+            detail={tr("browsersettings.runSetupAgainDetail")}
           >
             <button
               type="button"

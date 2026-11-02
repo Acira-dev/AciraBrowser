@@ -69,9 +69,48 @@ test('a new tab or typed address is cleaned too', () => {
 });
 
 test('de-AMP: an AMP page is replaced by its canonical page, cleaned', () => {
-  const { instance, wc } = cleaner();
+  const { instance, wc, state } = cleaner();
   assert.equal(instance.deAmpTarget(wc, 'https://news.example/amp/story', 'https://news.example/story?utm_source=amp'), 'https://news.example/story');
+  state.time += 5000;
   assert.equal(instance.deAmpTarget(wc, 'https://b.example/amp/x', '/x'), 'https://b.example/x');
+});
+
+test('de-AMP leaves a page whose canonical is the same page: trailing slash, fragment, host case, default port', () => {
+  const { instance, wc } = cleaner();
+  for (const canonical of ['https://amp.dev/index-2021/', 'https://amp.dev/index-2021#top', 'https://AMP.dev:443/index-2021//', '/index-2021/'])
+    assert.equal(instance.deAmpTarget(wc, 'https://amp.dev/index-2021', canonical), null, canonical);
+  assert.equal(instance.deAmpTarget(wc, 'https://amp.dev/index-2021', 'https://amp.dev/index-2021/?lang=fr'), 'https://amp.dev/index-2021/?lang=fr', 'another query is another page');
+});
+
+/** Follows de-AMP the way a tab does: replace with the target, let the server redirect, ask again on arrival (15 ms per round). */
+function follow(instance, wc, state, start, canonicalOf, redirects) {
+  let page = start, replaces = 0;
+  for (let round = 0; round < 100; round++) {
+    const target = instance.deAmpTarget(wc, page, canonicalOf(page)); if (!target) break;
+    replaces++; page = redirects[target] || target; state.time += 15;
+  }
+  return { page, replaces };
+}
+
+test('de-AMP stops when the canonical redirects back to the AMP page (amp.dev reloaded itself 60-90 times a second)', () => {
+  // amp.dev on 2 Nov 2026: / and /index-2021 are AMP pages naming /index-2021/ as canonical; /index-2021/ answers 301 /index-2021.
+  const { instance, wc, state } = cleaner();
+  assert.deepEqual(follow(instance, wc, state, 'https://amp.dev/', () => 'https://amp.dev/index-2021/', { 'https://amp.dev/index-2021/': 'https://amp.dev/index-2021' }), { page: 'https://amp.dev/index-2021', replaces: 1 });
+  // A canonical that is a different page but redirects back (say, by device): followed once, then the AMP page stays, after the 3 s cap too.
+  const other = cleaner(), back = { 'https://news.example/story/1': 'https://news.example/amp/1' };
+  assert.deepEqual(follow(other.instance, other.wc, other.state, 'https://news.example/amp/1', () => 'https://news.example/story/1', back), { page: 'https://news.example/amp/1', replaces: 1 });
+  other.state.time += 5000;
+  assert.equal(other.instance.deAmpTarget(other.wc, 'https://news.example/amp/1', 'https://news.example/story/1'), null);
+});
+
+test('de-AMP runs at most once per tab every 3 seconds, whatever the addresses', () => {
+  const { instance, wc, state } = cleaner(), otherTab = { ...wc, id: 2 };
+  assert.equal(instance.deAmpTarget(wc, 'https://a.example/amp/1', 'https://a.example/1'), 'https://a.example/1');
+  state.time += 2000;
+  assert.equal(instance.deAmpTarget(wc, 'https://b.example/amp/2', 'https://b.example/2'), null);
+  assert.equal(instance.deAmpTarget(otherTab, 'https://b.example/amp/2', 'https://b.example/2'), 'https://b.example/2', 'another tab is not held back');
+  state.time += 1500;
+  assert.equal(instance.deAmpTarget(wc, 'https://b.example/amp/2', 'https://b.example/2'), 'https://b.example/2');
 });
 
 test('de-AMP refuses bad targets, its switch, protection-off pages and loops', () => {

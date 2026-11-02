@@ -88,7 +88,7 @@ summary:focus-visible,
 .st-search .st-search-field input::placeholder { color: var(--st-muted); opacity: 1; }
 .st-search-clear { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; color: var(--st-muted); }
 .st-search-clear:hover { background: var(--hover, rgba(0, 0, 0, 0.06)); color: var(--st-text); }
-.st-results { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0; margin: 0; padding: 6px; list-style: none; max-height: min(420px, 62vh); overflow: auto; background: var(--sheet, var(--st-bg)); color: var(--st-text); border: 0; border-radius: 8px; box-shadow: var(--st-pop-shadow); animation: st-vapor 0.18s cubic-bezier(0.2, 0, 0, 1); }
+.st-results { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0; margin: 0; padding: 6px; list-style: none; max-height: min(420px, calc(62 * var(--pz-vh, 1vh))); overflow: auto; background: var(--sheet, var(--st-bg)); color: var(--st-text); border: 0; border-radius: 8px; box-shadow: var(--st-pop-shadow); animation: st-vapor 0.18s cubic-bezier(0.2, 0, 0, 1); }
 .st-results > li[role='option'] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 1px; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
 .st-results > li[data-active='true'] { background: var(--selection-bg, var(--hover, rgba(0, 0, 0, 0.06))); color: var(--selection-fg, inherit); }
 .st-result-title { font-size: 13px; line-height: 18px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -189,7 +189,7 @@ summary:focus-visible,
 .st-input::placeholder { color: var(--st-muted); opacity: 1; }
 .st-input:hover:not(:disabled) { border-color: var(--st-edge-strong); }
 .st-range { display: flex; align-items: center; gap: 12px; }
-.st-range > span { width: 38px; text-align: right; font: 12px/16px var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); font-variant-numeric: tabular-nums; color: var(--st-muted); }
+.st-range > span { width: 38px; text-align: right; font: 12px/16px var(--font-ui, 'Inter', 'Segoe UI', sans-serif); font-variant-numeric: tabular-nums; color: var(--st-muted); }
 .st-range input { -webkit-appearance: none; appearance: none; width: 140px; height: 20px; background: transparent; border: 0; padding: 0; cursor: pointer; }
 .st-range input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--primary) var(--fill, 50%), var(--st-edge) var(--fill, 50%)); }
 .st-range input::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--st-bg); border: 2px solid var(--primary); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }

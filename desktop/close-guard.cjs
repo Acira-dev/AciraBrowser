@@ -87,6 +87,8 @@ function closePrompt({scope,confirm=false,unsaved=[],tabs=0,windows=0,sites=[]},
 function createCloseGuard({getControllers,say,now=Date.now}){
   let approvedUntil=0,quitAt=0,asking=false;
   const live=controller=>Boolean(controller)&&!controller.closing;
+  /** A window that stepped aside for another profile's window (main's switchProfileHere) is hidden: it is not on screen. */
+  const onScreen=controller=>live(controller)&&!controller.switchedAway;
   const settingOn=controller=>controller?.state?.settings?.askBeforeClosing!==false;
   const windowOf=controller=>({tabs:controller.state?.tabs||[]});
   const counted=controller=>!controller.webApp;
@@ -113,22 +115,27 @@ function createCloseGuard({getControllers,say,now=Date.now}){
     try{writer.commitAction({type:'settings.update',patch:{askBeforeClosing:false}});}catch{}
   }
   const approve=()=>{approvedUntil=now()+APPROVAL_MS;};
-  const pickHost=list=>list.find(c=>c.window&&!c.window.isDestroyed?.()&&c.window.isFocused?.())||list.find(c=>!c.privateMode&&!c.webApp)||list[0];
+  const pickHost=list=>list.find(c=>c.window&&!c.window.isDestroyed?.()&&c.window.isFocused?.())||list.find(c=>!c.privateMode&&!c.webApp&&!c.switchedAway)||list.find(c=>!c.switchedAway)||list[0];
 
   return {
     /** A window is closing (×, Alt+F4, the taskbar, Ctrl+Shift+W). Resolves true to go on, false when the person said Cancel.
-     * The last window closing is the browser closing, so it also asks "Close Acira?" unless the quit was already asked. */
+     * The last window closing is the browser closing, so it also asks "Close Acira?" unless the quit was already asked. Windows
+     * that stepped aside for another profile do not count: closing the last one on screen closes them too (main quits), so
+     * their unsaved work is asked about on this card, and they then close without asking. */
     async confirmWindowClose(controller){
       if(now()<approvedUntil)return true;
-      const last=![...getControllers()].some(c=>c!==controller&&live(c));
-      const unsaved=await unsavedOf(controller);
+      const others=[...getControllers()].filter(c=>c!==controller&&live(c));
+      const last=!others.some(onScreen),behind=last?others:[];
+      const perWindow=await Promise.all([controller,...behind].map(async c=>({controller:c,unsaved:await unsavedOf(c)})));
+      const unsaved=perWindow.flatMap(item=>item.unsaved);
       const windows=[windowOf(controller)];
       const confirm=last&&!quitBegan()&&counted(controller)&&shouldConfirm({enabled:settingOn(controller),windows});
-      if(!confirm&&!unsaved.length)return true;
+      if(!confirm&&!unsaved.length){if(behind.length)approve();return true;}
       const verdict=await ask(controller,closePrompt({scope:last?'quit':'window',confirm,unsaved,sites:openSites(windows),...tally(windows)},say),{mute:confirm&&!unsaved.length});
       if(!verdict.proceed)return false;
       if(verdict.dontAsk)turnOff(controller);
-      controller.approveLeave(unsaved.map(item=>item.id));
+      for(const item of perWindow)item.controller.approveLeave(item.unsaved.map(entry=>entry.id));
+      if(behind.length)approve();
       return true;
     },
     /** The browser is being closed on purpose (Ctrl+Shift+Q, Quit). Asks once for every window; resolves true when it may close. */

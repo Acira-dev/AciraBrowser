@@ -10,7 +10,7 @@ const host = (url: string) => { try { return new URL(url).hostname.replace(/^www
 
 /** The reason a tab cannot become an app, or '' when it can. */
 const whyNot = (tab: BrowserSnapshot['tabs'][number], privateProfile: boolean) =>
-  privateProfile || tab.privacy ? 'Private and Tor tabs can’t be installed.' : /^https?:\/\//.test(tab.url) ? '' : /^file:/.test(tab.url) ? 'Files on this computer can’t be installed.' : 'Acira pages can’t be installed.';
+  privateProfile || tab.privacy ? t('webApps.privateCannotInstall') : /^https?:\/\//.test(tab.url) ? '' : /^file:/.test(tab.url) ? t('webApps.filesCannotInstall') : t('webApps.aciraPagesCannotInstall');
 const origin = (url: string) => { try { return new URL(url).origin; } catch { return url; } };
 
 /** Settings › Apps: every open site with its own Install button, then the installed apps with Open and Uninstall (F52). */
@@ -35,7 +35,7 @@ function WebAppsSettings({ state, dispatch }: SettingsPanelProps) {
               {site.favicon ? <img className="wa-icon" src={site.favicon} alt="" width={20} height={20} /> : <span className="wa-icon wa-initial" aria-hidden="true">{(site.title || host(site.url))[0]?.toUpperCase()}</span>}
               <div className="st-copy"><span className="st-title">{site.title || host(site.url)}</span><p>{reason || host(site.url)}</p></div>
               <div className="st-control wa-actions">
-                <button type="button" className="st-button" disabled={!!reason || done || busyId !== null} aria-label={t("webApps.installUrl", { url: site.title || host(site.url) })} onClick={() => void install(site.id)}>{busyId === site.id ? 'Installing…' : done ? t("webApps.installed") : t("webApps.install")}</button>
+                <button type="button" className="st-button" disabled={!!reason || done || busyId !== null} aria-label={t("webApps.installUrl", { url: site.title || host(site.url) })} onClick={() => void install(site.id)}>{busyId === site.id ? t('webApps.installing') : done ? t("webApps.installed") : t("webApps.install")}</button>
               </div>
             </div>
           );
@@ -46,7 +46,7 @@ function WebAppsSettings({ state, dispatch }: SettingsPanelProps) {
         {apps === null ? <SettingNote>{t("webApps.loading")}</SettingNote> : error ? <SettingNote>{error}</SettingNote> : mine.length === 0 ? <SettingNote>{t("webApps.noAppsInstalledInThis")}</SettingNote> : mine.map(app => (
           <div key={app.id} className="st-row wa-row" data-setting={'web-app-' + app.id}>
             {app.icon ? <img className="wa-icon" src={app.icon} alt="" width={20} height={20} /> : <span className="wa-icon wa-initial" aria-hidden="true">{app.name[0]}</span>}
-            <div className="st-copy"><span className="st-title">{app.name}</span><p>{host(app.startUrl)} · {app.kind === 'app' ? 'App' : t("searchEngines.shortcut")}{app.launcher==='finder' ? t('local.webAppsInFinder') : app.inStart ? t("webApps.inStartAndOnThe") : ''}</p></div>
+            <div className="st-copy"><span className="st-title">{app.name}</span><p>{host(app.startUrl)} · {app.kind === 'app' ? t('webApps.kindApp') : t("searchEngines.shortcut")}{app.launcher==='finder' ? t('local.webAppsInFinder') : app.inStart ? t("webApps.inStartAndOnThe") : ''}</p></div>
             <div className="st-control wa-actions">
               <button type="button" className="st-button" onClick={() => dispatch({ type: 'tab.new', url: app.startUrl, browserProfileId: app.profileId })}>{t("app.open")}</button>
               <button type="button" className="st-button wa-remove" onClick={() => void uninstallWebApp(app, dispatch)}>{t("webApps.uninstall")}</button>

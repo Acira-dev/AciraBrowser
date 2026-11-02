@@ -271,6 +271,61 @@ static napi_value InspectWindowButtons(napi_env env, napi_callback_info info) {
     napi_value value; napi_create_string_utf8(env, (const char *)json.bytes, json.length, &value); return value;
   }
 }
+// Native fullscreen puts a second window over the top 32pt of the content whenever the pointer touches the top of the screen: AppKit's
+// full-screen titlebar strip (NSToolbarFullScreenWindow). Electron leaves titlebarAppearsTransparent off in fullscreen, so for a window with a
+// hidden title bar the strip is an opaque bar with the title and the traffic lights, and it covers the tab row and toolbar (the menu bar
+// above it is the system's and stays). Keep that window invisible and out of the mouse's way for as long as the window is fullscreen. Public
+// AppKit only: the window list, ignoresMouseEvents, alphaValue, and KVO on that alpha (AppKit sets it back to 1 on every reveal).
+@interface AciraFullscreenStrip : NSObject
+@property(nonatomic,strong) NSMutableArray<NSWindow *> *strips;
+@property(nonatomic,strong) NSMutableArray *tokens;
+@end
+@implementation AciraFullscreenStrip
+- (instancetype)init { if((self=[super init])){_strips=[NSMutableArray array];_tokens=[NSMutableArray array];} return self; }
+- (void)observeValueForKeyPath:(NSString *)path ofObject:(id)object change:(NSDictionary *)change context:(void *)context { NSWindow *strip=object; if(strip.alphaValue>0)strip.alphaValue=0; }
+- (void)hold:(NSWindow *)strip {
+  if([self.strips containsObject:strip])return;
+  strip.ignoresMouseEvents=YES; strip.alphaValue=0;
+  [strip addObserver:self forKeyPath:@"alphaValue" options:NSKeyValueObservingOptionNew context:nil]; [self.strips addObject:strip];
+}
+// Before the strip window is torn down (the window leaves fullscreen or closes): no observer may outlive it.
+- (void)letGo {
+  for(NSWindow *strip in self.strips){@try{[strip removeObserver:self forKeyPath:@"alphaValue"];}@catch(id ignored){}}
+  [self.strips removeAllObjects];
+  for(id token in self.tokens)[NSNotificationCenter.defaultCenter removeObserver:token];
+  [self.tokens removeAllObjects];
+}
+@end
+static NSMapTable<NSWindow *, AciraFullscreenStrip *> *FullscreenStrips() { static NSMapTable *table=nil; if(!table)table=[NSMapTable weakToStrongObjectsMapTable]; return table; }
+static napi_value HideFullscreenStrip(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    size_t argc = 1, length = 0; napi_value args[1]; void *bytes = nullptr;
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (argc != 1 || napi_get_buffer_info(env, args[0], &bytes, &length) != napi_ok || length != sizeof(void *)) {
+      napi_throw_type_error(env, nullptr, "Expected a native window handle"); return nullptr;
+    }
+    uintptr_t address = 0; std::memcpy(&address, bytes, sizeof(address));
+    if (!address) { napi_throw_error(env, nullptr, "Window handle is null"); return nullptr; }
+    NSView *view = (__bridge NSView *)(reinterpret_cast<void *>(address)); NSWindow *window = view.window; int held = 0;
+    if (window && (window.styleMask & NSWindowStyleMaskFullScreen)) {
+      AciraFullscreenStrip *keeper = [FullscreenStrips() objectForKey:window];
+      if (!keeper) {
+        keeper = [AciraFullscreenStrip new]; [FullscreenStrips() setObject:keeper forKey:window]; __weak AciraFullscreenStrip *weak = keeper;
+        for (NSNotificationName name in @[NSWindowWillExitFullScreenNotification, NSWindowWillCloseNotification]) {
+          [keeper.tokens addObject:[NSNotificationCenter.defaultCenter addObserverForName:name object:window queue:nil usingBlock:^(NSNotification *note) { [FullscreenStrips() removeObjectForKey:note.object]; [weak letGo]; }]];
+        }
+      }
+      // This window's strip: AppKit's own class, the same width, flush with the window's top edge (a second fullscreen window has its own).
+      for (NSWindow *strip in NSApp.windows) {
+        if (![NSStringFromClass(strip.class) isEqual:@"NSToolbarFullScreenWindow"]) continue;
+        const NSRect f = strip.frame, m = window.frame;
+        if (fabs(f.origin.x - m.origin.x) > 1 || fabs(f.size.width - m.size.width) > 1 || fabs(NSMaxY(f) - NSMaxY(m)) > 1) continue;
+        [keeper hold:strip]; held++;
+      }
+    }
+    napi_value answer; napi_create_int32(env, held, &answer); return answer;
+  }
+}
 NAPI_MODULE_INIT() {
   InstallMacPasskeys(env,exports);
   napi_value set, inspect, buttons, available, authenticate;
@@ -282,6 +337,7 @@ NAPI_MODULE_INIT() {
   napi_value frames;napi_create_function(env,"inspectViewFrames",NAPI_AUTO_LENGTH,InspectViewFrames,nullptr,&frames);napi_set_named_property(env,exports,"inspectViewFrames",frames);
   napi_create_function(env, "inspectWindowButtons", NAPI_AUTO_LENGTH, InspectWindowButtons, nullptr, &buttons);
   napi_set_named_property(env, exports, "inspectWindowButtons", buttons);
+  napi_value strip; napi_create_function(env, "hideFullscreenStrip", NAPI_AUTO_LENGTH, HideFullscreenStrip, nullptr, &strip); napi_set_named_property(env, exports, "hideFullscreenStrip", strip);
   napi_create_function(env, "authenticationAvailable", NAPI_AUTO_LENGTH, AuthenticationAvailable, nullptr, &available);
   napi_create_function(env, "authenticate", NAPI_AUTO_LENGTH, Authenticate, nullptr, &authenticate);
   napi_set_named_property(env, exports, "authenticationAvailable", available);

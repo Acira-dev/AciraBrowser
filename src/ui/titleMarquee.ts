@@ -12,7 +12,8 @@ export function startTitleMarquee(box:HTMLElement|null){
  if(distance<24)return;
  const lead=650,glide=Math.min(7000,Math.max(700,distance/speed*1000)),hold=1100,back=Math.min(1200,Math.max(450,glide*.45));
  const total=lead+glide+hold+back+hold,at=(ms:number)=>ms/total;
- const glideEase='cubic-bezier(.45,0,.55,1)',home=`translateX(0)`,end=`translateX(${-distance}px)`;
+ // A right-to-left title (its box has dir=auto) starts at the right and runs past the left edge: it glides the other way.
+ const glideEase='cubic-bezier(.45,0,.55,1)',home=`translateX(0)`,end=`translateX(${getComputedStyle(box).direction==='rtl'?distance:-distance}px)`;
  box.dataset.marquee='on';
  running.set(box,text.animate([
   {offset:0,transform:home},

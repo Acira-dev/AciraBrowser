@@ -207,7 +207,7 @@ function createRewind({dir,now=Date.now,limits={},timers={setTimeout,clearTimeou
   for(const tab of marked){if(!wanted.has(tab.ref))continue;if(adoptOpen&&tab.open){const match=state.tabs.find(t=>t.browserProfileId===profileId&&!taken.has(t.id)&&model.canonical(t.url)===model.canonical(tab.url));if(match){taken.add(match.id);adopted.set(tab.ref,match.id);chosen.push(tab);continue;}}const receipt=receipts.get(`${checkpoint.id}:${tab.ref}`);if(receipt&&state.tabs.some(t=>t.id===receipt)){skipped.push({title:tab.title,reason:'already-restored'});continue;}if(tab.open){skipped.push({title:tab.title,reason:'already-open'});continue;}if(!model.eligibleUrl(tab.url)){skipped.push({title:tab.title,reason:'unsupported'});continue;}chosen.push(tab);}
   if(!chosen.length)return {ok:true,restored:0,skipped,groups:[]};
   const created=new Map();
-  for(const tab of chosen){if(adopted.has(tab.ref))continue;
+  for(const tab of chosen){if(adopted.has(tab.ref)){/* a window reopen adopts its first tab, the first pinned one: it was never pinned again */const open=ctx.state().tabs.find(t=>t.id===adopted.get(tab.ref));if(tab.pinned&&open&&!open.pinned)ctx.dispatch({type:'tab.pin',id:open.id});continue;}
    // Back into the workspace the tab came from (R3-57), when it still exists; else the one on screen.
    const home=tab.workspace&&ctx.state().workspaces?.some(w=>w.id===tab.workspace&&w.browserProfileId===profileId)?tab.workspace:null;
    const before=new Set(ctx.state().tabs.map(t=>t.id));ctx.dispatch({type:'tab.new',url:tab.url,background:true,lazy:true,browserProfileId:profileId,...(home?{workspaceId:home}:{})});

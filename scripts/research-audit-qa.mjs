@@ -48,7 +48,7 @@ try{
  for(const name of ['Your experience','Profiles','Appearance','Tabs','Search engine','Privacy','Shortcuts','Acira','About Acira']){
    await navigation.getByRole('button',{name,exact:true}).click();await settle();
    const details=await navigation.locator('button').evaluateAll(nodes=>nodes.map(n=>({height:n.getBoundingClientRect().height,font:getComputedStyle(n).fontFamily,shadow:getComputedStyle(n).boxShadow})));
-   check(`${name}: settings navigation stays 32px and shadow-free`,details.every(n=>Math.abs(n.height-32)<.1&&n.shadow==='none'&&n.font.includes('Geist')));
+   check(`${name}: settings navigation stays 32px and shadow-free`,details.every(n=>Math.abs(n.height-32)<.1&&n.shadow==='none'&&n.font.includes('Inter')));
    report.settings.push({name,details});
    await capture('settings-'+name.toLowerCase().replaceAll(' ','-'));
  }

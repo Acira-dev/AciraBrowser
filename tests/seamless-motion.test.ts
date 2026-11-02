@@ -10,7 +10,9 @@ const { placePageBounds, springAt: nativeSpringAt, springSettle: nativeSpringSet
 // R3-68 section 5: the reveal is stiffness 400 / damping 33 (zeta .83, about +1% overshoot), the hide stiffness 1330 / damping 73
 // (critically damped, about two thirds as long); the speed setting stretches both; Off has no travel.
 test('the Seamless springs are the spec\'s: +1% overshoot on the way in, none on the way out, the way out two thirds as long', () => {
-  const reveal = springFor('seamless.reveal', 'fast')!, hide = springFor('seamless.hide', 'fast')!;
+  // The spec is the base timing (the token table's duration; Fast before Fast became 0.6x on 2 Nov).
+  const base = (id: 'seamless.reveal' | 'seamless.hide') => ({ duration: motionTokens[id][1], bounce: motionTokens[id][2] });
+  const reveal = base('seamless.reveal'), hide = base('seamless.hide');
   assert.equal(motionTokens['seamless.reveal'][0], 'S');
   const stiffness = (spring: { duration: number }) => Math.round((2 * Math.PI / spring.duration) ** 2), damping = (spring: { duration: number; bounce: number }) => (4 * Math.PI / spring.duration) * (1 - spring.bounce);
   assert.ok(Math.abs(stiffness(reveal) - 400) <= 3, `reveal stiffness ${stiffness(reveal)}`);
@@ -26,9 +28,9 @@ test('the Seamless springs are the spec\'s: +1% overshoot on the way in, none on
   assert.ok(outMs / inMs > .6 && outMs / inMs < .9, 'the way out is about two thirds of the way in');
 });
 
-test('the speed setting stretches the spring (Premium x1.7, Fast x1) and Off has none (opacity only)', () => {
-  const fast = springFor('seamless.reveal', 'fast')!, premium = springFor('seamless.reveal', 'premium')!;
-  assert.ok(Math.abs(premium.duration / fast.duration - 1.7) < .01);
+test('the speed setting stretches the spring (Premium x1.7, Fast x.6) and Off has none (opacity only)', () => {
+  const fast = springFor('seamless.reveal', 'fast')!, premium = springFor('seamless.reveal', 'premium')!, base = motionTokens['seamless.reveal'][1];
+  assert.ok(Math.abs(premium.duration / base - 1.7) < .02 && Math.abs(fast.duration / base - .6) < .02, `${premium.duration} / ${fast.duration}`);
   assert.equal(premium.bounce, fast.bounce, 'the shape stays, only the time stretches');
   assert.equal(springFor('seamless.reveal', 'off'), null);
   assert.equal(springFor('seamless.hide', 'off'), null);
@@ -59,7 +61,7 @@ test('a pinned toolbar takes the page down on the spring, one viewport per frame
 });
 
 test('the toolbar hiding lifts the page on the critically damped spring: no overshoot, growing to full height with it', () => {
-  const { view, tops, bottoms, sizes } = glide({ x: 0, y: 72, width: 1440, height: 828 }, { x: 0, y: 0, width: 1440, height: 900 }, springFor('seamless.hide', 'fast')!);
+  const { view, tops, bottoms, sizes } = glide({ x: 0, y: 72, width: 1440, height: 828 }, { x: 0, y: 0, width: 1440, height: 900 }, springFor('seamless.hide', 'premium')!);
   assert.deepEqual(view.bounds, { x: 0, y: 0, width: 1440, height: 900 });
   assert.ok(sizes.length > 10, 'the site lays out live at many heights on the way');
   assert.ok(bottoms.every(bottom => bottom === 900), 'the bottom edge stays on the window edge');

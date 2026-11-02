@@ -89,3 +89,9 @@ test('levels are stepped integers and the figure moves; the still frame is the r
   for(let r=0;r<gridRows;r++)for(let c=0;c<gridCols;c++)assert.equal(stillLevel(kind,r,c)>0,cellAt(kind,r,c)!=='.',kind);
  }
 });
+
+test('a body that cannot be decoded reads as an invalid response',()=>{
+ const failure=navigationFailure('ERR_CONTENT_DECODING_FAILED (-330)',describeDestination('https://shop.example/'));
+ assert.equal(failure.code,'ERR_CONTENT_DECODING_FAILED');assert.equal(failure.number,-330);assert.equal(failure.title,'This page isn’t working');
+ assert.equal(failure.message,navigationFailure('ERR_INVALID_HTTP_RESPONSE (-370)',describeDestination('https://shop.example/')).message);
+});

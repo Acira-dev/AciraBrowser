@@ -2,6 +2,7 @@ import { animate } from 'motion/react';
 import type { BrowserAction } from '../runtime/types';
 import { fillChipIcon } from './chipIcon';
 import { liquidChip,liquidFork,liquidTargets,type LiquidTarget } from './liquidSnap';
+import { motionPace } from './sharedMotion';
 import { motionScale, morphSpring } from './splitMotion';
 import './sidebarTabDrag.css';
 
@@ -60,7 +61,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     const previous=moves.get(node);if(previous?.offset===offset)return;
     if(!previous&&!offset)return;
     const from=getComputedStyle(node).translate;previous?.animation?.cancel();
-    const duration=motionScale()?180:0;
+    const duration=motionScale()?180*motionPace():0;
     const animation=node.animate([{translate:from==='none'?'0px 0px':from},{translate:`0px ${offset}px`}],{duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'both'});
     moves.set(node,{animation,offset});node.dataset.dragRoom='';
   };
@@ -132,9 +133,9 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     for(const [node,move] of moves){move.animation?.cancel();delete node.dataset.dragRoom;for(const animation of node.getAnimations())if(animation.id==='sb-flip')animation.cancel();}
     moves.clear();gap.remove();
     if(!motionScale())return;
-    for(const [node,top] of drawn){if(!node.isConnected)continue;const d=top-node.getBoundingClientRect().top;if(Math.abs(d)>.5)node.animate([{translate:`0px ${d}px`},{translate:'0px 0px'}],{duration:140,easing:'cubic-bezier(.22,1,.36,1)'});}
+    for(const [node,top] of drawn){if(!node.isConnected)continue;const d=top-node.getBoundingClientRect().top;if(Math.abs(d)>.5)node.animate([{translate:`0px ${d}px`},{translate:'0px 0px'}],{duration:140*motionPace(),easing:'cubic-bezier(.22,1,.36,1)'});}
   };
-  const restoreRoom=()=>{for(const [node,move] of moves){move.animation?.cancel();delete node.dataset.dragRoom;if(move.offset)node.animate([{translate:`0px ${move.offset}px`},{translate:'0px 0px'}],{duration:motionScale()?180:0,easing:'cubic-bezier(.22,1,.36,1)'});}moves.clear();gap.remove();};
+  const restoreRoom=()=>{for(const [node,move] of moves){move.animation?.cancel();delete node.dataset.dragRoom;if(move.offset)node.animate([{translate:`0px ${move.offset}px`},{translate:'0px 0px'}],{duration:motionScale()?180*motionPace():0,easing:'cubic-bezier(.22,1,.36,1)'});}moves.clear();gap.remove();};
   /** The carried row settles into `slot`. The frame the change is in the page (`ready`), the room goes (`onReady`: kept longer, it came
    *  on top of the new layout and the rows below slid on and snapped back) and the carried row heads for the real row's place
    *  (`goal`); once it is there, the real row takes over (`onDone`). */
@@ -297,7 +298,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
         const gone=!destination&&!row.isConnected,rect=destination?.getBoundingClientRect()??(gone?preview.getBoundingClientRect():row.getBoundingClientRect()),small=Boolean(destination),scale=motionScale();
         const animation=preview.animate([{transform:preview.style.transform,width:preview.style.width,height:preview.style.height,opacity:1},{transform:`translate3d(${rect.left+(small?(rect.width-28)/2:0)}px,${rect.top+(small?(rect.height-28)/2:0)}px,0) scale(${small?.35:1})`,width:(small?28:rect.width)+'px',height:(small?28:rect.height)+'px',opacity:small||gone?0:1}],{duration:scale?small?200:160:0,easing:'cubic-bezier(.22,1,.36,1)',fill:'forwards'});
         animation.finished.then(clean,clean);
-        if(destination&&scale){const glyph=destination.querySelector('.sb-ws-icon')??destination;glyph.animate([{transform:'scale(1) rotate(0deg)'},{transform:'scale(1.14) rotate(-5deg)',offset:.3},{transform:'scale(.96) rotate(3deg)',offset:.62},{transform:'scale(1.03) rotate(-1deg)',offset:.82},{transform:'scale(1) rotate(0deg)'}],{duration:380,easing:'ease-out'});}
+        if(destination&&scale){const glyph=destination.querySelector('.sb-ws-icon')??destination;glyph.animate([{transform:'scale(1) rotate(0deg)'},{transform:'scale(1.14) rotate(-5deg)',offset:.3},{transform:'scale(.96) rotate(3deg)',offset:.62},{transform:'scale(1.03) rotate(-1deg)',offset:.82},{transform:'scale(1) rotate(0deg)'}],{duration:380*motionPace(),easing:'ease-out'});}
       });
       return projected;
     },

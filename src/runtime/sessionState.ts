@@ -27,11 +27,17 @@ export function webOrigin(url:string):string|null {
  try{const parsed=new URL(url);return parsed.protocol==='http:'||parsed.protocol==='https:'?parsed.origin:null;}catch{return null;}
 }
 
+/** What a zoom level is remembered for: a website's origin, or an Acira page's own address (acira://settings), as Chrome keeps a level per
+ * host for its chrome:// pages. A level is per page, not per tab: every tab on that page, in any window of the profile, shares it. */
+export function zoomOrigin(url:string):string|null {
+ return webOrigin(url)??(/^acira:\/\/[a-z][a-z0-9-]{0,31}$/.test(url)?url:null);
+}
+
 export function normalizeOriginZooms(input:unknown,profiles:readonly {id:string}[]):BrowserSnapshot['originZooms'] {
  const result:BrowserSnapshot['originZooms']={},raw=object(input);
  for(const profile of profiles){
   const values=object(raw[profile.id]),clean:Record<string,number>={};
-  for(const [url,zoom] of Object.entries(values)){const origin=webOrigin(url);if(origin&&typeof zoom==='number'&&Number.isFinite(zoom))clean[origin]=Math.max(25,Math.min(500,zoom));}
+  for(const [url,zoom] of Object.entries(values)){const origin=zoomOrigin(url);if(origin&&typeof zoom==='number'&&Number.isFinite(zoom))clean[origin]=Math.max(25,Math.min(500,zoom));}
   if(Object.keys(clean).length)result[profile.id]=clean;
  }
  return result;
@@ -39,16 +45,16 @@ export function normalizeOriginZooms(input:unknown,profiles:readonly {id:string}
 
 export function originZoom(state:Pick<BrowserSnapshot,'originZooms'>,tab:Pick<TabSession,'url'|'browserProfileId'|'privacy'|'zoom'>):number {
  if(tab.privacy)return tab.zoom;
- const origin=webOrigin(tab.url);return origin?state.originZooms[tab.browserProfileId]?.[origin]??100:100;
+ const origin=zoomOrigin(tab.url);return origin?state.originZooms[tab.browserProfileId]?.[origin]??100:100;
 }
 
 /** Ordinary tabs share per-origin zoom; private tabs keep their own unsaved zoom. */
 export function setOriginZoom(state:BrowserSnapshot,tab:TabSession,value:number):void {
- const zoom=Math.max(25,Math.min(500,Number.isFinite(value)?value:tab.zoom)),origin=webOrigin(tab.url);
+ const zoom=Math.max(25,Math.min(500,Number.isFinite(value)?value:tab.zoom)),origin=zoomOrigin(tab.url);
  // A private tab keeps its zoom to itself: the per-site table is saved, and would record which sites it visited.
  if(origin&&!tab.privacy){
   const map=state.originZooms[tab.browserProfileId]??(state.originZooms[tab.browserProfileId]={});map[origin]=zoom;
-  for(const member of state.tabs)if(!member.privacy&&member.browserProfileId===tab.browserProfileId&&webOrigin(member.url)===origin)member.zoom=zoom;
+  for(const member of state.tabs)if(!member.privacy&&member.browserProfileId===tab.browserProfileId&&zoomOrigin(member.url)===origin)member.zoom=zoom;
  }else tab.zoom=zoom;
  const active=state.tabs.find(member=>member.id===state.activeTabId);if(active)state.settings.zoom=active.zoom;
 }

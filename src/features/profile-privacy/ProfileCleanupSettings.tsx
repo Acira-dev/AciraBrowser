@@ -223,7 +223,7 @@ function CleanupForm({ client, profileId }: ProfileCleanupSettingsProps) {
       const keepDraft = !!saved.current && draftChanged(currentDraft.current, saved.current);
       adopt(checkedCleanupStatus(result, profileId), {keepDraft});
       setUncertain(false);
-      setNotice(keepDraft ? "Cleanup status updated. Your edits are still here." : t("cleanup.statusUpdated"));
+      setNotice(keepDraft ? t("cleanup.statusUpdatedKeepEdits") : t("cleanup.statusUpdated"));
     } catch (reason) {
       if (current(token, startedClient)) {
         setFailureSerial((value) => value + 1);

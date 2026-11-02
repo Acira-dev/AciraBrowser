@@ -229,8 +229,8 @@ export const listOf = (items: string[]) => {
     return items.join(", ");
   }
 };
-/** A source profile's own name, unless it is a browser's placeholder ("Default", "Person 1"). */
-const ownName = (source: ImportSource) => (/^(default|person \d+|profile \d+|user|your chrome)$/i.test(source.name.trim()) ? "" : source.name.trim());
+/** A source profile's own name, unless it is a browser's placeholder ("Default", "Person 1", Zen's "Default (release)"). */
+const ownName = (source: ImportSource) => (/^(default( \([^)]*\))?|person \d+|profile \d+|user|your chrome)$/i.test(source.name.trim()) ? "" : source.name.trim());
 
 /** Import lives with the card, not the step: the footer's Import runs it and the card moves on once it lands. Any number
  *  of found profiles can be chosen. The first one (in list order) fills the profile being set up; each other one becomes
@@ -372,7 +372,7 @@ export function useImporter({
   const fromFile = async () => {
     const response = await act({ type: "imports.html" });
     if (response?.batch) {
-      const count = response.batch.results.reduce((sum, item) => sum + (item.status === "imported" ? item.count || 0 : 0), 0);
+      const count = response.batch.results.reduce((sum, item) => sum + (item.status === "imported" && item.category === "bookmarks" ? item.count || 0 : 0), 0); // an Acira profile file also brings history
       setRun({ sourceId: "file", counts: { bookmarks: count }, finished: true, batchIds: [response.batch.id], from: t("setup.fromFile"), profileIds: [], rows: {} });
       setNotice(t("setup.import.fileDone", { count }));
     } else if (response?.cancelled) setNotice(t("setup.import.fileNone"));
@@ -579,7 +579,7 @@ function FileLink({ disabled, onClick }: { disabled: boolean; onClick: () => voi
   return (
     <>
       {before}
-      <button className="fr-link" type="button" disabled={disabled} onClick={onClick}>
+      <button className="fr-link fr-inline-link fr-inline-link-end" type="button" disabled={disabled} onClick={onClick}>
         {t("setup.import.fileLink")}
       </button>
       {after}

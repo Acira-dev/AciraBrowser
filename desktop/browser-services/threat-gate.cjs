@@ -3,18 +3,22 @@ const { t } = require('./tx.cjs');
 // The request-time half of the phishing and malware lists (threat-lists.cjs): what happens when an address is listed.
 //   top-level navigation  -> cancelled; Acira's warning page (NavigationError, kind "threat") explains it. "Continue anyway (unsafe)" is behind a
 //                            disclosure and is remembered per listed entry (a listed host, or one listed page on a shared host), per browsing profile, until Acira quits.
-//   anything else (images, scripts, frames, XHR) -> cancelled quietly. A page that pulls in a listed address just loses that piece.
+//   anything else (images, scripts, frames, XHR) -> cancelled quietly. A page that pulls in a listed address just loses that piece, unless the person turned
+//                            protection off for the page's site: then nothing on that page is blocked (2 Nov 2026: a whole-host entry for a storage host hid a
+//                            study site's images, and turning the site's protection off did not bring them back). The first block of
+//                            each host is written to the local log (`log`: host and list, no page address; never for a private window), so a bug report shows it.
 // Private windows get the same protection; their "continue" choice lives only as long as the window's profile does.
 /** Read when a warning is shown, so the words follow the current language. */
 const WORDS = Object.freeze({
   get phishing() { return Object.freeze({ title: t('threat.blocked.title'), cause: t('threat.phishing.cause'), detail: t('threat.phishing.detail') }); },
   get malware() { return Object.freeze({ title: t('threat.blocked.title'), cause: t('threat.malware.cause'), detail: t('threat.malware.detail') }); }
 });
-function createThreatGate({ lists, now = Date.now, lookalike = () => null }) {
-  const allowed = new Set(), recent = new Map(), stats = { warned: 0, blocked: 0 };
+function createThreatGate({ lists, now = Date.now, lookalike = () => null, log = null }) {
+  const allowed = new Set(), recent = new Map(), stats = { warned: 0, blocked: 0 }, logged = new Set();
   const siteKey = (profileId, host) => String(profileId || '') + '|' + String(host || '').toLowerCase();
-  /** The pipeline step. `profileId` is the browsing profile the request belongs to. */
-  function check(details, wc, profileId) {
+  /** The pipeline step. `profileId` is the browsing profile the request belongs to; `quiet` (private windows) keeps it out of the log; `pageProtected()` is the
+   *  site switch of the page the request is for (asked on a hit only). */
+  function check(details, wc, profileId, { quiet = false, pageProtected = () => true } = {}) {
     if (!/^https?:/i.test(details.url || '')) return {};
     const hit = lists.lookup(details.url) || (details.resourceType === 'mainFrame' ? lookalike(details.url) : null); if (!hit) return {};
     if (details.resourceType === 'mainFrame') {
@@ -22,7 +26,10 @@ function createThreatGate({ lists, now = Date.now, lookalike = () => null }) {
       stats.warned++; if (wc) { recent.set(wc.id, { profileId, url: details.url, kind: hit.kind, list: hit.list, host: hit.host, key: hit.key || hit.host, words: hit.words, at: now() }); if (recent.size > 200) recent.delete(recent.keys().next().value); }
       return { cancel: true };
     }
-    stats.blocked++; return { cancel: true };
+    if (!pageProtected()) return {};
+    stats.blocked++;
+    if (log && !quiet && !logged.has(hit.host) && logged.size < 5000) { logged.add(hit.host); try { log(`Blocked page resources from ${hit.host} (${details.resourceType || 'resource'}): listed in ${hit.list} as ${hit.key}. Further blocks of this host are not logged until Acira restarts.`); } catch { /* logging never blocks a request */ } }
+    return { cancel: true };
   }
   // The warning page asks about the tab's failed navigation. The address the tab shows can differ from the blocked one when a redirect led there, so a block
   // counts for its tab if it is the same address or recent (two minutes); the page only asks while its own error is "blocked by client".

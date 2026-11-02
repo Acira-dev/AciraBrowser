@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const rootFiles = new Set(['.gitignore', 'LICENSE', 'THIRD_PARTY_NOTICES.md',
   'package.json', 'package-lock.json', 'index.html', 'launch.mjs', 'vite.config.ts',
   'tsconfig.json', 'design-tokens.json', 'page-zoom-levels.json']);
-const scriptFiles = new Set(['build-filter-engine.cjs', 'build-installer-helper.cjs',
+const scriptFiles = new Set(['build-filter-engine.cjs', 'build-installer-helper.cjs', 'deploy-site-reports.mjs',
   'build-ui-preload.mjs', 'deploy-metrics.mjs', 'desktop-bundle.mjs', 'fetch-tor.mjs',
   'fetch-baseline-filters.mjs', 'install-runtime.mjs', 'installer-art-main.cjs',
   'installer-frames-main.cjs', 'uninstall-art-main.cjs', 'mirror-spellcheck-dictionaries.mjs',
@@ -41,7 +41,7 @@ const requiredInputs = ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'package.json', 'pa
   'packaging/installer/strings.json', 'packaging/LICENSE.NSIS.txt', 'packaging/LICENSE.rcedit.txt',
   'docs/launch/concepts/installer-creation.html', 'docs/release/withdrawals.json',
   'docs/design/rewind-routines/examples/start-work.acira-routine.json',
-  'public/fonts/inter-LICENSE.txt', 'public/fonts/geist-LICENSE.txt', 'public/fonts/plex-LICENSE.txt'];
+  'public/fonts/inter-LICENSE.txt'];
 const code = /\.(?:cjs|mjs|js|ts|tsx|css|json|html|md|txt|svelte|pem)$/i;
 const asset = /\.(?:svg|png|jpg|ico|woff2|md|txt|json)$/i;
 
@@ -72,7 +72,7 @@ export function allowedSource(file) {
     || /^scripts\/release-[a-z-]+\.(?:mjs|cjs)$/.test(file) && file !== 'scripts/release-archive-audit.mjs'
     || file === 'scripts/release.mjs';
   return file === '.github/workflows/release-qualification.yml'
-    || /^supabase\/(?:config\.toml|functions\/usage\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_usage_metrics(?:_v\d+)?\.sql)$/.test(file);
+    || /^supabase\/(?:config\.toml|functions\/(?:usage|report|allowlist)\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_(?:usage_metrics(?:_v\d+)?|site_reports)\.sql)$/.test(file);
 }
 
 export function auditExport(entries, readBlob) {

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { installDesignVariables } from './ui/designSystem';
 import { installDisclosureMotion } from './ui/disclosureMotion';
 import { initLocale, applyLanguageSetting, t } from './i18n';
+import { installWindowFullscreen } from './ui/windowFullscreen';
 installDesignVariables();installDisclosureMotion();
 class AppErrorBoundary extends Component<{children:ReactNode},{message:string}>{
  state={message:''};
@@ -13,6 +14,7 @@ class AppErrorBoundary extends Component<{children:ReactNode},{message:string}>{
 }
 document.documentElement.dataset.native=window.acira?'true':'false';
 document.documentElement.dataset.platform=window.acira?.platform||(/Mac/.test(navigator.platform)?'darwin':'win32');
+installWindowFullscreen();
 performance.mark('acira-render-begin');
 // The last language used is loaded before the first paint (English needs no wait), so nothing flashes in the wrong language.
 void initLocale().catch(()=>undefined).then(()=>{ // Every view (the page, menus and popups in the overlay) follows the language setting on its own.
@@ -25,5 +27,5 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>performance.mark('acira-firs
 
 
 // One button component for every surface; loads after the study so it settles every older button look.
-// Subtitles and ledes in IBM Plex Sans, under the Inter display titles.
+// Subtitles and ledes: the subtitle weight and tracking, in Inter like the titles above them.
 // Panels, popovers and menus: one rhythm, rows on the glass, fade-ended separators between groups only.

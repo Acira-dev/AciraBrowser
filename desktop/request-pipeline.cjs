@@ -16,6 +16,17 @@ function observeRequests(session,observer){
  const sync=()=>{for(const pipeline of registry.pipelines)pipeline.rewatch();};sync();
  return {update(phases){entry.phases=new Set(phases||[]);sync();},dispose(){const at=registry.list.indexOf(entry);if(at>=0)registry.list.splice(at,1);sync();}};
 }
+/** What each participant of one request is handed: the details plus the headers the earlier ones set. Electron's `details.frame` is a getter
+ * that, read once the frame has navigated or gone, answers null and logs "Frame property was accessed after it navigated or was destroyed".
+ * Spreading the details for every participant read it every time, also after an asynchronous one (CNAME uncloaking), when the frame was often
+ * gone. Now it is read only when a participant asks for it, and at most once per request. */
+function requestView(details){
+ const headers=result=>({...(result.responseHeaders?{responseHeaders:result.responseHeaders}:{}),...(result.requestHeaders?{requestHeaders:result.requestHeaders}:{})});
+ if(!details||typeof details!=='object'||!('frame' in details))return result=>({...details,...headers(result)});
+ const rest={};for(const key of Object.keys(details))if(key!=='frame')rest[key]=details[key];
+ let read=false,frame=null;const get=()=>{if(!read){read=true;frame=details.frame;}return frame;};
+ return result=>Object.defineProperty({...rest,...headers(result)},'frame',{get,enumerable:true,configurable:true});
+}
 /** One owner for each Electron webRequest event; participants return patches, never replace listeners. */
 class RequestPipeline{
  constructor(session){
@@ -48,6 +59,6 @@ class RequestPipeline{
  sealNetwork(reason='retired native context'){if(typeof reason!=='string'||reason.length>120||/[\u0000-\u001f]/.test(reason))throw new Error('Use a bounded native retirement reason.');this.networkState.retired=true;this.networkState.reason=reason;return this.networkStatus();}
  networkStatus(){return {blocked:this.networkState.retired||this.networkState.holds.size>0,retired:this.networkState.retired,temporaryHolds:this.networkState.holds.size};}
  /** A handler may return a promise (CNAME uncloaking waits for one DNS answer); the chain continues when it settles and a rejected promise cancels like a thrown error. Handlers that return plain patches never leave the synchronous path. */
- run(handlers,details,callback){let settled=false;const finish=result=>{if(!settled){settled=true;callback(result);}},fail=error=>{console.error('Request policy failed',error.message);finish({cancel:true});};try{if(this.networkStatus().blocked&&/^(?:https?|wss?):/i.test(details.url)){finish({cancel:true});return;}const step=(index,result)=>{for(let i=index;i<handlers.length;i++){const patch=handlers[i]({...details,...(result.responseHeaders?{responseHeaders:result.responseHeaders}:{}),...(result.requestHeaders?{requestHeaders:result.requestHeaders}:{})})||{};if(typeof patch.then==='function'){patch.then(value=>{const merged={...result,...(value||{})};if(merged.cancel||merged.redirectURL)finish(merged);else step(i+1,merged);}).catch(fail);return;}result={...result,...patch};if(result.cancel||result.redirectURL)break;}finish(result);};step(0,{});}catch(error){fail(error);}}
+ run(handlers,details,callback){let settled=false;const finish=result=>{if(!settled){settled=true;callback(result);}},fail=error=>{console.error('Request policy failed',error.message);finish({cancel:true});};try{if(this.networkStatus().blocked&&/^(?:https?|wss?):/i.test(details.url)){finish({cancel:true});return;}const view=requestView(details),step=(index,result)=>{for(let i=index;i<handlers.length;i++){const patch=handlers[i](view(result))||{};if(typeof patch.then==='function'){patch.then(value=>{const merged={...result,...(value||{})};if(merged.cancel||merged.redirectURL)finish(merged);else step(i+1,merged);}).catch(fail);return;}result={...result,...patch};if(result.cancel||result.redirectURL)break;}finish(result);};step(0,{});}catch(error){fail(error);}}
 }
 module.exports={RequestPipeline,observeRequests,REQUEST_PHASES:PHASES};

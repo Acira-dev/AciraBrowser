@@ -8,3 +8,8 @@ test('explicit protocols are preserved; public destinations stay HTTPS and unsaf
  for(const value of ['javascript:alert(1)','file:///etc/passwd','ftp://localhost/file','https://user:pass@localhost/'])assert.equal(resolveNavigation(value).contentKind,'internal');
  assert.equal(resolveNavigation('where is localhost').query,'where is localhost');
 });
+test('typed operators, versions and code words search; a dotted word opens only with a real top-level suffix, a port, a path or an IP',()=>{
+ for(const value of ['site:example.com','define:word','re:zero','time:12:30','std::vector','v1.2','node.js','next.js','Next.JS','3.14','192.168.1','abc.def.ghi','a.b?x']){const result=resolveNavigation(value);assert.equal(result.error,undefined,value);assert.equal(result.query,value,value);}
+ for(const [value,url] of [['nodejs.org','https://nodejs.org/'],['setup.py','https://setup.py/'],['bbc.co.uk','https://bbc.co.uk/'],['пример.рф','https://xn--e1afmkfd.xn--p1ai/'],['node.js/','https://node.js/'],['node.js:3000','https://node.js:3000/'],['foo.bar/baz','https://foo.bar/baz'],['1.2.3.4','https://1.2.3.4/'],['nas.local','http://nas.local/'],['myapp.test','https://myapp.test/'],['router.lan','https://router.lan/'],['abc.onion','https://abc.onion/']])assert.equal(resolveNavigation(value).url,url,value);
+ for(const value of ['mailto:a@example.com','about:blank','zoommtg://zoom.us/join','chrome://settings'])assert.equal(resolveNavigation(value).error,'Acira opens only http and https addresses.',value);
+});

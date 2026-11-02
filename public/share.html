@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Acira</title>
 <style>
-@font-face{font-family:'Geist';font-weight:100 900;src:url('/fonts/Geist.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-weight:100 900;font-display:block;src:url('/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
 /* "Choose what to share" (bible §4 Transient surfaces: picker 680 wide, padding 24, title 16/520, body 13/20 at 61%, 32px buttons,
    Windows order with the action first) and the sharing pill. Tokens follow native-dialog.html (round 12 ladder, neutral primary);
    radii 4/6/8, hairlines, soft layered shadow. Motion is transform/opacity only and stops for reduced motion. */
 :root{color-scheme:light;--bg:#fff;--text:rgb(0 0 0/.88);--muted:rgb(0 0 0/.61);--faint:rgb(0 0 0/.45);--line:rgb(0 0 0/.08);--line-strong:rgb(0 0 0/.14);--hover:rgb(0 0 0/.05);--field:rgb(0 0 0/.04);--raised:#fff;--primary:#1d1d1f;--primary-hover:#2a2a2e;--on-primary:#fff;--ring:#3b6eea;--live:#e5484d;--shadow:0 1px 2px rgb(0 0 0/.06),0 1px 1px rgb(0 0 0/.04);--pill-shadow:0 0 0 1px rgb(0 0 0/.08),0 2px 6px rgb(0 0 0/.08),0 10px 28px rgb(0 0 0/.16);--ease:cubic-bezier(.23,1,.32,1)}
 :root[data-dark]{color-scheme:dark;--bg:#232428;--text:#ededef;--muted:rgb(237 237 239/.64);--faint:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--line-strong:rgb(255 255 255/.16);--hover:rgb(255 255 255/.06);--field:rgb(255 255 255/.05);--raised:#34353a;--primary:#ededef;--primary-hover:#fff;--on-primary:#16171a;--ring:#8fb0ff;--live:#ff6369;--shadow:0 1px 2px rgb(0 0 0/.3);--pill-shadow:0 0 0 1px rgb(255 255 255/.10),0 2px 6px rgb(0 0 0/.28),0 10px 28px rgb(0 0 0/.42)}
 *{box-sizing:border-box}
-html,body{margin:0;color:var(--text);font:13px/1.4 'Geist','Inter','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
+html,body{margin:0;color:var(--text);font:13px/1.4 'Inter','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
 html:not([data-pill]),html:not([data-pill]) body{background:var(--bg)}
 html[data-pill],html[data-pill] body{background:transparent}
 [hidden]{display:none!important}

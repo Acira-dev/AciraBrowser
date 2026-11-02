@@ -1,5 +1,7 @@
-# Supabase project settings for the hosted project. Only the `usage` function lives here (see docs/launch/METRICS.md).
-# The project reference is not stored in the repository: scripts/deploy-metrics.mjs takes SUPABASE_PROJECT_REF from the environment.
+# Supabase project settings for the hosted project. Three functions live here: `usage` (anonymous usage counts, docs/launch/METRICS.md),
+# and `report` and `allowlist` (site problem reports and the reviewed allow-list, docs/SUPABASE_SETUP.md).
+# The project reference is not stored in the repository: scripts/deploy-metrics.mjs and scripts/deploy-site-reports.mjs take
+# SUPABASE_PROJECT_REF from the environment.
 project_id = "acira-usage"
 
 [functions.usage]
@@ -7,3 +9,15 @@ enabled = true
 # The app holds no key, so calls cannot carry a token. Safety is the strict schema, 2 KB limit and rate limits inside the function.
 verify_jwt = false
 entrypoint = "./functions/usage/index.ts"
+
+[functions.report]
+enabled = true
+# Write-only site problem reports. The app holds no key; safety is the strict schema, 4 KB limit and rate limits inside the function.
+verify_jwt = false
+entrypoint = "./functions/report/index.ts"
+
+[functions.allowlist]
+enabled = true
+# Read-only list of cleared host names, public by design. The app holds no key; the function answers GET and HEAD only.
+verify_jwt = false
+entrypoint = "./functions/allowlist/index.ts"

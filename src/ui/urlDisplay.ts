@@ -1,3 +1,5 @@
+import { displayHostname } from './idnDisplay';
+
 /** Address-bar presentation of a URL at rest (design bible §5.1): scheme and `www.` hidden, the registrable
  * domain emphasised, the rest quieter, and `Not secure` only for plain HTTP to a non-local host. */
 export interface UrlDisplay { prefix: string; domain: string; rest: string; insecure: boolean }
@@ -18,7 +20,8 @@ export function urlDisplay(value: string): UrlDisplay | null {
   try { url = new URL(value); } catch { return null; }
   if (url.protocol === 'acira:') return { prefix: 'acira://', domain: url.host + url.pathname.replace(/^\/\//, ''), rest: '', insecure: false };
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  const host = url.host.replace(/^www\./, ''), hostname = url.hostname.replace(/^www\./, '');
+  // An internationalised name reads in its own script when it is safe to (idnDisplay.ts), else as the punycode it is.
+  const shownHost = displayHostname(url.hostname), host = (shownHost + url.host.slice(url.hostname.length)).replace(/^www\./, ''), hostname = shownHost.replace(/^www\./, '');
   const domain = registrableDomain(hostname), subdomain = hostname.slice(0, Math.max(0, hostname.length - domain.length));
   const port = host.slice(hostname.length), tail = `${url.pathname === '/' ? '' : url.pathname}${url.search}${url.hash}`;
   return { prefix: subdomain, domain, rest: port + tail, /* an onion address is encrypted end to end by Tor itself, without a certificate: never "Not secure" (Tor Browser shows an onion mark) */ insecure: url.protocol === 'http:' && !loopback(url.hostname) && !/\.onion$/i.test(url.hostname) && !/^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(url.hostname) };

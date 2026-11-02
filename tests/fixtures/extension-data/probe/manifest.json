@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Data probe","version":"1.0","permissions":["storage"],"background":{"service_worker":"sw.js"}}

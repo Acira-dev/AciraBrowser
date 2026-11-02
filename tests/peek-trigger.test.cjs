@@ -6,11 +6,11 @@ const fs=require('node:fs');const path=require('node:path');const vm=require('no
 
 function load({mainFrame=true}={}){
  const sent=[],listeners={},handlers={};
- class Anchor{constructor(href,rects){this.href=href;this.rects=rects;}getClientRects(){return this.rects;}}
+ class Anchor{constructor(href,rects,attributes={}){this.href=href;this.rects=rects;this.target=attributes.target||'';this.attributes=attributes;}getClientRects(){return this.rects;}hasAttribute(name){return name in this.attributes;}}
  class Area extends Anchor{}
  const window={addEventListener(name,fn,options){(listeners[name]??=[]).push({fn,options});}};
  const timers=[];
- const sandbox={document:{addEventListener(){},querySelectorAll:()=>[],pointerLockElement:null},require:name=>{if(name==='electron')return {ipcRenderer:{send:(...args)=>sent.push(JSON.parse(JSON.stringify(args))),on:(channel,fn)=>{handlers[channel]=fn;}}};throw new Error(name);},window,process:{isMainFrame:mainFrame},HTMLAnchorElement:Anchor,HTMLAreaElement:Area,Date,Math,Number,String,Object,Set,Array,
+ const sandbox={document:{addEventListener(){},querySelectorAll:()=>[],querySelector:()=>null,pointerLockElement:null},require:name=>{if(name==='electron')return {ipcRenderer:{send:(...args)=>sent.push(JSON.parse(JSON.stringify(args))),on:(channel,fn)=>{handlers[channel]=fn;}}};throw new Error(name);},window,process:{isMainFrame:mainFrame},HTMLAnchorElement:Anchor,HTMLAreaElement:Area,Date,Math,Number,String,Object,Set,Array,
   setTimeout:(fn,ms)=>{timers.push({fn,ms,live:true});return timers.length-1;},clearTimeout:id=>{if(timers[id])timers[id].live=false;}};
  vm.createContext(sandbox);
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../desktop/page-input-preload.cjs'),'utf8'),sandbox);
@@ -31,7 +31,7 @@ test('Shift+click still previews, now with the link box too; a plain click does 
  const h=load(),a=link(h);
  h.fire('mousedown',{});h.fire('click',{shiftKey:true,composedPath:()=>[a]});
  assert.equal(h.sent.length,1);assert.equal(h.sent[0][0],'acira:page-peek-link');assert.deepEqual(h.sent[0][1].rect,{x:90,y:44,width:120,height:18});
- h.sent.length=0;const plain=h.fire('click',{composedPath:()=>[a]});assert.equal(plain.prevented,false);assert.deepEqual(h.sent,[]);
+ h.sent.length=0;const plain=h.fire('click',{composedPath:()=>[a]});assert.equal(plain.prevented,false);assert.equal(h.sent.some(([channel])=>channel==='acira:page-peek-link'),false);
 });
 
 test('a wrapped link grows from the line the pointer is on',()=>{
@@ -89,4 +89,14 @@ test('the page preload never cancels Ctrl+wheel: a trackpad pinch arrives as one
   for(const event of [{ctrlKey:true,deltaY:-120},{ctrlKey:true,deltaY:-.25},{ctrlKey:true,deltaY:120},{deltaY:120},{ctrlKey:true,altKey:true,deltaY:120}])assert.equal(h.fire('wheel',event).prevented,false,'the wheel stays left to Chromium');
   assert.deepEqual(h.sent,[],'no zoom request crosses the bridge; Chromium zooms the page and magnifies on pinch');
  }
+});
+
+test('a plain click on a link that replaces the page reports its address once, for the Leave site? card; other clicks report nothing',()=>{
+ const h=load(),a=link(h);
+ const plain=h.fire('click',{composedPath:()=>[a]});assert.equal(plain.prevented,false,'the page keeps its click');
+ assert.deepEqual(h.sent,[['acira:link-intent','https://example.com/page']]);
+ for(const event of [{metaKey:true},{ctrlKey:true},{button:1},{isTrusted:false},{defaultPrevented:true}]){h.sent.length=0;h.fire('click',{...event,composedPath:()=>[a]});assert.equal(h.sent.some(([channel])=>channel==='acira:link-intent'),false,JSON.stringify(event));}
+ for(const other of [new h.Anchor('https://example.com/new',[],{target:'_blank'}),new h.Anchor('https://example.com/file.zip',[],{download:''}),new h.Anchor('mailto:a@example.com',[])]){h.sent.length=0;h.fire('click',{composedPath:()=>[other]});assert.deepEqual(h.sent.filter(([channel])=>channel==='acira:link-intent'),[],other.href);}
+ h.sent.length=0;h.fire('click',{composedPath:()=>[new h.Anchor('https://example.com/top',[],{target:'_top'})]});assert.deepEqual(h.sent,[['acira:link-intent','https://example.com/top']]);
+ const frame=load({mainFrame:false});frame.fire('click',{composedPath:()=>[link(frame)]});assert.deepEqual(frame.sent,[],'only the top page reports');
 });

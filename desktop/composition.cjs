@@ -367,8 +367,13 @@ function markSystemTransparency(window) {
   for (const view of allViews(window.contentView)) if (uiContents(view.webContents)) view.webContents.executeJavaScript(script).catch(() => {});
 }
 const trackedWindows = new WeakSet();
+let activationInstalled = false;
 /** BaseWindow focus is not forwarded to app events, so each Acira UI page finds its own window once loaded. */
 function trackWindowActivation(app) {
+  // main.cjs calls this for every window it opens, but the listeners are app-wide: installed again they put one more dom-ready handler on every
+  // page and one more nativeTheme listener per window opened, never removed (Node's MaxListenersExceededWarning from the 11th window on).
+  if (activationInstalled) return;
+  activationInstalled = true;
   const {BaseWindow} = require('electron');
   const attach = (contents, attempt = 0) => {
     if (!uiContents(contents)) return;

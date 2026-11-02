@@ -4,7 +4,9 @@ import { useListMotion } from '../../ui/sharedMotion';
 import { breadcrumb, settingsRegistry, type SettingsContext, type SettingsEntry } from './registry';
 import { searchSettingsDetailed, type SettingsHit } from './search';
 
-import { t } from '../../i18n';
+import { t, translateText } from '../../i18n';
+/** Where a result lives (section, then group), in the interface language: the registry keeps the English names. */
+const trail = (entry: SettingsEntry) => breadcrumb(entry).map(translateText);
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function highlight(text: string, query: string): ReactNode {
@@ -36,7 +38,7 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
   const result = useMemo(() => (trimmed ? searchSettingsDetailed(settingsRegistry, trimmed, context) : { hits: [] as SettingsHit[], corrected: undefined as string | undefined }), [trimmed, context.customGlassColors, context.privateProfile, context.desktop, context.websiteOpen, context.appearanceChanged, context.toolbarChanged, context.newTabChanged, context.stockSearch, context.verticalTabs]);
   const hits: SettingsHit[] = result.hits, corrected = result.corrected, marked = corrected ?? trimmed;
   const showList = open && Boolean(trimmed);
-  const status = !trimmed ? '' : hits.length ? `${corrected ? `${t("settingssearch.showingFor", { query: corrected })}. ` : ''}${hits.length} ${hits.length === 1 ? 'setting' : 'settings'} found. Use the up and down arrow keys to review, Enter to open.` : `No settings found for ${trimmed}.`;
+  const status = !trimmed ? '' : hits.length ? `${corrected ? `${t("settingssearch.showingFor", { query: corrected })}. ` : ''}${t('settingssearch.foundStatus', { count: hits.length })}` : t('settingssearch.noneFoundStatus', { query: trimmed });
 
   useEffect(() => setActive(0), [trimmed]);
   // `/` and Ctrl+F (handled by Settings) move focus here.
@@ -144,8 +146,8 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
             [corrected ? <li key="corrected" className="st-result-note" role="presentation">{t("settingssearch.showingFor", { query: corrected })}</li> : null, ...hits.map((hit, index) => (
               <li key={hit.entry.id} id={`${uid}-r${index}`} role="option" aria-selected={index === active} data-active={index === active} onPointerEnter={() => setActive(index)} onClick={() => choose(hit)}>
                 <span className="st-result-title">{highlight(hit.entry.title, marked)}</span>
-                <span className="st-result-trail" aria-label={t("settingssearch.inJoin", { join: breadcrumb(hit.entry).join(', ') })}>
-                  {breadcrumb(hit.entry).map((part, partIndex) => (
+                <span className="st-result-trail" aria-label={t("settingssearch.inJoin", { join: trail(hit.entry).join(', ') })}>
+                  {trail(hit.entry).map((part, partIndex) => (
                     <Fragment key={part}>
                       {partIndex > 0 && <ChevronRight size={11} />}
                       {part}

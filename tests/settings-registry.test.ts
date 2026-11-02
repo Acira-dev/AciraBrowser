@@ -26,8 +26,8 @@ test('individual controls rank first for the requirement examples', () => {
   assert.equal(top('transparency')[0], 'reduce-transparency');
   assert.deepEqual(top('artwork').slice(0, 2), ['newtab-artwork', 'newtab-art']);
   assert.equal(top('zoom')[0], 'page-zoom');
-  // "Hide cookie banners" is a cookie control too, so it may lead; the clear-on-exit controls must follow it.
-  assert.deepEqual(top('cookies').slice(0, 3), ['filters-promotions', 'cleanup-categories', 'cleanup-keep-sites']);
+  // "Answer cookie banners with Reject" and "Hide cookie banners" are cookie controls too, so they may lead; the clear-on-exit controls must follow them.
+  assert.deepEqual(top('cookies').slice(0, 4), ['filters-cookie-answer', 'filters-promotions', 'cleanup-categories', 'cleanup-keep-sites']);
   assert.equal(top('dns')[0], 'secure-dns');
   assert.equal(top('import')[0], 'import-browser');
   assert.equal(top('clear on exit')[0], 'cleanup-enabled');

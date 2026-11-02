@@ -17,6 +17,8 @@ function createPopupGate({now=Date.now,windowMs=5000,noticeMs=4000,onBlocked=()=
   if(!ok&&now()-(notices.get(wc)||-Infinity)>noticeMs){notices.set(wc,now());try{onBlocked(wc,details);}catch{}}
   return ok;
  }
- return {attach,allow};
+ /** The same test without the notice: did a click or key press just reach this page? */
+ function recent(wc){const last=gestures.get(wc)||0;return last>0&&now()-last<=windowMs;}
+ return {attach,allow,recent};
 }
 module.exports={createPopupGate};

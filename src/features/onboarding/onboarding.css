@@ -1,12 +1,12 @@
 /* Acira first run — DESIGN_LANGUAGE.md, editorial layer.
    One luminous layer (the prism field) seen through crisp glass; website typography: a large display line between a
-   kicker and a lede, hairline-ruled rows, one left edge. Mono budget (bible 3.1): Geist Mono only for the kicker and its
-   step counter; every label, list, value and key is Geist. Uses A's tokens and editorial classes (.kicker,
+   kicker and a lede, hairline-ruled rows, one left edge. One typeface (founder, 2 Nov 2026): every kicker,
+   step counter, label, list, value and key is Inter. Uses A's tokens and editorial classes (.kicker,
    .display-hero, .lede, .rules); the stage maps their color inputs to its own tone. */
 
-/* Labels over groups and rows: Geist 12/500 at 50%, sentence case. */
+/* Labels over groups and rows: Inter 12/500 at 50%, sentence case. */
 .fr-label {
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
   letter-spacing: 0;
   color: rgb(from var(--fr-text) r g b / 0.5);
 }
@@ -43,7 +43,7 @@
   isolation: isolate;
   background: var(--fr-bg);
   color: var(--fr-text);
-  font: 400 var(--text-13, 13px) / 1.4 var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 var(--text-13, 13px) / 1.4 var(--font-ui, Inter, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
 .fr-yours {
@@ -261,7 +261,7 @@
 .fr-mark[data-resolved] .fr-mark-dots {
   opacity: 0;
 }
-/* The mark, with a quiet "Beta" beside it (Geist 12 at 50%), sitting on the wordmark's baseline. */
+/* The mark, with a quiet "Beta" beside it (Inter 12 at 50%), sitting on the wordmark's baseline. */
 .fr-brand {
   position: relative;
 }
@@ -271,7 +271,7 @@
   bottom: 6px;
 }
 .fr-beta {
-  font: 500 12px/1 var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/1 var(--font-ui, Inter, sans-serif);
   color: rgb(from var(--fr-text) r g b / 0.5);
   white-space: nowrap;
 }
@@ -643,7 +643,7 @@
   gap: 8px;
   border: 0;
   border-radius: 8px;
-  font: 500 14px/1 var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 14px/1 var(--font-ui, Inter, sans-serif);
 }
 .fr-go svg {
   width: 14px;
@@ -663,13 +663,13 @@
   height: 36px;
   padding: 0 16px;
   border-radius: 8px;
-  font: 500 14px/1 var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 14px/1 var(--font-ui, Inter, sans-serif);
 }
 
 /* ── Setup card: I's Apple concept (onboarding-apple-concept.html) with the bible 11 overrides ──────────
    One centred, fixed 720×600 card for every step: glyph 32 → 20 → title → 8 → line → 32 → content (440 wide).
    Overrides: the glass stays translucent (dark .32, light .24) and the haze is never dimmed behind it; primary
-   buttons are neutral; progress is Geist with tabular figures. */
+   buttons are neutral; progress is Inter with tabular figures. */
 
 /* On the translucent card the groups carry legibility: 6% white on dark, solid white on light (with its own edge below). */
 .fr-stage {
@@ -719,7 +719,7 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 /* Light glass per Linear/Apple (round 12): mostly white, no saturation boost, a half-pixel ring, a top highlight
-   instead of a second inner edge, and a light layered shadow (Geist modal). */
+   instead of a second inner edge, and a light layered shadow (Vercel's design-system modal). */
 /* Light: a clean white surface over the spectra, with only a soft hint of the light behind it. */
 .fr-stage[data-tone="light"] .fr-card {
   background: rgb(255 255 255 / 0.74);
@@ -763,7 +763,7 @@
 }
 .fr-stage .fr-card-title {
   margin: 20px 0 0;
-  font: 560 32px/40px var(--font-display, Inter, Geist, sans-serif);
+  font: 560 32px/40px var(--font-display, Inter, sans-serif);
   letter-spacing: -0.03em;
   font-feature-settings: "cv11", "ss03";
   text-wrap: balance;
@@ -772,7 +772,7 @@
 .fr-sub {
   max-width: 440px;
   margin: 8px 0 0;
-  font: 400 15px/24px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 15px/24px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   text-wrap: balance;
 }
@@ -788,7 +788,7 @@
   bottom: 12px;
   margin: 0;
   text-align: center;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-error);
 }
 
@@ -821,14 +821,14 @@
   gap: 8px;
 }
 .fr-counter {
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
   font-variant-numeric: tabular-nums;
   color: var(--fr-text-3);
 }
 
-/* Setup buttons (bible 11): 36px, radius 8, Geist 14/500; the primary is neutral (near-white on dark, near-black on
+/* Setup buttons (bible 11): 36px, radius 8, Inter 14/500; the primary is neutral (near-white on dark, near-black on
    light), never accent, with a 14px trailing arrow that moves 2px on hover. Text buttons share the height. The Make it
-   yours panel keeps app-sized buttons (32px, radius 6, Geist 13). Colors, hover, press, focus and disabled come from
+   yours panel keeps app-sized buttons (32px, radius 6, Inter 13). Colors, hover, press, focus and disabled come from
    the shared button component (src/styles/buttons.css). */
 .fr-btn {
   display: inline-flex;
@@ -838,7 +838,7 @@
   height: 36px;
   padding: 0 18px;
   border-radius: 8px;
-  font: 500 14px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 14px/20px var(--font-ui, Inter, sans-serif);
   white-space: nowrap;
   cursor: default;
   -webkit-app-region: no-drag;
@@ -861,7 +861,7 @@
   height: 32px;
   padding: 0 16px;
   border-radius: 6px;
-  font: 500 13px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 13px/16px var(--font-ui, Inter, sans-serif);
 }
 .fr-stage .fr-btn-text,
 .fr-yours .fr-btn-text {
@@ -875,7 +875,7 @@
   align-items: baseline;
   justify-content: space-between;
   margin: 0 16px 8px;
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-3);
 }
 .fr-group + .fr-glabel {
@@ -905,7 +905,7 @@
   background: var(--fr-group);
   overflow: hidden;
 }
-/* Light: white on warm near-white glass has no edge of its own, so the group carries one (Geist's material values):
+/* Light: white on warm near-white glass has no edge of its own, so the group carries one (Vercel's design-system material values):
    a 1px ring and a two-layer lift. Separators inside are a step firmer than the ring so rows stay distinct. */
 .fr-stage[data-tone="light"] .fr-group {
   box-shadow:
@@ -1082,7 +1082,7 @@
 .fr-row dt {
   display: block;
   overflow: hidden;
-  font: 500 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 13px/20px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1090,7 +1090,7 @@
 .fr-row small {
   display: block;
   overflow: hidden;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1115,7 +1115,7 @@
 }
 .fr-val {
   margin: 0;
-  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 13px/20px var(--font-ui, Inter, sans-serif);
   font-variant-numeric: tabular-nums;
   color: var(--fr-text-2);
   text-align: right;
@@ -1156,7 +1156,7 @@
 }
 .fr-note {
   margin: 16px 0 0;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-3);
   text-align: center;
   text-wrap: balance;
@@ -1183,6 +1183,10 @@
 .fr-card .fr-link.fr-inline-link {
   padding: 2px 3px;
   margin: -2px 0 -2px -3px;
+}
+/* The link that ends a sentence ("Or use a bookmarks file."): the same word spacing before the full stop as before the link. */
+.fr-card .fr-link.fr-inline-link.fr-inline-link-end {
+  margin-right: -3px;
 }
 /* Import progress lives on the chosen row: a 2px accent bar along its foot. */
 .fr-bar {
@@ -1247,7 +1251,7 @@
   --seg-thumb-rim: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.08);
 }
 .fr-stage .acira-seg button {
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
 }
 /* A sheet is the card's own glass (R3-06: not a flat slab): it has no fill of its own, and the step beneath fades out so
    nothing shows through but the frosted scene. With reduced transparency the card itself is solid, so is the sheet. */
@@ -1293,13 +1297,13 @@
 }
 .fr-sheet-title {
   margin: 0;
-  font: 600 24px/32px var(--font-display, var(--font-ui, Geist, Inter, sans-serif));
+  font: 600 24px/32px var(--font-display, var(--font-ui, Inter, sans-serif));
   letter-spacing: -0.02em;
   color: var(--fr-text);
 }
 .fr-sheet-line {
   margin: 8px 0 24px;
-  font: 400 14px/22px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 14px/22px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   text-align: center;
   text-wrap: balance;
@@ -1325,7 +1329,7 @@
   outline: none;
   background: var(--fr-field);
   color: var(--fr-text);
-  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 13px/20px var(--font-ui, Inter, sans-serif);
 }
 .fr-sheet-input::placeholder {
   color: var(--fr-text-3);
@@ -1368,7 +1372,7 @@
   place-items: center;
   border-radius: 6px;
   background: var(--fr-field);
-  font: 600 11px/1 var(--font-ui, Geist, Inter, sans-serif);
+  font: 600 11px/1 var(--font-ui, Inter, sans-serif);
   color: var(--fr-text);
 }
 .fr-vpn .fr-row[data-state="absent"] svg.fr-vpn-mark {
@@ -1379,7 +1383,7 @@
   padding: 0 12px;
   gap: 4px;
   border-radius: 6px;
-  font: 500 13px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 13px/16px var(--font-ui, Inter, sans-serif);
 }
 .fr-vpn .fr-btn-row svg {
   flex: none;
@@ -1404,7 +1408,7 @@
   margin: 0;
   padding: 12px 16px;
   overflow: auto;
-  font: 400 12px/18px var(--font-mono, "Geist Mono", ui-monospace, Consolas, monospace);
+  font: 400 12px/18px var(--font-mono, ui-monospace, Consolas, monospace);
   color: var(--fr-text-2);
   white-space: pre;
   user-select: text;
@@ -1449,13 +1453,14 @@
   flex: none;
   border-radius: 3px;
   background: var(--fr-skel);
-  /* The breath slows with the speed setting and is gone when motion is Off (its depth goes to 0; a 2.4 ms loop would strobe). */
+  /* The breath slows with the speed setting (never quicker than 2.4s, Fast included) and is gone when motion is Off (its depth
+     goes to 0; a 2.4 ms loop would strobe); any speed above Off breathes the full depth. */
   animation: fr-skel 2.4s ease-in-out infinite;
   animation-duration: calc(2.4s * max(var(--motion-scale, 1), 1));
 }
 @keyframes fr-skel {
   50% {
-    opacity: calc(1 - 0.45 * min(var(--motion-scale, 1), 1));
+    opacity: calc(1 - 0.45 * min(var(--motion-scale, 1) * 100, 1));
   }
 }
 .fr-stage[data-reduced-motion] .fr-skel {
@@ -1601,7 +1606,7 @@
   border-radius: 4px;
   background: rgb(0 0 0 / 0.5);
   color: rgb(255 255 255 / 0.88);
-  font: 500 10px/14px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 10px/14px var(--font-ui, Inter, sans-serif);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   opacity: 0;
@@ -1674,7 +1679,7 @@
   display: grid;
   min-height: 32px;
   margin: 10px 8px 6px;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   text-align: center;
   text-wrap: balance;
@@ -1732,7 +1737,7 @@
   transition:
     opacity calc(160ms * var(--motion-e, var(--motion-scale, 1))) cubic-bezier(0.2, 0, 0, 1),
     transform calc(200ms * var(--motion-scale, 1)) cubic-bezier(0.2, 0, 0, 1),
-    background-color calc(140ms * min(var(--motion-scale, 1), 1)) cubic-bezier(0.45, 0.05, 0.55, 0.95);
+    background-color calc(140ms * var(--motion-l, 1)) cubic-bezier(0.45, 0.05, 0.55, 0.95);
 }
 .fr-cover-more[data-shown] {
   opacity: 1;
@@ -1762,7 +1767,7 @@
   align-items: center;
   gap: 6px;
   width: 96px;
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   cursor: default;
   transition:
@@ -1784,7 +1789,7 @@
   border-radius: 6px;
   background: var(--fr-skel);
   box-shadow: 0 0 0 1px var(--fr-line-2);
-  transition: transform calc(0.14s * min(var(--motion-scale, 1), 1)) var(--fr-ease);
+  transition: transform calc(0.14s * var(--motion-l, 1)) var(--fr-ease);
 }
 /* The selection ring is its own layer 2px outside the thumbnail that only fades (no outline repaint while the row glides, so it
    never flickers); it lifts with the thumbnail on hover, but nothing lifts while the row is moving under a resting pointer. */
@@ -1800,7 +1805,7 @@
   pointer-events: none;
   transition:
     opacity calc(0.12s * var(--motion-e, var(--motion-scale, 1))) var(--fr-ease),
-    transform calc(0.14s * min(var(--motion-scale, 1), 1)) var(--fr-ease);
+    transform calc(0.14s * var(--motion-l, 1)) var(--fr-ease);
 }
 .fr-cover-row:not([data-moving]) .fr-cover-card:hover :is(.fr-cover-thumb, .fr-cover-ring) {
   transform: translateY(-1px);
@@ -1851,7 +1856,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  font-family: var(--font-display, Inter, Geist, sans-serif);
+  font-family: var(--font-display, Inter, sans-serif);
   font-weight: 560;
   letter-spacing: -0.02em;
   transition:
@@ -1878,7 +1883,7 @@
   outline: none;
   background: var(--fr-field);
   color: var(--fr-text);
-  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 13px/20px var(--font-ui, Inter, sans-serif);
   text-align: center;
 }
 .fr-field::placeholder {
@@ -1945,7 +1950,7 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  font: 500 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 13px/20px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
 }
 .fr-look input {
@@ -2086,7 +2091,7 @@
   z-index: 2147482000;
   pointer-events: none;
   color: var(--fr-text);
-  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 13px/20px var(--font-ui, Inter, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
 .fr-yours[data-tone="light"] {
@@ -2098,7 +2103,7 @@
 }
 /* The shared Segmented keeps its own type (12/500, never a weight change on selection); the inherit above would flatten it. */
 .fr-yours .acira-seg button {
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
 }
 .fr-yours-panel {
   position: absolute;
@@ -2130,7 +2135,7 @@
 }
 .fr-yours-panel h2 {
   margin: 0;
-  font: 560 20px/28px var(--font-display, Inter, Geist, sans-serif);
+  font: 560 20px/28px var(--font-display, Inter, sans-serif);
   letter-spacing: -0.02em;
   font-feature-settings: "cv11", "ss03";
   outline: none;
@@ -2155,12 +2160,12 @@
 }
 .fr-yours-hint {
   grid-column: 2;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
 }
 .fr-yours-row > span em {
   display: block;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   font-style: normal;
   color: var(--fr-text-3);
 }
@@ -2317,7 +2322,7 @@
 /* An 11px tag sits on a chosen row's fill, which is lighter in dark: at text-3 it measured 3.7:1 there, at text-2 4.4:1,
    so it takes 90% of the text ink (4.5:1 or better on real pixels at 100% and 150%). */
 .fr-tag {
-  font: 500 11px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 11px/16px var(--font-ui, Inter, sans-serif);
   color: rgb(from var(--fr-text) r g b / 0.9);
   white-space: nowrap;
 }

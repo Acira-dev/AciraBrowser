@@ -234,6 +234,11 @@
   line-height: 16px;
   color: var(--st-muted);
 }
+/* A name another profile already has: one red line under the field, the Initial hint's size. */
+.pm-field .pm-name-taken {
+  font-size: 12px;
+  line-height: 16px;
+}
 .pm-swatches {
   display: flex;
   flex-wrap: wrap;

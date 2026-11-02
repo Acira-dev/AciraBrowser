@@ -36,8 +36,8 @@ const fixtureSha256 = createHash("sha256").update(fixture).digest("hex");
 assert.equal(
   fixtureSha256,
   lastWindow
-    ? "96ae717f629ea15c957e4e194d0c0a85c93136c3c04821d0b811fff11ead597f"
-    : "a932c532c251db2f3edcaebd1a602372a7f2ae8772aa7c944efac1085731d77c",
+    ? "7d54b982e1a7d856f267d0cc567eca86b88b6a92295ee02baa9237674f75b36d"
+    : "d5daf49fb948c4df2c07aa2210c205e534a983b5131a4607a1d36be971af2603",
   "Owner fixture changed; review and recapture before adapting",
 );
 

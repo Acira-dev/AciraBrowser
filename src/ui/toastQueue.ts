@@ -33,3 +33,13 @@ export const toastStackHeight = (rows: number) => rows * toastRowHeight + Math.m
 /** The room the native toast host keeps: it grows with the list in the same render and shrinks only when `kept` (the delayed copy) lets go.
  *  Reading the delayed copy alone left a new toast's first render with no room (a 0×0 host layout that main rejects). */
 export const toastRoom = <T,>(list: T[], kept: T[]): T[] => list.length >= kept.length ? list : kept;
+
+/** Main closes the toast overlay on a resize, a blur, a move, a click in the page and when a popup opens and closes over it, and from then on
+ *  refuses that overlay id and every older one (createOverlayGuard). A host that sat over a website then holds a dead id: its rows are off
+ *  screen for good, so they leave the list too. Left in, an error (it has no timer) kept the dead id for the whole session and no toast
+ *  showed over a website again. In the page (an Acira page) nothing is hosted by main and nothing is lost. */
+export const toastHostRefused = (overWebsite: boolean, hostId: number | undefined, dismissedId: number | undefined) =>
+  overWebsite && hostId !== undefined && dismissedId !== undefined && dismissedId >= hostId;
+
+/** The rows that show exactly `text`: a notice that is only true while something holds (Seamless's first-use tip) leaves with it. */
+export const toastKeysSaying = (list: QueuedToast[], text: string) => list.filter(row => row.text === text).map(row => row.key);

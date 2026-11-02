@@ -86,3 +86,8 @@ test('preload bar: drawn on a detail page, hidden elsewhere, click installs and 
  assert.equal(result.reattached,true,'a page that rebuilds the document does not lose the bar');assert.equal(result.reattachedAfterRemove,true);
  assert.equal(result.startingHidden,true,'while the browser is still starting there is no bar');assert.equal(result.startingThenShown.visible,true,'the bar asks again and appears once extensions are ready');assert.equal(result.startingThenShown.button,'Add to Acira');assert.equal(result.statusCalls,2);
 });
+test('React Developer Tools stays "Tested: does not work": its panels appear only in the P9 rig\'s hosted DevTools, not with Acira\'s Developer Tools command',()=>{
+ const react=compat.lookup('fmkadmapgofadopljbjfkapdkoienihi');assert.equal(react.status,'unsupported');assert.match(react.note,/Components and Profiler panels never appear/);
+ const doc=fs.readFileSync(path.join(__dirname,'..','docs','launch','EXTENSION_COMPATIBILITY.md'),'utf8');
+ assert.doesNotMatch(doc,/React DevTools panels — work/,'the 28 Oct note is corrected');assert.match(doc,/only inside the P9 test rig, not in Acira/);
+});

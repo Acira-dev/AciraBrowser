@@ -215,7 +215,7 @@ async function launchReleaseCleanup(options){
      : `
  const runtime=await releaseRuntime();assert.equal(runtime.qualification.version,${JSON.stringify(identity.electron)});
  (report.releaseProfileInitializations??=[]).push(await releaseInitialize({candidate:releaseProductRoot,data:env.ACIRA_BROWSER_TEST_DATA,executablePath:runtime.executablePath}));
- return releaseElectron.launch({...options,args:[await fs.realpath(path.join(releaseProductRoot,'desktop/main.cjs'))],executablePath:runtime.executablePath,env});
+ return releaseElectron.launch({...options,args:[path.join(releaseProductRoot,'desktop/main.cjs')],executablePath:runtime.executablePath,env});
  `
  }
 }

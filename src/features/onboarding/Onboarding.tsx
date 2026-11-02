@@ -77,7 +77,7 @@ type PanelStep = Exclude<SetupStep, "welcome">;
  * phrase. Every English sentence fits the 440px measure on its own; a longer translated one (over 56 characters, as
  * German and French often are) may wrap inside itself rather than overflow. */
 const nbsp = String.fromCharCode(0xa0),
-  joiner = String.fromCharCode(0x2060); // after a hyphen ("sign-ins"): Geist has no non-breaking hyphen glyph
+  joiner = String.fromCharCode(0x2060); // after a hyphen ("sign-ins"): keeps the phrase together in any face
 const sentences = (...parts: string[]) =>
   parts.map((part) => (part.length > 56 ? part : part.split(" ").join(nbsp).split("-").join("-" + joiner))).join(" ");
 /** One short sentence for the title; the line says what happens, then the reassurance (I's Apple concept). */

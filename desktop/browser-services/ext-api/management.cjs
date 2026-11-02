@@ -70,7 +70,7 @@ module.exports = {
       const options = {
         type: 'warning', title: api.t('ext.removeTitle'),
         message: api.t('ext.removeMessage', {name}),
-        detail: self ? api.t('ext.removeSelfDetail') : api.t('ext.removeByDetail', {caller}),
+        detail: (self ? api.t('ext.removeSelfDetail') : api.t('ext.removeByDetail', {caller})) + '\n\n' + api.t('ext.removeDataDetail'),
         buttons: [api.t('dialog.cancel'), api.t('ext.remove')], defaultId: 0, cancelId: 0
       };
       const parent = api.getWindow && api.getWindow();

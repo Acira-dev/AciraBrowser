@@ -2,13 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Peek</title>
 <style>
 /* Peek frame (bible §3.3 elevation, §4 Morph). A transparent layer under the native page view: it dims the page and draws
    the card the page lands on, with its header (back, reload, title and address, Open in split view, Open as tab, Close).
    The card grows out of the link that was clicked on a spring and shrinks back into it on close; the page view appears on the
    formed card. Light and dark follow the chrome; the primary button takes the app's accent. */
+/* Inter, the browser's one typeface: the same file the interface loads (public/fonts, built into dist/fonts), same features. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
 :root{
  --scrim:rgb(0 0 0/.40);--card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-quiet:rgb(237 237 239/.44);--hover:rgb(255 255 255/.08);--press:rgb(255 255 255/.12);
  --glass:rgb(32 32 35/.74);--line:rgb(255 255 255/.10);--highlight:inset 0 1px 0 rgb(255 255 255/.06);--ring:#6ea8ff;--accent:#3b6eea;--on-accent:#fff;--danger:#f0867d;
@@ -26,7 +29,7 @@ body.light{
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
 #scrim{position:fixed;inset:0;background:var(--scrim);opacity:0}
 /* The card: the surface (hairline ring, soft shadow) the page view sits on. Its header is 44px; the page view starts below it. */
 #card{position:absolute;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--e3);opacity:0;transform-origin:50% 50%}
@@ -34,6 +37,16 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 1
 /* While the page loads: the dot-matrix loader (the app's "Working" lights, a square grid lighting up only) over the site's name. */
 #matrix{width:32px;height:32px;flex:none;color:var(--ink-2)}
 #fill span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A link that failed, or that downloads a file: the card says so where the page would be (what happened, the address, the reason)
+   with what to do next, in the header's own words, inks and buttons. The page view stays hidden meanwhile. */
+#state{display:flex;flex-direction:column;align-items:center;gap:4px;max-width:min(440px,100%)}
+#st-title{font-size:15px;line-height:20px;font-weight:500;color:var(--ink)}
+#fill #st-addr{font-size:12px;line-height:16px;color:var(--ink-2)}
+#fill #st-reason{margin-top:6px;font-size:12.5px;line-height:17px;color:var(--ink-quiet);white-space:normal}
+#fill #st-code{font-size:11.5px;line-height:14px;letter-spacing:.02em;color:var(--ink-quiet)}
+#fill #st-code:empty,#fill #st-reason:empty{display:none}
+#st-actions{display:flex;gap:8px;margin-top:14px}
+body.stated #matrix,body.stated #host{display:none}
 #bar{position:absolute;inset:0 0 auto;height:44px;display:flex;align-items:center;gap:8px;padding:0 8px;container-type:inline-size;opacity:0}
 #bar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
 .group{display:flex;align-items:center;gap:2px;flex:none}
@@ -51,7 +64,7 @@ button.act.primary{background:var(--accent);color:var(--on-accent)}
 button.act.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--on-accent))}
 button.act.primary:active{background:color-mix(in srgb,var(--accent) 80%,var(--on-accent))}
 button.act.primary:focus-visible{outline-color:var(--ink);outline-offset:1px}
-kbd{display:inline-block;padding:0 6px;border-radius:3px;font:500 11px/16px Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;background:color-mix(in srgb,currentColor 18%,transparent);color:inherit;opacity:.82}
+kbd{display:inline-block;padding:0 6px;border-radius:3px;font:500 11px/16px Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;background:color-mix(in srgb,currentColor 18%,transparent);color:inherit;opacity:.82}
 svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 #id{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 6px}
 #ttl{font-size:13px;line-height:16px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -62,7 +75,7 @@ svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:
 #addr em:empty{display:none}
 #copy .done{color:var(--accent)}
 /* Loading: a hairline sweeps under the header (transform only); still and quiet with reduced motion. */
-#load{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;opacity:0;transition:opacity 160ms var(--out);pointer-events:none}
+#load{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;opacity:0;transition:opacity calc(160ms * var(--pace, 1)) var(--out);pointer-events:none}
 #load::before{content:'';position:absolute;inset:0 auto 0 0;width:34%;background:var(--accent);animation:sweep 1.15s cubic-bezier(.4,0,.2,1) infinite}
 body.loading #load{opacity:1}
 body.reduced #load::before{width:100%;opacity:.4;animation:none}
@@ -70,7 +83,7 @@ body.reduced #load::before{width:100%;opacity:.4;animation:none}
 @container (max-width:760px){#split>span{display:none}#split{width:28px;padding:0;justify-content:center}}
 @container (max-width:520px){#tab>span,#tab>kbd{display:none}#tab{width:28px;padding:0;justify-content:center}}
 #notice{position:absolute;max-width:420px;padding:9px 14px;border-radius:6px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
- box-shadow:0 0 0 1px var(--line),var(--e2);color:var(--ink);opacity:0;transform:translateY(4px);transition:opacity 220ms var(--strong),transform 220ms var(--strong);pointer-events:none}
+ box-shadow:0 0 0 1px var(--line),var(--e2);color:var(--ink);opacity:0;transform:translateY(4px);transition:opacity calc(220ms * var(--pace, 1)) var(--strong),transform calc(220ms * var(--pace, 1)) var(--strong);pointer-events:none}
 #notice.show{opacity:1;transform:none}
 body.formed #scrim,body.formed #card,body.formed #bar{opacity:1}
 body.gone #scrim,body.gone #card,body.gone #bar,body.gone #notice{opacity:0}
@@ -80,7 +93,10 @@ body.gone #scrim,body.gone #card,body.gone #bar,body.gone #notice{opacity:0}
 <body>
 <div id="scrim"></div>
 <div id="card" role="dialog" aria-modal="false">
- <div id="fill"><canvas id="matrix" aria-hidden="true"></canvas><span id="host"></span></div>
+ <div id="fill"><canvas id="matrix" aria-hidden="true"></canvas><span id="host"></span>
+  <div id="state" role="status" hidden><strong id="st-title"></strong><span id="st-addr"></span><span id="st-reason"></span><span id="st-code"></span>
+   <div id="st-actions"><button id="retry" class="act ghost" type="button" hidden></button><button id="dl" class="act primary" type="button" hidden></button><button id="dl-tab" class="act ghost" type="button" hidden></button></div></div>
+ </div>
  <div id="bar" role="toolbar">
   <div class="group">
    <button id="back" class="icon" type="button"><svg viewBox="0 0 16 16"><path d="M13 8H3.5M7.5 3.75 3.25 8l4.25 4.25"/></svg></button>
@@ -118,7 +134,7 @@ const springEasing=(spec,scale=1,velocity=0)=>{
  return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
 };
 const TOKENS={'popover.grow':['S',.210,0],'menu.content':['E',.130,0],'materialize':['E',.170,0]};
-const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:.6,E:.6,L:1}},KICK={fast:.15,premium:.4};
 const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
 //#endspring
 const APERTURE_END='inset(-128px -128px -128px -128px round 8px)';
@@ -153,6 +169,9 @@ $('reload').addEventListener('click',()=>peekFrame.command(body.classList.contai
 $('split').addEventListener('click',()=>peekFrame.command('split'));
 $('tab').addEventListener('click',()=>peekFrame.command('tab'));
 $('copy').addEventListener('click',()=>peekFrame.command('copy'));
+$('retry').addEventListener('click',()=>peekFrame.command('retry'));
+$('dl').addEventListener('click',()=>peekFrame.command('download'));
+$('dl-tab').addEventListener('click',()=>peekFrame.command('tab'));
 
 function enter(state){
  started=true;
@@ -164,7 +183,7 @@ function enter(state){
  play($('scrim'),[{opacity:0},{opacity:1}],tokenSpring('materialize',speed));
  card.style.transformOrigin=originAt(state.link,g);
  const aperture=play(card,[{clipPath:apertureAt(state.link,g),transform:'scale(.94)'},{clipPath:APERTURE_END,transform:'none'}],grow,{opening:true});
- const content=speed==='premium'?50:30,rise=speed==='premium'?4:3;
+ const content=speed==='premium'?50:30*SCALES[speed].S,rise=speed==='premium'?4:3;
  play($('bar'),[{opacity:0,transform:`translateY(${rise}px)`},{opacity:1,transform:'none'}],tokenSpring('menu.content',speed),{delay:content});
  // The page view appears once the card is ~95% open, on a card that is already there.
  setTimeout(()=>{if(!leaving)peekFrame.command('entered');},Math.round(timeTo(grow,velocity,.95)));
@@ -191,7 +210,7 @@ const parts=url=>{try{const u=new URL(url);return {host:u.host.replace(/^www\./,
 peekFrame.onState(state=>{
  body.classList.toggle('light',state.dark===false);body.classList.toggle('reduced',!!state.reducedMotion||state.speed==='off');
  if(state.accent){root.style.setProperty('--accent',state.accent);const n=parseInt(state.accent.slice(1),16),lum=(.2126*(n>>16&255)+.7152*(n>>8&255)+.0722*(n&255))/255;root.style.setProperty('--on-accent',lum>.62?'#111214':'#ffffff');}
- speed=state.speed==='fast'?'fast':state.speed==='off'?'off':'premium';
+ speed=state.speed==='fast'?'fast':state.speed==='off'?'off':'premium';root.style.setProperty('--pace',String(speed==='fast'?SCALES.fast.S:1));
  if(state.leaving){leave({...latest,...state});return;}
  latest=state;const g=state.geometry;
  if(g){Object.assign(card.style,{left:g.card.x+'px',top:g.card.y+'px',width:g.card.width+'px',height:g.card.height+'px'});Object.assign($('notice').style,{left:(g.card.x+g.card.width/2)+'px',top:Math.max(8,g.card.y-48)+'px',translate:'-50% 0'});}
@@ -204,10 +223,15 @@ peekFrame.onState(state=>{
  $('back').disabled=!state.canGoBack;$('reload-glyph').hidden=loading;$('stop-glyph').hidden=!loading;
  $('split').querySelector('span').textContent=name.split;$('tab').querySelector('span').textContent=name.tab;$('tab').querySelector('kbd').textContent=keys.tab||'';
  $('notice').textContent=state.notice||'';$('notice').classList.toggle('show',!!state.notice);
- revealed=!!state.revealed;if(revealed&&matrixFrame){cancelAnimationFrame(matrixFrame);matrixFrame=0;}else if(!revealed&&g)runMatrix();
+ const fail=state.failure,file=state.download,stated=Boolean(fail||file);body.classList.toggle('stated',stated);$('state').hidden=!stated;
+ if(stated){$('st-title').textContent=fail?fail.title||'':labels.downloadTitle||'';$('st-addr').textContent=fail?fail.url||state.url||'':file.name||file.url||'';
+  $('st-reason').textContent=fail?fail.message||'':file.name?file.url||'':'';$('st-code').textContent=fail&&fail.code!==fail.message?fail.code||'':'';
+  $('retry').hidden=!fail;$('retry').textContent=labels.tryAgain||'';$('dl').hidden=!file;$('dl').textContent=labels.download||'';$('dl-tab').hidden=!file;$('dl-tab').textContent=labels.openAsTab||'';}
+ revealed=!!state.revealed;if((revealed||stated)&&matrixFrame){cancelAnimationFrame(matrixFrame);matrixFrame=0;}else if(!revealed&&!stated&&g)runMatrix();
  if(!started&&g)requestAnimationFrame(()=>{if(!started&&!leaving)enter(latest);});
 });
-peekFrame.command('ready');
+// Ready once Inter is in, so the first card is drawn in it.
+document.fonts.load('400 13px Inter').catch(()=>{}).finally(()=>peekFrame.command('ready'));
 </script>
 </body>
 </html>

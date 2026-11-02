@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,9 +23,12 @@ test('R4-22 a click anywhere outside a popup and its trigger dismisses it (tabs 
 
 test('R4-22 a press on the window frame (drag area, caption buttons) closes the open menu in main, guarded for Windows', () => {
   const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(main, /mainWindow\.on\('will-move',\(\)=>\{if\(!dialogDepth\)closeOverlay\(false\);\}\)/);
+  // Since 2 Nov these spare the toast stack only (tests/toast-window-change.test.cjs): an open menu or popup still closes.
+  assert.match(main, /mainWindow\.on\('will-move',\(\)=>\{if\(!dialogDepth&&closesOnWindowChange\(layout\.overlay\)\)closeOverlay\(false\);\}\)/);
   assert.match(main, /process\.platform==='win32'&&typeof mainWindow\.hookWindowMessage==='function'\)for\(const message of \[0x00A1,0x00A4,0x00A7\]\)/);
-  assert.match(main, /for\(const event of \['blur','minimize','hide'\]\)mainWindow\.on\(event,\(\)=>\{if\(!dialogDepth\)closeOverlay\(false\);\}\)/);
+  assert.match(main, /for\(const event of \['blur','minimize','hide'\]\)mainWindow\.on\(event,\(\)=>\{[^}]*if\(!dialogDepth&&closesOnWindowChange\(layout\.overlay\)\)closeOverlay\(false\);\}\)/);
+  const { closesOnWindowChange } = createRequire(import.meta.url)('../desktop/native-policy.cjs');
+  for (const kind of ['menu', 'more-tools', 'toolbar-context', 'tabs', 'profile']) assert.equal(closesOnWindowChange({ id: 3, kind }), true, `${kind} still closes`);
 });
 
 // Layout previews are distinct from leaving the tab that owns a menu.

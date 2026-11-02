@@ -136,7 +136,7 @@ test('uninstall of another extension is always confirmed; Cancel is the default;
   assert.deepEqual(parent, {id: 1});
   assert.deepEqual([options.type, options.buttons, options.defaultId, options.cancelId], ['warning', ['dialog.cancel', 'ext.remove'], 0, 0]);
   assert.equal(options.message, 'ext.removeMessage {"name":"Other"}');
-  assert.equal(options.detail, 'ext.removeByDetail {"caller":"Caller"}');
+  assert.equal(options.detail, 'ext.removeByDetail {"caller":"Caller"}\n\next.removeDataDetail', 'and that its data goes with it');
   const accepted = setup({answer: 1});
   assert.equal(await accepted.call(accepted.caller, 'management.uninstall', OTHER), undefined);
   assert.deepEqual(accepted.commands, [{type: 'remove', extensionId: OTHER}]);
@@ -155,7 +155,7 @@ test('uninstallSelf: no dialog unless showConfirmDialog; removal happens after t
   const asked = setup({answer: 1});
   assert.equal(await asked.call(asked.other, 'management.uninstallSelf', {showConfirmDialog: true}), undefined);
   assert.equal(asked.shown.length, 1);
-  assert.equal(asked.shown[0][1].detail, 'ext.removeSelfDetail');
+  assert.equal(asked.shown[0][1].detail, 'ext.removeSelfDetail\n\next.removeDataDetail');
   await wait(120);
   assert.deepEqual(asked.commands, [{type: 'remove', extensionId: OTHER}]);
 

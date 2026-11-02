@@ -14,7 +14,7 @@ const shortAddress=(url:string,fallback:string)=>{try{const parsed=new URL(url);
 /** Stagger for the arrival reveal, in milliseconds. */
 const delay=(ms:number)=>({'--ne-d':`${ms}ms`}) as CSSProperties;
 
-export function NavigationError({tab,onEditAddress,reducedMotion=false}:{tab:TabSession;onNavigate?:(url:string)=>void;onEditAddress?:()=>void;reducedMotion?:boolean}){
+export function NavigationError({tab,onEditAddress,onReport,reducedMotion=false}:{tab:TabSession;onNavigate?:(url:string)=>void;onEditAddress?:()=>void;onReport?:()=>void;reducedMotion?:boolean}){
  const t=useT();
  const destination=describeDestination(tab.url),crashed=/^The page stopped responding/.test(tab.error||''),failure=crashed?{...navigationFailure('',destination),code:'RENDERER_GONE',title:t('error.crashTitle'),message:t('error.crashMessage'),kind:'other' as FailureKind,detail:undefined,steps:[],retryable:true}:navigationFailure(tab.error||'',destination),id=useId(),certificateError=failure.kind==='certificate';
  const [certificate,setCertificate]=useState<CertificateStatus>(),[busy,setBusy]=useState(false),[problem,setProblem]=useState(''),[,tick]=useState(0),primary=useRef<HTMLButtonElement>(null),reloaded=useRef(false),[copied,setCopied]=useState(false),[trying,setTrying]=useState(false),[armed,setArmed]=useState(false),seenAt=useRef(new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'})).current;
@@ -68,7 +68,7 @@ export function NavigationError({tab,onEditAddress,reducedMotion=false}:{tab:Tab
   {failure.kind==='offline'&&<OfflineGame reducedMotion={reducedMotion}/>}
   {(failure.detail||failure.steps.length>0||threat)&&<details className="ne-details">
    <summary><span>{t('error.moreInfo')}</span></summary>
-   {threat&&<><p className="ne-detail">{threat.detail}</p><p className="ne-detail">{t('error.threat.source',{list:threat.list})}</p></>}
+   {threat&&<><p className="ne-detail">{threat.detail}</p><p className="ne-detail">{t('error.threat.source',{list:threat.list})}</p>{/* "Report a problem with this site" on Page information, already set to "Blocked by mistake" (SiteReport.tsx) */onReport&&<p className="ne-detail"><button type="button" className="ne-link" onClick={onReport}>{t('report.safeLink')}</button></p>}</>}
    {failure.detail&&<p className="ne-detail">{failure.detail}</p>}
    {certificate?.failure&&!certificate.failure.canContinue&&<p className="ne-detail">{certificate.failure.reason}</p>}
    {failure.steps.length>0&&!threat&&<><p className="ne-try">{t('error.whatYouCanDo')}</p><ul>{failure.steps.map(step=><li key={step}>{step}</li>)}</ul></>}

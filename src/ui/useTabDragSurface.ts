@@ -42,7 +42,7 @@ export function carryChip(row:HTMLElement,iconSelector:string,{only}:{/** The ta
  };
 }
 
-interface Surface{node:HTMLElement;held:boolean;quiet:number;bg?:string;preview?:HTMLElement;chip:{p:number;target:0|1;stop?:()=>void};pointer?:{x:number;y:number};padding?:[number,number];liquid?:Liquid}
+interface Surface{node:HTMLElement;held:boolean;/** A sideways reorder (ui/tabDragAxis): the tab is drawn on its row's height whatever the pointer's. */row?:boolean;quiet:number;bg?:string;preview?:HTMLElement;chip:{p:number;target:0|1;stop?:()=>void};pointer?:{x:number;y:number};padding?:[number,number];liquid?:Liquid}
 /** Keep a dragged tab opaque until its return and neighboring layout have settled. */
 export function useTabDragSurface(track:RefObject<HTMLDivElement|null>){
  const surfaces=useRef(new Map<string,Surface>());
@@ -62,7 +62,7 @@ export function useTabDragSurface(track:RefObject<HTMLDivElement|null>){
      const p=Math.min(1,surface.chip.p),pointer=surface.pointer,width=lerp(box.width,CARRIED_SIZE,p),height=lerp(box.height,CARRIED_SIZE,p);
      // As a chip it also leans into a drop target it nears (liquid snap, R3-80), scaled by how much of a chip it is.
      const lean=surface.liquid?.offset()??{x:0,y:0};
-     const left=pointer&&p>0?lerp(box.left,pointer.x+lean.x-width/2,p):box.left,top=pointer&&p>0?lerp(box.top,pointer.y+lean.y-height/2,p):box.top;
+     const natural=surface.row?origin.top+node.offsetTop:box.top,left=pointer&&p>0?lerp(box.left,pointer.x+lean.x-width/2,p):box.left,top=pointer&&p>0?lerp(natural,pointer.y+lean.y-height/2,p):natural;
      const style=surface.preview.style;
      style.transform=`translate3d(${left}px,${top}px,0)`;style.width=`${width}px`;style.height=`${height}px`;
      style.setProperty('--chip-p',String(p));
@@ -100,6 +100,8 @@ export function useTabDragSurface(track:RefObject<HTMLDivElement|null>){
   surfaces.current.set(id,{node,held:false,quiet:0,chip:{p:0,target:0}});node.setAttribute('data-drag-surface','layout');
   if(!following.current){following.current=true;frame.postRender(follow,true);}
  },[track,follow]);
+ /** The drag is a sideways reorder: the tab keeps to its row for the rest of the drag and its settling (the vertical wobble of the hand is not drawn). */
+ const pin=useCallback((id:string)=>{const surface=surfaces.current.get(id);if(surface)surface.row=true;},[]);
  /** Where the pointer is and whether the tab is out of the strip: the pill morphs to the icon chip (or back), retargeting from where it is. */
  const carry=useCallback((id:string,point:{x:number;y:number},stripBottom:number,enabled=true)=>{
   const surface=surfaces.current.get(id);if(!surface?.preview)return;
@@ -123,5 +125,5 @@ export function useTabDragSurface(track:RefObject<HTMLDivElement|null>){
   if(surface.chip.target!==0||surface.chip.p>0)carry(id,surface.pointer??{x:0,y:0},0,false);
  },[carry]);
  useLayoutEffect(()=>()=>{cancelFrame(follow);for(const surface of surfaces.current.values()){removePreview(surface);surface.node.removeAttribute('data-drag-surface');}surfaces.current.clear();following.current=false;},[follow]);
- return {start,end,project,carry};
+ return {start,end,project,carry,pin};
 }

@@ -9,7 +9,7 @@
 .menu-customize-row .menu-customize-switch{opacity:.7}
 .menu-customize-row .menu-customize-switch:not(:disabled):hover{opacity:1}
 .menu-customize-previews{display:flex;flex-direction:column;gap:10px;position:sticky;top:8px}
-.menu-preview{display:flex;flex-direction:column;padding:6px 4px 6px;border-radius:8px;background:var(--sheet,transparent);box-shadow:0 0 0 1px var(--line),0 1px 2px rgb(0 0 0 / .05);transition:height .2s}
+.menu-preview{display:flex;flex-direction:column;padding:6px 4px 6px;border-radius:8px;background:var(--sheet,transparent);box-shadow:0 0 0 1px var(--line),0 1px 2px rgb(0 0 0 / .05);transition:height calc(.2s * var(--motion-pace, 1))}
 .menu-preview-title{margin:0 0 4px;padding:0 8px;font:500 11px/16px var(--font-ui);color:var(--muted)}
 .menu-preview-group{display:flex;flex-direction:column;margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .menu-preview-group[data-first]{margin-top:0;padding-top:0;border-top:0}
@@ -19,3 +19,8 @@
 @keyframes menu-preview-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 .app[data-reduced-motion=true] .menu-preview-row,.app[data-reduced-motion=true] .menu-preview{animation:none;transition:none}
 .toolbar-customize-reset:disabled{opacity:.45;cursor:default}
+/* A long name (Arabic, Russian…) takes a second line instead of an ellipsis: the row grows only where its name is long, and a name
+   that still does not fit ends in "…" on its second line. One-line rows keep their 34px (26px of content and 4px above and below). */
+.menu-customize-row{height:auto;min-height:34px;padding-top:4px;padding-bottom:4px}
+.menu-customize-row .toolbar-customize-check{height:auto;min-height:26px}
+.menu-customize-row .toolbar-customize-check>span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;white-space:normal;overflow-wrap:anywhere;line-height:17px}

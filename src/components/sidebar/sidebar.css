@@ -400,14 +400,14 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
    page card resized every frame and the site reflowed every frame. Now the layout changes once, inside A's layout view
    transition (sharedMotion, started on the input frame by client.ts): the sidebar slides in from the window's edge (or
    out to it) and the toolbar glides, on the tab strip's spring, while main glides the native page the same way and
-   resizes it once (App: layout pageMotion 'slide'). */
+   resizes it once (App: layout pageMotion 'slide'). 480ms at Premium, 288 in Fast (--motion-pace), all of them together. */
 :root .app.style-acira:not(.native-layer){transition:none}
 :root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-expanded{view-transition-name:acira-sidebar}
 :root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.browser-toolbar.acira-persistent-toolbar{view-transition-name:acira-toolbar}
 :root[data-mode-switch=layout]::view-transition-group(acira-sidebar),
-:root[data-mode-switch=layout]::view-transition-group(acira-toolbar){animation-duration:480ms;animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
-:root[data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-slide-in}
-:root[data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-slide-out}
+:root[data-mode-switch=layout]::view-transition-group(acira-toolbar){animation-duration:calc(480ms * var(--motion-pace, 1));animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+:root[data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-slide-in}
+:root[data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-slide-out}
 :root[data-mode-switch=layout]::view-transition-old(acira-toolbar),
 :root[data-mode-switch=layout]::view-transition-new(acira-toolbar){width:auto;height:100%;object-fit:none;object-position:left center}
 /* The toolbar lays out once, like the page: its new layout glides from the old place; no crossfade of two address
@@ -426,7 +426,7 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
 :root[data-mode-switch=layout]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.browser-root .browser-body>.page-area>.page-content.split-pages{view-transition-name:acira-page-split}
 :root[data-mode-switch=layout]::view-transition-group(acira-page),
 :root[data-mode-switch=layout]::view-transition-group(acira-page-split),
-:root[data-mode-switch=layout]::view-transition-group(acira-page-content){animation-duration:480ms;animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+:root[data-mode-switch=layout]::view-transition-group(acira-page-content){animation-duration:calc(480ms * var(--motion-pace, 1));animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
 /* The card's two states crossfade as it moves (the docked sidebar's outline fades out with it), always the card's own height. */
 :root[data-mode-switch=layout]::view-transition-old(acira-page),
 :root[data-mode-switch=layout]::view-transition-new(acira-page){height:100%}

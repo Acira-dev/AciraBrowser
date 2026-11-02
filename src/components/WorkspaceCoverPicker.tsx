@@ -7,7 +7,7 @@ import {runtime} from '../runtime/client';
 import type {PersonalArtwork} from '../runtime/connectedServices';
 import {artworkCollectionChoice,artworkCollectionOptions,coverView,personalCovers,showMyArtworks,type ArtworkCollection,type CoverView} from '../ui/artworkCollections';
 import {useRemoteArtwork} from '../ui/useRemoteArtwork';
-import {t} from '../i18n';
+import {t,translateText} from '../i18n';
 import {DotMatrix} from './DotMatrix';
 import './WorkspaceCoverPicker.css';
 
@@ -23,6 +23,8 @@ export function WorkspaceCoverPicker({profileId,privateMode=false,compact=false,
  const mine=personalCovers(assets),listed=showMyArtworks(assets.length,prefs.artwork,privateMode),[browsingMine,setBrowsingMine]=useState(false),view:CoverView=coverView(prefs.collection,prefs.artwork,browsingMine,listed);
  const options:{value:CoverView;label:string}[]=[...artworkCollectionOptions().filter(item=>!privateMode||item.value==='built-in'),...(listed?[{value:'personal' as const,label:t('ntp.personal')}]:[])];
  const choices:CatalogArtwork[]=view==='personal'?mine:workspaceCovers;
+ // Acira's own covers have names in the catalog; paintings keep their museum titles and personal images their file names.
+ const coverName=(cover:CatalogArtwork)=>view==='personal'?cover.name:translateText(cover.name);
  const choose=(value:CoverView)=>{
   if(value==='personal'){setBrowsingMine(true);if(!prefs.artwork.startsWith('personal:')&&mine[0])setImage(mine[0].id);return;}
   setBrowsingMine(false);update({...artworkCollectionChoice(value,prefs.artwork),modules:{...prefs.modules,artwork:true}});
@@ -39,15 +41,15 @@ export function WorkspaceCoverPicker({profileId,privateMode=false,compact=false,
  };
  return <div className={`workspace-cover-picker${compact?' is-compact':''}`}>
   <label className="workspace-cover-collection"><span>{t('ntp.collection')}</span><select aria-label={t('ntp.collection')} value={view} onChange={event=>choose(event.target.value as CoverView)}>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-  {showVisibility&&<label className="workspace-cover-visibility"><span>Show workspace cover</span><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/></label>}
-  {view==='built-in'||view==='personal'?<div className="workspace-cover-grid" role="radiogroup" aria-label="Workspace cover" onKeyDown={keyboard}>
-   {choices.map((cover,index)=><button key={cover.id} type="button" role="radio" aria-checked={selected.id===cover.id} aria-label={`${cover.name} workspace cover`} tabIndex={(choices.some(item=>item.id===selected.id)?selected.id===cover.id:index===0)?0:-1} onClick={()=>setImage(cover.id)}>
-    <CoverThumbnail src={cover.src} position={cover.objectPosition||cover.position} selected={selected.id===cover.id} eager={index<12}/><span>{cover.name}</span>
+  {showVisibility&&<label className="workspace-cover-visibility"><span>{t('local.showWorkspaceCover')}</span><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/></label>}
+  {view==='built-in'||view==='personal'?<div className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={keyboard}>
+   {choices.map((cover,index)=><button key={cover.id} type="button" role="radio" aria-checked={selected.id===cover.id} aria-label={t('local.namedWorkspaceCover', { name: coverName(cover) })} tabIndex={(choices.some(item=>item.id===selected.id)?selected.id===cover.id:index===0)?0:-1} onClick={()=>setImage(cover.id)}>
+    <CoverThumbnail src={cover.src} position={cover.objectPosition||cover.position} selected={selected.id===cover.id} eager={index<12}/><span>{coverName(cover)}</span>
    </button>)}
-  </div>:<div className="workspace-cover-grid" role="radiogroup" aria-label="Workspace cover" onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]:not(:disabled)')];if(!buttons.length)return;event.preventDefault();const at=buttons.indexOf(document.activeElement as HTMLButtonElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(at+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+buttons.length)%buttons.length;buttons[next]?.focus();buttons[next]?.click();}}>
+  </div>:<div className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]:not(:disabled)')];if(!buttons.length)return;event.preventDefault();const at=buttons.indexOf(document.activeElement as HTMLButtonElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(at+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+buttons.length)%buttons.length;buttons[next]?.focus();buttons[next]?.click();}}>
    {Array.from({length:6},(_,index)=>{const seed=`cover-${gallery}-${index}`;return <RemoteCover key={prefs.collection+seed} collection={prefs.collection} seed={seed} profileId={profileId} selected={prefs.collectionSeed===seed} enabled={!privateMode} onChoose={()=>update({collectionSeed:seed,collectionExcludeId:'',daily:false,perTab:false,hourly:false,modules:{...prefs.modules,artwork:true}})}/>;})}
   </div>}
-  {prefs.artwork.startsWith('personal:')&&!assets.some(item=>'personal:'+item.id===prefs.artwork)&&<p className="workspace-cover-notice" role="status">{pending?'Loading your personal image…':'This personal image is unavailable. Choose another cover or add it again in Settings.'}</p>}
+  {prefs.artwork.startsWith('personal:')&&!assets.some(item=>'personal:'+item.id===prefs.artwork)&&<p className="workspace-cover-notice" role="status">{pending?t('local.personalCoverLoading'):t('local.personalCoverMissing')}</p>}
   {personalAssets===undefined&&personal.error&&<p className="workspace-cover-notice" role="alert">{personal.error}</p>}
  </div>;
 }

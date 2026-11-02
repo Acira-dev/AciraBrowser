@@ -83,6 +83,26 @@ function routeWindowOpen(details, {link = false, privateTab = false, tor = false
 }
 
 /**
+ * The size and place of a pop-up window from its feature string, as Chrome opens it: width and height are the page's own area
+ * (useContentSize), at least 100 (Chromium's floor) and no larger than the screen; left and top are kept on that screen. A request
+ * with no size gets the default window size. workArea is the work area of the opener's display.
+ */
+function popupBounds(features, workArea, fallback = {width: 640, height: 760}, frame = {width: 0, height: 28}) {
+  const map = tokenizeFeatures(features);
+  const number = name => { const match = /^\s*([+-]?\d+)/.exec(map.get(name) ?? ''); return match ? Number(match[1]) : null; };
+  const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+  const area = workArea && workArea.width > 0 && workArea.height > 0 ? workArea : null;
+  const maxWidth = area ? Math.max(100, area.width - frame.width) : Infinity, maxHeight = area ? Math.max(100, area.height - frame.height) : Infinity;
+  const askedWidth = number('width'), askedHeight = number('height');
+  const width = Math.round(clamp(askedWidth ?? fallback.width, 100, maxWidth)), height = Math.round(clamp(askedHeight ?? fallback.height, 100, maxHeight));
+  const bounds = {width, height, useContentSize: askedWidth !== null || askedHeight !== null};
+  const left = number('left'), top = number('top');
+  if (area && left !== null) bounds.x = Math.round(clamp(left, area.x, area.x + area.width - width - frame.width));
+  if (area && top !== null) bounds.y = Math.round(clamp(top, area.y, area.y + area.height - height - frame.height));
+  return bounds;
+}
+
+/**
  * Views made for a window.open() that becomes a tab, kept until that tab's page is built: createWindow hands the view to Chromium (which
  * links it to its opener and starts the navigation), and the tab's page adopts it instead of making a second one.
  */
@@ -110,4 +130,4 @@ function createOpenedViews() {
   };
 }
 
-module.exports = {tokenizeFeatures, readFeatures, decideWindowOpen, routeWindowOpen, createOpenedViews};
+module.exports = {tokenizeFeatures, readFeatures, decideWindowOpen, routeWindowOpen, createOpenedViews, popupBounds};

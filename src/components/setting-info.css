@@ -12,7 +12,7 @@
 .setting-info-button:focus-visible { outline:2px solid var(--focus-ring-color,var(--focus-ring));outline-offset:1px; }
 /* The usage-off acknowledgment is a toast (R3-20): the same card as transient.css's .t-toast — popover surface, rim, the toast
    shadow, 16px icon column, 13/450 text, one 24px × — only placed in the window's corner, away from the setup card. */
-.usage-off-notice { position:fixed;inset:auto;right:16px;bottom:16px;margin:0;z-index:100100;box-sizing:border-box;align-items:center;gap:8px;width:min(360px,calc(100vw - 32px));padding:10px 8px 10px 12px;border:0;border-radius:8px;background:var(--t-surface,rgb(var(--overlay-rgb)/1));color:var(--text-1,var(--text-primary));box-shadow:var(--menu-rim,0 0 0 1px rgb(0 0 0/.08)),var(--t-shadow,var(--shadow-popover));font:450 13px/18px var(--font-ui);letter-spacing:0; }
+.usage-off-notice { position:fixed;inset:auto;right:16px;bottom:16px;margin:0;z-index:100100;box-sizing:border-box;align-items:center;gap:8px;width:min(360px,calc(100 * var(--pz-vw,1vw) - 32px));padding:10px 8px 10px 12px;border:0;border-radius:8px;background:var(--t-surface,rgb(var(--overlay-rgb)/1));color:var(--text-1,var(--text-primary));box-shadow:var(--menu-rim,0 0 0 1px rgb(0 0 0/.08)),var(--t-shadow,var(--shadow-popover));font:450 13px/18px var(--font-ui);letter-spacing:0; }
 .usage-off-notice:popover-open { display:flex; }
 .usage-off-notice p { flex:1;min-width:0;margin:0; }
 .usage-off-glyph { flex:none;color:var(--text-2,var(--text-secondary)); }

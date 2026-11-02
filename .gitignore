@@ -4,6 +4,7 @@ dist/
 desktop/runtime.cjs
 desktop/i18n.cjs
 desktop/ui-preload.cjs
+desktop/browser-services/autoconsent-preload.cjs
 .profile/
 .preview-profile/
 .qa-profiles/

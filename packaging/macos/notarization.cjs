@@ -25,4 +25,13 @@ async function notarizeBundle({bundle,work,policy,run=execute}){
  const receipt=await notarize({artifact:archive,policy,run});
  return {...receipt,...await stapleAndAssess({artifact:bundle,run})};
 }
-module.exports={notarizationPolicy,notarize,stapleAndAssess,notarizeBundle};
+// The build files inside a bundle (ACIRA-BUILD.json, ACIRA-INSTALLER-BUILD.json) are sealed by the signature before Apple sees the bundle, and
+// rewriting one afterwards would break the signature and the stapled ticket. So the sealed file says only what is known when it is sealed:
+// whether the packager sends the bundle to Apple. What Apple and the tools then reported is recorded beside the bundle, in the build receipt.
+const sealedNotarization=policy=>policy?.enabled?'requested':'none';
+/** The outcome for the receipt, from notarizeBundle's real result (Apple's verdict, stapler validate, Gatekeeper), never from what was intended. */
+function notarizationOutcome(submission){
+ const accepted=submission?.status==='Accepted';
+ return {notarized:accepted,stapled:accepted&&submission.stapled===true,gatekeeperAccepted:accepted&&submission.gatekeeperAccepted===true};
+}
+module.exports={notarizationPolicy,notarize,stapleAndAssess,notarizeBundle,sealedNotarization,notarizationOutcome};

@@ -58,7 +58,7 @@ test('the animation-speed setting: Premium by default, Fast, and Off which reduc
   assert.equal(animationSpeedOf({ animationSpeed: 'fast', reducedMotion: true }), 'off');
   assert.equal(animationSpeedOf({ animationSpeed: 'premium', reducedMotion: true }), 'off');
   assert.equal(animationSpeedOf({ animationSpeed: 'nonsense' }), 'premium');
-  assert.deepEqual([motionScaleOf({}), motionScaleOf({ animationSpeed: 'fast' }), motionScaleOf({ reducedMotion: true })], [1.7, 1, 0]);
+  assert.deepEqual([motionScaleOf({}), motionScaleOf({ animationSpeed: 'fast' }), motionScaleOf({ reducedMotion: true })], [1.7, .6, 0]);
 });
 
 test('response and damping ratio map to duration and bounce; exits are critically damped and shorter', () => {
@@ -81,9 +81,9 @@ test('a spring in flight reports where it is and retargets with its velocity', (
   assert.ok(flight.done(2000) && !flight.done(100));
 });
 
-test('motion tokens reproduce the research tables: Fast d, Premium S ×1.7 / E ×1.4 / L ×1 rounded to 5 ms, Off none', () => {
+test('motion tokens reproduce the research tables: base d, Premium S ×1.7 / E ×1.4 / L ×1 and Fast S, E ×.6 / L ×1 rounded to 5 ms, Off none', () => {
   const ms = (id: Parameters<typeof springFor>[0], speed: 'fast' | 'premium') => Math.round(springFor(id, speed)!.duration * 1000);
-  assert.deepEqual(['menu.grow', 'menu.content', 'menu.shrink', 'menu.fade', 'popover.grow', 'toast.in', 'toast.out', 'toast.stack', 'island.expand', 'island.content', 'reorder.move', 'materialize'].map(id => ms(id as any, 'fast')), [170, 130, 115, 85, 210, 310, 150, 225, 295, 150, 150, 170]);
+  assert.deepEqual(['menu.grow', 'menu.content', 'menu.shrink', 'menu.fade', 'popover.grow', 'toast.in', 'toast.out', 'toast.stack', 'island.expand', 'island.content', 'reorder.move', 'materialize'].map(id => ms(id as any, 'fast')), [100, 80, 70, 50, 125, 185, 90, 135, 175, 90, 90, 100]);
   assert.deepEqual(['menu.grow', 'menu.content', 'menu.shrink', 'menu.fade', 'popover.grow', 'toast.in', 'toast.out', 'toast.stack', 'island.expand', 'island.content', 'reorder.move', 'materialize'].map(id => ms(id as any, 'premium')), [290, 180, 195, 120, 355, 525, 255, 385, 500, 210, 255, 240]);
   for (const id of ['drag.follow', 'press.down', 'press.up', 'hover.lift'] as const) assert.equal(ms(id, 'premium'), ms(id, 'fast'), `${id} (L) is never slowed`);
   assert.equal(springFor('menu.grow', 'off'), null);

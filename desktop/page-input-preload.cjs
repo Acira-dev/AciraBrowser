@@ -1,6 +1,6 @@
 const {ipcRenderer}=require('electron');
-// No API is exposed to websites. Only trusted link-preview gestures cross this sandboxed, isolated bridge; navigation/auth/page
-// data do not. Zoom is not handled here: a trackpad pinch reaches a page as a cancelable Ctrl+wheel before Chromium turns it
+// No API is exposed to websites. Only trusted link-preview gestures and the address of a plain link click (for the Leave site?
+// card, at the end) cross this sandboxed, isolated bridge; auth and page data do not. Zoom is not handled here: a trackpad pinch reaches a page as a cancelable Ctrl+wheel before Chromium turns it
 // into visual-viewport zoom, so cancelling Ctrl+wheel in a page turned every pinch into reflowing page zoom. Chromium zooms the
 // page itself (zoom-changed in main.cjs) and magnifies on pinch.
 // macOS only: Chromium turns Ctrl+wheel into page zoom on every other platform and scrolls the page on a Mac, so the wheel with the
@@ -98,3 +98,15 @@ if(process.isMainFrame){
  document.addEventListener('pointerlockchange',()=>send({lock:!!document.pointerLockElement}));
  window.addEventListener('pagehide',()=>{if(sent.hover||sent.drag||sent.lock){sent.hover=sent.drag=sent.lock=false;ipcRenderer.send('acira:edge-intent',{hover:false,drag:false,lock:false});}});
 }
+// A plain click on a link that replaces this page says where it goes. A page that asks "Leave site?" on the way out raises
+// will-prevent-unload in main, which Electron asks synchronously and without the address: knowing the click lets main ask in the
+// browser's own card (as for a typed address or a tab close) and repeat the click on Leave. Heard as the click bubbles out, so a
+// click the page took over (a router's preventDefault) is not reported. Only the link's http(s) address crosses.
+if(process.isMainFrame)window.addEventListener('click',event=>{
+ if(!event.isTrusted||event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey)return;
+ const link=event.composedPath().find(node=>node instanceof HTMLAnchorElement||node instanceof HTMLAreaElement);
+ if(!link||!/^https?:/i.test(link.href||'')||link.hasAttribute('download'))return;
+ const target=String(link.target||document.querySelector('base[target]')?.target||'').toLowerCase();
+ if(target&&target!=='_self'&&target!=='_top'&&target!=='_parent')return;
+ ipcRenderer.send('acira:link-intent',String(link.href).slice(0,4096));
+},{passive:true});

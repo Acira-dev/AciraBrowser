@@ -2,7 +2,7 @@
 //   node scripts/i18n-missing.mjs                       counts per locale
 //   node scripts/i18n-missing.mjs --batches <dir> [--size 120]
 //        writes <dir>/batch-N.in.json: { "id": "English text", … } for every id missing from at least one locale.
-//        A translator writes batch-N.out.json: { "id": { "es": "…", "fr": "…", "de": "…", "pt-BR": "…", "it": "…", "ja": "…", "zh-CN": "…" } }
+//        A translator writes batch-N.out.json: { "id": { "es": "…", "fr": "…", …, "hi": "…" } } (the twelve languages below)
 //        and `node scripts/i18n-seed.mjs <dir>/batch-N.out.json` merges it.
 //   node scripts/i18n-missing.mjs --strict               exit 1 when any locale lacks any id (the release gate)
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/i18n');
-const LOCALES = ['es', 'fr', 'de', 'pt-BR', 'it', 'ja', 'zh-CN'];
+const LOCALES = ['es', 'fr', 'de', 'pt-BR', 'it', 'ja', 'zh-CN', 'ar', 'tr', 'ru', 'ko', 'hi']; // every language in src/i18n/locales.ts but English
 const read = name => JSON.parse(fs.readFileSync(path.join(dir, name + '.json'), 'utf8'));
 const en = read('en'), catalogs = Object.fromEntries(LOCALES.map(code => [code, read(code)]));
 const missingFor = code => Object.keys(en).filter(id => !(id in catalogs[code]));

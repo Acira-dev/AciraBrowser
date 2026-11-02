@@ -1,9 +1,5 @@
-/* The website's variable Geist and Geist Mono (OFL, public/fonts/geist-LICENSE.txt), weights 100-900, so the fine
- editorial weights (450/470/520/540/560) render exactly. Inter is the display face (cv11, ss03): the official variable
- InterVariable.woff2 from github.com/rsms/inter v4.1 (OFL, public/fonts/inter-LICENSE.txt). Subtitles and ledes use IBM Plex
- Sans: the official, unmodified variable IBM Plex Sans Var-Roman.woff2 from github.com/IBM/plex (OFL with the Reserved
- Font Name "Plex", public/fonts/plex-LICENSE.txt), weights 100-700, widths 85-100%. */
-@font-face{font-family:'Geist';font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/Geist.woff2') format('woff2');}
-@font-face{font-family:'Geist Mono';font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/GeistMono.woff2') format('woff2');}
+/* One typeface: Inter, the official variable InterVariable.woff2 from github.com/rsms/inter v4.1 (OFL,
+ public/fonts/inter-LICENSE.txt), weights 100-900, so the fine editorial weights (450/470/520/540/560) render exactly.
+ Its features (cv11, ss03) are the --font-features token in styles.css. Scripts Inter lacks fall back to the system faces in
+ --font-ui; code uses the system monospace (--font-mono). */
 @font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/InterVariable.woff2') format('woff2');}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:100 700;font-stretch:85% 100%;font-display:swap;src:url('/fonts/IBMPlexSansVar-Roman.woff2') format('woff2');}

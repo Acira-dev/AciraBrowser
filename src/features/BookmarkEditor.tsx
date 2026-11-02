@@ -8,6 +8,7 @@ import { pageHost } from './libraryModel';
 import './library.css';
 
 import { t } from '../i18n';
+import { folderTitle } from '../ui/bookmarkFolderName';
 /** The popover under the star: name, folder, and Remove. Every change applies as it is made; Done only closes. */
 export function BookmarkEditor({ state, url, tor, dispatch, close }: { state: BrowserSnapshot; url?: string; /** Which of the page's bookmarks: its Tor one or its ordinary one (by default, the kind the current tab saves). */tor?: boolean; dispatch: (action: BrowserAction) => void; close: () => void }) {
   const profileId = state.activeBrowserProfileId;
@@ -41,7 +42,7 @@ export function BookmarkEditor({ state, url, tor, dispatch, close }: { state: Br
       {!hasBar && <button type="button" role="option" aria-selected={onBar} className="bm-edit-option" onClick={() => send('bookmarks-bar')}><Folder size={14} /><span>{t("bm.bar")}</span>{onBar && <Check size={14} />}</button>}
       {folders.map(({ node: item, depth }) => {
         const isBar = !item.parentId && item.title.trim().toLowerCase() === 'bookmarks bar', selected = here === item.id || (isBar && onBar);
-        return <button key={item.id} type="button" role="option" aria-selected={selected} className="bm-edit-option" style={{ ['--depth' as string]: depth }} onClick={() => send(item.id)}><Folder size={14} /><span>{item.title}</span>{selected && <Check size={14} />}</button>;
+        return <button key={item.id} type="button" role="option" aria-selected={selected} className="bm-edit-option" style={{ ['--depth' as string]: depth }} onClick={() => send(item.id)}><Folder size={14} /><span>{folderTitle(item)}</span>{selected && <Check size={14} />}</button>;
       })}
       {!folders.some(({ node: item }) => !item.parentId && item.title.trim().toLowerCase() === 'other bookmarks') && <button type="button" role="option" aria-selected={false} className="bm-edit-option" onClick={() => send('other-bookmarks')}><Folder size={14} /><span>{t("bookmarkeditor.otherBookmarks")}</span></button>}
     </div>

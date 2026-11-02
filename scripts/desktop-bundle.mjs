@@ -65,6 +65,7 @@ export const PATH_LOADED = [
 /** Read by path, copied by the release builds (see release-build*.mjs) or built separately; tests/release-desktop-bundle.test.mjs checks the list is complete. */
 export const DATA_LOADED = [
   'desktop/ui-preload.cjs', // built from ui-preload-entry.cjs
+  'desktop/browser-services/autoconsent-preload.cjs', // built from autoconsent-preload-entry.cjs (DuckDuckGo's autoconsent bundled in)
   'desktop/native/build/mac-material.node', // compiled and copied by copyMacMaterial on macOS
   'desktop/browser-services/annoyance-lists', 'desktop/browser-services/helium-annoyances.txt',
   'desktop/browser-services/vendor/readability/Readability.js', 'desktop/browser-services/vendor/dompurify/purify.min.js',

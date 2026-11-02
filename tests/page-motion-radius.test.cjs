@@ -56,7 +56,7 @@ test('a new goal during a move is picked up by the move that is running',()=>{
 test('main.cjs hands the radius to the move and only sets it directly when the page does not move',()=>{
  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','desktop','main.cjs'),'utf8');
  assert.match(source,/next\.pageMotion,next\.pageSpring,pageRadius[,)]/,'the move carries the radius');
- assert.match(source,/pageRadius,\['full','compact','seamless'\]\.includes\(effectiveView\(state\.settings,state\.windowUi\)\)&&next\.views\.length===1\)/,'only the normal, Compact and Seamless views\' single page glides with its size held');
+ assert.match(source,/pageRadius,\['full','compact','seamless'\]\.includes\(effectiveView\(state\.settings,state\.windowUi\)\)&&next\.views\.length===1,layoutPace\(next\.motionSpeed\)\)/,'only the normal, Compact and Seamless views\' single page glides with its size held, at the speed\'s pace');
  assert.match(source,/else if\(\(entry\.radiusGoal\?\?entry\.radius\)!==pageRadius\)\{if\(entry\.boundsTimer\)entry\.radiusGoal=pageRadius;else applyRadius\(entry,pageRadius\);\}/,'no move: set at once, or hand it to the running one');
  assert.doesNotMatch(source,/entry\.view\.setBorderRadius\(Math\.round\(radius\)\)/,'no flip on the first frame any more');
 });

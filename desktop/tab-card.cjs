@@ -70,7 +70,8 @@ function createTabCard({WebContentsView,getWindow,getState,pageOf=()=>null,block
   wc.setZoomFactor?.(scale);
   wc.ipc.on('acira:tab-card',(_event,message)=>{
    if(view!==made)return;
-   if(message==='ready'){readyDone?.(true);readyDone=null;}
+   // Chromium restores the zoom it last kept for this page's origin as the page loads, over the zoomFactor asked for at creation: after an interface scale change the new card page came up zoomed at the old scale. Asked again once it is loaded.
+   if(message==='ready'){wc.setZoomFactor?.(scale);readyDone?.(true);readyDone=null;}
    else if(message&&Number.isFinite(message.size)){const wake=sizeWaiter;sizeWaiter=null;wake?.(message.size);}
   });
   win.contentView.addChildView(made);

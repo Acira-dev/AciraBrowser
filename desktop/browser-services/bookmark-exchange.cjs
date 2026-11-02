@@ -5,9 +5,9 @@ const escape=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;')
 
 /** Parse Netscape bookmark HTML as inert data using maintained htmlparser2 (MIT). */
 function parseBookmarkHTML(text){
- if(typeof text!=='string'||Buffer.byteLength(text)>16*1024*1024)throw new Error('Bookmark HTML exceeds the16MB import limit.');
+ if(typeof text!=='string'||Buffer.byteLength(text)>16*1024*1024)throw new Error('Bookmark HTML exceeds the 16MB import limit.');
  const root={children:[]},stack=[root];let capture=null,pending=null,count=0,skipped=0;
- const append=node=>{if(++count>50000)throw new Error('Bookmark file contains more than50000 entries.');stack.at(-1).children.push(node);};
+ const append=node=>{if(++count>50000)throw new Error('Bookmark file contains more than 50000 entries.');stack.at(-1).children.push(node);};
  const parser=new Parser({onopentag(name,attrs){if(name==='h3'||name==='a'){capture={tag:name,text:'',attrs};}else if(name==='dl'){if(stack.length>=64)throw new Error('Bookmark folders are nested too deeply.');stack.push(pending||stack.at(-1));pending=null;}},ontext(value){if(capture)capture.text+=value;},onclosetag(name){if(capture?.tag===name){const {text:label,attrs}=capture;capture=null;if(name==='h3'){pending={type:'folder',name:label.trim().slice(0,2048)||'Bookmarks',children:[]};append(pending);}else{const target=url(attrs.href);if(target)append({type:'url',name:label.trim().slice(0,2048)||new URL(target).hostname,url:target});else skipped++;}}else if(name==='dl'&&stack.length>1){stack.pop();pending=null;}}},{decodeEntities:true,lowerCaseTags:true,lowerCaseAttributeNames:true});
  parser.end(text);return {roots:{html:{name:'Imported bookmarks',children:root.children}},skipped};
 }

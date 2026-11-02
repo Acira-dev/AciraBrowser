@@ -7,7 +7,7 @@ const MUTE_AFTER=2,WINDOW_MS=10000,MAX_MESSAGE=2000,MAX_INITIAL=1000;
 const hostOf=value=>{try{const url=new URL(value);return /^https?:$/.test(url.protocol)?url.host:'';}catch{return '';}};
 
 function createJsDialogs({controllers,t,now=()=>Date.now()}){
- const seen=new WeakMap();
+ const seen=new WeakMap(),open=new WeakMap();
  function ownerOf(wc){
   for(const controller of controllers){
    if(controller.closing||!controller.sitePrompt||!controller.pages)continue;
@@ -26,8 +26,8 @@ function createJsDialogs({controllers,t,now=()=>Date.now()}){
   return record;
  }
  function handle(event,payload){
-  let done=false;
-  const reply=value=>{if(done)return;done=true;try{event.returnValue=value;}catch{}};
+  let done=false,counted=null;
+  const reply=value=>{if(done)return;done=true;if(counted)open.set(counted,Math.max(0,(open.get(counted)||1)-1));try{event.returnValue=value;}catch{}};
   try{
    const wc=event.sender;
    if(!payload||typeof payload!=='object'||!['alert','confirm','prompt'].includes(payload.kind)||typeof payload.message!=='string'){reply({native:true});return;}
@@ -39,6 +39,7 @@ function createJsDialogs({controllers,t,now=()=>Date.now()}){
    const host=hostOf(event.senderFrame?.url||wc.getURL())||hostOf(wc.getURL());
    const offerMute=record.times.length>=MUTE_AFTER;
    record.times.push(now());
+   counted=wc;open.set(wc,(open.get(wc)||0)+1);
    const labels=[t('dialog.cancel'),t('sitePrompt.ok')];
    const asking=owner.controller.sitePrompt.showMessageBox({
     type:'question',message:t('sitePrompt.says',{host:host||wc.getURL()}),detail:payload.message.slice(0,MAX_MESSAGE),
@@ -54,6 +55,8 @@ function createJsDialogs({controllers,t,now=()=>Date.now()}){
    },()=>reply(defaults));
   }catch{reply({native:true});}
  }
- return {handle};
+ /** Whether this page is waiting on one of its dialogs: it is blocked on purpose, not stuck (page-hang.cjs leaves it alone). */
+ function waiting(wc){return (open.get(wc)||0)>0;}
+ return {handle,waiting};
 }
 module.exports={createJsDialogs,hostOf};

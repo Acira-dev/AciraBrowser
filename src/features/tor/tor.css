@@ -6,7 +6,7 @@
 [data-theme=dark] .tor-page,[data-chrome=dark] .tor-chip{--tor-ink:#d4bdf0;--tor-danger:#f0786f;--tor-line:var(--line,rgb(255 255 255/.08));--tor-line-strong:var(--line-strong,rgb(255 255 255/.14))}
 [data-chrome=light] .tor-chip{--tor-ink:#6a3f86;--tor-danger:#b3382f}
 
-.app .tor-chip,.tor-chip{position:relative;flex:0 0 auto;width:auto;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;height:22px;margin:0 4px 0 2px;padding:0 8px 0 6px;border:0;border-radius:4px;color:var(--tor-ink);background:transparent;font:500 12px/1 var(--font-ui,'Geist',sans-serif);letter-spacing:0;white-space:nowrap;cursor:default;transition:background-color .12s cubic-bezier(.2,0,0,1),transform .08s cubic-bezier(.2,0,0,1),padding-left calc(.24s*var(--motion-scale,1)) cubic-bezier(.2,0,0,1)}
+.app .tor-chip,.tor-chip{position:relative;flex:0 0 auto;width:auto;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;height:22px;margin:0 4px 0 2px;padding:0 8px 0 6px;border:0;border-radius:4px;color:var(--tor-ink);background:transparent;font:500 12px/1 var(--font-ui,'Inter',sans-serif);letter-spacing:0;white-space:nowrap;cursor:default;transition:background-color .12s cubic-bezier(.2,0,0,1),transform .08s cubic-bezier(.2,0,0,1),padding-left calc(.24s*var(--motion-scale,1)) cubic-bezier(.2,0,0,1)}
 .app .tor-chip:hover,.tor-chip:hover{background:color-mix(in srgb,var(--tor-ink) 13%,transparent)}
 /* R3-69 (founder): the "Tor" label has no box of its own; it sits directly on the address field's Tor wash. A faint fill appears only on hover/focus
    (the pill is a button) and in the error state. */
@@ -25,7 +25,7 @@
 .tor-chip-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .page-pane:has(.tor-page){scrollbar-width:thin;scrollbar-color:var(--ed-controlEdge) transparent}
 
-.tor-page{box-sizing:border-box;display:flex;justify-content:center;width:100%;min-height:100%;padding:clamp(40px,12vh,128px) clamp(24px,4vw,72px) 64px;color:var(--text-1,var(--text-primary,inherit));font-size:13px;line-height:1.45}
+.tor-page{box-sizing:border-box;display:flex;justify-content:center;width:100%;min-height:100%;padding:clamp(40px,calc(12 * var(--pz-vh,1vh)),128px) clamp(24px,calc(4 * var(--pz-vw,1vw)),72px) 64px;color:var(--text-1,var(--text-primary,inherit));font-size:13px;line-height:1.45}
 .tor-column{width:min(520px,100%);display:flex;flex-direction:column;align-items:flex-start}
 .tor-page-glyph{display:block;margin:0 0 20px;line-height:0}
 .tor-chip .tor-onion{flex:none}
@@ -119,7 +119,7 @@
 
 
 /* "Onion available" (TorOnion.tsx): the Onion-Location pill at the end of the address field, the Tor chip's ink, one 22px control that gives way to its glyph when the field is narrow. */
-.tor-onion-chip{--tor-ink:#6a3f86;flex:0 1 auto;min-width:22px;max-width:44%;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:22px;margin:0 2px 0 4px;padding:0 8px 0 6px;border:0;border-radius:4px;color:var(--tor-ink);background:color-mix(in srgb,var(--tor-ink) 12%,transparent);font:500 12px/1 var(--font-ui,'Geist',sans-serif);white-space:nowrap;cursor:default;transition:background-color .12s cubic-bezier(.2,0,0,1),transform .08s cubic-bezier(.2,0,0,1)}
+.tor-onion-chip{--tor-ink:#6a3f86;flex:0 1 auto;min-width:22px;max-width:44%;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:22px;margin:0 2px 0 4px;padding:0 8px 0 6px;border:0;border-radius:4px;color:var(--tor-ink);background:color-mix(in srgb,var(--tor-ink) 12%,transparent);font:500 12px/1 var(--font-ui,'Inter',sans-serif);white-space:nowrap;cursor:default;transition:background-color .12s cubic-bezier(.2,0,0,1),transform .08s cubic-bezier(.2,0,0,1)}
 [data-chrome=dark] .tor-onion-chip{--tor-ink:#d4bdf0}
 .tor-onion-chip:hover{background:color-mix(in srgb,var(--tor-ink) 20%,transparent)}
 .tor-onion-chip:active{transform:scale(.97)}

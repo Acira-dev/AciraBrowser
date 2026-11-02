@@ -2,6 +2,7 @@ import type { InternalPage,SearchEngine,TabContentKind } from './types';
 import { effectiveProviders,resolveSearch } from './searchProviders';
 import type { SearchProviders } from './searchProviders';
 import { googleSearchUrl } from './searchLanguage';
+import { PUBLIC_SUFFIX_TLDS } from './publicSuffixTlds';
 
 
 export interface NavigationTarget {url:string;contentKind:TabContentKind;query?:string;error?:string;/** A typed address that got https by default; the native layer may retry over http if the site has no secure endpoint. */httpsFirst?:boolean}
@@ -23,6 +24,20 @@ function localHostname(host:string):boolean {
  return octets.length===4&&octets.every(value=>Number.isInteger(value)&&value>=0&&value<=255)&&(octets[0]===127||octets[0]===10||octets[0]===192&&octets[1]===168||octets[0]===172&&octets[1]>=16&&octets[1]<=31||octets[0]===169&&octets[1]===254);
 }
 
+// Schemes a browser knows: typed, they stay the "only http and https" refusal rather than becoming a search.
+const KNOWN_SCHEMES = /^(?:javascript|data|file|chrome|chrome-extension|chrome-untrusted|devtools|about|blob|filesystem|vbscript|view-source|mailto|tel|ftp|wss?):/i;
+// Names reserved for local networks and testing (RFC 2606, 6761, 6762; ICANN's .internal), plus the common router names .lan and .home.
+const LOCAL_TOP_LEVEL = new Set(['localhost', 'local', 'test', 'example', 'invalid', 'internal', 'lan', 'home']);
+let topLevelNames: Set<string> | null = null;
+/** A dotted word is an address when its last label is a real top-level suffix (the Public Suffix List, bundled offline), so "node.js",
+ *  "next.js" and "v1.2" search while "nodejs.org", "setup.py" (Paraguay) and "bbc.co.uk" open. IP addresses always open. */
+function knownTopLevel(hostname: string): boolean {
+  if (hostname.startsWith('[') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname)) return true;
+  const label = hostname.toLowerCase().replace(/\.$/, '').split('.').pop() || '';
+  topLevelNames ??= new Set(PUBLIC_SUFFIX_TLDS.split(/\s+/).filter(Boolean));
+  return topLevelNames.has(label) || LOCAL_TOP_LEVEL.has(label);
+}
+
 /** A Google search made from typed text is Chromium's own Google URL (searchLanguage.ts). The fourth argument, the profile's first website language,
  *  no longer changes the URL (R6): the network hook adds Google's `hl` under the same rules for typed and pasted searches. Addresses and other engines never change. */
 export function resolveNavigation(input: string, engine: SearchEngine = 'google', providers?: SearchProviders, _websiteLanguage?: string): NavigationTarget {
@@ -40,7 +55,8 @@ export function resolveNavigation(input: string, engine: SearchEngine = 'google'
   const hostPort = /^(?:localhost|[^\s@/?#:]+\.[^\s@/?#:]+):\d+(?:[/?#]|$)/i.test(value);
   const explicitScheme = !hostPort && /^[a-z][a-z\d+.-]*:/i.test(value);
   const explicitWeb = /^https?:\/\//i.test(value);
-  if (explicitScheme && !explicitWeb && (!/\s/.test(value) || /^[a-z][a-z\d+.-]*:\/\//i.test(value) || /^(?:javascript|data|file|chrome|about|blob|vbscript|mailto|ftp):/i.test(value))) return { url: 'acira://new', contentKind: 'internal', error: 'Acira opens only http and https addresses.' };
+  // An unknown scheme without "//" is text, not an address: "site:example.com", "define:word", "re:zero", "time:12:30", "std::vector".
+  if (explicitScheme && !explicitWeb && (/^[a-z][a-z\d+.-]*:\/\//i.test(value) || KNOWN_SCHEMES.test(value))) return { url: 'acira://new', contentKind: 'internal', error: 'Acira opens only http and https addresses.' };
   const addressLike = explicitWeb || !/\s/.test(value) && (!explicitScheme && (/^(?:localhost(?::\d+)?|(?:\d{1,3}\.){3}\d{1,3}|\[[\da-f:]+\])(?:[:/?#]|$)/i.test(value) || /^[^\s@/?#]+\.[^\s@/?#]+(?:[/?#]|$)/.test(value)));
   if (addressLike) {
     try {
@@ -48,8 +64,10 @@ export function resolveNavigation(input: string, engine: SearchEngine = 'google'
       const parsed = new URL(explicitScheme ? value : `${local ? 'http' : 'https'}://${value}`);
       if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('Invalid web address');
       if (parsed.username || parsed.password) return { url: 'acira://new', contentKind: 'internal', error: 'Remove the sign-in details from the address.' };
-      return { url: parsed.toString(), contentKind: 'web', ...(!explicitWeb && !local && parsed.protocol === 'https:' ? { httpsFirst: true } : {}) };
-    } catch { return { url: 'acira://new', contentKind: 'internal', error: 'Check the web address and try again.' }; }
+      // "3.14" or "1.2" would parse as the IPv4 address 1.0.0.2: only all four parts make a bare number an address.
+      const typedHost = value.replace(/[/?#][\s\S]*$/, '').replace(/:\d+$/, ''), shortNumber = /^[\d.]+$/.test(typedHost) && !/^(?:\d{1,3}\.){3}\d{1,3}\.?$/.test(typedHost);
+      if (explicitWeb || hostPort || /^[^/?#]*\//.test(value) || !shortNumber && (local || knownTopLevel(parsed.hostname))) return { url: parsed.toString(), contentKind: 'web', ...(!explicitWeb && !local && parsed.protocol === 'https:' ? { httpsFirst: true } : {}) };
+    } catch { if (/^[^/?#]*\//.test(value) || hostPort || explicitWeb) return { url: 'acira://new', contentKind: 'internal', error: 'Check the web address and try again.' }; }
   }
   const bangLike = /^![a-z0-9]/i.test(value);
   if (providers || bangLike) {

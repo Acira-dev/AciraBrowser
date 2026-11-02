@@ -27,6 +27,7 @@ function resolveDefaultShortcut(input, platform = process.platform) {
   if(input.meta&&input.alt&&key==='arrowleft')return {action:'cycle-tab',direction:-1};
   if(input.meta&&input.alt&&key==='arrowright')return {action:'cycle-tab',direction:1};
   if(input.meta&&input.alt&&key==='b')return {action:'bookmarks'};
+  if(input.meta&&input.alt&&!shift&&key==='n')return {action:'tor-window'}; // Option+Cmd+N · New Tor window (Brave's Mac key; Option+Shift+N types a character)
   if(input.meta&&input.alt&&(key==='i'||key==='j'))return {action:'devtools'};
   if(input.meta&&!input.control&&!input.alt){
    if(key==='h'&&!shift||key==='q'||key==='m'&&!shift||key==='tab')return null; // Shift+Cmd+H is Rewind: only Cmd+H (Hide) belongs to the system

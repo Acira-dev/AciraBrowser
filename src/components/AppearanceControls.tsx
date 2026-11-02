@@ -1,7 +1,7 @@
 import {WorkspaceCoverPicker} from './WorkspaceCoverPicker';
-import {colorToCommit} from '../ui/hexColor';
+import {colorToCommit,completeHexColor,parseHexColor} from '../ui/hexColor';
 import {toolbarLayout,toolbarLayoutPatch} from '../runtime/toolbarLayout';
-import { useEffect,useState,type CSSProperties,type KeyboardEvent } from 'react';
+import { useEffect,useId,useState,type CSSProperties,type KeyboardEvent } from 'react';
 import { appearancePalettes,palettePreference } from '../runtime/appearancePalettes';
 import type { Settings } from '../runtime/types';
 import { useRafChange } from '../ui/useRafChange';
@@ -69,14 +69,18 @@ export function GlassFinishPicker({settings,onChange,size=24,columns=appearanceP
  </div>;
 }
 
-/** Retains the system color picker; the well and editable hex value share one value. */
+/** Retains the system color picker; the well and editable hex value share one value. "ff0000" and " #ff0000 " are taken as #ff0000;
+ *  text that is still not a colour stays in the field with a short message (Escape puts the colour back), never a silent revert. */
 export function AppearanceColorWell({label,value,onChange}:{label:string;value:string;onChange:(value:string)=>void}){
- const [input,setInput]=useState(value),picker=useRafChange(onChange);useEffect(()=>setInput(value),[value]);
- const valid=(text:string)=>/^#[\da-f]{6}$/i.test(text);
- function commit(){const next=colorToCommit(input,value);if(next)onChange(next);else setInput(value);}
+ const [input,setInput]=useState(value),[invalid,setInvalid]=useState(false),picker=useRafChange(onChange),messageId=useId();useEffect(()=>{setInput(value);setInvalid(false);},[value]);
+ function commit(){
+  if(!parseHexColor(input)){if(input.trim())setInvalid(true);else setInput(value);return;}
+  const next=colorToCommit(input,value);if(next)onChange(next);setInput(next||value);setInvalid(false);
+ }
  return <div className="appearance-color-field" role="group" aria-label={label}>
-  <span className="appearance-color-well" style={{'--well-color':value} as CSSProperties}><input type="color" aria-label={t("appearancecontrols.labelPicker", { label: label })} value={valid(input)?input:value} onChange={event=>{setInput(event.target.value);picker.change(event.target.value);}} onPointerUp={picker.flush} onBlur={picker.flush}/><span aria-hidden="true"/></span>
-  <input className="appearance-hex" aria-label={t("appearancecontrols.labelHexCode", { label: label })} value={input} maxLength={7} autoComplete="off" spellCheck={false} onChange={event=>{setInput(event.target.value);if(valid(event.target.value))onChange(event.target.value);}} onBlur={commit} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();commit();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setInput(value);}}}/>
+  <span className="appearance-color-well" style={{'--well-color':value} as CSSProperties}><input type="color" aria-label={t("appearancecontrols.labelPicker", { label: label })} value={completeHexColor(input)||value} onChange={event=>{setInput(event.target.value);setInvalid(false);picker.change(event.target.value);}} onPointerUp={picker.flush} onBlur={picker.flush}/><span aria-hidden="true"/></span>
+  <input className="appearance-hex" aria-label={t("appearancecontrols.labelHexCode", { label: label })} aria-invalid={invalid||undefined} aria-describedby={invalid?messageId:undefined} value={input} maxLength={16} autoComplete="off" spellCheck={false} onChange={event=>{const text=event.target.value,next=completeHexColor(text);setInput(text);setInvalid(false);if(next)onChange(next);}} onBlur={commit} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();commit();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setInput(value);setInvalid(false);}}}/>
+  {invalid&&<p id={messageId} className="appearance-hex-message" role="alert">{t("appearancecontrols.hexInvalid")}</p>}
  </div>;
 }
 
@@ -84,7 +88,7 @@ export function AppearanceColorWell({label,value,onChange}:{label:string;value:s
  * translucent value when it is turned off again, so Settings and this popup always show one value. */
 export function GlassOpacitySlider({value,onChange}:{value:number;onChange:(value:number)=>void}){
  const [draft,setDraft]=useState(value),change=useRafChange(onChange);useEffect(()=>setDraft(value),[value]);
- return <label className="appearance-opacity"><span>{t("appearancecontrols.windowOpacity")}</span><input type="range" min={40} max={100} step={1} value={draft} aria-label={t("appearancecontrols.windowOpacity")} aria-valuetext={draft===100?'100%, opaque':`${draft}%`} style={{'--opacity-progress':`${(draft-40)/60*100}%`} as CSSProperties} onChange={event=>{const next=Number(event.target.value);setDraft(next);change.change(next);}} onPointerUp={change.flush} onKeyUp={change.flush} onBlur={change.flush}/><output>{draft}%</output></label>;
+ return <label className="appearance-opacity"><span>{t("appearancecontrols.windowOpacity")}</span><input type="range" min={40} max={100} step={1} value={draft} aria-label={t("appearancecontrols.windowOpacity")} aria-valuetext={draft===100?t('appearancecontrols.opaqueValue'):`${draft}%`} style={{'--opacity-progress':`${(draft-40)/60*100}%`} as CSSProperties} onChange={event=>{const next=Number(event.target.value);setDraft(next);change.change(next);}} onPointerUp={change.flush} onKeyUp={change.flush} onBlur={change.flush}/><output>{draft}%</output></label>;
 }
 
 export function AppearancePanel({settings,onChange,onMore,profileId,privateMode}:{settings:Settings;profileId?:string;privateMode?:boolean;onChange:(patch:Partial<Settings>)=>void;onMore:()=>void}){

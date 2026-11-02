@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pushToast, spentToasts, toastRoom, toastStackHeight, type QueuedToast } from '../src/ui/toastQueue';
+import { pushToast, spentToasts, toastHostRefused, toastKeysSaying, toastRoom, toastStackHeight, type QueuedToast } from '../src/ui/toastQueue';
 
 const undo = (id: number, text: string, batch: string) => ({ id, text, action: { label: 'Undo', command: { type: 'tab.restore.batch' as const, id: batch } } });
 
@@ -51,4 +51,24 @@ test('the host keeps room for a new toast in the render that adds it, and for a 
   assert.deepEqual(toastRoom(['b'], ['a', 'b']), ['a', 'b'], 'a leaving toast keeps its room');
   assert.deepEqual(toastRoom([], ['a']), ['a']);
   assert.deepEqual(toastRoom([], []), []);
+});
+
+test('a toast host over a website lets go when main closes its overlay or a newer one (a resize, a blur, a click, a popup opened over it)', () => {
+  assert.equal(toastHostRefused(true, 5, 5), true, 'its own id');
+  assert.equal(toastHostRefused(true, 5, 6), true, 'a popup opened over it and closed');
+  assert.equal(toastHostRefused(true, 7, 6), false, 'a toast minted after that popup is accepted');
+});
+
+test('a toast shown in an Acira page is not main\'s to refuse', () => {
+  assert.equal(toastHostRefused(false, 5, 6), false);
+  assert.equal(toastHostRefused(true, undefined, 6), false);
+  assert.equal(toastHostRefused(true, 5, undefined), false);
+});
+
+test('a notice tied to a state is found by its text and leaves alone the toasts around it', () => {
+  let list = pushToast([], { id: 1, text: 'Link copied' }).list;
+  list = pushToast(list, { id: 2, text: 'Seamless is on.', tone: 'info' }).list;
+  list = pushToast(list, { id: 3, text: 'Download failed', tone: 'error' }).list;
+  assert.deepEqual(toastKeysSaying(list, 'Seamless is on.'), [2]);
+  assert.deepEqual(toastKeysSaying(list, 'Seamless'), [], 'the whole line, not a part of it');
 });

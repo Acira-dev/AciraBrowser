@@ -57,6 +57,8 @@ say('building the interface and runtime');
 run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
 say('refreshing the bundled filter lists and scriptlets (a failed download keeps the committed ones)');
 run(process.execPath, [path.join(root, 'scripts/fetch-baseline-filters.mjs'), path.join(root, 'resources/filters'), '--soft']);
+say('checking the phishing and malware feeds for whole-host entries that block well-known sites (listed for review, never fails the build)');
+run(process.execPath, [path.join(root, 'scripts/check-threat-lists.mjs'), '--soft']);
 say('compiling the bundled filter engine for first-run startup');
 run(process.execPath, [path.join(root, 'scripts/build-filter-engine.cjs'), path.join(root, 'resources/filters')]);
 if (!flag('--skip-tests')) { say('running the test suite'); run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test']); } else say('tests skipped (--skip-tests)');

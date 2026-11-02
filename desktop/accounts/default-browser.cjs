@@ -3,6 +3,7 @@ const path = require("node:path");
 const { execFile, execFileSync } = require("node:child_process");
 // "Acira Browser", or "Acira Browser QA" in a QA build (its own registration: desktop/build-identity.cjs).
 const REGISTERED_APPLICATION = require("../build-identity.cjs").registeredApplication;
+const { tm } = require("../tm.cjs");
 
 // Where other browsers install their executables (and the icon lookup built on it) lives in browser-icons.cjs.
 const { browserExecutables, createBrowserIcons } = require("../browser-services/browser-icons.cjs");
@@ -197,14 +198,14 @@ function createDefaultBrowserService({
       supported =
         !!app.isPackaged && (platform !== "win32" || !!installed || isDefault);
     const note = !app.isPackaged
-      ? "Install Acira to register it as a default browser. Browsing works now."
+      ? tm("defaultbrowser.noteDevelopmentRun")
       : !supported
-        ? "Windows registration for this copy is not confirmed. Use installed Acira to choose your default browser."
+        ? tm("defaultbrowser.noteUnregistered")
         : !statusKnown
-          ? "Default-browser status could not be confirmed. You can check system settings."
+          ? tm("defaultbrowser.noteUnknown")
           : isDefault
-            ? "Acira is your default browser."
-            : "Choose Acira in your operating system’s default-browser settings.";
+            ? tm("defaultbrowser.noteIsDefault")
+            : tm("defaultbrowser.noteChoose");
     return { supported, isDefault, statusKnown, note };
   }
   /** Data URLs of installed browsers' own icons, keyed by browser name; browsers that aren't installed are omitted. The

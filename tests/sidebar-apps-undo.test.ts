@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addSidebarApp,readSidebarApps,removeSidebarAppWithUndo,restoreSidebarApp } from '../src/ui/sidebarApps';
+import { readFileSync } from 'node:fs';
+import { addSidebarApp,noteReleasedTab,readSidebarApps,removeSidebarAppWithUndo,restoreSidebarApp } from '../src/ui/sidebarApps';
 
 // Edit favorite (Round 2, A): removing a favorite shows the shared Undo toast; Undo puts it back where it was.
 const store=new Map<string,string>();
@@ -54,4 +55,20 @@ test('removing an unknown favorite does nothing',()=>{
  seed('p4');
  assert.equal(removeSidebarAppWithUndo('p4',false,'nope'),null);
  assert.deepEqual(titles('p4'),['A','B','C']);
+});
+
+test('Undo brings the favorite back with the live tab it handed to the tab list, from any view (the note is on the Undo entry)',()=>{
+ seed('p5');
+ const toast=removeSidebarAppWithUndo('p5',false,'b');
+ const command=toast?.type==='toast'?toast.action?.command:undefined;
+ assert.ok(command&&command.type==='favorite.restore');
+ noteReleasedTab('b','tab-live');// what the sidebar does when it hands the tab back
+ noteReleasedTab('b','tab-live');
+ assert.match(store.get('acira-sidebar-apps-undo')??'',/"tabIds":\["tab-live"\]/,'kept in storage, so the overlay\'s toast can read it');
+ const restored:[string,string[]][]=[];
+ assert.equal(restoreSidebarApp(command.token,(id,tabs)=>restored.push([id,tabs])),true);
+ assert.deepEqual(restored,[['b',['tab-live']]]);
+ noteReleasedTab('zz','tab-x');// no Undo entry: nothing to note
+ const client=readFileSync(new URL('../src/runtime/client.ts',import.meta.url),'utf8');
+ assert.match(client,/restoreSidebarApp\(action\.token,\(appId,tabIds\)=>\{const tab=latest\.current\.tabs\.find\(tab=>tabIds\.includes\(tab\.id\)&&!tab\.favoriteId\);if\(tab\)dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:appId\}\)/);
 });

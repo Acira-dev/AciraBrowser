@@ -3,6 +3,7 @@ import { runtime } from '../../../runtime/client';
 import { type SearchProvider, type SearchProviders } from '../../../runtime/searchProviders';
 import type { BrowserAction, BrowserSnapshot } from '../../../runtime/types';
 import {currentSearchProviders,sharedProviderList,sharedProvidersConfigured} from '../../../ui/searchSettings';
+import { takenName } from '../../../ui/nameTaken';
 import {ProfileScope,scopedSetting} from '../ProfileScope';
 import { SettingGroup, SettingNote, SettingRow, Select } from '../controls';
 import { readable } from '../nativeClient';
@@ -27,6 +28,9 @@ function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(a
   };
   const add = async (event: FormEvent) => {
     event.preventDefault();
+    // Two engines with one name read the same in the default-engine menu and the list: the second is refused.
+    const taken = takenName(form.name, providers.engines.map((item) => item.name));
+    if (taken) { setError(t("searchEngines.nameTaken", { name: taken })); return; }
     const engine: SearchProvider = { id: slug(form.name, providers.engines.map((item) => item.id)), name: form.name.trim(), keyword: form.keyword.trim().replace(/^!/, '').toLowerCase(), template: form.template.trim() };
     if (await save(sharedProviderList(state,[...providers.engines, engine]))) setForm({ name: '', keyword: '', template: '' });
   };
@@ -40,7 +44,7 @@ function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(a
     <>
       <SettingGroup title={t("searchEngines.searchEngines")}>
         {custom && (
-          <SettingRow id="search-default-engine" title={t("nativeCore.defaultSearchEngine")} detail="Used for anything typed in the address bar that is not a web address.">
+          <SettingRow id="search-default-engine" title={t("nativeCore.defaultSearchEngine")} detail={t("nativeCore.usedForAnythingTypedIn")}>
             <Select value={providers.defaultId} label={t("nativeCore.defaultSearchEngine")} options={providers.engines.map((item) => ({ value: item.id, label: item.name }))} onChange={(defaultId) => scopedSetting(state,dispatch,'searchProviderId',defaultId,()=>void save({...providers,defaultId}))} />
           </SettingRow>
         )}
@@ -56,7 +60,7 @@ function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(a
             </div>
           ))}
         </div>
-        {providers.engines.length > 1 && <div className="nc-actions" style={{ marginTop: 8 }}><button type="button" className="st-button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? t("searchEngines.showOnlyTheOneIn") : `More engines… (${providers.engines.length - 1})`}</button></div>}
+        {providers.engines.length > 1 && <div className="nc-actions" style={{ marginTop: 8 }}><button type="button" className="st-button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? t("searchEngines.showOnlyTheOneIn") : t('searchEngines.moreEngines', { count: providers.engines.length - 1 })}</button></div>}
         <form className="nc-form" data-setting="search-engine-add" onSubmit={add}>
           <input className="st-input" aria-label={t("searchEngines.engineName")} placeholder={t("acirasidebar.name")} maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           <input className="st-input" aria-label={t("searchEngines.shortcutKeyword")} placeholder={t("searchEngines.keyword")} maxLength={25} value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} />

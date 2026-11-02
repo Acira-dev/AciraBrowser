@@ -22,6 +22,68 @@ test('matching: exact host, parent domains, IPs without suffix walking, path pre
  for(const miss of ['https://top/','https://example.top/','https://notevil.example.top/','http://203.0.113.70/x','http://203.0.113.8:9090/y','http://203.0.113.8/y','https://url.example.net/phishing','https://url.example.net/phish2','https://url.example.net/phish.html','https://url.example.net/','https://q.example.net/a?id=8','https://dir.example.net/kit','https://evil.example.top.example.com/'])assert.equal(listMatches(list,U(miss)),false,miss);
  assert.equal(listMatches(parseThreatList('3.3.3.3'),U('http://1.3.3.3/')),false,'IPs never match by suffix');
 });
+test('shared publishing hosts listed as whole hosts do not block their legitimate pages and images (Gravatar avatars, Google Sites)',async()=>{
+ const {parseCompactDomains,packThreatListAsync}=require('../desktop/browser-services/threat-lists.cjs');
+ const text=['gravatar.com','sites.google.com','pastebin.com','firebasestorage.googleapis.com','evil.example.top','||sites.google.com/view/phish^$all'].join('\n');
+ const lists={set:parseThreatList(text),packed:await packThreatListAsync(text),compact:parseCompactDomains(makeCompact(['gravatar.com','sites.google.com','pastebin.com','firebasestorage.googleapis.com','evil.example.top']))};
+ for(const [form,list] of Object.entries(lists)){
+  for(const clean of ['https://www.gravatar.com/avatar/cc2372591e00f2ab504b59b4f7cbed43?s=64&d=identicon','https://gravatar.com/avatar/x','https://sites.google.com/new','https://sites.google.com/view/my-school-site','https://pastebin.com/raw/abc123','https://firebasestorage.googleapis.com/v0/b/app/o/pic.png?alt=media'])assert.equal(listMatches(list,U(clean)),false,form+' '+clean);
+  assert.equal(listMatches(list,U('https://evil.example.top/')),true,form+' still blocks an ordinary listed host');assert.equal(listMatches(list,U('https://a.evil.example.top/x')),true,form+' and its subdomains');
+ }
+ for(const form of ['set','packed'])assert.equal(listMatches(lists[form],U('https://sites.google.com/view/phish')),true,form+' an entry that names a path on a shared host still matches');
+});
+test('the publishing services the websites hunt found listed as whole hosts (IPFS gateway, bio.link, Telegraph, paste.ee, Angelfire, Zoho Forms) block only their listed pages',async()=>{
+ const {parseCompactDomains,packThreatListAsync}=require('../desktop/browser-services/threat-lists.cjs');
+ const hosts=['cloudflare-ipfs.com','bio.link','telegra.ph','paste.ee','angelfire.com','forms.zohopublic.com'];
+ const text=[...hosts,'evil.example.top','||telegra.ph/Bank-Login-11-02^$all','||forms.zohopublic.com/phisher/form/Verify^$all'].join('\n');
+ const lists={set:parseThreatList(text),packed:await packThreatListAsync(text),compact:parseCompactDomains(makeCompact([...hosts,'evil.example.top']))};
+ for(const [form,list] of Object.entries(lists)){
+  for(const clean of ['https://cloudflare-ipfs.com/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi','https://bio.link/someartist','https://telegra.ph/My-Trip-Notes-10-30','https://paste.ee/p/AbC12','https://www.angelfire.com/band/fan/','https://forms.zohopublic.com/school/form/Signup/formperma/x'])assert.equal(listMatches(list,U(clean)),false,form+' '+clean);
+  assert.equal(listMatches(list,U('https://evil.example.top/')),true,form+' still blocks an ordinary listed host');
+ }
+ for(const form of ['set','packed']){assert.equal(listMatches(lists[form],U('https://telegra.ph/Bank-Login-11-02')),true,form+' a listed page on Telegraph');assert.equal(listMatches(lists[form],U('https://forms.zohopublic.com/phisher/form/Verify')),true,form+' a listed Zoho form');}
+});
+test('the release check flags whole-host entries that are top sites, and services under a top site, but not users\' subdomains on hosting services',()=>{
+ const {topSiteEntries,SHARED_HOSTS}=require('../desktop/browser-services/threat-lists.cjs');
+ for(const host of ['gravatar.com','sites.google.com','pastebin.com','firebasestorage.googleapis.com','cloudflare-ipfs.com','bio.link','telegra.ph','paste.ee','angelfire.com','forms.zohopublic.com'])assert.ok(SHARED_HOSTS.has(host),host);
+ const rank=new Map([['video.example',3],['shop.example',40],['portal.example',7],['hosting.example',12],['gravatar.com',167]]);
+ const domainOf=host=>host.split('.').slice(-2).join('.');
+ const compact=['video.example','evil.example.top','gravatar.com','app.portal.example',...Array.from({length:6},(_,i)=>`user${i}.hosting.example`),'203.0.113.7'].join('\n');
+ const urls=makeList(PHISH.title,['||shop.example^$all','||shop.example/login^$all','||help.portal.example^$all','||user9.hosting.example^$all']);
+ const found=topSiteEntries([{source:DB,text:compact},{source:PHISH,text:urls}],{rank,domainOf});
+ assert.deepEqual(found.exact,[{host:'video.example',rank:3,lists:[DB.title]},{host:'shop.example',rank:40,lists:[PHISH.title]}],'a shared host (gravatar.com) is not flagged; a path entry is not a whole host');
+ assert.deepEqual(found.services.map(item=>[item.host,item.domain,item.rank,item.lists]),[['app.portal.example','portal.example',7,[DB.title]],['help.portal.example','portal.example',7,[PHISH.title]]],'seven listed hosts under hosting.example are its users\' sites');
+ assert.deepEqual(topSiteEntries([{source:DB,text:compact}],{rank,domainOf,servicesWithin:5}).services,[],'services only under the top N');
+});
+test('Phishing.Database never blocks a well-known site as a whole host (Netflix video, amazon.ie, a bank, AMP); typosquats, hosting users and the curated feeds still block',async()=>{
+ const {parseCompactDomains,packThreatListAsync,knownSite,KNOWN_SITES,topSiteEntries}=require('../desktop/browser-services/threat-lists.cjs'),top=require('../desktop/browser-services/top-sites.cjs');
+ assert.ok(top.entries>=9000&&top.top===10000&&/^[A-Z0-9]+$/.test(top.list),'the shipped top 10,000 (Tranco '+top.list+')');
+ for(const host of ['google.com','nflxvideo.net','amazon.ie','mercadolibre.com.ar','yotpo.com','filesusr.com','banrisul.com.br','cdn.ampproject.org','app.primevideo.com'])assert.equal(knownSite(host),true,host);
+ for(const host of ['googll.store','werefilledwit.org','evil.example.top','000000login.weebly.com'])assert.equal(knownSite(host),false,host+' (googll.store is a top-10,000 look-alike, left out)');
+ const listed=['nflxvideo.net','amazon.ie','banrisul.com.br','cdn.ampproject.org','googll.store','werefilledwit.org','000000login.weebly.com','evil.example.top'];
+ const compact=parseCompactDomains(makeCompact(listed));
+ for(const clean of ['https://ipv4-c001-bey001-ix.1.oca.nflxvideo.net/range/0-1000?o=1','https://www.amazon.ie/','https://www.banrisul.com.br/','https://cdn.ampproject.org/v0.js'])assert.equal(listMatches(compact,U(clean)),false,clean);
+ for(const listedHost of ['https://googll.store/','https://werefilledwit.org/','https://000000login.weebly.com/','https://a.evil.example.top/'])assert.equal(listMatches(compact,U(listedHost)),true,listedHost);
+ const curated=[parseThreatList(listed.join('\n')),await packThreatListAsync(listed.join('\n'))];
+ for(const list of curated)assert.equal(listMatches(list,U('https://www.amazon.ie/')),true,'the curated feeds are not changed');
+ assert.ok(KNOWN_SITES.size<=80,'the hand-kept list stays small');
+ const report=topSiteEntries([{source:DB,text:listed.join('\n')}],{rank:new Map([['amazon.ie',4837],['googll.store',3322]]),domainOf:host=>host.split('.').slice(-2).join('.')});
+ assert.deepEqual(report.exact.map(item=>item.host),['googll.store'],'the release check lists what the app still blocks');assert.ok(report.allowed.some(item=>item.host==='amazon.ie'));
+});
+test('a whole-host entry that is a public suffix (a storage region, a platform) blocks nothing; matching never walks above an address\'s registrable domain',async()=>{
+ const {parseCompactDomains,packThreatListAsync,isPublicSuffix,topSiteEntries}=require('../desktop/browser-services/threat-lists.cjs');
+ const suffixes=['nyc3.digitaloceanspaces.com','s3.us-west-2.amazonaws.com','blob.core.windows.net','github.io','netlify.app','r2.dev','ec2-3-82-145-88.compute-1.amazonaws.com'];
+ for(const name of suffixes)assert.equal(isPublicSuffix(name),true,name);for(const name of ['jw-assets.nyc3.digitaloceanspaces.com','evil.example.top','gravatar.com','203.0.113.7'])assert.equal(isPublicSuffix(name),false,name);
+ const buckets=['at4etrg-aaa3-0or.nyc3.digitaloceanspaces.com','evilbucket.s3.us-west-2.amazonaws.com','phisher.github.io'];
+ const text=[...suffixes,...buckets,'evil.example.top','||s3.us-west-2.amazonaws.com/evilbucket/^$all','||nyc3.digitaloceanspaces.com/scam/^$all'].join('\n');
+ const lists={set:parseThreatList(text),packed:await packThreatListAsync(text),compact:parseCompactDomains(makeCompact([...suffixes,...buckets,'evil.example.top']))};
+ for(const [form,list] of Object.entries(lists)){
+  for(const clean of ['https://jw-assets.nyc3.digitaloceanspaces.com/dda/content/questions/XcB3HWATjAobqijam2OKPukJF4N5spMJnQzNj63K.jpg','https://nyc3.digitaloceanspaces.com/jw-assets/a.png','https://assets.s3.us-west-2.amazonaws.com/logo.png','https://s3.us-west-2.amazonaws.com/assets/logo.png','https://mystorage.blob.core.windows.net/c/x.png','https://someone.github.io/','https://docs.netlify.app/','https://pub-123.r2.dev/x.png'])assert.equal(listMatches(list,U(clean)),false,form+' '+clean);
+  for(const listed of ['https://at4etrg-aaa3-0or.nyc3.digitaloceanspaces.com/index.html','https://evilbucket.s3.us-west-2.amazonaws.com/login.html','https://phisher.github.io/x','https://a.evil.example.top/'])assert.equal(listMatches(list,U(listed)),true,form+' '+listed);
+ }
+ for(const form of ['set','packed']){assert.equal(listMatches(lists[form],U('https://s3.us-west-2.amazonaws.com/evilbucket/login.html')),true,form+' a listed path on a storage endpoint still matches');assert.equal(listMatches(lists[form],U('https://nyc3.digitaloceanspaces.com/scam/x')),true);}
+ const report=topSiteEntries([{source:DB,text:suffixes.join('\n')}],{rank:new Map(),domainOf:()=>null});assert.deepEqual(report.suffixes.map(item=>item.host),[...suffixes].sort(),'the release check lists them apart: they never block');
+});
 test('validation rejects a wrong header, HTML, control bytes and a list that is too short',()=>{
  assert.doesNotThrow(()=>validate(makeList(PHISH.title),PHISH));
  assert.throws(()=>validate(makeList(MAL.title),PHISH),/Unexpected/);assert.throws(()=>validate('<html>'+makeList(PHISH.title),PHISH),/Invalid/);assert.throws(()=>validate(makeList(PHISH.title)+'\u0001',PHISH),/Invalid/);
@@ -84,6 +146,21 @@ test('gate: a listed top-level navigation is cancelled and explained; resources 
  assert.deepEqual(gate.check({url:'https://drop.example.org/a.js',resourceType:'script'},wc,'p1'),{cancel:true});assert.deepEqual(gate.stats(),{warned:3,blocked:2});
 });
 
+test('gate: a page resource blocked by a list is never silent: the first block of each host goes to the local log with the list, never for a private window',()=>{
+ const lines=[],lists={lookup:address=>{const host=new URL(address).hostname;return host.endsWith('nflxvideo.example')?{kind:'phishing',list:'Phishing.Database active domains',host,key:'nflxvideo.example'}:null;}};
+ const gate=createThreatGate({lists,log:line=>lines.push(line)});
+ const request=(url,type='media')=>gate.check({url,resourceType:type},null,'p1');
+ for(let i=0;i<5;i++)assert.deepEqual(request('https://a.nflxvideo.example/range/'+i),{cancel:true});
+ request('https://b.nflxvideo.example/x','xhr');request('https://clean.example/x');
+ assert.equal(lines.length,2,'once per host');assert.match(lines[0],/a\.nflxvideo\.example \(media\): listed in Phishing\.Database active domains as nflxvideo\.example/);assert.doesNotMatch(lines.join(''),/range\//,'no address path');
+ gate.check({url:'https://c.nflxvideo.example/',resourceType:'image'},null,'private-1',{quiet:true});assert.equal(lines.length,2,'never for a private window');
+ gate.check({url:'https://d.nflxvideo.example/',resourceType:'mainFrame'},null,'p1');assert.equal(lines.length,2,'a page gets the warning page, not a log line');
+ const {createMainLog}=require('../desktop/browser-services/main-log.cjs'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'acira-main-log-'));
+ try{const log=createMainLog({directory:path.join(dir,'logs'),maxBytes:400,echo(){},now:()=>new Date('2026-11-02T12:00:00Z')});for(let i=0;i<20;i++)log('line '+i+' x\ny');
+  const text=fs.readFileSync(path.join(dir,'logs','main.log'),'utf8');assert.ok(text.length<=400,'bounded');assert.match(text,/2026-11-02T12:00:00\.000Z line 19 x y\n$/);assert.doesNotMatch(text,/^line 0 /m);
+  assert.doesNotThrow(()=>createMainLog({directory:'/nonexistent/forbidden',io:{mkdirSync(){throw new Error('read-only');}},echo(){}})('x'));}
+ finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
 test('gate: ending a private profile forgets its warnings and exceptions while another profile keeps its choices',()=>{
  const url='https://owned.example.test/login',key='owned.example.test';
  const gate=createThreatGate({lists:fakeLists({'https://owned.example.test/':{kind:'phishing',list:'Owned fixture'}})});

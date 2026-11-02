@@ -28,14 +28,14 @@ export function ExtensionReinstall({ profileId, found }: { profileId: string; fo
           const result = await runtime.extensions({ type: 'install', profileId, extensionId: item.id });
           setProgress(current => ({ ...current, [item.id]: result.cancelled ? { state: 'cancelled' } : result.error ? { state: 'failed', note: result.error } : { state: 'added' } }));
         } catch (error) {
-          setProgress(current => ({ ...current, [item.id]: { state: 'failed', note: error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : 'Could not add this extension.' } }));
+          setProgress(current => ({ ...current, [item.id]: { state: 'failed', note: error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : t('extensionReinstall.couldNotAdd') } }));
         }
       }
     } finally { setBusy(false); }
   };
   const label = (item: FoundExtension) => {
     const row = progress[item.id];
-    return !row ? '' : row.state === 'working' ? 'Waiting for your review…' : row.state === 'added' ? 'Added' : row.state === 'cancelled' ? 'Not added' : row.note || 'Could not add';
+    return !row ? '' : row.state === 'working' ? t('extensionReinstall.waiting') : row.state === 'added' ? t('extensionReinstall.added') : row.state === 'cancelled' ? t('extensionReinstall.notAdded') : row.note || t('extensionReinstall.failed');
   };
   return <div className="aip-extensions" data-setting="import-extension-reinstall">
     <p className="aip-copy">{t("extensionreinstall.extensionsFoundInThatProfile")}</p>

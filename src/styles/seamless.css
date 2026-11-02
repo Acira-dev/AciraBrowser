@@ -24,6 +24,9 @@
 /* A pinned sidebar docks the page beside it with its own page-area margins, which beat this rule on specificity: the card stood flush against the window's top edge (inset 0, the other three sides 6). Ported from upstream 94791f7b. */
 :root:root .app.style-acira:has(.browser-shell[data-seamless='hidden']) .browser-root .browser-body > .page-area { margin-top: 6px; }
 :root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area :is(.page-content, .page-pane) { border-radius: inherit; }
+/* Fullscreen (ui/windowFullscreen.ts marks the root): the page is the whole screen. No 6px frame, no corners and no ring, in every Seamless
+   state (hidden, toolbar or sidebar shown, sidebar pinned); the native page view gets radius 0 from the layout (App.tsx pageCardRadius). */
+:root[data-window-fullscreen]:root:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0; border-radius: 0; box-shadow: none; }
 
 /* R4-24 Tier A, the side: the sidebar floats over the page (ui/chromeEdge.ts setFloat; main raises the interface over the page views).
    The window's background moves onto a fixed layer with the page's rect cut out (the copy and the mask are set from JS when the float

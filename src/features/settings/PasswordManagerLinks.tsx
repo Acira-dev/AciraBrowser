@@ -20,7 +20,7 @@ export function PasswordManagerLinks({ dispatch }: { dispatch: (action: BrowserA
     <SettingRow
       id="passwords-extensions"
       title={t("passwordmanagerlinks.preferAPasswordManagerExtension")}
-      detail="Each opens on the Chrome Web Store. To add one, paste its address in Extensions → Add from a link."
+      detail={t("passwordmanagerlinks.detail")}
       stacked
     >
       {passwordManagerExtensions.map((manager) => (

@@ -22,3 +22,11 @@ test('a PDF tab saves the document itself, not the viewer page that prints blank
  Object.assign(f.wc,{session:{fetch:async()=>({ok:false})}});f.answer({canceled:false,filePath:file});
  assert.equal((await f.service.exportPDF(f.wc)).saved,true);assert.equal(f.calls(),1,'a failed fetch falls back to printing');fs.rmSync(file,{force:true});
 });
+test('the suggested file name is the page title, and a PDF tab keeps its own name without a second .pdf',async()=>{
+ const {fileName}=require('../desktop/browser-services/page-output.cjs');
+ assert.equal(fileName('My Page','pdf'),'My Page.pdf');assert.equal(fileName('doc.pdf','pdf'),'doc.pdf');assert.equal(fileName('Report.PDF','pdf'),'Report.PDF');
+ assert.equal(fileName('doc.pdf','html'),'doc.pdf.html');assert.equal(fileName('Notes: Q1/Q2','pdf'),'Notes Q1 Q2.pdf');assert.equal(fileName('','pdf'),'Page.pdf');
+ const wc=new EventEmitter();Object.assign(wc,{session:{},isDestroyed:()=>false,getURL:()=>'https://example.org/doc.pdf',getTitle:()=>'doc.pdf'});let seen;
+ const service=createPageOutput({getContext:()=>({profileId:'A',tabId:'t'}),getWindow:()=>({}),downloadsPath:'/downloads',dialog:{showSaveDialog:async(_window,options)=>{seen=options.defaultPath;return {canceled:true};}}});
+ await service.exportPDF(wc);assert.equal(path.basename(seen),'doc.pdf');
+});

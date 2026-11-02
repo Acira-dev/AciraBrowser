@@ -9,7 +9,7 @@ import './styles/ux-controls.css';
 import './frost-preview.css';
 // One button component for every surface; loads after the study so it settles every older button look.
 import './styles/buttons.css';
-// Subtitles and ledes in IBM Plex Sans, under the Inter display titles.
+// Subtitles and ledes: the subtitle weight and tracking, in Inter like the titles above them.
 import './styles/subtitles.css';
 // Panels, popovers and menus: one rhythm, rows on the glass, fade-ended separators between groups only.
 import './styles/panels.css';

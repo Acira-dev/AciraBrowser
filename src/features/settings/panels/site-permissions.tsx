@@ -5,13 +5,15 @@ import { native, readable } from '../nativeClient';
 import type { SettingsPanel } from '../panels';
 import '../native-core.css';
 
-import { t } from '../../../i18n';
-const NAMES: Record<string, string> = {
-  'media-audio': 'Microphone', 'media-video': 'Camera', geolocation: 'Location', 'geolocation-approximate': 'Approximate location', notifications: 'Notifications',
-  'clipboard-read': 'Clipboard (read)', 'clipboard-sanitized-write': 'Clipboard (write)', midi: 'MIDI devices', midiSysex: 'MIDI system exclusive', pointerLock: 'Pointer lock', keyboardLock: 'Keyboard lock',
-  'idle-detection': 'Idle detection', 'speaker-selection': 'Speaker selection', 'local-network': 'Local network', 'local-network-access': 'Local network', 'loopback-network': 'Local apps',
-  'storage-access': 'Embedded site data', 'top-level-storage-access': 'Site data across sites',
+import { t, translateText, type MessageId } from '../../../i18n';
+const NAMES: Record<string, MessageId> = {
+  'media-audio': 'site.perm.microphone', 'media-video': 'site.perm.camera', geolocation: 'site.perm.location', 'geolocation-approximate': 'sitePermissions.approximateLocation', notifications: 'site.perm.notifications',
+  'clipboard-read': 'sitePermissions.clipboardRead', 'clipboard-sanitized-write': 'sitePermissions.clipboardWrite', midi: 'site.perm.midi', midiSysex: 'sitePermissions.midiSysex', pointerLock: 'sitePermissions.pointerLock', keyboardLock: 'site.perm.keyboardLock',
+  'idle-detection': 'site.perm.idle', 'speaker-selection': 'sitePermissions.speakerSelection', 'local-network': 'sitePermissions.localNetwork', 'local-network-access': 'sitePermissions.localNetwork', 'loopback-network': 'sitePermissions.localApps',
+  'storage-access': 'sitePermissions.embeddedSiteData', 'top-level-storage-access': 'sitePermissions.siteDataAcrossSites',
 };
+/** A permission's name; one the list does not know shows the engine's label, translated when the catalog has it. */
+const permissionName = (row: SitePermission) => NAMES[row.permission] ? t(NAMES[row.permission]) : translateText(row.label);
 const host = (origin: string) => origin.replace(/^https?:\/\//, '');
 
 function SitePermissions() {
@@ -32,10 +34,10 @@ function SitePermissions() {
               const key = `${row.requester}|${row.embedder}|${row.permission}`;
               return (
                 <div className="nc-permission" role="row" key={key}>
-                  <span className="nc-mono" role="cell" title={embedded ? `${row.requester} embedded in ${row.embedder}` : row.requester}>{host(row.requester)}{embedded ? ` in ${host(row.embedder)}` : ''}</span>
-                  <span role="cell">{NAMES[row.permission] ?? row.label}</span>
+                  <span className="nc-mono" role="cell" title={embedded ? t('sitePermissions.embeddedIn', { requester: row.requester, embedder: row.embedder }) : row.requester}>{embedded ? t('sitePermissions.hostIn', { requester: host(row.requester), embedder: host(row.embedder) }) : host(row.requester)}</span>
+                  <span role="cell">{permissionName(row)}</span>
                   <span className="nc-mono" role="cell">{row.decision === 'allow' ? t("sitePermissions.allowed") : t("sitePermissions.blocked")}{row.temporary ? t("sitePermissions.once") : ''}</span>
-                  <button type="button" className="st-button" aria-label={t("sitePermissions.resetLabelForRequester", { label: NAMES[row.permission] ?? row.label, requester: host(row.requester) })} onClick={() => void apply({ type: 'permissions.reset', requester: row.requester, embedder: row.embedder, permission: row.permission })}>{t("browsersettings.reset")}</button>
+                  <button type="button" className="st-button" aria-label={t("sitePermissions.resetLabelForRequester", { label: permissionName(row), requester: host(row.requester) })} onClick={() => void apply({ type: 'permissions.reset', requester: row.requester, embedder: row.embedder, permission: row.permission })}>{t("browsersettings.reset")}</button>
                 </div>
               );
             })}

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const ts = createRequire(import.meta.url)('typescript');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const catalogPath = path.join(root, 'src/i18n/en.json');
-const ATTRS = new Set(['title', 'aria-label', 'aria-description', 'placeholder', 'alt', 'label']);
+const ATTRS = new Set(['title', 'aria-label', 'aria-description', 'aria-valuetext', 'placeholder', 'alt', 'label', 'detail', 'info', 'foldDetail', 'hint', 'description', 'note']); // as scripts/i18n-scan.mjs
 const PROPS = new Set(['title', 'detail', 'description', 'label', 'text', 'placeholder', 'message', 'tooltip', 'caption', 'heading', 'ariaLabel']);
 const hasWords = text => /[A-Za-zÀ-ɏ]{2}/.test(text);
 const prose = text => hasWords(text) && !/^[a-z0-9_.:/#@-]+$/.test(text) && !/^(https?:|acira:|file:|#|\.|\/)/.test(text) && !/^[A-Z0-9_]+$/.test(text);

@@ -9,9 +9,9 @@ test('the Chrome promo sheet is hidden on google.com and country domains',()=>{
 });
 test('the rules never apply to other sites',()=>{for(const url of ['https://example.com/','https://notgoogle.com/'])assert.doesNotMatch(styles(url),/promo_label_id/,url);});
 
-test('the frame filter applies the promo selectors on Google hosts only, behind the annoyances toggle',()=>{
+test('the frame filter applies the promo selectors on Google hosts only, while ad and tracker blocking is on (not behind the cookie-banner switch, which is off by default)',()=>{
  const source=fs.readFileSync(path.join(__dirname,'..','desktop','browser-services','optional-filtering.cjs'),'utf8');
- assert.match(source,/annoyanceSelectors:options\.annoyances\?browserPromoSelectors\(host\):\[\]/);
+ assert.match(source,/annoyanceSelectors:adsBlocked\(wc\)\?browserPromoSelectors\(host\):\[\]/);
  const make=source.match(/const GOOGLE_HOST=.*\r?\nconst browserPromoSelectors=.*/)[0];
  const {GOOGLE_HOST,browserPromoSelectors}=new Function(make+';return {GOOGLE_HOST,browserPromoSelectors};')();
  for(const host of ['www.google.com','google.com','www.google.co.uk','www.google.com.lb','www.google.de'])assert.equal(browserPromoSelectors(host).length,2,host);

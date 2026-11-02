@@ -19,6 +19,9 @@ test('look-alike addresses: homoglyphs, one-letter typos, mixed alphabets and a 
  for(const [host,reason] of Object.entries(reasons))assert.equal(risk.hostRisk(host)?.reason,reason,host);
  for(const host of ['www.paypal.com','paypal.com','accounts.google.com','mail.google.com','www.amazon.co.uk','amazon.de','github.io','docs.github.io','example.com','slack.co','localhost','127.0.0.1','[::1]','my.service.local','login.microsoftonline.com','gist.github.com','www.youtube.com','news.ycombinator.com','weather.com',''])assert.equal(risk.hostRisk(host),null,host);
  assert.equal(risk.hostRisk('paypa1.com').brand,'PayPal');assert.equal(risk.hostRisk('paypa1.com').domain,'paypal.com');
+ for(const host of ['telegra.ph','www.telegra.ph'])assert.equal(risk.hostRisk(host),null,host+' is Telegraph, Telegram\'s own publishing service, not a typo of telegram');
+ assert.equal(risk.hostRisk('telegrem.org')?.reason,'typo','a real typo of Telegram still is one');
+ assert.equal(risk.loginRisk('telegra.ph','Telegram: log in to verify your account')?.reason,'brand-login','a Telegraph page claiming to be Telegram\'s sign-in is still flagged');
 });
 test('look-alike sign-in pages: the page claims a brand on a domain the brand does not use; "sign in with" and the real domain are fine',()=>{
  assert.equal(risk.loginRisk('evil.top','Sign in to your PayPal account | verify').brand,'PayPal');assert.equal(risk.loginRisk('x.top','Microsoft 365 sign in').brand,'Microsoft');assert.equal(risk.loginRisk('login-secure.example','Log in - Chase').domain,'chase.com');

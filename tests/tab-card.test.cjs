@@ -7,10 +7,10 @@ const {createInitialState,reduceBrowser,tabCardKind,tabCardHost}=require('../des
 const {createTabCard,cardPlacement,WIDTH,GAP,SHOW_MS,SKIP_MS,LEAVE_MS,KEEP,MARGIN}=require('../desktop/tab-card.cjs');
 
 class FakeContents extends EventEmitter{
- constructor(){super();this.ipc=new EventEmitter();this.sent=[];this.destroyed=false;this.height=120;}
- loadFile(){setImmediate(()=>this.ipc.emit('acira:tab-card',{},'ready'));return Promise.resolve();}
+ constructor(){super();this.ipc=new EventEmitter();this.sent=[];this.destroyed=false;this.height=120;this.loaded=false;this.zooms=[];}
+ loadFile(){this.loaded=true;setImmediate(()=>this.ipc.emit('acira:tab-card',{},'ready'));return Promise.resolve();}
  send(channel,state){this.sent.push(state);if(!state.reveal&&!state.leaving)setImmediate(()=>this.ipc.emit('acira:tab-card',{},{size:state.picture?226:this.height}));}
- setZoomFactor(value){this.zoom=value;}isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}
+ setZoomFactor(value){this.zoom=value;this.zooms.push({value,loaded:this.loaded});}isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}
 }
 class FakeView{constructor(options){this.options=options;this.webContents=new FakeContents();this.bounds=null;this.visible=true;}setBounds(b){this.bounds=b;}setVisible(v){this.visible=v;}setBackgroundColor(){}}
 const flush=async(times=6)=>{for(let i=0;i<times;i++)await new Promise(resolve=>setImmediate(resolve));};
@@ -170,6 +170,17 @@ test('the interface scale zooms the card page and scales the anchor and the card
  h.card.command({action:'hover',tabId:a.id,anchor:{x:200,y:24,width:120,height:21},side:'below'});t.mock.timers.tick(SHOW_MS);await flush();
  assert.equal(h.views[0].options.webPreferences.zoomFactor,1.5);assert.equal(h.views[0].webContents.zoom,1.5);
  assert.equal(h.views[0].bounds.y,Math.round((24+21)*1.5),'the card hangs from the scaled tab box');
+});
+
+test('the card page is zoomed again once it has loaded: Chromium restores the origin\'s old zoom over the one asked for at creation, so a card built after an interface scale change came up at the old scale',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+ const h=harness();h.scale=1.5;const a=h.tab(1);
+ h.card.command({action:'hover',tabId:a.id,anchor:{x:200,y:24,width:120,height:21},side:'below'});t.mock.timers.tick(SHOW_MS);await flush();
+ h.card.command({action:'dismiss',tabId:a.id});
+ h.scale=0.8;h.card.onState(h.state,h.state);assert.equal(h.views[0].webContents.destroyed,true,'the old scale closes the card page');
+ h.card.command({action:'hover',tabId:a.id,anchor:{x:200,y:24,width:120,height:21},side:'below'});t.mock.timers.tick(SHOW_MS);await flush();
+ const zooms=h.views[1].webContents.zooms;assert.equal(h.views[1].options.webPreferences.zoomFactor,0.8);
+ assert.deepEqual(zooms.at(-1),{value:0.8,loaded:true},'the last zoom is asked after the page has loaded');
 });
 
 test('one rule for card or tooltip, shared by the interface and the main process',()=>{

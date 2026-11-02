@@ -92,7 +92,7 @@ test('app updater: states follow updater events, ready is announced to the inter
   const make=()=>createAppUpdater({app:{isPackaged:true,getVersion:()=>'0.1.0',getPath:()=>dir},dir,platform:'win32',env:{},autoUpdater:fake,uninstallerPresent:()=>true,onChange:status=>messages.push(status.status)});
   const updater=make();assert.equal(updater.status().supported,true);assert.equal(updater.status().autoDownload,true);
   const result=await updater.check();assert.equal(result.status,'ready');assert.equal(result.available,'0.2.0');assert.ok(messages.includes('ready'),'the interface is told when the download is ready: the Update pill and the Restart to update menu row replaced the old toast');
-  await updater.install();assert.deepEqual(fake.args,[false,true]);
+  await updater.install();assert.deepEqual(fake.args,[true,true]);
   assert.equal(updater.setAutoDownload(false).autoDownload,false);assert.equal(make().status().autoDownload,false);
   assert.throws(()=>updater.setAutoDownload('yes'));
   assert.equal(fake.autoDownload,false);

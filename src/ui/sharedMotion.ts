@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { springAt, springEasing, springs, type SpringSpec } from './springs';
-import { classScale, frequentStretch, kick, springFor, springForFrequent, stripMs, type MotionClass, type MotionTokenId, type SpeedName } from './motionTokens';
+import { classScale, frequentStretch, kick, motionPaceOf, springFor, springForFrequent, stripMs, type MotionClass, type MotionTokenId, type SpeedName } from './motionTokens';
 import { atRest, disclosureFrames, glideAt, glideStart, negligible, planList, type Glide, type GlideState } from './morphPlan';
 export * from './springs';
 export * from './motionTokens';
@@ -19,12 +19,12 @@ export function reducedMotion(): boolean {
 }
 
 /** The animation-speed setting (R3-17; Settings › Appearance). Premium is the default: relaxed, every stage visible
- * (1.7× the durations Fast has, which are the durations before the setting existed). Off is instant. The OS asking for
- * reduced motion always wins, and so does Accessibility › Reduce motion: both mean Off. */
+ * (1.7× the base durations, which are the durations before the setting existed). Fast is snappy: 0.6× the base. Off is
+ * instant. The OS asking for reduced motion always wins, and so does Accessibility › Reduce motion: both mean Off. */
 export type AnimationSpeed = SpeedName;
-/** The spatial (S) multiplier of each speed: this is `--motion-scale`. Effects (E) take 1.4 in Premium and latency-bound
- * motion (L: press, hover, drag follow) stays 1: `--motion-e`, `--motion-l`, `motionScale('E')`. */
-export const motionScales: Record<AnimationSpeed, number> = { premium: 1.7, fast: 1, off: 0 };
+/** The spatial (S) multiplier of each speed: this is `--motion-scale`. Effects (E) take 1.4 in Premium and 0.6 in Fast, and
+ * latency-bound motion (L: press, hover, drag follow) stays 1: `--motion-e`, `--motion-l`, `motionScale('E')`. */
+export const motionScales: Record<AnimationSpeed, number> = { premium: 1.7, fast: .6, off: 0 };
 /** The effective speed for a settings object whose `reducedMotion` already includes the OS preference (App merges it). */
 export function animationSpeedOf(settings: { animationSpeed?: string; reducedMotion?: boolean } | null | undefined): AnimationSpeed {
   if (settings?.reducedMotion) return 'off';
@@ -34,7 +34,7 @@ export const motionScaleOf = (settings: Parameters<typeof animationSpeedOf>[0]):
 
 let currentSpeed: SpeedName | null = null;
 /** App publishes the effective speed here and as CSS: `--motion-scale` (= `--motion-s`, the spatial class) on `.app` and
- * the document root, plus `--motion-e` and `--motion-l`, so script and CSS read one source. */
+ * the document root, plus `--motion-e`, `--motion-l` and `--motion-pace`, so script and CSS read one source. */
 export function publishMotionSpeed(speed: SpeedName): void {
   currentSpeed = speed;
   if (typeof document === 'undefined') return;
@@ -43,8 +43,10 @@ export function publishMotionSpeed(speed: SpeedName): void {
   style.setProperty('--motion-s', String(classScale(speed, 'S')));
   style.setProperty('--motion-e', String(classScale(speed, 'E')));
   style.setProperty('--motion-l', String(classScale(speed, 'L')));
-  // Frequent surfaces (tab strips, sidebar rows, suggestions) take 40% of the stretch: `--motion-f` (1.28 Premium, 1 Fast, 0 Off).
+  // Frequent surfaces (tab strips, sidebar rows, suggestions) take 40% of the stretch: `--motion-f` (1.28 Premium, .6 Fast, 0 Off).
   style.setProperty('--motion-f', String(frequentStretch(classScale(speed, 'S'))));
+  // Motion with a set length that Premium never stretches quickens in Fast: `--motion-pace` (1 Premium, .6 Fast, 1 Off).
+  style.setProperty('--motion-pace', String(motionPaceOf(speed)));
 }
 /** The speed in force right now: Off whenever reduced motion is on (the setting or the OS). Before App has published one,
  * it is Fast. */
@@ -52,15 +54,17 @@ export function motionSpeed(): SpeedName {
   if (typeof document === 'undefined' || reducedMotion()) return 'off';
   return currentSpeed ?? 'fast';
 }
-/** The multiplier a duration reads: for the spatial class 1.7 Premium, 1 Fast, 0 Off (`--motion-scale`); effects 1.4 and
+/** The multiplier a duration reads: for the spatial class 1.7 Premium, .6 Fast, 0 Off (`--motion-scale`); effects 1.4 and
  * latency-bound 1 in Premium. */
 export function motionScale(cls: MotionClass = 'S'): number {
   return classScale(motionSpeed(), cls);
 }
-/** The spring-speed multiplier of a frequent surface that still runs a hand-tuned spring (the tab strips): 1 in Fast (today's
- * feel), 1/1.28 in Premium (the same spring, 28% slower), 1 when off (those surfaces then run no motion). */
+/** The spring-speed multiplier of a frequent surface that still runs a hand-tuned spring (the tab strips): 1/.6 in Fast (the
+ * same spring, stiffer), 1/1.28 in Premium (28% slower), 1 when off (those surfaces then run no motion). */
 export const frequentSpeed = (settings: Parameters<typeof animationSpeedOf>[0]): number => { const scale = classScale(animationSpeedOf(settings), 'S'); return scale > 0 ? 1 / frequentStretch(scale) : 1; };
-/** Milliseconds for the current speed: `scaled(180)` is 306 in Premium, 180 in Fast, 0 when off. */
+/** The pace of motion with a set length that Premium never stretches (`motionPaceOf`): .6 in Fast, 1 otherwise. */
+export const motionPace = (): number => motionPaceOf(motionSpeed());
+/** Milliseconds for the current speed: `scaled(180)` is 306 in Premium, 108 in Fast, 0 when off. */
 export const scaled = (ms: number, cls: MotionClass = 'S'): number => ms * motionScale(cls);
 /** Frequent and keyboard-opened surfaces (right-click menus, the palette) take only part of the Premium stretch: a
  * surface used a hundred times a day must never feel slow. */
@@ -308,7 +312,9 @@ export function useSectionMotion(target: RefObject<HTMLElement | null>, key: unk
   }, [key]);
 }
 
-/** The sidebar's spring (the same curve the sidebar's own slide, the page card and main's native page follow). */
+/** The sidebar's spring (the same curve the sidebar's own slide, the page card and main's native page follow), 480 ms at Premium
+ * and 288 in Fast (`--motion-pace`): never stretched by Premium, so the four stay in step at every speed. */
+const PAGE_GLIDE_MS = 480;
 const PAGE_SPRING = 'linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)';
 /** R6 (founder: "the way websites respond to dimension changes is too cutty and slow", "remove the blur"): while the sidebar or the
  * toolbar changes the page's size, the page's content is not frozen into a picture and frosted. It stands in its old box and
@@ -326,7 +332,7 @@ function followPage(before: DOMRect | null | undefined): { start: () => void; st
   Object.assign(style, from); root.dataset.pageLive = '';
   let animation: Animation | null = null;
   const stop = () => { animation?.cancel(); animation = null; Object.assign(style, { marginLeft: '', marginTop: '', width: '', height: '' }); delete root.dataset.pageLive; };
-  const start = () => { animation = content.animate([from, to], { duration: 480, easing: PAGE_SPRING, fill: 'both' }); animation.finished.then(stop, () => {}); };
+  const start = () => { animation = content.animate([from, to], { duration: PAGE_GLIDE_MS * motionPace(), easing: PAGE_SPRING, fill: 'both' }); animation.finished.then(stop, () => {}); };
   return { start, stop };
 }
 
@@ -363,7 +369,7 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   const run = () => {
     if(kind === 'appearance') root.dataset.themeSettle = '';
     update();
-    if(kind === 'layout') follow = followPage(before);
+    if(kind === 'layout') { follow = followPage(before); if (follow) root.dataset.pageFollow = ''; }
   };
   const transition = start.call(document, run);
   if (kind === 'layout' && transition.ready) {
@@ -374,7 +380,7 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   // A newer reveal or workspace selection can skip this snapshot. Its update still
   // completes; consuming ready's rejection avoids an uncaught animation-only error.
   void transition.ready?.then(() => follow?.start(), () => {});
-  transition.finished.finally(() => { follow?.stop(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
+  transition.finished.finally(() => { follow?.stop(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.pageFollow; delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
   return transition;
 }
 

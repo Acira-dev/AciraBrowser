@@ -20,7 +20,8 @@ import { classScales, springFor, type SpeedName } from "../../ui/motionTokens";
  * whose radial mask opens; the mark is an SVG whose strokes draw. The browser is laid out and painted under setup
  * beforehand (onboarding.css column rule and the prewarm), so nothing in it changes on the click. */
 
-/** Perceptual spring durations at Fast in seconds (Premium stretches spatial S by 1.7 and effects E by 1.4). */
+/** Perceptual spring durations at the base speed in seconds (Premium stretches spatial S by 1.7 and effects E by 1.4; Fast
+ * takes 0.6 of both). */
 export const FINALE = {
   /** The mark enters this long after the click (E), while the setup fades. */
   enter: 0.07,
@@ -60,9 +61,10 @@ export function reverseSpring(spring: SpringEasing, trim = 0.02): SpringEasing {
   return { duration: Math.round(spring.duration * (1 - x0)), easing, peak: 1 };
 }
 
-/** The moment's timeline at a speed, in ms, with the springs' easings: each spring's duration is its settle time. */
-export function finaleTimeline(speed: SpeedName) {
-  const { S, E } = classScales[speed];
+/** The moment's timeline at a speed, in ms, with the springs' easings: each spring's duration is its settle time. `base` is the
+ * timeline before the speed setting (Fast's until 2 Nov), which the short version keeps at Premium. */
+export function finaleTimeline(speed: SpeedName | "base") {
+  const { S, E } = speed === "base" ? { S: 1, E: 1 } : classScales[speed];
   const spring = (d: number, scale: number) => springEasing({ duration: d, bounce: 0 }, scale);
   const drawSpring = spring(FINALE.draw, S),
     retractSpring = reverseSpring(spring(FINALE.retract, S)),
@@ -335,7 +337,8 @@ export type FinaleOptions = {
   onArrive?: () => void;
   /** Draw the mark (Start browsing, and the short version for Skip setup). */
   mark?: boolean;
-  /** The short version (Skip setup): the same moment on the Fast timeline, whatever the speed setting. */
+  /** The short version (Skip setup): the same moment on the base timeline at Premium (Fast's before Fast became 0.6×), on
+   * Fast's own at Fast. */
   short?: boolean;
 };
 
@@ -406,7 +409,7 @@ export function playFinale(stage: HTMLElement | null, { reduced, onStart, onArri
   const card = stage.querySelector<HTMLElement>(".fr-card");
   const box = card?.getBoundingClientRect();
   const drawn = withMark && !!symbol;
-  const t = finaleTimeline(short && speed === "premium" ? "fast" : speed);
+  const t = finaleTimeline(short && speed === "premium" ? "base" : speed);
   // Without the mark the veil clears right after the setup has left.
   const clearAt = drawn ? t.clearAt : t.enter,
     clearFor = drawn ? t.total - t.clearAt : t.retreat;

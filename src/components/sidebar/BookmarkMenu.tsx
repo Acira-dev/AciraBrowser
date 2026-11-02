@@ -11,6 +11,7 @@ import { MenuNameForm } from '../MenuNameForm';
 import { copyText } from '../../ui/pageActions';
 import { openWorkspacePage } from '../../ui/workspaceView';
 import { bookmarkStep,bookmarkTarget,branchOf,pagesIn,sortedByName } from '../../ui/bookmarkMenu';
+import { folderTitle } from '../../ui/bookmarkFolderName';
 
 import { t } from '../../i18n';
 type Row=(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string)=>ReactNode;
@@ -62,11 +63,11 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
   return <>
    {pages.length>0&&<>{row(t("bookmarkmenu.openAllCount", { count: pages.length }),Layers3,run(()=>{for(const url of pages.slice(0,OPEN_ALL_LIMIT))dispatch({type:'tab.new',url,background:true});if(pages.length>OPEN_ALL_LIMIT)dispatch({type:'toast',text:t("bookmarkmenu.openedFirst", { limit: OPEN_ALL_LIMIT, total: pages.length }),tone:'info'});}))}{sep('a')}</>}
    {editable&&<MenuFormFlyout title={t('bookmarkmenu.newFolder')}>{dismiss=><MenuNameForm label={t('bookmarkmenu.folderName')} action={t('searchEngines.add')} cancel={dismiss} submit={title=>{dispatch({type:'bookmark.folder',title,parentId:parentForNew});close();}}/>}</MenuFormFlyout>}
-   {editable&&!bar&&<MenuFormFlyout title={t('bookmarkmenu.rename')}>{dismiss=><MenuNameForm label={t('bookmarkmenu.folderName')} initial={node.title} action={t('bookmarkmenu.rename')} cancel={dismiss} submit={title=>{dispatch({type:'bookmark.rename',id:node.id,title});close();}}/>}</MenuFormFlyout>}
+   {editable&&!bar&&<MenuFormFlyout title={t('bookmarkmenu.rename')}>{dismiss=><MenuNameForm label={t('bookmarkmenu.folderName')} initial={folderTitle(node)} action={t('bookmarkmenu.rename')} cancel={dismiss} submit={title=>{/* Other bookmarks shows its translated name: kept as it is, it is no rename */if(title!==folderTitle(node))dispatch({type:'bookmark.rename',id:node.id,title});close();}}/>}</MenuFormFlyout>}
    {editable&&kids>1&&row(t("bookmarkmenu.sortByName"),ListFilter,run(()=>sortHere(node.id)))}
    {moves(node)}
    {bar&&row(state.settings.bookmarksBar?t("bookmarkmenu.hideBookmarksBar"):t("bookmarkmenu.showBookmarksBar"),PanelTop,run(()=>dispatch({type:'settings.update',patch:{bookmarksBar:!state.settings.bookmarksBar}})))}
-   {editable&&!bar&&<>{sep('b')}{row(t("bookmarkmenu.deleteFolder"),Trash2,run(()=>{const gone=branchOf(node,state.bookmarkNodes),inside=gone.filter(item=>item.url).length;dispatch({type:'bookmark.remove',id:node.id});deleted(`Deleted ${node.title||'folder'}${inside?` and ${inside} ${inside===1?'bookmark':'bookmarks'}`:''}`,gone);}))}</>}
+   {editable&&!bar&&<>{sep('b')}{row(t("bookmarkmenu.deleteFolder"),Trash2,run(()=>{const gone=branchOf(node,state.bookmarkNodes),inside=gone.filter(item=>item.url).length;dispatch({type:'bookmark.remove',id:node.id});deleted(`Deleted ${folderTitle(node)||'folder'}${inside?` and ${inside} ${inside===1?'bookmark':'bookmarks'}`:''}`,gone);}))}</>}
   </>;}
  return <>
   {editable&&<MenuFormFlyout title={t('bookmarkmenu.newFolder')}>{dismiss=><MenuNameForm label={t('bookmarkmenu.folderName')} action={t('searchEngines.add')} cancel={dismiss} submit={title=>{dispatch({type:'bookmark.folder',title,parentId:null});close();}}/>}</MenuFormFlyout>}

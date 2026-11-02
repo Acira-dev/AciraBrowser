@@ -18,8 +18,10 @@
 //     "Acira updated to X" toast, never an empty popup. A fresh install, or the first run of a build that predates this, shows nothing.
 // Test mode (ACIRA_UPDATE_TEST plus ACIRA_UPDATE_STUB): a stand-in updater downloads nothing and its quitAndInstall only writes a log line, so no
 // installer ever runs; ACIRA_UPDATE_TEST_VERSION pretends the app is that version (to rehearse the "updated" note).
-const fs=require('node:fs'),path=require('node:path'),{EventEmitter}=require('node:events');
+const fs=require('node:fs'),path=require('node:path'),{EventEmitter}=require('node:events'),{createRetry}=require('./network-retry.cjs');
 const CHECK_DELAY=20*1000,CHECK_EVERY=8*60*60*1000; // every 8 hours, like Dia
+// A failed check or download (offline at start, a dropped connection) tries again 2, 10 and 30 minutes later and as soon as the network comes back or the
+// Mac wakes (network-retry.cjs), instead of 8 hours later. Nothing new is shown: the status says 'error' as before until an attempt succeeds.
 const CHANNELS=['stable','beta'];
 const NOTES_MAX=1000,FLUSH_TIMEOUT=5000,PROGRESS_EVERY=400; // the interface hears about download progress at most this often (ms), and only when the percent moved
 const count=value=>Number.isFinite(value)&&value>=0?Math.round(value):null;
@@ -69,8 +71,7 @@ function createStubUpdater({env,dir}){
  stub.setFeedURL=config=>{stub.feed=typeof config?.url==='string'?config.url:null;};
  return stub;
 }
-function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,every=setInterval,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app})}){
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>fs.existsSync(path.join(path.dirname(process.execPath),'Uninstall AciraBrowser.exe')),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app})}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  const version=testing&&env.ACIRA_UPDATE_TEST_VERSION?String(env.ACIRA_UPDATE_TEST_VERSION):app.getVersion();
@@ -90,7 +91,10 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  const unsupported=stubbed?null:!app.isPackaged?'Updates apply to the installed app, not a development run.':qaBuild&&!env.ACIRA_UPDATE_TEST?'Updates are off in QA builds.':env.ACIRA_BROWSER_TEST_DATA&&!env.ACIRA_UPDATE_TEST?'Updates are off while running with a test profile.':platform==='darwin'?macAvailability():platform!=='win32'?'Automatic updates are unavailable on this platform.':!installed?'This is a portable copy. Download new versions from the releases page.':null;
  // transferred/total (bytes) and speed (bytes a second) describe the download in progress; notes are the downloaded version's plain-text release notes.
  const state={status:unsupported?'unsupported':'idle',version,available:null,progress:null,transferred:null,total:null,speed:null,notes:'',lastChecked:null,error:null};
- let updater=null,started=false,installing=false,promptedFor=null,welcomed=false,shownPercent=-1,shownAt=0;
+ let updater=null,started=false,installing=false,promptedFor=null,welcomed=false,shownPercent=-1,shownAt=0,failedRound=false;
+ const retry=createRetry({run:()=>{void check();},schedule,cancel,now,watch:network});
+ // electron-updater both emits 'error' and rejects the check: one failure per attempt
+ const failed=()=>{if(failedRound||unsupported)return;failedRound=true;retry.failed();};
  // The one question ("Install now / Later / Read more") is asked once for each downloaded version; Later never brings it back, the pill does.
  const wantsPrompt=()=>state.status==='ready'&&state.available!==null&&promptedFor!==state.available;
  // The first launch on a new version: its notes, shown once in a popup (only when the feed had notes; without them a quiet toast says it, see main announceUpdate).
@@ -101,9 +105,10 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   if(updater||unsupported)return updater;
   updater=stubbed?createStubUpdater({env,dir}):autoUpdater||require('electron-updater').autoUpdater;
   updater.autoDownload=autoDownload;updater.autoInstallOnAppQuit=true;updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false; /* each release carries latest.yml (Stable) and beta.yml (Beta); setting a channel turns allowDowngrade on, so it is reset */ updater.logger=null;if(env.ACIRA_UPDATE_TEST&&env.ACIRA_UPDATE_FEED)updater.setFeedURL({provider:'generic',url:env.ACIRA_UPDATE_FEED});// test-only: points the installed build at a local feed
-  updater.on('checking-for-update',()=>{state.status='checking';state.error=null;changed();});
-  updater.on('update-available',info=>{if(info?.version&&info.version!==state.available){state.progress=null;state.transferred=state.total=state.speed=null;state.notes='';}state.available=info?.version||null;state.status=autoDownload?'downloading':'available';shownPercent=-1;changed();});
-  updater.on('update-not-available',()=>{state.status='current';state.available=null;state.progress=state.transferred=state.total=state.speed=null;state.notes='';state.lastChecked=now();changed();});
+  updater.on('checking-for-update',()=>{failedRound=false;state.status='checking';state.error=null;changed();});
+  // a found update counts as success only when nothing is downloaded automatically: a download that keeps failing must climb the ladder, not restart it
+  updater.on('update-available',info=>{if(info?.version&&info.version!==state.available){state.progress=null;state.transferred=state.total=state.speed=null;state.notes='';}state.available=info?.version||null;state.status=autoDownload?'downloading':'available';shownPercent=-1;if(!autoDownload)retry.succeeded();changed();});
+  updater.on('update-not-available',()=>{retry.succeeded();state.status='current';state.available=null;state.progress=state.transferred=state.total=state.speed=null;state.notes='';state.lastChecked=now();changed();});
   // Progress is real (electron-updater counts the bytes); the interface hears of it when the percent moves, never faster than PROGRESS_EVERY.
   updater.on('download-progress',progress=>{
    state.status='downloading';state.progress=Math.max(0,Math.min(100,Math.round(progress?.percent||0)));
@@ -111,21 +116,25 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    const at=now();if(state.progress!==shownPercent&&(at-shownAt>=PROGRESS_EVERY||state.progress===100||shownPercent<0)){shownPercent=state.progress;shownAt=at;changed();}
   });
   updater.on('update-downloaded',info=>{
-   state.status='ready';state.available=info?.version||state.available;state.progress=100;state.speed=null;state.lastChecked=now();state.notes=notesText(info?.releaseNotes);
+   retry.succeeded();state.status='ready';state.available=info?.version||state.available;state.progress=100;state.speed=null;state.lastChecked=now();state.notes=notesText(info?.releaseNotes);
    // keep the notes with the version, so the "Acira updated" note can show them after the restart
    if(state.available){pending={version:state.available,notes:state.notes};try{persist();}catch{}}
    changed();
   });
-  updater.on('error',error=>{state.status='error';state.error=clean(error);state.lastChecked=now();changed();});
+  updater.on('error',error=>{state.status='error';state.error=clean(error);state.lastChecked=now();failed();changed();});
   return updater;
  }
  async function check(){
   if(unsupported)return status();
   if(['checking','downloading'].includes(state.status))return status();
-  try{setup();await updater.checkForUpdates();}catch(error){state.status='error';state.error=clean(error);state.lastChecked=now();changed();}
+  // Mac, 'ready': a downloaded update waits for Install now. Checking again hands it to Squirrel.Mac a second time, which either fails (status 'error':
+  // the pill and Install now disappear) or stages a second install under the first. The first check after the restart finds anything newer.
+  if(platform==='darwin'&&state.status==='ready')return status();
+  failedRound=false;
+  try{setup();await updater.checkForUpdates();}catch(error){state.status='error';state.error=clean(error);state.lastChecked=now();failed();changed();}
   return status();
  }
- async function download(){if(unsupported||state.status!=='available')return status();try{state.status='downloading';await setup().downloadUpdate();}catch(error){state.status='error';state.error=clean(error);}return status();}
+ async function download(){if(unsupported||state.status!=='available')return status();failedRound=false;try{state.status='downloading';await setup().downloadUpdate();}catch(error){state.status='error';state.error=clean(error);failed();}return status();}
  function setAutoDownload(value){
   if(typeof value!=='boolean')throw new Error('Choose on or off.');
   autoDownload=value;persist();
@@ -147,7 +156,9 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    // a failed or slow save must not trap the person in the old version: it is waited for, but only so long
    await Promise.race([Promise.resolve().then(beforeInstall),new Promise(resolve=>{timer=setTimeout(resolve,FLUSH_TIMEOUT);timer.unref?.();})]).catch(()=>{}).finally(()=>clearTimeout(timer));
    setup().log?.('session-flushed');
-   updater.quitAndInstall(false,true);
+   // Windows: silent (/S), so no setup window and none of its questions ("Update to X / Open / Cancel" is asked only when not silent), and
+   // --force-run, so the setup opens Acira again when it is done. Squirrel.Mac ignores both arguments.
+   updater.quitAndInstall(true,true);
   }catch(error){installing=false;throw error;}
   return {...status(),installing:true};
  }
@@ -169,4 +180,4 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  function start(){if(started||unsupported)return;started=true;const run=()=>{void check();};const first=schedule(run,stubbed?1500:CHECK_DELAY);first?.unref?.();const loop=every(run,CHECK_EVERY);loop?.unref?.();}
  return {status,check,download,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo};
 }
-module.exports={hasInstalledWindowsUninstaller,createAppUpdater,createStubUpdater,notesText,CHECK_EVERY,CHECK_DELAY,CHANNELS};
+module.exports={createAppUpdater,createStubUpdater,notesText,CHECK_EVERY,CHECK_DELAY,CHANNELS};

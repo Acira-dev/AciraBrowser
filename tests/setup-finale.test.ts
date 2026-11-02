@@ -124,10 +124,10 @@ test('R4-18: the moment runs on its own clock from its first frame, so a late fi
   // A theme crossfade still running is taken over, never a reason for the quiet fade.
   assert.doesNotMatch(finale, /hasAttribute\("data-fr-switch"\)\) \{\s*fade/);
   assert.match(finale, /root\.removeAttribute\("data-fr-switch"\)/);
-  // Skip setup ends on the mark too: the short version (the Fast timeline).
+  // Skip setup ends on the mark too: the short version (at Premium the base timeline, Fast's before Fast became 0.6x).
   assert.match(onboarding, /playFinale\(stageRef\.current, \{ reduced: reducedMotion, onStart: close, onArrive: offerUndo, mark: true, short: true \}\)/);
-  assert.match(finale, /finaleTimeline\(short && speed === "premium" \? "fast" : speed\)/);
-  assert.ok(finaleTimeline('fast').total < t.total);
+  assert.match(finale, /finaleTimeline\(short && speed === "premium" \? "base" : speed\)/);
+  assert.ok(finaleTimeline('base').total < t.total && finaleTimeline('fast').total < finaleTimeline('base').total);
 });
 
 test('setup closes once the motion runs, Make it yours enters as the browser clears, no fixed timers', () => {

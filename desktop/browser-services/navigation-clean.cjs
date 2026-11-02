@@ -65,10 +65,16 @@ function stripTracking(href, rules) {
   return { url: url.origin + url.pathname + (clean ? '?' + clean : '') + url.hash, removed: [...new Set(removed)] };
 }
 
-// brave-core de_amp_util.cc: the <html> tag carries amp/⚡, and the canonical link must be http(s) and a different URL.
+// Two addresses name the same page when they differ only by a trailing slash or the fragment (the URL parser already folds the
+// host's case and a default port). amp.dev's AMP page /index-2021 names /index-2021/ as its canonical and the server answers that
+// with a 301 back to /index-2021: compared byte for byte, de-AMP reloaded the page 60-90 times a second.
+const pageKey = url => url.origin + (url.pathname.replace(/\/+$/, '') || '/') + url.search;
+const samePage = (a, b) => { const x = parse(a), y = parse(b); return !!x && !!y && pageKey(x) === pageKey(y); };
+
+// brave-core de_amp_util.cc: the <html> tag carries amp/⚡, and the canonical link must be http(s) and a different page.
 function verifyCanonical(canonical, original) {
   const target = parse(canonical), from = parse(original);
-  return !!target && !!from && /^https?:$/.test(target.protocol) && !target.username && !target.password && target.href !== from.href && target.href.length <= MAX_URL;
+  return !!target && !!from && /^https?:$/.test(target.protocol) && !target.username && !target.password && pageKey(target) !== pageKey(from) && target.href.length <= MAX_URL;
 }
 
 /**
@@ -100,13 +106,16 @@ function createNavigationCleaner({ rulesPath, text, settings, enabled, contents,
       if (!wc || typeof page !== 'string' || typeof canonical !== 'string' || !settings().deAmp) return null;
       let target; try { target = new URL(canonical, page).href; } catch { return null; }
       if (!verifyCanonical(target, page) || !permitted(wc.session, wc, page)) return null;
-      // Loop guard (brave-core keeps the navigation chain): never de-AMP into a page this tab was just de-AMPed from or to.
+      // Loop guard (brave-core keeps the navigation chain). Within 15 s this tab never de-AMPs into a page it was just de-AMPed from,
+      // never de-AMPs a page it was just de-AMPed to, and never de-AMPs a page it already left (the canonical redirected back here).
+      // And whatever the addresses, at most one de-AMP per tab every 3 s, so no variant of a redirect loop can spin.
       const time = now(), chain = recent.get(wc.id) || [];
       const fresh = chain.filter(entry => time - entry.time < 15000);
-      if (fresh.some(entry => entry.from === target || entry.to === page)) return null;
-      fresh.push({ from: page, to: target, time }); recent.set(wc.id, fresh.slice(-6)); if (recent.size > 200) recent.delete(recent.keys().next().value);
+      if (fresh.some(entry => time - entry.time < 3000 || samePage(entry.from, target) || samePage(entry.to, page) || samePage(entry.from, page))) return null;
+      const destination = stripTracking(target, rules)?.url || target;
+      fresh.push({ from: page, to: destination, time }); recent.set(wc.id, fresh.slice(-6)); if (recent.size > 200) recent.delete(recent.keys().next().value);
       stats.deAmped++;
-      return stripTracking(target, rules)?.url || target;
+      return destination;
     },
     release: wc => recent.delete(wc?.id),
     stats: () => ({ ...stats, rules: rules.length })

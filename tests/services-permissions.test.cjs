@@ -74,3 +74,12 @@ test('R3-73: a request is asked in the window of the page that made it',async()=
   await new Promise(resolve=>handler(wc,'notifications',resolve,{isMainFrame:true,requestingUrl:'https://top.example/'}));
   assert.equal(asked[0][0],owner,'the owner window of the requesting page, not whichever window has focus');assert.equal(asked[0][1],wc);
 });
+test('clipboard writes never ask, as in Chrome; reads still ask, and a saved Block on writes still holds',async()=>{
+  const f=fixture(),top={isMainFrame:true,requestingUrl:'https://top.example/'};
+  assert.equal(await f.request('clipboard-sanitized-write',top),true);assert.equal(f.calls.length,0,'no question for a write');assert.equal(f.saved.size,0,'and nothing is written down');
+  assert.equal(f.session.check(f.wc,'clipboard-sanitized-write','https://top.example/',top),true,'the page sees clipboard-write as granted');
+  f.setResponse(0);assert.equal(await f.request('clipboard-read',top),false);assert.equal(f.calls.length,1,'a read still asks');
+  f.saved.set('A|https://top.example|https://top.example|clipboard-sanitized-write','block');
+  assert.equal(await f.request('clipboard-sanitized-write',top),false,'a Block chosen earlier holds');assert.equal(f.session.check(f.wc,'clipboard-sanitized-write','https://top.example/',top),false);assert.equal(f.calls.length,1);
+  assert.equal(await f.request('clipboard-sanitized-write',{isMainFrame:false}),false,'a frame that is not on the page is still refused');
+});

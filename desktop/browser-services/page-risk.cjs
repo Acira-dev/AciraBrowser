@@ -59,12 +59,16 @@ function distanceOne(a, b) {
   return edits + (a.length - i) + (b.length - j) <= 1;
 }
 const OWNED = new Map(); for (const brand of BRANDS) for (const domain of brand.domains) { const key = getDomain(domain) || domain; if (!OWNED.has(key)) OWNED.set(key, brand); }
+/** Real sites one letter from a brand's name that are not imitating it (`distinct` in the brand list): Telegraph (telegra.ph, Telegram's own publishing
+ *  service; every article on it was blocked as a typo of Telegram). Their addresses are never called look-alikes; a sign-in page there that claims to be
+ *  the brand still is (loginRisk), as on any address the brand does not own. */
+const DISTINCT = new Set(BRANDS.flatMap(brand => brand.distinct || []));
 const LABELS = BRANDS.map(brand => ({ brand, label: brand.domains[0].split('.')[0], domain: getDomain(brand.domains[0]) || brand.domains[0] }));
 /** Why this address might be imitating a known site, or null. Never fires for a domain a brand owns. */
 function hostRisk(hostname) {
   const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
   if (!host || /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith('[') || host === 'localhost' || host.endsWith('.localhost')) return null;
-  const registrable = getDomain(host); if (!registrable || OWNED.has(registrable)) return null;
+  const registrable = getDomain(host); if (!registrable || OWNED.has(registrable) || DISTINCT.has(registrable)) return null;
   const unicode = domainToUnicode(host), labels = unicode.split('.');
   for (const label of labels) { const scripts = scriptsIn(label); if (scripts.length > 1 && scripts.includes('Latin')) return { reason: 'mixed-script', brand: null, domain: null }; }
   const mine = domainToUnicode(registrable).split('.')[0], mineSkeleton = skeleton(mine);

@@ -4,7 +4,7 @@ html,body,#root { width:100%; height:100%; margin:0; overflow:hidden; }
 body { background:var(--sheet); }
 .app.style-acira {
   --material-radius:8px; background:var(--sheet); color:var(--ed-ink);
-  font-family:Geist,Inter,'Segoe UI',sans-serif; font-size:13px; font-weight:400;
+  font-family:var(--font-ui); font-size:13px; font-weight:400;
   font-synthesis:none; letter-spacing:normal;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   --xp-glass:var(--sheet); --xp-paper:var(--sheet); --xp-hover:var(--ed-hover); --xp-selected:var(--ed-selected);
@@ -27,7 +27,7 @@ html:has(.native-layer),html:has(.native-layer) body,html:has(.native-layer) #ro
 .app.style-acira .browser-tab[data-tab-group],.app.style-acira .tab-group-header:not(.compact) { height:26px; }
 .app.style-acira .tab-group-tray { border-radius:6px; box-shadow:inset 0 0 0 1px var(--group-accent,var(--ed-line)); }
 .app.style-acira .tab-group-label { font-size:13px; font-weight:500; border-radius:6px; }
-.app.style-acira .browser-tab[data-entering=true]>:is(.tab-title,.site-identity-icon,.tab-close) { animation:ed-tab-form .26s cubic-bezier(.22,.7,.3,1) both; }
+.app.style-acira .browser-tab[data-entering=true]>:is(.tab-title,.site-identity-icon,.tab-close) { animation:ed-tab-form calc(.26s * var(--motion-pace, 1)) cubic-bezier(.22,.7,.3,1) both; }
 /* A new tab's contents resolve in place: opacity and a 2px rise on the compositor, never an animated blur (bible §3.9). */
 @keyframes ed-tab-form { from { opacity:0; transform:translateY(2px) scale(.97); } to { opacity:1; transform:none; } }
 .app[data-reduced-motion=true] .browser-tab[data-entering=true]>* { animation:none; }
@@ -93,7 +93,7 @@ html[data-material=acrylic] .app.style-acira .address-bar { backdrop-filter:none
 .ed-rail-button .brand-symbol img { width:20px; height:24px; }
 /* Rail labels use the one inverted tooltip (bible §4, transient.css .t-tip): 24px, radius 4, ring as a shadow, 140ms expo-out
    slide from the trigger, after 500ms. */
-.ed-rail-button::after { content:attr(data-tooltip); position:absolute; left:42px; top:50%; transform:translate(-4px,-50%); box-sizing:border-box; height:24px; padding:4px 8px; border-radius:4px; background:rgb(24 24 27); color:#f4f4f5; box-shadow:0 0 0 1px rgb(255 255 255 / .1),0 1px 2px rgb(0 0 0 / .2),0 4px 12px -2px rgb(0 0 0 / .25); font:500 12px/16px var(--font-ui); white-space:nowrap; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 140ms cubic-bezier(.16,1,.3,1),transform 140ms cubic-bezier(.16,1,.3,1),visibility 0s 140ms; }
+.ed-rail-button::after { content:attr(data-tooltip); position:absolute; left:42px; top:50%; transform:translate(-4px,-50%); box-sizing:border-box; height:24px; padding:4px 8px; border-radius:4px; background:rgb(24 24 27); color:#f4f4f5; box-shadow:0 0 0 1px rgb(255 255 255 / .1),0 1px 2px rgb(0 0 0 / .2),0 4px 12px -2px rgb(0 0 0 / .25); font:500 12px/16px var(--font-ui); white-space:nowrap; opacity:0; visibility:hidden; pointer-events:none; transition:opacity calc(140ms * var(--motion-pace, 1)) cubic-bezier(.16,1,.3,1),transform calc(140ms * var(--motion-pace, 1)) cubic-bezier(.16,1,.3,1),visibility 0s calc(140ms * var(--motion-pace, 1)); }
 .ed-rail-button:hover::after { opacity:1; visibility:visible; transform:translate(0,-50%); transition-delay:.5s,.5s,0s; }
 .ed-rail-button:focus-visible::after { opacity:1; visibility:visible; transform:translate(0,-50%); transition-delay:0s; }
 .ed-rail-divider { height:1px; background:var(--ed-line); width:20px; margin:6px; }
@@ -499,14 +499,13 @@ html[data-material=acrylic] .app.style-acira .address-bar { backdrop-filter:none
 
 /* acirabrowser.com alignment:one ink at different strengths, a soft chrome with white lifted
    selections, hairlines instead of borders, and the site's glass recipe on floating material. */
-@font-face { font-family:'Geist Mono'; src:url('/fonts/GeistMono.woff2') format('woff2'); font-weight:100 900; font-display:swap; }
 .app.style-acira {
   --ink:37 38 43; --hair:rgb(var(--ink) / .075); --hair-2:rgb(var(--ink) / .12); --well:rgb(var(--ink) / .045);
   --lift:0 1px 2px rgb(var(--ink) / .07),0 0 0 1px rgb(var(--ink) / .045);
-  --mono:'Geist Mono',ui-monospace,'SF Mono',Consolas,monospace;
+  --mono:ui-monospace,'SF Mono',Consolas,monospace;
   --ease-out:cubic-bezier(.16,1,.3,1);
 }
-.app.style-acira kbd,.app.style-acira .menu-row kbd,.app.style-acira .popup-shortcut { font-family:var(--mono); font-size:11.5px; letter-spacing:-.01em; color:var(--text-secondary); background:none; border:0; box-shadow:none; }
+.app.style-acira kbd,.app.style-acira .menu-row kbd,.app.style-acira .popup-shortcut { font-family:var(--font-ui); font-variant-numeric:tabular-nums; font-size:11.5px; letter-spacing:-.01em; color:var(--text-secondary); background:none; border:0; box-shadow:none; }
 
 /* Chrome: sidebar, tab row and toolbar share one soft surface; pages stay white. */
 .app.style-acira:not(.native-layer),.app.style-acira .ed-rail,.app.style-acira .browser-shell,.app.style-acira .acira-tab-row,.app.style-acira .acira-persistent-toolbar { background:var(--ed-chrome); }
@@ -557,7 +556,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 .app.style-acira .ed-rail-divider { background:rgb(var(--ink) / .08); }
 .app.style-acira .ed-rail-saved>header { color:var(--text-secondary); }
 .app.style-acira .ed-rail-count { display:none; }
-.app.style-acira .ed-rail.is-expanded .ed-rail-count { display:block; margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); }
+.app.style-acira .ed-rail.is-expanded .ed-rail-count { display:block; margin-left:auto; font-family:var(--font-ui); font-variant-numeric:tabular-nums; font-size:11.5px; color:var(--text-secondary); }
 .app.style-acira .ed-rail.is-expanded .ed-rail-badge { position:static; flex:none; width:6px; height:6px; margin-left:auto; margin-right:2px; border:0; box-shadow:0 0 0 3px color-mix(in srgb,var(--ed-blue) 14%,transparent); }
 .app.style-acira .ed-rail.is-expanded .ed-rail-count+.ed-rail-badge { margin-left:8px; }
 
@@ -664,8 +663,9 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 /* Overflow-hidden containers can still be scrolled by focus; clip makes that impossible. */
 .app.style-acira .ed-rail,.app.style-acira .browser-shell { overflow:clip; }
 
-/* Numbers and keys read in the site's mono. */
-.app.style-acira :is(.m-code-pill,.task-facts dd .mono,.ed-history-open>time,.tab-group-count) { font-family:var(--mono); font-size:11.5px; letter-spacing:-.01em; }
+/* Numbers read in Inter's tabular figures; codes in the system mono. */
+.app.style-acira :is(.m-code-pill,.task-facts dd .mono) { font-family:var(--mono); font-size:11.5px; letter-spacing:-.01em; }
+.app.style-acira :is(.ed-history-open>time,.tab-group-count) { font-family:var(--font-ui); font-variant-numeric:tabular-nums; font-size:11.5px; letter-spacing:-.01em; }
 
 /* Assistant header state, as on the site's Ask Acira panel. */
 
@@ -702,7 +702,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 .app.style-acira .ed-rail-groups { margin-top:10px; }
 .app.style-acira .ed-rail-groups>button { gap:10px; }
 .app.style-acira .ed-rail-groups>button>span { flex:1; }
-.app.style-acira .ed-rail-groups>button>small { font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); }
+.app.style-acira .ed-rail-groups>button>small { font-family:var(--font-ui); font-variant-numeric:tabular-nums; font-size:11.5px; color:var(--text-secondary); }
 .app.style-acira .ed-rail-groups>button[aria-current=true] { background:var(--sidebar-selection-bg); color:var(--ed-ink); box-shadow:none; }
 .ed-group-dot { flex:none; width:8px; height:8px; margin:0 4px; border-radius:50%; box-shadow:0 0 0 3px color-mix(in srgb,currentColor 0%,transparent); }
 .app.style-acira .ed-rail { overflow-y:auto; overflow-x:clip; scrollbar-width:none; }
@@ -804,7 +804,7 @@ html:not(:is([data-material=acrylic],[data-material=vibrancy])) .app.style-acira
 .app.style-acira .ed-rail-section-body>button:not(.ed-rail-button),.app.style-acira .ed-rail-recent>button,.ed-rail-tab>button:first-child { display:flex; align-items:center; gap:10px; width:100%; height:32px; padding:0 8px; border-radius:6px; color:rgb(var(--ink) / .84); font-size:13px; text-align:left; transition:background-color .15s,color .15s; }
 .ed-rail-section-body>button>span,.ed-rail-recent>button>span:not(.ed-rail-run-icon),.ed-rail-tab>button>span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .app.style-acira .ed-rail-section-body>button:not(.ed-rail-button):hover,.app.style-acira .ed-rail-recent>button:hover,.app.style-acira .ed-rail-tab:hover { background:rgb(var(--ink) / .08); color:var(--ed-ink); }
-.ed-rail-section-body>button>small,.ed-rail-recent>button>small { flex:none; color:var(--text-secondary); font:500 11px/16px var(--mono); }
+.ed-rail-section-body>button>small,.ed-rail-recent>button>small { flex:none; color:var(--text-secondary); font:500 11px/16px var(--font-ui); font-variant-numeric:tabular-nums; }
 .ed-rail-run>small { font-family:inherit !important; font-size:11.5px !important; }
 .ed-rail-run>small.ask { color:var(--ed-blue) !important; font-weight:600 !important; }
 .app.style-acira .ed-rail-section-body>.ed-rail-group[aria-current=true],.app.style-acira .ed-rail-tab[aria-current=true] { background:var(--sidebar-selection-bg); color:var(--ed-ink); box-shadow:inset 2px 0 var(--chrome-focus-ring); }
@@ -837,7 +837,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
 
 /* Agent tab core · In-page language
    Everything inside an agent tab speaks acirabrowser.com's product language (docs/superpowers/specs/2026-10-22-in-page-style-study.md):
-   one ink at opacities, hairlines drawn as inset shadows, radius 6–10, Geist at 12–13.5px, color only where something is
+   one ink at opacities, hairlines drawn as inset shadows, radius 6–10, Inter at 12–13.5px, color only where something is
    selected, guarded or waiting. Block is an ink chip, Ask is accent-soft, Allow is a grey well; there is no red or green.
    Acira speaks with its symbol and name in sentence case, never a mono eyebrow. */
 .app { --acira-caution-bg:#fbf6ea; --acira-caution-ink:#6b5420; }
@@ -866,7 +866,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
 .app.style-acira .acira-card-detail { margin:0; color:var(--ip-fg-2); font-size:12.5px; line-height:18px; }
 .app.style-acira .acira-card-foot { display:flex; align-items:center; gap:8px; padding:12px 16px; border-top:1px solid var(--ip-line); }
 .app.style-acira .acira-card-spacer { flex:1; }
-.app.style-acira .acira-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:30px; padding:0 12px; border:0; border-radius:6px; background:var(--raised); box-shadow:inset 0 0 0 1px var(--ip-line-2,rgb(var(--ink) / .12)); color:var(--ed-ink); font:500 12.5px/1 Geist,Inter,'Segoe UI',sans-serif; white-space:nowrap; cursor:default; transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease); }
+.app.style-acira .acira-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:30px; padding:0 12px; border:0; border-radius:6px; background:var(--raised); box-shadow:inset 0 0 0 1px var(--ip-line-2,rgb(var(--ink) / .12)); color:var(--ed-ink); font:500 12.5px/1 Inter,'Segoe UI',sans-serif; white-space:nowrap; cursor:default; transition:background-color .16s var(--ease-out,ease),box-shadow .16s var(--ease-out,ease); }
 .app.style-acira .acira-btn:hover { background:color-mix(in srgb,rgb(var(--ink)) 7%,var(--raised)); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .18); }
 .app.style-acira .acira-btn[aria-pressed=true] { background:var(--ip-well); box-shadow:inset 0 0 0 1px var(--ip-line-2); }
 .app.style-acira .acira-btn.is-dark { background:rgb(var(--ink)); color:var(--raised); box-shadow:none; }
@@ -890,7 +890,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
 .app.style-acira .boundary-decision[data-decision=unclear] { background:var(--acira-caution-bg); color:var(--acira-caution-ink); }
 .app.style-acira .boundary-block { justify-self:start; height:26px; margin-top:7px; font-size:12px; }
 .app.style-acira .boundary-seg { display:inline-flex; gap:2px; padding:2px; border-radius:6px; background:rgb(var(--ink) / .05); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .06); }
-.app.style-acira .boundary-seg button { min-width:50px; height:26px; padding:0 10px; border:0; border-radius:6px; background:none; color:var(--ip-fg-2); font:400 12px/1 Geist,Inter,'Segoe UI',sans-serif; cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
+.app.style-acira .boundary-seg button { min-width:50px; height:26px; padding:0 10px; border:0; border-radius:6px; background:none; color:var(--ip-fg-2); font:400 12px/1 Inter,'Segoe UI',sans-serif; cursor:default; transition:background-color .16s var(--ease-out,ease),color .16s var(--ease-out,ease); }
 .app.style-acira .boundary-seg button:hover { color:var(--ed-ink); background:rgb(var(--ink) / .045); }
 .app.style-acira .boundary-seg button[aria-checked=true] { background:var(--raised); color:var(--ed-ink); font-weight:500; box-shadow:0 1px 2px rgb(var(--shade) / .1),0 0 0 1px rgb(var(--ink) / .06); }
 .app.style-acira .boundary-facts { display:grid; gap:8px; margin:0; padding:12px 16px; border-top:1px solid var(--ip-line); list-style:none; font-size:12.5px; line-height:18px; }
@@ -911,7 +911,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
 
 /* The agent's browser: a website panel. While the agent drives it carries the website's "being worked on" ring. */
 /* Guarded elements, drawn by Acira over the site: the website's .fld.guarded and its quiet disabled order button. */
-.app.style-acira .protection-guard { position:absolute; z-index:2; display:grid; align-content:center; gap:2px; padding:0 10px; border-radius:6px; pointer-events:none; font-family:Geist,Inter,'Segoe UI',sans-serif; }
+.app.style-acira .protection-guard { position:absolute; z-index:2; display:grid; align-content:center; gap:2px; padding:0 10px; border-radius:6px; pointer-events:none; font-family:Inter,'Segoe UI',sans-serif; }
 .app.style-acira .protection-guard.on-field { background:color-mix(in srgb,var(--ip-accent) 5%,#fff); box-shadow:inset 0 0 0 1px var(--ip-frame-line); }
 .app.style-acira .protection-guard.on-button { display:flex; align-items:center; justify-content:center; border-radius:6px; background:#ededee; }
 .app.style-acira .protection-guard.on-button[data-decision=ask] { background:var(--ip-accent-soft); box-shadow:inset 0 0 0 1px var(--ip-frame-line); }
@@ -961,7 +961,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
 .app.style-acira .op-review { scroll-margin-top:12px; margin:4px 0 12px; border-radius:8px; background:var(--raised); color:var(--ed-ink); font-size:13px; line-height:19px; box-shadow:var(--ip-card); overflow:hidden; }
 .app.style-acira .op-review-head { display:grid; gap:4px; justify-items:start; padding:14px 16px 8px; }
 .app.style-acira .op-review-kicker { display:flex; align-items:center; gap:6px; width:100%; color:rgb(var(--ink) / .55); font-size:12px; line-height:16px; }
-.app.style-acira .op-review-title { font:600 17px/22px Geist,Inter,'Segoe UI',sans-serif; letter-spacing:-.01em; }
+.app.style-acira .op-review-title { font:600 17px/22px Inter,'Segoe UI',sans-serif; letter-spacing:-.01em; }
 .app.style-acira .op-review-facts { display:grid; gap:8px; margin:0 16px; padding:12px 0; border-top:1px solid var(--ip-line); }
 .app.style-acira .op-review-facts>div { display:grid; grid-template-columns:104px minmax(0,1fr); gap:12px; }
 .app.style-acira .op-review-facts dt { color:var(--ip-fg-3); font-size:12.5px; }
@@ -986,7 +986,7 @@ html[data-native=false] .app .browser-root.side-tabs .compact-caption-space { fl
    Every status is one quiet pill with a static dot glyph whose lit dots read as strength. Color only carries
    meaning: the accent for something waiting on you or actively watched, the website's single caution tone for a
    degraded control, an ink chip with a lock for anything blocked. No red, no green, no mono uppercase tags. */
-.app.style-acira span.status-pill.status-pill { display:inline-flex; align-items:center; gap:6px; width:fit-content; height:22px; padding:0 10px 0 8px; border:0; border-radius:4px; background:var(--raised); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .12); color:var(--text-secondary); font:500 11.5px/1 Geist,Inter,'Segoe UI',sans-serif; letter-spacing:0; text-transform:none; white-space:nowrap; flex-shrink:0; }
+.app.style-acira span.status-pill.status-pill { display:inline-flex; align-items:center; gap:6px; width:fit-content; height:22px; padding:0 10px 0 8px; border:0; border-radius:4px; background:var(--raised); box-shadow:inset 0 0 0 1px rgb(var(--ink) / .12); color:var(--text-secondary); font:500 11.5px/1 Inter,'Segoe UI',sans-serif; letter-spacing:0; text-transform:none; white-space:nowrap; flex-shrink:0; }
 .app.style-acira span.status-pill.status-pill>svg { flex:none; }
 /* Optical centring: capitals sit low in a line box, so the glyph drops half a pixel and stays smaller than the text. */
 .app.style-acira span.status-pill.status-pill>.status-glyph { width:9px; height:9px; position:relative; top:0; }

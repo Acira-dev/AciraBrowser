@@ -1,5 +1,6 @@
 /** The tab strip's spring (stiffness 360, damping 38) sampled at 33 even steps over 480ms, the same curve the sidebar's
- * CSS slide uses, so the native page and the sidebar move as one. */
+ * CSS slide uses, so the native page and the sidebar move as one. 480ms at Premium; Fast runs it in 288 (`pace` .6, the interface's
+ * --motion-pace), like the sidebar, the page card and a page the interface draws. */
 const SPRING = [0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1];
 const spring = progress => { const at = Math.min(1, Math.max(0, progress)) * (SPRING.length - 1), i = Math.min(SPRING.length - 2, Math.floor(at)); return SPRING[i] + (SPRING[i + 1] - SPRING[i]) * (at - i); };
 
@@ -19,6 +20,11 @@ function springSettle(spec, tolerance = .004) {
   return last + step;
 }
 const validSpring = spring => spring && Number.isFinite(spring.duration) && Number.isFinite(spring.bounce) && spring.duration > 0;
+/** The pace a set-length glide runs at (the interface's --motion-pace: .6 in Fast, 1 at Premium); anything else is 1. */
+const paceOf = pace => Number.isFinite(pace) && pace > 0 && pace <= 1 ? pace : 1;
+/** That pace from a layout's `motionSpeed` (the interface sends 1 / --motion-scale: 1/1.7 Premium, 1/.6 Fast, 1 Off): never
+ * slower than 1, so Premium keeps its 480ms. */
+const layoutPace = motionSpeed => paceOf(1 / Math.max(1, Number(motionSpeed) || 1));
 
 /** The page's corner radius, applied to the native view once per distinct value. A WebContentsView has one radius for all four
  * corners (no per-corner API, and a parent View's radius does not clip it: qa/native-clip-probe.mjs). `entry.radius` is what the view
@@ -48,7 +54,7 @@ const EARLY_WAIT = 130, LAND_WAIT = 360, PRELAND = .9;
 
 /** A page that follows the chrome (the docked sidebar opening or closing, a toolbar easing, a floating reveal) runs on the chrome's
  * spring, one viewport per display frame, and its corner radius is interpolated with it. Any other change is committed at once. */
-function placePageBounds(entry, target, animated, clock = {now: () => performance.now(), later: (fn, delay) => setTimeout(fn, delay), cancel: clearTimeout}, frameInterval = 1000 / 60, motion, pageSpring, radius, smooth) {
+function placePageBounds(entry, target, animated, clock = {now: () => performance.now(), later: (fn, delay) => setTimeout(fn, delay), cancel: clearTimeout}, frameInterval = 1000 / 60, motion, pageSpring, radius, smooth, pace = 1) {
   // A placement while a slide is under way (the chrome's own transition measures the page on every frame, a toolbar easing to its
   // new height) becomes the slide's new end: the move keeps its curve and the viewport takes a new size at once. Snapped to its
   // end, the page ran ahead of the chrome it was following and covered it.
@@ -82,8 +88,9 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   const hold = !!smooth && slide && resizing && Math.abs(start.x + start.width - target.x - target.width) <= FAR_EDGE && Math.abs(start.y + start.height - target.y - target.height) <= FAR_EDGE && (Math.abs(start.x - target.x) >= SIDEWAYS || Math.abs(start.y - target.y) >= DROP);
   const dissolve = hold ? clock.dissolve : null, early = hold && target.width >= start.width && target.height >= start.height;
   if (!animated || (resizing && !slide)) { entry.view.setBounds(target); if (hasRadius) { applyRadius(entry, radius); entry.radiusGoal = undefined; } return; }
-  // A slide may bring its own spring (Seamless edge reveals: a reveal and a hide each have one); without it, the sidebar's 480ms curve.
-  const own = slide && validSpring(pageSpring) ? pageSpring : null, duration = own ? Math.round(springSettle(own) * 1000) : slide ? 480 : 280;
+  // A slide may bring its own spring (Seamless edge reveals: a reveal and a hide each have one, already at the speed); without it, the
+  // sidebar's 480ms curve, at the speed's pace.
+  const own = slide && validSpring(pageSpring) ? pageSpring : null, duration = own ? Math.round(springSettle(own) * 1000) : Math.round((slide ? 480 : 280) * paceOf(pace));
   const cadence = Math.max(1000 / 360, Math.min(1000 / 30, Number(frameInterval) || 1000 / 60));
   const lead = 0;
   const current = {start, target, resizing, hold};
@@ -143,4 +150,4 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   if (dissolve && early && beginCover({width: Math.max(start.width, target.width), height: Math.max(start.height, target.height)})) sized = false;
   frame();
 }
-module.exports = {placePageBounds, applyRadius, springAt, springSettle};
+module.exports = {placePageBounds, applyRadius, springAt, springSettle, layoutPace};

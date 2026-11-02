@@ -81,7 +81,8 @@ test('a data: or javascript: address gets a plain message, not the raw validatio
 
 test('tab menu has Split view (current + this tab), engine list collapses, settings icons share a tile',()=>{
   assert.ok(/row\(tr\("[\w.]+"\), Columns2, \(\) => \{ dispatch\(\{ type: 'split\.open', tabIds: \[tab\.id, context\.id\] \}\)/.test(read('src/App.tsx')));
-  assert.ok(read('src/features/settings/panels/search-engines.tsx').includes('More engines…'));
+  assert.ok(read('src/features/settings/panels/search-engines.tsx').includes("t('searchEngines.moreEngines', { count: providers.engines.length - 1 })"));
+  assert.equal(JSON.parse(read('src/i18n/en.json'))['searchEngines.moreEngines'], 'More engines… ({count})');
   assert.ok(read('src/features/BrowserSettings.tsx').includes('className="bs-nav-icon"'));
   assert.match(read('src/features/browser-settings.css'),/\.bs-nav-icon\{flex:none;display:grid;place-items:center;width:20px;height:20px/);
 });

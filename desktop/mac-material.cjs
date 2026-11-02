@@ -19,4 +19,11 @@ function setOverlayMaterial(window,chrome,regions,duration=0,reveal=true,enabled
  try{return bridge.overlayMaterial(window.getNativeWindowHandle(),index,views.length,regions,duration,reveal,enabled);}
  catch(error){if(!warningShown){console.warn('Mac overlay material:',error.message);warningShown=true;}return false;}
 }
-module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial};
+// Native fullscreen: AppKit's title strip would slide over the tab row and toolbar when the pointer touches the top edge (mac-material.mm).
+// Returns how many strip windows are held; 0 until the window is fullscreen and its strip exists.
+function hideFullscreenStrip(window){
+ if(!bridge?.hideFullscreenStrip||!window||window.isDestroyed())return 0;
+ try{return bridge.hideFullscreenStrip(window.getNativeWindowHandle());}
+ catch(error){if(!warningShown){console.warn('Mac fullscreen titlebar:',error.message);warningShown=true;}return 0;}
+}
+module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip};

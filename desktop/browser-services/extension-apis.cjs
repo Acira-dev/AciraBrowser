@@ -514,7 +514,10 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
    }catch{}
    return !!preloadId;
   },
-  forget(id){offscreen.close(id);sidePanel.forget(id);userScripts.forget(id);dnr?.forget(id);packages.forget(id);permissions.forget(id);activeTabGrants.delete(id);invocations.delete(id);captureTimes.delete(id);}
+  forget(id){offscreen.close(id);sidePanel.forget(id);userScripts.forget(id);dnr?.forget(id);packages.forget(id);permissions.forget(id);activeTabGrants.delete(id);invocations.delete(id);captureTimes.delete(id);},
+  /** The profile was removed (extension-manager.cjs disposeProfileRuntime): the idle poll stops, offscreen documents and sign-in windows close,
+   * and the work packages let go of the app-wide events they follow (ext-api/idle.cjs lock/unlock, ext-api/system.cjs displays). */
+  dispose(){clearInterval(idleTimer);try{offscreen.closeAll();}catch{}try{identity.closeAll();}catch{}try{packages.dispose();}catch{}api.syncUserScriptPreload(false);if(session)bySession.delete(session);}
  };
  if(session)bySession.set(session,api);registerPageChannels();
  return api;

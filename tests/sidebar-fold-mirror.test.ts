@@ -6,7 +6,7 @@ import { FOLD_CURVE, FOLD_GONE, curveAt, curveTime, foldAt, foldPlan, type FoldR
 import { stripEase, stripMs, frequentStretch, classScale } from '../src/ui/motionTokens';
 
 const rows = (n: number, h = 32, top = 100): FoldRow[] => Array.from({ length: n }, (_, i) => ({ top: top + i * h, height: h }));
-const speeds = { fast: stripMs * frequentStretch(classScale('fast', 'S')), premium: stripMs * frequentStretch(classScale('premium', 'S')) };
+const speeds = { fast: stripMs * frequentStretch(classScale('fast', 'S')), premium: stripMs * frequentStretch(classScale('premium', 'S')), base: stripMs };
 
 test('R5 fold mirror: the fade runs on the unfold\'s own spring curve, read exactly as CSS linear() reads it', () => {
   assert.equal(FOLD_CURVE.length, 33); assert.equal(FOLD_CURVE[0], 0); assert.equal(FOLD_CURVE.at(-1), 1);
@@ -28,8 +28,12 @@ test('R5 fold mirror: no leaving row is ever clipped while it can still be seen 
 });
 
 test('R5 fold mirror: timing reversed — lowest row first, 16 ms apart (at most 64), the unfold\'s length, and the rows below wait only for the lowest fade', () => {
-  const spring = speeds.fast, plan = foldPlan(rows(6), 6 * 32, spring);
+  const spring = speeds.base, plan = foldPlan(rows(6), 6 * 32, spring);
   assert.deepEqual(plan.delays.slice(-5), [64, 48, 32, 16, 0], 'the reverse of the unfold\'s top-first stagger');
+  // Fast's shorter spring (288 ms) brings the edge to a row sooner: a row may then start sooner than its 16 ms step, never later.
+  const quick = foldPlan(rows(6), 6 * 32, speeds.fast);
+  assert.ok(quick.delays.slice(-5).every((delay, i) => delay <= [64, 48, 32, 16, 0][i]) && quick.delays.at(-1) === 0, `Fast ${quick.delays.join(' ')}`);
+  for (let i = 1; i < quick.delays.length; i++) assert.ok(quick.delays[i] <= quick.delays[i - 1], 'Fast too: never a higher row before a lower one');
   for (let i = 1; i < plan.delays.length; i++) assert.ok(plan.delays[i] <= plan.delays[i - 1], 'never a higher row before a lower one');
   assert.equal(plan.spring, spring, 'the edge and the rows below glide on the unfold\'s spring and length');
   assert.ok(plan.wait > 0 && plan.wait <= spring * .25, `the rows below start as soon as the lowest row has faded (${plan.wait} ms)`);

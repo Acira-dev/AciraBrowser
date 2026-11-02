@@ -9,9 +9,9 @@
   -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
   color: var(--text-primary); font: 13px/18px var(--font-ui, system-ui);
   transform-origin: 100% 100%;
-  animation: rc-in 420ms var(--t-ease-enter, cubic-bezier(.2, .9, .25, 1.04)) both;
+  animation: rc-in calc(420ms * var(--motion-pace, 1)) var(--t-ease-enter, cubic-bezier(.2, .9, .25, 1.04)) both;
 }
-.rc-card[data-phase="leaving"] { animation: rc-out 220ms var(--t-ease-exit, cubic-bezier(.4, 0, 1, 1)) both; }
+.rc-card[data-phase="leaving"] { animation: rc-out calc(220ms * var(--motion-pace, 1)) var(--t-ease-exit, cubic-bezier(.4, 0, 1, 1)) both; }
 @keyframes rc-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes rc-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(0, 6px, 0) scale(.98); } }
 [data-motion-speed="fast"] .rc-card { animation-duration: 220ms; }

@@ -153,7 +153,7 @@ export function semanticColorVariables(base:FinishSurfaces,highContrast=false,re
   '--chrome-line':`rgb(${chromeHairline} / .08)`,'--chrome-line-strong':`rgb(${chromeHairline} / .14)`,
   '--chrome-text-2':`rgb(${triple(chromeInk)} / .64)`,'--chrome-text-3':`rgb(${triple(chromeInk)} / .44)`,
   '--focus-ring-color':focus,'--chrome-focus-ring-color':chromeFocus,
-  // One shadow scale (round 12, Geist): a 1px 8% ring, then 2-10% layers with negative spread. Never a ring and a border
+  // One shadow scale (round 12, Vercel's design system): a 1px 8% ring, then 2-10% layers with negative spread. Never a ring and a border
   // on the same edge. Dark keeps its rim + deep popover shadow.
   '--shadow-ring':deep?'0 0 0 1px rgb(255 255 255 / .08)':'0 0 0 1px rgb(0 0 0 / .08)',
   '--shadow-card':deep?'var(--shadow-ring),0 1px 2px rgb(0 0 0 / .3)':'var(--shadow-ring),0 1px 1px rgb(0 0 0 / .02),0 1px 2px rgb(0 0 0 / .05)',

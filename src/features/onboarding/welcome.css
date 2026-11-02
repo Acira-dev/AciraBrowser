@@ -20,7 +20,7 @@
 }
 .fr-w-beta {
   margin-bottom: 1px;
-  font: 500 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 500 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
 }
 .fr-stage .fr-w-hero {
@@ -31,10 +31,10 @@
   text-wrap: balance;
   color: var(--fr-text);
 }
-/* Subtitles take A's sharper subtitle face when the token exists, Geist until then. */
+/* Subtitles take the subtitle weight and tracking (--font-subtitle, Inter like everything else). */
 .fr-w-lede {
   margin: 16px 0 0;
-  font: 400 17px/28px var(--font-subtitle, var(--font-ui, Geist, Inter, sans-serif));
+  font: 400 17px/28px var(--font-subtitle, var(--font-ui, Inter, sans-serif));
   color: var(--fr-text-2);
 }
 .fr-w-lede span {
@@ -54,7 +54,7 @@
   bottom: 32px;
   margin: 0;
   text-align: center;
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-2);
   pointer-events: none;
 }
@@ -86,7 +86,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--fr-text-3);
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   cursor: pointer;
   transition:
     color 0.12s var(--fr-ease),
@@ -130,12 +130,12 @@
   padding: 0 8px 0 10px;
   border-radius: 6px;
   color: var(--fr-text);
-  font: 400 13px/20px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 13px/20px var(--font-ui, Inter, sans-serif);
   cursor: pointer;
   outline: none;
 }
 .fr-w-lang-list li small {
-  font: 400 12px/16px var(--font-ui, Geist, Inter, sans-serif);
+  font: 400 12px/16px var(--font-ui, Inter, sans-serif);
   color: var(--fr-text-3);
 }
 .fr-w-lang-list li:hover,

@@ -62,8 +62,9 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
   const batch = result.batch;
   const hasIssues = batch?.results.some(row => row.status === 'failed' || row.status === 'unavailable');
   const errorCopy = error ? importErrorPresentation(error, feedbackLocation) : null;
-  /** The browser the person brought things from (a bookmarks file is not one): names the one whose sign-ins stay behind. */
-  const fromBrowser = (batch && batch.browser !== 'HTML' ? batch.browser : result.batches?.find(item => item.browser !== 'HTML')?.browser) || undefined;
+  /** The browser the person brought things from (a bookmarks file or an Acira profile file is not one): names the one whose sign-ins stay behind. */
+  const fromFile = (browser: string) => browser === 'HTML' || browser === 'Acira';
+  const fromBrowser = (batch && !fromFile(batch.browser) ? batch.browser : result.batches?.find(item => !fromFile(item.browser))?.browser) || undefined;
   const signinRefresh = batch ? `${batch.id}:${passwordsBrought}` : passwordsBrought ? `p${passwordsBrought}` : undefined;
 
   useEffect(() => {
@@ -167,12 +168,14 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
+  /** "7 bookmarks · 1 duplicate skipped": the preview counts what the import adds, and says what it leaves out and why. */
+  const withSkipped = (count: string, skipped?: { duplicates: number; notWeb: number }) => [count, skipped?.duplicates ? t('import.skip.duplicates', { count: skipped.duplicates }) : '', skipped?.notWeb ? t('import.skip.notWeb', { count: skipped.notWeb }) : ''].filter(Boolean).join(' · ');
   const categoryDescription = (category: Category) => {
     if (!preview?.source.available[category]) return t('import.desc.unavailable');
     if (category === 'favorites') return t('import.desc.favorites', { count: countLabel(category, preview.favorites ?? 0) });
     if (category === 'spaces') return t('import.desc.spaces', { count: countLabel(category, preview.spaces ?? 0), pinned: (preview.pinned ?? 0).toLocaleString() });
-    if (category === 'bookmarks') return countLabel(category, preview.bookmarks);
-    if (category === 'history') return preview.history === null ? t('import.desc.historyUnreadable') : countLabel(category, preview.history);
+    if (category === 'bookmarks') return withSkipped(countLabel(category, preview.bookmarks), preview.skipped?.bookmarks);
+    if (category === 'history') return preview.history === null ? t('import.desc.historyUnreadable') : withSkipped(countLabel(category, preview.history), preview.skipped?.history);
     if (category === 'extensions') return t('import.desc.extensions', { count: countLabel(category, preview.extensions.length) });
     return t('import.desc.preferences');
   };

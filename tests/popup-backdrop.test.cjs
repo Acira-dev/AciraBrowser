@@ -13,7 +13,7 @@ test('material broker exposes geometry only and denies unarmed or foreign reques
  const f=fixture();assert.deepEqual(f.broker.metadata(f.wc,3),{id:3,sources:[{key:'page:1',bounds:{x:0,y:40,width:800,height:600},radius:10}]});
  assert.throws(()=>f.broker.metadata({...f.wc,id:99},3));assert.throws(()=>f.broker.metadata(f.wc,2));
  assert.equal(await f.display(),null);assert.equal(f.session.check(f.wc,'display-capture'),false);assert.equal(f.session.check(f.wc,'media'),false);
- await assert.rejects(f.broker.start(f.wc,3,'desktop:any'));assert.equal(f.broker.pending.size,0);
+ assert.equal(await f.broker.start(f.wc,3,'desktop:any'),false);await assert.rejects(f.broker.start(f.wc,3,{key:'page:1'}));assert.equal(f.broker.pending.size,0);
 });
 test('only one armed exact main frame can capture its owned source without audio',async()=>{
  const f=fixture();f.wc.executeJavaScript=async(script,userGesture)=>{
@@ -33,13 +33,32 @@ test('only one armed exact main frame can capture its owned source without audio
 test('closed, removed, expired and destroyed ownership cannot grant capture; failures clear authorization',async()=>{
  for(const change of [f=>f.close(),f=>f.remove(),f=>f.broker.pending.get(7).until=0,f=>f.source.isDestroyed=()=>true]){
   const f=fixture();f.wc.executeJavaScript=async()=>{change(f);assert.equal(await f.display(),null);throw Error('cancelled');};
-  await assert.rejects(f.broker.start(f.wc,3,'page:1'));assert.equal(f.broker.pending.size,0);
+  assert.equal(await f.broker.start(f.wc,3,'page:1'),false);assert.equal(f.broker.pending.size,0);
  }
  const f=fixture();f.wc.executeJavaScript=async()=>{f.wc.emit('destroyed');assert.equal(await f.display(),null);throw Error('gone');};
- await assert.rejects(f.broker.start(f.wc,3,'page:1'));assert.equal(f.broker.owners.size,0);
+ assert.equal(await f.broker.start(f.wc,3,'page:1'),false);assert.equal(f.broker.owners.size,0);
 });
 test('a stalled material request times out and cannot leave a grant',async()=>{
- const f=fixture();f.wc.executeJavaScript=()=>new Promise(()=>{});const request=f.broker.start(f.wc,3,'page:1');await assert.rejects(f.broker.start(f.wc,3,'page:1'));await assert.rejects(request,/timed out/);assert.equal(f.broker.pending.size,0);assert.equal(await f.display(),null);
+ const f=fixture();f.wc.executeJavaScript=()=>new Promise(()=>{});const request=f.broker.start(f.wc,3,'page:1');assert.equal(await f.broker.start(f.wc,3,'page:1'),false,'a second request while the grant is out');assert.equal(await request,false,'timed out');assert.equal(f.broker.pending.size,0);assert.equal(await f.display(),null);
+});
+
+test('a popup that moves on cancels its material quietly; a real capture failure is logged once',async()=>{
+ const warned=[],warn=console.warn;console.warn=(...args)=>warned.push(args.join(' '));
+ try{
+  // Esc or a blur while the stream was being acquired: the UI drops the request on purpose.
+  for(const message of ['Error: Material request cancelled','Error: Stale material request']){
+   const f=fixture();f.wc.executeJavaScript=async()=>{throw new Error(message);};
+   assert.equal(await f.broker.start(f.wc,3,'page:1'),false);assert.equal(f.broker.pending.size,0);
+  }
+  // The popup closed before main was asked, or while the request was out.
+  {const f=fixture();f.close();assert.equal(await f.broker.start(f.wc,3,'page:1'),false);}
+  {const f=fixture();f.wc.executeJavaScript=async()=>{f.close();throw new Error('NotReadableError: Could not start video source');};assert.equal(await f.broker.start(f.wc,3,'page:1'),false);}
+  assert.deepEqual(warned,[],'no log for a cancellation');
+  // The same popup still open and the system refusing the capture: one line however often it happens.
+  const f=fixture();f.wc.executeJavaScript=async()=>{throw new Error('Error: NotReadableError: Could not start video source');};
+  for(let i=0;i<5;i++)assert.equal(await f.broker.start(f.wc,3,'page:1'),false);
+  assert.equal(warned.length,1);assert.match(warned[0],/Could not start video source/);assert.equal(f.broker.pending.size,0);assert.equal(await f.display(),null);
+ }finally{console.warn=warn;}
 });
 
 const {LIMITS,snapshotPlan,snapshotRegion,encodeSnapshot,popupBackdropPageOwned}=require('../desktop/popup-snapshot.cjs');
@@ -173,13 +192,13 @@ test('shared backdrop resolver preserves real ordinary/private/Tor entry shapes 
 });
 test('both snapshot and GDM reject stale ownership before acquisition and after a held await',async()=>{
  const owned=ownedPageFixture(),f=snapshotFixture(),page=f.sources[1],owner=f.broker.owners.get(f.wc.id);owner.sources=()=>owned.valid()?[page]:[];
- owned.block();assert.deepEqual(f.broker.metadata(f.wc,9).sources,[]);assert.deepEqual(await f.broker.snapshot(f.wc,9),{id:9,sources:[]});await assert.rejects(f.broker.start(f.wc,9,page.key));assert.equal(f.calls.length,0);
+ owned.block();assert.deepEqual(f.broker.metadata(f.wc,9).sources,[]);assert.deepEqual(await f.broker.snapshot(f.wc,9),{id:9,sources:[]});assert.equal(await f.broker.start(f.wc,9,page.key),false);assert.equal(f.calls.length,0);
  for(const change of [own=>{own.tab.browserProfileId='profile-after-cleanup-gate';},own=>own.block()]){
   const owned=ownedPageFixture(),f=snapshotFixture(),page=f.sources[1],owner=f.broker.owners.get(f.wc.id);owner.sources=()=>owned.valid()?[page]:[];
   let finish,encoded=0;const pending=new Promise(resolve=>{finish=resolve;});f.setCapture(()=>pending);
   const result=f.broker.snapshot(f.wc,9);assert.equal(f.calls.length,1);change(owned);finish(fakeImage({encoded:()=>{encoded++;}}));assert.deepEqual(await result,{id:9,sources:[]});assert.equal(encoded,0);
   const live=ownedPageFixture(),g=snapshotFixture(),gowner=g.broker.owners.get(g.wc.id);gowner.sources=()=>live.valid()?[g.sources[1]]:[];
-  g.wc.executeJavaScript=async()=>{assert(g.broker.allowed(g.wc));change(live);assert.equal(g.broker.allowed(g.wc),false);};await assert.rejects(g.broker.start(g.wc,9,g.sources[1].key));assert.equal(g.broker.pending.size,0);
+  g.wc.executeJavaScript=async()=>{assert(g.broker.allowed(g.wc));change(live);assert.equal(g.broker.allowed(g.wc),false);};assert.equal(await g.broker.start(g.wc,9,g.sources[1].key),false);assert.equal(g.broker.pending.size,0);
  }
 });
 

@@ -31,22 +31,22 @@ export function DefaultBrowserRow() {
     setError('');
     try {
       const result = await client.request({ type: 'default.request' });
-      if (!result.ok) setError(result.error?.message || `${osName} did not change the default browser.`);
+      if (!result.ok) setError(result.error?.message || t('defaultbrowserrow.notChanged', { os: osName }));
       setStatus(result.defaultResult || result.defaults || status);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `${osName} did not change the default browser.`);
+      setError(reason instanceof Error ? reason.message : t('defaultbrowserrow.notChanged', { os: osName }));
     } finally {
       setBusy(false);
     }
   };
-  const detail = error || (status.isDefault ? 'Acira opens web links and files.' : status.requested ? (isMac() ? t('setup.default.detailRequested.mac') : 'Choose Acira in the Windows prompt to finish.') : status.note || 'Open links from other apps in Acira.');
+  const detail = error || (status.isDefault ? t('defaultbrowserrow.isDefaultDetail') : status.requested ? (isMac() ? t('setup.default.detailRequested.mac') : t('defaultbrowserrow.requestedDetail')) : status.note || t('defaultbrowserrow.notDefaultDetail'));
   return (
     <SettingRow id="default-browser" title={t("defaultbrowserrow.defaultBrowser")} detail={detail}>
       {status.isDefault ? (
         <span className="st-muted">{t("defaultbrowserrow.default")}</span>
       ) : (
         <button type="button" className="st-button" disabled={busy || !status.supported} onClick={() => void request()}>
-          {busy ? 'Opening…' : t("defaultbrowserrow.makeDefault")}
+          {busy ? t('defaultbrowserrow.opening') : t("defaultbrowserrow.makeDefault")}
         </button>
       )}
     </SettingRow>

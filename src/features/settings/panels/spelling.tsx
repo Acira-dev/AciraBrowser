@@ -25,11 +25,11 @@ function Spelling() {
   return (
     <>
       <SettingGroup>
-        <SettingRow id="spellcheck-enabled" title={t("nativeCore.checkSpelling")} detail="Underline misspelled words in text fields. Words are checked on this computer.">
+        <SettingRow id="spellcheck-enabled" title={t("nativeCore.checkSpelling")} detail={t("spelling.checkDetail")}>
           <Switch checked={enabled} label={t("nativeCore.checkSpelling")} onChange={(next) => apply(next, status.languageMode === 'system' ? [] : languages.length ? languages : ['en-US'])} />
         </SettingRow>
         {status.languageMode === 'selected' && (
-          <SettingRow id="spellcheck-languages" title={t("spelling.languages")} detail="Words are accepted if they are correct in any selected language." stacked>
+          <SettingRow id="spellcheck-languages" title={t("spelling.languages")} detail={t("spelling.languagesDetail")} stacked>
             <div className="nc-chips">
               {languages.map((code) => (
                 <span className="nc-chip" key={code}>{language(code)}

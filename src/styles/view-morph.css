@@ -78,11 +78,21 @@
    frame's own background (frost-preview.css), so the frame's 240ms expo-out crossfade swapped it for the plain frame tint within a few
    frames while the sidebar was still leaving, and the glassy column seemed to vanish (founder, 1 Nov). The tint now sits on the
    sidebar itself during the switch, and the sidebar slides out or in on the page's own 480ms spring, so the glass travels with the
-   page's edge. A fixed 480ms, not scaled by --motion-scale: the page card's group (sidebar.css) and the native page glide are 480ms at every
-   animation speed, and a sidebar scaled by Premium's 1.7 trailed the page by up to a quarter of the travel (sidebar-hunt, 1 Nov). Only where the frame is veiled over glass (the same materials as the frame rule) and not for the floating sidebar. */
+   page's edge. 480ms, never stretched by --motion-scale: the page card's group (sidebar.css) and the native page glide are 480ms at
+   Premium too, and a sidebar scaled by Premium's 1.7 trailed the page by up to a quarter of the travel (sidebar-hunt, 1 Nov). All four take
+   --motion-pace together, so Fast is 288ms for each (a reviewer, 2 Nov: Fast was barely faster than Premium). Only where the frame is veiled over glass (the same materials as the frame rule) and not for the floating sidebar. */
 html:is([data-material=acrylic],[data-material=vibrancy]):root[data-mode-switch=layout]:not([data-edge-float]) .app.style-acira:not(.native-layer):has(>.ed-rail.is-expanded:not(.is-peek)){background:linear-gradient(180deg,rgb(var(--chrome-rgb) / var(--chrome-veil-top)),rgb(var(--chrome-rgb) / var(--chrome-veil-bottom))) var(--navigation-width,0px) 0/100% 100% no-repeat}
 html:is([data-material=acrylic],[data-material=vibrancy]):root[data-mode-switch=layout]:not([data-edge-float]) .app.style-acira:not(.native-layer)>.ed-rail.is-expanded:not(.is-peek){background:linear-gradient(180deg,rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-top)),rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-bottom)))}
-:root[data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-leave}
-:root[data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation:480ms linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-arrive}
+:root[data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-leave}
+:root[data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both acira-sidebar-arrive}
 @keyframes acira-sidebar-leave{from{transform:none}to{transform:translateX(-100%)}}
 @keyframes acira-sidebar-arrive{from{transform:translateX(-100%)}to{transform:none}}
+/* A page the interface draws (a new tab, Settings) lays out on the main thread inside its card, and the card, the toolbar and the controls glide on the main
+   thread's clock too; the slide above, a bare transform, runs on the compositor, a frame ahead of them (a whole stall ahead when the interface thread is busy
+   as the glide starts). The card, opaque, then stood under the glass sidebar for a few frames, a darker band against the sidebar's edge (founder, 1 Nov,
+   most in dark). While such a page follows (sharedMotion followPage), the slide takes that clock: its outline-offset, which nothing shows, is an animated
+   property the compositor cannot take. A website is main's native view, placed on the compositor's slide, and keeps it. */
+:root[data-page-follow][data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child{animation-name:acira-sidebar-leave-follow}
+:root[data-page-follow][data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child{animation-name:acira-sidebar-arrive-follow}
+@keyframes acira-sidebar-leave-follow{from{transform:none;outline-offset:0}to{transform:translateX(-100%);outline-offset:.01px}}
+@keyframes acira-sidebar-arrive-follow{from{transform:translateX(-100%);outline-offset:.01px}to{transform:none;outline-offset:0}}

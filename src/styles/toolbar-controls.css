@@ -100,7 +100,11 @@
 
 
 
-.page-pane>.page-zoom-content{zoom:var(--page-zoom,1);width:calc(100% / var(--page-zoom,1));height:calc(100% / var(--page-zoom,1));min-height:calc(100% / var(--page-zoom,1));}
+/* Page zoom for Acira's own pages, the way a website zooms: the page is laid out in (pane / zoom) CSS pixels and drawn zoom times larger, so
+   it fills the pane, reflows, and its container queries see the smaller width. `zoom` is the standardized property: a percentage is a share of
+   the container whatever the zoom, so the box is 100% of the pane (the old width: calc(100% / zoom) was for the non-standard property and
+   drew the page in a corner at every zoom but 100%). Viewport units are not divided by the zoom, so pages use --pz-vw / --pz-vh for them. */
+.page-pane>.page-zoom-content{zoom:var(--page-zoom,1);--pz-vw:calc(1vw / var(--page-zoom,1));--pz-vh:calc(1vh / var(--page-zoom,1));width:100%;height:100%;min-height:100%;}
 
 /* UF-001: one rhythm in Compact and Focus — 2px inside a control group, 6px between groups.
    The tab-count badge sits inside its own 28px control (ringed in the frame color), so the
@@ -123,7 +127,7 @@
 /* UF-042: in sidebar-only tabs the sidebar toggle joins the navigation group on the single top row. */
 .app.style-acira .browser-shell.acira-shell .expanded-navigation:not([hidden]){display:flex;align-items:center;gap:6px}
 /* UF-008's top-bar auto-hide strip is gone: Seamless (seamless.css) replaces it. */
-/* §5.1 address field: 28px, 4px radius, one surface and one 2px focus ring; left-aligned URL in Geist 13 with the
+/* §5.1 address field: 28px, 4px radius, one surface and one 2px focus ring; left-aligned URL in Inter 13 with the
    registrable domain at full strength and the rest at 56%. No motion on focus. */
 .app.style-acira .browser-shell .address-bar{height:28px;border-radius:var(--radius-control,4px);box-shadow:none}
 /* Round 2: the field's own buttons (site information, bookmark star) are 22px circles set 3px in from its edges, so
@@ -159,7 +163,7 @@
 .app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .acira-compact-tab{height:28px}
 .app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .acira-compact-selection{top:2px;height:28px}
 .app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) :is(.compact-navigation .icon-button,.toolbar-tab-overview,.acira-compact-new,.toolbar-actions>.icon-button,.toolbar-actions>.profile-button){width:28px;min-width:28px;height:28px;flex-basis:28px}
-/* Bible §3.1 mono budget / §4 kbd: key caps are Geist 11/500 in a hairline box, never mono. */
+/* Bible §3.1 mono budget / §4 kbd: key caps are Inter 11/500 in a hairline box, never mono. */
 .app kbd{font-family:var(--font-ui);font-weight:500}
 /* Split drop zone: the right half of a previewing split while a tab rests over it (the page already sits left). */
 .app .split-drop-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;margin:0;border-radius:var(--page-radius,8px);background:color-mix(in srgb,var(--accent,#3b82f6) 8%,transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent,#3b82f6) 45%,transparent);color:color-mix(in srgb,var(--text-primary,currentColor) 72%,transparent);font:500 13px/1.3 var(--font-ui);animation:split-zone-in 140ms cubic-bezier(.23,1,.32,1) both}

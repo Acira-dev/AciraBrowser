@@ -4,14 +4,18 @@ const macWording = new Set(['setup.import.found', 'handoff.trash', 'handoff.tras
 const osNameMessages = new Set(['language.system', 'browsersettings.animationSystemOff', 'privacy.passkeysDetail', 'vpn.control.protonApp']);
 
 /** Keys written in Windows terms inside a sentence ("Ctrl+S", "Ctrl+Shift+E", "Alt+T") are Mac keys on a Mac: ⌘S, ⇧⌘E, ⌥T, in the Mac's
- * ⌥⇧⌘ order. Letters only: Ctrl+Tab is the Control key there too, and Option+digit is not the workspace key. */
-const writtenKey = /\b((?:Ctrl|Alt|Shift)(?:\+(?:Ctrl|Alt|Shift))*)\+([A-Z])\b/g;
-const macModifier: Record<string, string> = { Ctrl: '⌘', Alt: '⌥', Shift: '⇧' };
+ * ⌥⇧⌘ order. Letters only: Ctrl+Tab is the Control key there too, and Option+digit is not the workspace key. German and French write the
+ * keys as their keyboards label them ("Strg+Umschalt+E", "Ctrl+Maj+E"): the same keys. */
+const writtenKey = /\b((?:Ctrl|Strg|Alt|Shift|Umschalt|Maj)(?:\+(?:Ctrl|Strg|Alt|Shift|Umschalt|Maj))*)\+([A-Z])\b/g;
+const macModifier: Record<string, string> = { Ctrl: '⌘', Strg: '⌘', Alt: '⌥', Shift: '⇧', Umschalt: '⇧', Maj: '⇧' };
 const macOrder = '⌥⇧⌘';
+/** Any other "Alt" is the Option key on a Mac, in every language ("Alt+click", "Alt+Up", "Alt-Klick", "按住 Alt 点击" read Option), and
+ * Alt+Enter is Option+Return there. Alt+digit is left alone: Option+digit is not the workspace key (import.desc.spaces says ⌃1–8). */
+const optionKey = (text: string) => text.replace(/\bAlt\+Enter\b/g, 'Option+Return').replace(/\bAlt\b(?!\s*\+\s*\d)/g, 'Option');
 /** The same conversion for text that is still written in English in the code (a Settings row's detail), for a Mac only. */
 export const macKeys = (text: string) =>
-  text.replace(writtenKey, (_match, modifiers: string, key: string) =>
-    [...new Set(modifiers.split('+').map((name) => macModifier[name]))].sort((a, b) => macOrder.indexOf(a) - macOrder.indexOf(b)).join('') + key);
+  optionKey(text.replace(writtenKey, (_match, modifiers: string, key: string) =>
+    [...new Set(modifiers.split('+').map((name) => macModifier[name]))].sort((a, b) => macOrder.indexOf(a) - macOrder.indexOf(b)).join('') + key));
 
 const replaceAll = (text: string, pairs: readonly (readonly [string, string])[]) => pairs.reduce((out, [from, to]) => out.replaceAll(from, to), text);
 /** "Windows Settings" in the thirteen catalogs, and what a Mac calls that place in the same sentence. */
@@ -37,9 +41,13 @@ const withoutWindowsKey = [
 export function platformCatalogText(id: string, text: string, platform: string): string {
   if (platform !== 'darwin') return text;
   if (macWording.has(id)) text = text.replace(/\bPC\b/g, 'Mac').replaceAll('Recycle Bin', 'Trash');
+  // A Tor window opens with Option+Cmd+N on a Mac (Option+Shift+N types a character), in every language: Alt+Shift+N, Alt+Umschalt+N, Alt+Maj+N.
+  if (id === 'privacy.forAnonymityRatherThanA') text = text.replace(/Alt\+[^+()（）\s]+\+N/, '⌥⌘N');
   // The English copy calls the computer "this PC" (folders an extension is loaded from, files it cannot open, what setup found).
   text = macKeys(text.replaceAll('this PC', 'this Mac'));
   if (id.startsWith('workspaces.')) return text.replaceAll('Windows Hello', 'macOS').replaceAll('Windows', 'macOS');
+  // The Nth workspace opens with Control+digit on a Mac (Option+digit types a character), in every language: ⌃1–8, as the toasts write it.
+  if (id === 'import.desc.spaces') return text.replaceAll('Alt+1–8', '⌃1–8');
   // A Mac has no Windows key: its clause leaves the sentence, in every language.
   if (id === 'shortcuts.systemKeysNote') return replaceAll(text, withoutWindowsKey);
   // The Mac's own name for the place Windows calls Settings (the clock fix Tor asks for), in every language.

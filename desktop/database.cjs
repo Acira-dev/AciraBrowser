@@ -2,11 +2,14 @@
 const fs=require('node:fs'),path=require('node:path');
 const {DatabaseSync}=require('node:sqlite');
 const json=value=>JSON.stringify(value),parse=value=>JSON.parse(value);
+const SCHEMA=1; // the newest schema this Acira understands; a file with a higher user_version was written by a newer Acira
 class BrowserDatabase{
  constructor(filename){
   fs.mkdirSync(path.dirname(filename),{recursive:true});this.filename=filename;
-  this.db=new DatabaseSync(filename);this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000; PRAGMA secure_delete=ON;');
-  const version=this.db.prepare('PRAGMA user_version').get().user_version;if(version>1)throw new Error('This profile was created by a newer Acira version.');
+  this.db=new DatabaseSync(filename);this.db.exec('PRAGMA busy_timeout=3000;');
+  // the version is read before anything is set: a profile from a newer Acira is left exactly as it was (not even switched to WAL)
+  const version=this.db.prepare('PRAGMA user_version').get().user_version;if(version>SCHEMA){try{this.db.close();}catch{}throw new Error('This profile was created by a newer Acira version.');}
+  this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;');
   if(version===0)this.transaction(()=>this.db.exec(`
    CREATE TABLE profiles(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
    CREATE TABLE bookmarks(id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,parent_id TEXT,position INTEGER NOT NULL,payload TEXT NOT NULL);
@@ -23,7 +26,7 @@ class BrowserDatabase{
   `));
   const checked=this.db.prepare('PRAGMA quick_check').get();if(Object.values(checked)[0]!=='ok')throw new Error('Browser data integrity check failed. Your data has been preserved.');
  }
- transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const result=fn();this.db.exec('COMMIT');return result;}catch(error){this.db.exec('ROLLBACK');throw error;}finally{this.inTransaction=false;}}
+ transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const result=fn();this.db.exec('COMMIT');return result;}catch(error){try{this.db.exec('ROLLBACK');}catch{/* SQLite already ended it (a full disk does); the caller needs the real error */}throw error;}finally{this.inTransaction=false;}}
  readWindow(id){const row=this.db.prepare('SELECT payload FROM windows WHERE id=?').get(id);return row?parse(row.payload):null;}
  saveWindow(id,snapshot){this.transaction(()=>{
   this.db.prepare('INSERT INTO windows VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at').run(id,json(snapshot),Date.now());
@@ -53,7 +56,8 @@ class BrowserDatabase{
  setMetadata(key,value){this.db.prepare('INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,String(value));}
  /** Folds the write-ahead log into the database and empties it, so rows deleted a moment ago (cleared history) are not left in the -wal file. */
  scrub(){this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');}
- backup(){this.db.exec('PRAGMA wal_checkpoint(FULL)');const target=this.filename+'.bak';this.db.exec(`VACUUM INTO '${target.replaceAll("'","''")}.next'`);fs.renameSync(target+'.next',target);}
+ /** A complete, compacted copy at `target` (database-backups.cjs keeps the daily ones). Written beside it first and renamed, so a copy is never half there. */
+ backup(target=this.filename+'.bak'){this.db.exec('PRAGMA wal_checkpoint(FULL)');fs.rmSync(target+'.next',{force:true});this.db.exec(`VACUUM INTO '${target.replaceAll("'","''")}.next'`);fs.renameSync(target+'.next',target);}
  close(){this.db.close();}
 }
-module.exports={BrowserDatabase};
+module.exports={BrowserDatabase,SCHEMA};

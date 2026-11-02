@@ -470,6 +470,14 @@
 /* During an appearance switch's crossfade no color transition starts: the frame changes at once under the crossfade,
    and nothing has to be finished from script (getAnimations() forced a full style recalc inside the switch: F04). */
 :root[data-theme-settle] *, :root[data-theme-settle] *::before, :root[data-theme-settle] *::after { transition: none !important; }
+/* An appearance switch changes colour, not place: its crossfade eases in and out (CSS ease) instead of taking the glide curve above,
+   which put three quarters of the change into the first frame. The surface that changes the most, the selected tab going from white
+   to dark, jumped (249 → 98 in one frame, 249 → 60 → 44 at a coarser sampling) after the frame around it had already dimmed; it now
+   ramps with the rest. Only the curve: the durations stay those of the rule above. */
+:root[data-mode-switch='appearance']::view-transition-old(root),
+:root[data-mode-switch='appearance']::view-transition-new(root),
+:root[data-mode-switch='appearance']::view-transition-old(*),
+:root[data-mode-switch='appearance']::view-transition-new(*) { animation-timing-function: ease; }
 
 /* R3-36 experiment (src/ui/dotClick.ts, flag off by default): while the dot grid plays over a toolbar icon, the glyph steps
    aside and returns. The animation sits on the button's own svg so a glyph the click replaces steps aside too. */

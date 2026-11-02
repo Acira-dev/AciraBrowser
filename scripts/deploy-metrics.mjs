@@ -50,7 +50,8 @@ export async function migrationFiles() {
   return files;
 }
 
-async function migrate({ ref, token }, fetchImpl = fetch) {
+/** Runs every migration in name order (each is idempotent). Also used by scripts/deploy-site-reports.mjs. */
+export async function migrate({ ref, token }, fetchImpl = fetch) {
   for (const name of await migrationFiles()) {
     const query = await fs.readFile(path.join(root, 'supabase/migrations', name), 'utf8');
     const response = await fetchImpl(`${API}/${ref}/database/query`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
@@ -72,11 +73,12 @@ export async function ensureSalt({ ref, token }, fetchImpl = fetch) {
   return true;
 }
 
-function deployFunction({ ref, token }) {
+/** Deploys one Edge Function (`usage` here; scripts/deploy-site-reports.mjs passes its own names) with JWT verification off. */
+export function deployFunction({ ref, token }, name = 'usage') {
   const cli = (process.env.SUPABASE_CLI || 'npx --yes supabase@2').split(' ').filter(Boolean);
   return new Promise((resolve, reject) => {
     // The token travels in the environment (the CLI's own variable), never in the arguments.
-    const child = spawn(cli[0], [...cli.slice(1), 'functions', 'deploy', 'usage', '--project-ref', ref, '--no-verify-jwt', '--use-api'], { cwd: root, env: { ...process.env, SUPABASE_ACCESS_TOKEN: token }, stdio: 'inherit', shell: process.platform === 'win32' });
+    const child = spawn(cli[0], [...cli.slice(1), 'functions', 'deploy', name, '--project-ref', ref, '--no-verify-jwt', '--use-api'], { cwd: root, env: { ...process.env, SUPABASE_ACCESS_TOKEN: token }, stdio: 'inherit', shell: process.platform === 'win32' });
     child.on('error', reject);
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`supabase functions deploy exited with ${code}.`))));
   });

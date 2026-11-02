@@ -2,13 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Passwords</title>
 <style>
 /* Password suggestions and the save/update prompt, to the Transient surfaces spec (bible §4): the opaque popover tone, radius 8, rows 4,
    320 wide with 16px padding, title 13/500 over a 12px detail, 28px buttons right-aligned with the default first. Motion is transform and
    opacity only: the prompt enters in 180ms (ease-strong) and leaves in 120ms (ease-in); the list is a keyboard surface (80ms fade).
    Text only, never HTML from a page. */
+/* Inter, the browser's one typeface: the same file the interface loads (public/fonts, built into dist/fonts), same features. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
 :root{
  --bg:#1e1e22;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-3:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--hover:rgb(255 255 255/.07);
  --edge:rgb(255 255 255/.14);
@@ -20,7 +23,7 @@ body.light{
  --np-bg:#17171a;--np-fg:#fff;--np-hover:#26262b;--ring:#2563eb;color-scheme:light;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
 #panel{position:absolute;inset:0;margin:0;border-radius:8px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--edge);overflow:auto}
 #panel[hidden]{display:none}
 /* suggestions */
@@ -35,8 +38,8 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 1
 #save{display:flex;flex-direction:column;gap:12px;padding:16px;min-height:100%;height:max-content}
 #save[hidden]{display:none}
 .top{display:flex;align-items:flex-start;gap:8px}
-.top h1{margin:0;flex:1;font:500 13px/1.3 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
-.top .host{display:block;margin-top:2px;font:400 12px/1.3 Geist,system-ui,sans-serif;color:var(--ink-2)}
+.top h1{margin:0;flex:1;font:500 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+.top .host{display:block;margin-top:2px;font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--ink-2)}
 .close{flex:none;display:grid;place-items:center;width:24px;height:24px;margin:-2px -4px 0 0;padding:0;border:0;border-radius:4px;background:none;color:var(--ink-2);cursor:default}
 .close:hover{background:var(--hover);color:var(--ink)}
 .close svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
@@ -45,7 +48,7 @@ dt{font-size:12px;color:var(--ink-3);align-self:center}
 dd{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:450}
 dd.dots{letter-spacing:.12em;color:var(--ink-2)}
 .buttons{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin-top:auto}
-button.act{height:28px;padding:0 12px;border:0;border-radius:4px;font:500 13px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
+button.act{height:28px;padding:0 12px;border:0;border-radius:4px;font:500 13px/1 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
 button.act:active{transform:scale(.97)}
 button.quiet{background:none;color:var(--ink-2)}
 button.quiet:hover{background:var(--hover);color:var(--ink)}
@@ -114,7 +117,8 @@ $('never').addEventListener('click',()=>pwFrame.action('never'));
 $('close').addEventListener('click',()=>pwFrame.action('dismiss'));
 addEventListener('keydown',event=>{if(current?.mode!=='save')return;if(event.key==='Escape'){event.preventDefault();pwFrame.action('dismiss');}else if(event.key==='Enter'&&event.target.tagName!=='BUTTON'){event.preventDefault();pwFrame.action('save');}});
 pwFrame.onState(render);
-pwFrame.ready();
+// Ready once Inter is in, so the first card is measured in it.
+document.fonts.load('400 13px Inter').catch(()=>{}).finally(()=>pwFrame.ready());
 </script>
 </body>
 </html>

@@ -2,14 +2,14 @@
 // One honest, structured answer to "what protects me and what does not", built from what this process is really running.
 const {t,number}=require('./tx.cjs');
 const date=ms=>ms?new Date(ms).toISOString().slice(0,10):null;
-function protectionSummary({network,filterLists,antiTracking,safeBrowsing,cookieBanners,aiContent,metrics}){
+function protectionSummary({network,filterLists,antiTracking,safeBrowsing,cookieBanners,cookieAnswers,aiContent,metrics}){
  const engine=network.engine||{},current=network.current||{},dns=current.dns?.mode==='off'?t('protection.dns.off'):current.dns?.mode==='secure'?t('protection.dns.secure',{servers:(current.dns?.servers||[]).join(', ')}):t('protection.dns.system');
  const refreshed=filterLists.updatedAt?t('protection.ads.refreshed',{date:date(filterLists.updatedAt)}):t('protection.ads.bundled'),updating=filterLists.automatic?t('protection.ads.refreshEvery'):t('protection.ads.refreshOff');
  const rows=[
   {id:'ads-trackers',title:t('protection.ads.title'),state:'on',detail:t('protection.ads.detail',{lists:refreshed,refresh:updating})},
   {id:'third-party-cookies',title:t('protection.cookies.title'),state:engine.thirdPartyCookies==='allow'?'off':'on',detail:engine.thirdPartyCookies==='allow'?t('protection.cookies.allowed'):t('protection.cookies.blocked')},
   ...(antiTracking?.rows||[]),
-  cookieBannerRow(cookieBanners),
+  cookieBannerRow(cookieBanners,cookieAnswers),
   aiAnswerRow(aiContent),
   {id:'advertising-apis',title:t('protection.adApis.title'),state:engine.adApis==='available'?'off':'on',detail:t('protection.adApis.detail')},
   {id:'speculative-loading',title:t('protection.prefetch.title'),state:'on',detail:t('protection.prefetch.detail')},
@@ -38,9 +38,10 @@ function phishingRow(status,antiTracking){
  if(status.state==='ready')return {...base,state:'on',detail:t('protection.phishing.ready')};
  return {...base,state:status.state==='error'?'off':'preparing',detail:status.state==='error'?t('protection.phishing.listError',{error:status.lastError||unknown()}):t('protection.phishing.listDownloading')};
 }
-/** Banner hiding is on by default; the row follows the profile's saved choice and says it can be turned off per site. */
-function cookieBannerRow(enabled){
- if(enabled===false)return {id:'cookie-banners',title:t('protection.cookieBanners.title'),state:'off',detail:t('protection.cookieBanners.off')};
+/** Banners are answered "reject" by default (never accept); hiding is opt-in. The row follows the profile's saved choices (unknown answering means the default, on). */
+function cookieBannerRow(enabled,answers){
+ if(answers!==false)return {id:'cookie-banners',title:t('protection.cookieBanners.title'),state:'on',detail:t('protection.cookieBanners.answer')};
+ if(enabled!==true)return {id:'cookie-banners',title:t('protection.cookieBanners.title'),state:'off',detail:t('protection.cookieBanners.off')};
  return {id:'cookie-banners',title:t('protection.cookieBanners.title'),state:'on',detail:t('protection.cookieBanners.on')};
 }
 /** AI answers are hidden by default on the big search engines; the row follows the profile's saved choice. */

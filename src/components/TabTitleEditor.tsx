@@ -60,13 +60,13 @@ export function TabNameInput({tab,dispatch,onDone,className='',style}:{tab:Shown
 
 /** The strip's title (`.tab-title`). Double-click it, press F2 on the tab, or choose Rename tab to edit it in place. A tab
  * with no title on screen (pinned, or too narrow) renders this as an empty anchor and edits in a field over the tab. */
-export function TabTitle({tab,dispatch,className,children}:{tab:ShownTab;dispatch:(action:BrowserAction)=>void;className:string;children?:ReactNode}){
+export function TabTitle({tab,dispatch,className,children,dir}:{tab:ShownTab;dispatch:(action:BrowserAction)=>void;className:string;children?:ReactNode;/** The strip sets 'auto': an Arabic or Hebrew title reads right to left (BrowserTabsHorizontal withMark). */dir?:'auto'}){
  const ref=useRef<HTMLSpanElement>(null),[mode,setMode]=useTabRename(ref);
  const [box,setBox]=useState<DOMRect|null>(null);
  const done=()=>{setMode(null);setBox(null);requestAnimationFrame(()=>ref.current?.closest<HTMLElement>('[data-tab-id]')?.focus({preventScroll:true}));};
  useLayoutEffect(()=>{if(mode==='floating')setBox(ref.current?.closest<HTMLElement>('[data-tab-id]')?.getBoundingClientRect()??null);},[mode]);
  if(mode==='inline')return <span ref={ref} className={`${className} tab-title-editing`}><TabNameInput tab={tab} dispatch={dispatch} onDone={done}/></span>;
  const width=Math.min(240,Math.max(180,innerWidth-16)),left=box?Math.max(8,Math.min(innerWidth-width-8,box.left+box.width/2-width/2)):0;
- return <span ref={ref} className={className} onDoubleClick={event=>{event.preventDefault();event.stopPropagation();setMode(ref.current?.getClientRects().length?'inline':'floating');}}>{children}
+ return <span ref={ref} className={className} dir={dir} onDoubleClick={event=>{event.preventDefault();event.stopPropagation();setMode(ref.current?.getClientRects().length?'inline':'floating');}}>{children}
   {mode==='floating'&&box&&createPortal(<TabNameInput tab={tab} dispatch={dispatch} onDone={done} className="tab-name-floating" style={{left,top:box.top+(box.height-28)/2,width}}/>,document.querySelector<HTMLElement>('.app')??document.body)}</span>;
 }

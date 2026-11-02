@@ -3,6 +3,7 @@ import { runtime } from '../runtime/client';
 import type { BrowserLayout, Rectangle } from '../runtime/types';
 import { menuFrameBounds, menuFrameCoverage, menuFormOwnerRetired, menuFormSnapshotAdmitted } from './menuFormBackdrop';
 import { decodePopupSnapshot } from './popupSnapshot';
+import { motionPace } from './sharedMotion';
 
 const padding=64,warmingBudget=600;
 type Frame={element:HTMLCanvasElement|HTMLVideoElement;key:string;bounds:Rectangle;radius:number;sourceBounds?:Rectangle};
@@ -29,7 +30,7 @@ export function useMenuFormBackdrop({trigger,panel,canvas,open,host,bounds,onRet
     const reveal=(material:'captured'|'opaque')=>{
       if(!alive||retired)return;
       root.dataset.formMaterial=material;root.style.visibility='';root.inert=false;
-      if(!shown){shown=true;root.style.animation='none';const reduced=root.closest('.app')?.getAttribute('data-reduced-motion')==='true'||matchMedia('(prefers-reduced-motion: reduce)').matches;if(!reduced)animation=root.animate([{opacity:0,transform:'translateY(3px)'},{opacity:1,transform:'none'}],{duration:160,easing:'cubic-bezier(.16,1,.3,1)',fill:'both'});root.dispatchEvent(new Event('acira-menu-form-ready'));}
+      if(!shown){shown=true;root.style.animation='none';const reduced=root.closest('.app')?.getAttribute('data-reduced-motion')==='true'||matchMedia('(prefers-reduced-motion: reduce)').matches;if(!reduced)animation=root.animate([{opacity:0,transform:'translateY(3px)'},{opacity:1,transform:'none'}],{duration:160*motionPace(),easing:'cubic-bezier(.16,1,.3,1)',fill:'both'});root.dispatchEvent(new Event('acira-menu-form-ready'));}
     };
     const fallback=()=>{empty();reveal('opaque');};
     const checkRetirement=()=>{

@@ -1,5 +1,7 @@
 'use strict';
 const {LIMITS,snapshotRegion,snapshotPlan,sameSnapshotContext,sameSnapshotSources,encodeSnapshot}=require('./popup-snapshot.cjs');
+// The UI's own words when it drops a request on purpose (src/ui/usePopupBackdrop.ts): the popup closed or a newer request replaced this one.
+const CANCELLED=/Material request cancelled|Stale material request/;
 
 /** App-internal live material. Grants only an owned renderer, never a desktop,
  * screen, arbitrary tab ID, audio track, or a source chosen by web content. */
@@ -8,6 +10,7 @@ class PopupBackdropBroker {
     this.resolveFrame=resolveFrame;
     this.owners=new Map();this.pending=new Map();this.sessions=new WeakSet();
     this.snapshotPending=new Map();this.snapshotUsed=new WeakMap();this.snapshotCaptures=0;
+    this.failures=new Set();
   }
   register(contents,owner) {
     this.owners.set(contents.id,{contents,...owner});
@@ -48,10 +51,18 @@ class PopupBackdropBroker {
     if(owner&&!contents.isDestroyed()&&Number.isSafeInteger(id)&&owner.currentId()!==id)return {id,sources:[]};
     return this.metadata(contents,id);
   }
+  /** Resolves true when the material was acquired, false when the popup shows its native glass instead. A popup that closes or moves on
+   *  (a quick Esc, a blur, a tab switch) cancels its request on purpose: that is not an error, and nothing is logged. A real failure (a
+   *  capture the system refused, a renderer that did not answer in time) is logged once per kind; every time, the popup falls back. Nothing
+   *  rejects, because a rejected handler is logged by Electron on every popup ("Error occurred in handler for 'acira:start-popup-capture'"). */
   async start(contents,id,key) {
+    const owner=contents&&this.owners.get(contents.id);
+    if(owner&&!contents.isDestroyed()&&Number.isSafeInteger(id)&&owner.currentId()!==id)return false;
     this.metadata(contents,id);
-    const owner=this.owners.get(contents.id),source=owner.sources().find(source=>source.key===key);
-    if(typeof key!=='string'||key.length>160||!source||source.contents.isDestroyed()||this.pending.has(contents.id))throw new Error('Invalid popup material source');
+    if(typeof key!=='string'||key.length>160)throw new Error('Invalid popup material source');
+    const source=owner.sources().find(source=>source.key===key);
+    // The source left (its tab was switched or closed), or an earlier popup's one-shot grant is still out.
+    if(!source||source.contents.isDestroyed()||this.pending.has(contents.id))return false;
     const grant={id,key,source:source.contents,until:Date.now()+1200,consumed:false};
     this.pending.set(contents.id,grant);
     let timer;
@@ -60,9 +71,21 @@ class PopupBackdropBroker {
       // compositor request. The receiver keeps the MediaStream in its renderer.
       const script=`Promise.resolve(window.__aciraPopupCapture(${JSON.stringify(id)},${JSON.stringify(key)})).catch(error=>{throw new Error(String(error?.name||'CaptureError')+': '+String(error?.message||error))})`;
       await Promise.race([contents.executeJavaScript(script,true),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Live popup material timed out')),1000);})]);
-      if(!this.allowed(contents))throw new Error('Popup closed or source retired while material prepared');
-      return true;
+      // False: the popup closed or its source retired while the material was prepared.
+      return this.allowed(contents);
+    }catch(error){
+      if(this.wanted(contents,owner,grant)&&!CANCELLED.test(String(error?.message||error)))this.failed(error);
+      return false;
     }finally{clearTimeout(timer);if(this.pending.get(contents.id)===grant)this.pending.delete(contents.id);}
+  }
+  /** The popup that asked is still open on the same source, so a failure is the capture's own and not a cancellation. */
+  wanted(contents,owner,grant) {
+    try{return !contents.isDestroyed()&&this.owners.get(contents.id)===owner&&owner.currentId()===grant.id&&!grant.source.isDestroyed()&&owner.sources().some(source=>source.key===grant.key&&source.contents===grant.source);}catch{return false;}
+  }
+  failed(error) {
+    const text=String(error?.message||error).replace(/^(?:Error: )+/,'').slice(0,200);
+    if(this.failures.has(text))return;this.failures.add(text);
+    console.warn('Popup material unavailable, native glass shown (logged once):',text);
   }
   /** One cropped, in-memory frame per source for this popup generation. No permission handler, stream, file or cache. */
   async snapshot(contents,id){

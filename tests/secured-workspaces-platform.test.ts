@@ -30,8 +30,14 @@ test('keys written in a sentence read as Mac keys on a Mac', () => {
   assert.equal(mac('All open tabs (Alt+T)'), 'All open tabs (⌥T)');
   assert.equal(mac('Ctrl+Tab switches to'), 'Ctrl+Tab switches to', 'Control+Tab is the same key on a Mac');
   assert.equal(mac('one workspace per Space (Alt+1–8)'), 'one workspace per Space (Alt+1–8)');
-  assert.equal(mac('Ctrl+Alt with a character is AltGr'), 'Ctrl+Alt with a character is AltGr');
+  assert.equal(mac('Ctrl+Alt with a character is AltGr'), 'Ctrl+Option with a character is AltGr', 'the Option key by its Mac name; AltGr is a word, not the key');
   assert.equal(platformCatalogText('sidebar.x', 'Ctrl+S toggles the sidebar', 'win32'), 'Ctrl+S toggles the sidebar');
+  // German and French name the keys as their keyboards do; on a Mac they are the same keys.
+  assert.equal(mac('Strg+S schaltet die Seitenleiste um'), '⌘S schaltet die Seitenleiste um');
+  assert.equal(mac('Die Schaltfläche und Strg+Umschalt+E blenden sie ein. Alt+Umschalt+N, Strg+Tab'), 'Die Schaltfläche und ⇧⌘E blenden sie ein. ⌥⇧N, Strg+Tab');
+  assert.equal(mac('Le bouton et Ctrl+Maj+E l’affichent'), 'Le bouton et ⇧⌘E l’affichent');
+  assert.equal(mac('Vorheriger Treffer (Umschalt+Enter)'), 'Vorheriger Treffer (Umschalt+Enter)');
+  assert.equal(platformCatalogText('sidebar.x', 'Strg+Umschalt+E', 'win32'), 'Strg+Umschalt+E');
 });
 
 test('the Proton VPN app and the Tor clock hint name the Mac, not Windows', () => {
@@ -74,5 +80,16 @@ test('every catalog says macOS, System Settings and no Windows key on a Mac, and
       assert.equal(platformCatalogText(id, original, 'win32'), original);
       if (original.includes('{keys}')) assert.ok(mac.includes('{keys}'), `${code} ${id} keeps {keys}`);
     }
+  }
+});
+
+test('the Arc Spaces line names the Mac workspace key (Control+1–8), not Alt+1–8, in every catalog', async () => {
+  const fs = await import('node:fs'), path = await import('node:path');
+  for (const code of ['en', 'ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh-CN']) {
+    const original = (JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src', 'i18n', `${code}.json`), 'utf8')) as Record<string, string>)['import.desc.spaces'];
+    assert.ok(original.includes('Alt+1–8'), `${code} writes the Windows key`);
+    const mac = platformCatalogText('import.desc.spaces', original, 'darwin');
+    assert.ok(mac.includes('⌃1–8') && !mac.includes('Alt'), `${code}: ${mac}`);
+    assert.equal(platformCatalogText('import.desc.spaces', original, 'win32'), original);
   }
 });

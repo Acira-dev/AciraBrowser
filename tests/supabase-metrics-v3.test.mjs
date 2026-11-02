@@ -169,7 +169,7 @@ test('restStore: ratings go to feature_ratings, the probe reads zero rows of nam
 });
 
 test('deploy: the dry run lists v1 -> v3, the salt secret and both message-type probes; the health checks pass against the real handler', async () => {
-  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql']);
+  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql', '20261102000000_site_reports.sql']);
   const logs = []; const original = console.log; console.log = (...args) => logs.push(args.join(' '));
   try { await deploy({ SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', SUPABASE_ACCESS_TOKEN: 'sbp_SECRETVALUE' }, ['--dry-run']); } finally { console.log = original; }
   const plan = logs.join('\n');

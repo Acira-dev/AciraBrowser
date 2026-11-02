@@ -40,6 +40,9 @@ export async function buildCommitted(output){
  // Build the approved source entry as one bundle; never copy a shared generated preload.
  const uiPreload=tree.has('desktop/ui-preload-entry.cjs')?await esbuild({absWorkingDir:root,entryPoints:['desktop/ui-preload-entry.cjs'],outfile:path.join(output,'desktop/ui-preload.cjs'),bundle:true,platform:'node',format:'cjs',target:'node24',external:['electron'],metafile:true,logLevel:'silent',plugins:[sourceOverlay(false)]}):null;
  if(uiPreload&&Object.values(uiPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox UI preload must bundle every dependency except electron');
+ // The cookie-banner answering preload (browser-services/autoconsent-preload-entry.cjs) is bundled the same way: a sandboxed frame preload cannot require DuckDuckGo's autoconsent.
+ const answerPreload=tree.has('desktop/browser-services/autoconsent-preload-entry.cjs')?await esbuild({absWorkingDir:root,entryPoints:['desktop/browser-services/autoconsent-preload-entry.cjs'],outfile:path.join(output,'desktop/browser-services/autoconsent-preload.cjs'),bundle:true,platform:'browser',format:'cjs',target:'chrome130',external:['electron'],legalComments:'inline',metafile:true,logLevel:'silent',plugins:[sourceOverlay(false)]}):null;
+ if(answerPreload&&Object.values(answerPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox cookie-answer preload must bundle every dependency except electron');
  await esbuild({absWorkingDir:root,entryPoints:['src/runtime/core.ts'],outfile:path.join(output,'desktop/runtime.cjs'),bundle:true,platform:'node',format:'cjs',target:'node22',logLevel:'silent',plugins:[overlay]});
  const write=async(file,target)=>{await fs.mkdir(path.dirname(target),{recursive:true});await fs.writeFile(target,bytes(file));};
  const config=path.join(output,'captured-vite.config.ts');await write('vite.config.ts',config);
@@ -58,7 +61,7 @@ export async function buildCommitted(output){
  if(native.includes('desktop/browser-services/reader.cjs'))for(const file of tree.keys())if(file.startsWith('desktop/browser-services/vendor/'))await write(file,path.join(output,file));
  if(native.includes('desktop/browser-services/annoyance-rules.cjs'))for(const name of ['easylist-cookie.txt','README.md','LICENSE.CC-BY-3.0.txt']){const file='desktop/browser-services/annoyance-lists/'+name;await write(file,path.join(output,file));}
  for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md','page-zoom-levels.json'])if(tree.has(file))await write(file,path.join(output,file));
- for(const [source,target]of [['src/features/onboarding/upstream/LICENSE','helium-onboarding-GPL-3.0.txt'],['src/ui/LICENSE.iphone-solo.txt','iphone-solo-MIT.txt']])if(tree.has(source))await write(source,path.join(output,'source-licenses',target));
+ for(const [source,target]of [['src/features/onboarding/upstream/LICENSE','helium-onboarding-GPL-3.0.txt'],['src/ui/LICENSE.iphone-solo.txt','iphone-solo-MIT.txt'],['desktop/browser-services/LICENSE.autoconsent.txt','autoconsent-MPL-2.0.txt']])if(tree.has(source))await write(source,path.join(output,'source-licenses',target));
  await write('package-lock.json',path.join(output,'package-lock.source.json'));
  for(const [module,file]of [['electron-chrome-extensions','chrome-extension-api.preload.js'],['electron-chrome-web-store','chrome-web-store.preload.js']])await fs.copyFile(require.resolve(module+'/preload'),path.join(output,'desktop',file));
  // R4-37: Ghostery's cosmetic preload is no longer used (content-filter-preload.cjs feeds the engine) and is not shipped; see desktop-bundle.mjs ghosteryPreloadPathStub.

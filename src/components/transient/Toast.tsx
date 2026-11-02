@@ -21,18 +21,23 @@ export interface ToastRowModel { key: number | string; text: string; tone?: Toas
 export const TOAST_MIN = 300, TOAST_MAX = 420, TOAST_LINE = 44, TOAST_TWO_LINES = 60, TOAST_GAP = 8, TOAST_PEEK = 10, TOAST_VISIBLE = 3;
 export const PILL_HEIGHT = 32, PILL_GAP = 8, PILL_MAX = 320;
 const LEAD = 36, TRAIL = 8; // padding 12 + icon 16 + gap 8; right padding.
-/** Text width in the toast font (canvas, cached); a per-character estimate before fonts are ready or without a canvas. */
+/** Text width in the toast font (a hidden span, cached, so Inter's features count as they do on screen: canvas ignores them and
+ *  the single-storey a is wider); a per-character estimate before fonts are ready or without a document. */
 const widths = new Map<string, number>();
-let measure: CanvasRenderingContext2D | null | undefined;
-function textWidth(text: string, font = '450 13px Geist, Inter, "Segoe UI", sans-serif', fallback = 6.4) {
+let measure: HTMLSpanElement | null | undefined;
+function textWidth(text: string, font = '450 13px Inter, "Segoe UI", sans-serif', fallback = 6.4) {
   const key = font + '|' + text, known = widths.get(key); if (known !== undefined) return known;
-  if (measure === undefined) measure = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  if (measure === undefined && typeof document !== 'undefined' && document.body) {
+    measure = document.createElement('span'); measure.setAttribute('aria-hidden', 'true');
+    measure.style.cssText = 'position:fixed;left:-10000px;top:0;visibility:hidden;white-space:pre;pointer-events:none;contain:layout style';
+    document.body.append(measure);
+  }
   if (!measure || (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded')) return text.length * fallback;
-  measure.font = font; const width = Math.ceil(measure.measureText(text).width);
+  measure.style.font = font; measure.textContent = text; const width = Math.ceil(measure.getBoundingClientRect().width);
   if (widths.size > 400) widths.clear(); widths.set(key, width); return width;
 }
 
-const actionWidth = (row: ToastRowModel) => row.actionLabel ? 8 + textWidth(row.actionLabel, '500 13px Geist, Inter, "Segoe UI", sans-serif', 7.4) + 16 + (row.actionKey ? 8 + textWidth(row.actionKey, '500 11px Geist, Inter, "Segoe UI", sans-serif', 6.2) + 8 : 0) : 0;
+const actionWidth = (row: ToastRowModel) => row.actionLabel ? 8 + textWidth(row.actionLabel, '500 13px Inter, "Segoe UI", sans-serif', 7.4) + 16 + (row.actionKey ? 8 + textWidth(row.actionKey, '500 11px Inter, "Segoe UI", sans-serif', 6.2) + 8 : 0) : 0;
 
 /** A row's natural width and height: one line when the text fits beside its action within 420px, else two (clamped). The
  * × takes no width of its own: it lives in the glyph's spot (founder, 27 Oct). */
@@ -41,7 +46,7 @@ export function toastRowSize(row: ToastRowModel) {
   const width = Math.round(Math.max(TOAST_MIN, Math.min(TOAST_MAX, fixed + text + 4)));
   return { width, height: fixed + text + 4 > TOAST_MAX ? TOAST_TWO_LINES : TOAST_LINE };
 }
-export const pillWidth = (text: string) => Math.round(Math.min(PILL_MAX, 10 + 16 + 8 + textWidth(text, '500 13px Geist, Inter, "Segoe UI", sans-serif', 6.9) + 12 + 2));
+export const pillWidth = (text: string) => Math.round(Math.min(PILL_MAX, 10 + 16 + 8 + textWidth(text, '500 13px Inter, "Segoe UI", sans-serif', 6.9) + 12 + 2));
 
 /** The whole slot: the stack (newest last), and the status pill above it. `expanded` = spread on hover. */
 export function toastSlotSize(rows: ToastRowModel[], pill?: string, expanded = false) {

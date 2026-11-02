@@ -23,6 +23,7 @@ type Edit =
   | { id: string; state: 'clash'; accelerator: string; owner: string };
 
 const MAC_GLYPHS: Record<string, string> = { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Cmd: '⌘' };
+// Key names stay as the keys are labelled, in every language (i18n-ignore).
 const KEY_NAMES: Record<string, string> = { Left: '←', Right: '→', Up: '↑', Down: '↓', PageUp: 'Page Up', PageDown: 'Page Down', Delete: 'Del', Meta: 'Win', '=': '+' };
 /** Recording ends by itself after this long without a key (main keeps its own limit in step). */
 const IDLE_MS = 30_000;
@@ -93,7 +94,7 @@ function Shortcuts() {
       if (result?.ok) { finish(); load(); return; }
       if (result?.code === 'conflict' && result.conflict) { const next: Edit = { id, state: 'clash', accelerator, owner: commandLabel(result.conflict.id, result.conflict.label) }; current.current = next; setEdit(next); return; }
       // Refused after all (the registry changed under us): say why and listen again.
-      const next: Edit = { id, state: 'recording', held: [], refused: { keys: accelerator, reason: result?.message ?? 'Those keys can’t be used.' }, tries: Date.now() };
+      const next: Edit = { id, state: 'recording', held: [], refused: { keys: accelerator, reason: result?.message ?? t('shortcuts.keysRefused') }, tries: Date.now() };
       current.current = next; setEdit(next);
       void native({ type: 'shortcuts.record-start' }).catch(() => undefined);
     } catch (failure) { finish(); setError(readable(failure)); }
@@ -115,7 +116,7 @@ function Shortcuts() {
       if (event.cancel) return finish();
       if (event.clear) return clear(editing.id);
       if (!event.valid || !event.accelerator) {
-        const next: Edit = { ...editing, held: [], refused: { keys: event.accelerator ?? '', reason: event.reason ?? 'Those keys can’t be used.' }, tries: editing.tries + 1 };
+        const next: Edit = { ...editing, held: [], refused: { keys: event.accelerator ?? '', reason: event.reason ?? t('shortcuts.keysRefused') }, tries: editing.tries + 1 };
         current.current = next; setEdit(next); return;
       }
       if (event.conflict && event.conflict.id !== editing.id) { const next: Edit = { id: editing.id, state: 'clash', accelerator: event.accelerator, owner: commandLabel(event.conflict.id, event.conflict.label) }; current.current = next; setEdit(next); return; }

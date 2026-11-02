@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Site prompt</title>
 <style>
 /* Site prompts (R3-73): everything a website asks of you, in one card. A small native view above the page (the page is a
    native view and covers the interface), drawn here in the house style: the opaque popover tone, a hairline ring, the soft
-   layered shadow, radius 8 with 4px buttons, Geist 13. Two forms of the same card:
+   layered shadow, radius 8 with 4px buttons, Inter 13. Two forms of the same card:
    - anchored (permissions, "open this app?"): 320 wide, grows out of the site-identity icon on the aperture, never takes focus;
    - centred (JavaScript dialogs, "Leave this site?"): 400 wide in the middle of the page, which dims behind it.
    Text from a website is only ever set with textContent. Motion is transform, opacity and the aperture's clip-path. */
+/* Inter, the browser's one typeface: the same file the interface loads (public/fonts, built into dist/fonts), same features. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
+input,textarea{font-variant-ligatures:no-contextual!important}
 :root{
  --card:#1e1e22;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--ink-3:rgb(237 237 239/.44);--line:rgb(255 255 255/.10);--line-strong:rgb(255 255 255/.16);--hover:rgb(255 255 255/.07);
  --np-bg:#ededef;--np-fg:#16171a;--np-hover:#fff;--danger:#f0786f;--ring:#8fb0ff;--field:rgb(255 255 255/.05);--scrim:rgb(17 21 28/.34);--toggle-on:#5b86f0;
@@ -25,7 +29,7 @@ body.light{
  --rim:none;color-scheme:light;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.4 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;cursor:default}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.4 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;cursor:default}
 body[hidden]{display:none}
 #scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none}
 body.centered #scrim{pointer-events:auto}
@@ -65,7 +69,7 @@ body.centered #detail{margin-top:8px;font-size:13px;line-height:20px;max-height:
 body.centered .x{display:none}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 body.centered .actions{justify-content:flex-end;margin-top:24px}
-button.act{flex:1 1 auto;min-width:72px;height:28px;padding:0 12px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--ink);font:500 13px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;white-space:nowrap;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
+button.act{flex:1 1 auto;min-width:72px;height:28px;padding:0 12px;border:0;border-radius:4px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--ink);font:500 13px/1 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;white-space:nowrap;cursor:default;transition:background-color 120ms cubic-bezier(.2,0,0,1),transform 80ms cubic-bezier(.2,0,0,1)}
 body.centered button.act{flex:0 0 auto;height:32px;padding:0 16px}
 button.act:hover{background:var(--hover)}
 button.act:active{transform:scale(.97)}
@@ -75,7 +79,7 @@ button.act[data-role=danger]{color:var(--danger)}
 button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
 #foot{margin-top:12px;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;position:relative}
 #foot::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--line) 24px,var(--line) calc(100% - 24px),transparent)}
-button.link{padding:2px 0;border:0;background:none;color:var(--ink-3);font:400 12px/16px Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;border-radius:4px;transition:color 120ms cubic-bezier(.2,0,0,1)}
+button.link{padding:2px 0;border:0;background:none;color:var(--ink-3);font:400 12px/16px Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;cursor:default;border-radius:4px;transition:color 120ms cubic-bezier(.2,0,0,1)}
 button.link:hover{color:var(--ink)}
 #note{font-size:12px;line-height:16px;color:var(--ink-3);text-align:right;overflow-wrap:anywhere}
 /* R4-47 · the "close" variant (closing the browser, leaving work that is not saved): the Acira mark or the site's icon above a
@@ -105,7 +109,7 @@ body.close #sites:not([hidden]){display:block;margin-top:16px;padding:4px 0;bord
 .row .host{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500;letter-spacing:-.005em;color:var(--ink)}
 .row.rest{height:32px}
 .row.rest .host{font-size:13px;font-weight:400;color:var(--ink-3)}
-.tile.mono{box-shadow:none;color:#fff;font:600 12px/1 Geist,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;text-transform:uppercase}
+.tile.mono{box-shadow:none;color:#fff;font:600 12px/1 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;text-transform:uppercase}
 .strip-mono{font-size:12px}
 #caption{display:none}
 body.close #caption:not([hidden]){display:block;margin-top:16px;font-size:12px;line-height:16px;color:var(--ink-3)}
@@ -168,7 +172,7 @@ const springEasing=(spec,scale=1,velocity=0)=>{
  return {duration:Math.round(settle*1000),easing:`linear(${stops.map((v,i)=>i===0||i===POINTS-1?v:`${v} ${positions[i]}%`).join(', ')})`};
 };
 const TOKENS={'materialize':['E',.170,0],'menu.content':['E',.130,0],'popover.grow':['S',.210,0],'menu.fade':['E',.085,0]};
-const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:1,E:1,L:1}},KICK={fast:.15,premium:.4};
+const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:.6,E:.6,L:1}},KICK={fast:.15,premium:.4};
 const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
 //#endspring
 let speed='premium',off=false,running=[],shown=null,answered=false,spec=null;
@@ -313,7 +317,8 @@ sitePrompt.onState(state=>{
  else if(state.type==='hide'){settle();wrap.classList.remove('shown');scrim.style.opacity='0';body.hidden=true;spec=null;}
  else if(state.type==='focus')focusDefault();
 });
-sitePrompt.send({type:'ready'});
+// Ready once Inter is in, so the first card is measured in it.
+document.fonts.load('400 13px Inter').catch(()=>{}).finally(()=>sitePrompt.send({type:'ready'}));
 </script>
 </body>
 </html>

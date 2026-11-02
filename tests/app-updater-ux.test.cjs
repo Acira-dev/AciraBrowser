@@ -39,7 +39,7 @@ test('restart saves the session first, then calls quitAndInstall (never before)'
   await updater.check();
   const result = await updater.install();
   assert.equal(result.installing, true);
-  assert.deepEqual(order, [['flushed'], ['quitAndInstall', false, true]]);
+  assert.deepEqual(order, [['flushed'], ['quitAndInstall', true, true]]);
   await updater.install(); // a second click while installing does nothing more
   assert.equal(order.filter(row => row[0] === 'quitAndInstall').length, 1);
 });
@@ -48,7 +48,7 @@ test('a failing session save does not trap the person in the old version', async
   const order = [];
   const updater = make(folder(), { autoUpdater: fakeUpdater(order), beforeInstall: async () => { throw new Error('disk busy'); } });
   await updater.check(); await updater.install();
-  assert.deepEqual(order, [['quitAndInstall', false, true]]);
+  assert.deepEqual(order, [['quitAndInstall', true, true]]);
 });
 
 test('the notes are kept with the downloaded version and read as plain text', async () => {

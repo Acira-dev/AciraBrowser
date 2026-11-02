@@ -61,7 +61,7 @@ test('permissions.request: the prompt lists what is asked in words; yes grants, 
   const {accessLines} = require('../desktop/browser-services/extension-manager.cjs');
   const t = (id, params) => (params ? `${id}(${Object.values(params).join(',')})` : id);
   assert.deepEqual(accessLines(t, {permissions: ['history', 'webNavigation', 'unknownThing'], origins: ['https://*.example.com/*', '*://*/*', '<all_urls>']}),
-    ['• ext.perm.site(example.com)', '• ext.perm.allUrls', '• ext.perm.history', '• ext.perm.webNavigation', '• unknownThing']);
+    ['• ext.perm.allUrls', '• ext.perm.history', '• ext.perm.webNavigation', '• ext.perm.other'], 'every website covers the one site; an unknown name is never shown raw');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-perm-req-'));
   const extension = {id: ID, name: 'Fixture', manifest};
   const handlers = new Map(), sent = [], asked = [];

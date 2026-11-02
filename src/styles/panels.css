@@ -27,7 +27,7 @@
   --menu-line: rgb(0 0 0 / 0.1);
   --menu-hover: rgb(0 0 0 / 0.05);
   --menu-t3: color-mix(in srgb, currentColor 66%, transparent); /* R3-B05: 52% measured 3.44:1 on real pixels; 66% is 5.4:1 on white and 4.6:1 on a hovered row */
-  /* Light glass (round 12, Linear popup #ffffffe6 / 32px): mostly white, a 1px 8% ring, Geist's popover layers. */
+  /* Light glass (round 12, Linear popup #ffffffe6 / 32px): mostly white, a 1px 8% ring, Vercel's design-system popover layers. */
   --menu-surface: rgb(255 255 255 / 0.9);
   --menu-rim: 0 0 0 1px rgb(0 0 0 / 0.08);
   --menu-e2: 0 1px 1px rgb(0 0 0 / 0.02), 0 4px 8px -4px rgb(0 0 0 / 0.04), 0 16px 24px -8px rgb(0 0 0 / 0.06);

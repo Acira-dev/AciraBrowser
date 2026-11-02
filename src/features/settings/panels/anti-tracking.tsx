@@ -3,11 +3,12 @@ import { runtime } from '../../../runtime/client';
 import type { AntiTrackingChoice, AntiTrackingStatus, SafeBrowsingStatus } from '../../../runtime/nativeNetwork';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
+import { isMac } from '../../../ui/platform';
 
-import { t } from '../../../i18n';
+import { t, translateText } from '../../../i18n';
 /** Anti-tracking beyond lists and phishing warnings (stream J). Backed by services `antitracking.*` and `safebrowsing.*`; every note comes from the running browser. */
 
-const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : 'Something went wrong.');
+const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : t('connection.error.generic'));
 
 function AntiTracking({ disabled }: { disabled: boolean }) {
   const [status, setStatus] = useState<AntiTrackingStatus>();
@@ -24,20 +25,20 @@ function AntiTracking({ disabled }: { disabled: boolean }) {
   const settings = status?.settings;
   return (
     <SettingGroup title={t("antiTracking.antiTracking")}>
-      <SettingRow id="anti-cname" title={t("privacy.blockHiddenTrackers")} detail={status?.notes.cname ?? 'Trackers that hide behind a site’s own subdomain (CNAME cloaking).'}>
+      <SettingRow id="anti-cname" title={t("privacy.blockHiddenTrackers")} detail={status ? translateText(status.notes.cname) : t('antiTracking.cnameDetail')}>
         <Switch label={t("antiTracking.blockTrackersHiddenBehindA")} checked={settings?.cnameUncloaking ?? true} disabled={disabled || !settings} onChange={(next) => void change({ cnameUncloaking: next })} />
       </SettingRow>
-      <SettingRow id="anti-redirects" title={t("privacy.skipTrackingRedirects")} detail={status?.notes.bounce ?? 'Links through known tracking redirectors go straight to the destination.'}>
+      <SettingRow id="anti-redirects" title={t("privacy.skipTrackingRedirects")} detail={status ? translateText(status.notes.bounce) : t('privacy.redirects.on')}>
         <Switch label={t("privacy.skipTrackingRedirects")} checked={settings?.skipTrackingRedirects ?? true} disabled={disabled || !settings} onChange={(next) => void change({ skipTrackingRedirects: next })} />
       </SettingRow>
-      <SettingRow id="anti-params" title={t("privacy.removeTrackingParameters")} detail="Click IDs such as fbclid and gclid are removed from the address when you open a link to another site.">
+      <SettingRow id="anti-params" title={t("privacy.removeTrackingParameters")} detail={t('privacy.params.on')}>
         <Switch label={t("antiTracking.removeTrackingParametersFromLinks")} checked={settings?.stripTrackingParams ?? true} disabled={disabled || !settings} onChange={(next) => void change({ stripTrackingParams: next })} />
       </SettingRow>
-      <SettingRow id="anti-amp" title={t("privacy.openOriginalPagesInsteadOf")} detail="Google AMP links and AMP pages open the publisher’s own page.">
+      <SettingRow id="anti-amp" title={t("privacy.openOriginalPagesInsteadOf")} detail={t('antiTracking.ampDetail')}>
         <Switch label={t("privacy.openOriginalPagesInsteadOf")} checked={settings?.deAmp ?? true} disabled={disabled || !settings} onChange={(next) => void change({ deAmp: next })} />
       </SettingRow>
-      <SettingRow id="anti-fingerprint" title={t("privacy.fingerprintProtection")} detail={status?.notes.fingerprint ?? 'Makes your device look slightly different to each site.'}>
-        <Select label={t("privacy.fingerprintProtection")} value={settings?.fingerprint ?? 'standard'} disabled={disabled || !settings} onChange={(next) => void change({ fingerprint: next })} options={[{ value: 'off', label: 'Off' }, { value: 'standard', label: t("antiTracking.standard") }, { value: 'strict', label: t("antiTracking.strictCanBreakSites") }]} />
+      <SettingRow id="anti-fingerprint" title={t("privacy.fingerprintProtection")} detail={status ? translateText(status.notes.fingerprint) : t('antiTracking.fingerprintDetail')}>
+        <Select label={t("privacy.fingerprintProtection")} value={settings?.fingerprint ?? 'standard'} disabled={disabled || !settings} onChange={(next) => void change({ fingerprint: next })} options={[{ value: 'off', label: t('antiTracking.fingerprintOff') }, { value: 'standard', label: t("antiTracking.standard") }, { value: 'strict', label: t("antiTracking.strictCanBreakSites") }]} />
       </SettingRow>
       {settings?.fingerprint === 'strict' && <SettingNote>{t("antiTracking.strictAlsoReportsGenericGraphics")}</SettingNote>}
       {problem && <SettingNote>{problem}</SettingNote>}
@@ -46,11 +47,11 @@ function AntiTracking({ disabled }: { disabled: boolean }) {
 }
 
 const WORDS: Record<string, string> = {
-  off: 'Off. Pages on public phishing and malware lists open without a warning.',
-  loading: 'Reading the saved lists…',
-  downloading: 'Downloading the first lists. Pages are not checked yet.',
-  updating: 'Refreshing the lists.',
-  stale: 'The lists are over a week old and could not be refreshed.',
+  off: t('protection.phishing.off'),
+  loading: t('antiTracking.listsLoading'),
+  downloading: t('antiTracking.listsDownloading'),
+  updating: t('antiTracking.listsUpdating'),
+  stale: t('antiTracking.listsStale'),
 };
 
 /** The one switch for phishing and malware warnings (R4-07): its own row at the top of Privacy & security, with the same name and
@@ -65,10 +66,10 @@ export function PhishingProtection({ disabled }: { disabled: boolean }) {
   }, []);
   const lists = status?.stats.threats;
   const total = lists?.lists.reduce((sum, item) => sum + item.entries, 0) ?? 0;
-  const detail = !status ? 'Reading the current state…'
+  const detail = !status ? t('antiTracking.readingState')
     : !status.settings.phishingLists ? WORDS.off
-    : lists?.state === 'error' ? `The lists could not be downloaded: ${lists.lastError ?? 'unknown error'}. Pages are not checked until it works.`
-    : lists && ['active', 'partial', 'updating', 'stale'].includes(lists.state) && total ? `${lists.state === 'stale' ? WORDS.stale + ' ' : ''}Warns before opening a page on a public phishing or malware list (${total.toLocaleString('en-US')} addresses) and blocks listed addresses inside pages.${lists.warned ? ` Warned about ${lists.warned} so far this session.` : ''}`
+    : lists?.state === 'error' ? t('antiTracking.listsFailed', { error: lists.lastError ?? t('protection.phishing.unknownError') })
+    : lists && ['active', 'partial', 'updating', 'stale'].includes(lists.state) && total ? `${lists.state === 'stale' ? WORDS.stale + ' ' : ''}${t('antiTracking.listsActive', { count: total })}${lists.warned ? ' ' + t('antiTracking.listsWarned', { count: lists.warned }) : ''}`
     : WORDS[lists?.state ?? 'downloading'] ?? WORDS.downloading;
   const change = async (next: boolean) => {
     setProblem('');
@@ -98,7 +99,7 @@ function PhishingLists({ disabled }: { disabled: boolean }) {
   };
   return (
     <SettingGroup title={t("antiTracking.phishingAndMalware")}>
-      <SettingRow id="page-warnings" title={t("privacy.warnAboutScamPages")} detail="Stops a page from copying a command to your clipboard while telling you to paste it into the Run box (ClickFix), and flags look-alike addresses and look-alike sign-in pages. Fixed rules on this computer, no AI.">
+      <SettingRow id="page-warnings" title={t("privacy.warnAboutScamPages")} detail={isMac() ? t('antiTracking.pageWarningsDetailMac') : t('antiTracking.pageWarningsDetail')}>
         <Switch label={t("privacy.warnAboutScamPages")} checked={status?.settings.pageWarnings ?? true} disabled={disabled || !status} onChange={(next) => void changePage(next)} />
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
@@ -148,11 +149,11 @@ function SafeBrowsing({ disabled }: { disabled: boolean }) {
     setBusy(true); setProblem('');
     try { setStatus((await runtime.service(request)).safeBrowsing); setKey(''); } catch (reason) { setProblem(message(reason)); } finally { setBusy(false); }
   };
-  const detail = !status ? 'Reading the current state…'
-    : status.state === 'off-no-key' ? 'Add a Google Safe Browsing key to turn it on. Checks use lists stored on this computer; only a short hash prefix goes to Google when a site might match.'
-    : status.state === 'ready' ? 'Sites are checked against Google Safe Browsing lists stored on this computer. Only a short hash prefix goes to Google when a site might match.'
-    : status.state === 'error' ? `Not checking sites: ${status.lastError ?? 'the lists could not be updated'}.`
-    : 'Downloading the first lists. Sites are not checked yet.';
+  const detail = !status ? t('antiTracking.readingState')
+    : status.state === 'off-no-key' ? t('antiTracking.safeBrowsingNoKey')
+    : status.state === 'ready' ? t('antiTracking.safeBrowsingReady')
+    : status.state === 'error' ? t('antiTracking.safeBrowsingError', { error: status.lastError ?? t('antiTracking.safeBrowsingListsFailed') })
+    : t('protection.phishing.listDownloading');
   return (
     <SettingGroup title={t("antiTracking.googleSafeBrowsingOptional")} fold>
       <SettingRow id="safe-browsing-key" title={t("privacy.safeBrowsingWithYourOwn")} detail={detail} stacked>

@@ -2,7 +2,7 @@
 .sl { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 520px; min-width: 0; }
 .sl[data-disabled] { opacity: 0.5; }
 .sl-add { display: flex; align-items: center; gap: 8px; margin: 0; }
-.sl-add .sl-input { flex: 1 1 auto; width: auto; min-width: 0; font-family: var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); }
+.sl-add .sl-input { flex: 1 1 auto; width: auto; min-width: 0; font-family: var(--font-ui, 'Inter', 'Segoe UI', sans-serif); }
 .sl-add .st-button { flex: none; }
 .sl-input[aria-invalid='true'] { border-color: var(--danger-text, #b3261e); }
 .sl-message { margin: 0; padding: 0 2px; font-size: 12px; line-height: 16px; color: var(--danger-text, #b3261e); }
@@ -11,7 +11,7 @@
 .sl-list { margin: 0; padding: 0; list-style: none; max-height: 200px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--st-edge); border-radius: 6px; background: var(--st-field); }
 .sl-list > li { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 0 6px 0 12px; }
 .sl-list > li + li::before { content: ''; position: absolute; top: 0; left: 12px; right: 6px; height: 1px; background: var(--st-line); }
-.sl-site { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 13px/18px var(--font-ui, 'Geist', 'Inter', 'Segoe UI', sans-serif); color: var(--st-text); }
+.sl-site { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 13px/18px var(--font-ui, 'Inter', 'Segoe UI', sans-serif); color: var(--st-text); }
 .sl-remove { display: grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border-radius: 4px; color: var(--st-muted); transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1); }
 .sl-remove:hover:not(:disabled) { background: var(--hover, var(--st-line)); color: var(--st-text); }
 .sl-remove:focus-visible { outline: 2px solid var(--st-ring); outline-offset: -2px; }

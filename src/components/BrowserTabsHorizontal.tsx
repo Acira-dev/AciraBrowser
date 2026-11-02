@@ -11,6 +11,8 @@ installRowSelectionGuard();
 import { stripSpacing } from '../ui/tabStripLayout';
 import { useTabDragSurface } from '../ui/useTabDragSurface';import { holdPointer } from '../ui/dragPointer';import { SplitGroupSurfaces } from './SplitGroupSurfaces';
 import { useTabSelectionMotion } from '../ui/useTabSelectionMotion';
+import { decideAxis,rowPoint,type DragAxis } from '../ui/tabDragAxis';
+import { createEdgeScroller,type EdgeScroller } from '../ui/dragEdgeScroll';
 import { frequentSpeed,stripLeave } from '../ui/sharedMotion';
 import { ChevronLeft,ChevronRight,Columns2,Link2,X } from './AppIcons';
 import { paneDropAction,selectStripTab,toggleSolo } from '../ui/splitPaneSelect';
@@ -33,14 +35,15 @@ import { requestTabRename } from './TabTitleEditor';
 import { cardAnswers,useTabHoverCardMode } from '../ui/tabHoverCard';
 
 import { t as tr } from '../i18n';
-/** The title's text gets its own span so a long title can scroll inside its faded box (titleMarquee). A private or
+/** The title's text gets its own span so a long title can scroll inside its faded box (titleMarquee); the box reads its direction
+ * from the title (dir=auto), so an Arabic or Hebrew title starts at the right and fades out at the left. A private or
  * Tor tab's mark goes just before its close button; on the new-tab state, which has no site icon of its own, it takes
  * the icon's place instead (the slot before the title). */
 const withMark=(node:ReactNode,mark:ReactElement|null,inIconSlot=false,removeLabel?:string)=>{
  const items=Children.toArray(isValidElement<{children?:ReactNode}>(node)&&node.type===Fragment?node.props.children:node);
  const at=(name:string)=>items.findIndex(child=>isValidElement<{className?:string}>(child)&&child.props.className===name);
  const title=at('tab-title'),titleNode=items[title];
- if(isValidElement<{children?:ReactNode}>(titleNode))items[title]=cloneElement(titleNode,undefined,<span className="tab-title-text">{titleNode.props.children}</span>);
+ if(isValidElement<{children?:ReactNode}>(titleNode))items[title]=cloneElement(titleNode,{dir:'auto'} as object,<span className="tab-title-text">{titleNode.props.children}</span>);
  // A linked copy's × removes the tab from the split (the tab stays in its group): its label says so.
  const closing=at('tab-close');if(removeLabel&&closing>=0)items[closing]=cloneElement(items[closing] as ReactElement<{title?:string}>,{title:removeLabel,'aria-label':removeLabel} as object);
  if(!mark)return items;
@@ -70,7 +73,7 @@ const StripTrack=memo(function StripTrack({build}:{trackKey:string;build:{curren
 interface StripLive {
  props:BrowserTabsProps;container:RefObject<HTMLDivElement|null>;release:{current:(()=>void)|null};ids:string[];viewport:RefObject<HTMLDivElement|null>;layout:{current:{activeId:string;selectedIndex:number;linkedIndex:number;grouped:boolean}};userScroll:{current:boolean};
  revealSelected:()=>void;updateEdges:()=>void;dragSurface:ReturnType<typeof useTabDragSurface>;selection:ReturnType<typeof useTabSelectionMotion>;twin:ReturnType<typeof useTabSelectionMotion>;
- scrollFrame:{current:number};settleTimer:{current:ReturnType<typeof setTimeout>|undefined};dragged:{current:string|null};dragCancelled:{current:boolean};reordered:{current:string};
+ scrollFrame:{current:number};settleTimer:{current:ReturnType<typeof setTimeout>|undefined};dragged:{current:string|null};dragCancelled:{current:boolean};reordered:{current:string};axis:{current:DragAxis|null};/** Scrolls the strip while a sideways drag is near its end (ui/dragEdgeScroll). */edge:{current:EdgeScroller|null};
  stripDrag:{current:TabStripDrag|null};dragOrigin:{current:ReturnType<typeof captureTabDrag>};suppressClick:{current:boolean};downSelect:{current:string|null};
  setDraggingTab:(id:string|null)=>void;focusEntry:(entry:TabStripEntry)=>void;navigateEntry:(key:string,direction:string)=>void;
 }
@@ -92,6 +95,8 @@ function followPosition(L:StripLive,id:string,release:boolean){
  if(to===from||!canLiveReorder(id,ids[to],state.tabs,state.tabGroups))return;
  L.reordered.current=ids.join();dispatch({type:'tab.reorder',from:id,to:ids[to]});
 }
+/** The pointer as the strip reads it: once the drag is a sideways reorder (ui/tabDragAxis) it is on the strip's row, whatever its height; until then, and in a vertical drag, where it is. */
+const stripPoint=(L:StripLive,point:{x:number;y:number})=>{const row=L.axis.current==='x'?L.viewport.current?.getBoundingClientRect():null;return row?rowPoint(point,row):point;};
 interface StripTabProps {
  entry:TabStripEntry;sig:string;index:number;present:boolean;controls:ReturnType<typeof useDragControls>;width:number;space:number;offset:number;
  iconOnly:boolean;store:SelectedStore;entering:boolean;agentState?:string;inventory:string;reduced:boolean;scopeId:string;live:{current:StripLive};
@@ -122,10 +127,10 @@ const StripTab=memo(function StripTab({entry,index,present,controls,width,space,
   onAnimationComplete={()=>{const L=live.current;L.updateEdges();if(present&&tab.id===L.layout.current.activeId&&!L.userScroll.current)L.revealSelected();}}
   onPointerDownCapture={event=>{const L=live.current,control=(event.target as Element).closest('button,input,select,a');L.downSelect.current=null;/* Selection commits on click, so starting an inactive tab drag never replaces the pane it is meant to join. */if(event.button===0&&!event.defaultPrevented&&(!control||control.matches('.tab-close,.standard-tab-icon-close')))controls.start(event);}}
   onClickCapture={event=>{if(live.current.suppressClick.current){event.preventDefault();event.stopPropagation();return;}if(copy&&(event.target as Element).closest('.tab-close,.standard-tab-icon-close')){event.preventDefault();event.stopPropagation();leaveSplit();}}}
-  onDragStart={(_event,info)=>{const L=live.current,{state}=L.props;cancelAnimationFrame(L.scrollFrame.current);clearTimeout(L.settleTimer.current);L.scrollFrame.current=0;L.userScroll.current=true;L.dragSurface.start(key);L.selection.startDrag();L.twin.startDrag();L.dragged.current=key;L.dragCancelled.current=false;L.reordered.current='';L.stripDrag.current={id:tab.id,point:info.point,intent:captureTabDropIntent(L.viewport.current,info.point,tab.id,state.tabs,state.tabGroups)};L.setDraggingTab(tab.id);L.dragOrigin.current=captureTabDrag(tab.id,state.tabs,state.tabGroups);L.suppressClick.current=true;L.release.current?.();L.release.current=holdPointer(L.container.current,(_event as PointerEvent).pointerId);}}
-  onDrag={(_event,info)=>{const L=live.current;if(!L.dragCancelled.current)L.stripDrag.current={...L.stripDrag.current,id:tab.id,point:info.point};moveSplitDrag(tab.id,info.point,!L.dragCancelled.current&&L.props.state.tabs.length>1);if(!L.dragCancelled.current&&info.point.y<(L.viewport.current?.getBoundingClientRect().bottom??0)+16)followPosition(L,tab.id,false);/* The chip follows the pointer in 2D whatever the tab count: a lone tab is carried too (it can't split, but it isn't pinned to a vertical track). */L.dragSurface.carry(key,info.point,L.viewport.current?.getBoundingClientRect().bottom??0,!L.dragCancelled.current);markBookmarksBar(L.dragCancelled.current?null:bookmarksBarAt(info.point));}}
-  onPointerCancel={()=>{const L=live.current;L.release.current?.();L.release.current=null;markBookmarksBar(null);L.dragSurface.end(key);L.dragCancelled.current=true;L.stripDrag.current=null;L.setDraggingTab(null);}}
-  onDragEnd={(_event,info)=>{const L=live.current,{state,dispatch}=L.props,current=state.tabs.find(item=>item.id===tab.id)??tab;L.release.current?.();L.release.current=null;L.selection.endDrag();L.twin.endDrag();markBookmarksBar(null);
+  onDragStart={(_event,info)=>{const L=live.current,{state}=L.props;cancelAnimationFrame(L.scrollFrame.current);clearTimeout(L.settleTimer.current);L.scrollFrame.current=0;L.userScroll.current=true;L.dragSurface.start(key);L.selection.startDrag();L.twin.startDrag();L.dragged.current=key;L.dragCancelled.current=false;L.reordered.current='';L.axis.current=null;L.stripDrag.current={id:tab.id,point:info.point,intent:captureTabDropIntent(L.viewport.current,info.point,tab.id,state.tabs,state.tabGroups)};L.setDraggingTab(tab.id);L.dragOrigin.current=captureTabDrag(tab.id,state.tabs,state.tabGroups);L.suppressClick.current=true;L.release.current?.();L.release.current=holdPointer(L.container.current,(_event as PointerEvent).pointerId);L.edge.current?.stop();/* motion's drag follows the scrolling viewport (the tab stays under the pointer) and calls onDrag, so the slot is read again there */L.edge.current=createEdgeScroller({axis:'x',scroller:()=>live.current.viewport.current});}}
+  onDrag={(_event,moved)=>{const L=live.current,was=L.axis.current,axis=L.axis.current=decideAxis(was,moved.offset);if(axis==='x'&&was!=='x')L.dragSurface.pin(key);/* Sideways from the first few pixels: a reorder to the end, its pointer is read on the strip's row (no chip, bookmarks bar or window edge, and the picker's page zone is out of reach). */const info=axis==='x'?{...moved,point:stripPoint(L,moved.point)}:moved;if(!L.dragCancelled.current)L.stripDrag.current={...L.stripDrag.current,id:tab.id,point:info.point};moveSplitDrag(tab.id,info.point,!L.dragCancelled.current&&L.props.state.tabs.length>1);if(!L.dragCancelled.current&&info.point.y<(L.viewport.current?.getBoundingClientRect().bottom??0)+16)followPosition(L,tab.id,false);/* The chip follows the pointer in 2D whatever the tab count: a lone tab is carried too (it can't split, but it isn't pinned to a vertical track). */L.dragSurface.carry(key,info.point,L.viewport.current?.getBoundingClientRect().bottom??0,!L.dragCancelled.current&&axis!=='x');markBookmarksBar(L.dragCancelled.current||axis==='x'?null:bookmarksBarAt(info.point));/* Chrome, Arc: a sideways drag near the strip's end scrolls it */if(axis==='x'&&!L.dragCancelled.current)L.edge.current?.update(moved.point.x);else L.edge.current?.stop();}}
+  onPointerCancel={()=>{const L=live.current;L.release.current?.();L.release.current=null;markBookmarksBar(null);L.dragSurface.end(key);L.dragCancelled.current=true;L.axis.current=null;L.stripDrag.current=null;L.setDraggingTab(null);L.edge.current?.stop();L.edge.current=null;}}
+  onDragEnd={(_event,released)=>{const L=live.current,{state,dispatch}=L.props,info=L.axis.current==='x'?{...released,point:stripPoint(L,released.point)}:released,current=state.tabs.find(item=>item.id===tab.id)??tab;L.axis.current=null;L.release.current?.();L.release.current=null;L.edge.current?.stop();L.edge.current=null;L.selection.endDrag();L.twin.endDrag();markBookmarksBar(null);
    const bar=!L.dragCancelled.current&&bookmarksBarAt(info.point),torn=!L.dragCancelled.current&&!bar&&outsideWindow(info.point)&&state.tabs.length>1;
    if(bar||torn){endSplitDrag(tab.id);L.dragSurface.end(key);L.stripDrag.current=null;L.setDraggingTab(null);L.dragOrigin.current=null;L.dragged.current=null;setTimeout(()=>{L.suppressClick.current=false;},0);
     if(torn){const pointer=_event as PointerEvent;dispatch({type:'tab.move-window',id:tab.id,at:{x:Math.round(pointer.screenX??window.screenX+info.point.x),y:Math.round(pointer.screenY??window.screenY+info.point.y)}});}
@@ -148,14 +153,16 @@ export function BrowserTabsHorizontal({state,dispatch,render,onContext,onBlankCo
  const container=useRef<HTMLDivElement>(null),viewport=useRef<HTMLDivElement>(null),track=useRef<HTMLDivElement>(null);
  const dragOrigin=useRef<ReturnType<typeof captureTabDrag>>(null),release=useRef<(()=>void)|null>(null);
  const stripDrag=useRef<TabStripDrag|null>(null),dragCancelled=useRef(false);const [draggingTab,setDraggingTab]=useState<string|null>(null);
- const dragged=useRef<string|null>(null),reordered=useRef(''),suppressClick=useRef(false),downSelect=useRef<string|null>(null),scrollFrame=useRef(0),scrollGoal=useRef(0),lastPixelWheel=useRef(-Infinity),userScroll=useRef(false),settleTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ const dragged=useRef<string|null>(null),reordered=useRef(''),orderNow=useRef(''),axis=useRef<DragAxis|null>(null),edge=useRef<EdgeScroller|null>(null),suppressClick=useRef(false),downSelect=useRef<string|null>(null),scrollFrame=useRef(0),scrollGoal=useRef(0),lastPixelWheel=useRef(-Infinity),userScroll=useRef(false),settleTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
  const [available,setAvailable]=useState(1200),[closingWidth,setClosingWidth]=useState<number|null>(null),[edges,setEdges]=useState({left:false,right:false});
  const previousCount=useRef(state.tabs.length),reduced=state.settings.reducedMotion,speed=frequentSpeed(state.settings);
  const entries=tabStripEntries(state.tabs,state.tabGroups,false,state.windowUi.splitGroups),ordered=entries.filter(entry=>!entry.header).map(entry=>entry.tab),ids=entries.filter(entry=>!entry.header).map(stripValue),inventory=entries.map(entry=>`${entry.key}:${entry.pinned}:${entry.group?.id}:${entry.group?.collapsed}:${entry.splitGroup?.id}:${entry.splitGroup?.collapsed}`).join('|');
  // Revealed group members enter too; existing visible tabs never re-enter on a DOM move.
  const previousTabs=useRef(new Set(ids));
  useLayoutEffect(()=>{previousTabs.current=new Set(ids);},[inventory]);
- const scopeId=useId(),spacing=stripSpacing(entries);
+ // A swap asked for is pending only until the order changes: if the order then comes back to the one it was asked from (Reorder swaps a tab back when it reads a layout that is a frame old), nothing is pending, and followPosition must not stay blocked for the rest of the drag.
+ useLayoutEffect(()=>{reordered.current='';},[ids.join()]);// eslint-disable-line react-hooks/exhaustive-deps
+ const scopeId=useId(),spacing=stripSpacing(entries);orderNow.current=ids.join();
  const blocks=tabStripBlocks(entries),ownership=new Map(blocks.filter(block=>block.header?.group).map(block=>[block.header!.group!.id,block.items.filter(({entry})=>!entry.nested).map(({entry})=>entry.header?`${scopeId}-header-${entry.group!.id}`:`${scopeId}-tab-${entry.tab.id}`).join(' ')]));
  const metrics=standardTabMetrics(available,entries,closingWidth),{widths,offsets,occupied,pitch}=metrics;
  const groupWidths=new Map(blocks.filter(block=>block.header?.group).map(block=>{const first=block.items[0].index,last=block.items.at(-1)!.index;return [block.header!.group!.id,offsets[last]+widths[last]-offsets[first]+4];}));
@@ -216,13 +223,13 @@ export function BrowserTabsHorizontal({state,dispatch,render,onContext,onBlankCo
  const dragSurface=useTabDragSurface(track);
  const focusEntry=(entry:TabStripEntry)=>requestAnimationFrame(()=>{const selector=entry.header&&entry.splitGroup?`[data-split-group="${CSS.escape(entry.splitGroup.id)}"] .split-group-open`:entry.header?`[data-group-header="${CSS.escape(entry.group!.id)}"] button`:`[data-drag-key="${CSS.escape(stripValue(entry))}"]`;track.current?.querySelector<HTMLElement>(selector)?.focus({preventScroll:true});revealSelected();});
  const navigateEntry=(key:string,direction:string)=>{const entry=adjacentStripEntry(entries,key,direction);if(!entry)return;if(!entry.header)selectStripTab(state,dispatch,entry.tab.id,entry.splitGroup);focusEntry(entry);};
- const live=useRef<StripLive>(null!);live.current={props:{state,dispatch,render,onContext,onBlankContext,onPreview,newTab,tabState,iconOf},container,release,ids:entries.filter(entry=>!entry.header&&!entry.linked).map(entry=>entry.tab.id),viewport,layout,userScroll,revealSelected,updateEdges,dragSurface,selection,twin,scrollFrame,settleTimer,dragged,dragCancelled,reordered,stripDrag,dragOrigin,suppressClick,downSelect,setDraggingTab,focusEntry,navigateEntry};
+ const live=useRef<StripLive>(null!);live.current={props:{state,dispatch,render,onContext,onBlankContext,onPreview,newTab,tabState,iconOf},container,release,ids:entries.filter(entry=>!entry.header&&!entry.linked).map(entry=>entry.tab.id),viewport,layout,userScroll,revealSelected,updateEdges,dragSurface,selection,twin,scrollFrame,settleTimer,dragged,dragCancelled,reordered,axis,edge,stripDrag,dragOrigin,suppressClick,downSelect,setDraggingTab,focusEntry,navigateEntry};
  const [store]=useState(()=>createSelectedStore(state.activeTabId));
  useLayoutEffect(()=>store.set(state.activeTabId),[store,state.activeTabId]);
  const hasGroups=blocks.some(block=>block.header);
  const trackKey=[inventory,state.windowUi.split?.groupId,widths.join(),offsets.join(),spacing.join(),occupied,metrics.iconOnly,reduced,scopeId,draggingTab??'',hasGroups?state.activeTabId:'',entries.map(entry=>entry.header?`h${entry.key}|${entry.count}|${entry.group?.name}|${entry.group?.color}|${entry.group?.collapsed}|${entry.splitGroup?.name}`:`${tabSignature(entry.tab,iconOf?.(entry.tab.url))}|${tabState?.(entry.tab)??''}|${previousTabs.current.has(stripValue(entry))?1:0}|${entry.linked?1:0}|${entry.linkedIn?.id??''}|${entry.homeGroup?.name??''}|${entry.homeGroup?.color??''}`).join('\n')].join('\u0002');
  const buildTrack=useRef<()=>ReactNode>(()=>null);
- const reorder=(next:string[])=>{const from=dragged.current;if(!from)return;const index=next.indexOf(from),target=ids[index];if(!target||target===from)return;if(!canLiveReorder(from,target,state.tabs,state.tabGroups)||state.windowUi.splitGroups?.some(group=>group.tabIds.includes(from)))return;/* a pane chip stays in its split's tray until it is dropped */reordered.current=ids.join();dispatch({type:'tab.reorder',from,to:target});};
+ const reorder=(next:string[])=>{const from=dragged.current;if(!from)return;const index=next.indexOf(from),target=ids[index];if(!target||target===from)return;if(!canLiveReorder(from,target,state.tabs,state.tabGroups)||state.windowUi.splitGroups?.some(group=>group.tabIds.includes(from)))return;/* a pane chip stays in its split's tray until it is dropped */if(reordered.current===ids.join()||orderNow.current!==ids.join())return;/* a swap from this order is already asked for (followPosition's), or this is a callback from an order the strip has left: either would move the tab back */reordered.current=ids.join();dispatch({type:'tab.reorder',from,to:target});};
  buildTrack.current=()=>(
     <Reorder.Group as="div" ref={track} axis="x" values={ids} onReorder={reorder}
      initial={false} style={{width:occupied,gap:0}}

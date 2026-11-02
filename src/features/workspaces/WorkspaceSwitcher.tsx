@@ -101,11 +101,12 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
 /** The "you are here" line at the top of the sidebar's tab section (R4-48 P0-3, wireframe 2), only with two or more
  * workspaces: the open workspace's icon, name and tab count. Click opens the switcher popover, double-click renames, ⋯
  * opens the workspace's own menu. */
-export function WorkspaceTitle({ state }: { state: BrowserSnapshot }) {
+/** `count`: the tabs the sidebar lists (a favorite's own tab is in its tile, not the list); every tab of the workspace when absent. */
+export function WorkspaceTitle({ state, count: listed }: { state: BrowserSnapshot; count?: number }) {
   useShortcutKeys();
   const list = windowWorkspaces(state), open = list.find(item => item.id === state.activeWorkspaceId);
   if (list.length < 2 || !open) return null;
-  const name = shownName(open), count = state.tabs.length, color = shownColor(state, open), tabs = t('workspaces.tabCount', { count });
+  const name = shownName(open), count = listed ?? state.tabs.length, color = shownColor(state, open), tabs = t('workspaces.tabCount', { count });
   return <div className="sb-ws-title" data-workspace-title>
     <button type="button" className="sb-ws-title-main" data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.titleLabel', { name, tabs })} title={withCycle(t('workspaces.titleTip'))}
       onClick={event => openWorkspacePopup(state, 'workspace-menu', event.currentTarget)}

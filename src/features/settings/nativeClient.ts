@@ -1,9 +1,10 @@
 import { runtime } from '../../runtime/client';
 import type { NativeRequest, NativeResult } from '../../runtime/nativeCore';
+import { t } from '../../i18n';
 
 /** One call into the desktop core for Settings panels. Fails with a readable message outside the desktop app. */
 export function native(request: NativeRequest): Promise<NativeResult> {
-  if (!runtime.native) return Promise.reject(new Error('Open the Acira desktop app to change this.'));
+  if (!runtime.native) return Promise.reject(new Error(t('settings.needsDesktopApp')));
   return runtime.native(request);
 }
 

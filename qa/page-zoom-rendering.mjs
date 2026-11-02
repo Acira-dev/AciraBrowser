@@ -40,9 +40,6 @@ try{
  const wheel=async(target,deltaY,modifiers=2)=>{const box=await target.boundingBox();assert(box);if(modifiers){await control('keyDown');await sleep(150);}await app.main(({webContents},[u,x,y,dy,mods])=>{const w=webContents.getAllWebContents().find(w=>w.getURL()===u);w.sendInputEvent({type:'mouseWheel',x,y,deltaX:0,deltaY:-dy,wheelTicksX:0,wheelTicksY:-Math.sign(dy),hasPreciseScrollingDeltas:false,modifiers:mods?['control']:[]});},[page.url(),Math.round(box.x+Math.min(20,box.width/2)),Math.round(box.y+Math.min(10,box.height/2)),deltaY,modifiers]);if(modifiers){await sleep(60);await control('keyUp');}};
  await check('Ctrl+wheel zooms once over the website; plain wheel scrolls without zooming',async()=>{await page.getByLabel('Website draft').scrollIntoViewIfNeeded();await wheel(page.getByLabel('Website draft'),-120);await poll(()=>native(page),n=>Math.abs(n.page-1.1)<.001,'One wheel step');await sleep(160);await wheel(page.getByLabel('Website draft'),120);await poll(()=>native(page),n=>Math.abs(n.page-1)<.001,'Reverse wheel');await wheel(page.getByLabel('Website draft'),120,0);await sleep(200);assert.equal((await native(page)).page,1);});
  // A trackpad's Control + two-finger scroll is a stream of small precise deltas (about 60 a second, then momentum), not notches.
- // The running-total scroll adapter is deliberately macOS-only in page-input-preload.cjs.
- // Windows uses Chromium native wheel ticks; synthetic precise events with zero ticks are not Windows wheel input.
- if(process.platform==='darwin'){
  await check('Trackpad Ctrl+scroll steps a website like an Acira page, a notch is one step at any zoom, and releasing Control stops it',async()=>{
   const swipe12=Array.from({length:12},(_,i)=>3+i%6),swipe40=Array.from({length:40},(_,i)=>(i%4===3?-1:1)*(3+i%6)); // 40 events of 3-8 px, mostly one way with reversals
   const send=(who,events)=>app.main(({webContents},[who,pageUrl,events])=>{const w=webContents.getAllWebContents().find(w=>who==='ui'?w.getURL()==='acira-browser-ui://ui/index.html':w.getURL()===pageUrl);for(const e of events){if(e.key)w.sendInputEvent({type:e.key,keyCode:'Control',modifiers:e.key==='keyDown'?['control']:[]});else w.sendInputEvent({type:'mouseWheel',x:300,y:250,deltaX:0,deltaY:-e.d,wheelTicksX:0,wheelTicksY:0,hasPreciseScrollingDeltas:true,modifiers:['control']});}},[who,page.url(),events]);
@@ -53,7 +50,7 @@ try{
   const overSite=async list=>{await zoom(100);await send('page',[{key:'keyDown'}]);await sleep(150);const seen=await swipe('page',list,siteZoom);await send('page',[{key:'keyUp'}]);await sleep(150);return seen;};
   const site12=await overSite(swipe12),site40=await overSite(swipe40);
   await app.act({type:'tab.new',url:'acira://settings'});const internal=(await app.state()).activeTabId;await sleep(1200);
-  const tabZoom=async()=>(await app.state()).tabs.find(t=>t.id===internal).zoom,overPage=async list=>{await app.cmd({type:'zoom',tabId:internal,zoom:100});await sleep(300);return swipe('ui',list,tabZoom);};
+  const tabZoom=async()=>(await app.state()).tabs.find(t=>t.id===internal).zoom,overPage=async list=>{await app.cmd({type:'zoom',tabId:internal,zoom:100});await sleep(300);/* Control is held like a person holds it: without it a precise ctrl+wheel over an Acira page is a pinch, which magnifies. */await send('ui',[{key:'keyDown'}]);await sleep(150);const seen=await swipe('ui',list,tabZoom);await send('ui',[{key:'keyUp'}]);await sleep(150);return seen;};
   const page12=await overPage(swipe12),page40=await overPage(swipe40);
   await app.act({type:'tab.close',id:internal});await app.act({type:'tab.select',id});await sleep(600);
   assert.equal(site12.at(-1),page12.at(-1),'the same 12-event swipe over a website and over an Acira page ('+site12.at(-1)+' and '+page12.at(-1)+')');assert.ok(site12.at(-1)>100&&site12.at(-1)<=200,'a 66 px swipe is a few steps, not the top preset: '+site12.at(-1));
@@ -63,12 +60,6 @@ try{
   const momentum=await swipe('page',Array.from({length:20},(_,i)=>3+i%6),siteZoom);
   assert.ok(held>100,'the swipe zoomed while Control was held');assert.ok(momentum.every(z=>z===held),'the rest of the stream (momentum) does not zoom once Control is released: '+momentum.join(','));await zoom(100);
  });
- }else{
- await check('Windows native Ctrl+wheel steps once and releasing Control returns wheel ownership to the website',async()=>{
-  await zoom(300);await page.getByLabel('Website draft').scrollIntoViewIfNeeded();await wheel(page.getByLabel('Website draft'),-120);await poll(()=>native(page),n=>Math.abs(n.page-4)<.001,'Native Windows notch at 300% is one step');
-  await zoom(100);await page.evaluate(()=>scrollTo(0,0));await sleep(150);await page.evaluate(()=>{window.releaseWheelProbe=[];addEventListener('wheel',e=>releaseWheelProbe.push({trusted:e.isTrusted,ctrl:e.ctrlKey,cancelled:e.defaultPrevented}),{passive:true});});const before=await metrics(page);await wheel(page.getByLabel('Website draft'),120,0);await sleep(250);const after=await metrics(page);assert.equal((await native(page)).page,1,'Released Control leaves page zoom unchanged');const delivered=await page.evaluate(()=>releaseWheelProbe);assert.ok(delivered.length>0&&delivered.every(e=>e.trusted&&!e.ctrl&&e.cancelled),'Native wheel reaches the website and its intentional cancellation is respected');assert.equal(after.scroll,before.scroll,'This fixture cancels ordinary scrolling');
- });
- }
  await check('Keyboard and Ctrl+wheel work inside a cross-origin embedded frame',async()=>{const frame=page.frameLocator('iframe').getByLabel('Frame draft');await frame.click();await key('=');await poll(()=>native(page),n=>Math.abs(n.page-1.1)<.001,'Frame keyboard');await key('0');await page.locator('iframe').scrollIntoViewIfNeeded();await wheel(page.locator('iframe'),-120);await poll(()=>metrics(page),m=>Math.abs(m.dpr/base.dpr-1.1)<.01,'Frame wheel renders real zoom');await key('0');});
  // A trackpad pinch ('mouse' source = Chromium's touchpad path, which sends the page a Ctrl+wheel first) is visual-viewport zoom on both platforms: the page magnifies like a magnifier (no reflow, no text-size change), the layout width and
  // zoom factor stay put, and actual size clears it. (Chromium sends a pinch to a page as a cancelable Ctrl+wheel first; Acira must not cancel it.)

@@ -47,6 +47,6 @@ test('the memory saver panel uses the list editor with a short helper line and t
   assert.match(panel, /info=\{t\("memorySaver\.callsChatAndMusicSites"\)\}/);
   assert.doesNotMatch(panel, /<SettingNote>/, 'no wall of grey text under the control');
   const css = fs.readFileSync('src/features/settings/site-list.css', 'utf8');
-  assert.doesNotMatch(css, /monospace|Geist Mono/i, 'normal UI font');
+  assert.doesNotMatch(css, /monospace/i, 'normal UI font');
   assert.match(css, /\.sl-list > li \{[^}]*padding: 0 6px 0 12px/, 'rows keep text 12px from the edge');
 });

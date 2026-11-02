@@ -43,7 +43,7 @@ function paintDisplay(nodes: readonly Text[], a: number, b: number) {
   registry.set(DRAG_HIGHLIGHT, new Ctor(range));
 }
 
-/** The address field (design bible §5.1): left-aligned, no motion on focus. At rest a URL reads as Geist 13 with its
+/** The address field (design bible §5.1): left-aligned, no motion on focus. At rest a URL reads as Inter 13 with its
  * registrable domain at full strength and the rest quieter; focusing shows the full address, selected.
  *
  * Pointer selection follows Chrome's omnibox (see `addressSelection.ts`): a click selects the whole address; a press

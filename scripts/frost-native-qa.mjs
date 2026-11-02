@@ -67,7 +67,7 @@ try {
     await ui.getByRole('button', {name:'Expand sidebar', exact:true}).click();
     await ui.waitForFunction(()=>document.querySelector('.ed-rail').getBoundingClientRect().width===232);
     check(`${scale}: sidebar expands`, await ui.locator('.ed-rail').evaluate(node=>node.getBoundingClientRect().width) === 232);
-    check(`${scale}: expanded sidebar uses Geist and labeled navigation`, await ui.locator('.ed-rail.is-expanded .ed-rail-label').first().evaluate(node=>getComputedStyle(node).fontFamily.includes('Geist')));
+    check(`${scale}: expanded sidebar uses Inter and labeled navigation`, await ui.locator('.ed-rail.is-expanded .ed-rail-label').first().evaluate(node=>getComputedStyle(node).fontFamily.includes('Inter')));
     await ui.getByRole('button', {name:'Collapse sidebar', exact:true}).click();
     await ui.waitForFunction(()=>document.querySelector('.ed-rail').getBoundingClientRect().width===0);
     check(`${scale}: sidebar collapses`, await ui.locator('.ed-rail').evaluate(node=>node.getBoundingClientRect().width) === 0);
@@ -151,7 +151,7 @@ try {
     await ui.getByRole('button', { name: 'Settings', exact: true }).click();
     await ui.locator('.browser-settings').waitFor();
     check(`${scale}: settings render in preview`, await ui.locator('.browser-settings').isVisible());
-    check(`${scale}: settings share Geist`, await ui.locator('.browser-settings').evaluate(node=>getComputedStyle(node).fontFamily.includes('Geist')));
+    check(`${scale}: settings share Inter`, await ui.locator('.browser-settings').evaluate(node=>getComputedStyle(node).fontFamily.includes('Inter')));
     await ui.getByRole('button',{name:'Appearance',exact:true}).click();
     check(`${scale}: preview theme is accurately labeled`, await ui.getByText('Light · White',{exact:true}).isVisible());
     await ui.getByRole('button', { name: 'History', exact: true }).click();

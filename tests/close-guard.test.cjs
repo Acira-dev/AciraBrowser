@@ -111,6 +111,42 @@ test('the last window asks "Close Acira?"; a window with others behind it does n
   assert.equal(a.asked[0].checkboxLabel,"Don't ask again");assert.equal(a.asked[0].site.mute.label,"Don't ask again");
 });
 
+// Beta review (2 Nov 2026), two profiles: after the profile panel's switch the other profile's window waits hidden (switchedAway).
+// Closing the one window on screen never asked "Close Acira?" and never quit: Acira stayed open with no window, the Dock icon
+// showed nothing, and New Window then opened an empty window that became the one restored.
+test('a window that stepped aside for another profile does not make the one on screen "not the last"',async()=>{
+  const hidden=windowFake('a',PAGES),shown=windowFake('b',PAGES,{focused:true});hidden.switchedAway=true;
+  const guard=guardFor([hidden,shown]);
+  assert.equal(await guard.confirmWindowClose(shown),true);
+  assert.equal(shown.asked.length,1,'the last window on screen asks');assert.equal(shown.asked[0].message,'Close Acira?');
+  assert.equal(shown.asked[0].detail,'2 tabs in 1 window');assert.equal(hidden.asked.length,0,'never on the hidden window');
+  assert.equal(await guard.confirmWindowClose(hidden),true,'the hidden one then closes with it, without asking');assert.equal(hidden.asked.length,0);
+  const other=windowFake('c',PAGES);assert.equal(await guardFor([hidden,shown,other]).confirmWindowClose(other),true);
+  assert.equal(other.asked.length,0,'another window still on screen: only this window closes, as before');
+});
+
+test('closing the last window on screen asks about the hidden windows\' unsaved work on the same card',async()=>{
+  const hidden=windowFake('a',PAGES,{unsaved:[{id:'a:doc',url:'https://docs.example.com/d/1'}]}),shown=windowFake('b',PAGES,{focused:true});hidden.switchedAway=true;
+  const guard=guardFor([hidden,shown]);
+  assert.equal(await guard.confirmWindowClose(shown),true);
+  assert.equal(shown.asked.length,1);assert.deepEqual(shown.asked[0].site.list,{hosts:['docs.example.com'],more:0},'the hidden page is listed');
+  assert.deepEqual(hidden.approved,['a:doc'],'and approved, so it does not ask again where nobody can see it');
+  const cancel=windowFake('b',PAGES,{choose:()=>({response:1})}),still=windowFake('a',PAGES);still.switchedAway=true;
+  assert.equal(await guardFor([still,cancel]).confirmWindowClose(cancel),false,'Cancel keeps both');
+});
+
+test('Quit puts its card on a window on screen, never on one that stepped aside',async()=>{
+  const hidden=windowFake('a',PAGES),shown=windowFake('b',PAGES);hidden.switchedAway=true;
+  assert.equal(await guardFor([hidden,shown]).confirmQuit(),true);
+  assert.equal(hidden.asked.length,0);assert.equal(shown.asked.length,1);
+});
+
+test('main.cjs quits when the windows left all stepped aside for another profile',()=>{
+  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
+  assert.match(main,/if\(!\[\.\.\.controllers\]\.some\(c=>!c\.switchedAway\)&&!quitting\)updateQuit\?updateQuit\.lastWindowClosed\(\):app\.quit\(\);\}\);/,'during a Mac update quit Squirrel ends the app (mac-update-install)');
+  assert.match(main,/get switchedAway\(\)\{return switchedAway;\}/,'the guard reads it from each window');
+});
+
 test('a single blank tab, or one tab, closes without a question',async()=>{
   for(const urls of [['acira://new'],['https://one.test/']]){
     const only=windowFake('a',urls);assert.equal(await guardFor([only]).confirmWindowClose(only),true);assert.equal(only.asked.length,0);

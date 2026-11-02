@@ -23,6 +23,10 @@
 .appearance-color-well:has(input:focus-visible){outline:2px solid var(--selection-marker);outline-offset:2px}
 .app .appearance-hex{display:block;width:82px;min-width:0;height:30px;padding:0 8px;border:1px solid color-mix(in srgb,var(--text) 12%,transparent);border-radius:6px;background:color-mix(in srgb,var(--surface) 55%,transparent);color:var(--text);font:12px/1.2 var(--font-ui);font-variant-numeric:tabular-nums;outline:none}
 .app .appearance-hex:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
+/* A hex code that is not a colour: the same red rim and 12px line as the site-list editor's message, on its own line under the field. */
+.appearance-color-field:has(.appearance-hex-message){flex-wrap:wrap;row-gap:4px}
+.app .appearance-hex[aria-invalid=true]{border-color:var(--danger-text,#b3261e)}
+.appearance-hex-message{flex:1 0 100%;margin:0;padding:0 2px;font:12px/16px var(--font-ui);color:var(--danger-text,#b3261e)}
 .appearance-preferences{padding:4px 0}
 .appearance-preferences>label{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:32px;padding:0 8px 0 32px;font-size:13px;cursor:default}
 /* Window opacity: the label and its value share one line and the slider takes the full width beneath, so a long label in any language (fr "Opacité de la fenêtre") never wraps or squeezes the slider (R3-B02). */

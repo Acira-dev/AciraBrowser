@@ -1,12 +1,13 @@
 import type { SpringSpec } from './springs';
 
 /** The motion token table (R3-26; docs/launch/research/APPLE_MORPH_RESEARCH.md §3.2 and §5.11, bible §4 Morph).
- * Every spring in the app is one of these tokens, `(class, perceptual duration, bounce)`. The duration is the Fast value:
- * Fast equals the timings the app had before the animation-speed setting. Channel classes:
- *   S  spatial: position, size, shape, aperture; may carry bounce        Premium ×1.7
- *   E  effects: opacity, mist, rim light; always bounce 0                Premium ×1.4
- *   L  latency-bound: press, hover, drag follow; never slowed            Premium ×1.0
- * Off is no animation at all (the OS reduced-motion preference is Off). */
+ * Every spring in the app is one of these tokens, `(class, perceptual duration, bounce)`. The duration is the base value: the
+ * timings the app had before the animation-speed setting. Channel classes:
+ *   S  spatial: position, size, shape, aperture; may carry bounce        Premium ×1.7   Fast ×0.6
+ *   E  effects: opacity, mist, rim light; always bounce 0                Premium ×1.4   Fast ×0.6
+ *   L  latency-bound: press, hover, drag follow; never slowed            Premium ×1.0   Fast ×1.0
+ * Fast is snappy, like Chrome and Arc (a reviewer, 2 Nov: "the difference between premium and fast is barely noticeable"): a
+ * spring keeps its bounce and gets stiffer. Off is no animation at all (the OS reduced-motion preference is Off). */
 export type MotionClass = 'S' | 'E' | 'L';
 export const motionTokens = {
   'menu.grow': ['S', .170, 0], 'menu.content': ['E', .130, 0], 'menu.shrink': ['S', .115, 0], 'menu.fade': ['E', .085, 0],
@@ -37,10 +38,12 @@ export const motionTokens = {
 export type MotionTokenId = keyof typeof motionTokens;
 
 export type SpeedName = 'premium' | 'fast' | 'off';
-/** Premium stretches by channel class; Fast is 1 everywhere; Off is 0 (no motion). */
+/** Premium stretches by channel class; Fast takes 0.6 of the base (L stays 1, as in Premium); Off is 0 (no motion). The
+ * windows main draws itself (tab-card.html, site-prompt.html, rewind/peek-frame.html) and main.cjs carry copies of this table:
+ * a test keeps them equal. */
 export const classScales: Record<SpeedName, Record<MotionClass, number>> = {
   premium: { S: 1.7, E: 1.4, L: 1 },
-  fast: { S: 1, E: 1, L: 1 },
+  fast: { S: .6, E: .6, L: 1 },
   off: { S: 0, E: 0, L: 0 },
 };
 /** Launch velocity of an opening S spring as a fraction of ω0 (kick × 2π/d progress per second): the first painted frame
@@ -56,6 +59,10 @@ export function springFor(id: MotionTokenId, speed: SpeedName = 'fast'): SpringS
 }
 /** The multiplier of one class at a speed. */
 export const classScale = (speed: SpeedName, cls: MotionClass): number => classScales[speed][cls];
+/** Motion with a set length that Premium never stretches (the docked sidebar's slide, which the page card and main's native page
+ * glide with, the tab forming in the strip, the new tab's entrances, toasts drawn in CSS) still quickens in Fast: its pace is
+ * Fast's spatial scale (.6) in Fast and 1 at Premium and Off (Off has these off already). `--motion-pace` in CSS. */
+export const motionPaceOf = (speed: SpeedName): number => speed === 'fast' ? classScales.fast.S : 1;
 
 /** Frequent surfaces (suggestions, the command bar, the tab viewer, tab strips, sidebar rows: used a hundred times a day)
  * take only 40% of the Premium stretch, so they never feel slow: `1 + (scale − 1) × .4` above 1 (1.28 for S at Premium,

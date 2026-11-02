@@ -21,6 +21,8 @@ import {
   updateDetails,
   type ProfileDetails,
 } from "./profileModel";
+import { avatarInitial, initialAllowed, typedInitial } from "./avatarCase";
+import { takenName } from "../../ui/nameTaken";
 
 type Props = { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void };
 
@@ -46,6 +48,7 @@ export function ProfileManager({ state, dispatch }: Props) {
             current={profile.id === state.activeBrowserProfileId}
             isDefault={profile.id === defaultId}
             canRemove={profiles.length > 1}
+            otherNames={profiles.filter((other) => other.id !== profile.id).map((other) => other.name)}
             editing={editing === profile.id}
             onEdit={(open) => setEditing(open ? profile.id : null)}
             onRemoved={() => {
@@ -86,6 +89,7 @@ function ProfileRow({
   current,
   isDefault,
   canRemove,
+  otherNames,
   editing,
   onEdit,
   onRemoved,
@@ -96,6 +100,8 @@ function ProfileRow({
   current: boolean;
   isDefault: boolean;
   canRemove: boolean;
+  /** The other local profiles' names: a rename to one of them is refused (two "Work" profiles read the same in every menu). */
+  otherNames: string[];
   editing: boolean;
   onEdit: (open: boolean) => void;
   onRemoved: () => void;
@@ -135,9 +141,11 @@ function ProfileRow({
   const avatarChanged = (initial || null) !== (profile.avatar || null);
   const emailChanged = email.trim() !== (profile.email || "");
   const dirty = name.trim() !== profile.name || color.toLowerCase() !== profile.color.toLowerCase() || avatarChanged || emailChanged;
-  const initialValid = !initial || /^[\p{L}\p{N}]$/u.test(initial);
+  const initialValid = initialAllowed(initial);
   const emailValid = !email.trim() || looksLikeEmail(email.trim());
   // A name longer than the form allows (an imported profile can arrive with one) is fine while it is left as it is: only a changed name has to fit.
+  // A profile already sharing its name with another (made before names were checked) keeps it while it is left as it is.
+  const taken = name.trim() !== profile.name ? takenName(name, otherNames) : undefined;
   const nameValid = name.trim().length > 0 && (name.trim().length <= PROFILE_NAME_MAX || name.trim() === profile.name);
   const valid = nameValid && initialValid && emailValid;
   const detail = [profile.email, current && t("profiles.thisWindow"), isDefault && t("profiles.default")].filter(Boolean).join(" · ");
@@ -198,10 +206,10 @@ function ProfileRow({
           }}
           onSubmit={async (event) => {
             event.preventDefault();
-            if (!dirty || !valid) return;
+            if (!dirty || !valid || taken) return;
             if (name.trim() !== profile.name) saveProfile(dispatch, profile.id, { name: name.trim(), color });
             else if (color.toLowerCase() !== profile.color.toLowerCase()) setProfileColor(dispatch, profile.id, color);
-            if (avatarChanged) setAvatar(dispatch, profile.id, initial ? initial.toLocaleUpperCase() : null);
+            if (avatarChanged) setAvatar(dispatch, profile.id, initial ? avatarInitial(initial) : null);
             if (emailChanged && !(await apply({ email: email.trim() || null }))) return;
             close();
           }}
@@ -244,20 +252,23 @@ function ProfileRow({
                   maxLength={PROFILE_NAME_MAX}
                   autoComplete="off"
                   spellCheck={false}
+                  aria-invalid={taken ? true : undefined}
+                  aria-describedby={taken ? `${editor}-name` : undefined}
                   onChange={(event) => setName(event.target.value)}
                 />
+                {taken && <small id={`${editor}-name`} className="pm-problem pm-name-taken" role="alert">{t("profiles.nameTaken", { name: taken })}</small>}
               </label>
               <label className="pm-field pm-initial">
                 <span>{t("profiles.initial")}</span>
                 <input
                   className="st-input"
                   value={initial}
-                  maxLength={2}
+                  maxLength={16}
                   placeholder={[...name.trim()][0]?.toLocaleUpperCase() || "A"}
                   autoComplete="off"
                   spellCheck={false}
                   aria-describedby={`${editor}-initial`}
-                  onChange={(event) => setInitial([...event.target.value.trim()].slice(-1).join(""))}
+                  onChange={(event) => setInitial(typedInitial(event.target.value))}
                 />
                 <small id={`${editor}-initial`}>{initialValid ? t("profiles.initialHint") : t("profiles.initialInvalid")}</small>
               </label>
@@ -288,7 +299,7 @@ function ProfileRow({
             <Switch checked={isDefault} label={t("profiles.defaultProfile")} onChange={(on) => void apply({ default: on })} />
           </div>
           <div className="pm-actions">
-            <button type="submit" className="st-button primary" disabled={!dirty || !valid}>
+            <button type="submit" className="st-button primary" disabled={!dirty || !valid || Boolean(taken)}>
               {t("profiles.save")}
             </button>
             <button type="button" className="st-button pm-quiet" onClick={close}>
@@ -388,7 +399,9 @@ function CreateProfile({ profiles, dispatch, intentKey }: { profiles: BrowserPro
   useEffect(() => {
     if (open) requestAnimationFrame(() => input.current?.focus());
   }, [open, asked]);
-  const valid = name.trim().length > 0 && name.trim().length <= PROFILE_NAME_MAX;
+  const taken = takenName(name, profiles.map((profile) => profile.name));
+  const takenHint = useId();
+  const valid = name.trim().length > 0 && name.trim().length <= PROFILE_NAME_MAX && !taken;
   const dismiss = () => {
     setOpen(false);
     setName("");
@@ -444,8 +457,11 @@ function CreateProfile({ profiles, dispatch, intentKey }: { profiles: BrowserPro
             maxLength={PROFILE_NAME_MAX}
             autoComplete="off"
             spellCheck={false}
+            aria-invalid={taken ? true : undefined}
+            aria-describedby={taken ? takenHint : undefined}
             onChange={(event) => setName(event.target.value)}
           />
+          {taken && <small id={takenHint} className="pm-problem pm-name-taken" role="alert">{t("profiles.nameTaken", { name: taken })}</small>}
         </label>
         <Swatches label={t("profiles.color")} value={chosen} onChange={setColor} />
         <div className="pm-actions">

@@ -47,6 +47,11 @@ export async function buildIsolated(output){
   const uiPreload=hasUiPreload?await esbuild({absWorkingDir:root,entryPoints:['desktop/ui-preload-entry.cjs'],outfile:path.join(output,'desktop/ui-preload.cjs'),bundle:true,platform:'node',format:'cjs',target:'node24',external:['electron'],metafile:true,logLevel:'silent'}):null;
   warnings.push(...(uiPreload?.warnings||[]).map(w=>w.text));
   if(uiPreload&&Object.values(uiPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox UI preload must bundle every dependency except electron');
+  // The cookie-banner answering preload bundles DuckDuckGo's autoconsent the same way (a sandboxed frame preload cannot require it).
+  const hasAnswerPreload=await fs.access(path.join(root,'desktop/browser-services/autoconsent-preload-entry.cjs')).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;});
+  const answerPreload=hasAnswerPreload?await esbuild({absWorkingDir:root,entryPoints:['desktop/browser-services/autoconsent-preload-entry.cjs'],outfile:path.join(output,'desktop/browser-services/autoconsent-preload.cjs'),bundle:true,platform:'browser',format:'cjs',target:'chrome130',external:['electron'],legalComments:'inline',metafile:true,logLevel:'silent'}):null;
+  warnings.push(...(answerPreload?.warnings||[]).map(w=>w.text));
+  if(answerPreload&&Object.values(answerPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox cookie-answer preload must bundle every dependency except electron');
   // Optional filtering reads this exact preload source to construct an inert
   // child-frame runtime. Preserve its byte-level source contract after bundling.
   // Files the main process opens by path rather than require(): copied as they are.

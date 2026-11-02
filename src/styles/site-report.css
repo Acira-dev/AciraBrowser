@@ -1,0 +1,12 @@
+/* "Report a problem with this site" (SiteReport.tsx): panel rows from panels.css and the menu form's field and buttons (menu-form.css).
+   Only placement here: the labels, the note and the fine print sit on the panel's text edge (x = 36: 4 popup padding + 32), the buttons on the row padding.
+   The choices have no icon: without the blank icon slot (sized only inside .menu-toggle) a choice row reserves the same 32px column as any other. */
+.app .site-report .acira-menu-label{padding-left:32px}
+.app .site-report .menu-choice>.menu-toggle-blank{display:none}
+.app .site-report-note{padding:2px 8px 4px 32px}
+.app .site-report-note textarea{box-sizing:border-box;width:100%;min-width:0;min-height:64px;padding:7px 10px;border:1px solid var(--menu-line);border-radius:4px;background:transparent;color:inherit;font:400 13px/18px var(--font-ui);resize:none}
+.app .site-report-note textarea::placeholder{color:var(--menu-t3)}
+.app .site-report-note textarea:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:2px}
+.app .site-report-fine{margin:4px 8px 4px 32px;font:400 12px/16px var(--font-ui);color:var(--menu-t3);overflow-wrap:anywhere}
+.app .site-report-problem{color:var(--danger)}
+.app .site-report-actions{padding:4px 8px 8px}

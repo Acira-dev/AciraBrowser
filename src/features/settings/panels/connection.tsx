@@ -10,7 +10,7 @@ import { t, type MessageId } from '../../../i18n';
 function describe(status?: TorUpdateStatus) {
   if (!status) return t('connection.torStatus.reading');
   if (status.error) return status.error;
-  const versions = `Tor ${status.tor} · Tor Expert Bundle ${status.current}`;
+  const versions = `Tor ${status.tor} · Tor Expert Bundle ${status.current}`; // i18n-ignore product names and versions
   // Update checks go through Tor (tor-engine.cjs fetch), so "checking" can include Tor connecting first.
   if (status.state === 'checking') return t('connection.torStatus.checking', { versions });
   if (status.state === 'downloading') return t('connection.torStatus.downloading', { versions });
@@ -41,7 +41,7 @@ function Tor() {
 }
 
 type BridgeMode = TorBridgesStatus['mode'];
-const BRIDGE_NAMES: Record<TorBridgeType, string> = { obfs4: 'obfs4', snowflake: 'Snowflake', meek: 'meek' };
+const BRIDGE_NAMES: Record<TorBridgeType, string> = { obfs4: 'obfs4', snowflake: 'Snowflake', meek: 'meek' }; // i18n-ignore transport names
 /** One problem with one pasted line, in words ("Line 2: needs an IP address and port…"). */
 const LINE_PROBLEMS: Record<Exclude<TorBridgeLineError['code'], 'many' | 'transport'>, MessageId> = {
   long: 'connection.bridges.err.long', characters: 'connection.bridges.err.characters', address: 'connection.bridges.err.address', fingerprint: 'connection.bridges.err.fingerprint',
