@@ -3,6 +3,7 @@
 //   node qa/native-slot.mjs r6-updates -- node qa/r6-updates-proof.mjs [--scale=1.5] [--lang=de] [--out=<dir>]
 // Captures (desktopCapturer of the window, so the overlay popup is in them): downloading dot, tooltip, ready popup, Read more, Later and pill, both themes.
 import fs from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import {startApp, sleep, poll} from './d-harness.mjs';
@@ -13,11 +14,13 @@ await fs.mkdir(out, {recursive: true});
 process.env.D_VISIBLE = '1'; // screenshots need a shown window (never a hidden one)
 
 const SIZE = 40_000_000, HOLD = 0.42, VERSION = '9.9.9';
+// The file's real SHA-512: Acira checks the whole download against it before electron-updater (here its stand-in) may take it.
+const SHA512 = createHash('sha512').update(Buffer.alloc(SIZE, 1)).digest('base64');
 const NOTES = '## What we fixed\n- Windows now updates from the public update feed.\n- Smoother tab dragging and a calmer new tab page.\n- Downloads keep going when you close the panel.\n\n## What we pushed\n- A quieter update indicator while Acira downloads.\n- One question when the update is ready: Install now or Later.\n- Long notes scroll inside the popup, so it never changes size when you read them, however much we have to say about this release and how many lines it takes.';
 let gate = null, release = () => {}, held = true;
 const hold = new Promise(resolve => { release = resolve; });
 const server = http.createServer(async (req, res) => {
-  if (req.url.endsWith('latest.yml')) { res.setHeader('content-type', 'text/yaml'); return res.end(JSON.stringify({version: VERSION, releaseNotes: NOTES, files: [{url: 'Setup.bin', size: SIZE, sha512: 'x'}]})); }
+  if (req.url.endsWith('latest.yml')) { res.setHeader('content-type', 'text/yaml'); return res.end(JSON.stringify({version: VERSION, releaseNotes: NOTES, files: [{url: 'Setup.bin', size: SIZE, sha512: SHA512}]})); }
   res.writeHead(200, {'content-length': SIZE}); const chunk = Buffer.alloc(262144, 1); let sent = 0;
   while (sent < SIZE) {
     if (held && sent >= SIZE * HOLD) await hold;

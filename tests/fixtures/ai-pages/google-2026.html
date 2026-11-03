@@ -5,10 +5,15 @@
 <title>best way to learn guitar - Google Search</title>
 <!-- Structure copied from a live Google results page read on 26 Oct 2026 (desktop width): the AI Overview is the child of #rcnt that holds #m-x-content
      and is full width, its own content starts 104px in, like the organic results; the AI Mode tab is a role=listitem; the AI Mode pill's text includes its own style rules.
-     Text is filler. ?mode=sync|late|stream decides when the AI block arrives, ?theme=dark|light the colours, ?measure=1 records which frames showed it. -->
+     Text is filler. ?mode=sync|late|stream decides when the AI block arrives, ?measure=1 records which frames showed it, ?theme= the colours: light, dark,
+     system (follows prefers-color-scheme) or switch (light, turning dark 600 ms after load). ?ink= is the colour the results area inherits: page (the theme's),
+     fixed (#222 whatever the theme, as DuckDuckGo leaves it under its dark theme) or faint (60% black, as Bing has it). -->
 <style>
  :root{--bg:#fff;--fg:#202124;--muted:#4d5156;--link:#1a0dab}
  html.dark{--bg:#202124;--fg:#bdc1c6;--muted:#9aa0a6;--link:#8ab4f8}
+ @media (prefers-color-scheme:dark){html.system{--bg:#202124;--fg:#bdc1c6;--muted:#9aa0a6;--link:#8ab4f8}}
+ html.fixed #main{color:#222}
+ html.faint #main{color:rgba(0,0,0,.6)}
  body{margin:0;background:var(--bg);color:var(--fg);font:14px/22px Arial,sans-serif}
  #searchform{height:72px;padding:16px 0 0 104px;box-sizing:border-box}
  #searchbox{display:flex;align-items:center;width:560px;height:46px;border:1px solid var(--muted);border-radius:24px;padding:0 16px;box-sizing:border-box}
@@ -29,6 +34,9 @@
 <script>
  const q = new URLSearchParams(location.search), mode = q.get('mode') || 'sync';
  if (q.get('theme') === 'dark') document.documentElement.classList.add('dark');
+ if (q.get('theme') === 'system') document.documentElement.classList.add('system');
+ if (q.get('theme') === 'switch') addEventListener('load', () => setTimeout(() => document.documentElement.classList.add('dark'), 600));
+ if (q.get('ink') === 'fixed' || q.get('ink') === 'faint') document.documentElement.classList.add(q.get('ink'));
  if (q.get('measure')) {
   window.__frames = []; window.__t0 = performance.now();
   const sample = () => { const aiVisible = [...document.querySelectorAll('#m-x-content,button[jsname="B6rgad"],a[href*="udm=50"]')].filter(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden').length; window.__frames.push([Math.round(performance.now() - window.__t0), aiVisible]); requestAnimationFrame(sample); };

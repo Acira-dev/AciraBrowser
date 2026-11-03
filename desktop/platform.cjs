@@ -36,7 +36,8 @@ function materialOptions(material) {
   return {};
 }
 
-function macMenuTemplate(run) {
+/** `report`: this build can send reports (desktop/browser-services/site-reports-config.cjs), so Help > Report a Problem… is offered. */
+function macMenuTemplate(run,{report=false}={}) {
   const command=(label,accelerator,action)=>({label,accelerator,click:(item,window,event)=>run(action,item,window,event)});
   return [
     {label:'Acira',submenu:[{role:'about'},command('Settings…','Command+,',{action:'settings'}),{type:'separator'},{role:'services'},{type:'separator'},{role:'hide'},{role:'hideOthers'},{role:'unhide'},{type:'separator'},command('Quit Acira','Command+Q',{action:'quit'})]}, // R4-36: Quit asks about unsaved work and several tabs first
@@ -45,7 +46,9 @@ function macMenuTemplate(run) {
     {label:'View',submenu:[command('Reload','Command+R',{action:'reload'}),command('Reload Without Cache','Command+Shift+R',{action:'hard-reload'}),{type:'separator'},command('Actual Size','Command+0',{action:'zoom',change:0}),command('Zoom In','Command+Plus',{action:'zoom',change:1}),command('Zoom Out','Command+-',{action:'zoom',change:-1}),{type:'separator'},command('Your Tabs','Command+Shift+A',{action:'tabs'}),command('Focus View','Command+Shift+F',{action:'focus-mode'}),command('Bookmarks Bar','Command+Shift+B',{action:'toggle-bookmarks'}),command('Enter Full Screen','Control+Command+F',{action:'fullscreen'})]},
     {label:'History',submenu:[command('Back','Command+[',{action:'back'}),command('Forward','Command+]',{action:'forward'}),{type:'separator'},command('Show History','Command+Y',{action:'history'})]},
     {label:'Bookmarks',submenu:[command('Bookmark This Page','Command+D',{action:'bookmark'}),command('Show Bookmarks','Command+Option+B',{action:'bookmarks'})]},
-    {label:'Window',submenu:[{role:'minimize'},{role:'zoom'},{type:'separator'},{role:'front'}]}
+    {label:'Window',submenu:[{role:'minimize'},{role:'zoom'},{type:'separator'},{role:'front'}]},
+    // The Acira menu's "Report a problem…": opens that menu on the report form (about this site or about Acira).
+    ...(report?[{role:'help',submenu:[command('Report a Problem…',undefined,{action:'report'})]}]:[])
   ];
 }
 // The application menu outlives individual windows, including private windows.

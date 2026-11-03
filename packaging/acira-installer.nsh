@@ -17,6 +17,18 @@
   !define AC_DATA_DIR "AciraBrowser"
   !define AC_APP_EXE "AciraBrowser.exe"
 !endif
+;
+; Where the Windows uninstaller sends its one usage message (Acira's usage function: desktop/browser-services/metrics-config.cjs has the same
+; address, and tests/usage-uninstall.test.cjs keeps the two equal). A QA build never sends it: QA rigs install and remove that build many
+; times, and none of that is a person leaving.
+!ifdef ACIRA_QA
+  !define AC_USAGE_HOST ""
+!else
+  !define AC_USAGE_HOST "kqioquxkyprnaupqocnx.supabase.co"
+!endif
+!define AC_USAGE_PATH "/functions/v1/usage"
+; Acira for Windows ships for x64 only (packaging/electron-builder.json); on an ARM PC that build runs as x64, which is what the app reports too.
+!define AC_USAGE_ARCH "x64"
 ; Defining customCheckAppRunning replaces the stock include of these, so bring them in here.
 !include "getProcessInfo.nsh"
 Var pid
@@ -365,7 +377,132 @@ FunctionEnd
   ${EndIf}
 !macroend
 
+!ifdef BUILD_UNINSTALLER
+!include "FileFunc.nsh"
+; Anonymous usage, beta.9 (docs/launch/METRICS.md, "Who stops using Acira"): when a person really uninstalls Acira, one last message says
+; so, only while their usage sharing is on. (A Mac cannot do this: an app dragged to the Trash runs nothing.)
+; - Never on an update. The new version's installer runs this uninstaller with --updated (or --delete-app-data) and always with
+;   /KEEP_APP_DATA (electron-builder's installUtil.nsh, uninstallOldVersion): the updater, the branded Repair or Update, and a new setup
+;   run over Acira all go that way, and either flag stops it here. A person's own uninstall (Settings > Apps, which opens AciraRemove.exe,
+;   or a silent /S run) has neither.
+; - Only while sharing is on: the profile's metrics.json must start with {"choice":"on","installId":"<random id>","route":"ok" (the app
+;   writes those three keys first: desktop/browser-services/metrics.cjs). Turning sharing off deletes the id. "route":"ok" means the app's
+;   last check found its normal connection, the rule that lets the daily message leave, so this never goes around a manual proxy either.
+; - It runs before any file or data is removed, so "Remove and delete my data" still deletes after it.
+; - One HTTPS POST of the same fields the app shows in "See what's sent", through Windows' own WinHTTP with the system proxy settings, the
+;   app's User-Agent (Acira/<version>), no cookies, no redirects, no sign-in, no keep-alive. Each step has a short limit (name lookup 1 s,
+;   connection 1 s, sending 1 s, answer 1.5 s), so it can never hold the uninstall up for more than a few seconds; offline it fails at once.
+;   No retry, the answer is not read, nothing is written to disk or the registry, and whatever happens the uninstall goes on.
+Function un.AcUsageUninstalled
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  Push $5
+  Push $6
+  Push $7
+  Push $8
+  Push $9
+  Push $R9
+  ; an update, or a setup run over this version, is not an uninstall (${isUpdated} reads --updated; it uses $R9)
+  ${If} ${isUpdated}
+    Goto acUsageDone
+  ${EndIf}
+  ${GetParameters} $0
+  ${GetOptions} $0 "/KEEP_APP_DATA" $1
+  ${IfNot} ${Errors}
+    Goto acUsageDone
+  ${EndIf}
+  StrCmp "${AC_USAGE_HOST}" "" acUsageDone
+  ClearErrors
+  FileOpen $1 "$APPDATA\${AC_DATA_DIR}\metrics.json" r
+  IfErrors acUsageDone
+  FileRead $1 $2
+  FileClose $1
+  ; $2 = the start of the file. Sharing on, then the 36-character random id, then the route note.
+  StrCpy $3 $2 28
+  StrCmpS $3 '{"choice":"on","installId":"' 0 acUsageDone
+  StrCpy $3 $2 14 64
+  StrCmpS $3 '","route":"ok"' 0 acUsageDone
+  StrCpy $3 $2 36 28
+  ; only 0-9, a-f and - can go into the message
+  StrCpy $5 0
+  acUsageIdChar:
+    StrCpy $6 $3 1 $5
+    StrCmp $6 "" acUsageIdEnd
+    StrCpy $7 0
+    acUsageIdFind:
+      StrCpy $8 "0123456789abcdef-" 1 $7
+      StrCmp $8 "" acUsageDone
+      StrCmpS $8 $6 acUsageIdNext
+      IntOp $7 $7 + 1
+      Goto acUsageIdFind
+    acUsageIdNext:
+    IntOp $5 $5 + 1
+    Goto acUsageIdChar
+  acUsageIdEnd:
+  IntCmp $5 36 0 acUsageDone acUsageDone
+  ; today's UTC date, no time: SYSTEMTIME is wYear, wMonth, wDayOfWeek, wDay, ...
+  System::Alloc 16
+  Pop $1
+  StrCmp $1 0 acUsageDone
+  System::Call 'kernel32::GetSystemTime(p r1)'
+  System::Call '*$1(&i2 .r4, &i2 .r5, &i2, &i2 .r6)'
+  System::Free $1
+  IntFmt $5 "%02u" $5
+  IntFmt $6 "%02u" $6
+  StrCpy $4 "$4-$5-$6"
+  StrCpy $5 '{"schema":1,"event":"uninstall","installId":"$3","appVersion":"${VERSION}","platform":"win32","arch":"${AC_USAGE_ARCH}","day":"$4"}'
+  StrLen $6 $5
+  StrCpy $7 0
+  StrCpy $8 0
+  StrCpy $9 0
+  ; WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY (4): the system's proxy settings, as Acira's own "system" route
+  System::Call 'winhttp::WinHttpOpen(w "Acira/${VERSION}", i 4, p 0, p 0, i 0) p .r7'
+  ${If} $7 <> 0
+    System::Call 'winhttp::WinHttpSetTimeouts(p r7, i 1000, i 1000, i 1000, i 1500) i'
+    System::Call 'winhttp::WinHttpConnect(p r7, w "${AC_USAGE_HOST}", i 443, i 0) p .r8'
+  ${EndIf}
+  ${If} $8 <> 0
+    ; WINHTTP_FLAG_SECURE (0x00800000): https only
+    System::Call 'winhttp::WinHttpOpenRequest(p r8, w "POST", w "${AC_USAGE_PATH}", p 0, p 0, p 0, i 0x00800000) p .r9'
+  ${EndIf}
+  ${If} $9 <> 0
+    ; WINHTTP_OPTION_DISABLE_FEATURE (63): no cookies (1), no redirects (2), no sign-in (4), no keep-alive (8)
+    System::Call 'winhttp::WinHttpSetOption(p r9, i 63, *i 15, i 4) i'
+    ; the body is ASCII only (checked id, version, fixed words, date), sent as bytes
+    System::Call 'winhttp::WinHttpSendRequest(p r9, w "Content-Type: application/json", i -1, m r5, i r6, i r6, p 0) i .r1'
+    ${If} $1 <> 0
+      System::Call 'winhttp::WinHttpReceiveResponse(p r9, p 0) i'
+    ${EndIf}
+    System::Call 'winhttp::WinHttpCloseHandle(p r9) i'
+  ${EndIf}
+  ${If} $8 <> 0
+    System::Call 'winhttp::WinHttpCloseHandle(p r8) i'
+  ${EndIf}
+  ${If} $7 <> 0
+    System::Call 'winhttp::WinHttpCloseHandle(p r7) i'
+  ${EndIf}
+  acUsageDone:
+  ClearErrors
+  Pop $R9
+  Pop $9
+  Pop $8
+  Pop $7
+  Pop $6
+  Pop $5
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+!endif
+
 !macro customUnInstall
+  ; first, before anything is removed: the one usage message, if this is a real uninstall and sharing is on (see un.AcUsageUninstalled)
+  Call un.AcUsageUninstalled
   ${GetParameters} $R0
   ${GetOptions} $R0 "/S" $R1
   ${If} ${Errors}

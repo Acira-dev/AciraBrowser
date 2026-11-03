@@ -1,13 +1,18 @@
 'use strict';
-// "Report a problem with this site" (Page information and Protection panels, and "This site is safe? Tell Acira" on the warning page).
+// "Report a problem": about a website (Page information, Protection, "This site is safe? Tell Acira" on the warning page, the Acira menu on a
+// website) or about Acira itself (the Acira menu anywhere, Help > Report a Problem on a Mac).
 // A report is one small JSON message to Acira's own write-only endpoint (supabase/functions/report), sent only when the person presses Send, and
-// only ever with exactly what the panel showed them: the site's host (never the address, path or query), the problem they chose, which list or
-// feature was involved when Acira knows it, Acira's version, the system family, and their optional note (500 characters at most). No history,
-// cookie, account, install id or other identifier; the endpoint stores no IP address. Nothing is ever sent from a Tor window or tab.
+// only ever with exactly what the panel showed them: the site's host (never the address, path or query) or no site at all, the problem they
+// chose, which list or feature was involved when Acira knows it, Acira's version, the system family, and their note (500 characters at most;
+// optional about a site, required about Acira). No history, cookie, account, install id or other identifier; the endpoint stores no IP
+// address. Nothing is ever sent from a Tor window or tab.
 // The panel shows preview()'s payload and send() rebuilds the same payload from the same inputs, so what is shown is what is sent.
 const { checkedEndpoint } = require('./metrics.cjs');
 
-const KINDS = Object.freeze(['blocked', 'broken', 'banner', 'other']);
+const SITE_KINDS = Object.freeze(['blocked', 'broken', 'banner', 'other']);
+/** About Acira itself: no site and no list, and the note is required (without a site it is the report). */
+const APP_KINDS = Object.freeze(['app-broken', 'app-looks', 'app-crash', 'app-idea']);
+const KINDS = Object.freeze([...SITE_KINDS, ...APP_KINDS]);
 /** Which list or feature was involved. Threat lists by their id in threat-lists.cjs, the look-alike address check, and the two site switches. */
 const LISTS = Object.freeze(['phishing', 'malware', 'phishing-db', 'lookalike', 'ad-blocking', 'cookie-banners']);
 const PLATFORMS = Object.freeze(['darwin', 'win32', 'linux']);
@@ -36,14 +41,20 @@ function cleanNote(value) {
   return text;
 }
 
-/** Exactly the message that is sent. Throws when something is not reportable. */
-function buildReport({ address, kind, list = null, note = '', appVersion, platform }) {
-  const host = reportHost(address);
-  if (!host) throw new Error('Only websites can be reported.');
-  if (!KINDS.includes(kind)) throw new Error('Choose what went wrong.');
-  if (list !== null && !LISTS.includes(list)) list = null;
-  return { schema: SCHEMA, host, kind, list, appVersion: String(appVersion), platform: PLATFORMS.includes(platform) ? platform : 'linux', note: cleanNote(note) };
+/** Exactly the message that is sent. Throws when something is not reportable. A `draft` (the panel's preview) may have an empty note about
+ * Acira: it shows what Send will send once the note is written. */
+function buildReport({ address, kind, list = null, note = '', appVersion, platform }, { draft = false } = {}) {
+  const app = APP_KINDS.includes(kind);
+  const host = app ? null : reportHost(address);
+  if (!app && !host) throw new Error('Only websites can be reported.');
+  if (!app && !SITE_KINDS.includes(kind)) throw new Error('Choose what went wrong.');
+  const text = cleanNote(note);
+  if (app && !text && !draft) throw new Error('Write what happened first.');
+  if (app || (list !== null && !LISTS.includes(list))) list = null;
+  return { schema: SCHEMA, host, kind, list, appVersion: String(appVersion), platform: PLATFORMS.includes(platform) ? platform : 'linux', note: text };
 }
+/** The problems a panel may offer for its subject: 'site' (a website) or 'app' (Acira itself). */
+const kindsFor = (subject) => (subject === 'app' ? APP_KINDS : SITE_KINDS);
 
 /** The endpoints in use. A test profile never reaches the shipped (live) project: only addresses QA names itself, plain http allowed on 127.0.0.1. */
 function endpoints(env = process.env) {
@@ -52,20 +63,22 @@ function endpoints(env = process.env) {
   return { report: pick(test ? env.ACIRA_SITE_REPORT_ENDPOINT : config.reportEndpoint), allowlist: pick(test ? env.ACIRA_SITE_ALLOWLIST_ENDPOINT : config.allowlistEndpoint) };
 }
 
-/** `send(url, body, session)` -> HTTP status. `tor` is checked again here, whatever the panel did. */
+/** `send(url, body, session)` -> HTTP status. `tor` is checked again here, whatever the panel did. `input.subject` is 'app' for a report about
+ * Acira (no address), anything else for a website; a problem from the other subject's list is never built. */
 function createSiteReports({ endpoint = endpoints().report, send, appVersion, platform = process.platform, now = Date.now }) {
   const sent = [];
   const available = () => Boolean(endpoint);
   function preview(input) {
     if (input.tor) return { available: false, reason: 'tor' };
     if (!available()) return { available: false, reason: 'unavailable' };
-    if (!reportHost(input.address)) return { available: false, reason: 'not-a-website' };
-    if (!KINDS.includes(input.kind)) return { available: true, payload: null };
-    return { available: true, payload: buildReport({ ...input, appVersion, platform }) };
+    if (input.subject !== 'app' && !reportHost(input.address)) return { available: false, reason: 'not-a-website' };
+    if (!kindsFor(input.subject).includes(input.kind)) return { available: true, payload: null };
+    return { available: true, payload: buildReport({ ...input, appVersion, platform }, { draft: true }) };
   }
   async function submit(input, session) {
     if (input.tor) throw new Error('Reports are never sent from Tor windows.');
     if (!available()) throw new Error('Reports are not available in this version.');
+    if (!kindsFor(input.subject).includes(input.kind)) throw new Error('Choose what went wrong.');
     const payload = buildReport({ ...input, appVersion, platform });
     while (sent.length && now() - sent[0] > HOUR) sent.shift();
     if (sent.length >= PER_HOUR) throw new Error('You sent several reports in the last hour. Try again later.');
@@ -79,7 +92,8 @@ function createSiteReports({ endpoint = endpoints().report, send, appVersion, pl
   return { available, preview, send: submit };
 }
 
-/** The real transport, on the tab's own session so a proxy the person chose is used: POST, JSON, no cookies, no Referer, no cache, no redirects. */
+/** The real transport, on the tab's (or, about Acira, the profile's) own session so a proxy the person chose is used: POST, JSON, no cookies, no
+ * Referer, no cache, no redirects. */
 function electronSend(userAgent) {
   return async (url, body, session) => {
     const response = await session.fetch(url, { method: 'POST', body, credentials: 'omit', cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer', headers: { 'Content-Type': 'application/json', 'User-Agent': userAgent }, signal: AbortSignal.timeout(15000) });
@@ -87,4 +101,4 @@ function electronSend(userAgent) {
   };
 }
 
-module.exports = { KINDS, LISTS, NOTE_MAX, PRIVATE_TLDS, reportHost, cleanNote, buildReport, endpoints, createSiteReports, electronSend };
+module.exports = { KINDS, SITE_KINDS, APP_KINDS, LISTS, NOTE_MAX, PRIVATE_TLDS, reportHost, cleanNote, buildReport, endpoints, createSiteReports, electronSend };

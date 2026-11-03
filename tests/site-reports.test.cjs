@@ -1,8 +1,8 @@
 'use strict';
-// "Report a problem with this site" (desktop/browser-services/site-reports.cjs): exactly what is sent, host only, nothing from Tor, the endpoints a
-// test profile may reach, and the wiring in main.cjs (Tor checked there too). The interface: tests/site-report-ui.test.cjs.
+// "Report a problem" (desktop/browser-services/site-reports.cjs): exactly what is sent, host only (or no site at all, about Acira), nothing from
+// Tor, the endpoints a test profile may reach, and the wiring in main.cjs (Tor checked there too). The interface: tests/site-report-ui.test.cjs.
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {reportHost,cleanNote,buildReport,endpoints,createSiteReports,electronSend,KINDS,LISTS,NOTE_MAX}=require('../desktop/browser-services/site-reports.cjs');
+const {reportHost,cleanNote,buildReport,endpoints,createSiteReports,electronSend,KINDS,SITE_KINDS,APP_KINDS,LISTS,NOTE_MAX}=require('../desktop/browser-services/site-reports.cjs');
 const root=path.join(__dirname,'..'),read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const ENDPOINT='https://reports.example.org/functions/v1/report';
 const make=(options={})=>{const calls=[];const reports=createSiteReports({endpoint:ENDPOINT,appVersion:'0.1.0-beta.8',platform:'darwin',send:async(url,body,session)=>{calls.push({url,body,session});return options.status??204;},...options});return {reports,calls};};
@@ -42,6 +42,46 @@ test('preview shows the same payload send sends, byte for byte, through the sess
  assert.equal(calls[0].body,JSON.stringify(shown.payload));assert.deepEqual(result,{sent:true,payload:shown.payload});
  assert.deepEqual(JSON.parse(calls[0].body),{schema:1,host:'www.netflix.com',kind:'blocked',list:'phishing-db',appVersion:'0.1.0-beta.8',platform:'darwin',note:'Video does not play'});
  assert.deepEqual(reports.preview({address:input.address,kind:''}),{available:true,payload:null},'no payload until a problem is chosen');
+});
+
+test('a report about Acira itself: the same seven fields, no site and no list whatever the tab shows, and a note it cannot go without',async()=>{
+ const {reports,calls}=make(),session={id:'profile-session'};
+ const input={subject:'app',address:'https://www.netflix.com/watch/81?trackId=1',kind:'app-crash',list:'phishing-db',note:'  Froze when I opened Settings.  '};
+ const shown=reports.preview(input);
+ assert.deepEqual(shown,{available:true,payload:{schema:1,host:null,kind:'app-crash',list:null,appVersion:'0.1.0-beta.8',platform:'darwin',note:'Froze when I opened Settings.'}});
+ const result=await reports.send(input,session);
+ assert.equal(calls[0].body,JSON.stringify(shown.payload),'what is shown is what is sent');assert.equal(calls[0].session,session);
+ assert.deepEqual(Object.keys(JSON.parse(calls[0].body)),['schema','host','kind','list','appVersion','platform','note']);
+ for(const secret of ['netflix','watch','trackId','phishing'])assert.ok(!calls[0].body.includes(secret),secret);
+ assert.deepEqual(result,{sent:true,payload:shown.payload});
+ // The preview shows the message while the note is still empty; Send refuses it, so nothing goes.
+ assert.deepEqual(reports.preview({subject:'app',kind:'app-idea',note:'  '}).payload,{schema:1,host:null,kind:'app-idea',list:null,appVersion:'0.1.0-beta.8',platform:'darwin',note:''});
+ await assert.rejects(reports.send({subject:'app',kind:'app-idea',note:' \n '},session),/Write what happened/);
+ assert.equal(calls.length,1);
+ // On an Acira page there is no site: the app subject still works, the site subject does not.
+ assert.equal(reports.preview({subject:'app',address:'acira://settings',kind:'app-looks',note:'x'}).payload.host,null);
+ assert.deepEqual(reports.preview({subject:'site',address:'acira://settings',kind:'blocked'}),{available:false,reason:'not-a-website'});
+ // A problem from the other subject's list is never built.
+ assert.deepEqual(reports.preview({subject:'site',address:'https://a.example.org/',kind:'app-crash',note:'x'}),{available:true,payload:null});
+ assert.deepEqual(reports.preview({subject:'app',kind:'blocked',note:'x'}),{available:true,payload:null});
+ await assert.rejects(reports.send({subject:'site',address:'https://a.example.org/',kind:'app-crash',note:'x'},session),/Choose/);
+ await assert.rejects(reports.send({subject:'app',kind:'other',note:'x'},session),/Choose/);
+ assert.equal(calls.length,1);
+ // Tor: refused before anything else, about Acira too.
+ assert.deepEqual(reports.preview({subject:'app',kind:'app-crash',note:'x',tor:true}),{available:false,reason:'tor'});
+ await assert.rejects(reports.send({subject:'app',kind:'app-crash',note:'x',tor:true},session),/Tor/);
+ assert.equal(calls.length,1);
+});
+
+test('main: an app report is judged for Tor from the window and the tab, and goes out only on a session whose proxy is set up',()=>{
+ const main=read('desktop/main.cjs');
+ assert.match(main,/shape\(\['tabId','subject','kind','note'\]\)/);
+ assert.match(main,/if\(request\.subject==='app'\)\{const reports=siteReportsService\(\),input=\{subject:'app',address:null,kind:request\.kind,note:request\.note,list:null,tor:torMode\|\|tab\?\.privacy==='tor'\};/,'no address and no list leave main for a report about Acira');
+ assert.match(main,/ses=live\?\.session\|\|\(profile\?require\('electron'\)\.session\.fromPartition\(profile\.partition\):null\),routed=\(\(\)=>\{try\{const route=contentBlocking\.proxy\.status\(ses\);return !route\.error&&route\.applied!==false&&!route\.busy;\}catch\{return false;\}\}\)\(\);if\(!ses\|\|!routed\)throw/,'a proxy the person chose is never bypassed');
+ assert.match(main,/const input=\{subject:'site',address:tab\.url,/,'a site report says so');
+ assert.match(main,/siteReports:siteReportsService\(\)\.available\(\)\}/,'every window learns whether reports can be sent');
+ assert.match(read('src/runtime/core.ts'),/delete s\.siteReports;/,'and never saves it');
+ assert.match(main,/case 'report':[^\n]*?if\(!siteReportsService\(\)\.available\(\)\)break;if\(torMode\|\|active\.privacy==='tor'\)\{dispatch\(\{type:'toast',text:tm\('report\.unavailable'\),tone:'info'\}\);break;\}/,'Help > Report a Problem says so in Tor instead of opening anything (an info toast, not a check mark)');
 });
 
 test('nothing is ever sent from Tor, even when the panel asks',async()=>{
@@ -84,7 +124,7 @@ test('the transport: POST on the tab session, JSON, no cookies, no Referer, no c
 });
 
 test('the closed lists: every threat list can be named in a report',()=>{
- assert.deepEqual(KINDS,['blocked','broken','banner','other']);assert.deepEqual(LISTS,['phishing','malware','phishing-db','lookalike','ad-blocking','cookie-banners']);
+ assert.deepEqual(SITE_KINDS,['blocked','broken','banner','other']);assert.deepEqual(APP_KINDS,['app-broken','app-looks','app-crash','app-idea']);assert.deepEqual(KINDS,[...SITE_KINDS,...APP_KINDS]);assert.deepEqual(LISTS,['phishing','malware','phishing-db','lookalike','ad-blocking','cookie-banners']);
  const {SOURCES}=require('../desktop/browser-services/threat-lists.cjs');for(const source of SOURCES)assert.ok(LISTS.includes(source.id),source.id+' can be named in a report');
 });
 
@@ -92,9 +132,15 @@ test('the app and the report function agree on every field: what the app builds,
  const server=await import('../supabase/functions/report/handler.mjs');
  for(const host of ['example.com','a.b.example.co.uk','xn--mnchen-3ya.example.de','www.netflix.com','x.y','localhost','printer.local','abc.onion','192.168.1.1','a.example','shop.test','a_b.example.org','-a.example.org','a'.repeat(64)+'.example.org','UPPER.example.org'])
   assert.equal(reportHost('https://'+host+'/')===host,server.validHost(host),host);
- assert.deepEqual([...KINDS],[...server.KINDS]);assert.deepEqual([...LISTS],[...server.LISTS]);assert.equal(NOTE_MAX,server.NOTE_MAX);
+ assert.deepEqual([...KINDS],[...server.KINDS]);assert.deepEqual([...SITE_KINDS],[...server.SITE_KINDS]);assert.deepEqual([...APP_KINDS],[...server.APP_KINDS]);assert.deepEqual([...LISTS],[...server.LISTS]);assert.equal(NOTE_MAX,server.NOTE_MAX);
  for(const input of [{address:'https://www.example.org/a?b',kind:'blocked',list:'phishing-db',note:'Netflix video 😀 stops\nhere'},{address:'https://a.example.org/',kind:'other',note:''},{address:'https://a.example.org/',kind:'banner',list:'cookie-banners',note:'é'.repeat(NOTE_MAX)}]){
   const payload=buildReport({...input,appVersion:'0.1.0-beta.8',platform:'win32'});
   assert.deepEqual(server.validate(JSON.parse(JSON.stringify(payload))),{host:payload.host,kind:payload.kind,list:payload.list,app_version:'0.1.0-beta.8',platform:'win32',note:payload.note||null});
+ }
+ for(const kind of APP_KINDS){
+  const payload=buildReport({address:'https://www.example.org/a',kind,list:'phishing',note:'It happened again 😀',appVersion:'0.1.0-beta.8',platform:'darwin'});
+  assert.deepEqual(server.validate(JSON.parse(JSON.stringify(payload))),{host:null,kind,list:null,app_version:'0.1.0-beta.8',platform:'darwin',note:'It happened again 😀'},kind);
+  const draft=buildReport({kind,note:'',appVersion:'0.1.0-beta.8',platform:'darwin'},{draft:true});
+  assert.equal(server.validate(JSON.parse(JSON.stringify(draft))),null,'the empty-note preview is exactly what the function refuses, so Send stays off');
  }
 });

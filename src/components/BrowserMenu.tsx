@@ -5,7 +5,7 @@ import { formatShortcut, isMac, isTorSupported } from '../ui/platform';
 import { menuShortcut } from '../ui/shortcutKeys';
 import {runtime} from '../runtime/client';
 import { defaultMenuLayout,platformMenuLayout,menuSections,type MenuItemId,type MenuLayout } from '../ui/menuPrefs';
-import { ChevronLeft,Code2,FocusRow,PanelLeft,SeamlessRow,Link2,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Sparkles,SparklesOff,Star,Undo2 } from './AppIcons';
+import { ChevronLeft,Code2,FocusRow,PanelLeft,SeamlessRow,Link2,MessageSquare,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Sparkles,SparklesOff,Star,Undo2 } from './AppIcons';
 import { ExtensionsIcon } from './ToolbarIcon';
 import { TorCircuitGlyph, TorGlyph } from '../features/tor/TorChip';
 import { copyText } from '../ui/pageActions';
@@ -58,6 +58,9 @@ export interface MenuParts {
   /** R4-16 + R4-19: the Layout rows (View: Full · Compact · Seamless, Tabs: Top · Sidebar), applied live to the same settings as
    * Settings › Window view and Make it yours. Absent (tests, the preview) means no rows. */
   view?:WindowView;setView?:(view:WindowView)=>void;sidebarTabs?:boolean;setSidebarTabs?:(side:boolean)=>void;
+  /** "Report a problem…" under Settings: the menu turns into the report form (about this site or about Acira). Absent while this build
+   * cannot send reports, and in Tor (App.tsx reportSubjects); the menu is then as before. */
+  report?:()=>void;
 }
 const tool=(item:BrowserMenuTool)=><button type="button" className="menu-row" disabled={item.disabled} onClick={item.action}><item.Icon size={16}/><span>{item.label}</span>{item.hint&&<kbd>{formatShortcut(item.hint)}</kbd>}</button>;
 /** One node per menu row, so either list can draw any of them. */
@@ -98,12 +101,13 @@ const TabsTopGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/
 export const menuLayoutViews=['full','compact','seamless'] as const;
 const viewGlyph:Record<(typeof menuLayoutViews)[number],BrowserMenuIcon>={full:ViewFullGlyph,compact:ViewCompactGlyph,seamless:SeamlessRow};
 const viewShortcut:Record<(typeof menuLayoutViews)[number],[string,string]>={full:['view-full',''],compact:['compact-toolbar',''],seamless:['seamless-mode','Ctrl Shift L']};
-/** One joined segmented control on the menu grid (the shared .acira-seg track and sliding thumb, sized for a 30px row). */
-function MenuSegment<T extends string>({label,value,options}:{label:string;value:T|undefined;options:readonly {id:T;text?:string;tip:string;Icon:BrowserMenuIcon;choose:()=>void}[]}){
+/** One joined segmented control on the menu grid (the shared .acira-seg track and sliding thumb, sized for a 30px row). Also the report
+ * form's "About" row (SiteReport.tsx), with words and no glyphs. */
+export function MenuSegment<T extends string>({label,value,options}:{label:string;value:T|undefined;options:readonly {id:T;text?:string;tip:string;Icon?:BrowserMenuIcon;choose:()=>void}[]}){
   const index=options.findIndex(option=>option.id===value);
   return <div className={`acira-seg menu-seg${options.some(option=>option.text)?' menu-seg-labelled':''}`} role="radiogroup" aria-label={label} data-empty={index<0||undefined} style={{'--seg-count':options.length,'--seg-index':Math.max(0,index)} as CSSProperties}>
     <span className="acira-seg-thumb" aria-hidden="true"/>
-    {options.map(option=><button key={option.id} type="button" role="radio" aria-checked={option.id===value} aria-label={option.text?undefined:option.tip.split(' · ')[0]} title={option.tip} onClick={option.choose}><option.Icon size={16}/>{option.text&&<span>{option.text}</span>}</button>)}
+    {options.map(option=><button key={option.id} type="button" role="radio" aria-checked={option.id===value} aria-label={option.text?undefined:option.tip.split(' · ')[0]} title={option.tip} onClick={option.choose}>{option.Icon&&<option.Icon size={16}/>}{option.text&&<span>{option.text}</span>}</button>)}
   </div>;
 }
 /** R4-16 + R4-19: two short rows in the page group, no divider of their own; the menu stays open so the change is seen. */
@@ -133,6 +137,7 @@ export function BrowserMenu({layout=defaultMenuLayout,torActive=false,torIdentit
     {layout.main.length>0&&<hr/>}
     {layout.more.length>0&&<button type="button" className="menu-row menu-row-more" aria-haspopup="menu" onClick={()=>parts.open('more-tools')}><MoreHorizontal size={16}/><span>{t("browsermenu.moreTools")}</span><ChevronRight size={14} aria-hidden="true"/></button>}
     {row(t("browsermenu.settings"),Settings2,()=>parts.navigate('acira://settings'),'Ctrl ,')}
+    {parts.report&&row(t('report.menuRow'),MessageSquare,parts.report)}
   </>;
 }
 

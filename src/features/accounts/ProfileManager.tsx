@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { MessageId } from "../../i18n";
 import type { BrowserAction, BrowserProfile, BrowserSnapshot } from "../../runtime/types";
 import { Check, Plus } from "../../components/AppIcons";
-import { SettingGroup, Switch } from "../settings/controls";
+import { Select, SettingGroup, SettingRow, Switch } from "../settings/controls";
+import { isMac } from "../../ui/platform";
 import { useT } from "../../i18n";
 import { ProfileSuggestions } from "./ProfileSuggestions";
 import { onSettingsIntent, settingsViewKey, takeSettingsIntent } from "../../ui/settingsView";
@@ -56,13 +57,36 @@ export function ProfileManager({ state, dispatch }: Props) {
               requestAnimationFrame(() => heading.current?.focus());
             }}
             dispatch={dispatch}
+            spaces={state.settings.spaces === "profiles"}
           />
         ))}
-        <CreateProfile profiles={profiles} dispatch={dispatch} intentKey={tab ? settingsViewKey(tab) : ""} />
+        <CreateProfile profiles={profiles} dispatch={dispatch} intentKey={tab ? settingsViewKey(tab) : ""} spaces={state.settings.spaces === "profiles"} />
+        <SwitchBetween state={state} dispatch={dispatch} count={profiles.length} />
       </SettingGroup>
       {/* Other browsers' accounts on this computer, each one click from being its own profile. */}
       <ProfileSuggestions state={state} dispatch={dispatch} />
     </>
+  );
+}
+
+/** "Switch between": workspaces inside each profile, a window for each profile (the default), or profiles as spaces, every profile
+ *  in one window (runtime/profileSpaces.ts). Shown with two or more profiles, and always while profiles are spaces so it can be undone. */
+function SwitchBetween({ state, dispatch, count }: Props & { count: number }) {
+  const t = useT();
+  const value = state.settings.spaces === "profiles" ? "profiles" : "workspaces";
+  if (count < 2 && value === "workspaces") return null;
+  const secured = value === "workspaces" && (state.workspaces ?? []).some((workspace) => workspace.secured);
+  const keys = isMac() ? "⌃1–8" : "Alt+1–8";
+  const detail = value === "profiles" ? t("profiles.switchSpacesDetail", { key: keys }) : `${t("profiles.switchWorkspacesDetail")}${secured ? ` ${t("profiles.switchSecured")}` : ""}`;
+  return (
+    <SettingRow id="profile-spaces" title={t("profiles.switchBetween")} detail={detail}>
+      <Select
+        value={value}
+        label={t("profiles.switchBetween")}
+        options={[{ value: "workspaces", label: t("profiles.switchWorkspaces") }, { value: "profiles", label: t("profiles.switchSpaces") }]}
+        onChange={(next) => dispatch({ type: "settings.update", patch: { spaces: next } })}
+      />
+    </SettingRow>
   );
 }
 
@@ -94,6 +118,7 @@ function ProfileRow({
   onEdit,
   onRemoved,
   dispatch,
+  spaces,
 }: {
   profile: BrowserProfile;
   first: boolean;
@@ -106,6 +131,8 @@ function ProfileRow({
   onEdit: (open: boolean) => void;
   onRemoved: () => void;
   dispatch: Props["dispatch"];
+  /** Profiles as spaces: another profile switches here instead of opening in its own window. */
+  spaces: boolean;
 }) {
   const [name, setName] = useState(profile.name);
   const [color, setColor] = useState(profile.color);
@@ -174,9 +201,16 @@ function ProfileRow({
           {current ? (
             <Check className="pm-current" size={16} aria-label={t("profiles.current")} />
           ) : (
-            <button type="button" className="st-button" onClick={() => selectProfile(dispatch, profile.id)}>
-              {t("profiles.open")}
-            </button>
+            // With profiles as spaces a profile is a space of this window: Switch opens it here; otherwise Open, in its own window.
+            spaces ? (
+              <button type="button" className="st-button" onClick={() => dispatch({ type: "browser.profile.select", id: profile.id, here: true })}>
+                {t("profiles.switch")}
+              </button>
+            ) : (
+              <button type="button" className="st-button" onClick={() => selectProfile(dispatch, profile.id)}>
+                {t("profiles.open")}
+              </button>
+            )
           )}
           <button
             ref={editButton}
@@ -363,7 +397,7 @@ function ProfileRow({
 }
 
 /** "New profile" as the group's last row; it opens in place to a name and a color. */
-function CreateProfile({ profiles, dispatch, intentKey }: { profiles: BrowserProfile[]; dispatch: Props["dispatch"]; intentKey: string }) {
+function CreateProfile({ profiles, dispatch, intentKey, spaces = false }: { profiles: BrowserProfile[]; dispatch: Props["dispatch"]; intentKey: string; /** Profiles as spaces: the new profile's space opens in this window once it exists. */ spaces?: boolean }) {
   const t = useT();
   const used = new Set(profiles.map((profile) => profile.color.toLowerCase()));
   const suggested = (profileColors.find((item) => !used.has(item.value.toLowerCase())) || profileColors[0]).value;
@@ -382,7 +416,9 @@ function CreateProfile({ profiles, dispatch, intentKey }: { profiles: BrowserPro
     if (!created) return;
     pending.current = null;
     if (created.color.toLowerCase() !== wait.color.toLowerCase()) setProfileColor(dispatch, created.id, wait.color);
-  }, [profiles, dispatch]);
+    // With profiles as spaces a new profile is a new space, and it opens here (after its colour, while this page is still on screen).
+    if (spaces) dispatch({ type: "browser.profile.select", id: created.id, here: true });
+  }, [profiles, dispatch, spaces]);
   // Opened from outside ("Add profile…" in the profile menu): the form opens in place and the name field takes focus,
   // whether this panel was already showing or mounts a moment after the section switch.
   const [asked, setAsked] = useState(0);

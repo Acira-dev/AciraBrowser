@@ -276,7 +276,8 @@ export async function planUpdate(options,deps){
    const tag=U.releaseTag({version,platform:'windows',commit:windowsCommit}),exe=assets.windows.find(asset=>asset.role==='installer'),releaseName='Acira Browser '+effective;
    const release={platform:'windows',tag,title:releaseName+' (Windows)',prerelease:channel==='beta',assets:assets.windows.map(asset=>({...asset,url:U.assetUrl(tag,asset.name)})),body:U.releaseBody({notes,platform:'windows'}),feedEntry:windowsFeedAllowed};
    if(windowsFeedAllowed){
-    const doc=U.windowsFeed({version:effective,file:exe,url:U.assetUrl(tag,exe.name),releaseDate,releaseName,releaseNotes:notes.plain}),text=U.serializeFeed(doc);
+    // previousBlockMaps: where the setups now installed keep their blockmaps, so they download only what changed (packaging/update-publish.cjs)
+    const doc=U.windowsFeed({version:effective,file:exe,url:U.assetUrl(tag,exe.name),releaseDate,releaseName,releaseNotes:notes.plain,previousBlockMaps:U.previousBlockMaps(live.filter(item=>item.platform==='windows'&&item.version),{version:effective})}),text=U.serializeFeed(doc);
     for(const file of U.feedFiles(channel,'windows'))plan.feeds.push({platform:'windows',file,text,version:effective});
    }
    plan.releases.push(release);

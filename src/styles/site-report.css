@@ -10,3 +10,5 @@
 .app .site-report-fine{margin:4px 8px 4px 32px;font:400 12px/16px var(--font-ui);color:var(--menu-t3);overflow-wrap:anywhere}
 .app .site-report-problem{color:var(--danger)}
 .app .site-report-actions{padding:4px 8px 8px}
+/* The "About" row (the Acira menu on a website): the menu's own Layout row and segmented control (menu-layout.css), here with words and no glyph, so even padding. */
+.app .browser-popup .site-report .menu-seg button{padding:0 10px}

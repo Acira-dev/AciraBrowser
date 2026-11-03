@@ -169,7 +169,7 @@ test('restStore: ratings go to feature_ratings, the probe reads zero rows of nam
 });
 
 test('deploy: the dry run lists v1 -> v3, the salt secret and both message-type probes; the health checks pass against the real handler', async () => {
-  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql', '20261102000000_site_reports.sql']);
+  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql', '20261102000000_site_reports.sql', '20261103000000_usage_churn.sql']);
   const logs = []; const original = console.log; console.log = (...args) => logs.push(args.join(' '));
   try { await deploy({ SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', SUPABASE_ACCESS_TOKEN: 'sbp_SECRETVALUE' }, ['--dry-run']); } finally { console.log = original; }
   const plan = logs.join('\n');
@@ -182,7 +182,7 @@ test('deploy: the dry run lists v1 -> v3, the salt secret and both message-type 
   console.log = () => {};
   try { await smoke('https://x.supabase.co/functions/v1/usage', fetchImpl, { attempts: 1, wait: 0 }); } finally { console.log = original; }
   assert.equal(store.rows.length + store.ratings.length, 0, 'the health checks store nothing');
-  assert.equal(healthChecks(DAY).length, 6);
+  assert.equal(healthChecks(DAY).length, 8, 'two more for the uninstall message (tests/supabase-usage-churn.test.mjs)');
   await assert.rejects(smoke('https://x.supabase.co/functions/v1/usage', async () => new Response(null, { status: 204 }), { attempts: 1, wait: 0 }), /Health check failed/);
 });
 

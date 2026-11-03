@@ -5,7 +5,8 @@ import './usage-sent.css';
 type Key = Parameters<typeof translate>[0];
 
 /** R4-60 "What's sent", in plain words: every field of the daily message grouped as the person thinks about it, each row followed by the
- * values that would really be sent (read from `status.payload`, the same object the sender serialises), plus the rating message (R4-61).
+ * values that would really be sent (read from `status.payload`, the same object the sender serialises), plus the rating message (R4-61)
+ * and, on Windows, the one message the uninstaller sends (`status.uninstallPayload`; a Mac cannot tell that Acira is being deleted).
  * The raw message stays below it, so this never says more or less than the truth. */
 const GROUPS: { title: Key; rows: { label: Key; fields: string[] }[] }[] = [
   { title: 'usage.sent.groupSetup', rows: [
@@ -28,7 +29,7 @@ const GROUPS: { title: Key; rows: { label: Key; fields: string[] }[] }[] = [
 
 export function UsageSent({ status }: { status: MetricsStatus }) {
   const t = useT();
-  const payload = status.payload || {}, rating = status.ratingPayload;
+  const payload = status.payload || {}, rating = status.ratingPayload, uninstall = status.uninstallPayload;
   const values = (fields: string[], from: Record<string, string | number>) => fields.filter((field) => field in from).map((field) => `${field} ${from[field]}`).join(' · ');
   return (
     <div className="us-sent" data-usage-sent>
@@ -47,6 +48,12 @@ export function UsageSent({ status }: { status: MetricsStatus }) {
         <section className="us-group" aria-label={t('usage.sent.groupRatings')}>
           <h3 className="us-title">{t('usage.sent.groupRatings')}</h3>
           <div className="us-row"><p className="us-label">{t('usage.sent.rating')}</p><p className="us-values">{values(Object.keys(rating), rating)}</p></div>
+        </section>
+      )}
+      {uninstall && (
+        <section className="us-group" aria-label={t('usage.sent.groupUninstall')}>
+          <h3 className="us-title">{t('usage.sent.groupUninstall')}</h3>
+          <div className="us-row"><p className="us-label">{t('usage.sent.uninstall')}</p><p className="us-values">{values(Object.keys(uninstall), uninstall)}</p></div>
         </section>
       )}
       <p className="us-never">{t('usage.sent.never')}</p>

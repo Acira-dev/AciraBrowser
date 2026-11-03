@@ -33,13 +33,15 @@ function newGroup(state:BrowserSnapshot,name:string,profile:string,color:TabGrou
  let id=`group-${state.revision}-${state.tabGroups.length}`;while(state.tabGroups.some(group=>group.id===id))id+='-new';
  const group:TabGroup={id,name,color,collapsed:false,browserProfileId:profile,...(workspaceId?{workspaceId}:{})};state.tabGroups.push(group);return group;
 }
+/** The marks of a group that stands for a put-away workspace while profiles are spaces (runtime/profileSpaces.ts), kept as they are. */
+const fromWorkspaceMarks=(value:TabGroup):Partial<TabGroup>=>typeof value.fromWorkspaceId==='string'&&value.fromWorkspaceId?{fromWorkspaceId:value.fromWorkspaceId,...(typeof value.fromName==='string'?{fromName:value.fromName}:{}),...(typeof value.fromGroup==='string'?{fromGroup:value.fromGroup}:{})}:{};
 /** Groups have stable IDs and remain profile-scoped. Legacy names are migrated without losing memberships. */
 export function reconcileTabGroups(state:BrowserSnapshot):void {
  const ids=new Set<string>(),names=new Set<string>();
  state.tabGroups=(Array.isArray(state.tabGroups)?state.tabGroups:[]).flatMap(value=>{
   if(!value||typeof value!=='object'||typeof value.id!=='string'||!cleanName(value.name)||!state.browserProfiles.some(profile=>profile.id===value.browserProfileId))return [];
   const key=`${value.browserProfileId}\0${value.workspaceId??''}\0${cleanName(value.name)}`;if(ids.has(value.id)||names.has(key))return [];ids.add(value.id);names.add(key);
-  return [{id:value.id,name:cleanName(value.name),color:validColor(value.color)?value.color:'none' as TabGroupColor,collapsed:value.collapsed===true,browserProfileId:value.browserProfileId,...(typeof value.workspaceId==='string'&&value.workspaceId?{workspaceId:value.workspaceId}:{}),...(typeof value.lastActiveTabId==='string'&&state.tabs.some(tab=>tab.id===value.lastActiveTabId&&!tab.pinned&&tab.group===value.name&&inScope(tab,value))?{lastActiveTabId:value.lastActiveTabId}:{})}];
+  return [{id:value.id,name:cleanName(value.name),color:validColor(value.color)?value.color:'none' as TabGroupColor,collapsed:value.collapsed===true,browserProfileId:value.browserProfileId,...(typeof value.workspaceId==='string'&&value.workspaceId?{workspaceId:value.workspaceId}:{}),...fromWorkspaceMarks(value),...(typeof value.lastActiveTabId==='string'&&state.tabs.some(tab=>tab.id===value.lastActiveTabId&&!tab.pinned&&tab.group===value.name&&inScope(tab,value))?{lastActiveTabId:value.lastActiveTabId}:{})}];
  });
  for(const tab of [...state.tabs,...state.closedTabs]){
   tab.group=tab.pinned||groupless(tab)?'':cleanName(tab.group);

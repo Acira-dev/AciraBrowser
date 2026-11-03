@@ -2,7 +2,7 @@ import type { BrowserAction, BrowserSnapshot } from "../../runtime/types";
 import { runtime } from "../../runtime/client";
 import { Check, ExternalLink, Plus, PrivateWindow, Users } from "../../components/AppIcons";
 import { WorkspaceGlyph, workspaceIcon } from "../../components/WorkspaceGlyph";
-import { MAX_WORKSPACES, windowWorkspaces } from "../../runtime/workspaces";
+import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces } from "../../runtime/workspaces";
 import { openWorkspacePopupFromPopup } from "../../ui/workspaceTarget";
 import { shownColor, shownName, workspaceKey } from "../workspaces/WorkspaceSwitcher";
 import "../../styles/workspaces.css";
@@ -35,7 +35,8 @@ export function ProfileSwitcher({
   const t = useT();
   const profiles = state.browserProfiles.filter((profile) => !profile.private);
   const privateHere = state.browserProfiles.some((profile) => profile.private && profile.id === profileId);
-  const workspaces = privateHere ? [] : windowWorkspaces(state);
+  // With profiles as spaces the profiles are the spaces: no workspaces section under them.
+  const workspaces = privateHere || profilesAsSpaces(state) ? [] : windowWorkspaces(state);
   return (
     <div className="pf" role="menu" aria-label={t("profiles.panel")}>
       {privateHere ? (

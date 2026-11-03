@@ -182,9 +182,11 @@ test('automatic download is the default; the Settings switch turns it off and th
   assert.equal(updater.status().autoDownload, true, 'on by default');
   assert.equal(updater.setAutoDownload(false).autoDownload, false);
   assert.equal(make(dir, { autoUpdater: progressUpdater(() => undefined) }).status().autoDownload, false, 'the choice is kept');
-  let seen; const fake = progressUpdater(() => undefined); Object.defineProperty(fake, 'autoDownload', { set(value) { seen = value; }, get() { return seen; } });
+  let seen, asked = 0; const fake = progressUpdater(() => undefined); Object.defineProperty(fake, 'autoDownload', { set(value) { seen = value; }, get() { return seen; } });
+  fake.downloadUpdate = async () => { asked++; };
   await make(folder(), { autoUpdater: fake }).check();
-  assert.equal(seen, true, 'electron-updater is told to download by itself');
+  assert.equal(seen, false, 'electron-updater only finds the update: the download is started by Acira (its own, pausable one, app-updater-pause.test.cjs)');
+  assert.equal(asked, 1, 'an updater that does not describe its files is asked to download by itself, as before');
 });
 
 test('the stand-in updater downloads from a local feed for real, so the proof shows true progress', async () => {
@@ -206,11 +208,11 @@ test('the stand-in updater downloads from a local feed for real, so the proof sh
 
 test('the update popup, the dot and the pill are wired through the one popup system, with no markup from the network', () => {
   const app_ = read('src', 'App.tsx'), validation = read('desktop', 'validation.cjs'), popup = read('src', 'ui', 'popup.ts'), main = read('desktop', 'main.cjs');
-  assert.match(app_, /kind === 'update' && <UpdatePopover/); assert.match(app_, /update:'\.update-pill\[data-phase=ready\]'/);
-  assert.match(validation, /'workspace-edit', 'update', 'whats-new'\]/); assert.match(popup, /if\(kind==='update'\)return \d+;/);
+  assert.match(app_, /kind === 'update' && <UpdatePopover/); assert.match(app_, /update:'\.update-pill'/, 'the panel opens from the pill in every phase (the download dots too)');
+  assert.match(validation, /'workspace-edit', 'update', 'whats-new'\]/); assert.match(popup, /if\(kind==='update'\)return updatePanelPhase\(\)==='ready'\?\d+:\d+;/);
   assert.match(main, /request\.type==='update\.prompt'/); assert.match(main, /case 'update\.status'[^]*case 'update\.prompt'/);
   for (const file of ['UpdatePill.tsx', 'UpdatePopover.tsx', 'useUpdateReady.ts']) assert.doesNotMatch(read('src', 'features', 'updates', file), /dangerouslySetInnerHTML|innerHTML/, `${file} renders text only`);
-  assert.match(read('src', 'features', 'updates', 'UpdatePill.tsx'), /preset=\{ready \? 'check' : 'progress'\}/, 'the existing dot matrix: progress fill, then the check');
+  assert.match(read('src', 'features', 'updates', 'UpdatePill.tsx'), /preset=\{ready \? 'check' : paused \? 'progressHeld' : 'progress'\}/, 'the existing dot matrix: progress fill (held still while paused), then the check');
   assert.doesNotMatch(read('src', 'features', 'updates', 'update-pill.css'), /<progress|scaleX\(|width:\s*var\(--/, 'no progress line');
 });
 

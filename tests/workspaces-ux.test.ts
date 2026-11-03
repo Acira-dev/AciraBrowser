@@ -126,7 +126,7 @@ test('P0-2 / P0-3 / P0-7: one workspace shows no switcher, chip or title line; t
   const src = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
   const switcher = src('src/features/workspaces/WorkspaceSwitcher.tsx');
   assert.match(switcher, /if \(!several\) return null;/, 'the sidebar row');
-  assert.match(switcher, /if \(list\.length < 2 \|\| !open\) return null;/, 'the title line');
+  assert.match(switcher, /if \(list\.length < 2 \|\| !open(?: \|\| profilesAsSpaces\(state\))?\) return null;/, 'the title line (also hidden while profiles are spaces: the footer names the profile)');
   assert.match(switcher, /if \(!open \|\| list\.length < 2\) return null;/, 'the strip chip');
   assert.doesNotMatch(switcher, /workspaceHint|sb-ws-hint|data-single/, 'no first-run tip and no single-workspace control');
   const en = JSON.parse(src('src/i18n/en.json')) as Record<string, string>;

@@ -92,7 +92,7 @@ test('next / previous workspace: main cycles with wrap-around and shows the keys
   const main = read('desktop/main.cjs'), switcher = read('src/features/workspaces/WorkspaceSwitcher.tsx'), palette = read('src/components/CommandPalette.tsx');
   assert.match(main, /case 'workspace-cycle':\{const list=windowWorkspaces\(state\),at=list\.findIndex/);
   assert.match(main, /\(Math\.max\(0,at\)\+command\.direction\+list\.length\)%list\.length/);
-  assert.match(switcher, /title=\{withCycle\(t\('workspaces\.titleTip'\)\)\}/); assert.match(switcher, /title=\{withCycle\(t\('workspaces\.chipTip'/);
+  assert.match(switcher, /title=\{withCycle\(t\('workspaces\.titleTip'\)\)\}/); assert.match(switcher, /title=\{withCycle\(t\(spaces \? 'workspaces\.spaceChipTip' : 'workspaces\.chipTip'/); // with profiles as spaces, the space words
   assert.match(switcher, /\['next-workspace'/); assert.match(switcher, /\['prev-workspace'/);
   // Not filtered out of the command bar (only the positional switch-workspace-N and new-workspace are).
   const listed = /const listed = \(id: string\) => !\/\^\(([^)]*)\)\//.exec(palette)![1];

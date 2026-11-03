@@ -1,5 +1,5 @@
 // @ts-nocheck
-// Supabase Edge Function `usage`: the write-only endpoint for Acira's opt-in anonymous usage counts and feature ratings. See docs/launch/METRICS.md
+// Supabase Edge Function `usage`: the write-only endpoint for Acira's opt-in anonymous usage counts, feature ratings and the Windows uninstall message. See docs/launch/METRICS.md
 // and docs/SUPABASE_SETUP.md.
 // JWT verification is off (supabase/config.toml and --no-verify-jwt): the app holds no key, so the function must accept unsigned calls.
 // Its safety is the strict schema, the 2 KB limit and the rate limits in handler.mjs; it writes with the service role key that

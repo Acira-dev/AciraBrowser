@@ -5,6 +5,7 @@ import { menuHeight,menuRowHeight,readMenuLayout,platformMenuLayout } from './me
 import { windowWorkspaces } from '../runtime/workspaces';
 import { splitGroupMenu } from '../runtime/splitPlacement';
 import { peekWorkspaceTarget } from './workspaceTargetStore';
+import { updatePanelPhase } from './updatePhase';
 import { currentLocale } from '../i18n';
 import { PANEL_DOWNLOAD_ROWS,PANEL_DOWNLOAD_ROW_HEIGHT,profileDownloads } from './downloadActivity';
 import type { LocaleCode } from '../i18n/locales';
@@ -57,7 +58,9 @@ const profileOf=(state:BrowserSnapshot)=>state.tabs?.find(tab=>tab.id===state.ac
 export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].some(id=>main.includes(id))?2:0;
 /** The Tor rows: New Tor identity, and on a website also New Tor circuit for this site (Tor Browser's pair). */
 const torMenuRows=(state:BrowserSnapshot)=>{if(!inTorContext(state))return 0;const tab=state.tabs.find(item=>item.id===state.activeTabId);return tab?.contentKind==='web'&&/^https?:/i.test(tab.url||'')?2:1;};
-const mainMenuHeight=(state:BrowserSnapshot,rowHeight=menuRowHeight)=>{const layout=platformMenuLayout(readMenuLayout(profileOf(state)));return menuHeight(layout,'main',rowHeight)+(menuLayoutRows(layout.main)+torMenuRows(state))*rowHeight;};
+/** "Report a problem…" under Settings, while this build can send reports and outside Tor (App.tsx reportSubjects). */
+const reportMenuRows=(state:BrowserSnapshot)=>state.siteReports&&!inTorContext(state)?1:0;
+const mainMenuHeight=(state:BrowserSnapshot,rowHeight=menuRowHeight)=>{const layout=platformMenuLayout(readMenuLayout(profileOf(state)));return menuHeight(layout,'main',rowHeight)+(menuLayoutRows(layout.main)+torMenuRows(state)+reportMenuRows(state))*rowHeight;};
 /** The tab menu's 30px rows, counted the way App.tsx (tab-context) and TabGroupControls draw them. Always: reload, new tab, duplicate,
  *  rename, pin, move to new window, move to tab group, close, reopen (9). A website adds copy address and mute; a pane of a saved split
  *  adds Open alone and Remove from split view, another website (when the current tab is one) Split view; a grouped tab Remove from
@@ -123,7 +126,8 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   // The panel's own note and rows (187) plus the Security level row and the Prefer .onion versions switch (32 each).
   if(kind==='tor')return 251;
   // Update ready (Install now, Later, Read more): 124 measured in English (31 Oct, rig qa/r6-updates-proof.mjs): the identity row, the two-line note, one row of buttons. A longer language wraps the note to three lines and is measured on open; Read more swaps the note for the release notes, up to 11 lines.
-  if(kind==='update')return 124;
+  // The download (option B, the dots in the toolbar open it; updatePanelPhase): the identity row with its ring, the line under it and What's new, 102 measured in English (3 Nov, the update-pause rig); a language that wraps the line is measured on open.
+  if(kind==='update')return updatePanelPhase()==='ready'?124:102;
   // What's new after a restart (centred): the identity row, the notes (measured on open: they depend on the feed, and the popup waits for them, data-popup-pending) and the Close row. 222 is the case in tests/popup-heights.json (eight lines of notes, qa/r6-whatsnew-proof.mjs).
   if(kind==='whats-new')return 222;
   // A website's tab has more to offer (copy link, reload, site actions) than an Acira page's.

@@ -72,6 +72,6 @@ export async function applyLanguageSetting(setting: string | undefined): Promise
 
 /** For components that want to re-render if the language is ever switched without a reload. */
 export function useT() {
-  useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => version);
+  useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => version, () => version);
   return t;
 }

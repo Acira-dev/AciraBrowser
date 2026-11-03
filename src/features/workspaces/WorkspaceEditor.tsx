@@ -42,6 +42,13 @@ function walk(event: KeyboardEvent<HTMLElement>, columns: number) {
  * The icon follows the name while the person has not picked one ("Study" takes the book); the colour skips the profile's
  * and the other workspaces' colours. Enter creates or saves; Esc leaves everything as it was.
  */
+/** Profiles as spaces: there are no workspaces to make, and a new space is a new profile, so the editor's place (New workspace…
+ *  from a key or the command bar) opens Settings › Profiles with the add form ready instead, as the profile panel's Add profile… does. */
+export function NewSpace({ state, dispatch, close }: { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void; close: () => void }) {
+  useLayoutEffect(() => { close(); openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' }); }, []);// eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 export function WorkspaceEditor({ state, dispatch, close }: { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void; close: () => void }) {
   const [target] = useState(takeWorkspaceTarget), list = windowWorkspaces(state);
   const editing = target?.mode === 'edit' ? list.find(item => item.id === target.workspaceId) : undefined, adding = !editing;

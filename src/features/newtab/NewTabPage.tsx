@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSP
 import { AddressField } from '../../components/AddressField';
 import { ArrowRight, Globe2 } from '../../components/AppIcons';
 import { WorkspaceGlyph, workspaceIcon } from '../../components/WorkspaceGlyph';
-import { workspaceName } from '../../runtime/workspaces';
+import { profilesAsSpaces, workspaceName } from '../../runtime/workspaces';
 import { ProfileAvatar } from '../accounts/profileModel';
 import { BrandLogo } from '../../components/BrandLogo';
 import { EditorGlyph } from '../../components/EditorGlyph';
@@ -181,7 +181,7 @@ export function NewTabPage({ state, tab, dispatch, onNavigate }: Props) {
     {(!framed || !artOn) && <div className="nt-full-art-controls">{artControls}</div>}
     {hasStack && <div ref={layout} className="nt-scroll" style={stackStyle}><div className="nt-stack">
       {modules.workspace && <header className="nt-workspace-heading" aria-label={t("frostworkspace.workspace")}>
-        <div className="nt-workspace-title"><span className="nt-workspace-glyph" aria-hidden="true"><WorkspaceGlyph icon={workspaceIcon(workspace || {name:''})} /></span><h1><bdi>{workspace ? workspaceName(workspace, t('workspaces.main')) : t('workspaces.main')}</bdi></h1></div>
+        <div className="nt-workspace-title"><span className="nt-workspace-glyph" aria-hidden="true"><WorkspaceGlyph icon={workspaceIcon(workspace || {name:''})} /></span><h1><bdi>{profilesAsSpaces(state) && profile ? profile.name : workspace ? workspaceName(workspace, t('workspaces.main')) : t('workspaces.main')}</bdi></h1></div>
         <button type="button" className="nt-workspace-profile" data-popup-trigger title={profile?.name || t('ntp.defaultName')} aria-label={t('local.profileSwitch',{name:profile?.name || t('ntp.defaultName')})} onClick={event=>popup('profile',event.currentTarget)}><ProfileAvatar name={profile?.name || t('ntp.defaultName')} color={profile?.color || '#6b7280'} avatar={profile?.avatar} picture={profile?.picture} size={28} /></button>
       </header>}
 

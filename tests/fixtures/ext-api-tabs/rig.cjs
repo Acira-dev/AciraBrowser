@@ -29,13 +29,15 @@ function createRig({manifest = {manifest_version: 3, permissions: ['tabs']}, per
   };
   const windows = [];
   let tabSeq = 0;
-  const addTab = (window, {url = 'https://example.com/', title = 'Example', pinned = false, group = '', privacy, page = true, ...rest} = {}) => {
+  // `session`: another profile's page lives in that profile's session, which this extension's engine store never holds.
+  const addTab = (window, {url = 'https://example.com/', title = 'Example', pinned = false, group = '', privacy, page = true, session, ...rest} = {}) => {
     const tab = {id: `tab-${++tabSeq}`, title, url, contentKind: 'web', browserProfileId: 'p', profileId: 'p', pinned, group, privacy, favicon: '', loading: false, ...rest};
     if (pinned) window.state.tabs.splice(window.state.tabs.filter(t => t.pinned).length, 0, tab); else window.state.tabs.push(tab);
     if (page) {
       const wc = makeWc(url, title);
+      if (session) wc.session = session;
       window.pages.set(tab.id, {view: {webContents: wc}});
-      if (!privacy) { store.tabs.add(wc); store.tabToWindow.set(wc, window.win); }
+      if (!privacy && wc.session === SESSION) { store.tabs.add(wc); store.tabToWindow.set(wc, window.win); }
     }
     return tab;
   };

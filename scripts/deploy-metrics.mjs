@@ -1,12 +1,12 @@
-// Deploys Acira's anonymous usage backend (daily usage counts + feature ratings) to Supabase in one command. Runbook: docs/SUPABASE_SETUP.md.
+// Deploys Acira's anonymous usage backend (daily usage counts, feature ratings, the Windows uninstall message) to Supabase in one command. Runbook: docs/SUPABASE_SETUP.md.
 //
 //   SUPABASE_PROJECT_REF=<20 letters> SUPABASE_ACCESS_TOKEN=<personal access token> node scripts/deploy-metrics.mjs [--dry-run] [--write] [--skip-smoke]
 //
-// 1. Runs supabase/migrations/*.sql in name order (v1 -> v3) through the Management API (idempotent; row level security on, no public policies).
+// 1. Runs supabase/migrations/*.sql in name order (v1 -> v3, site reports, churn) through the Management API (idempotent; row level security on, no public policies).
 // 2. Sets the function secret ACIRA_USAGE_SALT (32 random bytes) once, server side, if it is not set yet. It is never printed or written.
 // 3. Deploys the `usage` Edge Function with the Supabase CLI (fetched by npx; JWT verification off, as supabase/config.toml says).
-// 4. Health checks, storing nothing: GET -> 405, an empty message -> 400, a bad daily and a bad rating message -> 400, and a probe of each
-//    message type (header X-Acira-Probe: 1) -> 202, which proves the function validates both types and every table and column exists.
+// 4. Health checks, storing nothing: GET -> 405, an empty message -> 400, a bad daily, rating and uninstall message -> 400, and a probe of
+//    each message type (header X-Acira-Probe: 1) -> 202, which proves the function validates all three and every table and column exists.
 // 5. Prints the endpoint. --write puts it into desktop/browser-services/metrics-config.cjs (an address, never a key).
 // The token and project ref come from the environment only; the token is never printed, written or put on a command line.
 // --dry-run checks the inputs and prints the whole plan without any network call or file change.
@@ -92,8 +92,10 @@ export function healthChecks(day = today()) {
     ['an empty message is refused', json({}), 400],
     ['a daily message with a URL in it is refused', json({ ...PROBES.daily(day), windowView: 'https://example.org/' }, true), 400],
     ['a rating with 9 stars is refused', json({ ...PROBES.rating(day), stars: 9 }, true), 400],
+    ['an uninstall message from a Mac is refused', json({ ...PROBES.uninstall(day), platform: 'darwin' }, true), 400],
     ['daily usage probe: validated, daily_usage has every schema-3 column, nothing stored', json(PROBES.daily(day), true), 202],
     ['feature rating probe: validated, feature_ratings has every column, nothing stored', json(PROBES.rating(day), true), 202],
+    ['uninstall probe: validated, usage_uninstalls has every column, nothing stored', json(PROBES.uninstall(day), true), 202],
   ];
 }
 
@@ -118,7 +120,7 @@ export async function main(env = process.env, argv = process.argv.slice(2)) {
     const lines = [`Dry run for project ${inputs.ref}. Nothing is sent and no file changes. The real run would:`];
     for (const name of await migrationFiles()) lines.push(`  migrate   supabase/migrations/${name}`);
     lines.push(`  secret    ${SALT_NAME} (random, set once server side, never printed)`);
-    lines.push('  deploy    Edge Function "usage" (verify_jwt off; accepts event "daily" schema 2/3 and event "rating" schema 1)');
+    lines.push('  deploy    Edge Function "usage" (verify_jwt off; accepts event "daily" schema 2/3, event "rating" schema 1 and event "uninstall" schema 1)');
     if (inputs.smoke) for (const [label, , want] of healthChecks()) lines.push(`  check     ${label} -> ${want}`);
     else lines.push('  check     skipped (--skip-smoke)');
     lines.push(inputs.write ? `  write     ${endpoint} into desktop/browser-services/metrics-config.cjs` : `  print     ${endpoint} (add --write to put it into metrics-config.cjs)`);

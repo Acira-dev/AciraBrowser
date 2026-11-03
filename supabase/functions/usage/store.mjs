@@ -2,7 +2,7 @@
 // function's environment (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY). Nothing here is a secret kept in the repository.
 // `fetchImpl` is injectable so Node tests can check exactly what would be sent.
 
-const TABLES = ['daily_usage', 'feature_ratings'];
+const TABLES = ['daily_usage', 'feature_ratings', 'usage_uninstalls'];
 
 export function restStore({ url, key, fetchImpl = fetch }) {
   if (!url || !key) throw new Error('Storage is not configured.');
@@ -24,6 +24,11 @@ export function restStore({ url, key, fetchImpl = fetch }) {
     async insertRating(row) {
       const response = await fetchImpl(`${base}/rest/v1/feature_ratings`, { method: 'POST', headers: { ...headers, Prefer: 'return=minimal' }, body: JSON.stringify(row) });
       if (!response.ok) throw new Error('rating store failed');
+    },
+    /** One Windows uninstall; a repeat of the same install id is ignored (the uninstaller sends once, but a retry must not fail). */
+    async insertUninstall(row) {
+      const response = await fetchImpl(`${base}/rest/v1/usage_uninstalls?on_conflict=install_id`, { method: 'POST', headers: { ...headers, Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify(row) });
+      if (!response.ok) throw new Error('uninstall store failed');
     },
     /** Deploy health check: selects zero rows of the named columns. PostgREST answers 400 if the table or any column is missing, so this proves
      * the migrations ran, without reading or writing a single row. */

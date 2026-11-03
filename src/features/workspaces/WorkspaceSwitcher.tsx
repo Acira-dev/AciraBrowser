@@ -4,7 +4,9 @@ import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph'
 import { workspacePlaying } from '../../ui/workspaceAudio';
 import { WorkspaceGlyph, workspaceIcon } from '../../components/WorkspaceGlyph';
 import { TabSoundMeter } from '../../components/TabSound';
-import { MAX_WORKSPACES, windowWorkspaces, workspaceColorOf, workspaceName } from '../../runtime/workspaces';
+import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces, workspaceColorOf, workspaceName } from '../../runtime/workspaces';
+import { ProfileAvatar } from '../accounts/profileModel';
+import { openSettings } from '../../ui/settingsView';
 import type { BrowserAction, BrowserSnapshot, Workspace } from '../../runtime/types';
 import { isMac } from '../../ui/platform';
 import { springTo } from '../../ui/sharedMotion';
@@ -22,13 +24,22 @@ export const CYCLE_COMMANDS = [['next-workspace', 1, 'Next workspace', 'Ctrl + A
 /** The live key of a cycle command (Settings › Shortcuts), or undefined once the person cleared it. */
 export const cycleKey = (id: typeof CYCLE_COMMANDS[number][0], written: string): string | undefined => shortcutFor(id, isMac() ? undefined : written);
 /** The next / previous workspace lines of a tooltip, with the live keys (Settings › Shortcuts); a key the person cleared leaves its line out (R4-48 P1-5). */
-export const cycleHint = (): string => CYCLE_COMMANDS
-  .flatMap(([id, , english, written]) => { const key = cycleKey(id, written); return key ? [`${commandLabel(id, english)} · ${key}`] : []; }).join('\n');
-const withCycle = (text: string): string => { const hint = cycleHint(); return hint ? `${text}\n${hint}` : text; };
+export const cycleHint = (spaces = false): string => CYCLE_COMMANDS
+  .flatMap(([id, , english, written]) => { const key = cycleKey(id, written); return key ? [`${commandLabel(id, english, spaces)} · ${key}`] : []; }).join('\n');
+const withCycle = (text: string, spaces = false): string => { const hint = cycleHint(spaces); return hint ? `${text}\n${hint}` : text; };
 /** The name a workspace is shown by: its own, or "Main" for the first one nobody renamed. */
 export const shownName = (workspace: Pick<Workspace, 'name'>): string => workspaceName(workspace, t('workspaces.main'));
-/** "Main workspace · Alt+1": what a workspace's control says on hover (the key becomes a key cap in the tooltip). */
-const label = (workspace: Workspace, index: number) => { const key = workspaceKey(index), name = t('workspaces.tip', { name: shownName(workspace) }); return key ? `${name} · ${key}` : name; };
+/** Profiles as spaces (runtime/profileSpaces.ts): the profile a space is; none with workspaces. */
+const spaceProfile = (state: BrowserSnapshot, workspace: Workspace) => profilesAsSpaces(state) ? state.browserProfiles.find(profile => profile.id === workspace.browserProfileId) : undefined;
+/** The name a workspace goes by in this window: with profiles as spaces, its profile's. */
+export const nameIn = (state: BrowserSnapshot, workspace: Workspace): string => spaceProfile(state, workspace)?.name ?? shownName(workspace);
+/** A workspace's icon; with profiles as spaces, its profile's avatar (photo, initial or emoji) on the profile's colour. */
+export function SpaceIdentity({ state, workspace }: { state: BrowserSnapshot; workspace: Workspace }) {
+  const profile = spaceProfile(state, workspace);
+  return profile ? <ProfileAvatar name={profile.name} color={profile.color} avatar={profile.avatar} picture={profile.picture} size={16} /> : <WorkspaceGlyph icon={workspaceIcon(workspace)} />;
+}
+/** "Main workspace · Alt+1": what a workspace's control says on hover (the key becomes a key cap in the tooltip); a space says its profile's name. */
+const label = (state: BrowserSnapshot, workspace: Workspace, index: number) => { const key = workspaceKey(index), name = profilesAsSpaces(state) ? nameIn(state, workspace) : t('workspaces.tip', { name: shownName(workspace) }); return key ? `${name} · ${key}` : name; };
 /** The colour a workspace shows (its rail, the preview): its own; Main wears the profile's (R4-48 P0-6). */
 export const shownColor = (state: BrowserSnapshot, workspace: Workspace): string | undefined => workspaceColorOf(state, workspace);
 const colorStyle = (color: string | undefined) => color ? { '--ws-color': color } as CSSProperties : undefined;
@@ -42,10 +53,11 @@ const NAMED_PILL_MAX = 4;
  * rail under the icon. A playing workspace uses the audio matrix in the icon slot; hover or keyboard focus reveals its chosen icon. Right-click: Rename, Icon and color, Delete. Alt+1–8 jump. */
 export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSnapshot; dispatch: Dispatch; moveFocus: (event: KeyboardEvent<HTMLElement>, from?: HTMLElement) => boolean }) {
   useShortcutKeys();
-  const list = windowWorkspaces(state), host = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>());
+  // With profiles as spaces the row lists the profiles, eight at most (the keys); the profile panel lists them all.
+  const spaces = profilesAsSpaces(state), list = spaces ? windowWorkspaces(state).slice(0, MAX_WORKSPACES) : windowWorkspaces(state), host = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>());
   const active = state.activeWorkspaceId, several = list.length > 1, named = list.length <= NAMED_PILL_MAX;
   // The open cell is as wide as its name: a rename (or another icon) changes the cell without changing the row, which the observer below watches, so it has to restart the placement.
-  const names = list.map(item => `${item.id}:${shownName(item)}:${workspaceIcon(item)}`).join('|');
+  const names = list.map(item => `${item.id}:${nameIn(state, item)}:${workspaceIcon(item)}`).join('|');
   useWorkspaceSlide('.acira-sidebar .sb-scroll', active, list.map(item => item.id));
   // The pill sits on the open workspace's cell and glides to the next one (S spring; the first placement and a resize are
   // instant). When the open cell grows to show its name the other icons move aside on the same spring (FLIP, transform only).
@@ -76,24 +88,29 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const cells = [...(host.current?.querySelectorAll<HTMLElement>('[data-sb-focus]') ?? [])], at = cells.indexOf(event.currentTarget);
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { const next = cells[at + (event.key === 'ArrowRight' ? 1 : -1)]; if (next) { event.preventDefault(); next.focus(); } return; }
-    if (workspace && (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10')) { event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event.currentTarget, { mode: 'context', workspaceId: workspace.id }); return; }
-    if (workspace && event.key === 'F2') { event.preventDefault(); openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'edit', workspaceId: workspace.id, focus: 'name' }); return; }
+    // A space is a profile: it has no workspace menu or rename (its profile is edited in Settings › Profiles).
+    if (workspace && !spaces && (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10')) { event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event.currentTarget, { mode: 'context', workspaceId: workspace.id }); return; }
+    if (workspace && !spaces && event.key === 'F2') { event.preventDefault(); openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'edit', workspaceId: workspace.id, focus: 'name' }); return; }
     moveFocus(event);
   };
   return <div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}>
     <span ref={pill} className="sb-ws-pill" aria-hidden="true" />
     {list.map((workspace, index) => {
-      const open = workspace.id === active, name = shownName(workspace), key = workspaceKey(index), color = shownColor(state, workspace), playing = workspacePlaying(state, workspace.id);
+      const open = workspace.id === active, name = nameIn(state, workspace), key = workspaceKey(index), color = shownColor(state, workspace), playing = workspacePlaying(state, workspace.id);
       return <button key={workspace.id} type="button" role="radio" aria-checked={open} className="sb-ws" data-ws={workspace.id} data-playing={playing || undefined} data-sb-focus data-colored={color ? '' : undefined}
-        style={colorStyle(color)} title={label(workspace, index) + (playing ? `\n${t('tabsound.playing')}` : '')} aria-label={playing ? `${name} · ${t('tabsound.playing')}` : name} aria-keyshortcuts={key?.replace(/\s/g, '')}
+        style={colorStyle(color)} title={label(state, workspace, index) + (playing ? `\n${t('tabsound.playing')}` : '')} aria-label={playing ? `${name} · ${t('tabsound.playing')}` : name} aria-keyshortcuts={key?.replace(/\s/g, '')}
         onPointerDown={event => { if (event.button === 0 && event.pointerType !== 'touch') choose(workspace); }}
         onClick={() => choose(workspace)} onKeyDown={event => keys(event, workspace)}
-        onContextMenu={event => { event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event, { mode: 'context', workspaceId: workspace.id }); }}>
-        <span className="sb-ws-icon"><span className="sb-ws-identity"><WorkspaceGlyph icon={workspaceIcon(workspace)} /></span>{playing && <TabSoundMeter reducedMotion={state.settings.reducedMotion} />}{color && <i className="sb-ws-rail" aria-hidden="true" />}</span>
+        onContextMenu={event => { event.preventDefault(); if (!spaces) openWorkspacePopup(state, 'workspace-context', event, { mode: 'context', workspaceId: workspace.id }); }}>
+        <span className="sb-ws-icon"><span className="sb-ws-identity"><SpaceIdentity state={state} workspace={workspace} /></span>{playing && <TabSoundMeter reducedMotion={state.settings.reducedMotion} />}{color && <i className="sb-ws-rail" aria-hidden="true" />}</span>
         {open && named && <span className="sb-ws-name">{name}</span>}
       </button>;
     })}
-    {list.length < MAX_WORKSPACES && <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.newTitle')} title={t('workspaces.newTitle')}
+    {spaces
+      // A new space is a new profile: the add form in Settings › Profiles, as the profile panel's Add profile… opens it.
+      ? <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus aria-label={t('profiles.add')} title={t('profiles.add')}
+        onKeyDown={keys} onClick={() => openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' })}><Plus size={16} /></button>
+      : list.length < MAX_WORKSPACES && <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.newTitle')} title={t('workspaces.newTitle')}
       onKeyDown={keys} onClick={event => openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'new' })}><Plus size={16} /></button>}
   </div>;
 }
@@ -105,7 +122,8 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
 export function WorkspaceTitle({ state, count: listed }: { state: BrowserSnapshot; count?: number }) {
   useShortcutKeys();
   const list = windowWorkspaces(state), open = list.find(item => item.id === state.activeWorkspaceId);
-  if (list.length < 2 || !open) return null;
+  // With profiles as spaces the footer right under the row names the profile on screen, so the title line isn't shown.
+  if (list.length < 2 || !open || profilesAsSpaces(state)) return null;
   const name = shownName(open), count = listed ?? state.tabs.length, color = shownColor(state, open), tabs = t('workspaces.tabCount', { count });
   return <div className="sb-ws-title" data-workspace-title>
     <button type="button" className="sb-ws-title-main" data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.titleLabel', { name, tabs })} title={withCycle(t('workspaces.titleTip'))}
@@ -129,12 +147,12 @@ export function WorkspaceChip({ state }: { state: BrowserSnapshot }) {
   const list = windowWorkspaces(state), index = list.findIndex(item => item.id === state.activeWorkspaceId), open = list[index];
   useWorkspaceSlide('.acira-tab-row .tab-strip-container', state.activeWorkspaceId, list.map(item => item.id));
   if (!open || list.length < 2) return null;
-  const name = shownName(open), color = shownColor(state, open);
-  return <button type="button" className="ws-chip" data-workspace-chip data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.chip', { name })} title={withCycle(t('workspaces.chipTip', { name }))} data-colored={color ? '' : undefined}
+  const name = nameIn(state, open), color = shownColor(state, open), spaces = profilesAsSpaces(state), playing = workspacePlaying(state, open.id);
+  return <button type="button" className="ws-chip" data-workspace-chip data-popup-trigger aria-haspopup="dialog" aria-label={t(spaces ? 'workspaces.spaceChip' : 'workspaces.chip', { name })} title={withCycle(t(spaces ? 'workspaces.spaceChipTip' : 'workspaces.chipTip', { name }), spaces)} data-colored={color ? '' : undefined}
     style={colorStyle(color)}
     onClick={event => openWorkspacePopup(state, 'workspace-menu', event.currentTarget)}
-    onContextMenu={event => { event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event, { mode: 'context', workspaceId: open.id }); }}>
-    <span className="ws-chip-glyph"><WorkspacePlaybackGlyph workspace={open} playing={workspacePlaying(state, open.id)} reducedMotion={state.settings.reducedMotion} />{color && <i className="sb-ws-rail" aria-hidden="true" />}</span>
+    onContextMenu={event => { event.preventDefault(); if (!spaces) openWorkspacePopup(state, 'workspace-context', event, { mode: 'context', workspaceId: open.id }); }}>
+    <span className="ws-chip-glyph">{spaces && !playing ? <SpaceIdentity state={state} workspace={open} /> : <WorkspacePlaybackGlyph workspace={open} playing={playing} reducedMotion={state.settings.reducedMotion} />}{color && <i className="sb-ws-rail" aria-hidden="true" />}</span>
     <span className="ws-chip-name">{name}</span>
     {state.audibleWorkspaces?.length && !workspacePlaying(state, open.id) ? <span className="ws-chip-sound" title={t('tabsound.playing')} aria-label={t('tabsound.playing')}><TabSoundMeter reducedMotion={state.settings.reducedMotion} /></span> : null}
     <ChevronDown size={12} />

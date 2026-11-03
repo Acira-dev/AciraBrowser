@@ -3,11 +3,11 @@ import { ArrowLeft, ArrowRight, Check, LockKeyhole, Palette, PenLine, Plus, Tras
 import { securedRequest } from './securedClient';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
 import { workspacePlaying } from '../../ui/workspaceAudio';
-import { MAX_WORKSPACES, activeWorkspaceOf, cycledWorkspace, windowWorkspaces, workspaceCounts } from '../../runtime/workspaces';
+import { MAX_WORKSPACES, activeWorkspaceOf, cycledWorkspace, profilesAsSpaces, windowWorkspaces, workspaceCounts } from '../../runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot } from '../../runtime/types';
 import { openSettings } from '../../ui/settingsView';
 import { openWorkspacePopupFromPopup, takeWorkspaceTarget } from '../../ui/workspaceTarget';
-import { CYCLE_COMMANDS, cycleKey, shownColor, shownName, workspaceKey } from './WorkspaceSwitcher';
+import { CYCLE_COMMANDS, SpaceIdentity, cycleKey, nameIn, shownColor, shownName, workspaceKey } from './WorkspaceSwitcher';
 import { commandLabel } from '../../ui/shortcutKeys';
 import '../../styles/workspaces.css';
 import { t } from '../../i18n';
@@ -22,7 +22,8 @@ import { t } from '../../i18n';
  */
 export function WorkspaceMenu({ state, dispatch, close, mode }: { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void; close: () => void; mode: 'list' | 'context' }) {
   const [target] = useState(() => mode === 'context' ? takeWorkspaceTarget() : null), [confirming, setConfirming] = useState(false);
-  const list = windowWorkspaces(state), counts = state.workspaceTabCounts ?? workspaceCounts(state);
+  // With profiles as spaces this lists the profiles (the space switcher), with no workspace to make, rename or delete.
+  const spaces = profilesAsSpaces(state), list = windowWorkspaces(state), counts = state.workspaceTabCounts ?? workspaceCounts(state);
   const subject = mode === 'context' ? list.find(item => target && 'workspaceId' in target && item.id === target.workspaceId) : activeWorkspaceOf(state);
   const profile = state.browserProfiles.find(item => item.id === state.activeBrowserProfileId);
   // Another popup opens from this one on the next turn, once this one has gone.
@@ -50,14 +51,14 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
   return <div className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
     {mode === 'list' && <>
       <div className="ws-menu-head" role="presentation">
-        <span className="ws-menu-head-title">{t('workspaces.panel')}</span>
-        <span className="acira-menu-sub">{t('workspaces.panelScope', { profile: profile?.name ?? '' })}</span>
+        <span className="ws-menu-head-title">{spaces ? t('profiles.panel') : t('workspaces.panel')}</span>
+        {!spaces && <span className="acira-menu-sub">{t('workspaces.panelScope', { profile: profile?.name ?? '' })}</span>}
       </div>
       {list.map((workspace, index) => {
         const open = workspace.id === state.activeWorkspaceId, key = workspaceKey(index), color = shownColor(state, workspace);
         return <button key={workspace.id} type="button" role="menuitemradio" aria-checked={open} className="acira-menu-row acira-menu-row-identity" onClick={() => { if (!open) dispatch({ type: 'workspace.select', id: workspace.id }); close(); }}>
-          <span className="acira-menu-icon ws-menu-glyph" data-colored={color ? '' : undefined} style={color ? { '--ws-color': color } as CSSProperties : undefined}><WorkspacePlaybackGlyph workspace={workspace} playing={workspacePlaying(state, workspace.id)} reducedMotion={state.settings.reducedMotion} />{color && <i className="sb-ws-rail" aria-hidden="true" />}{workspace.secured && <i className="ws-lock-badge" aria-hidden="true"><LockKeyhole size={9} /></i>}</span>
-          <span className="acira-menu-title">{shownName(workspace)}<span className="acira-menu-sub">{sub(workspace.id)}</span></span>
+          <span className="acira-menu-icon ws-menu-glyph" data-colored={color ? '' : undefined} style={color ? { '--ws-color': color } as CSSProperties : undefined}>{spaces && !workspacePlaying(state, workspace.id) ? <SpaceIdentity state={state} workspace={workspace} /> : <WorkspacePlaybackGlyph workspace={workspace} playing={workspacePlaying(state, workspace.id)} reducedMotion={state.settings.reducedMotion} />}{color && <i className="sb-ws-rail" aria-hidden="true" />}{workspace.secured && <i className="ws-lock-badge" aria-hidden="true"><LockKeyhole size={9} /></i>}</span>
+          <span className="acira-menu-title">{nameIn(state, workspace)}<span className="acira-menu-sub">{sub(workspace.id)}</span></span>
           <span className="ws-menu-trail">{key && <span className="acira-menu-meta">{key}</span>}<span className="ws-menu-mark">{open && <Check className="acira-menu-check" size={16} />}</span></span>
         </button>;
       })}
@@ -65,19 +66,20 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
       {/* Next / previous workspace, wrapping round like Ctrl+Alt+PageDown / PageUp, with the live keys (a cleared key leaves the row keyless). */}
       {list.length > 1 && CYCLE_COMMANDS.map(([id, direction, english, written]) => {
         // Keys sit at the row's end like every menu key (no check column here): longer names keep their room and ellipsize, the tooltip says it all.
-        const Icon = direction > 0 ? ArrowRight : ArrowLeft, key = cycleKey(id, written), label = commandLabel(id, english);
+        const Icon = direction > 0 ? ArrowRight : ArrowLeft, key = cycleKey(id, written), label = commandLabel(id, english, spaces);
         return <button key={id} type="button" role="menuitem" className="acira-menu-row ws-menu-cycle" data-workspace-cycle={id} title={key ? `${label} · ${key}` : label} onClick={() => { const target = cycledWorkspace(state, direction); if (target) dispatch({ type: 'workspace.select', id: target.id }); close(); }}>
           <Icon className="acira-menu-icon" size={16} /><span className="acira-menu-title">{label}</span>{key ? <span className="acira-menu-meta">{key}</span> : <span />}
         </button>;
       })}
-      {list.length < MAX_WORKSPACES && <button type="button" role="menuitem" className="acira-menu-row" onClick={() => next(() => openWorkspacePopupFromPopup(state, 'workspace-edit', { mode: 'new' }))}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.new')}</span><span /></button>}
+      {spaces && <button type="button" role="menuitem" className="acira-menu-row" onClick={() => { openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' }); close(); }}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('profiles.add')}</span><span /></button>}
+      {!spaces && list.length < MAX_WORKSPACES && <button type="button" role="menuitem" className="acira-menu-row" onClick={() => next(() => openWorkspacePopupFromPopup(state, 'workspace-edit', { mode: 'new' }))}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.new')}</span><span /></button>}
       <hr className="acira-menu-sep" />
     </>}
-    {!locked && <>
+    {!spaces && !locked && <>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('name')}><PenLine className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.rename')}</span><span /></button>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('icon')}><Palette className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.iconColor')}</span><span /></button>
     </>}
-    {subject && list[0]?.id !== subject.id && <>
+    {!spaces && subject && list[0]?.id !== subject.id && <>
       {!locked && <hr className="acira-menu-sep" />}
       {!subject.secured
         ? <button type="button" role="menuitem" className="acira-menu-row acira-menu-row-identity" onClick={() => { close(); void securedRequest({ type: 'enable', id: subject.id }); }}><LockKeyhole className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.lockThis')}<span className="acira-menu-sub">{t('workspaces.lockThisSub')}</span></span><span className="ws-beta">{t('workspaces.beta')}</span></button>
@@ -88,14 +90,14 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
           </>
           : <button type="button" role="menuitem" className="acira-menu-row" onClick={() => { close(); void securedRequest({ type: 'unlock', id: subject.id }); }}><LockKeyhole className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.unlockHello')}</span><span /></button>}
     </>}
-    {!locked && <hr className="acira-menu-sep" />}
-    {locked ? null : confirming && subject
+    {!spaces && !locked && <hr className="acira-menu-sep" />}
+    {spaces || locked ? null : confirming && subject
       ? <div className="ws-menu-confirm" role="group" aria-label={t('workspaces.deleteConfirm', { count: pages, name: shownName(subject) })}>
         <p>{t('workspaces.deleteConfirm', { count: pages, name: shownName(subject) })}</p>
         <div><button type="button" className="acira-button" onClick={() => setConfirming(false)}>{t('dialog.cancel')}</button><button type="button" className="acira-button acira-button-danger" data-autofocus autoFocus onClick={remove}>{t('workspaces.deleteShort')}</button></div>
       </div>
       : <button type="button" role="menuitem" className="acira-menu-row acira-menu-row-danger" disabled={!subject || list.length < 2} onClick={remove}><Trash2 className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.delete')}</span><span /></button>}
-    {mode === 'list' && <>
+    {mode === 'list' && !spaces && <>
       <hr className="acira-menu-sep" />
       <button type="button" role="menuitem" className="acira-menu-row acira-menu-row-identity" onClick={() => { openSettings(state, dispatch, { section: 'Profiles' }); close(); }}>
         <Users className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.needSeparate')}<span className="acira-menu-sub">{t('workspaces.useProfile')}</span></span><span />

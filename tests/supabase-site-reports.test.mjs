@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { createHandler, validate, validHost, HOST, BLOCKED_TLDS, KINDS, LISTS, PLATFORMS, LIMITS, MAX_BYTES, NOTE_MAX, PROBE, COLUMNS, addressKey, sourceAddress } from '../supabase/functions/report/handler.mjs';
+import { createHandler, validate, validHost, HOST, BLOCKED_TLDS, KINDS, SITE_KINDS, APP_KINDS, LISTS, PLATFORMS, LIMITS, MAX_BYTES, NOTE_MAX, PROBE, COLUMNS, addressKey, sourceAddress } from '../supabase/functions/report/handler.mjs';
 import { restStore } from '../supabase/functions/report/store.mjs';
 import * as allowlist from '../supabase/functions/allowlist/handler.mjs';
 import { restStore as allowlistStore, PAGE } from '../supabase/functions/allowlist/store.mjs';
@@ -23,6 +23,8 @@ const HOUR = 3600000;
 const ADDRESS = '203.0.113.7';
 const sql = () => fs.readFileSync(path.join(root, 'supabase/migrations/20261102000000_site_reports.sql'), 'utf8');
 const good = (extra = {}) => ({ schema: 1, host: 'www.example.org', kind: 'blocked', list: 'phishing-db', appVersion: '0.9.4', platform: 'darwin', note: 'Netflix videos stopped loading.', ...extra });
+/** A report about Acira itself (the Acira menu, Help > Report a Problem): no host, no list, a note. */
+const aboutAcira = (extra = {}) => ({ schema: 1, host: null, kind: 'app-crash', list: null, appVersion: '0.9.4', platform: 'win32', note: 'Froze when I opened Settings.', ...extra });
 
 /** Mirrors public.rate_limit_hit: a counter per key per fixed window; true while within the limit. `clock` is the handler's clock. */
 function memoryStore({ fail = false, probeOk = true, clock = () => NOW } = {}) {
@@ -79,13 +81,14 @@ test('validHost: public DNS names only; the rule is exported for the app tests a
 
 test('validate accepts exactly the report contract and stores exactly six columns', () => {
   assert.deepEqual(validate(good()), { host: 'www.example.org', kind: 'blocked', list: 'phishing-db', app_version: '0.9.4', platform: 'darwin', note: 'Netflix videos stopped loading.' });
-  for (const kind of KINDS) assert.equal(validate(good({ kind })).kind, kind);
+  for (const kind of SITE_KINDS) assert.equal(validate(good({ kind })).kind, kind);
   for (const list of LISTS) assert.equal(validate(good({ list })).list, list);
   assert.equal(validate(good({ list: null })).list, null, 'list may be null');
   for (const platform of PLATFORMS) assert.equal(validate(good({ platform })).platform, platform);
   for (const appVersion of ['0.9.4', '1.0.0-beta.1', '12.3.4567-rc.2.x', '0.0.0-probe']) assert.ok(validate(good({ appVersion })), appVersion);
   assert.ok(validate(PROBE), 'the deploy probe is a valid report');
-  assert.deepEqual([...KINDS], ['blocked', 'broken', 'banner', 'other']);
+  assert.deepEqual([...SITE_KINDS], ['blocked', 'broken', 'banner', 'other']); assert.deepEqual([...APP_KINDS], ['app-broken', 'app-looks', 'app-crash', 'app-idea']);
+  assert.deepEqual([...KINDS], [...SITE_KINDS, ...APP_KINDS]);
   assert.deepEqual([...LISTS], ['phishing', 'malware', 'phishing-db', 'lookalike', 'ad-blocking', 'cookie-banners']);
   assert.deepEqual([...PLATFORMS].sort(), ['darwin', 'linux', 'win32']);
   assert.equal(MAX_BYTES, 4096); assert.equal(NOTE_MAX, 500);
@@ -105,6 +108,19 @@ test('validate refuses anything outside the contract', () => {
   for (const appVersion of ['1.0', '1.0.0; drop table', '1.2.3-' + 'a'.repeat(30), 'v1.0.0', '', 7, null]) assert.equal(bad((v) => { v.appVersion = appVersion; }), null, 'version ' + appVersion);
   for (const platform of ['android', 'Darwin', 'macos', '', null, 1]) assert.equal(bad((v) => { v.platform = platform; }), null, 'platform ' + platform);
   for (const value of [null, [], 'x', 1, true, undefined]) assert.equal(validate(value), null, String(value));
+});
+
+test('a report about Acira itself: no host, no list, a required note; the two subjects never mix', () => {
+  for (const kind of APP_KINDS) assert.deepEqual(validate(aboutAcira({ kind })), { host: null, kind, list: null, app_version: '0.9.4', platform: 'win32', note: 'Froze when I opened Settings.' }, kind);
+  assert.equal(validate(aboutAcira({ note: '  Idea: a darker sidebar.  ', kind: 'app-idea' })).note, 'Idea: a darker sidebar.', 'trimmed');
+  for (const note of ['', '   ', '\n\t']) assert.equal(validate(aboutAcira({ note })), null, 'an empty note is refused: ' + JSON.stringify(note));
+  for (const host of ['example.com', 'www.example.org', '', 'acira']) assert.equal(validate(aboutAcira({ host })), null, 'an app report names no site: ' + host);
+  for (const list of LISTS) assert.equal(validate(aboutAcira({ list })), null, 'an app report names no list: ' + list);
+  assert.equal(validate(aboutAcira({ note: 'x'.repeat(NOTE_MAX + 1) })), null, 'the same 500-character limit');
+  for (const kind of SITE_KINDS) assert.equal(validate(aboutAcira({ kind })), null, 'a site kind needs a site: ' + kind);
+  for (const kind of APP_KINDS) assert.equal(validate(good({ kind, list: null })), null, 'an app kind with a site is refused: ' + kind);
+  const { host, ...noHost } = aboutAcira(); assert.equal(validate(noHost), null, 'host is still a required key (null)');
+  for (const kind of ['app', 'app-other', 'App-crash', 'crash']) assert.equal(validate(aboutAcira({ kind })), null, 'kind ' + kind);
 });
 
 test('note: at most 500 code points, no control characters except tab and line feed, trimmed, empty is NULL', () => {
@@ -193,6 +209,19 @@ test('handler: the same host from the same address is accepted 3 times a day', a
   assert.deepEqual(LIMITS.hostDay.slice(1), [86400, 3]);
 });
 
+test('handler: a report about Acira is stored with no host; the same kind from the same address 3 times a day', async () => {
+  const { handler, store } = make();
+  const statuses = []; for (let i = 0; i < 5; i++) statuses.push((await call(handler, aboutAcira({ note: `crash ${i}` }))).status);
+  assert.deepEqual(statuses, [204, 204, 204, 429, 429]);
+  assert.equal((await call(handler, aboutAcira({ kind: 'app-idea', note: 'An idea' }))).status, 204, 'another kind from the same address');
+  assert.equal((await call(handler, good())).status, 204, 'a site report from the same address has its own allowance');
+  assert.deepEqual(store.rows.slice(0, 3).map((row) => row.host), [null, null, null]);
+  assert.deepEqual(store.rows[3], { host: null, kind: 'app-idea', list: null, app_version: '0.9.4', platform: 'win32', note: 'An idea' });
+  const keys = [...store.counters.keys()].join(' ');
+  assert.doesNotMatch(keys, /acira|crash|idea/, 'the kind is hashed with the address like a host');
+  assert.equal((await call(handler, aboutAcira({ note: '' }))).status, 400, 'no note, no report');
+});
+
 test('handler: a global cap of 3000 reports an hour across all callers; callers over their own limit do not use it up', async () => {
   const { handler, store } = make();
   for (let i = 0; i < 12; i++) await call(handler, good({ host: `g${i}.example.org` }));
@@ -274,7 +303,7 @@ test('the migration: two locked tables (RLS on, no policies, no public grants), 
   assert.doesNotMatch(text, /grant\s+(select|insert|update|delete|all)[^;]*\bto\s+(anon|authenticated|public)/i);
   assert.doesNotMatch(text.replace(/^\s*--.*$/gm, ''), /insert into/i, 'no data is inserted');
   assert.match(text, /--\s+insert into public\.site_allowlist \(host, reason\) values \('nflxvideo\.net', '[^']+'\) on conflict do nothing;/, 'the example insert is a comment');
-  const columns = (table) => text.match(new RegExp(`create table if not exists public\\.${table} \\(([\\s\\S]*?)\\n\\);`))[1].split('\n').map((line) => line.trim().split(/\s+/)[0]).filter(Boolean);
+  const columns = (table) => text.match(new RegExp(`create table if not exists public\\.${table} \\(([\\s\\S]*?)\\n\\);`))[1].split('\n').map((line) => line.trim().split(/\s+/)[0]).filter((word) => word && word !== 'constraint');
   assert.deepEqual(columns('site_reports'), [...COLUMNS], 'exactly the documented columns');
   for (const column of columns('site_reports')) assert.doesNotMatch(column, /ip|address|user|install|agent|email|url|path|session|device/i, 'no identifying column: ' + column);
   assert.deepEqual(columns('site_allowlist'), ['host', 'reason', 'added_at']);
@@ -283,7 +312,21 @@ test('the migration: two locked tables (RLS on, no policies, no public grants), 
   const list = (column) => /in \(([^)]*)\)/.exec(table.split('\n').find((line) => line.trim().startsWith(column + ' ')))[1].split(',').map((item) => item.trim().replace(/^'|'$/g, ''));
   assert.deepEqual(list('kind'), [...KINDS]); assert.deepEqual(list('list'), [...LISTS]); assert.deepEqual(list('platform').sort(), [...PLATFORMS].sort());
   assert.match(table, /list\s+text\s+null check/, 'list is nullable'); assert.match(table, /note\s+text\s+null check \(char_length\(note\) between 1 and 500\)/);
-  for (const column of ['host', 'kind', 'app_version', 'platform']) assert.match(table, new RegExp(`\\n\\s*${column}\\s+text\\s+not null check`), column + ' is required and constrained');
+  for (const column of ['kind', 'app_version', 'platform']) assert.match(table, new RegExp(`\\n\\s*${column}\\s+text\\s+not null check`), column + ' is required and constrained');
+  assert.match(table, /\n\s*host\s+text\s+null check \(char_length\(host\)/, 'host is constrained, and empty only for a report about Acira');
+  const subject = /constraint site_reports_subject check \(\(kind in \(([^)]*)\) and host is not null\) or \(kind in \(([^)]*)\) and host is null and list is null and note is not null\)\)/.exec(table);
+  assert.ok(subject, 'one check ties the subject to the kind');
+  const names = (group) => group.split(',').map((item) => item.trim().replace(/^'|'$/g, ''));
+  assert.deepEqual(names(subject[1]), [...SITE_KINDS], 'site kinds need a host'); assert.deepEqual(names(subject[2]), [...APP_KINDS], 'app kinds have no host or list and need a note');
+  // The upgrade of a table made by the first version (host required, site kinds only): the same two checks, re-made, and host nullable.
+  const upgrade = text.slice(text.indexOf(table) + table.length, text.indexOf('alter table public.site_reports enable row level security'));
+  assert.deepEqual(upgrade.split('\n').filter((line) => line.startsWith('alter table')), [
+    'alter table public.site_reports alter column host drop not null;',
+    'alter table public.site_reports drop constraint if exists site_reports_kind_check;',
+    `alter table public.site_reports add constraint site_reports_kind_check check (kind in (${[...KINDS].map((kind) => `'${kind}'`).join(', ')}));`,
+    'alter table public.site_reports drop constraint if exists site_reports_subject;',
+    `alter table public.site_reports add constraint site_reports_subject ${/constraint site_reports_subject (check .*)$/m.exec(table)[1]};`,
+  ], 'idempotent, and the same checks as the table definition');
   const usageSql = fs.readFileSync(path.join(root, 'supabase/migrations/20261025000000_usage_metrics.sql'), 'utf8');
   assert.equal(/app_version text\s+not null (check \(.*\)),/.exec(table)[1], /app_version text\s+not null (check \(.*\)),/.exec(usageSql)[1], 'the same app version check as daily_usage');
   assert.match(text, /reason\s+text\s+not null check \(char_length\(reason\) between 1 and 500\)/);
@@ -300,7 +343,7 @@ test('the migration: two locked tables (RLS on, no policies, no public grants), 
 
 test('the migration runs after the usage migrations in both deploy scripts', async () => {
   const files = await migrationFiles();
-  assert.equal(files.at(-1), '20261102000000_site_reports.sql');
+  assert.ok(files.includes('20261102000000_site_reports.sql'));
   assert.ok(files.indexOf('20261025000000_usage_metrics.sql') < files.indexOf('20261102000000_site_reports.sql'), 'rate_limit_hit exists before report is deployed');
 });
 
@@ -453,7 +496,8 @@ test('deploy --write sets only the two endpoint values, and only to plain https 
     const endpoints = endpointsFor('abcdefghijklmnopqrst');
     await writeEndpoints(file, endpoints);
     const written = fs.readFileSync(file, 'utf8');
-    assert.equal(written, source.replace("reportEndpoint: ''", `reportEndpoint: '${endpoints.reportEndpoint}'`).replace("allowlistEndpoint: ''", `allowlistEndpoint: '${endpoints.allowlistEndpoint}'`), 'nothing else changed');
+    // The shipped file may already hold the live addresses (after the first deploy); either way only the two quoted values change.
+    assert.equal(written, source.replace(/reportEndpoint: '[^']*'/, `reportEndpoint: '${endpoints.reportEndpoint}'`).replace(/allowlistEndpoint: '[^']*'/, `allowlistEndpoint: '${endpoints.allowlistEndpoint}'`), 'nothing else changed');
     delete require.cache[file];
     assert.deepEqual(require(file), endpoints);
     await writeEndpoints(file, endpoints); assert.equal(fs.readFileSync(file, 'utf8'), written, 'writing again changes nothing');

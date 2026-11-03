@@ -6,7 +6,8 @@ import { isMac } from '../../../ui/platform';
 import { reducedMotion, useListMotion, useSectionMotion } from '../../../ui/sharedMotion';
 import { SettingNote } from '../controls';
 import { native, readable } from '../nativeClient';
-import type { SettingsPanel } from '../panels';
+import type { SettingsPanel, SettingsPanelProps } from '../panels';
+import { profilesAsSpaces } from '../../../runtime/workspaces';
 import '../native-core.css';
 import '../shortcuts.css';
 
@@ -51,7 +52,8 @@ function Caps({ accel, parts }: { accel?: string; parts?: string[] }) {
   return <span className="sk-caps">{(parts ?? keyCaps(accel ?? '')).map((part, index) => <kbd key={index} className="sk-cap">{part}</kbd>)}</span>;
 }
 
-function Shortcuts() {
+function Shortcuts({ state: browser }: SettingsPanelProps) {
+  const spaces = profilesAsSpaces(browser);
   const [commands, setCommands] = useState<ShortcutCommand[]>([]);
   const [query, setQuery] = useState('');
   const [onlyChanged, setOnlyChanged] = useState(false);
@@ -63,8 +65,8 @@ function Shortcuts() {
   const groupsRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
-    native({ type: 'shortcuts.list' }).then((result) => setCommands((result.shortcuts?.commands ?? []).map((command) => ({ ...command, label: commandLabel(command.id, command.label) }))), (failure) => setError(readable(failure)));
-  }, []);
+    native({ type: 'shortcuts.list' }).then((result) => setCommands((result.shortcuts?.commands ?? []).map((command) => ({ ...command, label: commandLabel(command.id, command.label, spaces) }))), (failure) => setError(readable(failure)));
+  }, [spaces]);
 
   const finish = useCallback(() => {
     const was = current.current;

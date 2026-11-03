@@ -94,6 +94,19 @@ test('the Windows channel document is a valid electron-updater document for the 
  assert.equal(U.parseFeed('version: 0.1.0-beta.7\nfiles: []\n').version,'0.1.0-beta.7','electron-builder\'s own YAML is read too');
 });
 
+test('the Windows document names where earlier setups\' blockmaps are, so an installed Acira downloads only what changed since its own setup',()=>{
+ const rel=(tag,name)=>U.assetUrl(tag,name);
+ const live=[{file:'beta.yml',version:'0.1.0-beta.8',files:[{url:rel('v0.1.0-beta.8-windows-530845ad','AciraBrowserSetup-0.1.0-beta.8.exe')}],previousBlockMaps:[{version:'0.1.0-beta.7',url:rel('v0.1.0-beta.7-windows-574941f2','AciraBrowserSetup-0.1.0-beta.7.exe.blockmap')},{version:'0.1.0-beta.8',url:'https://elsewhere/x.blockmap'},{version:'1',url:'http://plain/x.blockmap'}]}];
+ const list=U.previousBlockMaps(live,{version:'0.1.0-beta.9'});
+ assert.deepEqual(list,[{version:'0.1.0-beta.8',url:rel('v0.1.0-beta.8-windows-530845ad','AciraBrowserSetup-0.1.0-beta.8.exe.blockmap')},{version:'0.1.0-beta.7',url:rel('v0.1.0-beta.7-windows-574941f2','AciraBrowserSetup-0.1.0-beta.7.exe.blockmap')}],'the live setup first, then the ones it noted; one per version, HTTPS only');
+ assert.deepEqual(U.previousBlockMaps(live,{version:'0.1.0-beta.8'}).map(item=>item.version),['0.1.0-beta.7'],'never the version being published');
+ assert.equal(U.previousBlockMaps(Array.from({length:9},(_,i)=>({version:'0.1.'+i,files:[{url:'https://x/'+i+'.exe'}]})),{version:'9'}).length,6,'a few releases back, not the whole history');
+ const file={name:'AciraBrowserSetup-0.1.0-beta.9.exe',size:5,sha512:createHash('sha512').update('setup').digest('base64')};
+ const doc=U.windowsFeed({version:'0.1.0-beta.9',file,url:rel('v0.1.0-beta.9-windows-bbbbbbbb',file.name),releaseDate:'2026-11-03T00:00:00.000Z',releaseName:'Acira Browser 0.1.0-beta.9',previousBlockMaps:list});
+ assert.deepEqual(U.readWithUpdater(U.serializeFeed(doc),{file:'beta.yml'}).info.previousBlockMaps,list,'electron-updater hands the field to the app as it is');
+ assert.equal(U.windowsFeed({version:'1',file,url:'https://x/a.exe',releaseDate:'d',releaseName:'n'}).previousBlockMaps,undefined,'no earlier setups, no field');
+});
+
 // The real AppUpdater, the way the app configures it (beta channel for a pre-release version), against the documents this tool writes.
 async function checkWith(t,{platform,installed,feedFile,feedText}){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'acira-publish-updater-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));

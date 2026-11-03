@@ -64,8 +64,20 @@ function finalizeMacFeed(baseText,{urlFor,releaseName,releaseNotes:notes}){
  const doc=JSON.parse(baseText),files=doc.files.map(file=>({...file,url:urlFor(file.url)}));
  return {version:doc.version,files,path:files[0].url,sha512:files[0].sha512,releaseDate:doc.releaseDate,minimumSystemVersion:doc.minimumSystemVersion,releaseName,...(notes?{releaseNotes:notes}:{})};
 }
-function windowsFeed({version,file,url,releaseDate,releaseName,releaseNotes:notes}){
- return {version,files:[{url,sha512:file.sha512,size:file.size}],path:url,sha512:file.sha512,releaseDate,releaseName,...(notes?{releaseNotes:notes}:{})};
+function windowsFeed({version,file,url,releaseDate,releaseName,releaseNotes:notes,previousBlockMaps=[]}){
+ return {version,files:[{url,sha512:file.sha512,size:file.size}],path:url,sha512:file.sha512,releaseDate,releaseName,...(notes?{releaseNotes:notes}:{}),...(previousBlockMaps.length?{previousBlockMaps}:{})};
+}
+const BLOCKMAPS_KEPT=6;
+/** Where earlier Windows setups' blockmaps are, newest first: the live channel documents' own setups (their URL + .blockmap) and the notes they carried.
+ *  An installed Acira downloads only what changed since its own setup (desktop/browser-services/app-updater.cjs), which needs its own version's
+ *  blockmap; electron-updater's guess at that URL (the new one with the version swapped) misses releases tagged with their commit, as these are.
+ *  The app checks each one against the setup it has, so a missing or wrong entry only means a whole download. */
+function previousBlockMaps(live,{version,kept=BLOCKMAPS_KEPT}){
+ const list=[],seen=new Set([version]);
+ const add=(entryVersion,url)=>{if(typeof entryVersion!=='string'||typeof url!=='string'||seen.has(entryVersion)||!/^https:\/\//.test(url))return;seen.add(entryVersion);list.push({version:entryVersion,url});};
+ for(const doc of live){const setup=(doc.files||[]).find(file=>/\.exe$/i.test(String(file?.url||'')));if(setup)add(doc.version,setup.url+'.blockmap');}
+ for(const doc of live)for(const entry of doc.previousBlockMaps||[])add(entry?.version,entry?.url);
+ return list.slice(0,kept);
 }
 const serializeFeed=doc=>JSON.stringify(doc,null,2)+'\n'; // JSON is YAML, and the public documents already use it
 function parseFeed(text){try{return JSON.parse(text);}catch{return require('js-yaml').load(text);}}
@@ -82,10 +94,10 @@ async function readLiveFeed({fetch,file,baseUrl=RAW_FEED_BASE}){
   if(!response.ok)return {file,error:'HTTP '+response.status};
   const doc=parseFeed(await response.text());
   if(!doc||typeof doc.version!=='string')return {file,error:'not a channel document'};
-  return {file,version:doc.version,files:doc.files||[]};
+  return {file,version:doc.version,files:doc.files||[],previousBlockMaps:Array.isArray(doc.previousBlockMaps)?doc.previousBlockMaps:[]};
  }catch(error){return {file,error:String(error?.message||error)};}
 }
 function buildInfo({version,channel,platform,commit,assets,checks,builtAt}){
  return {schema:1,product:'Acira Browser',version,channel,platform,commit,publishedAt:builtAt,checks,files:assets.map(({name,size,sha256,sha512})=>({name,size,sha256,sha512}))};
 }
-module.exports={ARCHES,CHANNELS,PLATFORMS,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};
+module.exports={ARCHES,CHANNELS,PLATFORMS,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};

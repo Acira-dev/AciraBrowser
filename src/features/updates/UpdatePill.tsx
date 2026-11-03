@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { DotMatrix } from '../../components/DotMatrix';
 import { t } from '../../i18n';
-import { claimUpdatePrompt, claimWhatsNew, formatBytes, useUpdateStatus, useWhatsNew, type UpdateView } from './useUpdateReady';
+import { claimUpdatePrompt, claimWhatsNew, formatBytes, formatShare, useUpdateStatus, useWhatsNew, type UpdateView } from './useUpdateReady';
 import './update-pill.css';
 
 /** The tooltip of the download dot: what is happening, then how far it is ("42% · 160 of 382 MB · 5 MB/s"). Sizes and speed appear once they are known. */
@@ -12,9 +12,15 @@ export function downloadTip(update: UpdateView): string {
     : t('update.downloadDetailShort', { percent: update.percent });
   return `${t('update.downloadTip', { version: update.version })}\n${detail}`;
 }
+/** The tooltip of a paused download: what it is, then how much is here ("160 of 382 MB"). */
+export function pausedTip(update: UpdateView): string {
+  const share = update.total && update.transferred !== null ? formatShare(update.transferred, update.total) : t('update.downloadDetailShort', { percent: update.percent });
+  return `${t('update.pausedTip', { version: update.version })}\n${share}`;
+}
 
 /** The update, at the toolbar's right edge beside the Acira menu button. Nothing until an update is downloading (and no timers or frames then).
  *  Downloading: a small dot matrix that fills with the real progress; hover or focus it for the details. No line, no number on the toolbar.
+ *  A click opens the update panel (UpdatePopover): the progress, a ring that pauses and resumes it, What's new. Paused: the same dots, held and dimmed.
  *  Downloaded: the same dots resolve into a check and a calm "Update" pill appears; main asks once (claimUpdatePrompt) and this opens the
  *  popup (Install now, Later, Read more). After Later the pill is the quiet way back. It never moves again; ignored, the update installs when Acira quits. */
 export function UpdatePill({ onOpen, onOpenNotes, active, canAsk, reducedMotion }: { onOpen: () => void; onOpenNotes: () => void; active: boolean; canAsk: boolean; reducedMotion: boolean }) {
@@ -30,12 +36,12 @@ export function UpdatePill({ onOpen, onOpenNotes, active, canAsk, reducedMotion 
     return () => window.clearTimeout(timer);
   }, [whatsNew, canAsk]);
   if (!update) return null;
-  const ready = update.phase === 'ready', tip = ready ? `${t('update.readyTip', { version: update.version })}\n${t('update.readyTipHint')}` : downloadTip(update), label = tip.replace('\n', '. ');
+  const ready = update.phase === 'ready', paused = update.phase === 'paused';
+  const tip = ready ? `${t('update.readyTip', { version: update.version })}\n${t('update.readyTipHint')}` : paused ? pausedTip(update) : downloadTip(update), label = tip.replace('\n', '. ');
   return (
-    <button type="button" className="update-pill" data-update-pill data-phase={update.phase} data-popup-trigger={ready ? '' : undefined} data-tip={tip} aria-label={label}
-      aria-haspopup={ready ? 'dialog' : undefined} aria-expanded={ready ? active : undefined} aria-disabled={ready ? undefined : true}
-      onClick={() => { if (ready) onOpen(); }}>
-      <span className="update-pill-mark" aria-hidden="true"><DotMatrix preset={ready ? 'check' : 'progress'} size={16} rows={5} progress={update.percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
+    <button type="button" className="update-pill" data-update-pill data-phase={update.phase} data-popup-trigger="" data-tip={tip} aria-label={label}
+      aria-haspopup="dialog" aria-expanded={active} onClick={onOpen}>
+      <span className="update-pill-mark" aria-hidden="true"><DotMatrix preset={ready ? 'check' : paused ? 'progressHeld' : 'progress'} size={16} rows={5} progress={update.percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
       {ready && <span className="update-pill-label">{t('update.pill')}</span>}
     </button>
   );

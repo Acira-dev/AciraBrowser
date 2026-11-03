@@ -72,7 +72,8 @@ test('a window that is open again, or whose record is gone, is not offered', () 
 test('main.cjs: a window closed on purpose goes through closed(), and opening a profile in its own window uses its saved one', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(main, /const profileWindows=require\('\.\/profile-windows\.cjs'\)\.createProfileWindows\(\{getDatabase:\(\)=>database,getControllers:\(\)=>controllers\}\);/);
-  assert.match(main, /mainWindow\.on\('closed',\(\)=>\{pageDissolve\.destroy\(\);if\(!quitting&&!openWindows\.quitting\(\)\)profileWindows\.closed\(controller\);/);
+  // With workspaces (a window for each profile) it goes through closed(); with profiles as spaces a window is no profile's own and is forgotten.
+  assert.match(main, /mainWindow\.on\('closed',\(\)=>\{pageDissolve\.destroy\(\);(?:if\(discardRecord\)try\{database\.deleteWindow\(windowId\);\}catch\{\})?(?:\/\*[^*]*\*\/)?if\(!quitting&&!openWindows\.quitting\(\)\)\{if\(state\.settings\.spaces==='profiles'\)profileWindows\.forget\(windowId\);else profileWindows\.closed\(controller\);\}/);
   assert.match(main, /else\{const saved=profileWindows\.find\(action\.id\);createBrowserWindow\(saved\?\{windowId:saved,restore:true,profileId:action\.id\}:\{profileId:action\.id\}\);\}/);
   assert.match(main, /saved=open\?null:profileWindows\.find\(id\)/, 'the profile panel switch already used it');
 });

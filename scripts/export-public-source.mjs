@@ -72,7 +72,7 @@ export function allowedSource(file) {
     || /^scripts\/release-[a-z-]+\.(?:mjs|cjs)$/.test(file) && file !== 'scripts/release-archive-audit.mjs'
     || file === 'scripts/release.mjs';
   return file === '.github/workflows/release-qualification.yml'
-    || /^supabase\/(?:config\.toml|functions\/(?:usage|report|allowlist)\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_(?:usage_metrics(?:_v\d+)?|site_reports)\.sql)$/.test(file);
+    || /^supabase\/(?:config\.toml|functions\/(?:usage|report|allowlist)\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_(?:usage_metrics(?:_v\d+)?|usage_churn|site_reports)\.sql)$/.test(file);
 }
 
 export function auditExport(entries, readBlob) {

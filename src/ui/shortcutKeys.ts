@@ -45,12 +45,14 @@ export function useShortcutKeys(): void {
 }
 
 /** A registry command's name in the current language, by its stable id (the registry loads before the language is known and
- *  keeps English labels). Tab-set commands arrive already translated by main. */
-export function commandLabel(id: string, english: string): string {
+ *  keeps English labels). Tab-set commands arrive already translated by main. With profiles as spaces (`spaces`) the workspace
+ *  commands name spaces: "Next space", "Go to space 2". */
+export function commandLabel(id: string, english: string, spaces = false): string {
   const tab = /^select-tab-(\d)$/.exec(id);
   if (tab) return t('shortcutCmd.select-tab', { n: tab[1] });
   const workspace = /^switch-workspace-(\d)$/.exec(id);
-  if (workspace) return t('shortcutCmd.switch-workspace', { n: workspace[1] });
+  if (workspace) return t(spaces ? 'workspaces.goToSpace' : 'shortcutCmd.switch-workspace', { n: workspace[1] });
+  if (spaces && (id === 'next-workspace' || id === 'prev-workspace')) return t(id === 'next-workspace' ? 'workspaces.nextSpace' : 'workspaces.prevSpace');
   const key = `shortcutCmd.${id}` as MessageId, text = t(key);
   return text === key ? translateText(english) : text;
 }

@@ -10,8 +10,8 @@ import { historyVisibleFrom, tabVisibleFrom } from '../ui/suggestionPrivacy';
 import { shownTab } from '../runtime/tabTitle';
 import { formatShortcut } from '../ui/platform';
 import { commandLabel } from '../ui/shortcutKeys';
-import { MAX_WORKSPACES, windowWorkspaces, workspaceIdOf } from '../runtime/workspaces';
-import { shownName, workspaceKey } from '../features/workspaces/WorkspaceSwitcher';
+import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces, workspaceIdOf } from '../runtime/workspaces';
+import { nameIn, shownName, workspaceKey } from '../features/workspaces/WorkspaceSwitcher';
 import { openWorkspacePopupFromPopup } from '../ui/workspaceTarget';
 import { noteUse } from '../features/metrics/noteUse';
 
@@ -43,15 +43,16 @@ export function CommandPalette({ state, dispatch, close, onNavigate, pages }: { 
   useEffect(() => noteUse('commandBar'), []); // R4-60: one use per opening, counted only while usage sharing is on
   // The registry (with customised shortcuts and dynamic "Open tab set" commands) reloads whenever it changes.
   useEffect(() => {
-    const load = () => void runtime.native?.({ type: 'shortcuts.list' }).then(result => { registry = (result.shortcuts?.commands || []).filter(entry => listed(entry.id)).map(entry => ({ id: entry.id, label: commandLabel(entry.id, entry.label), category: entry.category, shortcut: chord(entry.display?.[0]) })); setCommands(registry); }, () => {});
+    const load = () => void runtime.native?.({ type: 'shortcuts.list' }).then(result => { registry = (result.shortcuts?.commands || []).filter(entry => listed(entry.id)).map(entry => ({ id: entry.id, label: commandLabel(entry.id, entry.label, profilesAsSpaces(state)), category: entry.category, shortcut: chord(entry.display?.[0]) })); setCommands(registry); }, () => {});
     load(); return runtime.subscribeBrowser(event => { if (event.type === 'shortcuts-changed') load(); });
   }, []);
   // Privacy line (founder P0): from an ordinary tab the search never finds a private, Tor or secured tab; from a Tor tab it finds nothing ordinary.
   const viewer = state.tabs.find(tab => tab.id === state.activeTabId);
   const tabs = useMemo(() => { const byId = new Map(state.tabs.map(tab => [tab.id, tab])); return mruOrder(state.tabs.map(tab => tab.id), state.activeTabId, readStamps()).map(id => byId.get(id)!).filter(tab => tab && (tab.id === state.activeTabId || tabVisibleFrom(state, viewer, tab))).map(tab => shownTab(tab)); }, [state.tabs, state.activeTabId, state.browserProfiles, viewer]);
-  const history = useMemo(() => historyVisibleFrom(state, viewer, state.browsingHistory).slice(0, 400).map(visit => ({ url: visit.url, title: visit.title })), [state.browsingHistory, state.browserProfiles, viewer]);
+  // With no tab open, the history is still the window's own profile's, never every profile's.
+  const history = useMemo(() => historyVisibleFrom(state, viewer ?? { browserProfileId: state.activeBrowserProfileId }, state.browsingHistory).slice(0, 400).map(visit => ({ url: visit.url, title: visit.title })), [state.browsingHistory, state.browserProfiles, state.activeBrowserProfileId, viewer]);
   // Workspaces (R3-57): switch to another one by name, or start a new one. They belong to this window, so they are not registry commands.
-  const spaces = useMemo<PaletteCommand[]>(() => { const own = windowWorkspaces(state); return [...own.flatMap((workspace, index) => workspace.id === state.activeWorkspaceId ? [] : [{ id: `workspace:${workspace.id}`, label: t('workspaces.paletteSwitch', { name: shownName(workspace) }), category: 'Workspaces', shortcut: workspaceKey(index) }]), ...(own.length && own.length < MAX_WORKSPACES ? [{ id: 'workspace:new', label: t('workspaces.new'), category: 'Workspaces' }] : [])]; }, [state.workspaces, state.activeWorkspaceId, state.activeBrowserProfileId]);
+  const spaces = useMemo<PaletteCommand[]>(() => { const own = windowWorkspaces(state); return [...own.flatMap((workspace, index) => workspace.id === state.activeWorkspaceId ? [] : [{ id: `workspace:${workspace.id}`, label: t('workspaces.paletteSwitch', { name: nameIn(state, workspace) }), category: 'Workspaces', shortcut: workspaceKey(index) }]), ...(own.length && own.length < MAX_WORKSPACES && !profilesAsSpaces(state) ? [{ id: 'workspace:new', label: t('workspaces.new'), category: 'Workspaces' }] : [])]; }, [state.workspaces, state.activeWorkspaceId, state.activeBrowserProfileId, state.settings.spaces, state.browserProfiles]);// eslint-disable-line react-hooks/exhaustive-deps
   // R4-48 P1-2: with several workspaces, a search also finds the other workspaces' tabs (a section each, named for the workspace); choosing one switches there.
   const otherTabs = useMemo<PaletteWorkspaceTabs[]>(() => { const elsewhere = state.otherWorkspaceTabs ?? []; if (!elsewhere.length) return []; return windowWorkspaces(state).flatMap(workspace => { const found = elsewhere.filter(tab => workspaceIdOf(state, tab) === workspace.id && tabVisibleFrom(state, viewer, tab)).map(tab => shownTab(tab)); return found.length ? [{ id: workspace.id, name: shownName(workspace), tabs: found }] : []; }); }, [state.otherWorkspaceTabs, state.workspaces, state.activeBrowserProfileId, viewer]);// eslint-disable-line react-hooks/exhaustive-deps
   const sections = useMemo(() => paletteSections({ query, commands: [...commands, ...spaces], tabs, activeTabId: state.activeTabId, history, pages, recent, otherTabs }), [query, commands, spaces, tabs, state.activeTabId, history, pages, recent, otherTabs]);

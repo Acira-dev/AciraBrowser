@@ -153,6 +153,10 @@ test('Windows: a setup that carries its feed gets a beta.yml entry; one that can
  assert.deepEqual(good.plan.feeds.map(feed=>feed.file),['beta-mac.yml','beta.yml']);
  const windows=good.plan.releases[1];assert.deepEqual(windows.assets.map(asset=>asset.name).sort(),['AciraBrowserSetup.exe','AciraBrowserSetup.exe.blockmap','BUILD-INFO.json','SHA256SUMS.txt']);
  const feed=JSON.parse(good.plan.feeds[1].text);assert.equal(feed.files[0].url,`https://github.com/${REPO}/releases/download/v0.1.0-beta.7-windows-b62c4715/AciraBrowserSetup.exe`);
+ assert.equal(feed.previousBlockMaps,undefined,'the live beta.yml names no setup yet: no earlier blockmaps');
+ github.state.feed['beta.yml']=JSON.stringify({version:'0.1.0-beta.6',files:[{url:`https://github.com/${REPO}/releases/download/v0.1.0-beta.6-windows-aaaaaaaa/AciraBrowserSetup-0.1.0-beta.6.exe`,sha512:'x',size:1}]});
+ const noted=JSON.parse((await planUpdate(options,baseDeps(w,github))).plan.feeds[1].text);
+ assert.deepEqual(noted.previousBlockMaps,[{version:'0.1.0-beta.6',url:`https://github.com/${REPO}/releases/download/v0.1.0-beta.6-windows-aaaaaaaa/AciraBrowserSetup-0.1.0-beta.6.exe.blockmap`}],'the live setup\'s blockmap, for copies of it that update (differential)');
  // the installer cannot be shown to carry app-update.yml
  for(const updateConfig of [false,null]){
   const result=await planUpdate(options,baseDeps(w,github,{inspectWindowsInstaller:async()=>({updateConfig,source:'test'})}));

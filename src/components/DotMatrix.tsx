@@ -1,11 +1,11 @@
 import { useEffect,useRef } from 'react';
-import { blend,switchedOff,torConnecting,torConnected,torStopped,privateSweep,audioBars,checkLights,downloadFill } from '../ui/matrixShapes';
+import { blend,switchedOff,torConnecting,torConnected,torStopped,privateSweep,audioBars,checkLights,downloadFill,progressHeld } from '../ui/matrixShapes';
 import { toneColors,type MatrixTone } from '../ui/matrixTone';
 
 /** The acirabrowser.com status lights, ported from its site.js: a small dot grid showing what an agent is actually doing.
  * Working = loader, Reading = scan, Needs you = heartbeat, Paused = still, Seen = switched off. Round 2: the classic
  * square grid only — Tor and private are patterns of light through the whole grid, never a picture drawn in dots. */
-export type MatrixPreset = 'loader' | 'heartbeat' | 'weave' | 'pulse' | 'scan' | 'still' | 'idle' | 'bars' | 'off' | 'tor' | 'torConnecting' | 'torStopped' | 'private' | 'audio' | 'check' | 'download' | 'downloadHeld' | 'progress';
+export type MatrixPreset = 'loader' | 'heartbeat' | 'weave' | 'pulse' | 'scan' | 'still' | 'idle' | 'bars' | 'off' | 'tor' | 'torConnecting' | 'torStopped' | 'private' | 'audio' | 'check' | 'download' | 'downloadHeld' | 'progress' | 'progressHeld';
 export type { MatrixTone };
 
 const TAU = Math.PI * 2;
@@ -85,6 +85,8 @@ const presets: Record<MatrixPreset, (t: number, r: number, c: number, R: number,
   torConnecting,
   // Any real progress (an update downloading): the same fill, from the centre outwards, dot by dot, with the next dot blinking.
   progress: torConnecting,
+  // A paused update download: the same fill, held still.
+  progressHeld,
   tor: torConnected,
   torStopped,
   // Private: a diagonal sweep that leaves the grid dark behind it.
@@ -100,7 +102,7 @@ const presets: Record<MatrixPreset, (t: number, r: number, c: number, R: number,
 // Heartbeat and the loader keep their smooth opacity curves; the rest use two intensities, full or half.
 const smooth = (preset: MatrixPreset) => preset === 'heartbeat' || preset === 'loader' || preset === 'off';
 // Shapes that hold still once drawn; they only repaint while cross-fading in or when the appearance changes.
-const steady = (preset: MatrixPreset) => preset === 'off' || preset === 'torStopped' || preset === 'check' || preset === 'downloadHeld';
+const steady = (preset: MatrixPreset) => preset === 'off' || preset === 'torStopped' || preset === 'check' || preset === 'downloadHeld' || preset === 'progressHeld';
 const FADE = .45;
 type Painted = { values: number[]; drawn: number[]; R: number; C: number };
 const level = (value: number) => value >= .55 ? 1 : value >= .18 ? .5 : 0;

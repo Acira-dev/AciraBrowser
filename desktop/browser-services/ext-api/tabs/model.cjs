@@ -56,7 +56,19 @@ function createTabsModel(api) {
     const pending = !committed && loading && target ? target : (loading && requested && requested !== committed ? requested : undefined);
     return pending ? {url, pendingUrl: pending} : {url};
   }
+  /** The profile whose tabs this model lists in a window: the extension's own (main's hook names it per window). */
   const profileId = w => w.profileId;
+  /**
+   * The window's active tab as this profile's extensions see it. Chrome has one active tab per window; a window holding several profiles
+   * (profiles as spaces) shows one profile at a time, so for another profile's extensions its active tab is the one it showed last there
+   * (windowUi.lastTabs), else its first. When the tab on screen is this profile's (every window today), that tab, as before.
+   */
+  function activeIn(w, strip) {
+    const onScreen = (w.state.tabs || []).find(tab => tab.id === w.state.activeTabId);
+    if (!onScreen || profileId(w) === undefined || onScreen.browserProfileId === profileId(w)) return w.state.activeTabId;
+    const shown = new Set(Object.values(w.state.windowUi?.lastTabs || {}));
+    return (strip.find(tab => shown.has(tab.id)) || strip[0])?.id;
+  }
 
   /** The profile's ordinary windows from the hook: [{id, focused, state, pages, dispatch, ...}], front to back as the hook lists them. */
   function windows() {
@@ -134,6 +146,7 @@ function createTabsModel(api) {
       const pageOf = tab => { const wc = w.pages.get(tab.id)?.view?.webContents; return wc && !quiet(() => wc.isDestroyed()) && wc.session === api.session ? wc : null; };
       for (const tab of whole) { const gone = retired.has(keyOf(w, tab)) ? pageOf(tab) : null; if (gone) claimed.add(gone); }   // a tab that continues elsewhere: its old page is not an extension window
       const strip = whole.filter(tab => !retired.has(keyOf(w, tab)) && !held.has(keyOf(w, tab)));
+      const activeId = activeIn(w, strip);
       strip.forEach((tab, index) => {
         const wc = pageOf(tab);
         if (wc) claimed.add(wc);
@@ -143,7 +156,7 @@ function createTabsModel(api) {
         const web = tab.contentKind !== 'internal', loading = !!tab.loading;
         out.push({
           wc, id, windowId: w.id, window: w, aux: null, tab, acira: tab.id, index, stripLength: strip.length,
-          active: w.state.activeTabId === tab.id, pinned: !!tab.pinned, groupId: groupOf(w, tab),
+          active: activeId === tab.id, pinned: !!tab.pinned, groupId: groupOf(w, tab),
           openerId: opener ? idFor(w, opener, pageOf(opener)) : undefined,
           ...addresses(exposeUrl(tab.url), wc ? quiet(() => wc.getURL()) || '' : '', loading, exposeUrl(tab.requestedUrl)),
           title: tab.title, favicon: tab.favicon || '', loading,

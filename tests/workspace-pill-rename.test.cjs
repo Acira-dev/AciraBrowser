@@ -8,6 +8,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'features', 'workspaces', 'WorkspaceSwitcher.tsx'), 'utf8');
 
 test('the pill placement restarts when a workspace is renamed or gets another icon', () => {
-  assert.match(source, /const names = list\.map\(item => `\$\{item\.id\}:\$\{shownName\(item\)\}:\$\{workspaceIcon\(item\)\}`\)\.join\('\|'\);/);
+  // nameIn: the name shown in this window (with profiles as spaces, the profile's, so renaming a profile restarts it too).
+  assert.match(source, /const names = list\.map\(item => `\$\{item\.id\}:\$\{(?:shownName\(item\)|nameIn\(state, item\))\}:\$\{workspaceIcon\(item\)\}`\)\.join\('\|'\);/);
   assert.match(source, /\}, \[active, list\.length, several, names\]\);/);
 });

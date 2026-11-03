@@ -130,7 +130,7 @@ test('purge: an onion address an older build stored never reaches disk and is dr
 test('command bar: tab and history search use the same privacy line', () => {
   const source = readFileSync(new URL('../src/components/CommandPalette.tsx', import.meta.url), 'utf8');
   assert.match(source, /tabVisibleFrom\(state, viewer, tab\)\)\)\.map\(tab => shownTab\(tab\)\)/, 'open tabs filtered');
-  assert.match(source, /historyVisibleFrom\(state, viewer, state\.browsingHistory\)/, 'history filtered');
+  assert.match(source, /historyVisibleFrom\(state, viewer \?\? \{ browserProfileId: state\.activeBrowserProfileId \}, state\.browsingHistory\)/, 'history filtered');
   assert.match(source, /workspace\.id && tabVisibleFrom\(state, viewer, tab\)/, 'other workspaces\' tabs filtered');
 });
 
@@ -159,4 +159,22 @@ test('remove ×: only history rows carry it, and a press on the list never takes
   assert.ok(list.includes('onPointerDown={event=>event.preventDefault()} onMouseDown={event=>event.preventDefault()'), 'a press never moves focus inside the list');
   assert.ok(main.includes(`if(contents===overlayView?.webContents&&layout.overlay?.kind==='suggestions'){`) && main.includes(`setImmediate(()=>{if(layout.overlay?.kind==='suggestions'&&contents.isFocused()&&chromeView&&!chromeView.webContents.isDestroyed())focusContents(chromeView.webContents);});return;}`), 'main hands focus back to the field once the press has moved it');
   assert.ok(field.includes('if (suggestionOpen && !event.relatedTarget && !document.hasFocus())'), 'the field waits for focus to come back before closing');
+});
+
+// QA (profiles as spaces, batch 1 #2): the command bar listed every profile's history, since a window holds every profile's visits.
+test('history is read only by its own profile: a Work tab never sees Personal\'s visits, in the command bar or the address bar', () => {
+  const WORK = 'profile-work', state = createInitialState();
+  const both = { ...state, browserProfiles: [...state.browserProfiles, { id: WORK, name: 'Work', color: '#0088ff', partition: 'persist:acira-profile-work' }] };
+  const history = [visit('p1', 'https://personal-secret.test/', 'PSECRETOPEN'), visit('w1', 'https://work-page.test/', 'Work page', WORK), { ...visit('old', 'https://older.test/', 'Saved before profiles were named'), browserProfileId: undefined }];
+  const fromWork = historyVisibleFrom(both, tab('w', 'https://work.test/', 'Work', undefined, WORK), history);
+  assert.deepEqual(fromWork.map(item => item.id), ['w1']);
+  const fromPersonal = historyVisibleFrom(both, tab('p', 'https://start.test/', 'Start'), history);
+  assert.deepEqual(fromPersonal.map(item => item.id), ['p1', 'old'], 'a visit without a profile is the first profile\'s');
+  const privateTab = historyVisibleFrom(both, tab('pp', 'https://x.test/', 'X', 'private', WORK), history);
+  assert.deepEqual(privateTab.map(item => item.id), ['w1'], 'a private tab reads its own profile\'s history, as Chrome Incognito does');
+  // The command bar reads history through this, from the tab on screen.
+  const palette = readFileSync(new URL('../src/components/CommandPalette.tsx', import.meta.url), 'utf8');
+  // With no tab open it still reads the window's own profile, never every profile's.
+  assert.match(palette, /const history = useMemo\(\(\) => historyVisibleFrom\(state, viewer \?\? \{ browserProfileId: state\.activeBrowserProfileId \}, state\.browsingHistory\)/);
+  assert.match(palette, /const viewer = state\.tabs\.find\(tab => tab\.id === state\.activeTabId\);/);
 });

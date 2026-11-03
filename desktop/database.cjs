@@ -28,6 +28,8 @@ class BrowserDatabase{
  }
  transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const result=fn();this.db.exec('COMMIT');return result;}catch(error){try{this.db.exec('ROLLBACK');}catch{/* SQLite already ended it (a full disk does); the caller needs the real error */}throw error;}finally{this.inTransaction=false;}}
  readWindow(id){const row=this.db.prepare('SELECT payload FROM windows WHERE id=?').get(id);return row?parse(row.payload):null;}
+ /** A window record nothing can open again (profiles as spaces: a profile window joined into another): it goes, with the copy of history and bookmarks it carried. */
+ deleteWindow(id){this.db.prepare('DELETE FROM windows WHERE id=?').run(id);}
  saveWindow(id,snapshot){this.transaction(()=>{
   this.db.prepare('INSERT INTO windows VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at').run(id,json(snapshot),Date.now());
   const profiles=new Set(snapshot.browserProfiles.filter(p=>!p.private).map(p=>p.id));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { runtime } from '../../../runtime/client';
 import type { UpdateStatus } from '../../../runtime/nativeNetwork';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
@@ -6,25 +6,11 @@ import type { SettingsPanel } from '../panels';
 import { version as aciraVersion } from '../../../../package.json';
 import { releaseVersion } from '../../../ui/releaseVersion';
 
-import { t, translateText } from '../../../i18n';
+import { t } from '../../../i18n';
+import { describe, rowAction } from '../updateRow';
 const chromium = /Chrome\/(\d+)/.exec(typeof navigator === 'undefined' ? '' : navigator.userAgent)?.[1];
 
 const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : t('connection.error.generic'));
-
-function describe(status?: UpdateStatus) {
-  if (!status) return t('updates.reading');
-  switch (status.status) {
-    // The updater says why in English (app-updater.cjs, mac-app-update.cjs); each reason is in the catalog.
-    case 'unsupported': return status.reason ? translateText(status.reason) : t('updates.notAvailableHere');
-    case 'checking': return t('updates.checking');
-    case 'available': return t('updates.versionAvailable', { version: status.available ?? '' });
-    case 'downloading': return status.progress ? t('updates.downloadingProgress', { version: status.available ?? '', percent: status.progress }) : t('updates.downloadingVersion', { version: status.available ?? '' });
-    case 'ready': return t('updates.versionReady', { version: status.available ?? '' });
-    case 'current': return t('updates.upToDate');
-    case 'error': return t('updates.checkFailed', { error: status.error ?? '' }).trim();
-    default: return t('connection.torStatus.notChecked');
-  }
-}
 
 function Updates() {
   const [status, setStatus] = useState<UpdateStatus>();
@@ -36,8 +22,13 @@ function Updates() {
     const timer = window.setInterval(() => void refresh(), 1500);
     return () => window.clearInterval(timer);
   }, [status, refresh]);
-  const act = async (type: 'update.check' | 'update.download' | 'update.install') => {
+  const refocus = useRef(false), rowButton = () => document.querySelector<HTMLButtonElement>('[data-setting="app-updates"] .st-control button');
+  const act = async (type: 'update.check' | 'update.download' | 'update.pause' | 'update.resume' | 'update.install') => {
     setProblem('');
+    // The row's button goes off while a download runs; a keyboard user gets it back, focused, when it ends.
+    refocus.current = document.activeElement === rowButton();
+    // A Mac's check is answered only when it is over (one to three seconds): say it is checking from the press, not afterwards.
+    if (type === 'update.check') setStatus((current) => current && { ...current, status: 'checking', error: null });
     try { setStatus((await runtime.service({ type })).update); } catch (reason) { setProblem(message(reason)); }
   };
   const auto = async (enabled: boolean) => {
@@ -48,15 +39,24 @@ function Updates() {
     setProblem('');
     try { setStatus((await runtime.service({ type: 'update.channel', channel: value })).update); } catch (reason) { setProblem(message(reason)); }
   };
-  const busy = status?.status === 'checking' || status?.status === 'downloading';
+  const busy = status?.status === 'checking' || status?.status === 'downloading', button = rowAction(status);
+  useEffect(() => {
+    if (busy || !refocus.current) return;
+    refocus.current = false;
+    if (document.activeElement === document.body) rowButton()?.focus();
+  }, [busy]);
   return (
     <SettingGroup title={t("updates.updates")}>
       <SettingRow id="app-updates" title={t("updates.aciraAciraversionChromium", { aciraVersion: releaseVersion(aciraVersion), chromium: chromium ? ` (Chromium ${chromium})` : '' })} detail={describe(status)}>
-        {status?.status === 'ready'
+        {button.action === 'update.install'
           ? <button type="button" className="st-button primary" onClick={() => void act('update.install')}>{t("updates.restartToUpdate")}</button>
-          : status?.status === 'available'
-            ? <button type="button" className="st-button primary" onClick={() => void act('update.download')}>{t("updates.download")}</button>
-            : <button type="button" className="st-button" disabled={!status?.supported || busy} onClick={() => void act('update.check')}>{busy ? t('cleanup.checking') : t("updates.checkForUpdates")}</button>}
+          : button.action === 'update.resume'
+            ? <button type="button" className="st-button primary" onClick={() => void act('update.resume')}>{t('updates.resume')}</button>
+          : button.action === 'update.pause'
+            ? <button type="button" className="st-button" onClick={() => void act('update.pause')}>{t('updates.pause')}</button>
+          : button.action === 'update.download'
+            ? <button type="button" className="st-button primary" disabled={button.disabled} onClick={() => void act('update.download')}>{t("updates.download")}</button>
+            : <button type="button" className="st-button" disabled={button.disabled} onClick={() => void act('update.check')}>{t("updates.checkForUpdates")}</button>}
       </SettingRow>
       <SettingRow id="app-updates-auto" title={t("updates.downloadUpdatesAutomatically")} detail={t("updates.autoDetail")}>
         <Switch label={t("updates.downloadUpdatesAutomatically")} checked={status?.autoDownload ?? true} disabled={!status?.supported} onChange={(next) => void auto(next)} />
@@ -65,6 +65,7 @@ function Updates() {
         <Select label={t("updates.updateChannel")} value={status?.channel ?? 'stable'} disabled={!status?.supported} options={[{ value: 'stable', label: t("updates.stable") }, { value: 'beta', label: t("updates.beta") }]} onChange={(next) => void channel(next)} />
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
+      {status?.status === 'error' && status.error && <SettingNote>{t('import.technicalDetails')}: {status.error}</SettingNote>}
       <SettingNote>{t("updates.updatesComeFromGithubReleases")}</SettingNote>
     </SettingGroup>
   );

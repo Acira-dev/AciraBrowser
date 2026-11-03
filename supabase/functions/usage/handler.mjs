@@ -1,11 +1,14 @@
 // The whole logic of the `usage` Edge Function, with no Deno, network or database in it, so Node can run it in tests.
 // index.ts supplies the real store (restStore) and the hashing salt; tests supply fakes.
 //
-// POST only. Two message types, each with exactly the fields the app sends (src: desktop/browser-services/metrics.cjs, usage-facts.cjs, feature-rating.cjs):
+// POST only. Three message types, each with exactly the fields the app sends (src: desktop/browser-services/metrics.cjs, usage-facts.cjs, feature-rating.cjs,
+// and the Windows uninstaller, packaging/acira-installer.nsh):
 //  - event "daily" (one a day per random install id): schema 3 = the nine base fields (required) plus coarse facts, every one from a CLOSED
 //    list or a bucket (each optional, so a field the app no longer sends is simply NULL). Schema 2 (Round 3 builds) is still accepted exactly.
 //  - event "rating" (at most one a week, only when the person answered a feature-rating card): feature id, stars 1-5, app version, OS family, day.
 //    No install id, no free text, nothing else.
+//  - event "uninstall" (Windows only, at most once per install: the uninstaller sends it when a person really removes Acira while usage
+//    sharing is on, never on an update; packaging/acira-installer.nsh): the same random install id, app version, "win32", arch and day.
 // Any other key or value is a 400, so free text, URLs and exact numbers cannot be stored. tests/supabase-metrics*.test.mjs fail if these lists
 // drift from the client's or from the SQL check constraints.
 // Answers 204 (stored or already stored), 202 (a deploy health probe: valid, storage reachable, nothing stored), 400 (anything wrong with the
@@ -17,6 +20,8 @@
 export const MAX_BYTES = 2048;
 /** A rating message is under 140 bytes; anything over 256 is not one. */
 export const RATING_MAX_BYTES = 256;
+/** An uninstall message is under 180 bytes (tests/usage-uninstall.test.cjs computes the longest); anything over 256 is not one. */
+export const UNINSTALL_MAX_BYTES = 256;
 export const SAMPLE_ID = '00000000-0000-4000-8000-000000000000'; // the app's placeholder; a real opt-in never sends it, a health probe always does
 const BASE_FIELDS = ['schema', 'event', 'installId', 'appVersion', 'channel', 'platform', 'arch', 'language', 'day'];
 
@@ -69,6 +74,10 @@ export const COUNTS = Object.freeze(['0', '1-2', '3-9', '10+']);
 /** R4-61 feature ratings: the features a person can be asked about (only ones they used). */
 export const RATING_FEATURES = Object.freeze(['splitView', 'windowViews', 'workspaces', 'peek', 'sidebarTabs', 'rewind', 'tabSets', 'adBlocking', 'signBackIn', 'newTabArtwork']);
 const RATING_FIELDS = ['schema', 'event', 'feature', 'stars', 'appVersion', 'platform', 'day'];
+/** The Windows uninstall message (packaging/acira-installer.nsh builds it; desktop/browser-services/metrics.cjs uninstallMessage shows it). */
+export const UNINSTALL_FIELDS = Object.freeze(['schema', 'event', 'installId', 'appVersion', 'platform', 'arch', 'day']);
+/** Only the Windows uninstaller can tell that Acira is being removed (a Mac app is dragged to the Trash; nothing runs). */
+export const UNINSTALL_PLATFORMS = Object.freeze(['win32']);
 
 export const snake = (name) => name.replace(/[A-Z]/g, (letter) => '_' + letter.toLowerCase());
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -80,8 +89,10 @@ export const ARCHES = ['x64', 'arm64', 'ia32'];
 /** Every daily_usage column the function writes (schema 3), and every feature_ratings column. The deploy health probe checks they exist. */
 export const DAILY_COLUMNS = Object.freeze(['day', 'install_id', 'app_version', 'channel', 'platform', 'arch', 'language', 'schema_version', ...Object.keys(ENUMS).map(snake), ...USES.map((name) => 'use_' + snake(name))]);
 export const RATING_COLUMNS = Object.freeze(['day', 'feature', 'stars', 'app_version', 'platform']);
-/** [name, window in seconds, limit]. Per source address (all messages), per install id (daily), per address for ratings. */
-export const LIMITS = Object.freeze({ ipHour: ['h', 3600, 30], ipDay: ['d', 86400, 200], idDay: ['i', 86400, 2], ratingDay: ['r', 86400, 4] });
+export const UNINSTALL_COLUMNS = Object.freeze(['install_id', 'day', 'app_version', 'platform', 'arch']);
+/** [name, window in seconds, limit]. Per source address (all messages), per install id (daily), per address for ratings and for uninstalls
+ * (an install sends at most one uninstall message; a repeat of the same id is ignored by the table's primary key). */
+export const LIMITS = Object.freeze({ ipHour: ['h', 3600, 30], ipDay: ['d', 86400, 200], idDay: ['i', 86400, 2], ratingDay: ['r', 86400, 4], uninstallDay: ['u', 86400, 3] });
 const DAY_MS = 86400000;
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -96,6 +107,8 @@ function dayOk(day, now) {
   return Math.abs(when - today) <= DAY_MS;
 }
 
+const idOk = (installId, probe) => typeof installId === 'string' && UUID_V4.test(installId) && (probe ? installId === SAMPLE_ID : installId !== SAMPLE_ID);
+
 /** Returns the daily_usage row to store, or null when the body is not exactly a valid daily message. `probe` accepts only the placeholder id. */
 export function validate(value, now = Date.now(), { probe = false } = {}) {
   if (!isObject(value)) return null;
@@ -107,7 +120,7 @@ export function validate(value, now = Date.now(), { probe = false } = {}) {
   if (schema === 2 && !exactly(keys, [...BASE_FIELDS, ...facts])) return null;
   // Schema 3: the base fields are required; each fact may be left out (stored as NULL), but no key outside the list is allowed.
   if (schema === 3 && (!BASE_FIELDS.every((key) => keys.includes(key)) || !keys.every((key) => BASE_FIELDS.includes(key) || facts.includes(key)))) return null;
-  if (typeof installId !== 'string' || !UUID_V4.test(installId) || (probe ? installId !== SAMPLE_ID : installId === SAMPLE_ID)) return null;
+  if (!idOk(installId, probe)) return null;
   if (!versionOk(appVersion)) return null;
   if (!CHANNELS.includes(channel) || !PLATFORMS.includes(platform) || !ARCHES.includes(arch)) return null;
   if (typeof language !== 'string' || !/^[a-z]{2}$/.test(language)) return null;
@@ -135,10 +148,20 @@ export function validateRating(value, now = Date.now()) {
   return { day, feature, stars, app_version: appVersion, platform };
 }
 
-/** The two health-probe messages the deploy script sends with `X-Acira-Probe: 1`. They pass validation, reach storage, and store nothing. */
+/** Returns the usage_uninstalls row to store, or null when the body is not exactly a valid uninstall message. `probe` accepts only the placeholder id. */
+export function validateUninstall(value, now = Date.now(), { probe = false } = {}) {
+  if (!isObject(value) || !exactly(Object.keys(value), UNINSTALL_FIELDS)) return null;
+  const { schema, event, installId, appVersion, platform, arch, day } = value;
+  if (schema !== 1 || event !== 'uninstall') return null;
+  if (!idOk(installId, probe) || !versionOk(appVersion) || !UNINSTALL_PLATFORMS.includes(platform) || !ARCHES.includes(arch) || !dayOk(day, now)) return null;
+  return { install_id: installId, day, app_version: appVersion, platform, arch };
+}
+
+/** The health-probe messages the deploy script sends with `X-Acira-Probe: 1`. They pass validation, reach storage, and store nothing. */
 export const PROBES = Object.freeze({
   daily: (day) => ({ schema: 3, event: 'daily', installId: SAMPLE_ID, appVersion: '0.0.0-probe', channel: 'beta', platform: 'linux', arch: 'x64', language: 'en', day, windowView: 'full', splitView: '0' }),
   rating: (day) => ({ schema: 1, event: 'rating', feature: 'splitView', stars: 5, appVersion: '0.0.0-probe', platform: 'linux', day }),
+  uninstall: (day) => ({ schema: 1, event: 'uninstall', installId: SAMPLE_ID, appVersion: '0.0.0-probe', platform: 'win32', arch: 'x64', day }),
 });
 
 const hex = (buffer) => [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -153,7 +176,8 @@ const reply = (status, headers = {}) => new Response(null, { status, headers });
 const LIMITED = { 'Retry-After': '3600' };
 
 /** `store.hit(key, windowSeconds, limit)` -> true when allowed; `store.insert(row)` stores one daily row (a repeat of day+install id is not an error);
- * `store.insertRating(row)` stores one rating; `store.probe(table, columns)` -> true when the table and every column exist (reads no row). */
+ * `store.insertRating(row)` stores one rating; `store.insertUninstall(row)` stores one uninstall (a repeat of the install id is not an error);
+ * `store.probe(table, columns)` -> true when the table and every column exist (reads no row). */
 export function createHandler({ store, secret, now = () => Date.now() }) {
   return async function handle(request) {
     if (request.method !== 'POST') return reply(405, { Allow: 'POST' });
@@ -166,8 +190,11 @@ export function createHandler({ store, secret, now = () => Date.now() }) {
     let body;
     try { body = JSON.parse(text); } catch { return reply(400); }
     const probe = request.headers.get('x-acira-probe') === '1', time = now();
-    const rating = isObject(body) && body.event === 'rating';
-    const row = rating ? (size <= RATING_MAX_BYTES ? validateRating(body, time) : null) : validate(body, time, { probe });
+    const kind = isObject(body) && (body.event === 'rating' || body.event === 'uninstall') ? body.event : 'daily';
+    const rating = kind === 'rating', uninstall = kind === 'uninstall';
+    const row = rating ? (size <= RATING_MAX_BYTES ? validateRating(body, time) : null)
+      : uninstall ? (size <= UNINSTALL_MAX_BYTES ? validateUninstall(body, time, { probe }) : null)
+      : validate(body, time, { probe });
     if (!row) return reply(400);
     try {
       const today = new Date(time).toISOString().slice(0, 10);
@@ -175,11 +202,13 @@ export function createHandler({ store, secret, now = () => Date.now() }) {
       const checks = [[`ip:${ip}:${LIMITS.ipHour[0]}`, ...LIMITS.ipHour.slice(1)]];
       if (!probe) {
         checks.push([`ip:${ip}:${LIMITS.ipDay[0]}`, ...LIMITS.ipDay.slice(1)]);
-        checks.push(rating ? [`rt:${ip}:${today}:${LIMITS.ratingDay[0]}`, ...LIMITS.ratingDay.slice(1)] : [`id:${row.install_id}:${today}:${LIMITS.idDay[0]}`, ...LIMITS.idDay.slice(1)]);
+        checks.push(rating ? [`rt:${ip}:${today}:${LIMITS.ratingDay[0]}`, ...LIMITS.ratingDay.slice(1)]
+          : uninstall ? [`un:${ip}:${today}:${LIMITS.uninstallDay[0]}`, ...LIMITS.uninstallDay.slice(1)]
+          : [`id:${row.install_id}:${today}:${LIMITS.idDay[0]}`, ...LIMITS.idDay.slice(1)]);
       }
       for (const [key, seconds, limit] of checks) if (!(await store.hit(key, seconds, limit))) return reply(429, LIMITED);
-      if (probe) return reply((await store.probe(rating ? 'feature_ratings' : 'daily_usage', rating ? RATING_COLUMNS : DAILY_COLUMNS)) ? 202 : 503);
-      if (rating) await store.insertRating(row); else await store.insert(row);
+      if (probe) return reply((await store.probe(...(rating ? ['feature_ratings', RATING_COLUMNS] : uninstall ? ['usage_uninstalls', UNINSTALL_COLUMNS] : ['daily_usage', DAILY_COLUMNS]))) ? 202 : 503);
+      if (rating) await store.insertRating(row); else if (uninstall) await store.insertUninstall(row); else await store.insert(row);
       return reply(204);
     } catch { return reply(503); }
   };

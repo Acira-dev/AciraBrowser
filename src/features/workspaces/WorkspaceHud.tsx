@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { windowWorkspaces } from '../../runtime/workspaces';
+import { profilesAsSpaces, switchSpoken, windowWorkspaces, type WindowPlace } from '../../runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot } from '../../runtime/types';
-import { shownName } from './WorkspaceSwitcher';
+import { nameIn } from './WorkspaceSwitcher';
 import { t } from '../../i18n';
 
 /** The controls that already say which workspace is open: the sidebar row, its title line, the strip chip. */
@@ -16,10 +16,10 @@ export function switcherOnScreen(root: ParentNode = document): boolean {
     return box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < window.innerWidth && box.top < window.innerHeight;
   });
 }
-/** What a switch says: "Work workspace, 12 tabs". */
+/** What a switch says: "Work workspace, 12 tabs"; with profiles as spaces "Client, 12 tabs". */
 export const hudText = (state: BrowserSnapshot): string | undefined => {
   const open = windowWorkspaces(state).find(item => item.id === state.activeWorkspaceId);
-  return open ? t('workspaces.hud', { name: shownName(open), count: state.tabs.length }) : undefined;
+  return open ? t(profilesAsSpaces(state) ? 'workspaces.spaceHud' : 'workspaces.hud', { name: nameIn(state, open), count: state.tabs.length }) : undefined;
 };
 /** Toasts that already say where things went (create, delete, its Undo): the HUD stays quiet for them. */
 const SPOKEN = new Set(['workspaces.created', 'workspaces.createdAll', 'runtime.workspaceDeleted']);
@@ -31,11 +31,11 @@ const SPOKEN = new Set(['workspaces.created', 'workspaces.createdAll', 'runtime.
  * and speed rules (it rises on the input frame; with reduced motion it only fades). Mounted once per window (App).
  */
 export function WorkspaceSwitchFeedback({ state, dispatch }: { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void }) {
-  const last = useRef<{ id: string; profile: string } | null>(null), [said, setSaid] = useState('');
+  const last = useRef<WindowPlace | null>(null), [said, setSaid] = useState('');
   useEffect(() => {
     const before = last.current, now = { id: state.activeWorkspaceId, profile: state.activeBrowserProfileId };
     last.current = now;
-    if (!before || before.profile !== now.profile || before.id === now.id || windowWorkspaces(state).length < 2) return;
+    if (!switchSpoken(state, before, now)) return;
     const text = hudText(state);
     if (!text) return;
     const toast = state.toast, fresh = toast && Date.now() - (toast.at ?? toast.id) < 1500 && toast.i18n && SPOKEN.has(toast.i18n.id);

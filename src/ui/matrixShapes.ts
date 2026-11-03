@@ -43,6 +43,12 @@ export function torConnecting(t: number, r: number, c: number, R: number, C: num
   return rank < lit ? 1 : rank === lit ? ((t * 2.4) % 1 < .5 ? .5 : 0) : 0;
 }
 
+/** The same fill held still (a paused update download): the lit layers stay, the next dot stops blinking. A still frame: it costs no frames. */
+export function progressHeld(_t: number, r: number, c: number, R: number, C: number, progress = 0) {
+  const lit = Math.max(1, Math.round(Math.min(1, Math.max(0, progress)) * R * C));
+  return layerOrder(R, C)[r * C + c] < lit ? 1 : 0;
+}
+
 /** Tor connected: every layer rests at half and a full layer travels from the centre to the edge, then a short rest. */
 export function torConnected(t: number, r: number, c: number, R: number, C: number) {
   const edge = (Math.min(R, C) - 1) / 2, front = ((t / 3.2) % 1) * (edge + 2.5) - .5;

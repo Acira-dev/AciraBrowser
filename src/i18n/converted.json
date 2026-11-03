@@ -175,6 +175,7 @@
     "src/features/settings/panels/spelling.tsx",
     "src/features/settings/panels/tor-security.tsx",
     "src/features/settings/panels/updates.tsx",
+    "src/features/settings/updateRow.ts",
     "src/features/settings/panels/vpn.tsx",
     "src/features/settings/panels/web-apps.tsx",
     "src/features/tor/TorChip.tsx",

@@ -41,10 +41,13 @@ export function ordinaryVisit(state: Profiles, visit: Pick<HistoryVisit, 'url' |
   return !profile?.private && !profile?.tor;
 }
 
-/** The history a tab may read: none in Tor; elsewhere only ordinary visits. */
+/** The history a tab may read: none in Tor; elsewhere only ordinary visits of the tab's own profile. Every window holds every
+ * profile's history (a shared field), so a surface that lists it (the command bar, the address bar) would otherwise show one
+ * profile's visits in another's window. A visit saved before visits named their profile belongs to the first ordinary profile. */
 export function historyVisibleFrom<T extends Pick<HistoryVisit, 'url' | 'browserProfileId'>>(state: Profiles, from: Tab | undefined, history: readonly T[]): T[] {
   if (browsingContextOf(state, from) === 'tor') return [];
-  return history.filter(visit => ordinaryVisit(state, visit));
+  const first = state.browserProfiles?.find(profile => !profile.private && !profile.tor)?.id;
+  return history.filter(visit => ordinaryVisit(state, visit) && (!from || (visit.browserProfileId ?? first) === from.browserProfileId));
 }
 
 /** Bookmarks are the person's own choice, so they stay everywhere except a Tor tab of an ordinary window (they are the

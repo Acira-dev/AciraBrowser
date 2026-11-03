@@ -1,6 +1,6 @@
 {
   "name": "acira-browser",
-  "version": "0.1.0-beta.8",
+  "version": "0.1.0-beta.9",
   "description": "An independent, calm consumer browser",
   "license": "AGPL-3.0-only",
   "main": "desktop/main.cjs",
@@ -110,6 +110,8 @@
       "tests/database-transaction-error.test.cjs",
       "tests/network-retry.test.cjs",
       "tests/app-updater-retry.test.cjs",
+      "tests/app-updater-pause.test.cjs",
+      "tests/update-download.test.cjs",
       "tests/protected-media-wait.test.cjs",
       "tests/process-errors.test.cjs",
       "tests/database-backups.test.cjs",
@@ -230,6 +232,8 @@
       "tests/supabase-metrics-v2.test.mjs",
       "tests/supabase-metrics-v3.test.mjs",
       "tests/supabase-site-reports.test.mjs",
+      "tests/supabase-usage-churn.test.mjs",
+      "tests/usage-uninstall.test.cjs",
       "tests/feature-rating.test.mjs",
       "tests/rewind-closed-tabs.test.cjs",
       "tests/rewind-reopen-split.test.cjs",
@@ -297,6 +301,9 @@
       "tests/extension-review-visible.test.mjs",
       "tests/ext-api-windows.test.cjs",
       "tests/ext-api-tabs.test.cjs",
+      "tests/ext-api-tabs-profiles.test.cjs",
+      "tests/profile-spaces-main.test.cjs",
+      "tests/profile-spaces-ui.test.cjs",
       "tests/ext-api-tabs-events.test.cjs",
       "tests/ext-api-event-gate.test.cjs",
       "tests/ext-api-glob-dos.test.cjs",
@@ -318,6 +325,7 @@
     ],
     "tsx": [
       "tests/cover-my-artworks.test.ts",
+      "tests/site-report-menu.test.ts",
       "tests/internal-page-zoom.test.ts",
       "tests/browser-chrome.test.ts",
       "tests/address-suggestion-privacy.test.ts",
@@ -356,6 +364,8 @@
       "tests/command-palette.test.ts",
       "tests/format-shortcut.test.ts",
       "tests/hex-color.test.ts",
+      "tests/update-row-button.test.ts",
+      "tests/update-pause-ui.test.ts",
       "tests/mac-option-key-text.test.ts",
       "tests/name-taken.test.ts",
       "tests/tor-window-mac-key.test.ts",
@@ -492,6 +502,10 @@
       "tests/pane-card-chip.test.ts",
       "tests/navigation-line.test.ts",
       "tests/workspaces-followups.test.ts",
+      "tests/profile-spaces.test.ts",
+      "tests/profile-spaces-translations.test.ts",
+      "tests/space-windows.test.ts",
+      "tests/qa-profile-spaces-bugs.test.ts",
       "tests/setup-scene-look.test.ts",
       "tests/r4-vpn-setup.test.ts",
       "tests/import-browser-icons.test.ts",
@@ -520,7 +534,8 @@
       "tests/secured-workspaces-platform.test.ts",
       "tests/group-rail-fade.test.ts",
       "tests/ws-title-count-align.test.ts",
-      "tests/release-version.test.ts"
+      "tests/release-version.test.ts",
+      "tests/usage-sent-uninstall.test.ts"
     ]
   }
 }

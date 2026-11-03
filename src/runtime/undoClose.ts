@@ -66,10 +66,13 @@ export function forgetDeletedPages(s:BrowserSnapshot,before:readonly HistoryVisi
 export function reopenLastClosedTab(s:BrowserSnapshot,inView?:(tab:ClosedTabSession)=>boolean):boolean {
  const profiles=new Set(s.browserProfiles.map(p=>p.id)),open=new Set(s.tabs.map(t=>t.id));
  if(s.closedPrivateTabs){s.closedPrivateTabs=s.closedPrivateTabs.filter(t=>profiles.has(t.browserProfileId)&&!open.has(t.id));if(!s.closedPrivateTabs.length)delete s.closedPrivateTabs;}
- const normal=s.closedTabs[0] as ClosedTabSession|undefined,hidden=inView?s.closedPrivateTabs?.find(inView):s.closedPrivateTabs?.[0];
+ // The profile on screen's own: with profiles as spaces a window's closed tabs are every space's, and Reopen closed tab in one space never
+ // reopens another's (in a window of one profile they are all its own).
+ const own=(t:ClosedTabSession)=>t.browserProfileId===s.activeBrowserProfileId,normalAt=s.closedTabs.findIndex(own);
+ const normal=normalAt>=0?s.closedTabs[normalAt] as ClosedTabSession:undefined,hidden=s.closedPrivateTabs?.find(t=>own(t)&&(!inView||inView(t)));
  const fromPrivate=!!hidden&&(!normal||(hidden.closedRev??0)>(normal.closedRev??0)),closed=fromPrivate?hidden:normal;
  if(!closed)return false;
- if(fromPrivate){s.closedPrivateTabs=s.closedPrivateTabs!.filter(t=>t!==hidden);if(!s.closedPrivateTabs.length)delete s.closedPrivateTabs;}else s.closedTabs.shift();
+ if(fromPrivate){s.closedPrivateTabs=s.closedPrivateTabs!.filter(t=>t!==hidden);if(!s.closedPrivateTabs.length)delete s.closedPrivateTabs;}else s.closedTabs.splice(normalAt,1);
  // A page caution belongs to the page that was showing: the reopened tab is checked afresh.
  const {closedIndex,closedBatch,closedSplit,closedActive:_a,closedLeftId:_l,closedRightId:_r,closedRev:_v,risk:_risk,...tab}=closed;
  s.tabs.splice(Math.min(closedIndex??s.tabs.length,s.tabs.length),0,tab);s.activeTabId=tab.id;

@@ -1,9 +1,11 @@
 // The whole logic of the `report` Edge Function, with no Deno, network or database in it, so Node can run it in tests.
 // index.ts supplies the real store (restStore) and the hashing salt; tests supply fakes.
 //
-// POST only. One message type, "Report a problem with this site" (src: desktop/browser-services/site-reports.cjs), with exactly these keys:
-//   schema 1, host (a public site name only), kind and list (closed lists; list may be null), appVersion, platform (OS family),
-//   note (the text the person typed, '' for none, at most 500 characters).
+// POST only. One message type, "Report a problem" (src: desktop/browser-services/site-reports.cjs), with exactly these keys:
+//   schema 1, host, kind and list (closed lists; list may be null), appVersion, platform (OS family), note (the text the person typed, at most
+//   500 characters). Two subjects, told apart by the kind:
+//   - a website (SITE_KINDS): host is a public site name only; list may name the list or feature involved; the note may be '' (none);
+//   - Acira itself (APP_KINDS, from the Acira menu or Help > Report a Problem): host and list are null and the note is required.
 // Any other key or value is a 400, so a full address, a path, a query or an identifier cannot be stored. tests/supabase-site-reports.test.mjs
 // fails if these lists drift from the SQL check constraints.
 // Answers 204 (stored), 202 (a deploy health probe: valid, storage reachable, nothing stored), 400 (anything wrong with the request),
@@ -14,7 +16,9 @@
  * tests/supabase-site-reports.test.mjs computes it. 4 KB fits it and still refuses anything bigger. */
 export const MAX_BYTES = 4096;
 export const NOTE_MAX = 500;
-export const KINDS = Object.freeze(['blocked', 'broken', 'banner', 'other']);
+export const SITE_KINDS = Object.freeze(['blocked', 'broken', 'banner', 'other']);
+export const APP_KINDS = Object.freeze(['app-broken', 'app-looks', 'app-crash', 'app-idea']);
+export const KINDS = Object.freeze([...SITE_KINDS, ...APP_KINDS]);
 export const LISTS = Object.freeze(['phishing', 'malware', 'phishing-db', 'lookalike', 'ad-blocking', 'cookie-banners']);
 export const PLATFORMS = Object.freeze(['darwin', 'win32', 'linux']);
 const FIELDS = ['schema', 'host', 'kind', 'list', 'appVersion', 'platform', 'note'];
@@ -33,8 +37,8 @@ export function validHost(host) {
 
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:[-.][0-9A-Za-z.]{1,16}){0,2}$/; // the same rule as usage's app version and the SQL check
 /** C0 controls other than tab and line feed (so carriage return too), the Unicode line and paragraph separators, and lone surrogates. */
-const BAD_NOTE = /[\u0000-\u0008\u000B-\u001F\u2028\u2029\uD800-\uDFFF]/u;
-/** [name, window in seconds, limit]. Per source address (hour, day), per address and host (day), and for all callers together (hour). */
+const BAD_NOTE = /[\u0000-\u0008\u000B-\u001F\u{2028}\u{2029}\uD800-\uDFFF]/u;
+/** [name, window in seconds, limit]. Per source address (hour, day), per address and host or app kind (day), and for all callers together (hour). */
 export const LIMITS = Object.freeze({ addressHour: ['h', 3600, 10], addressDay: ['d', 86400, 30], hostDay: ['s', 86400, 3], allHour: ['h', 3600, 3000] });
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -51,13 +55,17 @@ function cleanNote(note) {
 export function validate(value) {
   if (!isObject(value) || !exactly(Object.keys(value), FIELDS)) return null;
   const { schema, host, kind, list, appVersion, platform, note } = value;
-  if (schema !== 1 || !validHost(host)) return null;
-  if (typeof kind !== 'string' || !KINDS.includes(kind)) return null;
+  if (schema !== 1 || typeof kind !== 'string') return null;
+  const app = APP_KINDS.includes(kind);
+  if (!app && !SITE_KINDS.includes(kind)) return null;
+  // A report about a site names it; one about Acira names no site and no list.
+  if (app ? host !== null || list !== null : !validHost(host)) return null;
   if (list !== null && (typeof list !== 'string' || !LISTS.includes(list))) return null;
   if (typeof appVersion !== 'string' || appVersion.length > 24 || !VERSION.test(appVersion)) return null;
   if (typeof platform !== 'string' || !PLATFORMS.includes(platform)) return null;
   const stored = cleanNote(note);
-  if (stored === undefined) return null;
+  // With no site, the note is the report: an empty one is refused.
+  if (stored === undefined || (app && stored === null)) return null;
   return { host, kind, list, app_version: appVersion, platform, note: stored };
 }
 
@@ -116,8 +124,8 @@ export function createHandler({ store, secret, now = () => Date.now() }) {
       const ip = await addressKey(address, secret, today);
       const checks = [counter(ip, LIMITS.addressHour)];
       if (!probe) {
-        // The same host from the same address: a hash of both, so the counter key names neither the address nor the site.
-        const site = await addressKey(`${address}|${row.host}`, secret, today);
+        // The same host (or, about Acira, the same kind) from the same address: a hash of both, so the counter key names neither the address nor the site.
+        const site = await addressKey(`${address}|${row.host ?? `acira:${row.kind}`}`, secret, today);
         // The global cap comes last, so callers already over their own limit do not use up everyone's allowance.
         checks.push(counter(ip, LIMITS.addressDay), counter(site, LIMITS.hostDay), counter('all', LIMITS.allHour));
       }

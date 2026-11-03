@@ -1,6 +1,7 @@
 import enMessages from '../i18n/en.json';
 import { format as formatMessage } from '../i18n/format';
 import { navigationTitle } from './navigation';
+import { settleSpaces } from './profileSpaces';
 import { leaveSplit, normalizeSplitGroups } from './splitGroups';
 import { normalizeSplit } from './splitLayout';
 import { TAB_GROUP_COLORS } from './tabGroups';
@@ -51,14 +52,32 @@ export function workspaceIdOf(state: Scoped, item: { browserProfileId: string; w
 }
 /** True when `id` has a tab in this window (the interface only switches optimistically to a workspace that does). */
 export const workspaceHasTabs = (state: Pick<BrowserSnapshot, 'tabs' | 'workspaces'>, id: string): boolean => state.tabs.some(tab => workspaceIdOf(state, tab) === id);
-/** The workspaces the window's profile has (none in a private or Tor window). */
-export const windowWorkspaces = (state: Pick<BrowserSnapshot, 'workspaces' | 'activeBrowserProfileId'>): Workspace[] => workspacesFor(state, state.activeBrowserProfileId);
+/** Settings › Profiles "Switch between: Profiles as spaces" (runtime/profileSpaces.ts): each profile is a space, there are no workspaces. */
+export const profilesAsSpaces = (state: { settings?: Pick<BrowserSnapshot['settings'], 'spaces'> }): boolean => state.settings?.spaces === 'profiles';
+type Listed = Pick<BrowserSnapshot, 'workspaces' | 'activeBrowserProfileId'> & Partial<Pick<BrowserSnapshot, 'settings' | 'browserProfiles'>>;
+/** What the window's switcher lists (none in a private or Tor window): the window's profile's workspaces, or with profiles as
+ *  spaces one space per ordinary profile, which is that profile's first workspace (its others are put away). */
+export const windowWorkspaces = (state: Listed): Workspace[] => {
+  if (profilesAsSpaces(state) && state.browserProfiles) {
+    const ordinary = state.browserProfiles.filter(profile => !profile.private);
+    if (!ordinary.some(profile => profile.id === state.activeBrowserProfileId)) return [];
+    return ordinary.flatMap(profile => workspacesFor(state, profile.id).slice(0, 1));
+  }
+  return workspacesFor(state, state.activeBrowserProfileId).filter(workspace => !workspace.parked);
+};
 /** The workspace Ctrl+Alt+PageDown (1) or PageUp (-1) opens: the window's next / previous one, wrapping round (main's workspace-cycle). None with one workspace. */
 export function cycledWorkspace(state: Pick<BrowserSnapshot, 'workspaces' | 'activeBrowserProfileId' | 'activeWorkspaceId'>, direction: 1 | -1): Workspace | undefined {
   const list = windowWorkspaces(state), at = list.findIndex(item => item.id === state.activeWorkspaceId);
   return list.length < 2 ? undefined : list[(Math.max(0, at) + direction + list.length) % list.length];
 }
 export const activeWorkspaceOf = (state: Pick<BrowserSnapshot, 'workspaces' | 'activeBrowserProfileId' | 'activeWorkspaceId'>): Workspace | undefined => windowWorkspaces(state).find(workspace => workspace.id === state.activeWorkspaceId);
+/** Where the window is: its open workspace and the profile on screen. */
+export interface WindowPlace { id: string; profile: string }
+/** True when the window says a switch out loud (WorkspaceSwitchFeedback, "Work workspace, 12 tabs"): another of its two or more
+ *  workspaces opened. With profiles as spaces every space switch also changes the profile on screen and is said the same way;
+ *  with workspaces a change of profile (a window taking over from another) stays quiet. */
+export const switchSpoken = (state: Listed, before: WindowPlace | null, now: WindowPlace): boolean =>
+  !!before && before.id !== now.id && (before.profile === now.profile || profilesAsSpaces(state)) && windowWorkspaces(state).length >= 2;
 /** What the interface calls the first workspace until it is renamed. */
 export const FIRST_WORKSPACE_NAME = 'Main';
 export const workspaceName = (workspace: Pick<Workspace, 'name'>, unnamed: string = FIRST_WORKSPACE_NAME): string => workspace.name || unnamed;
@@ -74,12 +93,13 @@ export function workspaceColorOf(state: Pick<BrowserSnapshot, 'browserProfiles' 
   return profile && !profile.private && profile.id !== fallback && validWorkspaceColor(profile.color) ? profile.color.toLowerCase() : undefined;
 }
 /** Tabs (and tabs with a page, not just a new tab) per workspace of the window's profile, from the full state. */
-export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspaces' | 'activeBrowserProfileId'>): Record<string, { tabs: number; pages: number }> {
+export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspaces' | 'activeBrowserProfileId'> & Partial<Pick<BrowserSnapshot, 'settings' | 'browserProfiles'>>): Record<string, { tabs: number; pages: number }> {
   const counts: Record<string, { tabs: number; pages: number }> = {};
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
-    // A favorite's own tab is the favorite's (favoriteTabs.ts), shown in its tile and not in any workspace's list.
-    if (tab.browserProfileId !== state.activeBrowserProfileId || tab.favoriteId) continue;
+    // A favorite's own tab is the favorite's (favoriteTabs.ts), shown in its tile and not in any workspace's list. Every other tab
+    // counts in its own profile's workspace, so only listed ones count (with profiles as spaces, every profile's).
+    if (tab.favoriteId) continue;
     const entry = counts[workspaceIdOf(state, tab)];
     if (entry) { entry.tabs++; if (tab.url !== 'acira://new') entry.pages++; }
   }
@@ -88,7 +108,7 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
 
 function cleanEntry(raw: Workspace): Workspace {
   const legacyDefault = raw.id === 'workspace-default' && raw.name === 'My workspace';
-  return { id: raw.id, browserProfileId: raw.browserProfileId, name: legacyDefault ? '' : cleanWorkspaceName(raw.name), ...(validWorkspaceIcon(raw.icon) ? { icon: raw.icon } : {}), ...(validWorkspaceColor(raw.color) ? { color: raw.color.toLowerCase() } : {}), ...(raw.secured === true ? { secured: true as const, ...(raw.unlocked === true ? { unlocked: true as const } : {}) } : {}) };
+  return { id: raw.id, browserProfileId: raw.browserProfileId, name: legacyDefault ? '' : cleanWorkspaceName(raw.name), ...(validWorkspaceIcon(raw.icon) ? { icon: raw.icon } : {}), ...(validWorkspaceColor(raw.color) ? { color: raw.color.toLowerCase() } : {}), ...(raw.secured === true ? { secured: true as const, ...(raw.unlocked === true ? { unlocked: true as const } : {}) } : {}), ...(raw.parked === true ? { parked: true as const } : {}) };
 }
 /** Step one of settling a window: the list itself. Every ordinary profile has at least one workspace and at most eight; entries are clean; legacy rows stay. */
 function cleanWorkspaceList(s: BrowserSnapshot): void {
@@ -135,7 +155,7 @@ function settleWorkspaces(s: BrowserSnapshot): void {
   if (!s.closedWorkspaces?.length) delete s.closedWorkspaces;
 }
 /** Makes a state's workspaces valid in place (restore, another window's change, the end of every action). */
-export function normalizeWorkspaces(s: BrowserSnapshot): void { cleanWorkspaceList(s); settleWorkspaces(s); }
+export function normalizeWorkspaces(s: BrowserSnapshot): void { cleanWorkspaceList(s); settleSpaces(s); settleWorkspaces(s); }
 
 const say = (s: BrowserSnapshot, id: string, params?: Record<string, string | number>, extra: { action?: NonNullable<BrowserSnapshot['toast']>['action']; tone?: 'error' | 'info' | 'status'; icon?: StatusIcon } = {}) => {
   const now = Date.now();
@@ -199,6 +219,29 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
   }
   if (!action.type.startsWith('workspace.')) return false;
   if (!owner || owner.private) return 'ignore';
+  if (profilesAsSpaces(s)) {
+    // Profiles as spaces: there are no workspaces to make, edit or move tabs to; picking a space opens that profile's tab, in this
+    // window (the one it showed last there, else its first, else a new tab of that profile). A secured workspace still open always
+    // locks (main seals it before profiles become spaces; its workspace.secured-lock must never be dropped, or its page stays up).
+    // A tab dropped on another profile's space stays where it is (its pages are its profile's): a toast says so and offers to open its
+    // address in that profile (QA #10). A private, Tor or secured page is never opened elsewhere.
+    if (action.type === 'workspace.move-tabs') {
+      const space = windowWorkspaces(s).find(item => item.id === action.workspaceId), tab = s.tabs.find(item => item.id === s.activeTabId && action.tabIds.includes(item.id)) ?? s.tabs.find(item => item.id === action.tabIds[0]);
+      const other = space && s.browserProfiles.find(item => item.id === space.browserProfileId && item.id !== tab?.browserProfileId);
+      if (!tab || !other) return 'ignore';
+      const name = { name: other.name };
+      say(s, 'workspaces.tabsStayInProfile', undefined, { tone: 'info', ...(tab.privacy ? {} : { action: { label: formatMessage('en', (enMessages as Record<string, string>)['workspaces.openInProfile'], name), labelId: 'workspaces.openInProfile', labelParams: name, command: { type: 'tab.new', url: tab.url, browserProfileId: other.id } } }) });
+      return true;
+    }
+    if (action.type !== 'workspace.select' && action.type !== 'workspace.lock' && action.type !== 'workspace.secured-lock') return 'ignore';
+  }
+  if (profilesAsSpaces(s) && action.type === 'workspace.select') {
+    const space = windowWorkspaces(s).find(item => item.id === action.id);
+    if (!space || space.id === s.activeWorkspaceId) return 'ignore';
+    const own = s.tabs.filter(tab => tab.browserProfileId === space.browserProfileId && workspaceIdOf(s, tab) === space.id);
+    activate(s, entryTab(s, space.id, () => Object.assign(fresh(), { browserProfileId: space.browserProfileId }), own));
+    return true;
+  }
   const mine = workspacesFor(s, profile);
   switch (action.type) {
     case 'workspace.create': {
@@ -433,6 +476,8 @@ export function finishWorkspaces(s: BrowserSnapshot, previous: BrowserSnapshot, 
     }
   }
   guardSecured(s, previous, fresh);
+  // Profiles as spaces (profileSpaces.ts): the workspaces follow the "Switch between" choice; nothing to do while they match.
+  settleSpaces(s);
   settleWorkspaces(s);
 }
 /** The secured rules every action ends with: a locked workspace holds only its lock screen (a tab opened into it goes to the first workspace), every tab of a secured workspace is secured, and a lock screen that is no longer needed goes. */
@@ -466,7 +511,9 @@ function guardSecured(s: BrowserSnapshot, previous: BrowserSnapshot, fresh: Make
  *  page open in it (a lone new tab is an empty twin, not tabs). */
 export function windowHoldsWorkspace(state: Pick<BrowserSnapshot, 'tabs' | 'workspaces' | 'activeWorkspaceId' | 'activeBrowserProfileId'>, id: string): boolean {
   if (state.activeWorkspaceId === id) return true;
-  return state.tabs.some(tab => tab.browserProfileId === state.activeBrowserProfileId && !tab.privacy && tab.url !== 'acira://new' && workspaceIdOf(state, tab) === id);
+  // The workspace's own profile (with profiles as spaces, a window holds every profile's space).
+  const profile = (state.workspaces || []).find(workspace => workspace.id === id)?.browserProfileId ?? state.activeBrowserProfileId;
+  return state.tabs.some(tab => tab.browserProfileId === profile && !tab.privacy && tab.url !== 'acira://new' && workspaceIdOf(state, tab) === id);
 }
 /** The window (by its number) that holds each of this window's workspaces that this window does not: the popover marks them "window 2", and choosing one brings that
  *  window forward on it instead of opening an empty copy here. `others` are the other ordinary windows of the same profile. A window that shows the workspace wins. */
@@ -490,10 +537,16 @@ const scopedCache = new WeakMap<object, BrowserSnapshot>();
 export function scopeToWorkspace(state: BrowserSnapshot): BrowserSnapshot {
   const hit = scopedCache.get(state);
   if (hit) return hit;
-  const own = windowWorkspaces(state);
+  const own = windowWorkspaces(state), profile = state.activeBrowserProfileId;
+  // A window that holds another profile's tabs (profiles as spaces) is scoped even when this profile has one workspace: the
+  // other profile's tabs, groups and closed tabs are never the open workspace's. A window of one profile is unchanged.
+  const mixed = state.tabs.some(tab => tab.browserProfileId !== profile);
+  // Fails closed: a window left on a workspace the switcher doesn't list (profiles as spaces lists each profile's first only) shows the
+  // profile on screen's space, never every tab.
+  const active = own.some(workspace => workspace.id === state.activeWorkspaceId) ? state.activeWorkspaceId : (own.find(workspace => workspace.browserProfileId === profile) ?? (mixed ? undefined : own[0]))?.id;
   let scoped = state;
-  if (own.length > 1 && own.some(workspace => workspace.id === state.activeWorkspaceId)) {
-    const active = state.activeWorkspaceId, profile = state.activeBrowserProfileId, inside = (item: { browserProfileId: string; workspaceId?: string }) => item.browserProfileId !== profile || workspaceIdOf(state, item) === active;
+  if ((own.length > 1 || mixed) && active) {
+    const inside = (item: { browserProfileId: string; workspaceId?: string }) => item.browserProfileId === profile && workspaceIdOf(state, item) === active;
     const tabs = state.tabs.filter(inside), ids = new Set(tabs.map(tab => tab.id));
     const ui = state.windowUi, groups = ui.splitGroups?.filter(group => group.tabIds.every(id => ids.has(id)));
     // The switcher replaces a background workspace's icon with its audio matrix
@@ -501,7 +554,8 @@ export function scopeToWorkspace(state: BrowserSnapshot): BrowserSnapshot {
     const audible = [...new Set(state.tabs.filter(tab => tab.audible && !tab.muted && !inside(tab)).map(tab => workspaceIdOf(state, tab)))];
     // And how many tabs each holds (the switcher's counts, the delete confirmation).
     // R4-48 P1-2: tab search (the command bar, the tab viewer) also looks in the other workspaces, so it needs their tabs (the same objects, not copies).
-    const elsewhere = state.tabs.filter(tab => !inside(tab) && !tab.privacy);
+    // Only this profile's: another profile's tab titles never show in this one.
+    const elsewhere = state.tabs.filter(tab => tab.browserProfileId === profile && !inside(tab) && !tab.privacy);
     scoped = { ...state, tabs, tabGroups: state.tabGroups.filter(inside), closedTabs: state.closedTabs.filter(inside), windowUi: { ...ui, split: ui.split && ui.split.tabIds.every(id => ids.has(id)) ? ui.split : null, ...(groups ? { splitGroups: groups } : {}) }, ...(audible.length ? { audibleWorkspaces: audible } : {}), ...(elsewhere.length ? { otherWorkspaceTabs: elsewhere } : {}), workspaceTabCounts: workspaceCounts(state) };
   }
   scopedCache.set(state, scoped);

@@ -252,9 +252,12 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  useCardGlide(peek.root,'.sb-tab[aria-current=true]:not([data-hidden])',reduced);
  // One layout store: native settings.verticalTabs is the truth; the per-profile switch follows it, and a change
  // made through that switch (Settings) is written back to the native setting.
- const seenLayout=useRef({native:vertical,profile:prefs.tabs});
- useEffect(()=>{const seen=seenLayout.current;if(vertical!==seen.native){seenLayout.current={native:vertical,profile:vertical};if(prefs.tabs!==vertical)setRailPrefs({tabs:vertical},profileId,privateMode);return;}
-  if(prefs.tabs!==seen.profile){seenLayout.current={native:prefs.tabs,profile:prefs.tabs};if(prefs.tabs!==vertical)dispatch({type:'settings.update',patch:{verticalTabs:prefs.tabs}});}
+ // Another profile coming on screen in this window (profiles as spaces) brings its own switch, which follows the native setting
+ // and never rewrites it: the tab layout stays what it is when the profile changes.
+ const seenLayout=useRef({native:vertical,profile:prefs.tabs,profileId});
+ useEffect(()=>{const seen=seenLayout.current;if(profileId!==seen.profileId){seenLayout.current={native:vertical,profile:vertical,profileId};if(prefs.tabs!==vertical)setRailPrefs({tabs:vertical},profileId,privateMode);return;}
+  if(vertical!==seen.native){seenLayout.current={native:vertical,profile:vertical,profileId};if(prefs.tabs!==vertical)setRailPrefs({tabs:vertical},profileId,privateMode);return;}
+  if(prefs.tabs!==seen.profile){seenLayout.current={native:prefs.tabs,profile:prefs.tabs,profileId};if(prefs.tabs!==vertical)dispatch({type:'settings.update',patch:{verticalTabs:prefs.tabs}});}
  },[vertical,prefs.tabs,profileId,privateMode]);// eslint-disable-line react-hooks/exhaustive-deps
  // Native signals: Ctrl+Shift+D. (The left-edge peek is main's, desktop/edge-reveal.cjs, and reaches useSidebarPeek as chrome-edge.)
  const latest=useRef({state,dispatch,expanded});latest.current={state,dispatch,expanded};

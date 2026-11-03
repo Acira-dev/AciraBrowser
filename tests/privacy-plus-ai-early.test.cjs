@@ -3,11 +3,15 @@
 // Runs the app's real frame script (content-filter-preload.cjs) as a preload in a hidden Electron window against a Google-shaped page (fixtures/ai-pages/google-2026.html,
 // structure read from a live results page on 26 Oct 2026) that adds its AI Overview at parse time, late (400 ms) or streamed (heading text arrives later).
 // Every animation frame records whether any AI element (overview, AI Mode pill, AI Mode tab) was visible: it must be zero frames.
+// The line's colours are measured against what paints behind it on light and dark pages, after the system appearance or the page's own theme changes under a
+// line already drawn, and where the results area inherits a colour unrelated to the theme (DuckDuckGo's #222 under its dark theme, Bing's 60% black).
 const {test}=require('node:test'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process'),path=require('node:path'),fs=require('node:fs');
 const {surfacesFor,earlyStyles,splitSelectors,RULES}=require('../desktop/browser-services/ai-surfaces.cjs');
 const electron=(()=>{try{const value=require('electron');return typeof value==='string'&&fs.existsSync(value)?value:null;}catch{return null;}})();
 const SPECS=[
  {mode:'sync',theme:'light',reveal:true},{mode:'late',theme:'dark'},{mode:'stream',theme:'light'},{mode:'late',theme:'light'},
+ {mode:'late',theme:'system',switchTo:'dark'},{mode:'sync',theme:'switch'},{mode:'sync',theme:'dark',ink:'fixed'},{mode:'sync',theme:'light',ink:'faint'},
+ {mode:'sync',theme:'system',scheme:'dark',switchTo:'light'},
  {mode:'sync',theme:'light',ai:false}
 ];
 let results=null,problem=null;
@@ -36,9 +40,25 @@ test('the "AI answer hidden · Show" line lines up with the results column, is q
   assert.deepEqual(measured.lines,['AI answer hidden · Show'],'spec '+index);
   assert.ok(Math.abs(measured.textLeft-measured.resultsLeft)<=1,`text starts at ${measured.textLeft}, the results column at ${measured.resultsLeft}`);
   assert.equal(measured.fontSize,'13px');assert.equal(measured.lineHeight,'20px');assert.equal(measured.marginTop,'10px');assert.equal(measured.marginBottom,'8px');
-  assert.match(measured.color,/ 0\.62\)$/,'the text is the page colour at 62%: '+measured.color);
   assert.ok(measured.buttonBox.h>=36&&measured.buttonBox.w>=16+16,'Show has 8px of hit area on every side: '+JSON.stringify(measured.buttonBox));
  }
+});
+test('the line reads at 4.5:1 or better on light and dark pages and after a theme switch, and Show stays an underlined link in full colour',{skip},()=>{
+ for(const [index,spec] of SPECS.entries()){
+  if(spec.ai===false)continue;
+  const {measured}=results[index],{contrast}=measured,name=JSON.stringify(spec);
+  assert.ok(contrast.text>=4.5,`${name}: the words read at ${contrast.text}:1 on rgb(${contrast.background}) in ${measured.color}`);
+  assert.ok(contrast.link>=contrast.text&&contrast.link>=4.5,`${name}: Show reads at ${contrast.link}:1 in ${measured.buttonColor}`);
+  assert.equal(contrast.underline,'underline',name);
+ }
+ const color=index=>results[index].measured.color,show=index=>results[index].measured.buttonColor;
+ for(const index of [0,2,3]){assert.match(color(index),/^color\(srgb 0\.125\d* 0\.129\d* 0\.141\d* \/ 0\.62\)$/,'light, where it already reads: the page colour (#202124) at 62%, as before');assert.equal(show(index),'rgb(32, 33, 36)');}
+ assert.match(color(1),/^color\(srgb 0\.74\d* 0\.75\d* 0\.77\d* \/ 0\.(6[4-9]|[7-9]\d)\)$/,'dark: the page\'s own colour (#bdc1c6), only a little stronger than 62% so it reads');assert.equal(show(1),'rgb(189, 193, 198)');
+ assert.equal(show(4),'rgb(189, 193, 198)','the system turned dark after the line was drawn: it takes the page\'s dark colour');
+ assert.equal(show(5),'rgb(189, 193, 198)','the page turned dark by itself after the line was drawn');
+ assert.equal(show(8),'rgb(32, 33, 36)','the system turned light after the line was drawn: it takes the page\'s light colour');
+ assert.equal(show(6),'rgb(255, 255, 255)','a dark page whose results inherit #222: white, as the background calls for');assert.match(color(6),/^color\(srgb 1 1 1 \/ 0\.62\)$/);
+ assert.equal(show(7),'rgba(0, 0, 0, 0.6)','Bing\'s 60% black stays the page\'s own colour for Show');
 });
 test('Show brings the block back and removes the line; the style sheet no longer hides it',{skip},()=>{
  const {shown}=results[0];

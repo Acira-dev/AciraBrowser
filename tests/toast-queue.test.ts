@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pushToast, spentToasts, toastHostRefused, toastKeysSaying, toastRoom, toastStackHeight, type QueuedToast } from '../src/ui/toastQueue';
+import { otherSpaceToasts, pushToast, spentToasts, toastHostRefused, toastKeysSaying, toastRoom, toastStackHeight, type QueuedToast } from '../src/ui/toastQueue';
 
 const undo = (id: number, text: string, batch: string) => ({ id, text, action: { label: 'Undo', command: { type: 'tab.restore.batch' as const, id: batch } } });
 
@@ -32,6 +32,20 @@ test('an undo row is spent once its batch leaves closed tabs', () => {
   const list = [undo(1, 'Tab closed', 'b1'), undo(2, 'Tab closed', 'b2'), { id: 3, text: 'Saved' }].reduce<QueuedToast[]>((rows, toast) => pushToast(rows, toast).list, []);
   const closed = [{ id: 't2', closedBatch: 'b2' }] as unknown as Parameters<typeof spentToasts>[1];
   assert.deepEqual(spentToasts(list, closed), [1]);
+});
+
+test('profiles as spaces: another profile on screen takes the last space\'s toasts away, never one that came with the switch (QA #8)', () => {
+  let list = pushToast([], undo(1, 'Tab closed', 'b1'), 'personal').list;
+  list = pushToast(list, { id: 2, text: 'Link copied' }, 'personal').list;
+  list = pushToast(list, { id: 3, text: 'Another window is still open.' }, 'work').list;
+  assert.deepEqual(otherSpaceToasts(list, 'work'), [1, 2], 'Personal\'s Undo leaves Work\'s space');
+  assert.deepEqual(otherSpaceToasts(list, 'personal'), [3]);
+  assert.equal(pushToast([], { id: 4, text: 'Saved' }).list[0].profileId, undefined, 'a row with no profile');
+  assert.deepEqual(otherSpaceToasts(pushToast([], { id: 4, text: 'Saved' }).list, 'work'), [], 'stays');
+  assert.deepEqual(otherSpaceToasts(list, ''), [1, 2, 3], 'turned off: the spaces\' toasts go ("Open in Client" would open Client\'s tab in this profile\'s window)');
+  assert.equal(pushToast([], { id: 6, text: 'Saved' }, '').list[0].profileId, undefined, 'with workspaces a row has no profile');
+  // The same batch growing in its own space keeps its key and its profile.
+  assert.equal(pushToast(list, undo(5, '2 tabs closed', 'b1'), 'personal').list[0].profileId, 'personal');
 });
 
 test('stack height counts one rule between rows', () => {
