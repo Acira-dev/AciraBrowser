@@ -281,7 +281,6 @@
       "tests/ext-api-runtime.test.cjs",
       "tests/ext-api-web-request.test.cjs",
       "tests/ext-api-web-navigation.test.cjs",
-      "tests/ext-api-downloads.test.cjs",
       "tests/ext-api-downloads-engine.test.cjs",
       "tests/ext-api-history.test.cjs",
       "tests/ext-api-action.test.cjs",
@@ -306,7 +305,6 @@
       "tests/profile-spaces-ui.test.cjs",
       "tests/ext-api-tabs-events.test.cjs",
       "tests/ext-api-event-gate.test.cjs",
-      "tests/ext-api-glob-dos.test.cjs",
       "tests/widevine.test.cjs",
       "tests/mac-widevine-package.test.cjs",
       "tests/update-publish.test.cjs",
@@ -321,7 +319,9 @@
       "tests/peek-polish.test.cjs",
       "tests/extension-reload.test.cjs",
       "tests/extension-runtime-leaks.test.cjs",
-      "tests/native-shortcuts.test.cjs"
+      "tests/native-shortcuts.test.cjs",
+      "tests/ext-api-downloads.test.cjs",
+      "tests/ext-api-glob-dos.test.cjs"
     ],
     "tsx": [
       "tests/cover-my-artworks.test.ts",

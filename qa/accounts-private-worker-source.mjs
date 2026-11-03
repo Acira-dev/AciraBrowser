@@ -42,7 +42,7 @@ const sourceFiles=[];
 async function collect(directory){for(const item of await fs.readdir(path.join(sourceRoot,directory),{withFileTypes:true})){assert.equal(item.isSymbolicLink(),false);const file=path.join(directory,item.name);if(item.isDirectory())await collect(file);else if(file.endsWith('.cjs'))sourceFiles.push(file);}}
 await collect('desktop');assert.ok(sourceFiles.length<256);
 sourceFiles.push('dist/index.html');const html=await fs.readFile(path.join(sourceRoot,'dist/index.html'),'utf8');for(const asset of new Set(html.match(/assets\\/[A-Za-z0-9._-]+\\.(?:js|css)/g)||[]))sourceFiles.push('dist/'+asset);
-async function sourceHashes(){return Object.fromEntries(await Promise.all(sourceFiles.sort().map(async file=>{const bytes=await fs.readFile(path.join(sourceRoot,file));assert.ok(bytes.length<10*1024*1024);return[file,createHash('sha256').update(bytes).digest('hex')];})));}
+async function sourceHashes(){return Object.fromEntries(await Promise.all(sourceFiles.sort().map(async file=>{const bytes=await fs.readFile(path.join(sourceRoot,file));assert.ok(bytes.length<32*1024*1024);return[file,createHash('sha256').update(bytes).digest('hex')];})));}
 const beforeSources=await sourceHashes(),runtime=await qualifiedElectron(),candidate={sourceDigest:'native-source-graph:'+createHash('sha256').update(JSON.stringify(beforeSources)).digest('hex')};
 `;
 generated =

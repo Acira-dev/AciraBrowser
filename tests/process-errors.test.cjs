@@ -23,7 +23,9 @@ test('an uncaught exception and an unhandled rejection are written to main.log w
  assert.match(text,/\n {4,}at /,'the stack is kept, indented under its line');
  assert.match(text,/Unhandled rejection: Error: Unknown toolbar target/);
  assert.match(text,/Unhandled rejection: a plain string/);
- assert.equal((fs.statSync(file).mode&0o777).toString(8),'600');
+ // NTFS uses inherited ACLs; POSIX mode bits do not describe Windows permissions.
+ if(process.platform!=='win32') assert.equal((fs.statSync(file).mode&0o777).toString(8),'600');
+ else assert.doesNotThrow(()=>fs.accessSync(file,fs.constants.R_OK|fs.constants.W_OK));
 });
 
 test('the same error in a burst is written once, then counted; a burst of different errors stops at 20 lines a minute',()=>{

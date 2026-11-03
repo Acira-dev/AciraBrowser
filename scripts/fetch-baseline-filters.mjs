@@ -4,6 +4,7 @@
 // Release builds run this before build-filter-engine.cjs, so an installer never ships last month's lists. Everything is downloaded and validated first and written only if all of it is good.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import https from 'node:https';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 const {SOURCES, SCRIPTLET_SOURCE, validateList, validateResources} = createRequire(import.meta.url)('../desktop/browser-services/filter-updates.cjs');
@@ -11,13 +12,39 @@ const args = process.argv.slice(2), soft = args.includes('--soft'), directory = 
 const root = path.resolve(directory || fileURLToPath(new URL('../resources/filters/', import.meta.url)));
 await fs.mkdir(root, {recursive: true});
 
+// Keep build-time downloads on Node's HTTPS client: the bundled Node 24 fetch parser
+// can assert during a paused/closed response. TLS verification and content validators stay on.
+function downloadText(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    if (new URL(url).protocol !== 'https:' || redirects > 5) return reject(new Error('Unsafe filter redirect'));
+    const request = https.get(url, {headers: {'user-agent': 'AciraBrowser filter baseline'}}, response => {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+        response.resume();
+        resolve(downloadText(new URL(response.headers.location, url).href, redirects + 1));
+        return;
+      }
+      if (response.statusCode !== 200) { response.resume(); reject(new Error('HTTP ' + response.statusCode)); return; }
+      let text = '', bytes = 0;
+      response.setEncoding('utf8');
+      response.on('data', chunk => {
+        bytes += Buffer.byteLength(chunk);
+        if (bytes > 16 * 1024 * 1024) { request.destroy(new Error('Filter response is too large')); return; }
+        text += chunk;
+      });
+      response.on('aborted', () => reject(new Error('Filter response interrupted')));
+      response.on('error', reject);
+      response.on('end', () => response.complete ? resolve(text) : reject(new Error('Incomplete filter response')));
+    });
+    request.setTimeout(60000, () => request.destroy(new Error('Filter download timed out')));
+    request.on('error', reject);
+  });
+}
+
 async function fetchText(source, validate) {
   let failure;
   for (const url of [source.url, ...(source.mirrors || [])]) {
     try {
-      const response = await fetch(url, {signal: AbortSignal.timeout(60000), headers: {'user-agent': 'AciraBrowser filter baseline'}});
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      return {url, value: validate(await response.text(), source)};
+      return {url, value: validate(await downloadText(url), source)};
     } catch (error) { failure = new Error(source.id + ' from ' + url + ': ' + (error.message || error)); }
   }
   throw failure;

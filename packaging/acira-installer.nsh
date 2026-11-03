@@ -377,6 +377,8 @@ FunctionEnd
   ${EndIf}
 !macroend
 
+; Defer plugin-using function compilation until electron-builder has registered its plugin paths.
+!macro customHeader
 !ifdef BUILD_UNINSTALLER
 !include "FileFunc.nsh"
 ; Anonymous usage, beta.9 (docs/launch/METRICS.md, "Who stops using Acira"): when a person really uninstalls Acira, one last message says
@@ -499,6 +501,7 @@ Function un.AcUsageUninstalled
   Pop $0
 FunctionEnd
 !endif
+!macroend
 
 !macro customUnInstall
   ; first, before anything is removed: the one usage message, if this is a real uninstall and sharing is on (see un.AcUsageUninstalled)

@@ -7,7 +7,8 @@ const {download,handOver,handedOver,received,discard,DIR_NAME,PART}=require('../
 
 const body=Buffer.from(Array.from({length:600000},(_,i)=>(i*7+i%13)&255));
 const sha512=buf=>createHash('sha512').update(buf).digest('base64');
-const folder=()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'acira-update-download-'));return {root,dir:path.join(root,'cache',DIR_NAME),pending:path.join(root,'cache','pending')};};
+const made=[];test.after(()=>{for(const root of made)fs.rmSync(root,{recursive:true,force:true});}); // every throwaway folder goes when the file's tests end
+const folder=()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'acira-update-download-'));made.push(root);return {root,dir:path.join(root,'cache',DIR_NAME),pending:path.join(root,'cache','pending')};};
 const quiet={info(){},warn(){},error(){},debug(){}};
 
 /** A file server. range: honour Range (206); etag: the file's ETag; slow: send in 50 KB pieces with a pause between; asked: every request's Range/If-Range. */
@@ -89,6 +90,21 @@ test('a stalled connection gives up with the bytes kept, for the next try',async
  assert.equal(received(where.dir,{sha512:sha512(body),size:body.length}),1000);
 });
 
+test('a response Acira refuses is hung up at once (its body cancelled, its request aborted), never left streaming',async t=>{
+ const length=body.length+5; // another file than the feed describes, sent slowly: about 1.2 s in all
+ for(const [status,headers,code] of [[500,{},'ERR_UPDATE_HTTP'],[200,{'content-length':length},'ERR_UPDATE_SIZE'],[206,{'content-length':length,'content-range':`bytes 0-${length-1}/${length}`},'ERR_UPDATE_SIZE']]){
+  let ended=null;
+  const server=http.createServer((req,res)=>{
+   res.writeHead(status,headers);res.on('close',()=>{ended=res.writableFinished;});
+   let at=0;const step=()=>{if(res.destroyed)return;const piece=Buffer.alloc(Math.min(10000,length-at));at+=piece.length;if(at>=length)return res.end(piece);res.write(piece);setTimeout(step,20);};step();
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections?.();server.close(resolve);}));
+  await assert.rejects(download({url:`http://127.0.0.1:${server.address().port}/Acira.zip`,sha512:sha512(body),size:body.length,dir:folder().dir,fetch}),error=>error.code===code);
+  for(const end=Date.now()+600;ended===null&&Date.now()<end;)await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(ended,false,`HTTP ${status}: the connection was closed before the body ended`);
+ }
+});
+
 test('a partial belongs to one file: another SHA-512 or size starts from zero, and only acira-partial folders are ever touched',async t=>{
  const server=await serve({slow:true}),where=folder();t.after(server.close);
  await pausedAt(server,where,100000);
@@ -113,6 +129,21 @@ test('the verified file is handed over in the form electron-updater\'s own Downl
  assert.equal(await helper.getValidCachedUpdateFile({info:{sha512:sha512(body)}},quiet),placed);
  assert.deepEqual(helper.downloadedFileInfo,{fileName:'Acira-0.1.0-beta.9-arm64-mac.zip',sha512:sha512(body),isAdminRightsRequired:false});
  await assert.rejects(handOver({file:placed,pendingDir:where.pending,name:'../escape.zip',sha512:sha512(body)}),/not valid/);
+});
+
+test('a second update in the same run under the same file name (every Windows setup is AciraBrowserSetup.exe): with electron-updater\'s helper, it takes the new file from its cache',async t=>{
+ const server=await serve(),where=folder();t.after(server.close);
+ const {DownloadedUpdateHelper}=require('electron-updater/out/DownloadedUpdateHelper'),helper=new DownloadedUpdateHelper(path.join(where.root,'cache'));
+ const name='AciraBrowserSetup.exe',earlier=Buffer.from('the setup taken earlier in this run'),newer={info:{sha512:sha512(body)}};
+ fs.mkdirSync(where.pending,{recursive:true});fs.writeFileSync(path.join(where.pending,name),earlier);
+ await helper.setDownloadedFile(path.join(where.pending,name),null,{version:'0.1.0-beta.10'},{info:{sha512:sha512(earlier)}},name,true); // as electron-updater records the update it took
+ let result=await download({url:server.url,sha512:sha512(body),size:body.length,dir:where.dir,fetch});
+ let placed=await handOver({file:result.file,pendingDir:where.pending,name,sha512:sha512(body)});
+ assert.equal(await helper.validateDownloadedPath(placed,{version:'0.1.0-beta.11'},newer,quiet),null,'without the helper, electron-updater still has the earlier one in mind and would download this one again');
+ result=await download({url:server.url,sha512:sha512(body),size:body.length,dir:where.dir,fetch});
+ placed=await handOver({file:result.file,pendingDir:where.pending,name,sha512:sha512(body),helper});
+ assert.equal(await helper.validateDownloadedPath(placed,{version:'0.1.0-beta.11'},newer,quiet),placed,'with it, the new file is taken from the cache');
+ assert.deepEqual(fs.readdirSync(where.pending).sort(),[name,'update-info.json']);
 });
 
 // --- Windows: the differential download, resumable -------------------------------------------------------------------------------------------

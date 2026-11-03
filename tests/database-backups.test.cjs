@@ -26,7 +26,9 @@ test('one copy a day at most, the last 3 kept, named by the local day, readable 
  for(let i=1;i<=4;i++)backups.take(db,{now:start+i*DAY});
  assert.deepEqual(backups.list(db.filename).map(entry=>entry.day),['2026-11-06','2026-11-05','2026-11-04']);
  const copy=backups.list(db.filename)[0].file;
- assert.equal((fs.statSync(copy).mode&0o777).toString(8),'600');
+ // NTFS uses inherited ACLs; POSIX mode bits do not describe Windows permissions.
+ if(process.platform!=='win32') assert.equal((fs.statSync(copy).mode&0o777).toString(8),'600');
+ else assert.doesNotThrow(()=>fs.accessSync(copy,fs.constants.R_OK|fs.constants.W_OK));
  assert.equal(backups.usable(backups.list(db.filename)[0],{supported:SCHEMA}),true);
  assert.equal(backups.dayLabel('2026-11-02'),'2 November 2026');
  db.close();

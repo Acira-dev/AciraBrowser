@@ -6,7 +6,9 @@ const SCHEMA=1; // the newest schema this Acira understands; a file with a highe
 class BrowserDatabase{
  constructor(filename){
   fs.mkdirSync(path.dirname(filename),{recursive:true});this.filename=filename;
-  this.db=new DatabaseSync(filename);this.db.exec('PRAGMA busy_timeout=3000;');
+  this.db=new DatabaseSync(filename);
+  try {
+  this.db.exec('PRAGMA busy_timeout=3000;');
   // the version is read before anything is set: a profile from a newer Acira is left exactly as it was (not even switched to WAL)
   const version=this.db.prepare('PRAGMA user_version').get().user_version;if(version>SCHEMA){try{this.db.close();}catch{}throw new Error('This profile was created by a newer Acira version.');}
   this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;');
@@ -25,6 +27,11 @@ class BrowserDatabase{
    PRAGMA user_version=1;
   `));
   const checked=this.db.prepare('PRAGMA quick_check').get();if(Object.values(checked)[0]!=='ok')throw new Error('Browser data integrity check failed. Your data has been preserved.');
+  } catch (error) {
+   // Windows cannot move a damaged database aside while the failed open still owns its handle.
+   try { this.db.close(); } catch {}
+   throw error;
+  }
  }
  transaction(fn){if(this.inTransaction)return fn();this.db.exec('BEGIN IMMEDIATE');this.inTransaction=true;try{const result=fn();this.db.exec('COMMIT');return result;}catch(error){try{this.db.exec('ROLLBACK');}catch{/* SQLite already ended it (a full disk does); the caller needs the real error */}throw error;}finally{this.inTransaction=false;}}
  readWindow(id){const row=this.db.prepare('SELECT payload FROM windows WHERE id=?').get(id);return row?parse(row.payload):null;}

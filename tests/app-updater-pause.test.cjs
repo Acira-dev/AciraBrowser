@@ -51,7 +51,8 @@ function liteUpdater(feed,{root,platform='win32'}={}){
  updater.quitAndInstall=(...args)=>{updater.installed=args;};updater.setFeedURL=()=>{};
  return updater;
 }
-const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'acira-update-pause-'));
+const made=[];test.after(()=>{for(const root of made)fs.rmSync(root,{recursive:true,force:true});}); // every throwaway folder goes when the file's tests end
+const tmp=()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'acira-update-pause-'));made.push(root);return root;};
 const make=(root,autoUpdater,extra={})=>createAppUpdater({app:{getVersion:()=>extra.version||'0.1.0-beta.8',isPackaged:true,getPath:()=>root},dir:root,platform:'win32',env:{},autoUpdater,uninstallerPresent:()=>true,qaBuild:false,schedule:()=>null,every:()=>null,fetch,...extra});
 
 test('pause keeps the bytes and is kept across a restart: the relaunch starts paused and off the network; Resume asks for the rest with Range',async t=>{
@@ -122,6 +123,40 @@ test('a paused download from another version is dropped with its bytes; a withdr
  assert.equal(JSON.parse(fs.readFileSync(path.join(root2,'updater.json'),'utf8')).download,undefined);
 });
 
+test('Resume whose look fails is an ordinary failure: the next try says "checking" and downloads only as the automatic setting says',async t=>{
+ const feed=await feedServer(),root=tmp();t.after(feed.close);
+ let first;const paused=new Promise(resolve=>{first=make(root,liteUpdater(feed,{root}),{onChange:status=>{if(status.status==='downloading'&&status.transferred>=100000&&status.pausable)resolve(first.pause());}});});
+ await first.check();await paused;first.setAutoDownload(false);await new Promise(resolve=>setTimeout(resolve,50));
+ // the relaunch, offline when Resume looks
+ const lite=liteUpdater(feed,{root}),look=lite.checkForUpdates;let offline=true;
+ lite.checkForUpdates=async()=>{if(!offline)return look();lite.emit('checking-for-update');const error=new Error('net::ERR_INTERNET_DISCONNECTED');lite.emit('error',error);throw error;};
+ const seen=[],second=make(root,lite,{onChange:status=>seen.push(status.status)});
+ assert.equal(second.status().status,'paused');
+ second.resume();await until(()=>second.status().status==='error');
+ offline=false;const files=feed.fileRequests().length;seen.length=0;
+ await second.check();await new Promise(resolve=>setTimeout(resolve,100));
+ assert.equal(seen[0],'checking','the next try says it is checking');
+ assert.equal(second.status().status,'available','automatic download is off: it waits for Download');
+ assert.equal(feed.fileRequests().length,files,'nothing was downloaded');
+});
+
+test('a channel change while paused ends the pause: the bytes were for the other channel\'s file, so they go, and Resume has nothing to continue',async t=>{
+ const feed=await feedServer(),root=tmp();t.after(feed.close);
+ let updater;const seen=[];
+ const paused=new Promise(resolve=>{updater=make(root,liteUpdater(feed,{root}),{onChange:status=>{seen.push(status.status);if(status.status==='downloading'&&status.transferred>=100000&&status.pausable)resolve(updater.pause());}});});
+ await updater.check();await paused;await new Promise(resolve=>setTimeout(resolve,50));
+ const dir=JSON.parse(fs.readFileSync(path.join(root,'updater.json'),'utf8')).download.dir,asked=feed.requests.length;
+ const after=updater.setChannel('stable');
+ assert.deepEqual([after.status,after.available,after.progress,after.pausable,after.channel],['idle',null,null,false,'stable']);
+ assert.equal(seen.at(-1),'idle','every window hears of it: the toolbar\'s paused dots go');
+ assert.equal(updater.resume().status,'idle','nothing to resume');
+ assert.equal(fs.existsSync(path.join(dir,'update.part')),false,'the other channel\'s bytes are gone');
+ assert.equal(JSON.parse(fs.readFileSync(path.join(root,'updater.json'),'utf8')).download,undefined);
+ const relaunched=make(root,liteUpdater(feed,{root})).status();
+ assert.deepEqual([relaunched.status,relaunched.channel],['idle','stable'],'a relaunch is not paused either');
+ assert.equal(feed.requests.length,asked,'nothing was fetched');
+});
+
 test('the file for this computer: arm64 or x64 zip on a Mac (as MacUpdater picks it), the setup on Windows; no SHA-512, no own download',()=>{
  const base=new URL('https://github.com/Acira-dev/AciraBrowserUpdates/releases/download/v0.1.0-beta.9-mac-abcdef12/');
  const info={version:'0.1.0-beta.9',files:[{url:'Acira-0.1.0-beta.9-arm64-mac.zip',sha512:'A',size:10},{url:'Acira-0.1.0-beta.9-mac.zip',sha512:'X',size:11},{url:'Acira-0.1.0-beta.9-arm64.dmg',sha512:'D',size:12}]};
@@ -178,8 +213,9 @@ test('the test-mode stand-in (the live rig\'s updater) takes the file Acira chos
 });
 
 // --- electron-updater itself ---------------------------------------------------------------------------------------------------------------
-/** electron-updater's HTTP for Node (as electron-builder's own NodeHttpExecutor): the real check runs against the local feed. */
-function nodeExecutor(){const {HttpExecutor}=require('builder-util-runtime');return new (class extends HttpExecutor{createRequest(options,callback){return http.request(options,callback);}})();}
+/** electron-updater's HTTP for Node (as electron-builder's own NodeHttpExecutor): the real check runs against the local feed, and a download of its own
+ *  (none is expected: Acira downloads) reaches the feed like any other request, so a test can count it. */
+function nodeExecutor(){const {HttpExecutor}=require('builder-util-runtime');return new (class extends HttpExecutor{createRequest(options,callback){return http.request(options,callback);}async download(url,destination){fs.writeFileSync(destination,Buffer.from(await(await fetch(url.href)).arrayBuffer()));return destination;}})();}
 function appAdapter(root,feed,quits){
  const config=path.join(root,'app-update.yml');fs.writeFileSync(config,`provider: generic\nurl: ${feed.base}\nupdaterCacheDirName: acira-browser-updater\n`);
  return {version:'0.1.0-beta.8',name:'Acira Browser',isPackaged:true,appUpdateConfigPath:config,userDataPath:root,baseCachePath:path.join(root,'Caches'),whenReady:()=>Promise.resolve(),quit(){},relaunch(){},onQuit(handler){quits.push(handler);}};
@@ -201,6 +237,32 @@ test('Windows, the real NsisUpdater: it finds the update, Acira downloads it wit
  const exe=feed.fileRequests();assert.equal(exe.length,2,'Acira\'s two requests; NsisUpdater downloaded nothing');assert.match(exe[1].range,/^bytes=\d+-$/);
  assert.deepEqual(feed.blockMapRequests(),['AciraBrowserSetup-0.1.0-beta.9.exe.blockmap','AciraBrowserSetup-0.1.0-beta.9.exe.blockmap'],'it looked for the setup\'s blockmap (none published here, and no old setup in the cache): the whole setup, resumable');
  assert.equal(quits.length,1,'install-on-quit is armed only now, for the whole verified file');
+});
+
+test('Windows, the real NsisUpdater: a newer update found while one waits (Later) is downloaded once, by Acira; NsisUpdater takes it from its cache too',async t=>{
+ // every release's setup has the same name (AciraBrowserSetup.exe), each in its own commit-tagged release folder, as on GitHub
+ const builds={'0.1.0-beta.10':blob(11),'0.1.0-beta.11':blob(13)},folder=v=>`v${v}-windows-${v.slice(-2)}ab`,requests=[];let current='0.1.0-beta.10';
+ const server=http.createServer((req,res)=>{
+  const name=decodeURIComponent(new URL(req.url,'http://x').pathname.slice(1));requests.push({name,range:req.headers.range||null});
+  if(name==='beta.yml')return res.end(JSON.stringify({version:current,files:[{url:`${folder(current)}/AciraBrowserSetup.exe`,sha512:sha512(builds[current]),size:builds[current].length}]}));
+  const version=Object.keys(builds).find(v=>name===`${folder(v)}/AciraBrowserSetup.exe`);if(!version){res.statusCode=404;return res.end();}
+  const file=builds[version],match=/^bytes=(\d+)-$/.exec(req.headers.range||''),start=match?Number(match[1]):0;
+  res.writeHead(match?206:200,{'content-length':file.length-start,etag:`"${version}"`,...(match?{'content-range':`bytes ${start}-${file.length-1}/${file.length}`}:{})});res.end(file.subarray(start));
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections?.();server.close(resolve);}));
+ const feed={base:`http://127.0.0.1:${server.address().port}/`},root=tmp(),quits=[];
+ const {NsisUpdater}=require('electron-updater/out/NsisUpdater'),nsis=new NsisUpdater(null,appAdapter(root,feed,quits));
+ nsis.httpExecutor=nodeExecutor();nsis._testOnlyOptions={platform:'win32'};nsis.logger=null;
+ const updater=make(root,nsis,{version:'0.1.0-beta.9'}),setups=v=>requests.filter(r=>r.name===`${folder(v)}/AciraBrowserSetup.exe`).map(r=>r.range);
+ await updater.check();await until(()=>updater.status().status==='ready'&&updater.status().available==='0.1.0-beta.10');
+ updater.claimPrompt(); // Later: the update waits, and the next automatic check (every 8 hours) runs
+ current='0.1.0-beta.11';
+ await updater.check();await until(()=>updater.status().status==='ready'&&updater.status().available==='0.1.0-beta.11');
+ await new Promise(resolve=>setTimeout(resolve,100)); // a second download would have started by now
+ assert.deepEqual(setups('0.1.0-beta.11'),[null],'one download of the newer setup, Acira\'s; NsisUpdater did not fetch it again');
+ assert.deepEqual(setups('0.1.0-beta.10'),[null]);
+ assert.equal(sha512(fs.readFileSync(nsis.installerPath)),sha512(builds['0.1.0-beta.11']),'Install now runs the newer setup');
+ assert.equal(updater.status().pausable,false);assert.equal(updater.status().error,null);
 });
 
 // --- Windows: only what changed since the installed setup ---------------------------------------------------------------------------------

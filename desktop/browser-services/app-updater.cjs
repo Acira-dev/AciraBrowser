@@ -124,7 +124,8 @@ function updateFile(updater,{platform,arm64}){
 function updaterFetch(){
  try{const {session}=require('electron');const own=session.fromPartition('electron-updater',{cache:false});return (url,init)=>own.fetch(url,init);}catch{return globalThis.fetch;}
 }
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>fs.existsSync(path.join(path.dirname(process.execPath),'Uninstall AciraBrowser.exe')),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null}){
+function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -194,7 +195,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    if(state.available){pending={version:state.available,notes:state.notes};try{persist();}catch{}}
    changed();
   });
-  updater.on('error',error=>{if(state.status==='paused')return;/* a look that was under way when the person paused: paused stays paused */state.status='error';state.error=clean(error);state.speed=null;state.lastChecked=now();failed();changed();});
+  updater.on('error',error=>{resuming=false;if(state.status==='paused')return;/* a look that was under way when the person paused: paused stays paused */state.status='error';state.error=clean(error);state.speed=null;state.lastChecked=now();failed();changed();});
   return updater;
  }
  // Progress is real (bytes counted as they arrive); the interface hears of it when the percent moves, never faster than PROGRESS_EVERY.
@@ -205,7 +206,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   state.transferred=transferred;state.total=total;state.speed=count(progress?.bytesPerSecond);
   const at=now();if(state.progress!==shownPercent&&(at-shownAt>=PROGRESS_EVERY||state.progress===100||shownPercent<0)){shownPercent=state.progress;shownAt=at;changed();}
  }
- const cacheOf=async()=>{try{const helper=await updater.getOrCreateDownloadHelper?.();return helper?.cacheDir&&helper.cacheDirForPendingUpdate?{cache:helper.cacheDir,dir:path.join(helper.cacheDir,fetched.DIR_NAME),pending:helper.cacheDirForPendingUpdate}:null;}catch{return null;}};
+ const cacheOf=async()=>{try{const helper=await updater.getOrCreateDownloadHelper?.();return helper?.cacheDir&&helper.cacheDirForPendingUpdate&&typeof helper.clear==='function'?{cache:helper.cacheDir,dir:path.join(helper.cacheDir,fetched.DIR_NAME),pending:helper.cacheDirForPendingUpdate,helper}:null;}catch{return null;}};
  const requestHeaders=()=>{try{const provider=updater.updateInfoAndProvider?.provider;return provider&&typeof updater.computeRequestHeaders==='function'?{...updater.computeRequestHeaders(provider)}:{accept:'*/*'};}catch{return {accept:'*/*'};}};
  // Windows: only what changed since the installed version's setup. The NSIS installer keeps a copy of itself in electron-updater's cache
  // (installer.exe), and the blockmap published with each setup says which of its blocks the new one shares. The installed version's blockmap is looked
@@ -284,7 +285,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
     }
     if(id!==round||result.paused)return;
     state.pausable=false;state.speed=null;changed();
-    await fetched.handOver({file:result.file,pendingDir:where.pending,name:target.name,sha512:target.sha512,isAdminRightsRequired:target.isAdminRightsRequired,blockMap:diff?.newRaw||null});
+    await fetched.handOver({file:result.file,pendingDir:where.pending,name:target.name,sha512:target.sha512,isAdminRightsRequired:target.isAdminRightsRequired,blockMap:diff?.newRaw||null,helper:where.helper});
    }
    if(id!==round)return;
    held=null;state.pausable=false;try{persist();}catch{}
@@ -306,7 +307,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  }
  async function look(){
   failedRound=false;
-  try{setup();await updater.checkForUpdates();}catch(error){state.status='error';state.error=clean(error);state.lastChecked=now();failed();changed();}
+  try{setup();await updater.checkForUpdates();}catch(error){resuming=false;state.status='error';state.error=clean(error);state.lastChecked=now();failed();changed();}
   return status();
  }
  // Settings' Download, when updates are not downloaded automatically
@@ -339,7 +340,11 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  // Stable follows full releases only; Beta also follows pre-releases. Switching never downgrades (allowDowngrade is off).
  function setChannel(value){
   if(!CHANNELS.includes(value))throw new Error('Choose Stable or Beta.');
-  channel=value;persist();if(['available','current','error'].includes(state.status)){state.available=null;state.status='idle';}
+  // paused: the bytes are the other channel's file, so they go with the pause (Resume would go on with it); the next look finds this channel's
+  const wasPaused=state.status==='paused';
+  if(wasPaused){fetched.discard(held?.dir);held=null;Object.assign(state,{progress:null,transferred:null,total:null,speed:null,notes:'',pausable:false});}
+  channel=value;persist();if(wasPaused||['available','current','error'].includes(state.status)){state.available=null;state.status='idle';}
+  if(wasPaused)changed();
   if(updater){updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false;}return status();
  }
  /** Restart to update: the open tabs and windows are saved first (beforeInstall: the same save a normal quit does), then quitAndInstall, which quits the ordinary graceful way. */

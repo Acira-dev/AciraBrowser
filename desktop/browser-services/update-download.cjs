@@ -154,15 +154,14 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
    if(signal?.aborted)return false;
    const controller=new AbortController(),abort=()=>controller.abort();
    signal?.addEventListener('abort',abort,{once:true});
-   let timer=null,stalled=false;
+   let timer=null,stalled=false,response=null;
    const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{stalled=true;controller.abort();},stall);timer.unref?.();};
    try{
     const asked=!whole||have>0,ifRange=meta.etag&&!/^W\//.test(meta.etag)?{'if-range':meta.etag}:{};
     arm();
-    const response=await fetch(url,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
+    response=await fetch(url,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
     const range=response.status===206?contentRange(response.headers.get('content-range')):null;
     if(!whole&&!(range&&range.start===have&&range.end===seg.end-1&&(range.total===null||range.total===size))){
-     await response.body?.cancel().catch(()=>{});
      throw new DownloadError(`The server did not send the changed part of the update (HTTP ${response.status}).`,'ERR_UPDATE_RANGE');
     }
     if(whole){
@@ -196,6 +195,8 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
     throw new DownloadError('The update download ended early.','ERR_UPDATE_SHORT');
    }catch(error){
     clearTimeout(timer);
+    // a refused or broken response is hung up at once, never left streaming into nothing
+    controller.abort();await response?.body?.cancel().catch(()=>{});
     if(signal?.aborted)return false;
     if(stalled)throw new DownloadError('The update download stalled.','ERR_UPDATE_STALLED');
     throw error;
@@ -218,9 +219,12 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
 
 /** Puts a verified file where electron-updater looks for an update that an earlier launch downloaded: <pending>/<name> and update-info.json.
  *  With the new version's blockmap (Windows), it goes beside it as current.blockmap: electron-updater moves that into its cache when it takes the
- *  file, so the next update can be differential (its old blockmap is then on this computer). */
-async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null}){
+ *  file, so the next update can be differential (its old blockmap is then on this computer). `helper` is electron-updater's DownloadedUpdateHelper:
+ *  its clear() also forgets the update it took earlier in this run, which would otherwise hide this one when the file name is the same (every
+ *  Windows setup is AciraBrowserSetup.exe), and electron-updater would download it all again by itself. */
+async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null,helper=null}){
  if(path.basename(name)!==name||!name)throw new Error('The update file name is not valid.');
+ if(helper)await helper.clear();
  await fsp.mkdir(pendingDir,{recursive:true});
  // whatever else is in the folder is a stale download (electron-updater empties it the same way when it starts a new one)
  for(const entry of await fsp.readdir(pendingDir))await fsp.rm(path.join(pendingDir,entry),{recursive:true,force:true});
