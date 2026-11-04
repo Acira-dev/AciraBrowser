@@ -299,6 +299,7 @@ test('7a. a transfer held behind the "several files" question is journaled; what
     assert.ok(entry && entry.held, 'journaled as held: ' + JSON.stringify(f.journal()));
     held.write('y'.repeat(30));
     // The crash: no 'done'. The next start removes the partial file and forgets the entry; the finished file stays.
+    const beforeRestart = new Date(Date.now() - 1000); fs.utimesSync(held.locked, beforeRestart, beforeRestart);
     f.make();
     assert.deepEqual(list(f.folder), ['one.bin']);
     assert.deepEqual(f.journal().filter(e => e.held), []);
@@ -313,6 +314,7 @@ test('7b. an "Ask where" download a crash stopped can be resumed after the resta
     await until(() => f.replies.length === 1, 'dialog');
     f.reply(0, {canceled: false, filePath: chosen});
     await until(() => !item.paused, 'answered');
+    await until(() => typeof item.locked === 'string' && item.locked.length > 0, 'Electron captured the initial save path');
     item.write('0123456789'); f.clock.now += 2000; item.emit('updated', {}, 'progressing');
     const records = f.records.map(r => ({...r}));
     assert.ok(stagedPath(f, f.journal()[0].path), 'the journal points into staging');
@@ -522,6 +524,7 @@ test('second review 6: a held transfer whose bytes had all arrived when Acira st
       const held = f.begin(new Item('two.bin', {total: 100}));
       await tick(); await tick();
       held.write('y'.repeat(100));
+      const beforeRestart = new Date(Date.now() - 1000); fs.utimesSync(held.locked, beforeRestart, beforeRestart);
       f.make();
       assert.deepEqual(list(f.folder), ['one.bin']);
     } finally { f.cleanup(); }

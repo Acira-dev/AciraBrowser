@@ -53,6 +53,24 @@ test('a durable re-arm failure keeps the barrier and reports recovery failure, a
 test('unknown or wrong-profile installation inventory preserves all data and pending recovery behind the barrier',async()=>{
  const f=fixture();try{await f.service.set('A',{enabled:true,categories:['storage'],keepOrigins:[]});for(const inventory of [[],{complete:false,origins:[]},{complete:true,profileId:'B',origins:[]}]){f.setInventory(inventory);const result=await f.service.runPending({phase:'startup'});assert.equal(result.completed,false);assert.match(result.profiles[0].error,/installed-origin inventory is unknown/);assert.equal(f.calls.some(call=>call.dataTypes),false);assert.equal(f.service.status('A').networkBlocked,true);assert.equal(f.service.status('A').pending,true);}f.setInventory({complete:true,profileId:'A',origins:['chrome-extension://'+'b'.repeat(32)]});assert.equal((await f.service.runPending({phase:'startup'})).completed,true);assert.ok(f.calls.some(call=>call.excludeOrigins?.includes('chrome-extension://'+'b'.repeat(32))));assert.ok(f.calls.some(call=>call.excludeOrigins?.includes('acira-browser-ui://ui')));}finally{f.database.close();}
 });
+test('exit cleanup waits for delayed native terminal events after deletion before committing its journal',async()=>{
+ const f=fixture();try{
+  const clear=f.session.clearData;f.session.clearData=async options=>{await clear(options);f.setNetwork(true);setImmediate(()=>f.setNetwork(false));};
+  await f.service.set('A',{enabled:true,categories:['storage'],keepOrigins:['https://keep.example']});
+  assert.equal((await f.service.runPending()).completed,true);assert.equal(f.service.status('A').pending,false);
+  assert.equal(f.service.status('A').networkBlocked,true,'the exit barrier remains until startup recovery');
+ }finally{f.database.close();}
+});
+
+for(const activity of [true,null])test(`exit cleanup retains its journal when post-deletion network activity stays ${activity===true?'active':'unknown'}`,async()=>{
+ const f=fixture();try{
+  const clear=f.session.clearData;f.session.clearData=async options=>{await clear(options);f.setNetwork(activity);};
+  await f.service.set('A',{enabled:true,categories:['storage'],keepOrigins:[]});
+  const result=await f.service.runPending();assert.equal(result.completed,false);assert.match(result.profiles[0].error,/requests are still active or their lifetime is unknown/);
+  assert.equal(f.service.status('A').pending,true);assert.equal(f.service.status('A').networkBlocked,true);
+ }finally{f.database.close();}
+});
+
 test('Settings applies its own switch without the native review; every other caller is still asked',async()=>{
  const f=fixture();try{globalThis.__exitCleanupDialogs=0;
   const asked=await f.service.set('A',{enabled:true,categories:['cookies'],keepOrigins:[]});assert.equal(globalThis.__exitCleanupDialogs,1);assert.equal(asked.choice.enabled,true);

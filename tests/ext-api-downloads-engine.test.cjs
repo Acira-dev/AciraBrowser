@@ -139,7 +139,9 @@ test('saveAs shows the Save dialog with a default path; cancelling it cancels th
     assert.match(item.saved, /download-staging/);
     assert.equal(g.records[0].status, 'Downloading');
     item.finish('chosen');
-    for (let i = 0; i < 50 && g.records[0].status !== 'Ready'; i++) await tick();
+    const readyDeadline = Date.now() + 5000;
+    while (g.records[0].status !== 'Ready' && Date.now() < readyDeadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(g.records[0].status, 'Ready', 'the asynchronous staging move completed before reading its destination');
     assert.equal(fs.readFileSync(path.join(g.folder, 's2.bin'), 'utf8'), 'chosen');
     assert.equal(g.records[0].path, path.join(g.folder, 's2.bin'));
   } finally { g.cleanup(); }

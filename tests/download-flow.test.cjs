@@ -212,6 +212,10 @@ test('a half-finished download left by a crash: Cancel at the next start deletes
     assert.equal(records[0].status, 'Downloading');
     // The crash: no 'done', the journal has the transfer, and Chromium kept writing for a moment after the last journal write.
     fs.appendFileSync(item.locked, 'y'.repeat(10));
+    // This file predates the simulated restart. NTFS's sub-ms clock can otherwise
+    // put its write just after Date.now() at engine creation and trigger the
+    // deliberate "changed after startup" safety guard under parallel load.
+    const beforeRestart = new Date(Date.now() - 1000); fs.utimesSync(item.locked, beforeRestart, beforeRestart);
     const next = f.make();
     const shown = next.reconcile(records, 'A')[0];
     assert.equal(shown.status, 'Interrupted');
