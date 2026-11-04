@@ -21,6 +21,19 @@ export function pushToast(list: QueuedToast[], toast: Incoming, profileId?: stri
   return { list: next.slice(-toastLimit), key, dropped: next.slice(0, Math.max(0, next.length - toastLimit)).map(row => row.key) };
 }
 
+/** Main keeps its last toast in the snapshot, so a view that reloads (a language change, a crashed view brought back) finds it again.
+ *  It is shown again unless it is spent: dismissed in this view before the reload (session storage outlives it), or older than its
+ *  display time (ids are the clock time main raised it). An error has no display time: it stays until dismissed. */
+export function toastSpentAtLoad(toast: { id: number; tone?: string; action?: unknown }, displayMs: number, now = Date.now(), storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = globalThis.sessionStorage): boolean {
+  try { if ((JSON.parse(storage?.getItem('acira-toast-dismissed') || '[]') as number[]).includes(toast.id)) return true; } catch { /* nothing remembered */ }
+  return toast.tone !== 'error' && now - toast.id >= displayMs;
+}
+/** Toasts this view took down (×, Undo, a space change), remembered for its next reload; the last 20 are plenty. */
+export function rememberDismissed(ids: number[], storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = globalThis.sessionStorage) {
+  if (!ids.length) return;
+  try { const kept = JSON.parse(storage?.getItem('acira-toast-dismissed') || '[]') as number[]; storage?.setItem('acira-toast-dismissed', JSON.stringify([...kept, ...ids].slice(-20))); } catch { /* a reload may show it again */ }
+}
+
 /** Undo rows whose batch has left closed tabs (undone from the toast, Ctrl+Shift+T or another window) are spent. */
 export const spentToasts = (list: QueuedToast[], closedTabs: BrowserSnapshot['closedTabs']) => list.filter(row => {
   const command = row.action?.command;

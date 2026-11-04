@@ -2,8 +2,8 @@
 // Sideways reorders with deliberate vertical wobble at slow and fast speeds, at 3, 8 and 20 tabs: the tab must land in the slot it was taken to,
 // and the drag must never switch to the vertical mode (the carried chip, the split picker, a torn-off window). Then clean vertical drags: they still do
 // today's vertical action (chip, picker, split on a cell, a new window).
-//   ACIRA_BROWSER_TEST_DATA=/tmp/acira-agents/fix-tab-drag-axis/<run> node qa/tab-drag-axis.mjs [--tabs=3,8,20] [--label=after] [--out=file.json] [--quick] [--sections=side,vertical] [--view=full] [--sidebar]
-// Safety: every launch uses a throwaway profile under /tmp/acira-agents/fix-tab-drag-axis/, and the run aborts unless app.getPath('userData') is there.
+//   ACIRA_BROWSER_TEST_DATA=/tmp/acira-qa/tab-drag-axis/<run> node qa/tab-drag-axis.mjs [--tabs=3,8,20] [--label=after] [--out=file.json] [--quick] [--sections=side,vertical] [--view=full] [--sidebar]
+// Safety: every launch uses a throwaway profile under /tmp/acira-qa/tab-drag-axis/, and the run aborts unless app.getPath('userData') is there.
 // Every Electron launch passes --use-mock-keychain: the real macOS Keychain is never read, so no password prompt can appear.
 // The window sits off-screen and is never activated (it still renders; the Mac may be locked).
 import fs from 'node:fs/promises';
@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { _electron } from 'playwright';
 
 const REPO = process.cwd(), req = createRequire(REPO + '/package.json');
-const SAFE = '/tmp/acira-agents/fix-tab-drag-axis/';
+const SAFE = '/tmp/acira-qa/tab-drag-axis/';
 const ROOT = path.resolve(process.env.ACIRA_BROWSER_TEST_DATA || '');
 if (!(ROOT + '/').startsWith(SAFE)) throw new Error(`ACIRA_BROWSER_TEST_DATA must be a throwaway folder under ${SAFE} (got "${process.env.ACIRA_BROWSER_TEST_DATA || ''}")`);
 const arg = (name, fallback) => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').slice(name.length + 3) || fallback;

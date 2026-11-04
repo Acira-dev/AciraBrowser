@@ -17,7 +17,7 @@ import type { BrowserAction } from "../../runtime/types";
 import { artworkCatalog, readNewTabPreferences, selectedArtwork, type CatalogArtwork } from "../../ui/newTabPreferences";
 import { ArrowRight } from "../../components/AppIcons";
 import { BrandIcon } from "../../components/BrandLogo";
-import { ProfileAvatar } from "../accounts/profileModel";
+import { ProfileAvatar, hasDefaultName, nameDefaultProfile, settleProfileName } from "../accounts/profileModel";
 import { PrismField } from "./PrismField";
 import { SCENE_GRAIN } from "./sceneLook";
 import { playFinale, prewarmCapture, prewarmEffects, prewarmFinale } from "./finale";
@@ -247,6 +247,12 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
   const quick = !!progress?.complete && !!progress.pendingSetup;
   const [quickIndex, setQuickIndex] = useState(0);
   const step: SetupStep = quick ? quickSteps[quickIndex] : progress?.step || "welcome";
+  // The first setup names a fresh profile in its language ("Persönlich", "個人用"): silently, only while it still has the name Acira gave it,
+  // and again if the language changes before setup ends. A new profile's short setup (quick) never does; its name was just typed.
+  const ownProfile = state.browserProfiles.find((profile) => profile.id === profileId), localDefaultName = t("setup.personal");
+  useEffect(() => {
+    if (!quick && ownProfile && hasDefaultName(ownProfile) && ownProfile.name !== localDefaultName) nameDefaultProfile(dispatch, ownProfile.id, localDefaultName);
+  }, [quick, ownProfile?.id, ownProfile?.name, ownProfile?.defaultName, localDefaultName, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
   const facts: FlowFacts = {
     sources: sources ?? undefined,
     defaultSupported: defaults?.supported,
@@ -311,6 +317,9 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
       playFinale(stageRef.current, { reduced: reducedMotion, onStart: close, mark: true });
       return;
     }
+    // The first setup is over (finished, skipped or with the defaults): the profile's name is the person's from now on, so a later
+    // language or "Run setup again" never renames it.
+    if (ownProfile?.defaultName) settleProfileName(dispatch, ownProfile.id);
     if (skip) {
       // Skipping is never blocked on the native write; a failed write only means setup is offered again next launch.
       void client.request({ type: "skip" }).catch(() => {});

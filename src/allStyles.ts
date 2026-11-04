@@ -18,3 +18,5 @@ import './styles/frame.css';
 import './styles/mac-material.css';
 import './styles/kbd.css';
 import './styles/rtl.css';
+// Tab ink on the light cards (current sidebar row, current compact tab, carried tabs): last, so it settles every surface above.
+import './styles/tab-ink.css';

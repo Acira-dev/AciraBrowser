@@ -30,7 +30,8 @@ test('a failed check is one sentence under the title; the updater\'s own words g
   assert.equal(describe(status({ status: 'checking' })), 'Checking for updates…');
   assert.equal(describe(status({ status: 'downloading', available: '0.1.0-beta.9', progress: 42 })), 'Downloading version 0.1.0-beta.9 · 42%');
   const source = readFileSync('src/features/settings/panels/updates.tsx', 'utf8');
-  assert.match(source, /\{status\?\.status === 'error' && status\.error && <SettingNote>\{t\('import\.technicalDetails'\)\}: \{status\.error\}<\/SettingNote>\}/);
+  // (also while paused again after a Resume that could not connect: update-pause-ui.test.ts)
+  assert.match(source, /\{\(status\?\.status === 'error' \|\| status\?\.status === 'paused'\) && status\.error && <SettingNote>\{t\('import\.technicalDetails'\)\}: \{status\.error\}<\/SettingNote>\}/);
 });
 
 test('the press says "Checking for updates…" at once, and a keyboard user keeps the button when the wait ends', () => {

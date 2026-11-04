@@ -7,6 +7,7 @@ import en from './en.json';
 import { format, type Params } from './format';
 import { resolveLocale, type LocaleCode } from './locales';
 import { platformCatalogText } from './platform';
+import { createSaid } from './said';
 
 export type MessageId = keyof typeof en;
 type Catalog = Record<string, string>;
@@ -27,6 +28,13 @@ let locale: LocaleCode = 'en';
 
 /** `setting` is the Settings › Languages value ('system' or a code); `systemTag` is Electron's app.getLocale(). */
 export function setMainLocale(setting: string | undefined, systemTag: string): LocaleCode { locale = resolveLocale(setting, systemTag); return locale; }
-export function tm(id: MessageId, params?: Params): string { return format(locale, platformCatalogText(id, catalog(locale)[id] ?? (en as Catalog)[id] ?? id, process.platform), params); }
+const said = createSaid();
+export function tm(id: MessageId, params?: Params): string {
+  const text = format(locale, platformCatalogText(id, catalog(locale)[id] ?? (en as Catalog)[id] ?? id, process.platform), params);
+  if (params) said.note(text, id, params);
+  return text;
+}
 export const mainLocale = () => locale;
+/** The catalog message `text` was made from by tm() in the language in use (said.ts): main's toasts keep their id with it. */
+export const saidAs = (text: string) => said.find(text, locale, () => (Object.keys(en) as MessageId[]).filter(id => !(catalog(locale)[id] ?? (en as Catalog)[id]).includes('{')).map(id => [id, tm(id)] as const));
 export { resolveLocale };

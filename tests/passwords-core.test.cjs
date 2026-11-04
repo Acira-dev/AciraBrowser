@@ -6,7 +6,7 @@ const {createVault,VaultError}=require('../desktop/passwords/vault.cjs');
 const csv=require('../desktop/passwords/csv.cjs');
 const {assess,reuseCounts}=require('../desktop/passwords/strength.cjs');
 const {generate,LOWER,UPPER,DIGITS,SYMBOLS}=require('../desktop/passwords/generator.cjs');
-const {createGate,windowsVerifier,testSwitchesAllowed,platformVerifier,runScript,HELLO_SCRIPT,CRED_SCRIPT}=require('../desktop/passwords/gate.cjs');
+const {createGate,windowsVerifier,testSwitchesAllowed,platformVerifier}=require('../desktop/passwords/gate.cjs');
 
 test('Mac password verification waits for the native device-owner decision and fails closed',async()=>{
  let accept,reason,prompts=0;
@@ -228,21 +228,39 @@ test('gate: one prompt, a short unlock window, then locked; failures never unloc
 });
 
 test('gate: Windows verifier — Hello, credential fallback, and every failure is a refusal',async()=>{
- const calls=[];const exec=outputs=>(file,args,options,callback)=>{calls.push({file,args,options});const next=outputs.shift();callback(next.error||null,next.stdout||'');};
- const base={platform:'win32',env:{SystemRoot:'C:\\Windows'}};
+ const calls=[],helper='C:\\Users\\me\\AppData\\Local\\Programs\\Acira Browser\\resources\\acira-verify.exe';
+ const exec=outputs=>(file,args,options,callback)=>{const call={file,args,options,input:null};calls.push(call);const next=outputs.shift();setImmediate(()=>callback(next.error||null,next.stdout||''));return {stdin:{on(){},end(text){call.input=text;}}};};
+ const base={platform:'win32',env:{SystemRoot:'C:\\Windows',ACIRA_STARTUP_TRACE:'C:\\trace.json'},helper,window:()=>null};
  assert.deepEqual(await windowsVerifier({...base,exec:exec([{stdout:'result:Verified\r\n'}])})('reveal'),{ok:true,method:'hello'});
- const call=calls[0];assert.equal(call.file,path.join('C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe'));
- assert.equal(call.options.windowsHide,true);assert.equal(call.options.env.ACIRA_GATE_MESSAGE,'Show a saved password in Acira');
- const decoded=Buffer.from(call.args.at(-1),'base64').toString('utf16le');assert.equal(decoded,HELLO_SCRIPT);assert.ok(call.args.includes('-NonInteractive')&&call.args.includes('-NoProfile'));
+ const call=calls[0];assert.equal(call.file,helper,'Acira\'s own signed helper, never powershell.exe');
+ assert.deepEqual(call.args,['hello','0'],'the job and the window, nothing else on the command line');
+ assert.equal(call.options.windowsHide,true);assert.equal(call.input,'Show a saved password in Acira','the message travels on standard input');
+ assert.equal(Object.keys(call.options.env).some(name=>/^ACIRA_/.test(name)),false,'Acira\'s own ACIRA_ variables stay out of the helper\'s environment');assert.equal(call.options.env.SystemRoot,'C:\\Windows','the rest of Acira\'s environment is passed on');
  assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'result:Canceled'}])})('copy')).code,'cancelled');
  assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'result:RetriesExhausted'}])})('copy')).code,'failed');
- assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'error'}])})('copy')).ok,false);
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'result:DeviceBusy'}])})('copy')).code,'failed');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'garbage'}])})('copy')).ok,false);
  assert.equal((await windowsVerifier({...base,exec:exec([{error:Object.assign(new Error('x'),{killed:true})}])})('copy')).code,'timeout');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'timeout'}])})('copy')).code,'timeout','the helper cancelled a prompt left open too long');
+ // a helper that is missing or blocked (an antivirus quarantine) is a refusal, and so is one that cannot be found at all
+ calls.length=0;assert.equal((await windowsVerifier({...base,exec:exec([{error:Object.assign(new Error('spawn ENOENT'),{code:'ENOENT',syscall:'spawn x.exe'})}])})('copy')).code,'failed');assert.equal(calls.length,1,'a helper that cannot start is not asked again for the password prompt');
+ assert.equal((await windowsVerifier({...base,helper:null,exec:()=>assert.fail('nothing to start')})('copy')).code,'failed');
+ assert.equal((await windowsVerifier({...base,exec:(f,a,o,cb)=>{throw new Error('spawn failed');}})('copy')).ok,false);
  calls.length=0;
  const fallback=await windowsVerifier({...base,exec:exec([{stdout:'unavailable:NotConfiguredForUser'},{stdout:'result:Verified'}])})('export');
- assert.deepEqual(fallback,{ok:true,method:'credential'});assert.equal(calls.length,2);assert.equal(Buffer.from(calls[1].args.at(-1),'base64').toString('utf16le'),CRED_SCRIPT);
- assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'result:Failed'}])})('export')).ok,false);
+ assert.deepEqual(fallback,{ok:true,method:'credential'});assert.equal(calls.length,2);
+ assert.deepEqual(calls.map(c=>c.args[0]),['hello','password']);assert.equal(calls[1].input,'Export your Acira passwords');
+ for(const hello of ['unavailable:DeviceNotPresent','unavailable:NoApi','unavailable:DeviceBusy','result:NotConfiguredForUser','result:DeviceNotPresent','result:DisabledByPolicy','error','']){
+  calls.length=0;
+  assert.equal((await windowsVerifier({...base,exec:exec([{stdout:hello},{stdout:'result:Verified'}])})('export')).method,'credential',(hello||'no answer (the helper ended without writing one)')+' offers the password prompt');
+  assert.equal(calls.length,2);
+ }
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'result:Failed'}])})('export')).code,'failed','a wrong password');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'result:Canceled'}])})('export')).code,'cancelled');
  assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'garbage'}])})('export')).code,'unavailable');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'unavailable:NoPassword'}])})('export')).code,'unavailable','an account without a password: set up Hello or a password');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{stdout:'error'}])})('export')).code,'unavailable');
+ assert.equal((await windowsVerifier({...base,exec:exec([{stdout:'unavailable:DeviceNotPresent'},{error:Object.assign(new Error('x'),{killed:true})}])})('export')).code,'timeout');
  assert.equal((await windowsVerifier({platform:'linux',env:{},exec:exec([])})('reveal')).code,'unavailable');
  // The test switch is ignored outside an unpackaged run in an isolated test profile.
  assert.equal((await windowsVerifier({...base,packaged:false,env:{ACIRA_PASSWORDS_TEST_GATE:'allow'},exec:exec([{stdout:'result:Canceled'}])})('reveal')).ok,false);
@@ -252,16 +270,52 @@ test('gate: Windows verifier — Hello, credential fallback, and every failure i
  const env={ACIRA_PASSWORDS_TEST_GATE:'allow',ACIRA_BROWSER_TEST_DATA:'x'};
  for(const packaged of [true,undefined]){
   calls.length=0;
-  const result=await windowsVerifier({platform:'win32',packaged,env,exec:exec([{stdout:'result:Canceled'}])})('reveal');
+  const result=await windowsVerifier({platform:'win32',packaged,env,helper,window:()=>null,exec:exec([{stdout:'result:Canceled'}])})('reveal');
   assert.equal(result.ok,false);assert.equal(result.code,'cancelled');assert.equal(calls.length,1,'the real Windows prompt ran instead of the switch');
  }
  assert.equal(testSwitchesAllowed({env,packaged:false}),true);
  assert.equal(testSwitchesAllowed({env,packaged:true}),false);
  assert.equal(testSwitchesAllowed({env}),false);
  assert.equal(testSwitchesAllowed({env:{},packaged:false}),false);
- // Scripts carry no user data: the message travels in the environment only.
- for(const script of [HELLO_SCRIPT,CRED_SCRIPT]){assert.match(script,/\$env:ACIRA_GATE_MESSAGE/);assert.equal(/password\s*=\s*['"][^'"]+['"]/i.test(script),false);}
- assert.equal((await runScript('Write-Output x','m',{exec:(f,a,o,cb)=>{throw new Error('spawn failed');}})).code,'failed');
+});
+
+test('gate: the Windows prompt is parented to the Acira window, which is enabled again if the helper is stopped with the prompt up',async()=>{
+ const handle=Buffer.alloc(8);handle.writeBigUInt64LE(0x1a2b3cn);
+ let enabled=true;const win={isDestroyed:()=>false,isEnabled:()=>enabled,setEnabled:value=>{enabled=value;},getNativeWindowHandle:()=>handle};
+ const seen=[];
+ const exec=(file,args,options,callback)=>{seen.push(args);enabled=false;setImmediate(()=>callback(Object.assign(new Error('killed'),{killed:true}),''));return {stdin:{on(){},end(){}}};};
+ const result=await windowsVerifier({platform:'win32',env:{},helper:'C:\\acira\\resources\\acira-verify.exe',window:()=>win,exec})('secured');
+ assert.equal(result.code,'timeout');assert.deepEqual(seen,[['hello',String(0x1a2b3c)]]);
+ assert.equal(enabled,true,'the window the prompt disabled is usable again');
+ // a window that was already disabled (another modal of Acira's own) is left as it was
+ enabled=false;const keep=(file,args,options,callback)=>{setImmediate(()=>callback(null,'result:Verified'));return {stdin:{on(){},end(){}}};};
+ assert.equal((await windowsVerifier({platform:'win32',env:{},helper:'C:\\acira\\resources\\acira-verify.exe',window:()=>win,exec:keep})('secured')).ok,true);
+ assert.equal(enabled,false);
+});
+
+test('gate: with no window from the caller, the prompt goes in front of Acira\'s focused BaseWindow (the real lookup), and the asking window wins',async()=>{
+ // Electron 44 as it behaves with Acira's windows: they are BaseWindows, which BrowserWindow's lists leave out.
+ const id=require.resolve('electron'),saved=require.cache[id];
+ const handle=value=>{const bytes=Buffer.alloc(8);bytes.writeBigUInt64LE(BigInt(value));return bytes;};
+ const make=value=>({enabled:true,isDestroyed:()=>false,isVisible:()=>true,isEnabled(){return this.enabled;},setEnabled(on){this.enabled=on;},getNativeWindowHandle:()=>handle(value)});
+ const focused=make(0x2a0c4),other=make(0x51e08),seen=[];
+ require.cache[id]={id,filename:id,loaded:true,exports:{BaseWindow:{getFocusedWindow:()=>focused,getAllWindows:()=>[other,focused]},BrowserWindow:{getFocusedWindow:()=>null,getAllWindows:()=>[]}}};
+ try{
+  const exec=(file,args,options,callback)=>{seen.push(args);setImmediate(()=>callback(null,'result:Verified'));return {stdin:{on(){},end(){}}};};
+  const verify=windowsVerifier({platform:'win32',env:{},helper:'C:\\A\\resources\\acira-verify.exe',exec});
+  assert.equal((await createGate({verify,windowMs:0}).ensure('tor')).ok,true);
+  assert.deepEqual(seen.pop(),['hello',String(0x2a0c4)],'saved Tor items: the focused Acira window');
+  assert.equal((await createGate({verify,windowMs:0}).ensure('reveal',other)).ok,true);
+  assert.deepEqual(seen.pop(),['hello',String(0x51e08)],'a saved password: the window that asked');
+  // No focused window: a visible one.
+  require.cache[id].exports.BaseWindow.getFocusedWindow=()=>null;
+  await verify('secured');assert.deepEqual(seen.pop(),['hello',String(0x51e08)]);
+  // The re-enable after a stopped prompt reaches the real window too.
+  require.cache[id].exports.BaseWindow.getFocusedWindow=()=>focused;
+  const stopped=(file,args,options,callback)=>{focused.enabled=false;setImmediate(()=>callback(Object.assign(new Error('killed'),{killed:true}),''));return {stdin:{on(){},end(){}}};};
+  assert.equal((await windowsVerifier({platform:'win32',env:{},helper:'C:\\A\\resources\\acira-verify.exe',exec:stopped})('secured')).code,'timeout');
+  assert.equal(focused.enabled,true,'the Acira window is usable again after the 90 s stop');
+ }finally{if(saved)require.cache[id]=saved;else delete require.cache[id];}
 });
 
 test('installed Mac password verification ignores test bypass switches and still requires native verification',async()=>{

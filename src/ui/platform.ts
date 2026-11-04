@@ -4,13 +4,17 @@ export const isTorSupported = () => isWindows() || isMac();
 
 const MAC_MODIFIERS: Record<string,string> = {Ctrl:'⌃',Option:'⌥',Shift:'⇧',Cmd:'⌘'};
 const MAC_ORDER = '⌃⌥⇧⌘';
+/** Hints here are written in Windows terms, where Delete is the key a Mac labels delete: Backspace, ⌫. The stock Mac binding for
+ *  Clear browsing data is that key (desktop/shortcut-registry.cjs). Registry keys themselves, where Delete means forward delete (⌦),
+ *  are shown by the registry's display() and Settings › Shortcuts' keyCaps. */
+const MAC_KEYS: Record<string,string> = {Delete:'⌫',Backspace:'⌫'};
 
 /** macOS shows shortcuts as modifier symbols in ⌃⌥⇧⌘ order directly before the key: "⇧⌘T". */
 function macGlyphs(shortcut:string):string {
   return shortcut.split(' / ').map(part=>{
     const tokens=part.split(/\s*\+\s*|\s+/).filter(Boolean);
     const modifiers=tokens.filter(token=>token in MAC_MODIFIERS).map(token=>MAC_MODIFIERS[token]);
-    const keys=tokens.filter(token=>!(token in MAC_MODIFIERS));
+    const keys=tokens.filter(token=>!(token in MAC_MODIFIERS)).map(key=>MAC_KEYS[key]??key);
     if(!modifiers.length||!keys.length)return part;
     return modifiers.sort((a,b)=>MAC_ORDER.indexOf(a)-MAC_ORDER.indexOf(b)).join('')+keys.join(' ');
   }).join(' / ');

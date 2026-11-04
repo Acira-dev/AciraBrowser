@@ -50,6 +50,8 @@ export function platformCatalogText(id: string, text: string, platform: string):
   if (id === 'import.desc.spaces') return text.replaceAll('Alt+1–8', '⌃1–8');
   // A Mac has no Windows key: its clause leaves the sentence, in every language.
   if (id === 'shortcuts.systemKeysNote') return replaceAll(text, withoutWindowsKey);
+  // The key that clears a shortcut is Backspace on Windows; a Mac's is labelled delete (the ⌫ in its key caps), in every language.
+  if (id === 'settingslede.shortcuts' || id === 'routinespage.shortcutPressAKeyCombination') return text.replace(/Backspace|Rücktaste|Retour arrière/g, 'Delete');
   // The Mac's own name for the place Windows calls Settings (the clock fix Tor asks for), in every language.
   if (id === 'tor.clock.detail' || id === 'tor.err.clock.detail') return replaceAll(text, systemSettings);
   return osNameMessages.has(id) ? text.replaceAll('Windows', 'macOS') : text;

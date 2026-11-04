@@ -16,9 +16,12 @@ export const newTabInGroupActions=(group:{id:string;collapsed?:boolean},lastMemb
 
 /** The tabs that just arrived at the end of the sidebar's list as NEW tabs (founder, 24 Oct: with "new tabs at the top" a new tab shows under the
  * New tab row at once, and the model is reordered a moment later). A tab in `reopened` (it was in the closed list a moment ago: Ctrl+Shift+T, an
- * Undo) is not new: it comes back at its own place, even when that place was the end of the list. */
-export const appendedTabs=<T extends {id:string}>(loose:readonly T[],previous:ReadonlySet<string>,reopened:ReadonlySet<string>):T[]=>
- loose.filter((tab,index)=>!previous.has(tab.id)&&!reopened.has(tab.id)&&!loose.slice(index+1).some(item=>previous.has(item.id)));
+ * Undo) is not new: it comes back at its own place, even when that place was the end of the list.
+ * `listed` (every tab the list shows, pinned and grouped ones too; the loose ones when absent): a list that keeps none of the tabs
+ * shown before is another list (a workspace or a profile's space came on screen), not new tabs. Its first frame showed every one
+ * of them upside down at the top, and the next frame put them back (founder, 3 Nov). */
+export const appendedTabs=<T extends {id:string}>(loose:readonly T[],previous:ReadonlySet<string>,reopened:ReadonlySet<string>,listed:readonly T[]=loose):T[]=>
+ !listed.some(tab=>previous.has(tab.id))?[]:loose.filter((tab,index)=>!previous.has(tab.id)&&!reopened.has(tab.id)&&!loose.slice(index+1).some(item=>previous.has(item.id)));
 
 /** A catalog tip written "Name · {shortcut} what it does" reads as the name with the rest on its own line. The tooltip's key cap holds only keys
  *  (components/transient/tooltipParse.ts): it took everything after the dot for the cap, so "Add to Favorites" was squeezed into three lines

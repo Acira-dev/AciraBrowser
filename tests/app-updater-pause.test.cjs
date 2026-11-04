@@ -123,7 +123,7 @@ test('a paused download from another version is dropped with its bytes; a withdr
  assert.equal(JSON.parse(fs.readFileSync(path.join(root2,'updater.json'),'utf8')).download,undefined);
 });
 
-test('Resume whose look fails is an ordinary failure: the next try says "checking" and downloads only as the automatic setting says',async t=>{
+test('Resume whose look fails (offline after a relaunch) is paused again, not an error; nothing looks or downloads by itself until the next Resume, which goes on',async t=>{
  const feed=await feedServer(),root=tmp();t.after(feed.close);
  let first;const paused=new Promise(resolve=>{first=make(root,liteUpdater(feed,{root}),{onChange:status=>{if(status.status==='downloading'&&status.transferred>=100000&&status.pausable)resolve(first.pause());}});});
  await first.check();await paused;first.setAutoDownload(false);await new Promise(resolve=>setTimeout(resolve,50));
@@ -132,12 +132,13 @@ test('Resume whose look fails is an ordinary failure: the next try says "checkin
  lite.checkForUpdates=async()=>{if(!offline)return look();lite.emit('checking-for-update');const error=new Error('net::ERR_INTERNET_DISCONNECTED');lite.emit('error',error);throw error;};
  const seen=[],second=make(root,lite,{onChange:status=>seen.push(status.status)});
  assert.equal(second.status().status,'paused');
- second.resume();await until(()=>second.status().status==='error');
+ second.resume();await until(()=>second.status().status!=='downloading');
+ assert.equal(second.status().status,'paused','paused again with its bytes (it was "error": the panel closed and the dots went)');assert.equal(seen.includes('error'),false);
  offline=false;const files=feed.fileRequests().length;seen.length=0;
- await second.check();await new Promise(resolve=>setTimeout(resolve,100));
- assert.equal(seen[0],'checking','the next try says it is checking');
- assert.equal(second.status().status,'available','automatic download is off: it waits for Download');
- assert.equal(feed.fileRequests().length,files,'nothing was downloaded');
+ await second.check();await new Promise(resolve=>setTimeout(resolve,100)); // the 8-hour check, or a retry: paused stays off the network
+ assert.deepEqual(seen,[],'nothing looked by itself');assert.equal(feed.fileRequests().length,files,'nothing was downloaded (automatic download is off, and Resume did not stick)');
+ second.resume();await until(()=>second.status().status==='ready');
+ assert.ok(feed.fileRequests().length>files,'the next Resume goes on');
 });
 
 test('a channel change while paused ends the pause: the bytes were for the other channel\'s file, so they go, and Resume has nothing to continue',async t=>{

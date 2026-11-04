@@ -42,7 +42,8 @@ html:has(.native-layer),html:has(.native-layer) body,html:has(.native-layer) #ro
 html[data-native=false] .app .caption-reservation { display:none; }
 .app.style-acira .compact-caption-space { display:none; }
 .app.style-acira .icon-button { width:28px; height:28px; min-width:28px; flex-basis:28px; color:var(--ed-icon); border-radius:6px; }
-.app.style-acira .icon-button:hover { background:var(--ed-hover); color:var(--ed-ink); }
+/* A disabled button (Back with no history) does not answer the pointer; :where keeps every rule's specificity as it was. */
+.app.style-acira .icon-button:hover:where(:not(:disabled)) { background:var(--ed-hover); color:var(--ed-ink); }
 .app.style-acira .icon-button.active { background:var(--ed-selected); color:var(--ed-ink); }
 .app.style-acira .icon-button svg { width:18px; height:18px; }
 .app.style-acira .acira-persistent-toolbar { display:flex; height:var(--geometry-toolbar); padding:0 12px; gap:12px; border:0; background:var(--sheet); }
@@ -525,7 +526,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira :is(.
 .app.style-acira .browser-body>.page-area :is(.page-content,.page-pane) { border-radius:inherit; }
 .app.style-acira .browser-shell { border-bottom-color:transparent; }
 html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .browser-shell { border-bottom-color:transparent; }
-html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-rail-button:hover,html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .icon-button:hover { background:rgb(var(--sheet-rgb) / .5); }
+html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-rail-button:hover,html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .icon-button:hover:where(:not(:disabled)) { background:rgb(var(--sheet-rgb) / .5); }
 
 /* Tabs: quiet text on the chrome; the selected tab lifts out as a white sheet. */
 .app.style-acira .browser-tab { color:var(--text-secondary); }
@@ -543,7 +544,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 .app.style-acira .address-bar:focus-within { background:var(--address-focus); border-color:transparent; outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:var(--field-shadow); }
 .app.style-acira .address-bar::before { display:none; }
 .app.style-acira .address-bar .address-agent { background:var(--sheet); }
-.app.style-acira .icon-button:hover,.app.style-acira .ed-icon:hover { background:var(--well); }
+.app.style-acira .icon-button:hover:where(:not(:disabled)),.app.style-acira .ed-icon:hover { background:var(--well); }
 .app.style-acira .icon-button.active { background:var(--sheet); box-shadow:var(--lift); }
 
 /* Sidebar: rows on the chrome, the current page lifted white with its accent tick. */

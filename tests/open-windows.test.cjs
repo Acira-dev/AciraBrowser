@@ -64,7 +64,7 @@ test('start reads back only windows that were saved, at most twelve, and falls b
 test('main.cjs hands the quit to the module before it saves the windows', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(source, /createOpenWindows\(\{getDatabase:\(\)=>database,getControllers:\(\)=>controllers,isQuitting:\(\)=>quitting\}\)/);
-  assert.match(source, /const beginQuit=\(\)=>\{openWindows\.begin\(\);/);
+  assert.match(source, /const beginQuit=\(\)=>\{closeSplash\(\);openWindows\.begin\(\);/);
   assert.match(source, /app\.on\('before-quit',beginQuit\);/);
   assert.match(source, /require\('electron'\)\.autoUpdater\.on\('before-quit-for-update',\(\)=>\{[^\n]*beginQuit\(\);\}\);/, 'Install now closes the windows before before-quit; they still come back');
   assert.match(source, /function restorableWindowIds\(\)\{return openWindows\.restorable\(\);\}/);

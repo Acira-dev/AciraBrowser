@@ -5,9 +5,9 @@ import { DownloadMatrix } from '../components/DownloadsGlyph';
 import { Download, FolderOpen, Pause, Play, RotateCw, X } from '../components/AppIcons';
 import { ActionRow } from '../components/PanelParts';
 import { t, useT } from '../i18n';
-import { isLiveDownload, panelDownloads, PANEL_DOWNLOAD_ROWS } from '../ui/downloadActivity';
+import { isLiveDownload, panelDownloads, panelWarnsFirst, PANEL_DOWNLOAD_ROWS } from '../ui/downloadActivity';
 import { TorDownloadNotice } from './tor/TorDownloadNotice';
-import { DownloadLineSlot, downloadMeta, downloadShare, useDownloads, type DownloadCommand } from './Downloads';
+import { DownloadLineSlot, downloadMeta, downloadShare, sizeOf, useDownloads, type DownloadCommand } from './Downloads';
 import { FileGlyph, MiddleName } from './Library';
 import './downloads-panel.css';
 
@@ -16,7 +16,7 @@ function PanelRow({ item, act, reduced, onOpened }: { item: BrowserDownload; act
   const matrix = running ? <DownloadMatrix phase={item.status === 'Paused' ? 'held' : 'run'} progress={downloadShare(item)} reducedMotion={reduced}/> : undefined;
   const body = <>
     <FileGlyph name={item.name} bare>{matrix}</FileGlyph>
-    <span className="acira-menu-title"><MiddleName name={item.name}/><span className="acira-menu-sub">{downloadMeta(item, false)}{item.dangerous && item.status === 'Ready' ? <> · <span data-warn>{t('dl.review')}</span></> : null}</span></span>
+    <span className="acira-menu-title"><MiddleName name={item.name}/><span className="acira-menu-sub">{panelWarnsFirst(item) ? <><span data-warn>{t('dl.review')}</span> · {sizeOf(item)}</> : downloadMeta(item, false)}</span></span>
     <span/>
   </>;
   const button = (label: string, icon: ReactNode, run: () => void, danger = false) => <button type="button" className="dl-panel-act" data-danger={danger || undefined} aria-label={label} title={label} onClick={run}>{icon}</button>;

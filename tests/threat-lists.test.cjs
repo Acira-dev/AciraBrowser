@@ -157,7 +157,7 @@ test('gate: a page resource blocked by a list is never silent: the first block o
  gate.check({url:'https://d.nflxvideo.example/',resourceType:'mainFrame'},null,'p1');assert.equal(lines.length,2,'a page gets the warning page, not a log line');
  const {createMainLog}=require('../desktop/browser-services/main-log.cjs'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'acira-main-log-'));
  try{const log=createMainLog({directory:path.join(dir,'logs'),maxBytes:400,echo(){},now:()=>new Date('2026-11-02T12:00:00Z')});for(let i=0;i<20;i++)log('line '+i+' x\ny');
-  const text=fs.readFileSync(path.join(dir,'logs','main.log'),'utf8');assert.ok(text.length<=400,'bounded');assert.match(text,/2026-11-02T12:00:00\.000Z line 19 x y\n$/);assert.doesNotMatch(text,/^line 0 /m);
+  const text=fs.readFileSync(path.join(dir,'logs','blocked.log'),'utf8');assert.ok(text.length<=400,'bounded');assert.match(text,/2026-11-02T12:00:00\.000Z line 19 x y\n$/);assert.doesNotMatch(text,/^line 0 /m);
   assert.doesNotThrow(()=>createMainLog({directory:'/nonexistent/forbidden',io:{mkdirSync(){throw new Error('read-only');}},echo(){}})('x'));}
  finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

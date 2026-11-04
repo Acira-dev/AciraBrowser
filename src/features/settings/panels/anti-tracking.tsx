@@ -179,7 +179,8 @@ function Panel({ state }: SettingsPanelProps) {
     <>
       <AntiTracking disabled={disabled} />
       <PhishingLists disabled={disabled} />
-      <Passkeys disabled={disabled} />
+      {/* No passkey choice on a Mac: the guard answers there with no setting (passkey-guard-preload.cjs), so the switch did nothing. */}
+      {!isMac() && <Passkeys disabled={disabled} />}
       <SafeBrowsing disabled={disabled} />
     </>
   );

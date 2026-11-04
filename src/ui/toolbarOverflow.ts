@@ -1,6 +1,6 @@
 import { useLayoutEffect } from 'react';
 import type { ToolbarItemId } from './toolbarPrefs';
-import { fitMetrics, fitToolbar, hideOrder, type FitItem } from './toolbarFit';
+import { compactLeadFloor, fitMetrics, fitToolbar, hideOrder, type FitItem } from './toolbarFit';
 
 const px = (value: string) => Number.parseFloat(value) || 0;
 const FIT = 'data-fit-hidden', REFIT = 'acira-toolbar-refit';
@@ -57,7 +57,7 @@ function fitRow(toolbar: HTMLElement) {
   const navGap = 6;
   const kids = grid ? [...leading.querySelectorAll<HTMLElement>('.compact-navigation > *')].filter(node => shown(node)) : [];
   const leadingWidth = grid
-    ? kids.reduce((sum, node) => sum + (node.classList.contains('acira-compact-tabs') ? 34 : node.getBoundingClientRect().width), 0) + Math.max(0, kids.length - 1) * navGap
+    ? kids.reduce((sum, node) => sum + (node.classList.contains('acira-compact-tabs') ? fitMetrics.stripFolded : node.getBoundingClientRect().width), 0) + Math.max(0, kids.length - 1) * navGap
     : leading.getBoundingClientRect().width;
   const overviewShown = overview && shown(overview) && overview.getBoundingClientRect().width > 0;
   const homeShown = home && shown(home) && home.getBoundingClientRect().width > 0;
@@ -65,8 +65,10 @@ function fitRow(toolbar: HTMLElement) {
   for (const id of result.hidden) present.get(id)?.setAttribute(FIT, '');
   if (result.hidden.includes('home')) home?.setAttribute(FIT, '');
   if (result.dropTabViewer && overview) overview.setAttribute(FIT, '');
-  // Compact and Focus: the left column never gets narrower than its controls (the tab chips can still shrink to 34px).
-  if (grid) toolbar.style.setProperty('--fit-lead', `${Math.ceil(leadingWidth - (result.dropTabViewer && overviewShown ? overview!.getBoundingClientRect().width + navGap : 0))}px`);
+  // Compact and Focus: the left column never gets narrower than its controls, and keeps the tab strip at its usable minimum
+  // while the address field can make that room (ui/toolbarFit.ts compactLeadFloor); otherwise the strip can fold to its +.
+  const strip = kids.some(node => node.classList.contains('acira-compact-tabs'));
+  if (grid) toolbar.style.setProperty('--fit-lead', `${Math.ceil(compactLeadFloor(leadingWidth - (result.dropTabViewer && overviewShown ? overview!.getBoundingClientRect().width + navGap : 0), result.address, strip))}px`);
   toolbar.dataset.fitKey = signature();
   actions.dataset.fitPinned = result.hidden.includes('pinned') ? '1' : '';
 }

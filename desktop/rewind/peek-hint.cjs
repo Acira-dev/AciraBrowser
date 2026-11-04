@@ -9,7 +9,7 @@ const TEXT='Preview links without opening a tab: Alt-click a link, or press and 
 function createPeekHint({file,threshold=3}={}){
  let seen=read(),count=0;
  function read(){try{return JSON.parse(fs.readFileSync(file,'utf8')).seen===true;}catch{return false;}}
- function remember(){seen=true;try{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({seen:true}));}catch{}}
+ function remember(){seen=true;try{fs.mkdirSync(path.dirname(file),{recursive:true});require('../atomic-file.cjs').writeFileAtomic(file,JSON.stringify({seen:true}));}catch{}}
  return {
   /** A link opened as a background tab. Calls show(text) once, on the threshold'th one, if Peek is still unknown. */
   note(show){if(seen)return false;count++;if(count<threshold)return false;remember();try{show(TEXT);}catch{}return true;},

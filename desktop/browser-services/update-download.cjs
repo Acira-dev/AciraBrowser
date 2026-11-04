@@ -241,4 +241,4 @@ function handedOver({pendingDir,sha512,size}){
  return Boolean(info&&info.sha512===sha512&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName&&sizeOf(path.join(pendingDir,info.fileName))===size);
 }
 
-module.exports={download,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX};
+module.exports={download,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL};

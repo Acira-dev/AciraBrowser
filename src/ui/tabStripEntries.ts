@@ -11,6 +11,13 @@ export type TabStripEntry={key:string;tab:TabSession;group?:TabGroup;splitGroup?
 /** What a chip is called to Reorder, the drag surface and the DOM: the tab id, except a linked copy (its key, so a tab drawn twice has two names). */
 export const stripValue=(entry:Pick<TabStripEntry,'key'|'tab'|'linked'>)=>entry.linked?entry.key:entry.tab.id;
 
+/** What changed in the strip since it last settled: `entering`, the chips new to it (they grow in from nothing: tab-motion.css), and
+ * `replaced`, a strip that keeps none of the chips it showed. That is another list (a workspace or a profile's space came on screen),
+ * not tabs closing and opening: played as such, the old chips shrank and slid left across the new ones while every new chip grew
+ * from zero and the row closed up for half a second (founder, 3 Nov). The strip starts it afresh instead. */
+export const stripChange=(values:readonly string[],previous:ReadonlySet<string>):{entering:Set<string>;replaced:boolean}=>
+ !previous.size||values.some(value=>previous.has(value))?{entering:new Set(values.filter(value=>!previous.has(value))),replaced:false}:{entering:new Set(),replaced:values.length>0};
+
 /** The split chip's width: disclosure, glyph, "Split view" and the count; folded, the members' site icons take the count's place. */
 const chipWidth=(split:Pick<SplitGroup,'collapsed'|'tabIds'|'name'>)=>Math.min(190,(split.collapsed?122+split.tabIds.length*17:134)+(split.name?Math.min(60,Math.ceil(split.name.length*5.5)):0));
 

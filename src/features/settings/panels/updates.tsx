@@ -17,6 +17,9 @@ function Updates() {
   const [problem, setProblem] = useState('');
   const refresh = useCallback(async () => { try { setStatus((await runtime.service({ type: 'update.status' })).update); } catch (reason) { setProblem(message(reason)); } }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  // Every change, wherever it came from (the toolbar panel's ring, a look in the background, a failure): without this a download resumed from
+  // the panel kept this row on "paused" with Resume download, since the timer below only runs while it checks or downloads.
+  useEffect(() => runtime.subscribeBrowser?.((event) => { if (event.type === 'update-changed') void refresh(); }), [refresh]);
   useEffect(() => {
     if (!status || !['checking', 'downloading'].includes(status.status)) return;
     const timer = window.setInterval(() => void refresh(), 1500);
@@ -65,7 +68,7 @@ function Updates() {
         <Select label={t("updates.updateChannel")} value={status?.channel ?? 'stable'} disabled={!status?.supported} options={[{ value: 'stable', label: t("updates.stable") }, { value: 'beta', label: t("updates.beta") }]} onChange={(next) => void channel(next)} />
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
-      {status?.status === 'error' && status.error && <SettingNote>{t('import.technicalDetails')}: {status.error}</SettingNote>}
+      {(status?.status === 'error' || status?.status === 'paused') && status.error && <SettingNote>{t('import.technicalDetails')}: {status.error}</SettingNote>}
       <SettingNote>{t("updates.updatesComeFromGithubReleases")}</SettingNote>
     </SettingGroup>
   );

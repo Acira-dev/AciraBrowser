@@ -41,7 +41,15 @@ function createHTTPSOnly({database,getProfiles,getContext,resolveContents,getWin
   if(answer.response!==1)return {cancelled:true};if(!validTicket(wc,ticket))throw new Error('The website changed during review. No HTTP exception was granted.');
   grants.set(wc.id,{session:wc.session,profileId:ticket.profileId,tabId:ticket.tabId,origin:origin(ticket.originalURL),active:false,activationDeadline:now()+120000});pending.delete(wc.id);tickets.delete(wc.id);if(ticket.method==='GET')await navigate(wc,ticket.originalURL);notify(wc);return {allowed:true,requiresResubmit:ticket.method!=='GET',scope:'origin-in-this-tab-until-leave-or-close'};
  }
+ /** Strict mode is on for this tab (its ordinary profile, or its private window). */
+ function active(wc){try{return enabled(owner(wc).state);}catch{return false;}}
+ /** The person already chose this http address on Acira's "No secure connection" page (https-first.cjs). That answer is strict mode's answer too, so it
+  *  gets the same exception allowHTTP gives (this origin, this tab, until it leaves the origin) without strict mode's own prompt: one question, not two. */
+ function grantHTTP(wc,url){
+  const context=owner(wc);let parsed;try{parsed=new URL(url);}catch{parsed=null;}if(parsed?.protocol!=='http:'||parsed.username||parsed.password)throw new Error('Choose an http address.');if(!enabled(context.state))return {allowed:false};
+  track(wc);grants.set(wc.id,{session:wc.session,profileId:context.profileId,tabId:context.tabId,origin:parsed.origin,active:false,activationDeadline:now()+120000});pending.delete(wc.id);tickets.delete(wc.id);notify(wc);return {allowed:true,scope:'origin-in-this-tab-until-leave-or-close'};
+ }
  async function revokeHTTP(wc){owner(wc);grants.delete(wc.id);tickets.delete(wc.id);pending.delete(wc.id);wc.stop();await wc.session.closeAllConnections();notify(wc);return {revoked:true,reloadRequired:true};}
- return {attach,profileStatus,setProfile,setPrivate,status,allowHTTP,revokeHTTP,release(session){const state=sessions.get(session);state?.dispose?.();clearSession(session);sessions.delete(session);}};
+ return {attach,profileStatus,setProfile,setPrivate,status,active,allowHTTP,grantHTTP,revokeHTTP,release(session){const state=sessions.get(session);state?.dispose?.();clearSession(session);sessions.delete(session);}};
 }
 module.exports={createHTTPSOnly,FALLBACK_ERRORS};

@@ -1,6 +1,6 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import {runtime} from '../runtime/client';
-import type {BrowserAction,SiteReportKind,SiteReportPayload,SiteReportSubject,TabSession} from '../runtime/types';
+import type {BrowserAction,ServiceResult,SiteReportKind,SiteReportPayload,SiteReportSubject,TabSession} from '../runtime/types';
 import {FactRow} from '../components/PanelParts';
 import {MenuChoice} from '../components/MenuChoice';
 import {MenuSegment} from '../components/BrowserMenu';
@@ -19,6 +19,12 @@ const subjectName:Record<SiteReportSubject,MessageId>={site:'report.subject.site
 const lists:Record<string,MessageId>={phishing:'report.list.phishing',malware:'report.list.malware','phishing-db':'report.list.phishingDb',lookalike:'report.list.lookalike','ad-blocking':'report.list.adBlocking','cookie-banners':'report.list.cookieBanners'};
 const systems:Record<string,MessageId>={darwin:'report.system.darwin',win32:'report.system.win32',linux:'report.system.linux'};
 export const NOTE_MAX=500;
+/** Why Send didn't go, in words: nothing answered (the connection), or the server answered and refused it, or the hourly cap (later; the
+ * connection works then, so it isn't blamed). */
+export const sendProblem=(failure?:'offline'|'later')=>t(failure==='later'?'report.tryLater':'report.failed');
+/** Send's answer: null when main sent it (only `sent:true` is), else what the form says. A site report whose tab closed or left the web is
+ * answered with available:false and reason 'not-a-website', and nothing went: that is not a thank-you. */
+export const sendOutcome=(report?:ServiceResult['siteReport'])=>report?.sent===true?null:report?.failure?sendProblem(report.failure):report?.reason==='not-a-website'?t('report.siteGone'):sendProblem('offline');
 
 /** Whether a tab can offer "Report a problem with this site": a website, never in a Tor window or tab (main refuses those too). */
 export const reportable=(tab:TabSession,tor:boolean)=>!tor&&tab.privacy!=='tor'&&tab.contentKind==='web'&&/^https?:\/\//i.test(tab.url);
@@ -34,7 +40,7 @@ export function SiteReport({tab,subjects,initialKind,dispatch,onCancel,onSent}:{
  const about=(next:SiteReportSubject)=>{if(next===subject)return;setSubject(next);setKind(undefined);setPayload(null);setProblem('');};
  // Main builds the message; the panel only shows it. Asked again when the subject, the choice or the note changes, so what is shown is what Send sends.
  useEffect(()=>{const current=++version.current;const timer=setTimeout(()=>{void runtime.service({type:'site-report.preview',tabId:tab.id,subject,kind:kind??'',note}).then(result=>{if(current!==version.current)return;const report=result.siteReport;setAvailable(report?.available!==false);setPayload(report?.payload??null);if(report?.payload?.host)setHost(report.payload.host);else if(!host&&subjects.includes('site')){try{setHost(new URL(tab.url).hostname);}catch{}}}).catch(()=>{if(current===version.current)setPayload(null);});},note?150:0);return()=>clearTimeout(timer);},[tab.id,tab.url,subject,kind,note]);
- const send=async()=>{if(!kind||!payload)return;setBusy(true);setProblem('');try{await runtime.service({type:'site-report.send',tabId:tab.id,subject,kind,note});dispatch({type:'toast',text:t('report.thanks')});onSent();}catch{setProblem(t('report.failed'));setBusy(false);}};
+ const send=async()=>{if(!kind||!payload)return;setBusy(true);setProblem('');try{const unsent=sendOutcome((await runtime.service({type:'site-report.send',tabId:tab.id,subject,kind,note})).siteReport);if(unsent){setProblem(unsent);setBusy(false);return;}dispatch({type:'toast',text:t('report.thanks')});onSent();}catch{setProblem(sendProblem('offline'));setBusy(false);}};
  return <section className="site-report" aria-label={t('report.title')} aria-busy={busy}>
   <div className="acira-menu-row acira-menu-row-identity"><MessageSquare size={16} className="acira-menu-icon"/><span className="acira-menu-title">{t('report.title')}<span className="acira-menu-sub"><bdi>{app?t('report.subject.app'):host}</bdi></span></span><span/></div>
   <div className="acira-menu-sep" role="separator"/>

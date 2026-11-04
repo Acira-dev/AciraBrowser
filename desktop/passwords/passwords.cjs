@@ -22,13 +22,13 @@ function createPasswords({dir,keys,gate,clipboard,confirm,pickOpen,pickSave,tras
  const settingsFile=path.join(dir,'settings.json');
  let settings=readSettings();
  let clearTimer=null,imports=new Map();
- function readSettings(){try{const raw=JSON.parse(fsApi.readFileSync(settingsFile,'utf8'));return {enabled:raw.enabled!==false};}catch{return {enabled:true};}}
- function writeSettings(){fsApi.mkdirSync(dir,{recursive:true});fsApi.writeFileSync(settingsFile,JSON.stringify(settings));}
+ /* a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile) */function readSettings(){const raw=require('../atomic-file.cjs').readJsonFile(settingsFile,{fileSystem:fsApi});return {enabled:raw?.enabled!==false};}
+ function writeSettings(){fsApi.mkdirSync(dir,{recursive:true});require('../atomic-file.cjs').writeFileAtomic(settingsFile,JSON.stringify(settings),{fileSystem:fsApi});}
  const exact=(request,allowed)=>{for(const key of Object.keys(request))if(key!=='type'&&!allowed.includes(key))bad('Unexpected request field.');};
  const idOf=value=>{if(typeof value!=='string'||!ID.test(value))bad('Unknown item.');return value;};
  const row=item=>({id:item.id,origin:item.origin,host:displayHost(item.origin),username:item.username,updatedAt:item.updatedAt});
  async function gated(reason,window){
-  const result=await gate.ensure(reason);
+  const result=await gate.ensure(reason,window);
   return result.ok?null:{denied:{code:result.code||'failed',message:result.message||tr('pw.err.cantVerify','Couldn’t verify it’s you.')}};
  }
  // The clipboard is asynchronous (Electron 44: readText and writeText return promises), so both the copy and the later clear await it.

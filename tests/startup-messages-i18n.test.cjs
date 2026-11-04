@@ -4,7 +4,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {BrowserDatabase,SCHEMA}=require('../desktop/database.cjs'),{openBrowserDatabase}=require('../desktop/database-open.cjs'),backups=require('../desktop/database-backups.cjs');
 const {startupFailed}=require('../desktop/process-errors.cjs');
-const KEYS=['main.dataOpenTitle','main.dataNothingChanged','main.dataRestoreQuestion','main.dataRestoreButton','main.dataQuitButton','main.dataRestoreFailed','main.startupFailedTitle','main.startupFailedText'];
+const KEYS=['main.dataOpenTitle','main.dataNothingChanged','main.dataRestoreQuestion','main.dataRestoreButton','main.dataQuitButton','main.dataRestoreFailed','main.startupFailedTitle','main.startupFailedText','main.secureStartFailedTitle','main.secureStartFailedText','main.secureStartLinksText'];
 const LOCALES=['en','es','fr','de','pt-BR','it','ja','zh-CN','ar','tr','ru','ko','hi'];
 const marker=(id,params)=>'['+id+(params?' '+JSON.stringify(params):'')+']';
 function damagedWithCopy(){
@@ -15,7 +15,10 @@ function damagedWithCopy(){
 
 test('every word of the restore question, its buttons and the quit message is a catalog message',()=>{
  const file=damagedWithCopy(),asked=[],errors=[];
- openBrowserDatabase({create:name=>new BrowserDatabase(name),file,backups,supported:SCHEMA,formatDay:day=>'<'+day+'>',t:marker,showError:(title,text)=>errors.push({title,text}),quit(){},warn(){},choose:question=>{asked.push(question);return 'quit';}});
+ // data-safety-2: Quit leaves without a second message; the message still explains when the question itself could not be asked
+ openBrowserDatabase({create:name=>new BrowserDatabase(name),file,backups,supported:SCHEMA,formatDay:day=>'<'+day+'>',t:marker,showError:(title,text)=>errors.push({title,text}),quit(){},warn(){},choose:question=>{asked.push(question);if(asked.length>1)throw new Error('no dialog');return 'quit';}});
+ assert.deepEqual(errors,[],'Quit: no second message');
+ openBrowserDatabase({create:name=>new BrowserDatabase(name),file,backups,supported:SCHEMA,formatDay:day=>'<'+day+'>',t:marker,showError:(title,text)=>errors.push({title,text}),quit(){},warn(){},choose:question=>{asked.push(question);if(asked.length>1)throw new Error('no dialog');return 'quit';}});
  assert.equal(asked[0].title,'[main.dataOpenTitle]');
  assert.equal(asked[0].restore,'[main.dataRestoreButton {"date":"<2026-11-02>"}]');assert.equal(asked[0].quit,'[main.dataQuitButton]');
  assert.ok(asked[0].text.endsWith('[main.dataRestoreQuestion '+JSON.stringify({file,date:'<2026-11-02>'})+']'),'SQLite\'s reason first, then the question');
@@ -25,7 +28,7 @@ test('every word of the restore question, its buttons and the quit message is a 
  for(const name of ['database-open.cjs','process-errors.cjs'])assert.doesNotMatch(fs.readFileSync(path.join(__dirname,'../desktop',name),'utf8').split('\n').filter(line=>!/^\s*(\/\/|\/\*|\*)/.test(line)).join('\n'),/Restore the backup from|Acira could not (start|open)|ask for help/,name+' keeps no English sentence of its own');
 });
 
-test('all thirteen catalogs carry the eight messages with the English parameters',()=>{
+test('all thirteen catalogs carry the eleven messages with the English parameters',()=>{
  const read=code=>JSON.parse(fs.readFileSync(path.join(__dirname,'../src/i18n',code+'.json'),'utf8'));
  const params=text=>[...new Set([...text.matchAll(/\{(\w+)\}/g)].map(m=>m[1]))].sort();
  const en=read('en');

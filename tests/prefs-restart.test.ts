@@ -31,7 +31,8 @@ test('toolbar buttons (shown, hidden, order) survive a restart (per profile)', a
   await fresh('../src/ui/toolbarPrefs.ts');
   const raw = store.get('acira-toolbar-items:profile-work') ?? [...store.entries()].find(([k]) => k.includes('toolbar') && k.endsWith(':profile-work'))?.[1];
   assert.ok(raw, 'stored under the page storage');
-  assert.deepEqual(JSON.parse(raw!).map((i: any) => [i.id, i.visible]), flipped.map((i: any) => [i.id, i.visible]));
+  // The list carries a mark that it was saved in the order the toolbar draws (toolbarPrefs.ts ORDERED).
+  assert.deepEqual(JSON.parse(raw!).filter((i: any) => i.id !== 'ordered').map((i: any) => [i.id, i.visible]), flipped.map((i: any) => [i.id, i.visible]));
 });
 
 test('R3-68: the old Hide until needed flag is read once (it becomes Seamless) and the first-run tip is remembered per profile', async () => {

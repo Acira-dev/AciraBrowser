@@ -1,7 +1,8 @@
 'use strict';
 // Renders the installer scene bitmaps (NSIS needs BMP) from the design concept page, for each theme, stage and screen scale.
 //   install-<theme>-<stage>-<scale>.bmp   stage 1 = start of copy (p .12), stage 2 = finishing up (p .9); scales 100/150/200
-//   uninstall-<theme>-100.bmp             branded splash shown by the uninstaller
+//   uninstall-<theme>-<scale>.bmp         branded splash shown by the uninstaller (picked like the setup scene: acira-installer.nsh customUnInit);
+//                                         the committed 150/200 are the 100% picture scaled up (beta.10) until the art is next rendered
 // The page is docs/launch/concepts/installer-creation.html (?p=<progress>&theme=<dark|light>; the install stages add &grow=auto so the coloured beams are
 // drawn in as at that progress, like the animated frames; the uninstall splash does not). The live parts (progress line,
 // percentage, buttons) are hidden here: the installer draws its own progress line over the bitmap.
@@ -33,8 +34,10 @@ app.whenReady().then(async()=>{
    fs.writeFileSync(path.join(out,name),shot.data);console.log(name,shot.size.width+'x'+shot.size.height);
    if(scale===1)fs.writeFileSync(path.join(out,`install-${theme}-${stage}-preview.png`),shot.png);
   }
-  const un=await shoot({p:'0.5',theme},1,"document.getElementById('title').textContent='Removing Acira';document.getElementById('status').textContent='Your data stays unless you choose to remove it.'");
-  fs.writeFileSync(path.join(out,`uninstall-${theme}-100.bmp`),un.data);fs.writeFileSync(path.join(out,`uninstall-${theme}-preview.png`),un.png);console.log(`uninstall-${theme}-100.bmp`,un.size.width+'x'+un.size.height);
+  for(const scale of SCALES){
+   const un=await shoot({p:'0.5',theme},scale,"document.getElementById('title').textContent='Removing Acira';document.getElementById('status').textContent='Your data stays unless you choose to remove it.'"),name=`uninstall-${theme}-${Math.round(scale*100)}.bmp`;
+   fs.writeFileSync(path.join(out,name),un.data);if(scale===1)fs.writeFileSync(path.join(out,`uninstall-${theme}-preview.png`),un.png);console.log(name,un.size.width+'x'+un.size.height);
+  }
  }
  app.quit();
 });

@@ -20,7 +20,8 @@ test('a change made in Settings has time to reach the saved setting before any r
 
 test('the layout repair is wired into the browser view',()=>{
   const app=read('src/App.tsx');
-  assert.match(app,/useLayoutRepair\(s\.verticalTabs,railPrefs\.tabs/);
+  assert.match(app,/useLayoutRepair\(s\.verticalTabs,storedRail\.tabs/,'the repair reads the switch as stored');
+  assert.match(app,/railPrefs=\{tabs:useShownTabsSwitch\(s\.verticalTabs,storedRail\.tabs,tab\.browserProfileId\)\}/,'the window is drawn from the switch as shown (a profile just arriving keeps the setting\'s layout)');
 });
 
 test('a view that throws reloads itself, a crashed browser view is reloaded by the main process, both with a limit',()=>{

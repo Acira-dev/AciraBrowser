@@ -230,5 +230,12 @@ export function semanticColorVariables(base:FinishSurfaces,highContrast=false,re
   const glyph=readable(color,[...chromeSurfaces,chromeSelected],3.2);
   result[name]=glyph;result[name.replace('--tab-group-','--selected-tab-group-')]=glyph;
  }
+ // The Update pill (update-pill.css) draws an accent on a 13% whisper of itself: the page's on a light toolbar, the frame's on a dark one.
+ // Neither is made against a colour of the person's own under the toolbar (a toolbar colour, or the sidebar colour the toolbar sits on in
+ // sidebar mode), where "Update" fell to 1.05-2.6:1. There the pill keeps that accent if it reads (4.5:1 on its tint) and otherwise takes the
+ // colour's own ink, as the toolbar's text does. Without such a colour no token: the pill keeps the frame's rule (beta.10, contrast-2).
+ const pillInk=(surface:string,surfaceInk:string,drawn:string)=>{const tint=compositeColor(`rgb(${triple(drawn)} / .13)`,surface),own=contrast(drawn,tint);return own>=4.5||own>=contrast(surfaceInk,tint)?drawn:surfaceInk;};
+ if(toolbarSeed)result['--toolbar-pill-ink']=pillInk(toolbar,toolbarInk,toolbarDark?base.chromeAccent:accent);
+ if(sidebarSeed)result['--sidebar-pill-ink']=pillInk(sidebar,sidebarInk,base.chromeDark?base.chromeAccent:accent);
  return result;
 }

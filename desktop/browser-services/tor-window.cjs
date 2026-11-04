@@ -235,7 +235,7 @@ function createTorWindows({app,contentBlocking,userData,vault=null,engine=null,l
  /** Writes the preferences with `patch` applied; nothing changes in memory unless the file was written. */
  function persist(patch,message){
   const next={level,downloadWarning,preferOnion,...patch};
-  try{fs.mkdirSync(path.dirname(settingsFile),{recursive:true});fs.writeFileSync(settingsFile,JSON.stringify(next));}catch(error){log('Tor settings not saved: '+error.message);if(settingsFile)throw new Error(message);}
+  try{fs.mkdirSync(path.dirname(settingsFile),{recursive:true});require('../atomic-file.cjs').writeFileAtomic(settingsFile,JSON.stringify(next));}catch(error){log('Tor settings not saved: '+error.message);if(settingsFile)throw new Error(message);}
   ({level,downloadWarning,preferOnion}=next);
  }
  let unsubscribe=null,identityRun=null,gatesHeld=false;

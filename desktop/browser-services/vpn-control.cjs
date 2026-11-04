@@ -1,7 +1,7 @@
 'use strict';
 // Local Windows and macOS provider controls. No Acira tunnel, account storage, IP check, PATH lookup or shell command expansion.
 // Contracts and installation paths: docs/launch/research/VPN_INTEGRATION.md.
-const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), { execFile } = require('node:child_process');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), { execFile } = require('node:child_process'), { helperPath, runHelper } = require('../windows-helper.cjs');
 const PROVIDERS = Object.freeze([
   { id: 'mullvad', name: 'Mullvad VPN', site: 'https://mullvad.net/', help: 'https://mullvad.net/en/help/how-use-mullvad-cli', publishers: ['Mullvad VPN AB', 'Amagicom AB'] },
   { id: 'proton', name: 'Proton VPN', site: 'https://protonvpn.com/', help: 'https://protonvpn.com/support/install-windows-vpn', publishers: ['Proton AG', 'Proton Technologies AG'] },
@@ -12,8 +12,14 @@ const COMMANDS = Object.freeze({
   ivpn: { status: ['status'], connect: ['connect', '-last'], disconnect: ['disconnect'] },
 });
 const STATES = new Set(['connected', 'disconnected', 'connecting', 'disconnecting', 'error']);
-// Constant source, never interpolated. The fixed candidate is a literal path in a dedicated child environment variable.
-const VERIFY_SCRIPT = "$ErrorActionPreference='Stop'; try { $s=Get-AuthenticodeSignature -LiteralPath $env:ACIRA_VPN_VERIFY_PATH; @{valid=($s.Status -eq 'Valid'); publisher=if($s.SignerCertificate){$s.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false)}else{''}} | ConvertTo-Json -Compress } catch { '{\"valid\":false,\"publisher\":\"\"}' }";
+
+/** A Windows file's Authenticode signature from Acira's signed helper (desktop/windows-helper.cjs: WinVerifyTrust, no script host): valid
+ * only when the signature checks out and its signer's name is one of the provider's publishers. The path goes on the helper's standard input. */
+async function windowsSignature(file, provider, { helper = helperPath(), exec } = {}) {
+  const result = await runHelper(['signature'], file, { helper, exec, timeoutMs: 10000 });
+  const [status, publisher] = String(result.stdout || '').split(/\r?\n/);
+  return !result.code && status === 'valid' && provider.publishers.includes(publisher);
+}
 
 function runFile(file, args, options = {}) {
   return new Promise(resolve => {
@@ -72,7 +78,7 @@ function macRequirement(provider) {
   return '=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and (' + provider.publishers.map(name => 'certificate leaf[subject.O] = ' + JSON.stringify(name)).join(' or ') + ')';
 }
 
-function createVpnControl({ platform = process.platform, env = process.env, files = fs, run = runFile, verify, openApp, homeDir = os.homedir() } = {}) {
+function createVpnControl({ platform = process.platform, env = process.env, files = fs, run = runFile, verify, openApp, homeDir = os.homedir(), windowsHelper } = {}) {
   const signatureCache = new Map(); let busy = false;
   const windowsRoots = [...new Set([env.ProgramW6432, env.ProgramFiles, env['ProgramFiles(x86)']].filter(value => typeof value === 'string' && /^[a-z]:\\Program Files(?: \(x86\))?$/i.test(value)))];
   const roots = platform === 'darwin' ? ['/Applications', path.posix.join(homeDir, 'Applications')] : windowsRoots;
@@ -91,9 +97,7 @@ function createVpnControl({ platform = process.platform, env = process.env, file
       const result = await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--test-requirement', macRequirement(provider), file], { timeout: 10000 });
       return result.ok;
     }
-    const powershell = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const result = await run(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', VERIFY_SCRIPT], { env: { ...env, ACIRA_VPN_VERIFY_PATH: file }, timeout: 6000 });
-    try { const signature = JSON.parse(result.stdout.trim()); return result.ok && signature.valid === true && provider.publishers.includes(signature.publisher); } catch { return false; }
+    return windowsSignature(file, provider, windowsHelper);
   });
   async function trusted(file, provider) {
     if (platform === 'darwin') {
@@ -168,4 +172,4 @@ function createVpnControl({ platform = process.platform, env = process.env, file
 }
 let shared;
 const sharedVpnControl = () => shared ||= createVpnControl();
-module.exports = { createVpnControl, sharedVpnControl, parseStatus, candidates, macCandidates, macRequirement, runFile, PROVIDERS, COMMANDS };
+module.exports = { createVpnControl, sharedVpnControl, parseStatus, candidates, macCandidates, macRequirement, runFile, windowsSignature, PROVIDERS, COMMANDS };

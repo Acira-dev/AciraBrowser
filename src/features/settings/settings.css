@@ -81,6 +81,10 @@ summary:focus-visible,
 .st-search { position: relative; }
 .st-search-field { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 10px; border-radius: 4px; background: var(--st-field); border: 1px solid transparent; color: var(--st-muted); transition: border-color 0.12s, background-color 0.12s; }
 .st-search-field > svg { flex: none; width: 16px; height: 16px; }
+/* The "/" key hint gives its room to the placeholder in the narrowest field (200% in a 900×600 window), where the longer languages' would
+   be cut ("Pesquisar configurações" needs 220px of content box beside the hint; the field has 224 at 150%, 197 at 200%). */
+.st-search-field { container: st-search / inline-size; }
+@container st-search (width < 220px) { .st-kbd { display: none; } }
 .st-search-field:hover { border-color: var(--st-edge); }
 .st-search-field:focus-within { border-color: var(--st-ring); box-shadow: inset 0 0 0 1px var(--st-ring); outline: 0; color: var(--st-text); }
 .st-search .st-search-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: 0; font-size: 14px; color: var(--st-text); }

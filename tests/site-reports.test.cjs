@@ -94,20 +94,30 @@ test('nothing is ever sent from Tor, even when the panel asks',async()=>{
  assert.match(main,/case 'site-report\.preview'[^]*?const threat=\/BLOCKED_BY_CLIENT\/\.test\(tab\.error\|\|''\)\?contentBlocking\.threats\.status\(live\.id,tab\.url\):null;/,'a list is named only while the tab shows its warning (seen in the real app: bbc.com reported as listed right after a blocked page in the same tab)');
 });
 
-test('no endpoint, no report: the row is hidden and nothing is sent; failures, 429 and the hourly cap are errors, not silence',async()=>{
+test('no endpoint, no report: the row is hidden and nothing is sent; failures, 429 and the hourly cap are said, not silence',async()=>{
  const none=make({endpoint:''});assert.equal(none.reports.available(),false);assert.equal(none.reports.preview({address:'https://example.org/',kind:'other'}).available,false);
  await assert.rejects(none.reports.send({address:'https://example.org/',kind:'other'},{}));assert.equal(none.calls.length,0);
- await assert.rejects(make({status:500}).reports.send({address:'https://example.org/',kind:'other'},{}),/could not be sent/);
- await assert.rejects(make({status:429}).reports.send({address:'https://example.org/',kind:'other'},{}),/Too many/);
- await assert.rejects(make({send:async()=>{throw new Error('offline');}}).reports.send({address:'https://example.org/',kind:'other'},{}),/could not be sent/);
+ // beta.10: what the form says depends on why. No answer at all: the connection. An answer that refused it (429 the server's limits, 503 its
+ // storage, any other status) or the app's own hourly cap: later. A 429 used to say "Check your connection" although the connection worked.
+ const site={address:'https://example.org/',kind:'other'};
+ assert.deepEqual(await make({status:429}).reports.send(site,{}),{sent:false,failure:'later'});
+ assert.deepEqual(await make({status:503}).reports.send(site,{}),{sent:false,failure:'later'});
+ assert.deepEqual(await make({status:500}).reports.send(site,{}),{sent:false,failure:'later'});
+ assert.deepEqual(await make({send:async()=>{throw new Error('offline');}}).reports.send(site,{}),{sent:false,failure:'offline'});
+ assert.deepEqual(await make({send:async()=>{throw new DOMException('timed out','TimeoutError');}}).reports.send(site,{}),{sent:false,failure:'offline'});
  let time=0;const {reports,calls}=make({now:()=>time});
- for(let i=0;i<10;i++)await reports.send({address:`https://s${i}.example.org/`,kind:'broken'},{});
- await assert.rejects(reports.send({address:'https://s10.example.org/',kind:'broken'},{}),/last hour/);
- time+=61*60*1000;await reports.send({address:'https://s10.example.org/',kind:'broken'},{});assert.equal(calls.length,11);
+ for(let i=0;i<10;i++)assert.equal((await reports.send({address:`https://s${i}.example.org/`,kind:'broken'},{})).sent,true);
+ assert.deepEqual(await reports.send({address:'https://s10.example.org/',kind:'broken'},{}),{sent:false,failure:'later'});assert.equal(calls.length,10,'the hourly cap sends nothing');
+ time+=61*60*1000;assert.equal((await reports.send({address:'https://s10.example.org/',kind:'broken'},{})).sent,true);assert.equal(calls.length,11);
+ // a refused or failed report doesn't count towards the cap
+ const refused=make({status:429});for(let i=0;i<12;i++)await refused.reports.send(site,{});assert.equal(refused.calls.length,12);
+ // main passes the answer through as it is: the form reads siteReport.failure
+ assert.match(read('desktop/main.cjs'),/return \{siteReport:\{available:true,\.\.\.\(await reports\.send\(input,live\.session\)\)\}\};/);
+ assert.match(read('desktop/main.cjs'),/return \{siteReport:\{available:true,\.\.\.\(await reports\.send\(input,ses\)\)\}\};/);
 });
 
 test('a test profile only reaches addresses QA names, never the shipped project; plain http only on 127.0.0.1',()=>{
- assert.deepEqual(endpoints({ACIRA_BROWSER_TEST_DATA:'/tmp/acira-agents/x'}),{report:'',allowlist:''});
+ assert.deepEqual(endpoints({ACIRA_BROWSER_TEST_DATA:'/tmp/acira-qa/x'}),{report:'',allowlist:''});
  assert.deepEqual(endpoints({ACIRA_BROWSER_TEST_DATA:'/tmp/x',ACIRA_SITE_REPORT_ENDPOINT:'http://127.0.0.1:54321/functions/v1/report',ACIRA_SITE_ALLOWLIST_ENDPOINT:'http://127.0.0.1:54321/functions/v1/allowlist'}),{report:'http://127.0.0.1:54321/functions/v1/report',allowlist:'http://127.0.0.1:54321/functions/v1/allowlist'});
  assert.deepEqual(endpoints({ACIRA_BROWSER_TEST_DATA:'/tmp/x',ACIRA_SITE_REPORT_ENDPOINT:'http://evil.example.org/r',ACIRA_SITE_ALLOWLIST_ENDPOINT:'https://a.example.org/x?id=1'}),{report:'',allowlist:''},'no plain http elsewhere, no query string');
  const config=require('../desktop/browser-services/site-reports-config.cjs');

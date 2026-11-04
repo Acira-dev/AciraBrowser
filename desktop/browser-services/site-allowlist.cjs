@@ -5,7 +5,7 @@
 // read-only endpoint (supabase/functions/allowlist): a plain GET with no cookie, no query and no identifier. A failed or odd answer changes nothing:
 // the last good copy (or none) stays in use, so blocking stays as it was.
 const fs = require('node:fs'), path = require('node:path'), { randomUUID } = require('node:crypto');
-const { reportHost } = require('./site-reports.cjs');
+const { reportHost } = require('./site-reports.cjs'), { readJsonFile } = require('../atomic-file.cjs');
 
 const FILE = 'site-allowlist.json', PERIOD = 24 * 60 * 60 * 1000, MAX_BYTES = 512 * 1024, MAX_HOSTS = 20000;
 
@@ -34,7 +34,8 @@ function createSiteAllowlist({ cachePath, endpoint = '', fetchText = electronFet
   let hosts = new Set(), updated = null, loaded = false, refreshing = null, lastError = null;
   function load() {
     if (loaded) return; loaded = true;
-    try { const saved = JSON.parse(io.readFileSync(file, 'utf8')); const parsed = parseAllowlist(JSON.stringify({ schema: 1, hosts: saved.hosts })); hosts = parsed; updated = Number.isFinite(saved.updated) ? saved.updated : null; } catch { /* No copy yet, or a damaged one: none is used. */ }
+    // No copy yet, or a damaged one (kept aside first, atomic-file.cjs readJsonFile): none is used until the next fetch.
+    try { const saved = readJsonFile(file, { fileSystem: io }); if (!saved) return; const parsed = parseAllowlist(JSON.stringify({ schema: 1, hosts: saved.hosts })); hosts = parsed; updated = Number.isFinite(saved.updated) ? saved.updated : null; } catch { /* hosts this Acira refuses: none is used */ }
   }
   /** True when a whole-host threat-list `entry` must not block `hostname`: hostname, or a parent of it no higher than the entry, is on the list. */
   function covers(hostname, entry) { if (!hosts.size) return false; for (const name of between(hostname, entry)) if (hosts.has(name)) return true; return false; }

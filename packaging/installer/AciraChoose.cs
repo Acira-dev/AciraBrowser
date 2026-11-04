@@ -117,7 +117,9 @@ class ChooseForm : Form {
     oldV = InstalledVersion(exe);
     int c = oldV.Length == 0 ? 0 : Compare(oldV, newV); kind = c == 0 ? Kind.Same : c < 0 ? Kind.Older : Kind.Newer;
     if (oldV.Length == 0) oldV = newV;
-    IntPtr dc = Native.GetDC(IntPtr.Zero); int dpi = Native.GetDeviceCaps(dc, 88); Native.ReleaseDC(IntPtr.Zero, dc); s = Math.Max(96, dpi) / 96.0;
+    // the size of the installer's card on the primary screen (both are centred there), so the hand-off is the same size: the uninstall card's rule
+    // (RemoveForm.CardScale). The sign-in scale alone was the exact scale, smaller than that card at 125% and 175%. (0, 0) is the primary screen's corner.
+    s = RemoveForm.CardScale(Native.ScreenDpi(new Native.POINT()));
     double pct; if (double.TryParse(Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_SCALE"), out pct) && pct >= 100) s = pct / 100.0;
     using (var st = Assembly.GetExecutingAssembly().GetManifestResourceStream("dark-base5.jpg")) { var ms = new MemoryStream(); st.CopyTo(ms); ms.Position = 0; scene = Image.FromStream(ms); }
     MakeFonts();

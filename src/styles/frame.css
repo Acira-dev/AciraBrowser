@@ -50,8 +50,10 @@
 :root:root:not(:is([data-material=acrylic],[data-material=vibrancy])) .app.style-acira[data-toolbar-color] .browser-shell {
   --tab-surface: rgb(var(--toolbar-rgb));
 }
+/* The toolbar's ink on its rows and its selected strip tab. A selected tab being carried, settling or moving aside is the light
+   carry card instead (selection.css), so it keeps the card's ink: with a dark toolbar colour it drew a white label on it (beta.10). */
 :root:root .app.style-acira[data-toolbar-color] .browser-shell > :is(.browser-toolbar.acira-persistent-toolbar, .acira-bookmarks-row),
-:root:root .app.style-acira[data-toolbar-color] .browser-shell .tab-strip-container .browser-tab.selected {
+:root:root .app.style-acira[data-toolbar-color] .browser-shell .tab-strip-container .browser-tab.selected:not([data-drag-surface]) {
   color: var(--toolbar-ink);
   --chrome-fg: var(--toolbar-ink); --chrome-ink: var(--toolbar-ink-rgb); --ink: var(--toolbar-ink-rgb);
   --text-primary: var(--toolbar-ink); --ed-ink: var(--toolbar-ink); --text: var(--toolbar-ink); --frame-text: var(--toolbar-ink); --frame-hover-text: var(--toolbar-ink); --frame-selection-fg: var(--toolbar-ink);

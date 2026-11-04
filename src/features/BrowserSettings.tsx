@@ -1101,6 +1101,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <button
               type="button"
               className="bs-back"
+              aria-label={tr("browsersettings.backToBrowser")}
               onClick={() => {
                 const tab = state.tabs.find((t) => t.id === state.activeTabId);
                 if (tab && tab.historyIndex > 0)
@@ -1109,7 +1110,9 @@ export function BrowserSettings({ state, dispatch }: Props) {
               }}
             >
               <ArrowLeft size={15} />
-              {tr("browsersettings.backToBrowser")}
+              {/* A span like the nav labels: the narrow rail hides `.bs-back > span` (settings.css, frost-preview.css). As a bare text
+                  node it wrapped into the 52px rail as "Zurüc / zum / Brows" between 541 and 620px (200% page zoom, a narrow pane). */}
+              <span>{tr("browsersettings.backToBrowser")}</span>
             </button>
           </div>
         </aside>

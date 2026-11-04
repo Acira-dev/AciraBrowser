@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { BROWSERS, browserExecutables, createBrowserIcons, sanitizeIcons, validIconUrl } = require('../desktop/browser-services/browser-icons.cjs');
+const { BROWSERS, browserExecutables, createBrowserIcons, sanitizeIcons, validIconUrl, windowsExtract } = require('../desktop/browser-services/browser-icons.cjs');
 
 const PNG = (tag) => 'data:image/png;base64,' + Buffer.from('png-' + tag).toString('base64');
 /** A stand-in for Electron's NativeImage. `side` is the icon's pixel size. */
@@ -228,4 +228,17 @@ test('macOS falls back to getFileIcon when the thumbnail is empty or fails', asy
     assert.match((await service.icons(['Chrome'])).Chrome, /^data:image\/png;base64,/);
     assert.deepEqual(calls.icon, [[bundle, 'normal']]);
   }
+});
+
+test('Windows\' own icon for an executable comes from Acira\'s signed helper, the path on its standard input; anything but a PNG is dropped', async () => {
+  const calls = [];
+  const exec = (answer) => (file, args, options, callback) => { const call = { file, args, options, input: null }; calls.push(call); setImmediate(() => callback(null, answer)); return { stdin: { on() {}, end(text) { call.input = text; } } }; };
+  const helper = 'C:\\Acira\\resources\\acira-verify.exe', helium = 'C:\\Users\\me\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe';
+  const png = Buffer.from('\x89PNG helium').toString('base64');
+  assert.equal(await windowsExtract(helium, { helper, exec: exec(png + '\r\n') }), 'data:image/png;base64,' + png);
+  assert.equal(calls[0].file, helper); assert.deepEqual(calls[0].args, ['icon']); assert.equal(calls[0].input, helium);
+  assert.equal(calls[0].options.windowsHide, true); assert.equal(calls[0].options.timeout, 8000);
+  assert.equal(await windowsExtract(helium, { helper, exec: exec('not base64 <svg>') }), null);
+  assert.equal(await windowsExtract(helium, { helper, exec: exec('') }), null);
+  assert.equal(await windowsExtract(helium, { helper: null, exec: () => assert.fail('no helper, nothing starts') }), null);
 });

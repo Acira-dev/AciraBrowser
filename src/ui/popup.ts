@@ -21,11 +21,15 @@ export const MENU_WIDTHS:Record<string,Partial<Record<LocaleCode,number>>>={
  'page-context':{de:270,es:350,fr:290,it:350,ja:300,ko:290,ru:310},
  'toolbar-context':{es:340,fr:320,de:340,'pt-BR':340,it:350,ja:310,ar:360,tr:350,ru:340},
  'split-context':{fr:280,ru:280},
- 'workspace-context':{ru:260},
- // The Acira menu (340): Arabic "Tabs" shares its row with the Top / Sidebar switch and lost its last letters to an ellipsis (81px of 91). The
- // Protection panel (320): the Japanese "Saved for this site in this profile." line needs 274px, the panel gave it 264.
- 'menu':{ar:360},
- 'protection':{ja:330},
+ 'workspace-context':{ru:270},
+ // The workspace menu (280): its "Need other sign-ins for a site?" row and Russian "Next/Previous workspace" were cut (3 Nov, measured in the app).
+ 'workspace-menu':{es:360,fr:320,de:340,'pt-BR':300,ja:300,ar:300,tr:310,ru:300},
+ // The Acira menu (340): Arabic "Tabs" shares its row with the Top / Sidebar switch and lost its last letters to an ellipsis (81px of 91; Turkish 76 of 82). The
+ // Protection panel (320): the Japanese "Saved for this site in this profile." line needs 274px, the panel gave it 264 (German 266, Russian 285).
+ 'menu':{ar:360,tr:350},
+ // More tools (340): French "Effacer les données de navigation…" beside its key (221px of 209 even with ⇧⌘⌫).
+ 'more-tools':{fr:360},
+ 'protection':{ja:330,de:330,ru:350},
 };
 export const localeMenuWidth=(kind:string,locale:LocaleCode=currentLocale())=>MENU_WIDTHS[kind]?.[locale]??0;
 
@@ -168,7 +172,10 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
 
 /** Kinds whose estimate above is measured for the state it is given; a remembered height would only be staler. */
 export const measuredPopupKinds=['tabs','workspace-menu','switcher','palette','bookmarks','profile','menu','more-tools','extensions','downloads','toolbar-context','customize-toolbar','security','tab-context','strip-context','split-context','bookmark-edit','find','zoom','recent-closed','update','whats-new'];
-export const popupEstimateMeasured=(kind:string,_state:BrowserSnapshot)=>measuredPopupKinds.includes(kind);
+/** The switcher's "Lock this workspace" row (a workspace other than the first, not locked yet) wraps when its words are longer
+ *  than the menu (most languages, and "Windows Hello" on Windows), which no estimate knows: that switcher waits for its measured height. */
+const lockThisRowShown=(state:BrowserSnapshot)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===state.activeWorkspaceId);return !!own&&list[0]?.id!==own.id&&!own.secured;};
+export const popupEstimateMeasured=(kind:string,state:BrowserSnapshot)=>measuredPopupKinds.includes(kind)&&!(kind==='workspace-menu'&&lockThisRowShown(state));
 
 /** The Acira menu at its 30px rows and at its dense 26px rows: 19 rows (17 + the two Layout rows), four 9px dividers, 12px of container. */
 export const menuFullHeight=648,menuDenseHeight=568;

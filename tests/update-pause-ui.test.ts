@@ -98,6 +98,47 @@ test('Settings > About: the row\'s button pauses Acira\'s own download, as the p
   assert.match(read('src/features/settings/panels/updates.tsx'), /button\.action === 'update\.resume'\s+\? <button type="button" className="st-button primary" onClick=\{\(\) => void act\('update\.resume'\)\}>\{t\('updates\.resume'\)\}<\/button>/);
 });
 
+// beta.10: Settings > About read the status only while it checked or downloaded. Resumed from the toolbar's panel (or a download the 6-hourly look
+// started, or one that failed), the row kept saying "paused · 64%" with Resume download while the dots downloaded. It now listens for the same
+// 'update-changed' every window hears, as the toolbar does.
+test('Settings > About follows every change of the update, wherever it came from (the panel\'s ring, a look in the background)', () => {
+  const panel = read('src/features/settings/panels/updates.tsx');
+  assert.match(panel, /useEffect\(\(\) => runtime\.subscribeBrowser\?\.\(\(event\) => \{ if \(event\.type === 'update-changed'\) void refresh\(\); \}\), \[refresh\]\);/);
+  assert.match(read('src/features/updates/useUpdateReady.ts'), /event\.type === 'update-changed'/, 'the same event the toolbar\'s dots listen to');
+});
+
+// beta.10: in light mode a deep finish (Burgundy, Navy, Sky, Emerald, Alpine, Deep Purple, Graphite) gives a deep frame, and the ready pill drew
+// "Update" in the page's accent, as dark as the frame: about 1.3:1 in the real app. On a dark toolbar it now uses the toolbar's own accent. The rule
+// follows the toolbar's real tone (--toolbar-tone), so a white or cream toolbar colour on a deep finish keeps the page's accent (keying it on the
+// frame alone took Burgundy + white from 14.3:1 to 1.95:1, review of 3 Nov).
+test('the ready pill reads on every finish and toolbar colour: never below what it was, and the toolbar\'s accent only on a dark toolbar', async () => {
+  const { appearancePalettes } = await import('../src/runtime/appearancePalettes');
+  const { studyFinish } = await import('../src/ui/theme');
+  const { contrast } = await import('../src/ui/colorMath');
+  const toolbars = [undefined, '#ffffff', '#f6efdc', '#e4e4e4', '#1c1c1e', '#000000', '#7a2030'];
+  const fixedDeep: string[] = [];
+  for (const palette of appearancePalettes) {
+    for (const dark of [false, true]) {
+      for (const toolbarColor of toolbars) {
+        const tokens = studyFinish({ colorPreset: palette.name, accentColor: palette.accent, browserTint: palette.tint, toolbarColor } as Parameters<typeof studyFinish>[0], dark);
+        const toolbar = tokens['--toolbar'], label = `${palette.name} ${dark ? 'dark' : 'light'} toolbar ${toolbarColor ?? 'none'}`;
+        // what update-pill.css draws: the toolbar's accent (--ed-blue = --chrome-accent in the toolbar's scope) on a dark toolbar, else the page's
+        const drawn = tokens['--toolbar-tone'] === 'dark' ? tokens['--chrome-accent'] : tokens['--accent'], before = contrast(tokens['--accent'], toolbar);
+        assert.ok(contrast(drawn, toolbar) >= before - 0.005, `${label}: never below the pill before beta.10 (${before.toFixed(2)})`);
+        if (!toolbarColor && tokens['--chrome-tone'] === 'dark') assert.ok(contrast(drawn, toolbar) >= 3, `${label}: a deep frame reads`);
+        if (!dark && toolbarColor && tokens['--toolbar-tone'] === 'light' && tokens['--chrome-tone'] === 'dark') assert.ok(contrast(drawn, toolbar) >= 4.5, `${label}: a light toolbar colour on a deep finish keeps the page accent`);
+        if (!dark && !toolbarColor && before < 3) fixedDeep.push(palette.name);
+      }
+    }
+  }
+  assert.ok(fixedDeep.length >= 6, 'the page accent alone is unreadable on several deep frames in light mode: ' + fixedDeep.join(', '));
+  const css = read('src/features/updates/update-pill.css');
+  assert.match(css, /@container style\(--toolbar-tone: dark\) \{\s*\.app \.update-pill\[data-phase='ready'\] \{ color: var\(--ed-blue, var\(--accent, #3b6eea\)\); background: color-mix\(in srgb, var\(--ed-blue, var\(--accent, #3b6eea\)\) 13%, transparent\); \}/);
+  assert.doesNotMatch(css, /data-chrome='dark'\] \.update-pill/, 'not keyed on the frame: a toolbar colour repaints the toolbar');
+  assert.match(read('src/frost-preview.css'), /--ed-blue:var\(--chrome-accent\)/, 'the toolbar scope maps --ed-blue to the frame\'s accent');
+  assert.match(read('src/ui/semanticColors.ts'), /'--toolbar-tone':toolbarDark\?'dark':'light'/, 'a toolbar colour sets the tone, else the frame does');
+});
+
 test('every new string is in all 13 catalogs, translated (not an English copy), with its parameters', () => {
   const need: Record<string, string[]> = { 'update.downloadingTitle': [], 'update.pausedTitle': [], 'update.sizeOf': ['done', 'total'], 'update.timeLeft': ['time'], 'update.lessThanMinute': [], 'update.resumesWhereStopped': [], 'update.pauseDownload': [], 'update.resumeDownload': [], 'update.pausedTip': ['version'], 'updates.pausedProgress': ['version', 'percent'], 'updates.resume': [], 'updates.pause': [] };
   const files = readdirSync('src/i18n').filter(name => /^[A-Za-z-]+\.json$/.test(name) && name !== 'converted.json'), en = JSON.parse(read('src/i18n/en.json'));
@@ -109,5 +150,34 @@ test('every new string is in all 13 catalogs, translated (not an English copy), 
       for (const name of names) assert.ok(catalog[id].includes(`{${name}}`), `${file} ${id} lacks {${name}}`);
       if (file !== 'en.json') assert.notEqual(catalog[id], en[id], `${file} ${id} is still English`);
     }
+  }
+});
+
+// beta.10 round 2 (updates-2): Resume while offline used to end in 'error', so the panel closed under the pointer and the toolbar's dots went, with no
+// word. Main now pauses it again with the reason (status 'paused', error set): the panel stays on "Update paused" with the ring that resumes, the dots
+// stay held, and the line says the connection failed, in the words the site panel already uses for it (app.connectionFailed, in all 13 catalogs).
+test('a Resume that could not connect stays paused: the ring resumes, the dots hold, the line and Settings say the connection failed', () => {
+  const html = renderToStaticMarkup(createElement(UpdateDownload, { update: view({ phase: 'paused', speed: null, failed: true }), reducedMotion: false }));
+  assert.match(html, /data-phase="paused"/);
+  assert.match(html, />Update paused</);
+  assert.match(html, /<button type="button" class="update-ring" data-paused="true" aria-label="Resume update download"/);
+  assert.match(html, /stroke-dasharray="42 100"/, 'the fill is kept');
+  assert.match(html, />160 of 382 MB · Connection failed</);
+  assert.match(html, /data-preset="progressHeld"/);
+  assert.equal(downloadLine(view({ phase: 'paused', total: null, transferred: null, percent: 80, failed: true })), '80% · Connection failed');
+  assert.equal(downloadLine(view({ phase: 'paused', speed: null })), '160 of 382 MB · resumes where it stopped', 'an ordinary pause is as it was');
+  assert.match(read('src/features/updates/useUpdateReady.ts'), /failed: phase === 'paused' && Boolean\(update\.error\)/, 'from main\'s status: paused with a reason');
+  // the pressed ring is settled by every status read: a Resume that fails at once is paused again before this window reads 'downloading'
+  assert.match(read('src/features/updates/UpdatePopover.tsx'), /useEffect\(\(\) => setAsked\(null\), \[update\]\);/);
+  const status = (patch: Partial<UpdateStatus>): UpdateStatus => ({ status: 'idle', version: '0.1.0-beta.8', available: null, progress: null, transferred: null, total: null, speed: null, notes: '', lastChecked: null, error: null, autoDownload: true, channel: 'beta', supported: true, reason: null, prompt: false, welcome: false, whatsNew: null, ...patch });
+  assert.equal(describe(status({ status: 'paused', available: '0.1.0-beta.9', progress: 80, error: 'fetch failed' })), 'Download of version 0.1.0-beta.9 paused · 80% · Connection failed', 'not "Could not check for updates."');
+  assert.deepEqual(rowAction(status({ status: 'paused', available: '0.1.0-beta.9', progress: 80, error: 'fetch failed' })), { action: 'update.resume', disabled: false });
+  assert.match(read('src/features/settings/panels/updates.tsx'), /\(status\?\.status === 'error' \|\| status\?\.status === 'paused'\) && status\.error && <SettingNote>\{t\('import\.technicalDetails'\)\}: \{status\.error\}<\/SettingNote>/, 'the technical detail in the note it already had for errors');
+  const files = readdirSync('src/i18n').filter(name => /^[A-Za-z-]+\.json$/.test(name) && name !== 'converted.json'), en = JSON.parse(read('src/i18n/en.json'));
+  assert.equal(files.length, 13);
+  for (const file of files) {
+    const catalog = JSON.parse(read(`src/i18n/${file}`));
+    assert.ok(catalog['app.connectionFailed']?.length > 1, `${file} lacks app.connectionFailed`);
+    if (file !== 'en.json') assert.notEqual(catalog['app.connectionFailed'], en['app.connectionFailed'], `${file}: translated`);
   }
 });

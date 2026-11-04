@@ -66,6 +66,21 @@ test('row 3 suspend-on-lock: lock seals FIRST, then removes the tabs; a failed s
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test('the Windows prompt for a secured workspace goes in front of the window that asked: unlock, lock this workspace, stop locking', async () => {
+  const dir=tmp();try{
+    const vault=createSecuredVault({dir,keys});vault.write('workspace-h',{tabs:[tab('t1','workspace-h')]});
+    const asked=[],gate={ensure:async(reason,win)=>{asked.push([reason,win]);return {ok:true};}};
+    const c=fakeWindow(stateWith(false));c.state.tabs=c.state.tabs.filter(t=>t.workspaceId!=='workspace-h');
+    const service=createSecuredWorkspaces({controllers:new Set([c]),vault,gate,timers});
+    assert.equal((await service.unlock('workspace-h',c)).ok,true);
+    assert.equal((await service.disable('workspace-h',c)).ok,true);
+    const plain=fakeWindow(stateWith());plain.state.workspaces=plain.state.workspaces.map(w=>w.id==='workspace-h'?{id:w.id,name:w.name,browserProfileId:w.browserProfileId}:w);
+    await createSecuredWorkspaces({controllers:new Set([plain]),vault,gate,timers}).enable('workspace-h',plain); // the fake controller does not apply secured-set; the check is what counts here
+    assert.deepEqual(asked.map(([reason])=>reason),['secured','secured','secured']);
+    assert.deepEqual(asked.map(([,win])=>win),[c.window,c.window,plain.window],'each check names the controller\'s own window');
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test('row 6 unlock gate: a denied Windows check opens nothing; the test substitute only works unpackaged in a test profile', async () => {
   const dir=tmp();try{
     const vault=createSecuredVault({dir,keys});vault.write('workspace-h',{tabs:[tab('t1','workspace-h')]});

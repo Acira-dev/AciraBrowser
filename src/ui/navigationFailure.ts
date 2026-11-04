@@ -6,6 +6,8 @@ import type {ErrorKind} from '../features/errors/errorShapes';
 import {t,type MessageId} from '../i18n';
 
 export type FailureKind=ErrorKind;
+/** The errors that mean "no secure connection could be made" (closed port, reset, timeout, TLS failure). On a typed address that got https by default they offer the http choice. desktop/browser-services/https-first.cjs keeps the same list. */
+export const SECURE_CONNECTION_CODES:readonly number[]=[-100,-101,-102,-103,-104,-107,-113,-118,-324];
 export interface NavigationFailure{
  /** Chromium's symbolic name, for example ERR_CERT_AUTHORITY_INVALID. */
  code:string;

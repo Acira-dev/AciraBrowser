@@ -20,6 +20,6 @@
 .browser-tab[data-icon-only=true].selected:is(:hover,:focus-within)>:is(.site-identity-icon,.agent-glyph,svg,img){opacity:0}
 .browser-tab[data-icon-only=true]>:is(.site-identity-icon,.agent-glyph,svg,img){transition:opacity .1s}
 .tab-strip-container[data-reduced-motion=true] *{transition:none}
-@container(max-width:104px){.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true])>.tab-close{position:absolute;right:3px;opacity:0;pointer-events:none}.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{opacity:1;pointer-events:auto;background:var(--frame)}.tab-strip-container:not(.vertical) .browser-tab.selected:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{background:var(--frame-selection-bg)}}
+@container(max-width:104px){.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true])>.tab-close{position:absolute;right:3px;opacity:0;pointer-events:none}.tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{opacity:1;pointer-events:auto;background:var(--frame)}.tab-strip-container:not(.vertical) .browser-tab.selected:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close{background:var(--tab-close-patch,var(--frame-selection-bg))}}
 
 .tab-strip-container[data-dragging=true]>.tab-strip-viewport{mask-image:none}

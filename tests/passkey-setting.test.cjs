@@ -1,7 +1,8 @@
 'use strict';
 // "Passkeys and security keys" (28 Oct): the choice is off by default for new and existing profiles, persists, reaches the guard through the
-// main process, backs the guard up with a Permissions-Policy header while off, and has a searchable Settings > Privacy row in all 13 languages.
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+// main process, backs the guard up with a Permissions-Policy header while off, and has a searchable Settings > Privacy row in all 13 languages
+// (Windows and Linux; a Mac has no such choice: its guard answers with no setting, so the row did nothing there and is not shown, 4 Nov).
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFile}=require('node:child_process'),{promisify}=require('node:util');
 const {createPrivacyPlus,DEFAULTS}=require('../desktop/browser-services/privacy-plus.cjs');
 const {passkeyPolicyPatch,DENY}=require('../desktop/browser-services/passkey-policy.cjs');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
@@ -80,4 +81,19 @@ test('Settings > Privacy has the row (switch off unless on), it is searchable, a
   for(const id of ['privacy.passkeysAndSecurityKeys','privacy.passkeysDetail','privacy.passkeysReload'])assert.ok(typeof messages[id]==='string'&&messages[id].trim(),file+' has '+id);
   if(file!=='en.json')assert.notEqual(messages['privacy.passkeysDetail'],english['privacy.passkeysDetail'],file+' is translated');
  }
+});
+
+test('Settings › Privacy shows the passkeys row, and search offers it, on Windows and Linux, never on a Mac (it did nothing there)',async()=>{
+ const panel=read('src/features/settings/panels/anti-tracking.tsx'),entries=read('src/features/settings/entries/privacy.ts');
+ assert.match(panel,/\{!isMac\(\) && <Passkeys disabled=\{disabled\} \/>\}/);
+ assert.match(entries,/\]\)\.filter\(\(entry\) => entry\.id !== 'passkeys' \|\| !isMac\(\)\);/);
+ // Settings drawn as a person reads it (tests/fixtures/settings-text.ts), for each platform's browser.
+ const root=path.join(__dirname,'..'),draw=async platform=>JSON.parse((await promisify(execFile)(process.execPath,[path.join(root,'node_modules/tsx/dist/cli.mjs'),path.join(root,'tests/fixtures/settings-text.ts'),'en'],{cwd:root,maxBuffer:64*1024*1024,env:{...process.env,ACIRA_TEST_NAVIGATOR_PLATFORM:platform}})).stdout);
+ const platforms=[['MacIntel',false],['Win32',true],['Linux x86_64',true]],drawn=await Promise.all(platforms.map(([platform])=>draw(platform)));
+ platforms.forEach(([platform,shown],index)=>{
+  const {sections,registry}=drawn[index];
+  assert.ok(sections.Privacy.includes('Phishing and malware protection'),platform+': Privacy is drawn');
+  assert.equal(sections.Privacy.includes('Passkeys and security keys'),shown,platform+': the row');
+  assert.equal(registry.includes('Passkeys and security keys'),shown,platform+': Settings search');
+ });
 });

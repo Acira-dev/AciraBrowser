@@ -2,7 +2,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),{EventEmitter}=require('node:events'),{createForgetSite,forgetOriginRecords}=require('../desktop/browser-services/forget-site.cjs');
 for(const privacy of ['private','tor'])test(`Forget site stores only public split state while retaining live ${privacy} tabs`,()=>{
  const {DatabaseSync}=require('node:sqlite'),runtime=require('../desktop/runtime.cjs'),{commitForgetRecords,forgetStoredOrigin}=require('../desktop/browser-services/forget-site.cjs');
- const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE windows(id TEXT PRIMARY KEY,payload TEXT,updated_at INTEGER);CREATE TABLE history(id TEXT PRIMARY KEY,profile_id TEXT,visited_at TEXT,payload TEXT)');
+ const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE windows(id TEXT PRIMARY KEY,payload TEXT,updated_at INTEGER);CREATE TABLE history(id TEXT PRIMARY KEY,profile_id TEXT,visited_at TEXT,payload TEXT);CREATE TABLE policies(profile_id TEXT NOT NULL,site TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(profile_id,site))');
  const database={db:sql,transaction:fn=>{sql.exec('BEGIN');try{const result=fn();sql.exec('COMMIT');return result;}catch(error){sql.exec('ROLLBACK');throw error;}}};
  try{
   let s=runtime.createInitialState();const profile=s.activeBrowserProfileId,first=s.activeTabId;
@@ -49,5 +49,28 @@ test('profile-wide preview counts distinct live/dormant records once and commits
   const current=snapshot();current.bookmarks=[];for(const row of current.browsingHistory)row.time='2026-10-24T00:00:00Z';Object.assign(current.bookmarkNodes[0],{parentId:null,position:0});current.downloads[0].id='download';db.saveWindow('current',current);const dormant=structuredClone(current);dormant.browsingHistory.push({id:'dormant-target',browserProfileId:'A',url:'https://one.example.org/dormant',time:'2026-10-24T00:00:00Z'},{id:'dormant-kept',browserProfileId:'A',url:'https://retained.example/',time:'2026-10-24T00:00:00Z'});dormant.closedTabs.push({id:'dormant-closed',browserProfileId:'A',url:'https://one.example.org/dormant',history:['https://one.example.org/dormant'],historyIndex:0});db.saveWindow('dormant',dormant);
   const live=structuredClone(current);live.browsingHistory.find(row=>row.id==='a').url='https://retained.example/live';live.closedTabs.find(tab=>tab.id==='closed-a').url='https://retained.example/live';live.closedTabs.find(tab=>tab.id==='closed-a').history=['https://retained.example/live'];const liveWindows=[{id:'current',snapshot:live}],before=db.readWindow('dormant'),preview=prepareForgetRecords(db,liveWindows,'A','https://one.example.org');assert.deepEqual(preview.counts,{history:1,closedTabs:1,closedHistoryEntries:1});assert.deepEqual(db.readWindow('dormant'),before);
   const committed=commitForgetRecords(db,liveWindows,'A','https://one.example.org');assert.deepEqual(committed.counts,preview.counts);const result=committed.windows.find(window=>window.id==='current').snapshot;assert.ok(result.browsingHistory.some(row=>row.id==='dormant-kept'));assert.ok(result.browsingHistory.some(row=>row.id==='a'&&row.url==='https://retained.example/live'));assert.ok(result.browsingHistory.some(row=>row.id==='b'));assert.equal(db.readWindow('dormant').closedTabs.some(tab=>tab.id==='dormant-closed'),false);assert.equal(db.db.prepare('SELECT count(*) AS count FROM bookmarks').get().count,1);assert.equal(db.db.prepare('SELECT count(*) AS count FROM downloads').get().count,1);
+ }finally{db.close();}
+});
+test('Forget site forgets the site\'s remembered http choice and keeps its filtering choices, as its dialog says',()=>{
+ // The "Continue over http" choice (https-first.cjs) is kept in the site's policies row next to its filtering choices (protection, AI-free mode,
+ // cookie banners). Forget site used to leave it, so a forgotten site still opened over http by itself. It is kept under the host that was typed, so
+ // Forget site drops every such choice on the registrable domain (as it does cookies): example.com typed, then sent on to www.example.com.
+ const fs=require('node:fs'),path=require('node:path'),{BrowserDatabase}=require('../desktop/database.cjs'),{commitForgetRecords}=require('../desktop/browser-services/forget-site.cjs'),httpsFirst=require('../desktop/browser-services/https-first.cjs'),root=path.resolve('.qa-profiles/services-unit');fs.mkdirSync(root,{recursive:true});const directory=fs.mkdtempSync(path.join(root,'forget-http-')),db=new BrowserDatabase(path.join(directory,'browser.sqlite'));
+ try{
+  const live=[{id:'live',snapshot:{revision:1,browserProfiles:[{id:'A'},{id:'B'}],browsingHistory:[],closedTabs:[]}}];
+  db.setPolicy('A','http://example.com',{httpFallback:true,aiContent:true,blocking:false});db.setPolicy('A','https://www.example.com',{aiContent:true,annoyances:true});
+  db.setPolicy('A','http://shop.example.com:8080',{httpFallback:true});db.setPolicy('A','http://example.org',{httpFallback:true});db.setPolicy('A','http://example.com.evil.test',{httpFallback:true});
+  db.setPolicy('B','http://example.com',{httpFallback:true});db.setPolicy('A','*',{httpsOnly:true,aiContent:true});
+  assert.equal(httpsFirst.allowed(db,'A','example.com'),true);
+  commitForgetRecords(db,live,'A','http://www.example.com');
+  assert.equal(httpsFirst.allowed(db,'A','example.com'),false,'the typed address asks again, though the page forgotten was www');
+  assert.deepEqual(db.policy('A','http://example.com'),{aiContent:true,blocking:false},'its filtering choices stay');
+  assert.deepEqual(db.policy('A','https://www.example.com'),{aiContent:true,annoyances:true});
+  assert.equal(db.policy('A','http://shop.example.com:8080'),null,'a row that held only the http choice is gone, on any host and port of the site');
+  assert.equal(httpsFirst.allowed(db,'A','example.org'),true,'another registrable domain keeps its choice');
+  assert.equal(httpsFirst.allowed(db,'A','example.com.evil.test'),true,'a name that only starts the same is another site');
+  assert.equal(httpsFirst.allowed(db,'B','example.com'),true,'other profiles keep their choice');
+  assert.deepEqual(db.policy('A','*'),{httpsOnly:true,aiContent:true},'profile-wide choices stay');
+  const before=db.policies('A').length;commitForgetRecords(db,live,'A','https://three.example.net');assert.equal(db.policies('A').length,before,'a site with no choices changes nothing');
  }finally{db.close();}
 });

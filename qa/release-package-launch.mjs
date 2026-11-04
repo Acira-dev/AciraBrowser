@@ -8,6 +8,10 @@ import http from 'node:http';
 import {poll,nativePage} from './native-helpers.mjs';
 import {createHash} from 'node:crypto';
 import {verifyRuntimePolicy} from '../scripts/release-runtime-policy.mjs';
+import {qualifiedElectron} from './release-runtime.mjs';
+import {checkFusedCookies} from './release-fused-cookies.mjs';
+import {createRequire} from 'node:module';
+const {WINDOWS:WINDOWS_FUSES,fuseProblems,readFuses,describe:describeFuses}=createRequire(import.meta.url)('../packaging/fuses.cjs');
 const folder=path.resolve(process.argv[2]||''),executable=path.join(folder,'AciraBrowser.exe');
 const provenance=JSON.parse(await fs.readFile(path.join(folder,'ACIRA-PROVENANCE.json'),'utf8'));
 const output=path.resolve('qa/artifacts','release-package-'+Date.now()+'.json'),data=path.resolve('.qa-profiles','release-package-'+Date.now());await fs.mkdir(data,{recursive:true});
@@ -15,6 +19,7 @@ const report={schema:1,createdAt:new Date().toISOString(),sourceDigest:provenanc
 const server=http.createServer((_request,response)=>{response.setHeader('Content-Type','text/html');response.end('<!doctype html><title>Packaged browser fixture</title><h1>Packaged browsing works</h1><input id="draft">');});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let app;
 try{
   const env={...process.env,ACIRA_QA_RUN:'1',ACIRA_BROWSER_TEST_DATA:data,ACIRA_BROWSER_TEST_HIDDEN:'1',NODE_PATH:'',LOCALAPPDATA:path.join(data,'empty-source-profiles')};delete env.ELECTRON_RUN_AS_NODE;delete env.ACIRA_DEV;
+  const wrongFuses=await fuseProblems(executable,WINDOWS_FUSES);assert.deepEqual(wrongFuses,[],'Packaged program fuses: '+describeFuses(wrongFuses));report.fuses=await readFuses(executable);report.checks.push('Electron fuses read back from the packaged program: RunAsNode and NODE_OPTIONS off, cookie encryption on');
   report.profileInitialization=await initializeReleaseProfile({candidate:path.join(folder,'resources/app'),data,executablePath:executable,packaged:true});
   app=await _electron.launch({executablePath:executable,args:[],cwd:process.env.TEMP||folder,env,timeout:30000});
   const ui=await poll(async()=>app.context().pages().find(page=>page.url()==='acira-browser-ui://ui/index.html'),Boolean,'Packaged UI',15000);await ui.waitForFunction(()=>Boolean(window.acira));
@@ -32,6 +37,12 @@ try{
   const packagePrefix=path.resolve(folder).toLowerCase()+path.sep,external=actual.cached.filter(file=>path.isAbsolute(file)&&!path.resolve(file).toLowerCase().startsWith(packagePrefix)&&!file.includes('playwright-core'));assert.deepEqual(external,[],'No production dependency may be loaded from the source checkout');report.actual=actual;
   report.checks.push('Launches own resources/app with packaged version and no source dependency loads');
   const url='http://127.0.0.1:'+server.address().port+'/';await ui.evaluate(url=>window.acira.dispatch({type:'tab.new',url}),url);const page=await nativePage(app,url);await page.getByRole('heading',{name:'Packaged browsing works'}).waitFor();await page.locator('#draft').fill('packaged input');assert.equal(await page.locator('#draft').inputValue(),'packaged input');report.checks.push('Native packaged loopback navigation and typing');
+  // Sign-ins survive the cookie encryption fuse: a cookie stock Electron wrote (as beta.9 left them) is read by the fused program, and both survive a
+  // relaunch (qa/release-fused-cookies.mjs).
+  const partition=await ui.evaluate(async()=>{const state=await window.acira.getSnapshot();return state.browserProfiles.find(profile=>profile.id===state.activeBrowserProfileId).partition;});
+  await app.close();app=null;
+  report.fusedCookies=await checkFusedCookies({launch:()=>_electron.launch({executablePath:executable,args:[],cwd:process.env.TEMP||folder,env,timeout:30000}),stockElectron:(await qualifiedElectron()).executablePath,data,partition,url:'http://127.0.0.1:'+server.address().port+'/'});
+  report.checks.push('Sign-ins survive the cookie encryption fuse: a cookie stock Electron wrote is read by the fused program, and both stay after a relaunch');
   report.status='PASS';
 }catch(error){report.status='FAIL';report.failure=String(error.stack||error);process.exitCode=1;}
 finally{await app?.close();server.close();await fs.writeFile(output,JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({status:report.status,checks:report.checks,failure:report.failure,output},null,2));}

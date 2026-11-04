@@ -15,3 +15,8 @@ search.brave.com##dialog:has(.promo-content)
 ! labelled by promo_label_id / promo_desc_id; no other Google surface uses those ids.
 google.*##g-bottom-sheet[aria-labelledby="promo_label_id"]
 google.*##g-bottom-sheet[aria-describedby="promo_desc_id"]
+
+! weather.com: an empty grey "Advertisement" card stays for every ad slot once ads are blocked (read from the live page, 4 Nov 2026). EasyList's rule is
+! procedural (weather.com#?#.bg-gray-100:has-text(Advertisement)) and the page swaps that class name for a random one at run time; the card's label and
+! its WX_ ad slot are stable. Applied while ad blocking is on, before the page lays out (desktop/content-blocking.cjs AD_SLOT_LEFTOVERS, scriptlet-preload.cjs).
+weather.com##section[aria-label="Advertisement"]:has(div[id^="WX_"]):not(:has(iframe))

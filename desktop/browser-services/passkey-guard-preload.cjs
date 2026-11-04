@@ -23,6 +23,11 @@
 // smart-card transports, a create() asking for a cross-platform authenticator, or either one hinting only 'security-key'. No setting and
 // no press: nothing here opens a system dialog. The Windows press rule is not used on a Mac (it can suppress a sign-in request after
 // navigation, when the initiating click belonged to the previous document). Linux keeps its native WebAuthn methods and answers.
+// The refusal reads exactly as the engine's own (Chromium 152, measured 4 Nov: the same NotAllowedError, in 1 ms, when no authenticator has
+// the passkey), and as Chrome's after the person cancels its sheet. Sites word it their own way: Google's passkey page said "Make sure
+// Bluetooth is on" (founder, 3 Nov). So when the page itself asked for a passkey (not autofill, not a quiet immediate sign-in) and was
+// refused, `refused` lets the main process say in a toast that this is Acira, not the person's Bluetooth: top frame only, once per page
+// load, only while the page is on screen (main decides and answers whether it showed).
 // Passwords, federated sign-in and every other credential call are untouched (the check is for `publicKey` options only). Runs before
 // any page script in every website frame (tabs, pop-ups and Peek load preloads in iframes; every session registers it, private, Tor and
 // secured ones included) and in the page's own world; a child frame that is still about:blank is covered by its parent the moment the
@@ -31,9 +36,9 @@
 // its children (Windows, content-blocking.cjs). If a Windows browser has no navigator.userActivation the guard does nothing. A sandboxed
 // preload cannot require other files, so the guard is one function that executeInMainWorld serialises; tests/passkey-guard.test.cjs runs
 // it against stand-in windows. `allowed` is the bridged answer from the main process (true only when the person turned passkeys on);
-// `mac` selects the macOS answers above, which ask nothing of the main process.
+// `mac` selects the macOS answers above, which ask nothing of the main process; `refused` (macOS) is the bridged notice.
 const {ipcRenderer,contextBridge}=require('electron');
-const guard = function (allowed, mac) {
+const guard = function (allowed, mac, refused) {
   // The page's own globals can be replaced by page scripts later: everything the guard calls at request time is taken now, before any
   // page script runs. (A page that swapped Reflect.apply used to be handed the unguarded original on its next ordinary call.)
   const apply = Reflect.apply, keysOf = Object.keys, define = Object.defineProperty, createBare = Object.create, describe = Object.getOwnPropertyDescriptor;
@@ -71,7 +76,12 @@ const guard = function (allowed, mac) {
         ? Boolean(publicKey.authenticatorSelection) && publicKey.authenticatorSelection.authenticatorAttachment === 'cross-platform'
         : every(publicKey.allowCredentials, item => Boolean(item) && every(item.transports, keyTransport)));
       const onMac = (options, creating) => {
-        try { return securityKeyOnly(options.publicKey, creating) ? undefined : refuse('The operation either timed out or was not allowed.'); } catch (error) { return PromiseOf.reject(error); }
+        try {
+          if (securityKeyOnly(options.publicKey, creating)) return undefined;
+          // This frame's own request (a child frame the parent's guard covered when it reached it says nothing).
+          if (options.mediation !== 'immediate' && w === window && typeof refused === 'function') { try { refused(); } catch (error) { /* A closing frame. */ } }
+          return refuse('The operation either timed out or was not allowed. See: https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.');
+        } catch (error) { return PromiseOf.reject(error); }
       };
       // The engine converts any object as the options dictionary (a function too, and document.all, whose typeof is 'undefined') and reads
       // its members again. So the options are read once, here, into a plain copy: the decision and the engine see the same values, and a
@@ -157,5 +167,9 @@ if(process.platform==='win32'&&(/^(?:blob:)?https?:/.test(location.href)||locati
 }else if(process.platform==='darwin'&&(/^(?:blob:)?https?:/.test(location.href)||location.href==='about:srcdoc')){
  // Registered before mac-passkey-preload.cjs: in a main frame where Apple's passkeys are approved, that bridge sits on top and hands
  // the guard only what it leaves to the engine (security keys, unsupported extensions).
- try{contextBridge.executeInMainWorld({func:guard,args:[null,true]});}catch{/* A closing window. */}
+ // The notice: asked of main from the top frame only; once main has shown it, never again in this document (this world's own state,
+ // out of the page's reach). A page that was not on screen keeps its one notice for a later refusal.
+ let notice='ready';
+ const refused=()=>{if(notice!=='ready'||window.top!==window)return;notice='asking';ipcRenderer.invoke('acira:passkey-refused').then(shown=>{notice=shown===true?'shown':'ready';},()=>{notice='ready';});};
+ try{contextBridge.executeInMainWorld({func:guard,args:[null,true,refused]});}catch{/* A closing window. */}
 }

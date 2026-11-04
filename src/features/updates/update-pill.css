@@ -27,6 +27,24 @@
 .app .update-pill:focus-visible { outline: 2px solid var(--focus-ring-color, var(--accent, #3b6eea)); outline-offset: 1px; }
 .app .update-pill:disabled { opacity: 0.6; }
 .app .update-pill[aria-expanded='true'] { background: color-mix(in srgb, var(--accent, #3b6eea) 22%, transparent); }
+/* A dark toolbar (a deep finish in light mode, Burgundy, Navy, Sky, Emerald, Alpine, Deep Purple or Graphite, where "Update" in the page's
+   accent read at about 1.3:1; or a dark toolbar colour): the toolbar's own accent (--ed-blue: the chrome scope's --chrome-accent, a pastel made
+   readable on the frame, or the light glass's accent over AppKit glass). Keyed on --toolbar-tone, the toolbar's real tone: a toolbar colour sets
+   it, so a white or cream toolbar on a deep finish keeps the page's accent, which reads on it. In dark mode --ed-blue is the same colour as --accent. */
+@media not (forced-colors: active) {
+  @container style(--toolbar-tone: dark) {
+    .app .update-pill[data-phase='ready'] { color: var(--ed-blue, var(--accent, #3b6eea)); background: color-mix(in srgb, var(--ed-blue, var(--accent, #3b6eea)) 13%, transparent); }
+    .app .update-pill[data-phase='ready']:is(:hover, [aria-expanded='true']) { background: color-mix(in srgb, var(--ed-blue, var(--accent, #3b6eea)) 22%, transparent); }
+  }
+}
+/* A colour of the person's own under the pill: a toolbar colour, or the sidebar colour the toolbar sits on in sidebar mode (frame.css, same
+   condition). No accent is made against it, so the theme hands the pill the accent above where it reads (4.5:1 on its tint) and otherwise
+   the colour's own ink, the toolbar's text colour (--toolbar-pill-ink, --sidebar-pill-ink in semanticColors). The whisper stays the accent's.
+   Before, "Update" read 1.05-2.6:1 on a light toolbar colour in dark mode, a dark one on a pale finish, or a mid grey (beta.10, contrast-2). */
+@media not (forced-colors: active) {
+  .app.style-acira[data-toolbar-color] .update-pill[data-phase='ready'] { color: var(--toolbar-pill-ink, var(--toolbar-ink)); }
+  :root:root:root:not([data-edge-float]) .app.style-acira[data-sidebar-color]:not([data-toolbar-color]):is(:has(> .ed-rail.is-expanded), :has(> .browser-root:is(.mode-compact, .side-tabs, .mode-focus))) .update-pill[data-phase='ready'] { color: var(--sidebar-pill-ink, var(--sidebar-ink)); }
+}
 /* Downloading and paused: the bare dots, now a control (they open the update panel), so the toolbar's own hover and open fill (--frame-hover, what
    its icon buttons use; private and Tor windows have their own), square-cornered like its icon buttons. Paused, the dots hold still (progressHeld) and dim. */
 .app .update-pill:is([data-phase='downloading'], [data-phase='paused']) { width: 24px; justify-content: center; margin: 0 2px; padding: 0; border-radius: 6px; background: transparent; color: var(--ed-icon, currentColor); }

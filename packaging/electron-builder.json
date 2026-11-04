@@ -82,6 +82,10 @@
   ],
   "extraResources": [
     {
+      "from": "packaging/installer/acira-verify.exe",
+      "to": "acira-verify.exe"
+    },
+    {
       "from": "desktop/browser-services/tor-engine/win-x64",
       "to": "tor",
       "filter": [

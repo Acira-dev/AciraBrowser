@@ -2,7 +2,7 @@
 // A visible window on a throwaway profile; `screencapture -v` records the display (about 60 frames a second) while a real click on the
 // sidebar button opens or closes the sidebar. An injected ruler gives the page's own geometry as painted: a green bar at the page's left
 // edge and a magenta bar at the middle of its laid-out width (so a re-wrap, a stretch or a gap shows as numbers, not as a guess).
-//   ACIRA_BROWSER_TEST_DATA=/tmp/acira-agents/smooth/profile node qa/sidebar-smooth.mjs [outDir]
+//   ACIRA_BROWSER_TEST_DATA=/tmp/acira-qa/smooth/profile node qa/sidebar-smooth.mjs [outDir]
 //   env SM_SITE=https://www.youtube.com/ | newtab | heavy (a local page with an expensive layout; SM_CARDS=2500) | text (long paragraphs that re-wrap at every width; SM_CARDS=1500)  SM_VIEW=full|compact|seamless   SM_REPS=3   SM_LABEL=run   SM_KEEP=1 (keep the clips)
 //       ACIRA_DISSOLVE=1 (turns on the page's dissolve, off by default: the page's one re-layout is a cut)   ACIRA_QA_DISSOLVE_TRACE=1 (the picture's timeline in globalThis.__dissolveTrace)
 //       SM_ARGS="--flag=value ..." extra Chromium switches   SM_SLOW=4 (the website's thread 4x slower: a mediocre laptop)   ACIRA_QA_LIVE_GOOGLE=1 (a test profile otherwise blocks YouTube)
@@ -17,8 +17,8 @@ import {_electron} from 'playwright-core';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = (...a) => console.log('[sidebar-smooth]', ...a);
-const ROOT = path.resolve(process.env.ACIRA_BROWSER_TEST_DATA || ''), OUT = path.resolve(process.argv[2] || '/tmp/acira-agents/smooth/out');
-if (!ROOT.startsWith('/tmp/acira-agents/')) throw new Error('ACIRA_BROWSER_TEST_DATA must be a throwaway folder under /tmp/acira-agents/');
+const ROOT = path.resolve(process.env.ACIRA_BROWSER_TEST_DATA || ''), OUT = path.resolve(process.argv[2] || '/tmp/acira-qa/smooth/out');
+if (!ROOT.startsWith('/tmp/acira-qa/')) throw new Error('ACIRA_BROWSER_TEST_DATA must be a throwaway folder under /tmp/acira-qa/');
 const SITE = process.env.SM_SITE || 'https://www.youtube.com/', VIEW = process.env.SM_VIEW || 'full', REPS = Number(process.env.SM_REPS || 3), LABEL = process.env.SM_LABEL || 'run';
 const newtab = SITE === 'newtab';
 await fs.mkdir(OUT, {recursive: true});
@@ -103,7 +103,7 @@ const find = (win, match) => win.context().pages().find(p => { try { return p.ur
 try {
   app = await _electron.launch({args: [path.resolve('desktop/main.cjs'), ...(process.env.SM_ARGS ? process.env.SM_ARGS.split(' ') : [])], env, timeout: 40000});
   // Safety: this rig only ever runs a build whose profile is the throwaway folder; anything else (a forgotten ACIRA_BROWSER_TEST_DATA would be the user's own profile) quits before it does a thing.
-  { const userData = path.resolve(await app.evaluate(({app: electronApp}) => electronApp.getPath('userData'))); if (!(userData === ROOT || userData.startsWith(ROOT + path.sep)) || !ROOT.startsWith('/tmp/acira-agents/')) { await app.close().catch(() => {}); throw new Error('refusing to run: userData ' + userData + ' is not under ' + ROOT); } }
+  { const userData = path.resolve(await app.evaluate(({app: electronApp}) => electronApp.getPath('userData'))); if (!(userData === ROOT || userData.startsWith(ROOT + path.sep)) || !ROOT.startsWith('/tmp/acira-qa/')) { await app.close().catch(() => {}); throw new Error('refusing to run: userData ' + userData + ' is not under ' + ROOT); } }
   const context = app.context(), main = (fn, arg) => app.evaluate(fn, arg);
   let ui; for (let i = 0; i < 300 && !ui; i++) { ui = context.pages().find(p => { try { return p.url() === 'acira-browser-ui://ui/index.html'; } catch { return false; } }); await sleep(100); }
   for (let i = 0; i < 300; i++) { if (await ui.evaluate(() => Boolean(window.acira?.getSnapshot)).catch(() => false)) break; await sleep(100); }

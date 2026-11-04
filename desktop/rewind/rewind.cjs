@@ -25,7 +25,7 @@ function createRewind({dir,now=Date.now,limits={},timers={setTimeout,clearTimeou
  const routineService=()=>routines??=createRoutines({dir:path.join(dir,'..','routines'),shortcuts});
  const closedLog=closedModel.createClosedLog({dir,now,timers});
  let settings=readSettings();
- function readSettings(){try{const raw=JSON.parse(fs.readFileSync(path.join(dir,'settings.json'),'utf8'));return {enabled:raw.enabled!==false,days:DAYS.includes(raw.days)?raw.days:7};}catch{return {enabled:true,days:7};}}
+ /* a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile) */function readSettings(){const raw=require('../atomic-file.cjs').readJsonFile(path.join(dir,'settings.json'));return {enabled:raw?.enabled!==false,days:DAYS.includes(raw?.days)?raw.days:7};}
  function writeAtomic(file,text){fs.mkdirSync(path.dirname(file),{recursive:true});const tmp=`${file}.${process.pid}.tmp`;fs.writeFileSync(tmp,text);fs.renameSync(tmp,file);}
  const profileDir=id=>path.join(dir,id);
  const epoch=id=>epochs.get(id)||0;

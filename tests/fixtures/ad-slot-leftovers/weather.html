@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- weather.com's ad cards as read from the live page on 4 Nov 2026 (one card per ad slot, class names as served; the page swaps bg-gray-100 for a random name at run time). -->
+<meta charset="utf-8"><title>weather</title>
+<script>
+// Records from the first frame: how many empty ad cards have a box, and every layout shift the page reports.
+window.__frames = []; window.__shifts = [];
+new PerformanceObserver(list => { for (const entry of list.getEntries()) window.__shifts.push(entry.value); }).observe({ type: 'layout-shift', buffered: true });
+(function frame() { const empty = [...document.querySelectorAll('section[aria-label="Advertisement"]')].filter(s => s.querySelector('div[id^="WX_"]') && !s.querySelector('iframe') && s.getBoundingClientRect().height > 0); window.__frames.push(empty.length); if (window.__frames.length < 120) requestAnimationFrame(frame); })();
+</script>
+<style>body{margin:0;font:14px system-ui}.flex{display:flex}.flex-col{flex-direction:column}.gap-12{gap:48px}.pb-6{padding-bottom:24px}.bg-gray-100,.a7qow1e5z3805kajiic2-05kz{background:#f2f2f2}.rounded-3xl{border-radius:24px}.min-h-250{min-height:250px}.min-h-90{min-height:90px}.text-xxs{font-size:10px;text-align:center;color:#999}</style>
+<div class="flex flex-col gap-12" id="column">
+  <div class="card" id="current" style="height:120px">Al Mazraa 70°</div>
+  <div class="hide-empty"><div><section class="flex flex-col @container/card text-card-foreground border-0 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden pb-0 rounded-3xl" aria-label="Advertisement" id="top"><div class="flex-1 bg-gray-100 pb-6"><div class="text-xxs">Advertisement</div><div data-testid="WX_WindowShade-container" class="flex min-h-250"><div id="WX_WindowShade" data-testid="WX_WindowShade"></div></div></div></section></div></div>
+  <div class="card" id="forecast" style="height:300px">Al Mazraa Weather</div>
+  <div class="hide-empty"><div><section class="flex flex-col adContainer pb-6" aria-label="Advertisement" id="swapped"><div class="flex-1 a7qow1e5z3805kajiic2-05kz pb-6"><div class="text-xxs">Advertisement</div><div data-testid="WX_MidLeader-container" class="flex min-h-90"><div id="WX_MidLeader" data-testid="WX_MidLeader"></div></div></div></section></div></div>
+  <div class="hide-empty"><div><section class="flex flex-col adContainer pb-6" aria-label="Advertisement" id="filled"><div class="flex-1 bg-gray-100 pb-6"><div class="text-xxs">Advertisement</div><div data-testid="WX_Bot300AdX1-container" class="flex min-h-250"><div id="WX_Bot300AdX1" data-testid="WX_Bot300AdX1"><div><iframe title="ad" style="width:300px;height:250px;border:0" srcdoc="ad"></iframe></div></div></div></div></section></div></div>
+  <div class="hide-empty"><div><section class="flex flex-col adContainer pb-6" aria-label="Advertisement" id="late"><div class="flex-1 bg-gray-100 pb-6"><div class="text-xxs">Advertisement</div><div data-testid="WX_Bot300AdX2-container" class="flex min-h-250"><div id="WX_Bot300AdX2" data-testid="WX_Bot300AdX2"></div></div></div></section></div></div>
+  <section aria-label="Advertisement" id="noslot" style="height:80px">A labelled block with no ad slot</section>
+  <section aria-label="Weather news" id="news" style="height:80px"><div id="WX_NewsModule">News</div></section>
+  <div class="card" id="footer" style="height:60px">Footer</div>
+</div>

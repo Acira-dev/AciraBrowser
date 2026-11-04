@@ -31,5 +31,5 @@ test('a subframe that moved to another document before dom-ready logs nothing an
  const r=rig(),child=r.frame('about:blank','T1');
  r.created(child);child.frameToken='T2';child.url='https://other.example/ad';child.emit('dom-ready');await tick();r.done();
  assert.deepEqual(r.warnings,[]);
- assert.equal(child.injected,0,'unchanged: cross-site iframes are not filtered (open question for the founder, main-leaks handover)');
+ assert.equal(child.injected,0,'unchanged: cross-site iframes are not filtered (open question for the founder)');
 });

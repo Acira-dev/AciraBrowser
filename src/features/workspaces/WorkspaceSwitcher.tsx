@@ -49,20 +49,23 @@ const NAMED_PILL_MAX = 4;
 /** The switcher in the sidebar (R3-57, R4-23, R4-48). Shown only once there is a second workspace (D1): one workspace has
  * nothing to switch to, so Workspaces is found from the profile panel, the command bar, the tab menu and Settings instead.
  * With several it is one icon per workspace in a row above the profile footer: one click opens a workspace; the open one is
- * a raised pill (with its name while there are four or fewer) that glides to the next on a spring; a colour shows as a 2px
+ * a raised pill (with its name while there are four or fewer) that moves to the next one in the frame it is chosen; a colour shows as a 2px
  * rail under the icon. A playing workspace uses the audio matrix in the icon slot; hover or keyboard focus reveals its chosen icon. Right-click: Rename, Icon and color, Delete. Alt+1–8 jump. */
 export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSnapshot; dispatch: Dispatch; moveFocus: (event: KeyboardEvent<HTMLElement>, from?: HTMLElement) => boolean }) {
   useShortcutKeys();
   // With profiles as spaces the row lists the profiles, eight at most (the keys); the profile panel lists them all.
-  const spaces = profilesAsSpaces(state), list = spaces ? windowWorkspaces(state).slice(0, MAX_WORKSPACES) : windowWorkspaces(state), host = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>());
+  const spaces = profilesAsSpaces(state), list = spaces ? windowWorkspaces(state).slice(0, MAX_WORKSPACES) : windowWorkspaces(state), host = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>()), shownActive = useRef(state.activeWorkspaceId);
   const active = state.activeWorkspaceId, several = list.length > 1, named = list.length <= NAMED_PILL_MAX;
   // The open cell is as wide as its name: a rename (or another icon) changes the cell without changing the row, which the observer below watches, so it has to restart the placement.
   const names = list.map(item => `${item.id}:${nameIn(state, item)}:${workspaceIcon(item)}`).join('|');
   useWorkspaceSlide('.acira-sidebar .sb-scroll', active, list.map(item => item.id));
-  // The pill sits on the open workspace's cell and glides to the next one (S spring; the first placement and a resize are
-  // instant). When the open cell grows to show its name the other icons move aside on the same spring (FLIP, transform only).
+  // The pill sits on the open workspace's cell (the first placement and a resize are instant). When a cell grows or shrinks (a rename,
+  // a workspace added) the other icons move aside on the S spring (FLIP, transform only). A switch lands at once, pill and icons:
+  // the new open cell shows its name at its new place in the same frame, and gliding the icons there drew them over that name while
+  // the pill sat at the old cell with the new width (founder, 3 Nov: "how it expands and glitches, then gets good").
   useLayoutEffect(() => {
-    const row = host.current, el = pill.current;
+    const row = host.current, el = pill.current, switched = shownActive.current !== active;
+    shownActive.current = active;
     if (!row || !el) { placed.current = false; lefts.current.clear(); return; }
     const place = (glide: boolean) => {
       const cells = [...row.querySelectorAll<HTMLElement>('[data-ws],[data-workspace-new]')];
@@ -77,7 +80,7 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
       void springTo(el, { x: cell.offsetLeft }, 'workspace.pill', glide && placed.current ? {} : { from: { x: cell.offsetLeft } });
       placed.current = true;
     };
-    place(true);
+    place(!switched);
     const observer = new ResizeObserver(() => place(false));
     observer.observe(row);
     return () => observer.disconnect();

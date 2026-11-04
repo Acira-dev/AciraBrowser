@@ -2,10 +2,10 @@
 // Installed browsers' own app icons (R4-53), read from the local executable (Windows) or app bundle (macOS) with
 // Electron's app.getFileIcon. Nothing is fetched and no third-party logo ships: a browser that is not installed simply
 // has no icon, and the interface keeps its letter tile for it.
-const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { helperPath, runHelper } = require('../windows-helper.cjs');
 
 /** Browsers the importers can read, in the order the interface lists them. */
 const BROWSERS = Object.freeze(['Chrome', 'Edge', 'Brave', 'Helium', 'Firefox', 'Zen', 'Arc']);
@@ -64,18 +64,14 @@ function browserExecutables(env = process.env, { platform = process.platform, ho
 /** A path that does not exist: Windows answers app.getFileIcon for it with its generic application icon, which is also what an
  * executable without a readable icon resource yields. Comparing against it tells a browser's own icon from the stand-in. */
 const GENERIC_PROBE = 'C:\\acira-no-such-folder\\generic.exe';
-const EXTRACT_SCRIPT = "Add-Type -AssemblyName System.Drawing; $i=[System.Drawing.Icon]::ExtractAssociatedIcon($env:ACIRA_ICON_FILE); if(-not $i){exit 1}; $m=New-Object System.IO.MemoryStream; $i.ToBitmap().Save($m,[System.Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($m.ToArray())";
 
-/** The Windows shell's own icon extraction, for an executable whose icon app.getFileIcon cannot read (Helium's chrome.exe
- * yields the generic one there). Slow (a PowerShell start), so it runs only for such a browser, once per session. The path
- * travels in the environment, never in the script text. */
-function windowsExtract(file, env = process.env) {
-  return new Promise((resolve) => {
-    const exe = path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    execFile(exe, ['-NoProfile', '-NonInteractive', '-Command', EXTRACT_SCRIPT], { env: { ...env, ACIRA_ICON_FILE: file }, windowsHide: true, timeout: 8000, maxBuffer: 256 * 1024 }, (error, output) => {
-      const url = error ? null : 'data:image/png;base64,' + String(output).trim();
-      resolve(validIconUrl(url) ? url : null);
-    });
+/** Windows' own icon for an executable whose icon app.getFileIcon cannot read (Helium's chrome.exe yields the generic one there),
+ * from Acira's signed helper (desktop/windows-helper.cjs: the shell's ExtractAssociatedIcon, no script host). It runs only for such a
+ * browser, once per session. The path travels on the helper's standard input, never on its command line. */
+function windowsExtract(file, { packaged, helper = helperPath({ packaged }), exec } = {}) {
+  return runHelper(['icon'], file, { helper, exec, timeoutMs: 8000, maxBuffer: 256 * 1024 }).then((result) => {
+    const url = result.stdout ? 'data:image/png;base64,' + result.stdout : null;
+    return validIconUrl(url) ? url : null;
   });
 }
 
@@ -100,7 +96,7 @@ function createBrowserIcons({
   home = os.homedir(),
   stat = (file) => fs.promises.stat(file).then((info) => ({ file: info.isFile(), directory: info.isDirectory() }), () => null),
   readAppPaths = registryAppPaths,
-  extractIcon = (file) => windowsExtract(file, env),
+  extractIcon = (file) => windowsExtract(file, { packaged: app?.isPackaged }),
   executables = browserExecutables(env, { platform, home }),
   // macOS: app.getFileIcon answers the generic application icon for an .app bundle on current systems, so the bundle's Quick Look thumbnail (its own icon) comes first.
   thumbnail = platform === 'darwin' ? (file) => require('electron').nativeImage.createThumbnailFromPath(file, { width: MAX_SIDE, height: MAX_SIDE }) : null,
@@ -184,4 +180,4 @@ function createBrowserIcons({
   return { icons };
 }
 
-module.exports = { BROWSERS, browserExecutables, createBrowserIcons, sanitizeIcons, validIconUrl };
+module.exports = { BROWSERS, browserExecutables, createBrowserIcons, sanitizeIcons, validIconUrl, windowsExtract };

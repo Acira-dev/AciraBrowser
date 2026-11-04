@@ -10,8 +10,9 @@ export function describe(status?: UpdateStatus) {
     case 'checking': return t('updates.checking');
     case 'available': return t('updates.versionAvailable', { version: status.available ?? '' });
     case 'downloading': return status.progress ? t('updates.downloadingProgress', { version: status.available ?? '', percent: status.progress }) : t('updates.downloadingVersion', { version: status.available ?? '' });
-    // Paused from the toolbar's update panel (and still paused after a relaunch): the row says so and its button resumes.
-    case 'paused': return t('updates.pausedProgress', { version: status.available ?? '', percent: status.progress ?? 0 });
+    // Paused from the toolbar's update panel (and still paused after a relaunch): the row says so and its button resumes. A Resume that could not
+    // connect is paused again with the reason (error): the row says the connection failed, the note below gives the technical detail.
+    case 'paused': { const line = t('updates.pausedProgress', { version: status.available ?? '', percent: status.progress ?? 0 }); return status.error ? `${line} · ${t('app.connectionFailed')}` : line; }
     case 'ready': return t('updates.versionReady', { version: status.available ?? '' });
     case 'current': return t('updates.upToDate');
     // One line: the updater's own words (a 200-character HttpError on a Mac) wrapped the row to five lines and pushed its button down; they go in the note below.

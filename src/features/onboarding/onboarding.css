@@ -852,6 +852,12 @@
 .fr-btn:hover:not(:disabled) .fr-arrow {
   transform: translateX(2px);
 }
+/* Right to left, forward is to the left: the arrows of Get started, Continue and Start browsing point that way (in Arabic they
+   pointed back). `scale` applies after `transform`, so the hover nudge moves them 2px to the left too. */
+.fr-btn:dir(rtl) .fr-arrow,
+.fr-go:dir(rtl) svg {
+  scale: -1 1;
+}
 /* The footer buttons hold still on hover (fill and arrow still respond): the pointer rests on the next step's button
    after a click, and the shared half-pixel lift would put it 0.5px off, and soft, on every step but the first (M25). */
 :root:root:root .fr-foot .fr-btn:hover:not(:disabled) {

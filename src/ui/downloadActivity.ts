@@ -25,3 +25,7 @@ export const PANEL_DOWNLOAD_ROWS = 5, PANEL_DOWNLOAD_ROW_HEIGHT = 44;
 export function panelDownloads<T extends Pick<BrowserDownload, 'status' | 'startedAt'>>(list: readonly T[], max = 5): T[] {
   return [...list].sort((a, b) => Number(isLiveDownload(b)) - Number(isLiveDownload(a)) || (b.startedAt || 0) - (a.startedAt || 0)).slice(0, max);
 }
+
+/** The popup's second line for a finished file that can run software: its warning first and no time. The row is narrow, so what gets cut
+ * is the size, never the warning (it read "150 KB · 4:54 PM · Review before …" in every finish and language). */
+export const panelWarnsFirst = (item: Pick<BrowserDownload, 'dangerous' | 'status'>) => !!item.dangerous && item.status === 'Ready';

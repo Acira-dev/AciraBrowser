@@ -54,8 +54,9 @@
 .app.style-acira .acira-sidebar .sb-ws-title-main:active { transform: scale(.98); transition: transform 80ms var(--sb-ease); }
 .app.style-acira .acira-sidebar :is(.sb-ws-title-main, .sb-ws-title-more):focus-visible { outline: 2px solid var(--sb-ring); outline-offset: -2px; }
 .sb-ws-title-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Founder (28 Oct): the count lines up with the New tab row's count (same size, colour and right edge); the ⋯ button sits in its place and swaps in on hover. */
-.sb-ws-title-count { flex: none; margin-left: auto; margin-right: 2px; color: rgb(var(--ink) / .44); font: 450 var(--text-12, 12px)/16px var(--font-ui, inherit); font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity var(--sb-dur, 120ms) var(--sb-ease); }
+/* Founder (28 Oct): the count lines up with the New tab row's count (same size, colour and right edge); the ⋯ button sits in its place and swaps in on hover.
+   Its colour is that row's: the sidebar's quiet ink (sidebar.css), 52% on light finishes so it keeps 3:1. */
+.sb-ws-title-count { flex: none; margin-left: auto; margin-right: 2px; color: var(--sb-quiet, rgb(var(--ink) / .44)); font: 450 var(--text-12, 12px)/16px var(--font-ui, inherit); font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity var(--sb-dur, 120ms) var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws-title:is(:hover, :focus-within) .sb-ws-title-count, .app.style-acira .acira-sidebar .sb-ws-title:has(.sb-ws-title-more[aria-expanded=true]) .sb-ws-title-count { opacity: 0; }
 .app.style-acira .acira-sidebar .sb-ws-title-more { position: absolute; top: 50%; right: var(--sb-ws-more-right, 10px); translate: 0 -50%; flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--sb-muted); opacity: 0; -webkit-app-region: no-drag; transition: opacity var(--sb-dur, 120ms) var(--sb-ease), background-color var(--sb-dur, 120ms) var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws-title:is(:hover, :focus-within) .sb-ws-title-more, .app.style-acira .acira-sidebar .sb-ws-title-more[aria-expanded=true] { opacity: 1; }
@@ -142,6 +143,11 @@ html[dir='rtl'] .ws-menu-cycle > .acira-menu-icon { transform: scaleX(-1); }
 .ws-lock-badge { position: absolute; right: -4px; bottom: -3px; display: grid; place-items: center; width: 13px; height: 13px; border-radius: 4px; background: var(--surface, Canvas); color: var(--text-1, currentColor); box-shadow: 0 0 0 1px var(--sb-line, rgb(0 0 0 / .12)); pointer-events: none; }
 .ws-lock-badge > svg { width: 9px; height: 9px; }
 .ws-beta { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font: 600 10px/16px var(--font-ui, inherit); letter-spacing: .02em; color: var(--text-2, inherit); background: var(--input-fill, rgb(127 127 127 / .12)); vertical-align: 1px; white-space: nowrap; }
+/* "Lock this workspace" and what it means ("Own sign-ins · opens with macOS", "… Windows Hello" on Windows) are longer than the 240px
+   menu in nearly every language, English included, and ended in an ellipsis. The row wraps instead (both menus are measured with it
+   on screen, popup.ts popupEstimateMeasured); the Beta chip keeps its place at the end. Only that row: other identity rows are unchanged. */
+:is(.popup-content-workspace-context, .popup-content-workspace-menu) .acira-menu-row-identity:has(.ws-beta) { height: auto; min-height: 44px; padding-block: 6px; }
+:is(.popup-content-workspace-context, .popup-content-workspace-menu) .acira-menu-row-identity:has(.ws-beta) :is(.acira-menu-title, .acira-menu-sub) { white-space: normal; text-wrap: pretty; }
 .ws-edit-lock { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 0; padding: 8px 0; border-top: 1px solid var(--sb-line, rgb(127 127 127 / .18)); }
 .ws-edit-lock > span { display: grid; gap: 2px; min-width: 0; }
 .ws-edit-lock strong { font: 500 13px/18px var(--font-ui, inherit); color: var(--text-1, inherit); }

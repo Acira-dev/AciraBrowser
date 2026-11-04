@@ -1,0 +1,14 @@
+/* Tab ink follows the surface each tab sits on (founder, beta.10: "when you select a tab, the highlight covers the X so it doesn't show;
+   the text too; when you drag a tab, its label doesn't show"). In light mode the sidebar's current row, the compact strip's current tab
+   and a carried tab (and its drag copy, and the strip's current tab while it settles or moves aside) are neutral white cards, also where
+   the frame, the toolbar or the sidebar around them is dark and its ink white. Their titles took the card's ink, but the ×, the mute and
+   sound glyphs, Acira's own logo and the private and Tor marks kept the light ink around them and vanished on the card.
+   The card's logo tone and marks (the light frame's deep marks, with its white glyph on their 12px badge) are the values a light frame
+   already has. The card's ink, and that ink at 64% for the quieter controls, replace the ink around a card only where that is dark: the
+   frame, a toolbar colour of its own (compact tabs live in the toolbar row) or a sidebar colour of its own. Light finishes keep exactly
+   their own ink. Checked on real pixels over every finish, view and zoom: text at least 4.5:1, icons 3:1 (tab-ink rig, beta.10 notes). */
+.app.style-acira[data-appearance=light] :is(.acira-sidebar .sb-tab[aria-current=true],.acira-compact-tabs .acira-compact-tab.selected,[data-drag-surface=held],.tab-drag-preview,.tab-strip-container .browser-tab.selected[data-drag-surface]){--brand-tone:light;--private-mark:var(--private-card-mark);--tor-mark:var(--tor-card-mark);--mark-on:var(--card-mark-on)}
+.app.style-acira[data-appearance=light] .acira-sidebar .sb-tab[aria-current=true]{--sb-private:var(--private-card-mark);--sb-tor:var(--tor-card-mark)}
+@container style(--sidebar-tone: dark){.app.style-acira[data-appearance=light] .acira-sidebar .sb-tab[aria-current=true]{--sb-fg:var(--sb-current-fg);--sb-muted:color-mix(in srgb,var(--sb-current-fg) 64%,transparent)}}
+@container style(--toolbar-tone: dark){.app.style-acira[data-appearance=light] .acira-compact-tabs :is(.acira-compact-tab.selected,[data-drag-surface=held]){--ed-ink:var(--tab-selection-fg);--ed-muted:color-mix(in srgb,var(--tab-selection-fg) 64%,transparent)}}
+@container style(--chrome-tone: dark){.app.style-acira[data-appearance=light] :is(.tab-strip-container [data-drag-surface=held],.tab-drag-preview,.tab-strip-container .browser-tab.selected[data-drag-surface]){--ed-ink:var(--tab-carry-fg);--ed-muted:color-mix(in srgb,var(--tab-carry-fg) 64%,transparent)}}

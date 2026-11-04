@@ -193,7 +193,15 @@ test('profile separation covers omnibox suggestions, history and bookmarks, not 
 
 test('only schemeless public addresses are marked for the https-then-http fallback',()=>{
  assert.equal(resolveNavigation('example.com').httpsFirst,true);
- assert.equal(resolveNavigation('example.com:8080/x?y=1').httpsFirst,true);
+ assert.equal(resolveNavigation('example.com:443/x').httpsFirst,true,'443 is the https port');
+ for(const typed of ['example.com:80','example.com:80/x?y=1'])assert.deepEqual([resolveNavigation(typed).url,resolveNavigation(typed).httpsFirst],[typed==='example.com:80'?'https://example.com/':'https://example.com/x?y=1',true],'port 80 is http\'s own: dropped, then https first as in Chrome');
+ assert.equal(resolveNavigation('192.168.1.1:80').url,'http://192.168.1.1/','a local address on port 80 stays http');
+ // Like Chrome's HTTPS-Upgrades: no https try (and so no http offer) for IP addresses, local and reserved names, and ports other than 443, where an
+ // http service answers a secure connection with an error. They open over http, as typed into Chrome.
+ for(const [typed,url] of [['example.com:8080/x?y=1','http://example.com:8080/x?y=1'],['0.0.0.0:8000','http://0.0.0.0:8000/'],['100.100.1.2','http://100.100.1.2/'],['100.64.0.1:3000','http://100.64.0.1:3000/'],['8.8.8.8','http://8.8.8.8/'],['[2001:db8::1]','http://[2001:db8::1]/'],['printer.lan','http://printer.lan/'],['host.internal','http://host.internal/'],['router.home.arpa','http://router.home.arpa/'],['nas.home','http://nas.home/'],['app.test:8443','http://app.test:8443/']] as const){const target=resolveNavigation(typed);assert.equal(target.httpsFirst,undefined,typed);assert.equal(target.url,url,typed);}
+ for(const typed of ['https://example.com:8080/','https://8.8.8.8/','https://printer.lan/'])assert.equal(resolveNavigation(typed).url,typed,'typed https stays https: '+typed);
+ assert.equal(resolveNavigation('100.128.0.1').url,'http://100.128.0.1/','outside 100.64/10 is still an IP address');
+ assert.equal(resolveNavigation('nodejs.org').httpsFirst,true);assert.equal(resolveNavigation('bbc.co.uk').httpsFirst,true);
  for(const explicit of ['https://example.com','http://example.com','https://192.168.1.1/'])assert.equal(resolveNavigation(explicit).httpsFirst,undefined,explicit);
  for(const local of ['localhost:3000','127.0.0.1','192.168.1.1','[::1]:8080','router.local','plain words'])assert.equal(resolveNavigation(local).httpsFirst,undefined,local);
  let s=reduceBrowser(createInitialState(),{type:'tab.new',url:'neverssl.com'});
@@ -202,6 +210,20 @@ test('only schemeless public addresses are marked for the https-then-http fallba
  assert.equal(s.tabs.find(t=>t.id===s.activeTabId)!.httpsFirst,true,'a repeat of the same address keeps the fallback');
  s=reduceBrowser(s,{type:'tab.navigate',url:'http://neverssl.com/'});
  assert.equal(s.tabs.find(t=>t.id===s.activeTabId)!.httpsFirst,undefined,'moving to an explicit address clears it');
+});
+
+test('the http offer is only for the address typed: a page that goes to another site itself drops it',()=>{
+ // Before: type example.com, click a link to https://bank.example.org/login that fails with -102, and the error page offered "Continue over http" for
+ // the bank (and Continue kept that choice for the bank). desktop/browser-services/https-first.cjs offered() and NavigationError's httpOffer read this flag.
+ let s=reduceBrowser(createInitialState(),{type:'tab.new',url:'example.com'});const id=s.activeTabId,tab=()=>s.tabs.find(t=>t.id===id)!;
+ const page=(url:string,extra:object={})=>{s=reduceBrowser(s,{type:'browser.event',event:{type:'state',tabId:id,url,title:url,...extra}} as BrowserAction);};
+ page('https://example.com/',{loading:false});assert.equal(tab().httpsFirst,true,'the typed site itself keeps it');
+ page('https://example.com/about',{loading:false});assert.equal(tab().httpsFirst,true,'and so does another page of it');
+ page('https://bank.example.org/login',{error:'ERR_CONNECTION_REFUSED (-102)',loading:false});
+ assert.equal(tab().url,'https://bank.example.org/login');assert.equal(tab().httpsFirst,undefined,'a link to another site never offers http');
+ s=reduceBrowser(createInitialState(),{type:'tab.new',url:'example.com'});const second=s.activeTabId;
+ s=reduceBrowser(s,{type:'browser.event',event:{type:'state',tabId:second,url:'https://www.example.com/',title:'',loading:false}} as BrowserAction);
+ assert.equal(s.tabs.find(t=>t.id===second)!.httpsFirst,undefined,'a redirect to another origin drops it too');
 });
 
 test('scheme typos in typed addresses are fixed, never searched',()=>{

@@ -35,6 +35,7 @@ function applyIdentity(config,env){
 function createConfig(env=process.env,releaseTarget=loadReleaseTarget()){
  const config=applyReleaseTarget(structuredClone(base),releaseTarget),mode=signingMode(env);
  applyIdentity(config,env);
+ config.electronFuses={...require('./fuses.cjs').WINDOWS}; // this config builds Windows only (scripts/release.mjs --win); electron-builder burns them right before signing. Mac packaging sets its own (packaging/macos/widevine.cjs)
  if(env.ACIRA_MAC_BROWSER_PASSKEY_PROFILE)require('./macos/passkeys.cjs').configureBuilderPasskeys(config,env); // Mac only; loaded on demand so a Windows build never needs its plist module
  // Both platforms read updates from the public metadata feed (packaging/update-feed.cjs). Windows follows the release target above
  // (packaging/release-target.json, the same feed); ACIRA_UPDATE_FEED_URL overrides it at build time. Mac: ACIRA_MAC_UPDATE_FEED_URL,

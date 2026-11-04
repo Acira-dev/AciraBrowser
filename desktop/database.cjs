@@ -2,17 +2,49 @@
 const fs=require('node:fs'),path=require('node:path');
 const {DatabaseSync}=require('node:sqlite');
 const json=value=>JSON.stringify(value),parse=value=>JSON.parse(value);
-const SCHEMA=1; // the newest schema this Acira understands; a file with a higher user_version was written by a newer Acira
+/** Schema upgrades after version 1: MIGRATIONS[0] takes a version-1 file to version 2, MIGRATIONS[1] version 2 to 3, and so on, each a function of the open
+ *  DatabaseSync. Before the first step a copy of the file as it is goes to backups/browser-before-v<N>.sqlite (kept, never pruned); each step runs in its
+ *  own transaction, so a step that fails leaves the file at the last version that worked. Adding a table or column later is one entry here. */
+const MIGRATIONS=[];
+const SCHEMA=1+MIGRATIONS.length; // the newest schema this Acira understands; a file with a higher user_version was written by a newer Acira
+/** What went wrong, for database-open.cjs: only a 'damaged' file may be replaced (restored or started fresh). A busy, read-only or full disk is not damage. */
+const NEWER='ACIRA_NEWER_DATA',DAMAGED='ACIRA_DAMAGED_DATA',UPGRADE_FAILED='ACIRA_UPGRADE_FAILED';
+const failure=(code,message)=>Object.assign(new Error(message),{code});
+function kindOf(error){
+ if(error?.code===NEWER||/newer Acira/i.test(String(error?.message)))return 'newer';
+ if(error?.code===UPGRADE_FAILED)return 'upgrade';
+ if(error?.code===DAMAGED||[11,26].includes(Number(error?.errcode)&0xff)||/malformed|not a database|integrity check failed/i.test(String(error?.message)))return 'damaged';
+ return 'other';
+}
+/** A first, read-only look at a file that is already there. A file written by a newer Acira, or a damaged one, is then left exactly as it was, its
+ *  write-ahead log included: a read-write connection that closes folds the log into the file (or drops a log it cannot use), a read-only one never does.
+ *  The -wal/-shm companions the look had to make are removed again when it fails. */
+function inspect(filename,latest){
+ if(!fs.existsSync(filename))return;
+ const had=new Set(['-wal','-shm'].filter(suffix=>fs.existsSync(filename+suffix)));let db=null,fine=false;
+ try{
+  db=new DatabaseSync(filename,{readOnly:true});db.exec('PRAGMA busy_timeout=3000;');
+  if(db.prepare('PRAGMA user_version').get().user_version>latest)throw failure(NEWER,'This profile was created by a newer Acira version.');
+  if(Object.values(db.prepare('PRAGMA quick_check').get())[0]!=='ok')throw failure(DAMAGED,'Browser data integrity check failed. Your data has been preserved.');
+  fine=true;
+ }catch(error){
+  // only a newer or damaged file stops here; anything a read-only look cannot do (roll back a journal left by a crash, make a -shm in a read-only
+  // folder) is left to the ordinary open below, as before
+  if(kindOf(error)==='newer'||kindOf(error)==='damaged')throw error;
+ }finally{try{db?.close();}catch{}if(!fine)for(const suffix of ['-wal','-shm'])if(!had.has(suffix))try{fs.rmSync(filename+suffix,{force:true});}catch{}}
+}
 class BrowserDatabase{
- constructor(filename){
+ constructor(filename,{migrations=MIGRATIONS}={}){
   fs.mkdirSync(path.dirname(filename),{recursive:true});this.filename=filename;
+  inspect(filename,1+migrations.length);
   this.db=new DatabaseSync(filename);
   try {
   this.db.exec('PRAGMA busy_timeout=3000;');
   // the version is read before anything is set: a profile from a newer Acira is left exactly as it was (not even switched to WAL)
-  const version=this.db.prepare('PRAGMA user_version').get().user_version;if(version>SCHEMA){try{this.db.close();}catch{}throw new Error('This profile was created by a newer Acira version.');}
+  const latest=1+migrations.length;let version=this.db.prepare('PRAGMA user_version').get().user_version;if(version>latest){try{this.db.close();}catch{}throw failure(NEWER,'This profile was created by a newer Acira version.');}
   this.db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;');
-  if(version===0)this.transaction(()=>this.db.exec(`
+  const created=version===0;
+  if(created)this.transaction(()=>this.db.exec(`
    CREATE TABLE profiles(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
    CREATE TABLE bookmarks(id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,parent_id TEXT,position INTEGER NOT NULL,payload TEXT NOT NULL);
    CREATE INDEX bookmarks_profile ON bookmarks(profile_id,parent_id,position);
@@ -26,7 +58,12 @@ class BrowserDatabase{
    CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
    PRAGMA user_version=1;
   `));
-  const checked=this.db.prepare('PRAGMA quick_check').get();if(Object.values(checked)[0]!=='ok')throw new Error('Browser data integrity check failed. Your data has been preserved.');
+  if(created)version=1;
+  if(version<latest){
+   // a new profile has nothing to keep; an existing one is copied whole before its first change
+   if(!created)try{const folder=path.join(path.dirname(filename),'backups');fs.mkdirSync(folder,{recursive:true,mode:0o700});const target=path.join(folder,'browser-before-v'+latest+'.sqlite');if(!fs.existsSync(target)){this.backup(target);try{fs.chmodSync(target,0o600);}catch{}}}catch(error){throw failure(UPGRADE_FAILED,'Your saved data could not be copied before it was updated, so it was left as it was ('+error.message+').');}
+   for(let at=version;at<latest;at++){try{this.transaction(()=>{migrations[at-1](this.db);this.db.exec('PRAGMA user_version='+(at+1));});}catch(error){throw failure(UPGRADE_FAILED,'Your saved data could not be updated to version '+(at+1)+' ('+error.message+'). It is still at version '+at+'.');}}
+  }
   } catch (error) {
    // Windows cannot move a damaged database aside while the failed open still owns its handle.
    try { this.db.close(); } catch {}
@@ -69,4 +106,4 @@ class BrowserDatabase{
  backup(target=this.filename+'.bak'){this.db.exec('PRAGMA wal_checkpoint(FULL)');fs.rmSync(target+'.next',{force:true});this.db.exec(`VACUUM INTO '${target.replaceAll("'","''")}.next'`);fs.renameSync(target+'.next',target);}
  close(){this.db.close();}
 }
-module.exports={BrowserDatabase,SCHEMA};
+module.exports={BrowserDatabase,SCHEMA,MIGRATIONS,kindOf,NEWER,DAMAGED,UPGRADE_FAILED};

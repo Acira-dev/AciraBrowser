@@ -9,7 +9,8 @@ import { restoreSidebarApp } from '../ui/sidebarApps';
 import { appearanceChanged, startModeTransition } from '../ui/sharedMotion';
 import { opensOrClosesSidebar,sidebarLayoutChanged } from '../ui/layoutMode';
 import { chromeLayoutChanged } from '../ui/chromeLayout';
-import { currentLocale,translateText } from '../i18n';
+import { currentLocale,saidAs,translateText } from '../i18n';
+import { withMessageIds } from '../i18n/said';
 declare global{interface Window{acira?:BrowserRuntime;__acira?:{getState():BrowserSnapshot;dispatch(action:BrowserAction):void}}}
 const native=window.acira;
 let state=createInitialState();
@@ -36,7 +37,11 @@ let modeUpdatePending=false;
 // A view transition runs its update on the next frame it renders. A window that renders none (covered, throttled, a stalled
 // GPU) must still switch, and must not hold later snapshots: the update also runs after 150ms, once either way (G, Round 2).
 const MODE_UPDATE_MS=150;
-const modeSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace')=>{let done=false;const run=()=>{if(done)return;done=true;modeUpdatePending=false;update();};modeUpdatePending=true;if(kind==='workspace')startWorkspaceTransition(run);else startModeTransition(run,kind);if(!done)setTimeout(run,MODE_UPDATE_MS);};
+// The update a mode switch is still holding for its view transition. A newer switch runs it first, so an older update never lands
+// after a newer one: two clicks on the space pills within a frame (each switch is optimistic) showed the second space, then the
+// first again when its transition's update ran, until main's snapshot came.
+let heldModeUpdate:(()=>void)|null=null;
+const modeSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace')=>{heldModeUpdate?.();let done=false;const run=()=>{if(done)return;done=true;if(heldModeUpdate===run)heldModeUpdate=null;modeUpdatePending=false;update();};heldModeUpdate=run;modeUpdatePending=true;if(kind==='workspace')startWorkspaceTransition(run);else startModeTransition(run,kind);if(!done)setTimeout(run,MODE_UPDATE_MS);};
 const OPTIMISTIC=new Set<string>(['tab.select','tab.new','tab.close','workspace.select','split.resize']);
 /** The tab main most recently said is active. A snapshot is painted a frame later (a window that draws no frames, up to 100 ms), so a
  * key that arrives in between (Ctrl+T, then Ctrl+L and typing at once) is meant for this tab while the chrome still shows the last one. */
@@ -70,7 +75,7 @@ export function useBrowser(){
    }
    if(!pending||next.revision>=pending.revision)pending=next;if(!frame){frame=requestAnimationFrame(flush);timer=setTimeout(flush,100);}};
   const unsubscribe=runtime.subscribe(receive);void runtime.getSnapshot().then(full=>apply(complete(full)));return()=>{unsubscribe();cancelAnimationFrame(frame);clearTimeout(timer);};},[]);
- const dispatch=(action:BrowserAction)=>{if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
+ const dispatch=(action:BrowserAction)=>{/* A toast written in the language on screen goes with its message id, so a language change shows it in the new one. */if(action.type==='toast')action=withMessageIds(action,saidAs);if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
   // Undo of a removed favorite: it comes back with the live tab it had handed to the tab list, if that tab is still open and unclaimed.
   if(action.type==='favorite.restore'){restoreSidebarApp(action.token,(appId,tabIds)=>{const tab=latest.current.tabs.find(tab=>tabIds.includes(tab.id)&&!tab.favoriteId);if(tab)dispatch({type:'tab.favorite',id:tab.id,favoriteId:appId});});return;}
   // Opening or closing the sidebar shows on the input frame (G, Round 2); main's snapshot confirms it a frame later.

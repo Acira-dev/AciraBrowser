@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>how do solar panels work at DuckDuckGo</title>
+<!-- DuckDuckGo's results layout as read live on 3 Nov 2026 (desktop width, text replaced by filler): the results list starts 100px in and each result's own
+     content 10px further. Inside each result the first links in the DOM belong to its "…" menu, an invisible dropdown placed 488px to the right; then the site icon,
+     the address and the title link (h2 a). The Search Assist answer is the first list item. With ?ghost=<kind> the first result is a slot that is not really
+     on screen, whose title link must not count as the results column: opacity (transparent, 488px to the right), offcanvas (left:-10000px), clip (clip-path
+     inset(50%)), sronly (a 1px screen-reader-only box clipped to nothing) or transform (moved 3000px off the left edge). For tests/privacy-plus-ai-early.test.cjs (where the line starts). -->
+<style>
+ body{margin:0;font:14px/20px Arial,sans-serif;color:#222;background:#fff}
+ #header{height:100px;padding-left:100px}
+ section[data-testid="mainline"]{width:672px;margin-left:100px}
+ section[data-testid="mainline"]>ol{list-style:none;margin:0;padding:0}
+ .assist{background:#f6f6f6;border-radius:12px;padding:16px;margin:8px 0}
+ article{position:relative;padding:12px 10px}
+ .menu{position:absolute;left:488px;top:24px;width:180px;opacity:0;pointer-events:none}
+ .menu a{display:block;height:21px}
+ .extras{display:flex;gap:8px;align-items:center}
+ .fav{display:block;width:32px;height:32px;border-radius:50%;background:#eee}
+ h2{font:400 20px/26px Arial,sans-serif;margin:4px 0}
+ .ghost{position:relative;height:0} .ghost article{position:absolute;top:0}
+</style></head><body>
+<div id="header"><form><input name="q" value="how do solar panels work"></form></div>
+<section data-testid="mainline"><ol class="react-results--main">
+<li><div class="assist"><button data-assist-icon-trigger aria-hidden="true"><span>Search Assist</span></button><p>Solar panels turn sunlight into electricity through the photovoltaic effect.</p></div></li>
+<script>{ const kind = (/[?&]ghost=([a-z]+)/.exec(location.search) || [])[1], css = {opacity: 'left:488px;width:180px;opacity:0', offcanvas: 'left:-10000px;width:180px', clip: 'left:488px;width:180px;clip-path:inset(50%)', sronly: 'left:488px;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap', transform: 'left:488px;width:180px;transform:translateX(-3000px)'}[kind];
+ if (css) document.currentScript.insertAdjacentHTML('afterend', '<li class="ghost"><article data-testid="result" class="slot" style="' + css + '"><h2><a href="https://slot.example/">Sponsored slot</a></h2></article></li>'); }</script>
+<li><article data-testid="result"><div class="menu"><a href="/?q=site1">Search this site</a><a href="/?q=block1">Block this site</a><a href="/?q=report1">Report</a></div><div class="extras"><a class="fav" data-testid="result-extras-site-search-link" href="/?q=site1"></a><a data-testid="result-extras-url-link" href="https://site1.example/">https://site1.example › solar</a></div><h2><a data-testid="result-title-a" href="https://site1.example/">Organic result 1</a></h2><p>Snippet 1</p></article></li>
+<li><article data-testid="result"><div class="menu"><a href="/?q=site2">Search this site</a><a href="/?q=block2">Block this site</a></div><div class="extras"><a class="fav" data-testid="result-extras-site-search-link" href="/?q=site2"></a><a data-testid="result-extras-url-link" href="https://site2.example/">https://site2.example › solar</a></div><h2><a data-testid="result-title-a" href="https://site2.example/">Organic result 2</a></h2><p>Snippet 2</p></article></li>
+<li><article data-testid="result"><div class="menu"><a href="/?q=site3">Search this site</a></div><div class="extras"><a class="fav" data-testid="result-extras-site-search-link" href="/?q=site3"></a><a data-testid="result-extras-url-link" href="https://site3.example/">https://site3.example › solar</a></div><h2><a data-testid="result-title-a" href="https://site3.example/">Organic result 3</a></h2><p>Snippet 3</p></article></li>
+</ol></section></body></html>

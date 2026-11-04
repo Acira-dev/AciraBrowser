@@ -8,6 +8,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {EventEmitter} = require('node:events');
+// The usual rig environment puts the engine in test mode (no Save dialog, a test download folder): these tests drive the real flow.
+delete process.env.ACIRA_BROWSER_TEST_DATA; delete process.env.ACIRA_BROWSER_TEST_DOWNLOAD_DIR;
 const {createDownloads} = require('../desktop/browser-services/download-engine.cjs');
 const {createAppHost} = require('../desktop/browser-services/ext-api/downloads/app-host.cjs');
 const hostModule = require('../desktop/browser-services/ext-api/downloads/host.cjs');
@@ -132,8 +134,14 @@ test('saveAs shows the Save dialog with a default path; cancelling it cancels th
     const item = new Item('https://example.com/s2.bin', {name: 's2.bin'});
     await g.willDownload(item);
     await started;
-    assert.equal(item.saved, path.join(g.folder, 's2.bin'));
+    /* Electron reads the path when the handler returns, long before the answer: the file is parked in staging and lands on the answer when it finishes. */
+    assert.equal(g.records[0].path, path.join(g.folder, 's2.bin'));
+    assert.match(item.saved, /download-staging/);
     assert.equal(g.records[0].status, 'Downloading');
+    item.finish('chosen');
+    for (let i = 0; i < 50 && g.records[0].status !== 'Ready'; i++) await tick();
+    assert.equal(fs.readFileSync(path.join(g.folder, 's2.bin'), 'utf8'), 'chosen');
+    assert.equal(g.records[0].path, path.join(g.folder, 's2.bin'));
   } finally { g.cleanup(); }
 });
 

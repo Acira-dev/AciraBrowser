@@ -32,8 +32,12 @@
 ; Defining customCheckAppRunning replaces the stock include of these, so bring them in here.
 !include "getProcessInfo.nsh"
 Var pid
-!ifndef BUILD_UNINSTALLER
+; Setup and uninstaller are both DPI aware for the sign-in scale: each picks its 100, 150 or 200% picture from it (AcStyleBanner,
+; customUnInit), so the uninstall splash is always the size of the setup window, and Windows draws the message boxes sharp and full size.
+; (beta.9 and earlier: the uninstaller was not DPI aware, so Windows stretched its 100% splash by the exact scale, smaller than the setup
+; window at 125% and 175%.)
 ManifestDPIAware true
+!ifndef BUILD_UNINSTALLER
 Var acTheme
 Var acScale
 Var acWnd
@@ -215,6 +219,8 @@ FunctionEnd
     IfSilent acNoBanner
     Call AcStyleBanner
     acNoBanner:
+    ; before electron-builder runs the old version's uninstaller (uninstallOldVersion comes right after this check)
+    Call AcDropBadUninstaller
   !endif
   !insertmacro IS_POWERSHELL_AVAILABLE
   !insertmacro _CHECK_APP_RUNNING
@@ -267,6 +273,9 @@ FunctionEnd
 ; the ordinary way first (its session comes back). See AciraChoose.cs. Silent runs (the updater) never ask; /preview never gets here.
 Function AcAskExisting
   IfSilent acAskDone
+  ; Install now on Acira beta.8 and earlier runs this setup with --updated and without /S: the person already chose, so no second question
+  Call AcUpdaterRun
+  IfErrors 0 acAskDone
   IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acAskDone
   Push $0
   Push $1
@@ -322,6 +331,121 @@ Function AcAskExisting
 FunctionEnd
 !endif
 
+; --- Updates that never stop behind a window (the co-founder's e493a626, ea5ea64b, b34487a1 and ea4a851d, on this installer) -----------------------
+!ifndef BUILD_UNINSTALLER
+!include "FileFunc.nsh"
+; electron-builder defines UNINSTALL_FILENAME and UNINSTALL_REGISTRY_KEY after this file is read (common.nsh, multiUser.nsh), so the Functions here
+; name them themselves, the same way, from the defines it passes on the command line.
+!define AC_OLD_UNINSTALLER "Uninstall ${PRODUCT_FILENAME}.exe"
+!define AC_OLD_UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}"
+
+; Clears the error flag when Acira's updater started this setup (--updated: Install now, and the update when Acira quits), sets it otherwise.
+Function AcUpdaterRun
+  Push $R0
+  Push $R1
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "--updated" $R1
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+; 1 on the stack when the file is a Windows program (at least 64 KB, an MZ header, a PE header where it points) or cannot be read (nothing is
+; deleted on a guess); 0 when it is cut short, zero bytes or damaged. Bytes only: FileReadWord needs a Unicode build.
+Function AcExeOk
+  Exch $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  StrCpy $3 1
+  ClearErrors
+  FileOpen $1 "$0" r
+  ${IfNot} ${Errors}
+    StrCpy $3 0
+    FileSeek $1 0 END $4
+    ${If} $4 >= 65536
+      FileSeek $1 0 SET
+      FileReadByte $1 $0
+      FileReadByte $1 $2
+      ${If} $0 = 77
+      ${AndIf} $2 = 90
+        FileSeek $1 60 SET
+        FileReadByte $1 $2
+        FileReadByte $1 $0
+        IntOp $0 $0 * 256
+        IntOp $2 $2 + $0
+        ${If} $2 > 0
+        ${AndIf} $2 < $4
+          FileSeek $1 $2 SET
+          FileReadByte $1 $0
+          FileReadByte $1 $2
+          ${If} $0 = 80
+          ${AndIf} $2 = 69
+            StrCpy $3 1
+          ${EndIf}
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    FileClose $1
+  ${EndIf}
+  ClearErrors
+  StrCpy $0 $3
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
+; The setup runs the old version's removers next: AciraRemove.exe (the registry's UninstallString), which hands a silent run to the real
+; "Uninstall *.exe" and waits for it. One that is cut short, zero bytes or damaged (a broken download, antivirus) makes Windows show "Unsupported
+; 16-Bit Application", which no silent run can answer: the update hung for good. A launcher whose real uninstaller is gone answers 2 five times and
+; the setup ends in "Failed to uninstall old application files". Either way the damaged file goes and the registry no longer points at a remover,
+; so the new version installs over the old one (settings and data untouched; the new version writes both removers again).
+Function AcDropBadUninstaller
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $1 0
+  ${If} ${FileExists} "$INSTDIR\AciraRemove.exe"
+    Push "$INSTDIR\AciraRemove.exe"
+    Call AcExeOk
+    Pop $0
+    ${If} $0 = 0
+      StrCpy $1 1
+      Delete "$INSTDIR\AciraRemove.exe"
+    ${EndIf}
+  ${EndIf}
+  ; the real uninstaller, found the way AciraRemove.exe finds it (the first "Uninstall *.exe"; older builds were named differently)
+  ClearErrors
+  FindFirst $0 $2 "$INSTDIR\Uninstall*.exe"
+  FindClose $0
+  ClearErrors
+  ${If} $2 != ""
+    Push "$INSTDIR\$2"
+    Call AcExeOk
+    Pop $0
+    ${If} $0 = 0
+      StrCpy $1 1
+      Delete "$INSTDIR\$2"
+      StrCpy $2 ""
+    ${EndIf}
+  ${EndIf}
+  ${If} ${FileExists} "$INSTDIR\AciraRemove.exe"
+  ${AndIf} $2 == ""
+    StrCpy $1 1
+  ${EndIf}
+  ${If} $1 = 1
+    DeleteRegValue SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "UninstallString"
+    DeleteRegValue SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "QuietUninstallString"
+  ${EndIf}
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+!endif
+
 ; Acira-owned per-user capabilities only. Windows chooses defaults through its UI.
 !macro customInstall
   !ifndef BUILD_UNINSTALLER
@@ -369,7 +493,26 @@ FunctionEnd
     ${EndIf}
     ${If} $R3 == "en"
       InitPluginsDir
-      File "/oname=$PLUGINSDIR\ac-un-dark.bmp" "${BUILD_RESOURCES_DIR}\installer\uninstall-dark-100.bmp"
+      ; the same picture size as the setup window on this screen: AcStyleBanner's choice (125% and up -> 150, 175% and up -> 200)
+      Push $R5
+      Push $R6
+      System::Call 'user32::GetDC(p 0) p .R6'
+      System::Call 'gdi32::GetDeviceCaps(p R6, i 88) i .R5'
+      System::Call 'user32::ReleaseDC(p 0, p R6)'
+      ${If} $R5 < 96
+        StrCpy $R5 96
+      ${EndIf}
+      IntOp $R5 $R5 * 100
+      IntOp $R5 $R5 / 96
+      ${If} $R5 >= 175
+        File "/oname=$PLUGINSDIR\ac-un-dark.bmp" "${BUILD_RESOURCES_DIR}\installer\uninstall-dark-200.bmp"
+      ${ElseIf} $R5 >= 125
+        File "/oname=$PLUGINSDIR\ac-un-dark.bmp" "${BUILD_RESOURCES_DIR}\installer\uninstall-dark-150.bmp"
+      ${Else}
+        File "/oname=$PLUGINSDIR\ac-un-dark.bmp" "${BUILD_RESOURCES_DIR}\installer\uninstall-dark-100.bmp"
+      ${EndIf}
+      Pop $R6
+      Pop $R5
       StrCpy $R2 "ac-un-dark"
       advsplash::show 1600 200 300 -1 "$PLUGINSDIR\$R2"
       Pop $R1
@@ -561,3 +704,38 @@ FunctionEnd
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   ${EndIf}
 !macroend
+
+!ifndef BUILD_UNINSTALLER
+; electron-builder's handleUninstallResult shows a plain OK box ("Failed to uninstall old application files", no silent default) when the old
+; version's files could not be removed (a locked file, antivirus). Only a person who started setup themselves gets it. The updater's runs (/S, and
+; --updated without /S from Install now on beta.8 and earlier) leave with exit code 2; the old version is untouched (its uninstaller removes
+; atomically). Install now (--force-run) opens that old version again, so nobody is left with a closed browser; its updater still holds the
+; download. Labels come from LogicLib: the macro is inserted for both registry roots.
+!macro customUnInstallCheck
+  ${IfNot} ${Errors}
+  ${AndIf} $R0 != 0
+    DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    Push $R1
+    Push $R2
+    ${GetParameters} $R1
+    ClearErrors
+    ${GetOptions} $R1 "--updated" $R2
+    ${If} ${Errors}
+    ${AndIfNot} ${Silent}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
+    ${EndIf}
+    ClearErrors
+    ${GetOptions} $R1 "--force-run" $R2
+    ${IfNot} ${Errors}
+      Exec '"$INSTDIR\${AC_APP_EXE}"'
+    ${EndIf}
+    Pop $R2
+    Pop $R1
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+!macroend
+!macro customUnInstallCheckCurrentUser
+  !insertmacro customUnInstallCheck
+!macroend
+!endif

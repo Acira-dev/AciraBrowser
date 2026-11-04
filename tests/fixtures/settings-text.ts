@@ -33,6 +33,8 @@ Object.assign(globalThis, {
   document: { documentElement: element(), body: element(), createElement: element, querySelector: () => null, querySelectorAll: () => [], addEventListener: noop, removeEventListener: noop, visibilityState: 'visible', fonts: { ready: Promise.resolve() } },
 });
 Object.assign(globalThis, { window: Object.assign(globalThis, { addEventListener: noop, removeEventListener: noop, dispatchEvent: noop, location: { search: '', href: 'acira-browser-ui://ui/index.html' } }) });
+// The platform Settings is drawn for (tests/passkey-setting.test.cjs): navigator.platform as a Mac, Windows or Linux browser reports it.
+if (process.env.ACIRA_TEST_NAVIGATOR_PLATFORM) Object.defineProperty(globalThis.navigator, 'platform', { value: process.env.ACIRA_TEST_NAVIGATOR_PLATFORM, configurable: true });
 // Server rendering refuses a store without a server snapshot; here the client snapshot is the server's.
 const require = createRequire(import.meta.url);
 const React = require('react');

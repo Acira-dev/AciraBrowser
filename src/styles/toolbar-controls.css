@@ -122,7 +122,7 @@
    so the toggle keeps its place next to the menu in both states. */
 .app.style-acira .browser-shell.acira-shell .acira-focus-row:not(:has(>.acira-compact-tabs))>.titlebar-drag{flex:1 1 12px}
 .app.style-acira .browser-shell.acira-shell .focus-actions>:is(.icon-button,.profile-button){width:28px;min-width:28px;flex:0 0 28px}
-.app.style-acira .browser-shell.acira-shell :is(.focus-actions,.toolbar-actions)>.toolbar-optional-profile{order:-1}
+.app.style-acira .browser-shell.acira-shell .focus-actions>.toolbar-optional-profile{order:-1}
 .app.style-acira .browser-shell.acira-shell .focus-actions{margin-right:6px}
 /* UF-042: in sidebar-only tabs the sidebar toggle joins the navigation group on the single top row. */
 .app.style-acira .browser-shell.acira-shell .expanded-navigation:not([hidden]){display:flex;align-items:center;gap:6px}
@@ -208,8 +208,9 @@
    gradient, clear to full at the right edge where its glyph sits (a little more on hover), and when active it is the normal
    selected tab plus a gentle wash and a 1px ring in its mark colour. The glyph, F's mask or N's onion, takes the icon's place on
    the new-tab state and otherwise sits at the end of the row, in the close button's slot: hovering the tab swaps it for the
-   close x; on the active tab both show, side by side. Title ink stays the strip's ink: at least 4.5:1 on every wash. */
-.app.style-acira{--private-mark:#0c746f;--private-wash:#119a93;--tor-mark:#6a3f86;--tor-wash:#8a4cb8;--private-rest:30%;--private-hover:40%;--private-current:14%;--private-ring:62%;--tor-rest:32%;--tor-hover:37%;--tor-current:14%;--tor-ring:62%;--tor-field:24%}
+   close x; on the active tab both show, side by side. Title ink stays the strip's ink: at least 4.5:1 on every wash. The
+   --*-card-mark pair keeps the light-frame mark for a light card on a dark frame (tab-ink.css). */
+.app.style-acira{--private-mark:#0c746f;--private-card-mark:#0c746f;--private-wash:#119a93;--tor-mark:#6a3f86;--tor-card-mark:#6a3f86;--tor-wash:#8a4cb8;--private-rest:30%;--private-hover:40%;--private-current:14%;--private-ring:62%;--tor-rest:32%;--tor-hover:37%;--tor-current:14%;--tor-ring:62%;--tor-field:24%}
 .app.style-acira[data-chrome=dark]{--private-mark:#7ee3da;--private-wash:#1fb3a9;--tor-mark:#dcc7f6;--tor-wash:#a26ad8;--private-rest:38%;--private-hover:48%;--private-current:18%;--tor-rest:40%;--tor-hover:50%;--tor-current:18%;--tor-field:30%}
 .app :is(.browser-tab,.tab-strip-selection,.acira-compact-tab,.acira-compact-selection)[data-privacy=private]{--tab-mark:var(--private-mark);--tab-wash:var(--private-wash);--mark-rest:var(--private-rest);--mark-hover:var(--private-hover);--mark-current:var(--private-current);--mark-ring:var(--private-ring)}
 .app :is(.browser-tab,.tab-strip-selection,.acira-compact-tab,.acira-compact-selection)[data-privacy=tor]{--tab-mark:var(--tor-mark);--tab-wash:var(--tor-wash);--mark-rest:var(--tor-rest);--mark-hover:var(--tor-hover);--mark-current:var(--tor-current);--mark-ring:var(--tor-ring)}
@@ -232,8 +233,9 @@
 .app .acira-compact-tab.selected[data-privacy][data-labels=true] .acira-compact-tab-inner>.tab-privacy-mark{margin-right:-16px;transform:translateX(calc((20px - 16px) / 2));transition:opacity 90ms cubic-bezier(.2,0,0,1)}
 .app .acira-compact-tab.selected[data-privacy]:is(:hover,:focus-within) .acira-compact-tab-inner>.tab-privacy-mark{opacity:0}
 /* Icon-only tabs (pinned, crowded, or the compact strip without titles) have no room for the trailing mark, so it
-   becomes a 12px badge on the favicon's lower right corner, filled with the tab's colour. */
-.app.style-acira{--mark-on:#fff}
+   becomes a 12px badge on the favicon's lower right corner, filled with the tab's colour. --card-mark-on keeps the light frame's
+   glyph for the deep marks a light card on a dark frame wears (tab-ink.css). */
+.app.style-acira{--mark-on:#fff;--card-mark-on:#fff}
 .app.style-acira[data-chrome=dark]{--mark-on:#17161f}
 .app .tab-strip-container .browser-tab[data-icon-only=true][data-privacy],.app .acira-compact-tab-icon{position:relative}
 .app .tab-strip-container .browser-tab[data-icon-only=true]>.tab-privacy-mark:not(.tab-privacy-icon){position:absolute;left:calc(50% + 2px);top:calc(50% + 1px);width:12px;height:12px;border-radius:50%;background:var(--tab-mark);color:var(--mark-on)}
@@ -311,6 +313,15 @@
 .app.style-acira .tab-strip-container .tab-strip-selection:not([data-privacy]){background:var(--tab-surface);box-shadow:var(--tab-lift-active)}
 .app.style-acira .tab-strip-container .tabs-strip>.browser-tab:not(.selected){color:color-mix(in srgb,var(--frame-text) 80%,transparent)}
 .app.style-acira .tab-strip-container .tabs-strip>.browser-tab.selected{color:var(--frame-text)}
+/* On Porcelain a group's tab count is the strip's quiet ink too: --group-count is tuned on the flat frame colour, and on the glass
+   Porcelain is drawn over it read just under 4.5:1 over a dark desktop (beta.10). Every other finish measured above and keeps its count
+   ink, and Increase Contrast keeps the full ink TabGroups.css gives it. */
+@media not (prefers-contrast:more){.app.style-acira[data-finish=Porcelain]:not([data-chrome=dark]) .tab-strip-container .tabs-strip>.tab-group-header .tab-group-label>small{color:color-mix(in srgb,var(--frame-text) 80%,transparent)}}
+/* A narrow current tab floats its × over the title's end on a patch (BrowserTabs.css). The patch is that tab's own paint, the active
+   surface on the recessed strip, so the × keeps the ink around it: the light-card token it used drew a white square holding a white ×
+   on deep finishes in light mode (founder, beta.10). A carried or settling tab is a light card (selection.css) and keeps that token. */
+.app.style-acira .tab-strip-container .tabs-strip>.browser-tab.selected:not([data-drag-surface]){--tab-close-patch:linear-gradient(var(--tab-surface),var(--tab-surface)),linear-gradient(var(--tab-strip-recess),var(--tab-strip-recess)),var(--frame)}
+.app.style-acira .tab-strip-container .tabs-strip>.browser-tab.selected[data-privacy]:not([data-drag-surface]){--tab-close-patch:linear-gradient(color-mix(in srgb,var(--tab-wash) var(--mark-current),transparent),color-mix(in srgb,var(--tab-wash) var(--mark-current),transparent)),linear-gradient(var(--tab-surface),var(--tab-surface)),linear-gradient(var(--tab-strip-recess),var(--tab-strip-recess)),var(--frame)}
 
 /* Scam-page caution (ClickFix, look-alike sign-in): a red ring on the tab; the tooltip says what Acira saw. */
 .app :is(.browser-tab,.sb-tab)[data-risk]{outline:1.5px solid color-mix(in srgb,var(--danger,#d93025) 78%,transparent);outline-offset:-1.5px}

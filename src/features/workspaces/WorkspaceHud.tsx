@@ -21,6 +21,9 @@ export const hudText = (state: BrowserSnapshot): string | undefined => {
   const open = windowWorkspaces(state).find(item => item.id === state.activeWorkspaceId);
   return open ? t(profilesAsSpaces(state) ? 'workspaces.spaceHud' : 'workspaces.hud', { name: nameIn(state, open), count: state.tabs.length }) : undefined;
 };
+/** The region names the place on screen and nothing else. A change it does not announce itself (the profile or workspace on screen
+ *  removed, a switch the pill announces) empties it: a screen reader could otherwise still read "Work, 1 tab" after Work was removed. */
+export const keptAnnouncement = (said: string, before: WindowPlace | null, now: WindowPlace): string => before && before.id !== now.id ? '' : said;
 /** Toasts that already say where things went (create, delete, its Undo): the HUD stays quiet for them. */
 const SPOKEN = new Set(['workspaces.created', 'workspaces.createdAll', 'runtime.workspaceDeleted']);
 
@@ -34,6 +37,7 @@ export function WorkspaceSwitchFeedback({ state, dispatch }: { state: BrowserSna
   const last = useRef<WindowPlace | null>(null), [said, setSaid] = useState('');
   useEffect(() => {
     const before = last.current, now = { id: state.activeWorkspaceId, profile: state.activeBrowserProfileId };
+    setSaid(said => keptAnnouncement(said, before, now));
     last.current = now;
     if (!switchSpoken(state, before, now)) return;
     const text = hudText(state);

@@ -5,19 +5,17 @@ import { DownloadLine } from '../components/DownloadLine';
 import { DownloadMatrix } from '../components/DownloadsGlyph';
 import { isLiveDownload, profileDownloads } from '../ui/downloadActivity';
 import { FolderOpen, Pause, Play, RotateCw, X } from '../components/AppIcons';
-import { currentLocale, t, useT, type MessageId } from '../i18n';
+import { currentLocale, t, useT } from '../i18n';
 import { TorDownloadNotice } from './tor/TorDownloadNotice';
 import { FileGlyph, LibraryEmpty, LibraryPage, LibrarySection, MiddleName, dayOf } from './Library';
+import { bytes, sizeOf, statusText } from './downloadText';
 
-export const bytes = (value: number) => value >= 1e9 ? `${(value / 1e9).toFixed(1)} GB` : value >= 1e6 ? `${Math.round(value / 1e6)} MB` : `${Math.max(1, Math.round(value / 1e3))} KB`;
-/** Finished downloads keep their size as the native side wrote it ("3072 / 3072 KB"); show the total. */
-export const sizeOf = (item: BrowserDownload) => item.totalBytes && item.totalBytes > 0 ? bytes(item.totalBytes) : item.size.includes('/') ? item.size.split('/').pop()!.trim() : item.size;
+export { bytes, sizeOf, statusText } from './downloadText';
 export const rate = (value?: number) => value && value > 0 ? `${bytes(value)}/s` : '';
 export const left = (seconds?: number) => !seconds || seconds <= 0 ? '' : seconds < 60 ? t('dl.secLeft', { count: Math.max(1, Math.round(seconds)) }) : seconds < 3600 ? t('dl.minLeft', { count: Math.round(seconds / 60) }) : t('dl.hourLeft', { count: Math.round(seconds / 3600) });
 export type DownloadCommand = Extract<ServiceRequest, { type: 'downloads.command' }>['command'];
 const timeFormat = () => new Intl.DateTimeFormat(currentLocale(), { hour: 'numeric', minute: '2-digit' });
 const live = isLiveDownload;
-export const statusText = (status: string) => { const id = `dl.status.${status}` as MessageId; const text = t(id); return text === id ? status : text; };
 
 /** This profile's downloads (with what the native side knows about each) and the commands that act on them. */
 export function useDownloads(state: BrowserSnapshot, query: string, hideReady: boolean) {

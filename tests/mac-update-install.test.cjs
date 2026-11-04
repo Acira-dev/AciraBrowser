@@ -43,7 +43,7 @@ test('Windows keeps looking while an update waits: a newer one replaces it (Nsis
 test('main.cjs starts the quit when Install now begins (before-quit-for-update), exactly as before-quit does',()=>{
  const main=fs.readFileSync(path.join(__dirname,'..','desktop','main.cjs'),'utf8');
  const begin=main.match(/const beginQuit=\(\)=>\{([^\n]*)\};\n/);assert(begin,'one function for both');
- assert.match(begin[1],/^openWindows\.begin\(\);/,'the windows that close from here are part of the next start');
+ assert.match(begin[1],/^closeSplash\(\);openWindows\.begin\(\);/,'the splash first (splash-quit.test.cjs); the windows that close from here are part of the next start');
  assert.match(begin[1],/closeGuard\.noteQuit\(\);/,'no "Close Acira?" for a quit that was already decided');
  assert.match(begin[1],/for\(const controller of controllers\)controller\.save\(\);/);
  assert.match(main,/app\.on\('before-quit',beginQuit\);/);

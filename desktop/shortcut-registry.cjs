@@ -99,7 +99,8 @@ const COMMANDS=[
  C('routines','Tab sets','Library',{action:'routines'}),
  C('run-routine','Open a tab set…','Library',{action:'routines',choose:true}),
  C('downloads','Downloads','Library',{action:'downloads'},['Mod+J'],['Mod+Shift+J','Mod+J']),
- C('clear-data','Clear browsing data','Library',{action:'clear-data'},['Mod+Shift+Delete']),
+ // A Mac's delete key is Backspace (⌫): the stock Mac key is that one, so the key shown is a key every Mac keyboard has (the resolver also takes ⌦).
+ C('clear-data','Clear browsing data','Library',{action:'clear-data'},['Mod+Shift+Delete'],['Mod+Shift+Backspace']),
  C('settings','Settings','Browser',{action:'settings'},['Mod+,']),
  C('menu','Open menu','Browser',{action:'menu'},['Alt+F','Alt+E'],[]),
  C('focus-toolbar','Focus the toolbar','Browser',{action:'focus-toolbar'},['Alt+Shift+T','F10'],['F10']),
@@ -138,7 +139,8 @@ function accelFromInput(input,platform,keyOf){
  return [...mods,key].join('+');
 }
 const expand=(accel,platform)=>canonical(accel,platform);
-const display=(accel,platform)=>accel.split('+').map(part=>platform==='darwin'?({Ctrl:'⌃',Alt:'⌥',Shift:'⇧',Cmd:'⌘'}[part]||part):part).join(platform==='darwin'?'':' + ');
+// On a Mac the delete key (Backspace) is ⌫ and forward delete (fn+delete) is ⌦, as macOS menus print them.
+const display=(accel,platform)=>accel.split('+').map(part=>platform==='darwin'?({Ctrl:'⌃',Alt:'⌥',Shift:'⇧',Cmd:'⌘',Backspace:'⌫',Delete:'⌦'}[part]||part):part).join(platform==='darwin'?'':' + ');
 
 const RESERVED_COMBOS=new Set(['Ctrl+C','Ctrl+V','Ctrl+X','Ctrl+A','Ctrl+Z','Ctrl+Y','Ctrl+Shift+Z','Ctrl+Insert','Shift+Insert','Shift+Delete','Alt+Tab','Alt+Shift+Tab','Ctrl+Alt+Tab','Alt+F4','Alt+Esc','Alt+Space','Alt+Enter','Ctrl+Alt+Delete','Ctrl+Esc','Cmd+C','Cmd+V','Cmd+X','Cmd+A','Cmd+Z','Cmd+Shift+Z','Cmd+Q','Cmd+H','Cmd+M','Cmd+Tab','Cmd+Space']);
 /** Returns null when an accelerator may be assigned, otherwise {code,message}. */
@@ -190,7 +192,8 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
  }
  function load(){
   if(!file)return;
-  try{const stat=fs.statSync(file);if(stat.size>64*1024)return;custom=validateTable(JSON.parse(fs.readFileSync(file,'utf8')).bindings);}catch{custom=new Map();}
+  // a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile)
+  try{custom=validateTable(require('./atomic-file.cjs').readJsonFile(file,{maxBytes:64*1024}).bindings);}catch{custom=new Map();}
  }
  function conflictFor(accel,id){const owner=effective().get(accel);return owner&&owner!==id?BY_ID.get(owner):null;}
 

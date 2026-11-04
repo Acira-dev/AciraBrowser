@@ -149,6 +149,8 @@
 .nt-credit-text:focus-visible { outline: 2px solid var(--nt-ring); }
 .nt-credit-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11px/15px var(--font-ui, 'Inter', sans-serif); color: var(--nt-text-2); }
 .nt-credit-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px/15px var(--font-ui, 'Inter', 'Segoe UI', sans-serif); font-variant-numeric: tabular-nums; color: var(--nt-text-3); }
+/* Each caption line takes its direction from its words (dir="auto"); an English line in a right-to-left interface stays on the right. */
+html[dir='rtl'] :is(.nt-credit-title, .nt-credit-meta) { text-align: right; }
 .app.style-acira .nt-page .nt-change { flex: none; height: var(--control-compact, 24px); padding: 0 8px; border: 0; border-radius: var(--radius-control, 4px); background: transparent; box-shadow: none; color: var(--nt-text-2); font: 500 var(--text-12, 12px) / 16px var(--font-ui, 'Inter', sans-serif); transition: background-color 120ms var(--nt-ease), color 120ms var(--nt-ease); }
 .app.style-acira .nt-page .nt-change:hover { background: var(--nt-hover); color: var(--text-primary); }
 .app.style-acira .nt-page .nt-change:active { background: var(--nt-press); color: var(--text-primary); }

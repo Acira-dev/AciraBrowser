@@ -31,10 +31,12 @@ import { installRowSelectionGuard } from '../../ui/rowSelectionGuard';
 installRowSelectionGuard();
 import type { BookmarkNode,BrowserAction,BrowserDownload,BrowserSnapshot,HistoryVisit,TabGroup,TabSession } from '../../runtime/types';
 import { pageKey } from '../../features/libraryModel';
+import { sidebarNote } from '../../features/downloadText';
 import { useNewTabPreferences } from '../../ui/newTabPreferences';
 import { classScale,frequentStretch,motionSpeed,stripEase,stripMs,useListMotion } from '../../ui/sharedMotion';
 import { bookmarkContext,openPage,savedPageIdentity } from '../../ui/pageActions';
 import { openRailSection,setRailPrefs,toggleRailSection,useRailPrefs } from '../../ui/railPrefs';
+import { useShownTabsSwitch } from '../../ui/layoutSync';
 import { addSidebarApp,appClickPlan,appHost,appTabFor,droppedLink,listedInSidebar,moveSidebarApp,normalizeAppUrl,noteReleasedTab,readSidebarApps,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
 import { focusSidebarControl } from '../../ui/sidebarFocus';
 import { pointerAnchor } from '../../ui/popup';
@@ -97,11 +99,21 @@ function moveFocus(event:KeyboardEvent<HTMLElement>,from:HTMLElement=event.curre
  if(!next)return false;event.preventDefault();next.focus();next.scrollIntoView({block:'nearest'});return true;
 }
 
+/** Scrolls the tab list (only it, and only up or down) so `node` shows. scrollIntoView scrolled every box around the row too: the
+ * sidebar is overflow:hidden, so while a switch slid the new list in from the right it scrolled 8px sideways, and the space row and
+ * the footer drifted left and back (founder, 3 Nov). */
+function revealRow(box:HTMLElement,node:HTMLElement,block:'nearest'|'center',behavior:ScrollBehavior){
+ let top=0,at:HTMLElement|null=node;while(at&&at!==box){top+=at.offsetTop;at=at.offsetParent as HTMLElement|null;}
+ if(at!==box)return;
+ const view=box.scrollTop,height=box.clientHeight,size=node.offsetHeight;
+ const goal=block==='center'?top-(height-size)/2:top<view?top:top+size>view+height?top+size-height:view,to=Math.max(0,Math.min(goal,box.scrollHeight-height));
+ if(Math.abs(to-view)>.5)box.scrollTo({top:to,behavior});
+}
 /** Keeps the current tab findable: scrolls to it when it changes or when a tab opens in the background, and reports
  * which edge it went past while the list is scrolled away from it. */
-function useActiveReveal(activeId:string,tabs:TabSession[],enabled:boolean,reduced:boolean){
+function useActiveReveal(activeId:string,tabs:TabSession[],enabled:boolean,reduced:boolean,space:string){
  const root=useRef<HTMLDivElement>(null),[edge,setEdge]=useState<'above'|'below'|null>(null);
- const seen=useRef<Set<string>|null>(null),lastActive=useRef(activeId);
+ const seen=useRef<Set<string>|null>(null),lastActive=useRef(activeId),lastSpace=useRef(space);
  const row=(id:string)=>root.current?.querySelector<HTMLElement>(`.sb-tab[data-tab-id="${CSS.escape(id)}"]:not(.sb-flip-ghost)`)||null;
  const measure=useCallback(()=>{
   const node=enabled?row(activeId):null,box=root.current;if(!node||!box||!node.getClientRects().length||node.closest('[inert]')){setEdge(null);return;}
@@ -115,12 +127,14 @@ function useActiveReveal(activeId:string,tabs:TabSession[],enabled:boolean,reduc
  useEffect(()=>{
   const list=tabs.map(tab=>tab.id),fresh=seen.current?list.filter(id=>!seen.current!.has(id)):[];seen.current=new Set(list);
   const target=lastActive.current!==activeId?activeId:fresh.at(-1);lastActive.current=activeId;
+  // Another space's list arrives scrolled where its tab is, not scrolling there from where the last list was.
+  const switched=lastSpace.current!==space;lastSpace.current=space;
   if(!enabled||!target){measure();return;}
-  const frame=requestAnimationFrame(()=>{row(target)?.scrollIntoView({block:'nearest',behavior:reduced?'auto':'smooth'});measure();});
+  const frame=requestAnimationFrame(()=>{const node=row(target),box=root.current;if(node&&box)revealRow(box,node,'nearest',reduced||switched?'auto':'smooth');measure();});
   return()=>cancelAnimationFrame(frame);
- },[activeId,ids,enabled]);// eslint-disable-line react-hooks/exhaustive-deps
+ },[activeId,ids,enabled,space]);// eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>{const box=root.current;if(!box)return;box.addEventListener('scroll',measure,{passive:true});const observer=new ResizeObserver(measure);observer.observe(box);measure();return()=>{box.removeEventListener('scroll',measure);observer.disconnect();};},[measure]);
- return {root,edge,reveal:()=>row(activeId)?.scrollIntoView({block:'center',behavior:reduced?'auto':'smooth'})};
+ return {root,edge,reveal:()=>{const node=row(activeId),box=root.current;if(node&&box)revealRow(box,node,'center',reduced?'auto':'smooth');}};
 }
 
 /** True while the element `selector` names starts below the scroll region's visible bottom (concept: with many tabs a
@@ -225,6 +239,8 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const profile=state.browserProfiles.find(item=>item.id===current.browserProfileId),privateMode=!!profile?.private,profileId=current.browserProfileId;
  const navigate=(page:string)=>openWorkspacePage(page,state,dispatch);
  const prefs=useRailPrefs(profileId,privateMode),reduced=state.settings.reducedMotion;
+ // The tab list is drawn from the switch as shown (ui/layoutSync.ts): a profile just arriving keeps the window's layout until its own switch is in line (the effect below).
+ const listTabs=useShownTabsSwitch(vertical,prefs.tabs,profileId);
  const width=clampSidebarWidth(state.settings.sidebarWidth);
  const setWidth=(next:number)=>dispatch({type:'settings.update',patch:{sidebarWidth:clampSidebarWidth(next)}});
  // A favorite's own tab lives in its tile, not in the tab list (runtime/favoriteTabs.ts); with Favorites hidden it is listed like any tab.
@@ -244,10 +260,10 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  // adopt what the current page shows so switching between websites and internal pages never flips the sidebar.
  useEffect(()=>{if(state.windowUi.workspaceOpen!==state.windowUi.webWorkspaceOpen)dispatch({type:'ui.update',patch:sidebarPatch(workspaceIsOpen(state.windowUi,current))});},[state.windowUi.workspaceOpen,state.windowUi.webWorkspaceOpen]);// eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>()=>{document.documentElement.style.removeProperty('--sidebar-rail');},[]);
- const peek=useActiveReveal(state.activeTabId,profileTabs,(expanded||peeking)&&prefs.tabs&&!prefs.folded.tabs,reduced);
+ const peek=useActiveReveal(state.activeTabId,profileTabs,(expanded||peeking)&&listTabs&&!prefs.folded.tabs,reduced,state.activeWorkspaceId);
  const bookmarksBelow=useBelowFold(peek.root,'[data-zone=bookmarks]',shown);
  useStuckHeaders(peek.root,shown);
- useFlip(peek.root,reduced);
+ useFlip(peek.root,reduced,state.activeWorkspaceId);
  useSettledPress(peek.root);
  useCardGlide(peek.root,'.sb-tab[aria-current=true]:not([data-hidden])',reduced);
  // One layout store: native settings.verticalTabs is the truth; the per-profile switch follows it, and a change
@@ -288,7 +304,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const changeLayout=(next:SectionLayout)=>{const off=next.hidden.includes('favorites');if(off!==favorites.hidden)setSidebarAppsHidden(profileId,privateMode,off);saveSections({...next,hidden:next.hidden.filter(id=>id!=='favorites')},profileId,privateMode);};
  const background=(event:MouseEvent<HTMLElement>)=>{const target=event.target as HTMLElement;if(target!==event.currentTarget&&!target.classList.contains('sb-sep')&&!target.classList.contains('sb-foot'))return;event.preventDefault();setCustomizing(true);};
  const blocks:{id:SectionId;lead:boolean}[]=[];
- for(const id of layout.order)if(id==='tabs'?prefs.tabs&&(show('tabs')||show('pinned')):show(id))blocks.push({id,lead:blocks.length>0});
+ for(const id of layout.order)if(id==='tabs'?listTabs&&(show('tabs')||show('pinned')):show(id))blocks.push({id,lead:blocks.length>0});
  const block=({id,lead}:{id:SectionId;lead:boolean})=>id==='tabs'?<SidebarTabs key={id} state={state} dispatch={dispatch} tabs={profileTabs} groups={groups} newTabsTop={!!prefs.newTabsTop} showPinned={show('pinned')} showList={show('tabs')} lead={lead}/>
   :id==='bookmarks'?<SidebarBookmarks key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>
   :id==='downloads'?<SidebarDownloads key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead} navigate={navigate}/>
@@ -503,7 +519,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
  const isPinned=(tab:TabSession)=>tab.pinned&&!groupForTab(state,tab)&&!paneOf.has(tab.id);
  const pinnedTabs=tabs.filter(isPinned),restTabs=tabs.filter(tab=>!isPinned(tab));
  const looseTabs=restTabs.filter(tab=>!groupForTab(state,tab)),previousIds=known.current;
-  const appended=newTabsTop&&previousIds?appendedTabs(looseTabs,previousIds,closedBefore.current):[];
+  const appended=newTabsTop&&previousIds?appendedTabs(looseTabs,previousIds,closedBefore.current,tabs):[];
  useEffect(()=>{const previous=known.current;known.current=new Set(tabs.map(tab=>tab.id));closedBefore.current=new Set([...state.closedTabs,...(state.closedPrivateTabs??[])].map(tab=>tab.id));if(!previous||!newTabsTop||!appended.length)return;
   let top=restTabs.find(tab=>previous.has(tab.id)&&!appended.includes(tab))?.id;if(!top)return;
   for(const tab of appended){dispatch({type:'tab.drop',from:tab.id,to:top,position:'before',groupId:null});top=tab.id;}
@@ -673,9 +689,10 @@ const SPRING=stripEase,springMs=()=>stripMs*frequentStretch(classScale(motionSpe
 // third and then dropped them at once, which read as "stuck" and then "gone".
 const EXIT='cubic-bezier(.16,1,.3,1)';
 type FlipBox={el:HTMLElement;top:number;left:number;width:number;height:number;nested:boolean};
-function useFlip(root:{current:HTMLDivElement|null},reduced:boolean){
- const last=useRef<Map<string,FlipBox>>(new Map()),baseline=useRef(0),ghosts=useRef(new Map<string,HTMLElement>()),flying=useRef(0);
+function useFlip(root:{current:HTMLDivElement|null},reduced:boolean,space:string){
+ const last=useRef<Map<string,FlipBox>>(new Map()),baseline=useRef(0),ghosts=useRef(new Map<string,HTMLElement>()),flying=useRef(0),shownSpace=useRef(space);
  useLayoutEffect(()=>{
+  const switched=shownSpace.current!==space;shownSpace.current=space;
   const box=root.current;if(!box){last.current=new Map();return;}
   // Layout positions (the offset chain inside the scroll box), which a running slide does not change. This runs on
   // every render, and pages loading re-render often: measured from painted rects, a row mid-slide read as moved and
@@ -692,6 +709,10 @@ function useFlip(root:{current:HTMLDivElement|null},reduced:boolean){
   // instead of forcing a layout of every row inside it (M F04: one 67ms frame on a switch at 27 tabs).
   if(!last.current.size){flipSkip=false;if(!baseline.current)baseline.current=requestAnimationFrame(()=>{baseline.current=0;if(root.current===box&&!last.current.size)last.current=measure();});return;}
   const next=measure(),previous=last.current;last.current=next;
+  // Another workspace or profile's space came on screen: the list is replaced, not changed, and the switch's own slide carries it
+  // (useWorkspaceSlide). Played as a change, the last space's rows faded out as pictures over the new ones while every new row dropped
+  // into a slot (founder, 3 Nov: "it glitches, then gets good"). The new list stands at once; nothing of the last one stays behind.
+  if(switched){for(const anim of box.getAnimations({subtree:true}))if(anim.id==='sb-flip'||anim.id==='sb-arrive')anim.cancel();box.querySelectorAll(':scope>.sb-flip-ghosts').forEach(node=>node.remove());ghosts.current.clear();flying.current=0;flipSkip=false;return;}
   // Speed Off (or reduced motion): a fold or an unfold is instant, nothing is left to fade.
   if(flipSkip||reduced||!previous.size||!springMs()){flipSkip=false;return;}
   const arrivals:(FlipBox&{key:string})[]=[],moves:{el:HTMLElement;dy:number;from:number;was:number}[]=[];let slide=0;
@@ -916,11 +937,10 @@ const quietRow=(key:string,text:string)=><div key={key} className="sb-section-em
 const FAVORITES_TIP='Favorites: your most-used sites, one click away. Drag a tab or a link here to add one; right-click a tile to edit or remove it. Turn them off in Settings › Sidebar.';
 function SidebarDownloads({state,profileId,privateMode,folded,reduced,lead,navigate}:SectionProps&{navigate:(page:string)=>void}){
  const items=state.downloads.filter(item=>!item.browserProfileId||item.browserProfileId===profileId).sort((a,b)=>(b.startedAt||0)-(a.startedAt||0)).slice(0,5);
- const status=(item:BrowserDownload)=>item.status==='Downloading'?(item.totalBytes?`${Math.min(99,Math.round((item.receivedBytes||0)/item.totalBytes*100))}%`:'…'):item.status==='Ready'?item.size:item.status;
  const open=(item:BrowserDownload)=>{if(item.status==='Ready'&&item.canOpen)void runtime.service({type:'downloads.command',id:item.id,command:'open'}).catch(()=>navigate('downloads'));else navigate('downloads');};
  return <>{lead&&<div className="sb-sep" role="separator" data-flip="sep:downloads"/>}<Zone id="downloads" title={t("browsermenu.downloads")} folded={!!folded['downloads-closed']} toggleKey="downloads-closed" mark={<PreviewIcon icon={Download} size={14}/>} reduced={reduced} profileId={profileId} privateMode={privateMode} action={<span className="sb-zone-actions">{listButton('All downloads','Ctrl J',()=>navigate('downloads'))}</span>}>
   {items.length?items.map(item=><button key={item.id} type="button" className="sb-bookmark sb-download" data-flip={'d:'+item.id} data-sb-focus title={item.name} onKeyDown={moveFocus} onClick={()=>open(item)} onContextMenu={event=>{event.preventDefault();event.stopPropagation();if(item.url&&/^https?:/i.test(item.url))openBookmarkMenu(item.url,{x:event.clientX,y:event.clientY,width:2,height:2});}}>
-   <span className="sb-tab-icon"><PreviewIcon icon={FileText} size={16}/></span><span className="sb-tab-title" dir="auto">{item.name}</span><small className="sb-row-note">{status(item)}</small></button>)
+   <span className="sb-tab-icon"><PreviewIcon icon={FileText} size={16}/></span><span className="sb-tab-title" dir="auto">{item.name}</span><small className="sb-row-note">{sidebarNote(item)}</small></button>)
    :[quietRow('downloads','No downloads yet')]}
  </Zone></>;
 }

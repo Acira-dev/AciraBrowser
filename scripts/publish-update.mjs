@@ -1,9 +1,14 @@
-// One command for a release that reaches everyone who already installed Acira. DRY RUN unless --publish is given: it checks everything, prints
-// exactly what would be uploaded, writes the planned feed files to a review folder, and changes nothing remote. With --publish it creates the releases
-// on Acira-dev/AciraBrowserUpdates, uploads, downloads every payload anonymously and compares its SHA-512, and only then commits the channel documents
-// in feed/ (the files installed copies read). Any failure before that last step leaves the feed untouched, so nobody is offered an update that cannot download.
-// Usage and rules: docs/launch/PUBLIC_UPDATES.md ("How to ship an update").
+// One command for a release that reaches everyone who already installed Acira, and for steering it once it is out. DRY RUN unless --publish is given:
+// it checks everything, prints exactly what would be uploaded and how each channel document would change (a line diff), writes the planned feed files to
+// a review folder, and changes nothing remote. With --publish (and --yes, or the version typed at the prompt) it creates the releases on
+// Acira-dev/AciraBrowserUpdates, uploads, downloads every payload anonymously and compares its SHA-512, and only then commits the channel documents in
+// feed/ (the files installed copies read). Any failure before that last step leaves the feed untouched, so nobody is offered an update that cannot download.
+// The live version can then be widened (--widen), halted (--halt), resumed (--resume-rollout), or given its missing Mac architecture (--add-arch).
+// --stand-in http://127.0.0.1:<port> sends every GitHub and feed request to a local stand-in (qa/publish-stand-in.mjs) instead: no gh, nothing leaves the computer.
+// Usage and rules: docs/launch/RELEASING.md (commands in order) and docs/launch/PUBLIC_UPDATES.md (the feed).
 import fs from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
+import {Readable} from 'node:stream';
 import path from 'node:path';
 import os from 'node:os';
 import {createHash} from 'node:crypto';
@@ -18,28 +23,42 @@ const U=require('../packaging/update-publish.cjs');
 const {writeMacUpdateFeed}=require('../packaging/macos/update-feed.cjs');
 const BRANCH='main'; // the feed URL in every installed app names this branch
 const MAC_ZIP=/^AciraBrowser-(.+)-mac-(arm64|x64)-update\.zip$/,MAC_DMG=/^AciraBrowser-(.+)-mac-(arm64|x64)\.dmg$/;
-const WINDOWS_EXE='AciraBrowserSetup.exe';
+const WINDOWS_EXE='AciraBrowserSetup.exe',RECEIPT='mac-widevine-package.json';
+const FEED_EDITS=['widen','halt','resume-rollout'],MODES=[...FEED_EDITS,'add-arch'];
+const FILE_OPTIONS=['mac-dir','mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg','windows-dir','windows-exe','windows-blockmap','windows-latest-yml'];
 
-export const HELP=`Usage: node scripts/publish-update.mjs --version <0.1.0-beta.7> [options]            (dry run: nothing is uploaded)
-       node scripts/publish-update.mjs --version <0.1.0-beta.7> [options] --publish [--yes]
+export const HELP=`Usage (each command is a dry run that changes nothing until you add --publish --yes):
 
+  A new version
+    node scripts/publish-update.mjs --version <0.1.0-beta.10> --notes-file notes.md [--windows-dir <folder>] [--rollout <percent>]
+  The live version
+    node scripts/publish-update.mjs --version <live version> --widen <percent>          offer it to more installs (100 = everyone)
+    node scripts/publish-update.mjs --version <live version> --halt                     offer it to nobody from their next check on
+    node scripts/publish-update.mjs --version <live version> --resume-rollout           offer a halted version again, at its old percentage
+    node scripts/publish-update.mjs --version <live version> --add-arch [--mac-x64-zip <file>]   add the Mac architecture it lacks
+
+  --publish [--yes]          act; without --yes it asks you to type the version
   --channel beta|stable      beta (default) for 0.1.0-beta.N; stable for plain versions (also reaches people on beta)
+  --rollout <percent>        a new version reaches only this share of installs (default 100); with --resume-rollout, the share to resume at
+  --platform mac|windows     with --widen/--halt/--resume-rollout: only that platform's documents (default: each one that offers --version)
   --notes-file <file>        what's new, one bullet per line; or --notes "<text>"; --no-notes publishes without notes
   --mac-dir <folder>         release/mac-widevine-<version>-<commit>.noindex (default: found in release/ from --version)
-  --mac-arm64-zip --mac-x64-zip --mac-arm64-dmg --mac-x64-dmg <file>      pick the Mac files yourself
+  --mac-arm64-zip --mac-x64-zip --mac-arm64-dmg --mac-x64-dmg <file>      exactly these Mac files, nothing found added (each beside its ${RECEIPT})
   --windows-dir <folder>     the folder npm run build:windows wrote (AciraBrowserSetup.exe, its .blockmap, latest.yml); or --windows-exe <file>
   --windows-assume-updater   the Windows setup is known to carry resources/app-update.yml (otherwise the Windows feed is left alone)
   --windows-download-only    publish the Windows setup for download without a Windows feed entry
-  --allow-single-arch        publish only one Mac architecture (the other keeps its old version)
+  --allow-missing-blockmaps  emergency only: publish although the live setup's blockmap cannot be read (copies of it then download the whole setup)
+  --allow-single-arch        publish only the arm64 Mac build now (Intel Macs see failed update checks until --add-arch adds x64)
   --review-dir <folder>      where the dry run writes the planned feed files (default release/update-review/<version>-<channel>)
   --rehearsal                dry run only, never with --publish: tolerate artifacts built as another version than --version (to try the tool on an old build)
   --commit <hex>             tag suffix when the artifacts carry no commit
   --no-wait                  do not wait for the feed CDN after publishing
+  --stand-in <url>           testing: a local stand-in for GitHub and the feed (http://127.0.0.1:<port>, qa/publish-stand-in.mjs); never gh, never github.com
 `;
 
 export function parseArguments(argv){
- const flags=new Set(['publish','rehearsal','yes','no-notes','allow-single-arch','windows-download-only','windows-assume-updater','no-wait','help']);
- const values=new Set(['version','channel','notes','notes-file','mac-dir','mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg','windows-dir','windows-exe','windows-blockmap','windows-latest-yml','review-dir','commit']);
+ const flags=new Set(['publish','rehearsal','yes','no-notes','allow-single-arch','windows-download-only','windows-assume-updater','no-wait','help','halt','resume-rollout','add-arch','allow-missing-blockmaps']);
+ const values=new Set(['version','channel','notes','notes-file','mac-dir','mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg','windows-dir','windows-exe','windows-blockmap','windows-latest-yml','review-dir','commit','rollout','widen','platform','stand-in']);
  const options={};
  for(let index=0;index<argv.length;index++){
   const argument=argv[index];if(!argument.startsWith('--'))throw Error('Unexpected argument '+argument+'.\n\n'+HELP);
@@ -48,12 +67,31 @@ export function parseArguments(argv){
   else if(values.has(name)){const value=argv[++index];if(value===undefined||value.startsWith('--'))throw Error('--'+name+' needs a value.');options[name]=value;}
   else throw Error('Unknown option '+argument+'.\n\n'+HELP);
  }
+ // combinations that would mean two different things
+ const modes=MODES.filter(name=>options[name]!==undefined);
+ if(modes.length>1)throw Error('Choose one of --'+modes.join(', --')+'.');
+ if(options.widen!==undefined)U.parsePercent(options.widen,'--widen');
+ if(options.rollout!==undefined){
+  U.parsePercent(options.rollout,'--rollout');
+  if(modes.length&&!options['resume-rollout'])throw Error('--rollout sets the share for a new version (or the one --resume-rollout resumes at); --widen raises the live one.');
+ }
+ if(options.platform!==undefined){
+  if(!U.PLATFORMS.includes(options.platform))throw Error('--platform is mac or windows.');
+  if(!FEED_EDITS.some(name=>options[name]!==undefined))throw Error('--platform goes with --widen, --halt or --resume-rollout; a new version takes its platforms from the files you give.');
+ }
+ const edit=FEED_EDITS.find(name=>options[name]!==undefined);
+ if(edit){const files=FILE_OPTIONS.filter(name=>options[name]!==undefined);if(files.length)throw Error('--'+edit+' changes the live channel documents only; it takes no files (--'+files.join(', --')+').');}
+ if(modes.length&&options.rehearsal)throw Error('--rehearsal tries the tool on an old build; it does not go with --'+modes[0]+'.');
+ const named=['mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg'].filter(name=>options[name]!==undefined);
+ if(options['mac-dir']&&named.length)throw Error('Name the Mac files (--'+named.join(', --')+') or give a folder to search (--mac-dir), not both: named files are used exactly as given.');
+ if(options['add-arch']&&(options['windows-dir']||options['windows-exe']))throw Error('--add-arch adds a Mac architecture; the Windows build has one (x64).');
  return options;
 }
 
 const exists=file=>fs.access(file).then(()=>true,()=>false);
 const readJSON=async file=>JSON.parse(await fs.readFile(file,'utf8'));
 const mb=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':Math.max(1,Math.round(bytes/1024))+' KB';
+const receiptBeside=file=>readJSON(path.join(path.dirname(file),RECEIPT)).catch(()=>null); // the packager writes one per architecture folder
 
 /** gh through the real CLI; input goes to stdin. Tests pass a fake with the same shape. */
 export function ghCli(){
@@ -64,6 +102,30 @@ export function ghCli(){
   child.on('close',code=>code===0?resolve(out):reject(Object.assign(Error('gh '+args.slice(0,3).join(' ')+' failed: '+(err.trim()||out.trim()).slice(0,400)),{stderr:err,stdout:out,code})));
   child.stdin.end(input??'');
  });
+}
+/** The same gh and anonymous fetch, served by a local stand-in (qa/publish-stand-in.mjs). Only a loopback http address is accepted, gh is never run,
+ *  and any URL that is not a release download or the public feed is refused, so a stand-in run cannot reach GitHub or anything else. */
+export function standInTransport(address){
+ let base;try{base=new URL(address);}catch{throw Error('--stand-in needs an address such as http://127.0.0.1:8123.');}
+ if(base.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(base.hostname)||base.username||base.password)throw Error('--stand-in must be a local address (http://127.0.0.1:<port>): the stand-in never reaches GitHub.');
+ const root=base.origin;
+ const failed=(args,body)=>{let detail;try{detail=JSON.parse(body);}catch{detail={message:body};}return Object.assign(Error('gh '+args.slice(0,3).join(' ')+' failed: '+String(detail.message||'').slice(0,400)),{stderr:detail.stderr||detail.message||''});};
+ const gh=async(args,{input}={})=>{
+  if(args[0]==='release'&&args[1]==='upload'){ // gh names the asset after the file; its bytes go up as the request body
+   const file=args[3],response=await fetch(root+'/upload/'+encodeURIComponent(args[2])+'/'+encodeURIComponent(path.basename(file)),{method:'PUT',body:Readable.toWeb(createReadStream(file)),duplex:'half'});
+   const body=await response.text();if(!response.ok)throw failed(args,body);return body;
+  }
+  const response=await fetch(root+'/gh',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({args,input:input??''})}),body=await response.text();
+  if(!response.ok)throw failed(args,body);return body;
+ };
+ const download=new RegExp('^https://github\\.com/'+U.UPDATE_REPOSITORY.replace('/','\\/')+'/releases/download/([^/]+)/([^/?#]+)$'),raw=new RegExp('^'+U.RAW_FEED_BASE.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^/?#]+)$');
+ const standInFetch=(url,init)=>{
+  const href=String(url),release=download.exec(href),feed=raw.exec(href);
+  if(release)return fetch(root+'/download/'+release[1]+'/'+release[2],init);
+  if(feed)return fetch(root+'/raw/feed/'+feed[1],init);
+  return Promise.reject(Error('stand-in run: '+href+' is neither a release download nor the feed, and nothing else is fetched.'));
+ };
+ return {gh,fetch:standInFetch,label:root,delays:[100,300,600]};
 }
 const ghJson=async(gh,args,options)=>JSON.parse(await gh(args,options));
 const notFound=error=>/HTTP 404|release not found|Not Found/i.test(String(error?.stderr||'')+String(error?.message||''));
@@ -78,12 +140,42 @@ export async function verifyDownload({fetch,url,sha512,size,sleep=ms=>new Promis
    const hash=createHash('sha512');let bytes=0;
    for await(const chunk of response.body){hash.update(chunk);bytes+=chunk.length;}
    const actual=hash.digest('base64');
-   if(bytes!==size)throw Error('downloaded '+bytes+' bytes, expected '+size);
-   if(actual!==sha512)throw Error('SHA-512 differs from the file that was uploaded');
+   if(bytes!==size)throw Object.assign(Error('downloaded '+bytes+' bytes, expected '+size),{mismatch:true});
+   if(actual!==sha512)throw Object.assign(Error('SHA-512 differs from the file that was uploaded'),{mismatch:true});
    return true;
   }catch(error){last=error;if(attempt<delays.length)await sleep(delays[attempt]);}
  }
- throw Error('Anonymous download of '+url+' failed: '+last.message);
+ // mismatch: the server has other bytes under that name (not a file that is missing or not served yet)
+ throw Object.assign(Error('Anonymous download of '+url+' failed: '+last.message),{mismatch:Boolean(last.mismatch)});
+}
+/** A small file (a blockmap), downloaded anonymously, each try given `timeout` ms; a failed try (a 5xx, a dropped or stalled connection, a 404 the
+ *  CDN has not caught up on) is tried again after each delay. */
+export async function downloadSmall({fetch,url,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),delays=[1000,3000,8000],timeout=30000}){
+ let last;
+ for(let attempt=0;attempt<=delays.length;attempt++){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);timer.unref?.();
+  try{
+   const response=await fetch(url,{redirect:'follow',signal:controller.signal});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const bytes=Buffer.from(await response.arrayBuffer());
+   if(!bytes.length||bytes.length>16*1024*1024)throw Error(bytes.length+' bytes');
+   return bytes;
+  }catch(error){last=controller.signal.aborted?Error('no answer within '+Math.round(timeout/1000)+' s'):error;if(attempt<delays.length)await sleep(delays[attempt]);}
+  finally{clearTimeout(timer);}
+ }
+ throw Error(last.message+(delays.length?' ('+(delays.length+1)+' tries)':''));
+}
+
+/** A live channel document: {file, version, files, previousBlockMaps, doc, text}, {file, version:null} when there is none, or {file, error}.
+ *  A dry run reads the public copy (raw.githubusercontent.com: no login, but up to 5 minutes old); --publish reads the feed repository itself through gh
+ *  (the contents API), so what is published is planned from what is really live, and the feed commit checks it still is (checkCurrent). */
+async function readLive({deps,file,authoritative}){
+ if(!authoritative)return U.readLiveFeed({fetch:deps.fetch??globalThis.fetch,file});
+ try{
+  const found=await ghJson(deps.gh,['api',`repos/${U.UPDATE_REPOSITORY}/contents/feed/${file}?ref=${BRANCH}`]),text=Buffer.from(found.content,'base64').toString('utf8'),doc=U.parseFeed(text);
+  if(!doc||typeof doc.version!=='string')return {file,error:'not a channel document'};
+  return {file,version:doc.version,files:doc.files||[],previousBlockMaps:Array.isArray(doc.previousBlockMaps)?doc.previousBlockMaps:[],doc,text};
+ }catch(error){return notFound(error)?{file,version:null,files:[]}:{file,error:String(error?.message||error).slice(0,200)};}
 }
 
 /** Finds the Mac build folders for a version: release/mac-widevine-<version>-<commit>.noindex/{arm64,x64}-*, each with its receipt. */
@@ -99,8 +191,8 @@ async function discoverMac({version,macDir,root}){
  for(const arch of U.ARCHES){
   const dirs=[];for(const entry of await fs.readdir(base,{withFileTypes:true}))if(entry.isDirectory()&&entry.name.startsWith(arch+'-'))dirs.push({dir:path.join(base,entry.name),at:(await fs.stat(path.join(base,entry.name))).mtimeMs});
   dirs.sort((a,b)=>b.at-a.at);if(!dirs.length)continue;
-  const dir=dirs[0].dir,receipt=await readJSON(path.join(dir,'mac-widevine-package.json')).catch(()=>null),names=await fs.readdir(dir);
-  result[arch]={dir,receipt,zip:names.filter(name=>MAC_ZIP.test(name)).map(name=>path.join(dir,name))[0]||null,dmg:names.filter(name=>MAC_DMG.test(name)).map(name=>path.join(dir,name))[0]||null};
+  const dir=dirs[0].dir,names=await fs.readdir(dir);
+  result[arch]={dir,zip:names.filter(name=>MAC_ZIP.test(name)).map(name=>path.join(dir,name))[0]||null,dmg:names.filter(name=>MAC_DMG.test(name)).map(name=>path.join(dir,name))[0]||null};
  }
  return result;
 }
@@ -114,7 +206,7 @@ async function discoverWindows({windowsDir,windowsExe,windowsBlockmap,windowsLat
  if(await exists(latest)){const doc=require('js-yaml').load(await fs.readFile(latest,'utf8'));evidence.push({source:'latest.yml',version:doc?.version,sha512:doc?.sha512||doc?.files?.[0]?.sha512,size:doc?.files?.[0]?.size,name:doc?.path||doc?.files?.[0]?.url});}
  for(const name of ['ACIRA-INSTALLER-PROVENANCE.json','WINDOWS-BUILD-RESULT.json']){
   const doc=await readJSON(sibling(name)).catch(()=>null);
-  if(doc)evidence.push({source:name,version:doc.version,commit:doc.sourceCommit||doc.commit,updateConfig:doc.payload?.updateConfig||doc.updateConfig});
+  if(doc)evidence.push({source:name,version:doc.version,commit:doc.sourceCommit||doc.commit,updateConfig:doc.payload?.updateConfig||doc.updateConfig,sha256:doc.installer?.sha256,size:doc.installer?.bytes});
  }
  return {exe,blockmap:(await exists(blockmap))?blockmap:null,evidence};
 }
@@ -141,46 +233,68 @@ export async function inspectWindowsInstaller({exe,evidence=[]}){
 }
 
 /**
- * Everything the dry run and the real run share. Resolves to {ok, problems, warnings, plan, report}.
- * deps: fetch, inspectMacZip, inspectMacDmg, inspectWindowsInstaller, log, now.
+ * A new version, or (--add-arch) the missing Mac architecture of the live one. Everything the dry run and the real run share.
+ * Resolves to {ok, problems, warnings, plan, checks, live, assets}. deps: fetch, inspectMacZip, inspectMacDmg, inspectWindowsInstaller, log, now.
  */
 export async function planUpdate(options,deps){
  const {log=()=>{},now=()=>new Date(),fetch=globalThis.fetch,root=repo}=deps;
- const problems=[],warnings=[],version=options.version,channel=options.channel||'beta',rehearsal=Boolean(options.rehearsal);
+ const problems=[],warnings=[],version=options.version,channel=options.channel||'beta',rehearsal=Boolean(options.rehearsal),adding=Boolean(options['add-arch']);
  const mismatch=message=>(rehearsal?warnings.push('REHEARSAL, would be an error: '+message):problems.push(message));
  if(rehearsal&&options.publish)throw Error('--rehearsal is for dry runs only and cannot be combined with --publish.');
  if(!version)throw Error('Say which version: --version 0.1.0-beta.7\n\n'+HELP);
  problems.push(...U.versionProblems(version,channel));
- const effective=version;
+ const effective=version,rollout=options.rollout!==undefined?U.parsePercent(options.rollout,'--rollout'):100;
  // --- inputs ---
- const mac={arm64:{},x64:{}};let macBase=null;
+ const mac={arm64:{},x64:{}};
  const explicit={arm64:{zip:options['mac-arm64-zip'],dmg:options['mac-arm64-dmg']},x64:{zip:options['mac-x64-zip'],dmg:options['mac-x64-dmg']}};
- const wantsMac=Object.values(explicit).some(item=>item.zip||item.dmg)||options['mac-dir']||!options['windows-dir']&&!options['windows-exe'];
+ const wantsMac=adding||Object.values(explicit).some(item=>item.zip||item.dmg)||options['mac-dir']||!options['windows-dir']&&!options['windows-exe'];
  if(wantsMac){
-  const found=await discoverMac({version,macDir:options['mac-dir'],root});macBase=found.base;
-  for(const arch of U.ARCHES){
-   const zip=explicit[arch].zip?path.resolve(explicit[arch].zip):found[arch]?.zip,dmg=explicit[arch].dmg?path.resolve(explicit[arch].dmg):found[arch]?.dmg;
-   mac[arch]={zip,dmg,receipt:found[arch]?.receipt||null};
-  }
+  // explicit means explicit: named files are the whole Mac input; a folder (--mac-dir, else release/ by version) is searched only when none is named
+  const named=Object.values(explicit).some(item=>item.zip||item.dmg),found=named?{}:await discoverMac({version,macDir:options['mac-dir'],root});
+  for(const arch of U.ARCHES)mac[arch]=named?{zip:explicit[arch].zip&&path.resolve(explicit[arch].zip),dmg:explicit[arch].dmg&&path.resolve(explicit[arch].dmg)}:{zip:found[arch]?.zip,dmg:found[arch]?.dmg};
  }
- const windows=await discoverWindows({windowsDir:options['windows-dir'],windowsExe:options['windows-exe'],windowsBlockmap:options['windows-blockmap'],windowsLatestYml:options['windows-latest-yml']});
- if(wantsMac){
-  const present=U.ARCHES.filter(arch=>mac[arch].zip);
-  if(!present.length)problems.push('No Mac update ZIP found. Build with scripts/package-mac-widevine.mjs (it now writes one per architecture), or pass --mac-arm64-zip and --mac-x64-zip.');
-  else if(present.length<2&&!options['allow-single-arch'])problems.push('Only the '+present.join('/')+' Mac update ZIP was found. Without the other one those Macs would never update. Pass both, or --allow-single-arch if that is intended.');
-  for(const arch of U.ARCHES)if(!mac[arch].zip&&mac[arch].dmg)problems.push('The '+arch+' DMG has no matching update ZIP.');
- }
+ const windows=adding?null:await discoverWindows({windowsDir:options['windows-dir'],windowsExe:options['windows-exe'],windowsBlockmap:options['windows-blockmap'],windowsLatestYml:options['windows-latest-yml']});
  if(!wantsMac&&!windows)problems.push('Nothing to publish: no Mac files and no Windows setup.');
- // --- the version has to beat everything already out there ---
+ // --- what is live now ---
  const live=[];
  const platforms=[...(wantsMac?['mac']:[]),...(windows?['windows']:[])];
  for(const platform of platforms)for(const file of U.feedFiles(channel,platform)){
-  const feed=await U.readLiveFeed({fetch,file});live.push({platform,...feed});
-  if(feed.error){(options.publish?problems:warnings).push('Could not read the live feed '+file+' ('+feed.error+'), so "newer than the feed" was not checked.');}
+  const feed=await readLive({deps,file,authoritative:Boolean(options.publish)});live.push({platform,...feed});
+  if(feed.error){(options.publish||adding?problems:warnings).push('Could not read the live feed '+file+' ('+feed.error+'), so "'+(adding?'what is live':'newer than the feed')+'" was not checked.');}
  }
- const references=[...U.SHIPPED.map(item=>({label:item.what,version:item.version})),...live.filter(item=>item.version).map(item=>({label:'the live feed '+item.file,version:item.version}))];
+ // --add-arch: the live Mac version, and the architecture it lacks
+ let addTo=null;
+ if(adding){
+  const own=live.find(item=>item.platform==='mac'&&item.file===U.feedFiles(channel,'mac')[0]);
+  if(own&&!own.error&&own.version!==version)problems.push('--add-arch adds to the version the live feed offers: '+own.file+' '+(own.version?'offers '+own.version:'does not exist')+', not '+version+'.');
+  else if(own?.version){
+   const docs=live.filter(item=>item.platform==='mac'&&item.version===version),liveArches=(own.doc.files||[]).map(file=>U.macArchOf(file.url)),tag=U.tagOf(own.doc.files?.[0]?.url);
+   const missing=U.ARCHES.filter(arch=>!liveArches.includes(arch));
+   if(!tag||liveArches.includes(null))problems.push('The live '+own.file+' does not name '+version+'\'s Mac update ZIPs on a release; --add-arch cannot tell which release to add to.');
+   else if(!missing.length)problems.push('The live '+version+' already offers both Mac architectures (arm64 and x64); nothing to add.');
+   if(docs.some(item=>JSON.stringify(item.doc.files)!==JSON.stringify(own.doc.files)))problems.push('The live Mac documents for '+version+' ('+docs.map(item=>item.file).join(', ')+') name different files; fix the feed by hand first.');
+   addTo={docs,tag,liveArches,missing,commit:tag?.split('-mac-')[1]||null};
+   for(const arch of U.ARCHES)if(!missing.includes(arch)&&(mac[arch].zip||mac[arch].dmg)){warnings.push('The '+arch+' files found here are not uploaded: the live '+version+' already has '+arch+'.');mac[arch]={};}
+  }
+ }
+ // --- the version has to beat everything already out there. --add-arch changes only the documents that offer its version, so it is compared with the
+ //     builds people run and its own channel's document (a stable version is not "older" because beta moved on) ---
+ const ownChannel=U.feedFiles(channel,'mac')[0];
+ const references=[...U.SHIPPED.map(item=>({label:item.what,version:item.version})),...live.filter(item=>item.version&&!(adding&&(item.version===version||item.file!==ownChannel))).map(item=>({label:'the live feed '+item.file,version:item.version}))];
  problems.push(...U.newerProblems(effective,references));
- // --- the Mac files ---
+ // --- an architecture missing: a Mac that is not handed its own build either sees failed checks (Intel) or installs the Intel build (Apple silicon) ---
+ if(wantsMac&&!adding){
+  const present=U.ARCHES.filter(arch=>mac[arch].zip);
+  if(!present.length)problems.push('No Mac update ZIP found. Build with scripts/package-mac-widevine.mjs (it writes one per architecture), or pass --mac-arm64-zip and --mac-x64-zip.');
+  else if(present.length<2){
+   if(present[0]==='x64')problems.push('Only the x64 Mac update ZIP was found. A feed without arm64 hands Apple silicon Macs the Intel build (electron-updater falls back to the file without "arm64"). Publish both.');
+   else if(!options['allow-single-arch'])problems.push('Only the arm64 Mac update ZIP was found. Without the x64 one Intel Macs could not update (their checks fail until it is added). Publish both, or pass --allow-single-arch and add x64 later with --add-arch.');
+   else warnings.push('Only arm64 is published: Intel Macs see failed update checks until you run --add-arch with the x64 ZIP of the same commit.');
+  }
+ }
+ if(adding&&addTo?.missing.length&&!addTo.missing.some(arch=>mac[arch].zip))problems.push('No '+addTo.missing.join('/')+' update ZIP to add. Pass --mac-'+addTo.missing[0]+'-zip <file> (from the same commit, '+addTo.commit+'), or --mac-dir.');
+ for(const arch of U.ARCHES)if(!mac[arch].zip&&mac[arch].dmg)problems.push('The '+arch+' DMG has no matching update ZIP.');
+ // --- the Mac files: named right, the bytes their build receipt describes, then signed, notarized, stapled and the right version inside ---
  const checks={mac:{},windows:null},assets={mac:[],windows:[]};
  const commits=new Set();
  for(const arch of U.ARCHES){
@@ -190,33 +304,50 @@ export async function planUpdate(options,deps){
    if(!match||match[2]!==arch)problems.push(name+' is not named AciraBrowser-<version>-mac-'+arch+'-update.zip.');
    else if(match[1]!==effective)mismatch(name+' is version '+match[1]+', not '+effective+'.');
    if(!(await exists(item.zip))){problems.push(item.zip+' does not exist.');continue;}
-   log('Checking the '+arch+' update ZIP (unzip, codesign, stapler, spctl)...');
-   try{
-    const proof=await deps.inspectMacZip({zip:item.zip,arch,version:rehearsal?undefined:effective});
-    if(rehearsal&&proof.version!==effective)warnings.push('REHEARSAL, would be an error: the app inside '+name+' says '+proof.version+', not '+effective+'.');
-    checks.mac[arch]={zip:proof};if(proof.commit)commits.add(proof.commit);
-   }catch(error){problems.push(name+': '+error.message);}
-   assets.mac.push({...await U.describeFile(item.zip),role:'update',arch});
+   const described=await U.describeFile(item.zip),receipt=await receiptBeside(item.zip),record=receipt?.updateZip;
+   let intact=true;
+   if(!record)problems.push(name+': no build receipt beside it ('+RECEIPT+' with updateZip), so nothing says what this ZIP should be. Publish the folder scripts/package-mac-widevine.mjs wrote, as it is.'),intact=false;
+   else{
+    if(path.basename(String(record.zip||''))!==name)problems.push(name+': its build receipt describes '+path.basename(String(record.zip||'another file'))+'.'),intact=false;
+    else if(record.sha512!==described.sha512||record.size!==described.size)problems.push(name+' is not the file its build receipt describes (SHA-512 or size differs: '+described.size+' bytes here, '+record.size+' recorded). It was replaced or damaged after the build; package it again.'),intact=false;
+    if(receipt.arch&&receipt.arch!==arch)problems.push(name+': its build receipt is for '+receipt.arch+'.');
+    if(receipt.version&&match&&receipt.version!==match[1])mismatch(name+': its build receipt says version '+receipt.version+'.');
+    if(receipt.commit)commits.add(receipt.commit);
+   }
+   if(intact){
+    log('Checking the '+arch+' update ZIP (unzip, codesign, stapler, spctl)...');
+    try{
+     const proof=await deps.inspectMacZip({zip:item.zip,arch,version:rehearsal?undefined:effective});
+     if(rehearsal&&proof.version!==effective)warnings.push('REHEARSAL, would be an error: the app inside '+name+' says '+proof.version+', not '+effective+'.');
+     checks.mac[arch]={zip:proof};if(proof.commit)commits.add(proof.commit);
+    }catch(error){problems.push(name+': '+error.message);}
+   }
+   assets.mac.push({...described,role:'update',arch});
   }
   if(item.dmg){
    const name=path.basename(item.dmg),match=MAC_DMG.exec(name);
    if(!match||match[2]!==arch)problems.push(name+' is not named AciraBrowser-<version>-mac-'+arch+'.dmg.');
    else if(match[1]!==effective)mismatch(name+' is version '+match[1]+', not '+effective+'.');
-   if(item.receipt&&item.receipt.version!==match?.[1])mismatch(name+': its build receipt says version '+item.receipt.version+'.');
    if(!(await exists(item.dmg))){problems.push(item.dmg+' does not exist.');continue;}
+   const described=await U.describeFile(item.dmg),receipt=await receiptBeside(item.dmg);
+   if(!receipt?.sha256)problems.push(name+': no build receipt beside it ('+RECEIPT+'), so nothing says what this disk image should be.');
+   else{
+    if(receipt.diskImage&&path.basename(String(receipt.diskImage))!==name)problems.push(name+': its build receipt describes '+path.basename(String(receipt.diskImage))+'.');
+    else if(receipt.sha256!==described.sha256||(receipt.bytes!==undefined&&receipt.bytes!==described.size))problems.push(name+' differs from the file its build receipt describes (SHA-256 or size mismatch).');
+    if(receipt.version!==match?.[1])mismatch(name+': its build receipt says version '+receipt.version+'.');
+    if(receipt.commit)commits.add(receipt.commit);
+   }
    log('Checking the '+arch+' disk image...');
    try{checks.mac[arch]={...checks.mac[arch],dmg:await deps.inspectMacDmg({dmg:item.dmg})};}catch(error){problems.push(name+': '+error.message);}
-   const described=await U.describeFile(item.dmg);
-   if(item.receipt?.sha256&&item.receipt.sha256!==described.sha256)problems.push(name+' differs from the file its build receipt describes (SHA-256 mismatch).');
    assets.mac.push({...described,role:'installer',arch});
-   if(item.receipt?.commit)commits.add(item.receipt.commit);
   }
  }
  if(commits.size>1)problems.push('The Mac files come from different commits ('+[...commits].map(commit=>commit.slice(0,8)).join(', ')+'). Rebuild both architectures from one commit.');
  const macCommit=[...commits][0]||options.commit||null;
  if(wantsMac&&assets.mac.length&&!macCommit)problems.push('No commit is known for the Mac files; pass --commit <hex>.');
+ if(adding&&addTo?.commit&&macCommit&&!macCommit.startsWith(addTo.commit))problems.push('The '+addTo.missing.join('/')+' build is from commit '+macCommit.slice(0,8)+', but the live '+version+' is release '+addTo.tag+' (commit '+addTo.commit+'). Build it from that commit; one release never mixes commits.');
  // --- the Windows files ---
- let windowsCommit=null,windowsFeedAllowed=false;
+ let windowsCommit=null,windowsFeedAllowed=false,blockMaps=[];
  if(windows){
   const exe=windows.exe;
   if(!(await exists(exe)))problems.push(exe+' does not exist.');
@@ -228,7 +359,7 @@ export async function planUpdate(options,deps){
    if(!versions.length)problems.push('Nothing says which version '+path.basename(exe)+' is. Keep the latest.yml or ACIRA-INSTALLER-PROVENANCE.json that the Windows build wrote next to it.');
    for(const item of versions)if(item.version!==effective)mismatch(item.source+' says the Windows installer is version '+item.version+', not '+effective+'.');
    if(!U.WINDOWS_VERSION.test(effective))warnings.push(effective+' does not match the Windows build rule ^0.1.N-beta.N$ (scripts/build-windows.mjs); that build would have refused it.');
-   for(const item of windows.evidence)if(item.sha512&&item.sha512!==described.sha512||item.size&&item.size!==described.size)problems.push(item.source+' describes a different file than '+path.basename(exe)+' (SHA-512 or size differs). Was it rebuilt after latest.yml was written?');
+   for(const item of windows.evidence)if(item.sha512&&item.sha512!==described.sha512||item.sha256&&item.sha256!==described.sha256||item.size&&item.size!==described.size)problems.push(item.source+' describes a different file than '+path.basename(exe)+' (SHA-512, SHA-256 or size differs). Was it rebuilt or damaged after the build wrote that record?');
    windowsCommit=windows.evidence.find(item=>item.commit)?.commit||options.commit||null;
    if(!windowsCommit)problems.push('No commit is known for the Windows installer; pass --commit <hex>.');
    if(windowsCommit&&macCommit&&windowsCommit!==macCommit)warnings.push('The Windows installer ('+windowsCommit.slice(0,8)+') and the Mac files ('+macCommit.slice(0,8)+') come from different commits.');
@@ -244,31 +375,65 @@ export async function planUpdate(options,deps){
     if(inspected.updateConfig===true&&options['windows-download-only'])warnings.push('The Windows feed is left alone because of --windows-download-only.');
    }
    assets.windows.push({...described,role:'installer'});
-   if(windows.blockmap)assets.windows.push({...await U.describeFile(windows.blockmap),role:'blockmap'});
-   else warnings.push('No '+path.basename(exe)+'.blockmap: Windows users download the whole installer instead of just what changed.');
+   // The setup's blockmap: what the next version's copies of this one download against. It has to be there and describe exactly this setup.
+   if(!windows.blockmap)problems.push('No '+path.basename(exe)+'.blockmap beside the setup. Installed copies would download the whole setup (about 230 MB) instead of what changed, now and for the next version; npm run build:windows writes it, keep it with the setup.');
+   else{
+    // gh names an asset after its file, and installed copies look for the blockmap at the setup's address plus .blockmap
+    if(path.basename(windows.blockmap)!==path.basename(exe)+'.blockmap')problems.push('The blockmap must be named '+path.basename(exe)+'.blockmap (installed copies look for it at the setup\'s address plus .blockmap), not '+path.basename(windows.blockmap)+'.');
+    try{U.checkBlockMap(await fs.readFile(windows.blockmap),{size:described.size});}catch(error){problems.push(path.basename(windows.blockmap)+': '+error.message+'.');}
+    assets.windows.push({...await U.describeFile(windows.blockmap),role:'blockmap'});
+   }
+   // previousBlockMaps: where the setups installed now keep their blockmaps. Each is downloaded (with retries) and read. An older entry that cannot be
+   // is left out with a warning; the live setup's own entry never is without --allow-missing-blockmaps: the next release is planned from this
+   // document, so an entry dropped once never comes back, and every copy on that version would download the whole setup from then on.
+   if(windowsFeedAllowed){
+    const liveWindows=live.filter(item=>item.platform==='windows'&&item.version),sizes=new Map(),live_=new Set(),override=Boolean(options['allow-missing-blockmaps']),lost=[];
+    for(const item of liveWindows){const setup=(item.files||[]).find(file=>/\.exe$/i.test(String(file?.url||'')));if(setup){live_.add(item.version);if(Number.isSafeInteger(setup.size))sizes.set(item.version,setup.size);}}
+    for(const entry of U.previousBlockMaps(liveWindows,{version:effective})){
+     try{const raw=await downloadSmall({fetch,url:entry.url,sleep:deps.sleep,delays:deps.delays});if(sizes.has(entry.version))U.checkBlockMap(raw,{size:sizes.get(entry.version)});else require('../desktop/browser-services/update-download.cjs').readBlockMap(raw);blockMaps.push(entry);}
+     catch(error){
+      const what=entry.version+' ('+entry.url+': '+error.message+')';
+      if(live_.has(entry.version)&&!override){lost.push(entry.version);problems.push('The live setup\'s blockmap, '+what+', could not be downloaded and read. Without it every copy on '+entry.version+' would download the whole setup, now and for every later version (the next document is made from this one). Try again later, upload the blockmap to its release, or pass --allow-missing-blockmaps to publish without it.');}
+      else warnings.push('previousBlockMaps leaves out '+what+'; copies of '+entry.version+' download the whole setup.');
+     }
+    }
+    const named=liveWindows.filter(item=>(item.files||[]).some(file=>/\.exe$/i.test(String(file?.url||''))));
+    if(named.length&&!blockMaps.length&&!lost.length){
+     const message='The live '+named.map(item=>item.file+' ('+item.version+')').join(', ')+' names a setup, but no earlier setup\'s blockmap could be downloaded and read, so the new Windows document would have no previousBlockMaps and every installed Windows copy would download the whole setup.';
+     if(override)warnings.push(message+' Published anyway (--allow-missing-blockmaps).');else problems.push(message+' Upload the live setup\'s .blockmap to its release and run again, or pass --allow-missing-blockmaps in an emergency.');
+    }
+   }
   }
  }
- // --- notes ---
+ // --- notes (--add-arch keeps the live notes) ---
  let notesText=options.notes;if(options['notes-file'])notesText=await fs.readFile(path.resolve(options['notes-file']),'utf8');
  const notes=U.releaseNotes(notesText);
- if(!notes.markdown){(options.publish&&!options['no-notes']?problems:warnings).push('No release notes. Installed copies show them in the "what\'s new" popup after the update. Pass --notes-file <file> (one bullet per line)'+(options.publish?' or --no-notes.':'.'));}
+ if(!notes.markdown&&!adding){(options.publish&&!options['no-notes']?problems:warnings).push('No release notes. Installed copies show them in the "what\'s new" popup after the update. Pass --notes-file <file> (one bullet per line)'+(options.publish?' or --no-notes.':'.'));}
  if(notes.plain.length>U.NOTES_MAX)warnings.push('The notes are '+notes.plain.length+' characters; the app shows the first '+U.NOTES_MAX+'.');
  // --- the plan: releases and feed files ---
- const releaseDate=now().toISOString(),plan={version,channel,rehearsal,repo:U.UPDATE_REPOSITORY,releases:[],feeds:[],releaseDate};
+ const releaseDate=now().toISOString(),plan={mode:adding?'add-arch':'release',version,channel,rehearsal,rollout,repo:U.UPDATE_REPOSITORY,releases:[],feeds:[],verify:[],untouched:[],releaseDate};
  const finish=ok=>({ok:ok&&problems.length===0,problems,warnings,plan,checks,live,assets});
  if(problems.length)return finish(false);
+ const liveOf=file=>live.find(item=>item.file===file&&item.version);
+ const feedEntry=(platform,file,doc)=>({platform,file,text:U.serializeFeed(doc),version:effective,before:liveOf(file)?.doc||null,beforeText:liveOf(file)?.text||''});
  const staging=await fs.mkdtemp(path.join(os.tmpdir(),'acira-feed-staging-'));
  try{
   if(assets.mac.length){
-   const tag=U.releaseTag({version,platform:'mac',commit:macCommit}),zips=assets.mac.filter(asset=>asset.role==='update'),releaseName='Acira Browser '+effective;
-   const release={platform:'mac',tag,title:releaseName+' (Mac)',prerelease:channel==='beta',assets:assets.mac.map(asset=>({...asset,url:U.assetUrl(tag,asset.name)}))};
+   const tag=adding?addTo.tag:U.releaseTag({version,platform:'mac',commit:macCommit}),zips=assets.mac.filter(asset=>asset.role==='update'),releaseName='Acira Browser '+effective;
+   const release={platform:'mac',tag,title:releaseName+' (Mac)',prerelease:channel==='beta',addTo:adding,arches:[...new Set(assets.mac.map(asset=>asset.arch))],assets:assets.mac.map(asset=>({...asset,url:U.assetUrl(tag,asset.name)}))};
    // writeMacUpdateFeed (the packager's own writer) computes the hashes the feed carries; they must agree with the ones computed above.
    for(const zip of zips)await fs.link(zip.path,path.join(staging,zip.name)).catch(()=>fs.copyFile(zip.path,path.join(staging,zip.name),fs.constants.COPYFILE_FICLONE)); // a hard link (or clone) costs nothing; writeMacUpdateFeed wants the ZIPs in one folder
    const base=await writeMacUpdateFeed({output:staging,version:effective,releaseDate,artifacts:zips.map(zip=>({zip:path.join(staging,zip.name),arch:zip.arch}))});
    const baseText=await fs.readFile(base.file,'utf8'),baseDoc=JSON.parse(baseText);
    for(const file of baseDoc.files){const zip=zips.find(item=>item.name===file.url);if(!zip||zip.sha512!==file.sha512||zip.size!==file.size)throw Error('Internal check failed: writeMacUpdateFeed and the publisher disagree about '+file.url+'.');}
-   const doc=U.finalizeMacFeed(baseText,{urlFor:name=>U.assetUrl(tag,name),releaseName,releaseNotes:notes.plain}),text=U.serializeFeed(doc);
-   for(const file of U.feedFiles(channel,'mac'))plan.feeds.push({platform:'mac',file,text,version:effective});
+   if(adding){
+    // the live documents keep everything (date, notes, rollout); they gain the new architecture's file
+    const added=baseDoc.files.map(file=>({...file,url:U.assetUrl(tag,file.url)}));
+    for(const item of addTo.docs)plan.feeds.push({platform:'mac',file:item.file,text:U.serializeFeed(U.addMacFiles(item.doc,added)),version:effective,before:item.doc,beforeText:item.text});
+   }else{
+    const doc=U.withRollout(U.finalizeMacFeed(baseText,{urlFor:name=>U.assetUrl(tag,name),releaseName,releaseNotes:notes.plain}),rollout);
+    for(const file of U.feedFiles(channel,'mac'))plan.feeds.push(feedEntry('mac',file,doc));
+   }
    release.body=U.releaseBody({notes,platform:'mac'});
    plan.releases.push(release);
   }
@@ -277,36 +442,91 @@ export async function planUpdate(options,deps){
    const release={platform:'windows',tag,title:releaseName+' (Windows)',prerelease:channel==='beta',assets:assets.windows.map(asset=>({...asset,url:U.assetUrl(tag,asset.name)})),body:U.releaseBody({notes,platform:'windows'}),feedEntry:windowsFeedAllowed};
    if(windowsFeedAllowed){
     // previousBlockMaps: where the setups now installed keep their blockmaps, so they download only what changed (packaging/update-publish.cjs)
-    const doc=U.windowsFeed({version:effective,file:exe,url:U.assetUrl(tag,exe.name),releaseDate,releaseName,releaseNotes:notes.plain,previousBlockMaps:U.previousBlockMaps(live.filter(item=>item.platform==='windows'&&item.version),{version:effective})}),text=U.serializeFeed(doc);
-    for(const file of U.feedFiles(channel,'windows'))plan.feeds.push({platform:'windows',file,text,version:effective});
+    const doc=U.withRollout(U.windowsFeed({version:effective,file:exe,url:U.assetUrl(tag,exe.name),releaseDate,releaseName,releaseNotes:notes.plain,previousBlockMaps:blockMaps}),rollout);
+    for(const file of U.feedFiles(channel,'windows'))plan.feeds.push(feedEntry('windows',file,doc));
    }
    plan.releases.push(release);
   }
-  // Every release also carries its checksums and a record of what was checked.
+  // Every release also carries its checksums and a record of what was checked; files added to a published release get their own (nothing is replaced).
   for(const release of plan.releases){
-   const files=release.assets.slice(),sums={name:'SHA256SUMS.txt',content:U.checksumsText(files),role:'checksums'};
-   const info={name:'BUILD-INFO.json',content:JSON.stringify(U.buildInfo({version:effective,channel,platform:release.platform,commit:release.platform==='mac'?macCommit:windowsCommit,assets:files,checks:release.platform==='mac'?checks.mac:checks.windows,builtAt:releaseDate}),null,2)+'\n',role:'info'};
+   const files=release.assets.slice(),suffix=release.addTo?'-'+release.arches.join('-'):'';
+   const sums={name:'SHA256SUMS'+suffix+'.txt',content:U.checksumsText(files),role:'checksums'};
+   const info={name:'BUILD-INFO'+suffix+'.json',content:JSON.stringify(U.buildInfo({version:effective,channel,platform:release.platform,commit:release.platform==='mac'?macCommit:windowsCommit,assets:files,checks:release.platform==='mac'?checks.mac:checks.windows}),null,2)+'\n',role:'info'};
    for(const generated of [sums,info]){generated.size=Buffer.byteLength(generated.content);generated.sha256=createHash('sha256').update(generated.content).digest('hex');generated.sha512=createHash('sha512').update(generated.content).digest('base64');generated.url=U.assetUrl(release.tag,generated.name);release.assets.push(generated);}
   }
-  // Read every planned feed document back the way an installed app does, and check it points at the assets it should.
-  for(const feed of plan.feeds){
-   const {info,files}=U.readWithUpdater(feed.text,{file:feed.file});
-   if(info.version!==effective)throw Error('Internal check failed: '+feed.file+' carries '+info.version+'.');
-   const release=plan.releases.find(item=>item.platform===feed.platform);
-   for(const file of files){
-    const asset=release.assets.find(item=>item.url===file.url.href);
-    if(!asset||asset.sha512!==file.info.sha512||asset.size!==file.info.size)throw Error('Internal check failed: '+feed.file+' names '+file.url.href+' which is not an uploaded asset with those hashes.');
-   }
-   if(feed.platform==='mac'){
-    const {MacUpdater}=require('electron-updater/out/MacUpdater');
-    for(const [isArm,arch] of [[true,'arm64'],[false,'x64']]){
-     const chosen=MacUpdater.filterFilesForArch(files,isArm);
-     if(U.ARCHES.filter(a=>assets.mac.some(asset=>asset.role==='update'&&asset.arch===a)).includes(arch)&&(chosen.length!==1||!chosen[0].url.href.includes('-'+arch+'-')))throw Error('Internal check failed: '+feed.file+' would not give '+arch+' Macs the '+arch+' archive.');
-    }
-   }
-  }
+  // Read every planned feed document back the way an installed app does, and check it points at the assets it should (or, --add-arch, at the live files it keeps).
+  for(const feed of plan.feeds)checkPlannedFeed(feed,plan);
  }finally{await fs.rm(staging,{recursive:true,force:true});}
  return finish(true);
+}
+/** A planned channel document, read back with electron-updater's own parser: the right version, every file a planned asset (or a file the live document
+ *  already named, when one is added), and on a Mac each architecture handed its own archive. */
+function checkPlannedFeed(feed,plan){
+ const {info,files}=U.readWithUpdater(feed.text,{file:feed.file});
+ if(info.version!==plan.version)throw Error('Internal check failed: '+feed.file+' carries '+info.version+'.');
+ const release=plan.releases.find(item=>item.platform===feed.platform),known=[...(release?.assets||[]),...(plan.mode==='release'?[]:feed.before?.files||[])];
+ for(const file of files){
+  const asset=known.find(item=>item.url===file.url.href);
+  if(!asset||asset.sha512!==file.info.sha512||asset.size!==file.info.size)throw Error('Internal check failed: '+feed.file+' names '+file.url.href+' which is not an uploaded asset with those hashes.');
+ }
+ if(feed.platform==='mac'){
+  const {MacUpdater}=require('electron-updater/out/MacUpdater'),offered=files.map(file=>U.macArchOf(file.url.href));
+  for(const [isArm,arch] of [[true,'arm64'],[false,'x64']]){
+   const chosen=MacUpdater.filterFilesForArch(files,isArm);
+   if(offered.includes(arch)&&(chosen.length!==1||!chosen[0].url.href.includes('-'+arch+'-')))throw Error('Internal check failed: '+feed.file+' would not give '+arch+' Macs the '+arch+' archive.');
+  }
+ }
+}
+
+/**
+ * --widen, --halt, --resume-rollout: a new version of each live channel document that offers --version, nothing else changed and nothing uploaded.
+ * Resolves to {ok, problems, warnings, plan, live}. deps: fetch, now.
+ */
+export async function planFeedChange(options,deps){
+ const {now=()=>new Date()}=deps;
+ const problems=[],warnings=[],version=options.version,channel=options.channel||'beta';
+ if(!version)throw Error('Say which live version: --version 0.1.0-beta.7\n\n'+HELP);
+ problems.push(...U.versionProblems(version,channel));
+ const mode=options.halt?'halt':options['resume-rollout']?'resume':'widen';
+ const target=mode==='widen'?U.parsePercent(options.widen,'--widen'):options.rollout!==undefined?U.parsePercent(options.rollout,'--rollout'):null;
+ const platforms=options.platform?[options.platform]:U.PLATFORMS,at=now().toISOString();
+ const plan={mode,version,channel,repo:U.UPDATE_REPOSITORY,releases:[],feeds:[],verify:[],untouched:[],releaseDate:at};
+ const live=[];
+ for(const platform of platforms)for(const file of U.feedFiles(channel,platform)){
+  live.push({platform,...await readLive({deps,file,authoritative:Boolean(options.publish)})});
+ }
+ const finish=()=>({ok:problems.length===0,problems,warnings,plan,live});
+ // Only the documents that offer the version are needed: one that cannot be read stops the change only when no readable one offers it (a halt
+ // should not wait for an unrelated document), and is otherwise named in a warning.
+ const offering=live.filter(item=>item.version===version),unreadable=live.filter(item=>item.error);
+ const narrow=options.platform?'':' --platform mac or --platform windows changes one platform only.',has=item=>item.version?'offers '+item.version:'does not exist';
+ if(!offering.length){
+  if(unreadable.length)problems.push('Could not read '+unreadable.map(item=>item.file+' ('+item.error+')').join(', ')+(live.length>unreadable.length?', and '+live.filter(item=>!item.error).map(item=>item.file+' '+has(item)).join(', '):'')+': no document that could be read offers '+version+'.'+narrow);
+  else problems.push('The live feed does not offer '+version+': '+live.map(item=>item.file+' '+has(item)).join(', ')+'. --'+(mode==='resume'?'resume-rollout':mode)+' only changes the version that is live.'+narrow);
+ }else for(const item of unreadable)warnings.push('Could not read the live feed '+item.file+' ('+item.error+'): it is left as it is. If it offers '+version+' too, run this again once it can be read.'+narrow);
+ for(const item of live)if(!item.error&&item.version!==version)plan.untouched.push('feed/'+item.file+' '+has(item)+': left alone');
+ for(const item of offering){
+  const {percentage,halted,before}=U.rolloutOf(item.doc);let doc=null;
+  if(!Array.isArray(item.doc.files)||!item.doc.files.length){problems.push(item.file+' offers '+version+' with no files; nothing to change.');continue;}
+  if(mode==='widen'){
+   if(halted)problems.push(item.file+': '+version+' is halted. Resume it first (--resume-rollout), then widen.');
+   else if(target<=percentage)problems.push(item.file+': '+version+' is already '+U.describeRollout(item.doc)+'; --widen only raises it'+(percentage===100?'.':' (a number above '+percentage+').'));
+   else doc=U.withRollout(item.doc,target);
+  }else if(mode==='halt'){
+   if(halted)problems.push(item.file+': '+version+' is already halted.');
+   else doc=U.haltDoc(item.doc,{at});
+  }else if(!halted)problems.push(item.file+': '+version+' is not halted ('+U.describeRollout(item.doc)+'); nothing to resume.');
+  else if(!(target??before))problems.push(item.file+': the halt did not record what share of installs '+version+' had; say it with --rollout <percent>.');
+  else doc=U.withRollout(item.doc,target??before);
+  if(!doc)continue;
+  const feed={platform:item.platform,file:item.file,text:U.serializeFeed(doc),version,before:item.doc,beforeText:item.text};
+  const {info}=U.readWithUpdater(feed.text,{file:feed.file});
+  if(info.version!==version||JSON.stringify(info.files)!==JSON.stringify(U.readWithUpdater(item.text,{file:item.file}).info.files))throw Error('Internal check failed: '+feed.file+' would change more than who it reaches.');
+  plan.feeds.push(feed);
+ }
+ // Widening and resuming send more people to the files: they are downloaded back and compared first, like a new version's.
+ if(mode!=='halt')for(const feed of plan.feeds)for(const file of feed.before.files)if(!plan.verify.some(item=>item.url===file.url))plan.verify.push({name:path.basename(new URL(file.url).pathname),url:file.url,sha512:file.sha512,size:file.size});
+ return finish();
 }
 
 /** The review folder: planned feed files, notes, checksums and PLAN.json. No payload is copied into it. */
@@ -319,26 +539,64 @@ async function writeReview({plan,dir}){
   await fs.writeFile(path.join(folder,'NOTES.md'),release.body);
   for(const asset of release.assets)if(asset.content!==undefined)await fs.writeFile(path.join(folder,asset.name),asset.content);
  }
- const slim={...plan,releases:plan.releases.map(release=>({...release,assets:release.assets.map(({name,size,sha256,sha512,url,role,arch})=>({name,size,sha256,sha512,url,role,arch}))})),feeds:plan.feeds.map(({platform,file,version})=>({platform,file,version}))};
+ const slim={...plan,releases:plan.releases.map(release=>({...release,assets:release.assets.map(({name,size,sha256,sha512,url,role,arch})=>({name,size,sha256,sha512,url,role,arch}))})),feeds:plan.feeds.map(({platform,file,version,before})=>({platform,file,version,before:before?{version:before.version,rollout:U.describeRollout(before)}:null}))};
  await fs.writeFile(path.join(dir,'PLAN.json'),JSON.stringify(slim,null,2)+'\n');
  return dir;
 }
 
+const TITLES={release:'',['add-arch']:'ADD THE MISSING MAC ARCHITECTURE to ',widen:'WIDEN ',halt:'HALT ',resume:'RESUME '};
+/** What a halt does to people, from desktop/browser-services/app-updater.cjs and electron-updater (docs/launch/RELEASING.md says the same). */
+export const haltEffects=({version,percentage})=>[
+ 'What it does to people (the installed app: electron-updater offers a version only below its stagingPercentage, and Acira never downgrades):',
+ '  - from each copy\'s next check (20 s after it starts, then every 8 hours) nobody is offered '+version+';',
+ '  - copies that already installed '+version+' keep it. To move them, publish a higher version with the fix;',
+ '  - a download already under way finishes and offers Install now. A Mac with a finished download does not check again, so it installs at Install now',
+ '    or when Acira quits. On Windows the next check takes Install now away, but the finished setup still installs when Acira quits;',
+ '  - a paused download stays paused: Resume finishes it in the same run, or after a restart asks the feed first and drops it;',
+ '  - the releases stay up (the website still offers them to new installs). --resume-rollout offers '+version+' again'+(percentage&&percentage<100?' to '+percentage+'% of installs':'')+'.',
+];
 function describePlan(plan,{log,review}){
- log('\n'+(plan.rehearsal?'REHEARSAL of ':'')+'Acira Browser '+plan.version+' on the '+plan.channel+' channel -> '+plan.repo);
+ log('\n'+(plan.rehearsal?'REHEARSAL of ':'')+TITLES[plan.mode]+'Acira Browser '+plan.version+' on the '+plan.channel+' channel -> '+plan.repo);
  for(const release of plan.releases){
-  log('\n  release '+release.tag+'  ('+release.title+(release.prerelease?', pre-release':'')+')');
+  log('\n  '+(release.addTo?'add to the published release ':'release ')+release.tag+'  ('+release.title+(release.prerelease?', pre-release':'')+')');
   for(const asset of release.assets)log('    upload  '+asset.name.padEnd(54)+mb(asset.size).padStart(10)+(asset.role?'   '+asset.role:''));
  }
- log('\n  channel documents, committed last, one commit to '+BRANCH+' of '+plan.repo+':');
- for(const feed of plan.feeds)log('    feed/'+feed.file+'  ->  '+feed.version);
+ if(plan.verify.length)log('\n  first download back anonymously and compare SHA-512 and size: '+plan.verify.map(item=>item.name).join(', ')+' ('+mb(plan.verify.reduce((sum,item)=>sum+item.size,0))+')');
+ log('\n  channel documents, '+(plan.releases.length||plan.verify.length?'committed last, ':'')+'one commit to '+BRANCH+' of '+plan.repo+':');
+ // one line each for now and after (with the Mac architectures it hands out), then the diff with unchanged runs folded
+ const summary=(doc,platform)=>{const arches=platform==='mac'?(doc.files||[]).map(file=>U.macArchOf(file.url)).filter(Boolean):[];return doc.version+(arches.length?' ('+arches.join(' + ')+')':'')+', '+U.describeRollout(doc);};
+ for(const feed of plan.feeds){
+  log('\n    feed/'+feed.file);
+  log('      now:   '+(feed.before?summary(feed.before,feed.platform):'(no document yet)'));
+  log('      after: '+summary(U.parseFeed(feed.text),feed.platform));
+  for(const line of U.foldDiff(U.lineDiff(feed.beforeText,feed.text)))log('      '+line);
+ }
  if(!plan.feeds.length)log('    (none)');
+ for(const line of plan.untouched)log('    '+line);
+ if(plan.mode==='halt')for(const line of haltEffects({version:plan.version,percentage:plan.feeds.map(feed=>U.rolloutOf(feed.before).percentage).find(Boolean)}))log('  '+line);
  if(review)log('\n  Review the planned feed files in '+review);
 }
 
-/** Commits the channel documents to feed/ in one commit. Fast-forward only: if somebody else moved main in the meantime this fails and changes nothing. */
-export async function commitFeed({gh,repo:slug,branch=BRANCH,files,message}){
+/** The channel document feed/<file> at a ref of the feed repository (not the CDN copy, which can be minutes old), or null when there is none. */
+async function readFeedAt({gh,slug,file,ref}){
+ try{const found=await ghJson(gh,['api',`repos/${slug}/contents/feed/${file}?ref=${ref}`]);return U.parseFeed(Buffer.from(found.content,'base64').toString('utf8'));}
+ catch(error){if(notFound(error))return null;throw error;}
+}
+/** The feed must still be what the plan was made from: a new version must still be newer, and every plan (a new version's previousBlockMaps come from
+ *  the live Windows document; an edit changes one document) must find exactly the document it was made from. */
+function checkCurrent(plan,current){
+ for(const feed of plan.feeds){
+  const doc=current[feed.file]??null;
+  if(plan.mode==='release'&&doc?.version&&!semver.gt(feed.version,doc.version))throw Error('feed/'+feed.file+' already offers '+doc.version+'; '+feed.version+' is not newer.');
+  if(JSON.stringify(doc)!==JSON.stringify(feed.before??null))throw Error('feed/'+feed.file+' is not what this plan was made from (it '+(doc?'offers '+doc.version+', '+U.describeRollout(doc):'does not exist')+(feed.before?'; the plan saw '+feed.before.version+', '+U.describeRollout(feed.before):'; the plan saw no document')+'). The public copy can be a few minutes old, or someone changed it: run the command again.');
+ }
+}
+
+/** Commits the channel documents to feed/ in one commit. Fast-forward only: if somebody else moved main in the meantime this fails and changes nothing.
+ *  check(docs) sees the documents as they are in the commit this one builds on, and can stop it. */
+export async function commitFeed({gh,repo:slug,branch=BRANCH,files,message,check}){
  const ref=await ghJson(gh,['api',`repos/${slug}/git/ref/heads/${branch}`]),parent=ref.object.sha;
+ if(check){const docs={};for(const file of files)docs[file.file]=await readFeedAt({gh,slug,file:file.file,ref:parent});check(docs);}
  const commit=await ghJson(gh,['api',`repos/${slug}/git/commits/${parent}`]);
  const tree=await ghJson(gh,['api','-X','POST',`repos/${slug}/git/trees`,'--input','-'],{input:JSON.stringify({base_tree:commit.tree.sha,tree:files.map(file=>({path:'feed/'+file.file,mode:'100644',type:'blob',content:file.text}))})});
  const created=await ghJson(gh,['api','-X','POST',`repos/${slug}/git/commits`,'--input','-'],{input:JSON.stringify({message,tree:tree.sha,parents:[parent]})});
@@ -346,28 +604,41 @@ export async function commitFeed({gh,repo:slug,branch=BRANCH,files,message}){
  return created.sha;
 }
 
-/** Creates (or completes) one release as a draft, uploads what is missing, publishes it, and returns once every asset is there. */
-async function ensureRelease({gh,slug,release,log,workDir}){
+const FEED_FILES=['latest-mac.yml','beta-mac.yml','latest.yml','beta.yml'];
+/** The local file to upload for an asset: the payload itself, or a generated file written under its plain name (gh names an asset after its file). */
+async function assetFile({asset,release,workDir}){
+ if(asset.content===undefined)return asset.path;
+ const dir=path.join(workDir,release.platform);await fs.mkdir(dir,{recursive:true});
+ const file=path.join(dir,asset.name);await fs.writeFile(file,asset.content);return file;
+}
+/** Puts the planned bytes in place of an asset that has others. Never one a live channel document names: installed copies download that one. */
+async function replaceAsset({gh,slug,release,asset,workDir,referenced,log,why}){
+ if(referenced.has(asset.url))throw Error(asset.name+' on '+release.tag+' '+why+', and a live channel document names it, so it is never replaced. Nothing was replaced and the feed was not changed.');
+ log('  replacing '+asset.name+' on '+release.tag+' ('+why+')');
+ await gh(['release','delete-asset',release.tag,asset.name,'--repo',slug,'--yes']);
+ await gh(['release','upload',release.tag,await assetFile({asset,release,workDir}),'--repo',slug]);
+}
+
+/** Creates (or completes) one release as a draft, uploads what is missing, publishes it. A release that exists (an earlier run that stopped, or with
+ *  release.addTo the live one, which must exist and be published) is completed: what it lacks is uploaded, a file of another size is replaced, and a
+ *  file of the same size stays for the anonymous download that follows to check its bytes. A file a live channel document names is never replaced. */
+async function ensureRelease({gh,slug,release,log,workDir,referenced}){
  let existing=null;
  try{existing=await ghJson(gh,['release','view',release.tag,'--repo',slug,'--json','tagName,isDraft,assets']);}catch(error){if(!notFound(error))throw error;}
- if(existing&&!existing.isDraft){
-  const names=new Set(existing.assets.map(asset=>asset.name));
-  if(release.assets.every(asset=>names.has(asset.name)))log('  '+release.tag+' already exists with every file; continuing to verification.');
-  else throw Error(release.tag+' is already published but is missing '+release.assets.filter(asset=>!names.has(asset.name)).map(asset=>asset.name).join(', ')+'. Delete it (gh release delete '+release.tag+' --repo '+slug+' --cleanup-tag) and run again.');
- }
- if(!existing){
+ if(release.addTo&&(!existing||existing.isDraft))throw Error('The live feed names release '+release.tag+', but it '+(existing?'is a draft':'does not exist')+'. --add-arch adds to the published release the feed points at; check the feed.');
+ if(existing){
+  const names=new Set(existing.assets.map(asset=>asset.name)),missing=release.assets.filter(asset=>!names.has(asset.name)).map(asset=>asset.name);
+  log('  '+release.tag+' exists'+(existing.isDraft?' (draft)':'')+(missing.length?'; adding '+missing.join(', '):' with every file')+'. Every file is checked by downloading it before the feed changes.');
+ }else{
   const notesFile=path.join(workDir,'notes-'+release.platform+'.md');await fs.writeFile(notesFile,release.body);
   await gh(['release','create',release.tag,'--repo',slug,'--draft',...(release.prerelease?['--prerelease']:[]),'--title',release.title,'--notes-file',notesFile]);
   log('  created draft '+release.tag);
  }
  const have=new Map(((await ghJson(gh,['release','view',release.tag,'--repo',slug,'--json','assets'])).assets||[]).map(asset=>[asset.name,asset.size]));
  for(const asset of release.assets){
-  if(have.has(asset.name)){if(have.get(asset.name)!==asset.size)throw Error(asset.name+' is already attached to '+release.tag+' with a different size ('+have.get(asset.name)+' vs '+asset.size+'). Delete the release and run again.');continue;}
-  let file=asset.path;
-  // gh names an asset after its file, so a generated file keeps its plain name, in a folder per platform.
-  if(asset.content!==undefined){const dir=path.join(workDir,release.platform);await fs.mkdir(dir,{recursive:true});file=path.join(dir,asset.name);await fs.writeFile(file,asset.content);}
+  if(have.has(asset.name)){if(have.get(asset.name)!==asset.size)await replaceAsset({gh,slug,release,asset,workDir,referenced,log,why:'is '+have.get(asset.name)+' bytes there, '+asset.size+' planned'});continue;}
   log('  uploading '+asset.name+(asset.size>1048576?' ('+mb(asset.size)+')':''));
-  await gh(['release','upload',release.tag,file,'--repo',slug]);
+  await gh(['release','upload',release.tag,await assetFile({asset,release,workDir}),'--repo',slug]);
  }
  const after=new Map(((await ghJson(gh,['release','view',release.tag,'--repo',slug,'--json','assets'])).assets||[]).map(asset=>[asset.name,asset.size]));
  for(const asset of release.assets)if(after.get(asset.name)!==asset.size)throw Error(asset.name+' is not attached to '+release.tag+' with the right size after uploading.');
@@ -384,32 +655,41 @@ export async function publishPlan({plan,deps,options}){
   if(info.private!==false)throw Error(slug+' is not public: installed copies could not read the feed.');
   if(info.permissions&&info.permissions.push!==true)throw Error('The signed-in GitHub account cannot push to '+slug+'.');
   if(info.default_branch!==BRANCH)throw Error(slug+' has default branch '+info.default_branch+', but every installed app reads the feed from '+BRANCH+'.');
-  // The authoritative feed (not the CDN copy, which can be minutes old): the version must still be higher right now.
-  for(const feed of plan.feeds){
-   let current=null;
-   try{const file=await ghJson(gh,['api',`repos/${slug}/contents/feed/${feed.file}?ref=${BRANCH}`]);current=U.parseFeed(Buffer.from(file.content,'base64').toString('utf8'));}catch(error){if(!notFound(error))throw error;}
-   if(current?.version&&!semver.gt(feed.version,current.version))throw Error('feed/'+feed.file+' already offers '+current.version+'; '+feed.version+' is not newer.');
-  }
+  // The authoritative feed (not the CDN copy): checked before anything is uploaded, and again on the commit the feed commit builds on.
+  const current={};for(const file of FEED_FILES)current[file]=await readFeedAt({gh,slug,file,ref:BRANCH});
+  checkCurrent(plan,current);
+  // every file a live document names (its setups and ZIPs, and the blockmaps its previousBlockMaps point at): never replaced
+  const referenced=new Set(Object.values(current).flatMap(doc=>[...(doc?.files||[]),...(doc?.previousBlockMaps||[])]).map(entry=>entry?.url).filter(Boolean));
+  state.referenced=referenced;
   // 1. payloads
-  for(const release of plan.releases){log('\nRelease '+release.tag);state.releases.push(release.tag);await ensureRelease({gh,slug,release,log,workDir:work});}
-  // 2. every payload, downloaded with no credentials, must be byte-for-byte what was uploaded
-  log('\nDownloading every file anonymously and comparing SHA-512...');
-  const queue=plan.releases.flatMap(release=>release.assets.map(asset=>({release,asset})));
-  const workers=Array.from({length:2},async()=>{for(let next=queue.shift();next;next=queue.shift()){await verifyDownload({fetch,url:next.asset.url,sha512:next.asset.sha512,size:next.asset.size,sleep,delays});log('  verified '+next.asset.name);}});
+  for(const release of plan.releases){log('\nRelease '+release.tag);state.releases.push(release.tag);await ensureRelease({gh,slug,release,log,workDir:work,referenced});}
+  // 2. every payload the documents will name, downloaded with no credentials, must be byte-for-byte what was planned. One of ours that comes back as
+  //    other bytes (a damaged upload, or a file a stopped run left) is replaced once and checked again; files of the live documents never are.
+  const queue=[...plan.releases.flatMap(release=>release.assets.map(asset=>({release,asset,name:asset.name,url:asset.url,sha512:asset.sha512,size:asset.size}))),...plan.verify];
+  if(queue.length)log('\nDownloading every file anonymously and comparing SHA-512...');
+  const check=next=>verifyDownload({fetch,url:next.url,sha512:next.sha512,size:next.size,sleep,delays});
+  const workers=Array.from({length:2},async()=>{for(let next=queue.shift();next;next=queue.shift()){
+   try{await check(next);}
+   catch(error){if(!error.mismatch||!next.release)throw error;await replaceAsset({gh,slug,release:next.release,asset:next.asset,workDir:work,referenced,log,why:'it downloads as other bytes than planned'});await check(next);}
+   log('  verified '+next.name);
+  }});
   await Promise.all(workers);
   // 3. only now the channel documents
   if(!plan.feeds.length){log('\nNo channel document to update.');return state;}
-  const message='Feed: Acira Browser '+plan.version+' ('+plan.channel+', '+plan.releases.map(release=>release.platform).join(' + ')+')\n\n'+plan.releases.map(release=>release.tag).join('\n');
+  const what={release:plan.releases.map(release=>release.platform).join(' + '),['add-arch']:'add '+plan.releases.flatMap(release=>release.arches||[]).join('+'),widen:'widened, '+U.describeRollout(U.parseFeed(plan.feeds[0].text)),halt:'halted',resume:'resumed, '+U.describeRollout(U.parseFeed(plan.feeds[0].text))}[plan.mode];
+  const message='Feed: Acira Browser '+plan.version+' ('+plan.channel+', '+what+')\n\n'+[...plan.releases.map(release=>release.tag),...plan.feeds.map(feed=>'feed/'+feed.file+': '+U.describeRollout(U.parseFeed(feed.text)))].join('\n');
   log('\nCommitting the channel documents ('+plan.feeds.map(feed=>feed.file).join(', ')+')...');
-  state.feedCommit=await commitFeed({gh,repo:slug,files:plan.feeds,message});
+  state.feedCommit=await commitFeed({gh,repo:slug,files:plan.feeds,message,check:docs=>checkCurrent(plan,docs)});
   log('  committed '+state.feedCommit);
   return state;
  }catch(error){
   error.state=state;
+  // Never advise deleting a release a live document names: every installed copy downloads from it (and the website offers its files).
+  const named=tag=>[...(state.referenced||[])].some(url=>U.tagOf(url)===tag);
   error.recovery=[
    'The channel documents in feed/ were '+(state.feedCommit?'COMMITTED before this failure':'NOT touched')+'.',
-   ...state.releases.map(tag=>'Release '+tag+' may exist (a draft is invisible to everyone); to remove it: gh release delete '+tag+' --repo '+slug+' --cleanup-tag --yes'),
-   'Running the same command again resumes: it reuses releases that exist and uploads only what is missing.',
+   ...(state.feedCommit?[]:plan.releases.filter(release=>state.releases.includes(release.tag)).map(release=>release.addTo||named(release.tag)?'Files may have been added to '+release.tag+', the release the live feed points at. No channel document names them yet. Do not delete that release: installed copies download from it.':'Release '+release.tag+' may exist; no channel document names it. To drop it instead of resuming: gh release delete '+release.tag+' --repo '+slug+' --cleanup-tag --yes')),
+   'Running the same command again resumes: it reuses what is there, checks every file by downloading it, and replaces only files no channel document names.',
   ];
   throw error;
  }finally{await fs.rm(work,{recursive:true,force:true});}
@@ -420,7 +700,7 @@ async function waitForFeed({plan,fetch,log,sleep,minutes=8}){
  const deadline=Date.now()+minutes*60000;let pending=plan.feeds.slice();
  while(pending.length&&Date.now()<deadline){
   const next=[];
-  for(const feed of pending){const live=await U.readLiveFeed({fetch,file:feed.file});if(live.version!==feed.version)next.push(feed);else log('  live: '+feed.file+' now offers '+feed.version);}
+  for(const feed of pending){const live=await U.readLiveFeed({fetch,file:feed.file});if(live.text!==feed.text)next.push(feed);else log('  live: '+feed.file+' now offers '+feed.version+', '+U.describeRollout(live.doc));}
   pending=next;if(pending.length){log('  waiting for the public copy of '+pending.map(feed=>feed.file).join(', ')+' (GitHub caches it for up to 5 minutes)...');await sleep(20000);}
  }
  return pending.length===0;
@@ -430,25 +710,29 @@ export async function main(argv=process.argv.slice(2),overrides={}){
  const options=parseArguments(argv);
  if(options.help||!argv.length){console.log(HELP);return 0;}
  const log=overrides.log||console.log;
- const deps={log,fetch:globalThis.fetch,root:repo,now:()=>new Date(),...require('../packaging/macos/update-verify.cjs'),inspectWindowsInstaller,gh:ghCli(),...overrides};
- const result=await planUpdate(options,deps);
+ const transport=options['stand-in']?standInTransport(options['stand-in']):null;
+ const deps={log,fetch:globalThis.fetch,root:repo,now:()=>new Date(),...require('../packaging/macos/update-verify.cjs'),inspectWindowsInstaller,gh:ghCli(),...(transport||{}),...overrides};
+ if(transport)log('STAND-IN: every GitHub and feed request goes to '+transport.label+'; nothing reaches GitHub and gh is not used.');
+ const editing=FEED_EDITS.some(name=>options[name]!==undefined);
+ const result=editing?await planFeedChange(options,deps):await planUpdate(options,deps);
  if(result.problems.length||!result.ok){
   log('\nREFUSED. Nothing was uploaded or changed.\n');for(const problem of result.problems)log('  x '+problem);for(const warning of result.warnings)log('  ! '+warning);
   return 1;
  }
- const review=await writeReview({plan:result.plan,dir:path.resolve(options['review-dir']||path.join(repo,'release/update-review',options.version+'-'+(options.channel||'beta')))});
+ const mode=result.plan.mode,verb={release:'release',['add-arch']:'add it',widen:'widen it',halt:'halt it',resume:'resume it'}[mode];
+ const review=await writeReview({plan:result.plan,dir:path.resolve(options['review-dir']||path.join(repo,'release/update-review',options.version+'-'+(options.channel||'beta')+(mode==='release'?'':'-'+mode)))});
  describePlan(result.plan,{log,review});
  for(const warning of result.warnings)log('  ! '+warning);
- if(!options.publish){log('\nDRY RUN OK. Nothing was uploaded or changed. Run the same command with --publish to release.');return 0;}
+ if(!options.publish){log('\nDRY RUN OK. Nothing was uploaded or changed. Run the same command with --publish --yes to '+verb+'.');return 0;}
  if(!options.yes){
   if(!process.stdin.isTTY)throw Error('--publish asks for confirmation; run it in a terminal, or add --yes.');
-  const rl=readline.createInterface({input:process.stdin,output:process.stdout}),answer=await rl.question('\nPublish version '+options.version+' to '+U.UPDATE_REPOSITORY+' now? Type the version to continue: ');rl.close();
-  if(answer.trim()!==options.version){log('Not published.');return 1;}
+  const rl=readline.createInterface({input:process.stdin,output:process.stdout}),answer=await rl.question('\n'+(mode==='release'?'Publish':verb[0].toUpperCase()+verb.slice(1,verb.indexOf(' ')))+' version '+options.version+' on '+U.UPDATE_REPOSITORY+' now? Type the version to continue: ');rl.close();
+  if(answer.trim()!==options.version){log('Nothing changed.');return 1;}
  }
  try{
   const state=await publishPlan({plan:result.plan,deps,options});
-  if(state.feedCommit&&!options['no-wait']){const seen=await waitForFeed({plan:result.plan,fetch:deps.fetch,log,sleep:deps.sleep||(ms=>new Promise(resolve=>setTimeout(resolve,ms)))});log(seen?'\nThe public feed offers '+options.version+'.':'\nCommitted, but the public copy has not refreshed yet; it will within minutes.');}
-  log('\nPUBLISHED. Next: open one installed copy of the previous version and check that it updates (docs/launch/PUBLIC_UPDATES.md, last step).');
+  if(state.feedCommit&&!options['no-wait']){const seen=await waitForFeed({plan:result.plan,fetch:deps.fetch,log,sleep:deps.sleep||(ms=>new Promise(resolve=>setTimeout(resolve,ms)))});log(seen?'\nThe public feed shows the change.':'\nCommitted, but the public copy has not refreshed yet; it will within minutes.');}
+  log(mode==='release'||mode==='add-arch'?'\nPUBLISHED. Next: open one installed copy of the previous version and check that it updates (docs/launch/RELEASING.md, last step).':'\nDONE. '+result.plan.feeds.map(feed=>'feed/'+feed.file+': '+U.describeRollout(U.parseFeed(feed.text))).join('; ')+'.');
   return 0;
  }catch(error){
   log('\nSTOPPED: '+error.message);for(const line of error.recovery||[])log('  - '+line);

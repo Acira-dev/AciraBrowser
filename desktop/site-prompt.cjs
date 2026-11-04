@@ -81,7 +81,7 @@ const INTERNAL_PAGES=require('./internal-pages.json');
 function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=>null,anchorOf=async()=>null,pageBounds=()=>null,blocked=()=>false,
  isDark=()=>true,speed=()=>'premium',reducedMotion=()=>false,uiScale=()=>1,faviconFor=()=>'',appIcon=()=>'',say=id=>id,onManage=()=>{},restoreFocus=()=>{},enabled=()=>true}){
  const queue=[];
- let view=null,ready=null,readyDone=null,sizeWaiter=null,shown=null,showing=null,exiting=null,exitTimer=null,idleTimer=null,nextTimer=null,gen=0,counter=0,scale=1,disposed=false,visible=false;
+ let view=null,ready=null,readyDone=null,sizeWaiter=null,shown=null,showing=null,exiting=null,exitTimer=null,idleTimer=null,nextTimer=null,gen=0,counter=0,scale=1,disposed=false,visible=false,crashes=[];
 
  /* An open Acira page ("acira://settings") draws the glyph its tab and the sidebar wear (src/ui/internalPageIcon.ts), never a letter; the New tab keeps the mark. */
  const pageItem=(host,entry)=>{
@@ -108,6 +108,7 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   wc.setWindowOpenHandler?.(()=>({action:'deny'}));
   wc.on?.('will-navigate',event=>event.preventDefault());
   wc.ipc.on('acira:site-prompt',(_event,message)=>{if(view===made)onMessage(message);});
+  wc.on?.('render-process-gone',(_event,details)=>{if(view===made&&details?.reason!=='clean-exit')gone();});
   win.contentView.addChildView(made);
   ready=new Promise(resolve=>{readyDone=resolve;setTimeout(()=>resolve(false),4000);wc.loadFile(FILE).catch(()=>resolve(false));});
   return ready;
@@ -117,6 +118,16 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   const old=view;view=null;ready=null;if(!old)return;
   try{getWindow()?.contentView.removeChildView(old);}catch{}
   try{if(!old.webContents.isDestroyed())old.webContents.close();}catch{}
+ }
+ /** The card's page stopped (its renderer crashed or was killed). It used to stay blank and unanswered, and every later request waited behind it. The
+  *  request stays queued and a new card shows it again; when the card keeps stopping (three times in a minute), every waiting request is answered the safe
+  *  way (its cancel button), so nothing waits for good. */
+ function gone(){
+  const now=Date.now();crashes=crashes.filter(at=>now-at<60000);crashes.push(now);
+  shown=null;showing=null;gen++;exiting=null;
+  destroy();
+  if(crashes.length>=3){for(const entry of [...queue])finish(entry,{response:entry.cancelId,dismissed:true});return;}
+  clearTimeout(nextTimer);nextTimer=setTimeout(pump,0);
  }
  const send=state=>{if(live())try{view.webContents.send('acira:site-prompt-state',state);}catch{}};
 

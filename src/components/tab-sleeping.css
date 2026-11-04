@@ -1,5 +1,8 @@
-/* A tab the memory saver put to sleep keeps its place; only its icon goes quiet. It wakes (and reloads) when opened. */
-[data-sleeping] .site-identity-icon { opacity: 0.45; }
+/* A tab the memory saver put to sleep keeps its place; only its icon goes quiet. It wakes (and reloads) when opened. Quiet, not gone:
+   the lowest strengths that keep the icon's stroke at 3:1 on every finish, measured on the glass over a white and a black desktop
+   (beta.10): 46% on dark frames (45% was just short there), 68% on light ones (45% was about 2:1). */
+[data-sleeping] .site-identity-icon { opacity: 0.46; }
+@media not (forced-colors: active) { .app.style-acira:not([data-chrome=dark]) [data-sleeping] .site-identity-icon { opacity: 0.68; } }
 @media (forced-colors: active) { [data-sleeping] .site-identity-icon { opacity: 1; } }
 /* A tab using the camera, microphone or screen shows a recording dot; the sidebar row also gets a one-click stop. */
 .sb-tab-capture > span, .browser-tab[data-capturing]::before { width: 7px; height: 7px; border-radius: 50%; background: var(--danger, #d93025); }

@@ -24,6 +24,8 @@ type Edit =
   | { id: string; state: 'clash'; accelerator: string; owner: string };
 
 const MAC_GLYPHS: Record<string, string> = { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Cmd: '⌘' };
+/** A Mac's delete key is Backspace (⌫); forward delete (fn+delete) is Delete (⌦). The caps show the key that runs the binding. */
+const MAC_KEYS: Record<string, string> = { Backspace: '⌫', Delete: '⌦' };
 // Key names stay as the keys are labelled, in every language (i18n-ignore).
 const KEY_NAMES: Record<string, string> = { Left: '←', Right: '→', Up: '↑', Down: '↓', PageUp: 'Page Up', PageDown: 'Page Down', Delete: 'Del', Meta: 'Win', '=': '+' };
 /** Recording ends by itself after this long without a key (main keeps its own limit in step). */
@@ -32,7 +34,7 @@ const IDLE_MS = 30_000;
 /** One key cap per key: "Ctrl+Shift+T" → Ctrl · Shift · T (⌃ ⇧ T on Mac). */
 export function keyCaps(accel: string): string[] {
   const mac = isMac();
-  return accel.split('+').filter(Boolean).map((part) => (mac && MAC_GLYPHS[part]) || KEY_NAMES[part] || part);
+  return accel.split('+').filter(Boolean).map((part) => (mac && (MAC_GLYPHS[part] || MAC_KEYS[part])) || KEY_NAMES[part] || part);
 }
 /** How keys read in text and tooltips: "Ctrl+Shift+T", "⌃⇧T" on Mac (the app's one spelling, ui/platform formatShortcut). */
 const spoken = (accel: string) => keyCaps(accel).join(isMac() ? '' : '+');

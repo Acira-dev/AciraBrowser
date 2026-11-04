@@ -64,7 +64,10 @@ function endpoints(env = process.env) {
 }
 
 /** `send(url, body, session)` -> HTTP status. `tor` is checked again here, whatever the panel did. `input.subject` is 'app' for a report about
- * Acira (no address), anything else for a website; a problem from the other subject's list is never built. */
+ * Acira (no address), anything else for a website; a problem from the other subject's list is never built.
+ * A report that wasn't taken resolves to {sent:false, failure}, so the form can say why: 'offline' when nothing answered (no network, a 15 s
+ * timeout), 'later' when the server answered and refused it (429 its limits, 503 its storage, any other status) or this app's own hourly cap
+ * was reached. The connection works in that case, so the form doesn't say to check it. */
 function createSiteReports({ endpoint = endpoints().report, send, appVersion, platform = process.platform, now = Date.now }) {
   const sent = [];
   const available = () => Boolean(endpoint);
@@ -81,11 +84,11 @@ function createSiteReports({ endpoint = endpoints().report, send, appVersion, pl
     if (!kindsFor(input.subject).includes(input.kind)) throw new Error('Choose what went wrong.');
     const payload = buildReport({ ...input, appVersion, platform });
     while (sent.length && now() - sent[0] > HOUR) sent.shift();
-    if (sent.length >= PER_HOUR) throw new Error('You sent several reports in the last hour. Try again later.');
+    if (sent.length >= PER_HOUR) return { sent: false, failure: 'later' };
     let status = 0;
     try { status = await send(endpoint, JSON.stringify(payload), session); } catch { status = 0; }
-    if (status === 429) throw new Error('Too many reports were sent. Try again later.');
-    if (status !== 204 && status !== 200) throw new Error('The report could not be sent. Check your connection and try again.');
+    if (!status) return { sent: false, failure: 'offline' };
+    if (status !== 204 && status !== 200) return { sent: false, failure: 'later' };
     sent.push(now());
     return { sent: true, payload };
   }

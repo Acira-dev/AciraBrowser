@@ -37,6 +37,25 @@ static class Native {
   [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
   [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool QueryFullProcessImageName(IntPtr h, int flags, System.Text.StringBuilder s, ref int n);
+  public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT p, uint flags);
+  [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
+
+  // Where the pointer is, read once: the card opens on that screen, and its size and its place both come from this one reading (read twice,
+  // a pointer moved to another screen while the scenes load would open the card there at the first screen's size). The primary screen's
+  // corner if Windows cannot say.
+  public static POINT Pointer() { POINT p; if (!GetCursorPos(out p)) { p.X = 0; p.Y = 0; } return p; }
+
+  // The DPI of the screen at that point. GetDeviceCaps alone gives the scale Windows had when the person signed in, and Windows never
+  // stretches this per-monitor aware card, so after a scale change without signing out (or on a second screen with another scale) it came
+  // out at the old size, smaller than the setup window on the same screen. GetDeviceCaps stays the fallback.
+  public static int ScreenDpi(POINT p) {
+    int dpi = 0;
+    try { uint x, y; if (GetDpiForMonitor(MonitorFromPoint(p, 2), 0, out x, out y) == 0) dpi = (int)x; } catch { } // MONITOR_DEFAULTTONEAREST, MDT_EFFECTIVE_DPI
+    if (dpi <= 0) { IntPtr dc = GetDC(IntPtr.Zero); dpi = GetDeviceCaps(dc, 88); ReleaseDC(IntPtr.Zero, dc); }
+    return dpi;
+  }
 }
 
 static class Program {
@@ -82,6 +101,9 @@ static class Program {
         // with _?=<dir> the NSIS uninstaller only works as a copy outside that folder (this is what the installer itself does for the old version)
         if (pinned != null) { temp = Path.Combine(Path.GetTempPath(), "acira-old-uninstaller-" + Process.GetCurrentProcess().Id + ".exe"); File.Copy(real, temp, true); run = temp; }
         var p = Process.Start(new ProcessStartInfo(run, rest) { UseShellExecute = false, WorkingDirectory = Path.GetTempPath() });
+        // no time limit, on purpose: the setup runs this again a second after any answer but 0, so an answer while the uninstaller still ran would
+        // start a second one on the same folder, and after five tries the setup leaves; if the first then finished, the old version would be gone
+        // with nothing to install the new one. Ending it is no better: it removes atomically, and cut short it can strand the old files.
         p.WaitForExit(); return p.ExitCode;
       } catch { return 2; }
       finally { try { if (temp != null) File.Delete(temp); } catch { } }
@@ -166,7 +188,7 @@ class RemoveForm : Form {
   public RemoveForm(string dir, string real) {
     this.dir = dir; this.real = real; dataName = DataFolder(dir);
     dark = true; // always dark, whatever the Windows theme is
-    IntPtr dc = Native.GetDC(IntPtr.Zero); int dpi = Native.GetDeviceCaps(dc, 88); Native.ReleaseDC(IntPtr.Zero, dc); s = Math.Max(96, dpi) / 96.0; double pct; if (double.TryParse(Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_SCALE"), out pct) && pct >= 100) s = pct / 100.0; // test only: preview at another screen scale
+    var at = Native.Pointer(); s = CardScale(Native.ScreenDpi(at)); double pct; if (double.TryParse(Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_SCALE"), out pct) && pct >= 100) s = pct / 100.0; // test only: preview at another screen scale
     string t = dark ? "dark" : "light"; if (LocTag().Length > 0 && Has(t + "-" + LocTag() + "tq.png")) t += "-" + loc; else loc = "";
     for (int i = 0; i < 3; i++) hoverImg[i] = Res(t + "-hover-" + i + ".jpg");
     using (var r = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream(loc.Length > 0 ? "layout-" + loc + ".txt" : "layout.txt")))
@@ -179,13 +201,26 @@ class RemoveForm : Form {
     tip = MakeTip();
     string sceneDump = Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_SCENES"); // test only: write the four composed scenes there and quit
     if (sceneDump != null) { qScene.Save(Path.Combine(sceneDump, "q.png"), ImageFormat.Png); rScene.Save(Path.Combine(sceneDump, "r.png"), ImageFormat.Png); kScene.Save(Path.Combine(sceneDump, "k.png"), ImageFormat.Png); dScene.Save(Path.Combine(sceneDump, "d.png"), ImageFormat.Png); Environment.Exit(0); }
-    Text = TITLE[Li]; FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.CenterScreen; ShowInTaskbar = true; KeyPreview = true;
+    Text = TITLE[Li]; FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual; ShowInTaskbar = true; KeyPreview = true;
     ClientSize = new Size((int)Math.Round(W * s), (int)Math.Round(H * s)); DoubleBuffered = true; BackColor = dark ? Color.Black : Color.FromArgb(243, 240, 234);
+    // centred on the working area of the screen measured above (CenterScreen would read the pointer again, when the window is created)
+    var area = Screen.FromPoint(new Point(at.X, at.Y)).WorkingArea;
+    Location = new Point(Math.Max(area.X, area.X + (area.Width - ClientSize.Width) / 2), Math.Max(area.Y, area.Y + (area.Height - ClientSize.Height) / 2));
     try { Icon = Icon.ExtractAssociatedIcon(Path.Combine(dir, File.Exists(Path.Combine(dir, "AciraBrowserQA.exe")) ? "AciraBrowserQA.exe" : "AciraBrowser.exe")); } catch { }
     AutoScaleMode = AutoScaleMode.None; // the window is exactly the card in device pixels; a monitor/DPI change resizes it and the layout follows
-    ClientSizeChanged += (a, b) => { double ns = ClientSize.Width / (double)W; if (ns > 0.5 && Math.Abs(ns - s) > 0.004) { s = ns; for (int i = 0; i < 3; i++) rect[i] = ScaledRect(lrect[i]); if (tip != null) tip.Dispose(); tip = MakeTip(); Invalidate(); } };
+    ClientSizeChanged += (a, b) => { double ns = ClientSize.Width / (double)W; if (ns > 0.5 && Math.Abs(ns - s) > 0.004) { s = ns; for (int i = 0; i < 3; i++) rect[i] = ScaledRect(lrect[i]); if (tip != null) tip.Dispose(); tip = MakeTip(); if (IsHandleCreated) Round(); Invalidate(); } };
     HandleCreated += (a, b) => Round();
     timer.Interval = 16; timer.Tick += (a, b) => Tick();
+  }
+
+  // The card's scale on a screen of this DPI (100% = 96): the size the setup window has on that screen, so the two always match. The setup
+  // (DPI aware for the sign-in scale) picks its 100, 150 or 200% scene from the sign-in scale (AcStyleBanner in acira-installer.nsh: 125%
+  // and up -> 150, 175% and up -> 200), and Windows stretches it by this screen's scale over the sign-in scale. When the two are the same
+  // (one screen, no scale change since sign-in) that is simply 100, 150 or 200%. The setup's Repair / Update / Open card (AciraChoose.cs) uses it too.
+  internal static double CardScale(int dpi) {
+    IntPtr dc = Native.GetDC(IntPtr.Zero); int signIn = Math.Max(96, Native.GetDeviceCaps(dc, 88)); Native.ReleaseDC(IntPtr.Zero, dc);
+    int pct = signIn * 100 / 96; double setup = pct >= 175 ? 2.0 : pct >= 125 ? 1.5 : 1.0;
+    return setup * Math.Max(96, dpi) / signIn;
   }
 
   Rectangle ScaledRect(Rectangle l) { return new Rectangle((int)Math.Round(l.X * s), (int)Math.Round(l.Y * s), (int)Math.Round(l.Width * s), (int)Math.Round(l.Height * s)); }
@@ -207,6 +242,11 @@ class RemoveForm : Form {
 
   // drag the window by its background
   protected override void WndProc(ref Message m) {
+    // WM_DPICHANGED (moved to a screen with another scale): WinForms leaves this to the app here (no app.config opt-in). The card takes the
+    // place and size Windows suggests (lParam: left, top, right, bottom). That size is the current one times new DPI / old DPI, which is
+    // CardScale's own rule (it is proportional to the screen's DPI), and keeping Windows' rectangle means the card never flips back at the
+    // edge between the screens. ClientSizeChanged then lays it out again.
+    if (m.Msg == 0x02E0) { IntPtr r = m.LParam; int l = Marshal.ReadInt32(r, 0), t = Marshal.ReadInt32(r, 4); Bounds = new Rectangle(l, t, Marshal.ReadInt32(r, 8) - l, Marshal.ReadInt32(r, 12) - t); m.Result = IntPtr.Zero; return; }
     if (m.Msg == 0x84 && stage != Stage.Done) { // WM_NCHITTEST
       var p = PointToClient(new Point((short)(m.LParam.ToInt64() & 0xFFFF), (short)((m.LParam.ToInt64() >> 16) & 0xFFFF)));
       if (stage != Stage.Question || HitButton(p) < 0) { m.Result = (IntPtr)2; return; } // HTCAPTION

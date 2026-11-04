@@ -4,7 +4,7 @@ import { createInitialState, makeTab, reduceBrowser } from '../src/runtime/core'
 import { scopeToWorkspace } from '../src/runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot, TabSession } from '../src/runtime/types';
 
-// QA of "Profiles as spaces" (qa-profile-spaces-report.md, bug 1b): failing tests that reproduce what the live app showed.
+// QA of "Profiles as spaces" (bug 1b): failing tests that reproduce what the live app showed.
 const run = (state: BrowserSnapshot, ...actions: BrowserAction[]) => actions.reduce(reduceBrowser, state);
 
 /** Alex's Main (a, b) and an unlocked secured workspace Bank (vault, on screen), plus Client's tabs x, y in the same window. */

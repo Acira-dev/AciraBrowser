@@ -6,14 +6,23 @@ import { validProfileEmail,validProfilePicture } from './browserProfiles';
 export type ProfileAction=Extract<BrowserAction,{type:'browser.profile.rename'|'browser.profile.update'|'browser.profile.remove'}>;
 export type BulkCloseAction={type:'tab.close.others'|'tab.close.left'|'tab.close.right';id:string};
 
-export function renameProfile(s:BrowserSnapshot,action:Extract<ProfileAction,{type:'browser.profile.rename'}>,toast:(text:string,tone?:'error')=>void):boolean {
+/** `renamed(name)` says it (a translated toast); `toast` is for the length rule. `defaultName:true` is Acira naming its own default profile in the
+ *  first setup's language: only while the profile still has its default name (BrowserProfile.defaultName), with no toast, and it stays the default.
+ *  A rename by the person makes the name theirs. */
+export function renameProfile(s:BrowserSnapshot,action:Extract<ProfileAction,{type:'browser.profile.rename'}>,toast:(text:string,tone?:'error')=>void,renamed:(name:string)=>void):boolean {
   const profile=s.browserProfiles.find(p=>p.id===action.id&&!p.private);
   if(!profile)return false;
   const name=action.name.trim();
+  if(action.defaultName){
+    if(!profile.defaultName||profile.defaultName!==profile.name||!name||name.length>40||name===profile.name)return false;
+    profile.name=profile.defaultName=name;
+    return true;
+  }
   if(!name||name.length>40){toast('Enter a profile name with 1 to 40 characters.','error');return true;}
   profile.name=name;
+  delete profile.defaultName;
   if(action.color&&/^#[\da-f]{6}$/i.test(action.color))profile.color=action.color;
-  toast(`Profile renamed to ${name}.`);
+  renamed(name);
   return true;
 }
 
@@ -28,6 +37,7 @@ export function updateProfile(s:BrowserSnapshot,action:Extract<ProfileAction,{ty
   if(action.picture===null)delete profile.picture;else if(validProfilePicture(action.picture))profile.picture=action.picture;
   if(action.email===null)delete profile.email;else if(validProfileEmail(action.email))profile.email=action.email.trim();
   if(action.default===true)s.settings.defaultProfileId=profile.id;else if(action.default===false&&s.settings.defaultProfileId===profile.id)delete s.settings.defaultProfileId;
+  if(action.defaultName===null)delete profile.defaultName;
   return true;
 }
 

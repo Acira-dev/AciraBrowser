@@ -24,7 +24,9 @@ function createOpenWindows({getDatabase,getControllers,isQuitting=()=>false,now=
   function restorable(){
     const database=getDatabase();
     try{
-      const ids=JSON.parse(database.getMetadata('open-windows')||'[]').filter(id=>typeof id==='string'&&VALID_ID.test(id)&&database.readWindow(id));
+      // a record that is there but cannot be read still counts: its window asks what to do (saved-window.cjs) instead of being left out without a word
+      const present=id=>{try{return Boolean(database.readWindow(id));}catch{return true;}};
+      const ids=JSON.parse(database.getMetadata('open-windows')||'[]').filter(id=>typeof id==='string'&&VALID_ID.test(id)&&present(id));
       return ids.length?ids.slice(0,12):['main'];
     }catch{return ['main'];}
   }

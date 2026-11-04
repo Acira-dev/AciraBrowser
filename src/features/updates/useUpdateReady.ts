@@ -20,13 +20,15 @@ export interface UpdateView {
   prompt: boolean;
   /** Acira's own download: it pauses and resumes where it stopped. */
   pausable: boolean;
+  /** Paused again because a Resume could not connect (offline, the feed unreachable); the bytes are kept and the next Resume goes on from them. */
+  failed?: boolean;
 }
 
 const view = (update: UpdateStatus | undefined): UpdateView | null => {
   if (!update?.available || (update.status !== 'downloading' && update.status !== 'paused' && update.status !== 'ready')) return null;
   const ready = update.status === 'ready', phase = update.status;
   noteUpdatePhase(phase);
-  return { phase, version: update.available, percent: ready ? 100 : Math.max(0, Math.min(100, update.progress ?? 0)), transferred: update.transferred ?? null, total: update.total ?? null, speed: update.speed ?? null, notes: update.notes || '', prompt: ready && update.prompt === true, pausable: !ready && update.pausable === true };
+  return { phase, version: update.available, percent: ready ? 100 : Math.max(0, Math.min(100, update.progress ?? 0)), transferred: update.transferred ?? null, total: update.total ?? null, speed: update.speed ?? null, notes: update.notes || '', prompt: ready && update.prompt === true, pausable: !ready && update.pausable === true, failed: phase === 'paused' && Boolean(update.error) };
 };
 
 /** The updater's status, read now and again whenever main says it changed. `pick` turns it into what a caller shows; each read is a new object, so an effect keyed on it runs again on every change. */
@@ -101,10 +103,11 @@ export function formatTimeLeft(seconds: number): string {
   return t('update.timeLeft', { time });
 }
 /** The panel's line under the title: "160 of 382 MB · 3 min left" while it downloads (the time once the speed is known), "160 of 382 MB · resumes where
- *  it stopped" while paused, the percent alone before the size is known. */
+ *  it stopped" while paused ("· Connection failed" when a Resume could not connect), the percent alone before the size is known. */
 export function downloadLine(update: UpdateView): string {
-  if (!update.total || update.transferred === null) return t('update.downloadDetailShort', { percent: update.percent });
+  const failed = update.phase === 'paused' && update.failed;
+  if (!update.total || update.transferred === null) { const short = t('update.downloadDetailShort', { percent: update.percent }); return failed ? `${short} · ${t('app.connectionFailed')}` : short; }
   const share = formatShare(update.transferred, update.total);
-  if (update.phase === 'paused') return `${share} · ${t('update.resumesWhereStopped')}`;
+  if (update.phase === 'paused') return `${share} · ${failed ? t('app.connectionFailed') : t('update.resumesWhereStopped')}`;
   return update.speed ? `${share} · ${formatTimeLeft((update.total - update.transferred) / update.speed)}` : share;
 }

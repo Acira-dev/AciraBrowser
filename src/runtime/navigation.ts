@@ -17,12 +17,15 @@ export function searchFor(settings: { searchEngine: SearchEngine; searchProvider
 
 // Schemeless development/LAN endpoints usually serve HTTP. Explicit schemes
 // are never changed, including when HTTPS fails certificate validation.
+// Local names are the reserved and local-network top-level names below (LOCAL_TOP_LEVEL) and home.arpa; local addresses are loopback, private,
+// link-local, shared (100.64/10: carrier networks, Tailscale) and 0.0.0.0/8.
 function localHostname(host:string):boolean {
  const name=host.toLowerCase().replace(/\.$/,'');
- if(name==='localhost'||name.endsWith('.localhost')||name.endsWith('.local')||name==='[::1]'||/^\[(?:f[cd]|fe[89ab])/i.test(name))return true;
+ if(LOCAL_TOP_LEVEL.has(name.split('.').pop()||'')||name.endsWith('.home.arpa')||name==='[::1]'||/^\[(?:f[cd]|fe[89ab])/i.test(name))return true;
  const octets=name.split('.').map(Number);
- return octets.length===4&&octets.every(value=>Number.isInteger(value)&&value>=0&&value<=255)&&(octets[0]===127||octets[0]===10||octets[0]===192&&octets[1]===168||octets[0]===172&&octets[1]>=16&&octets[1]<=31||octets[0]===169&&octets[1]===254);
+ return octets.length===4&&octets.every(value=>Number.isInteger(value)&&value>=0&&value<=255)&&(octets[0]===0||octets[0]===127||octets[0]===10||octets[0]===100&&octets[1]>=64&&octets[1]<=127||octets[0]===192&&octets[1]===168||octets[0]===172&&octets[1]>=16&&octets[1]<=31||octets[0]===169&&octets[1]===254);
 }
+const ipAddress=(host:string)=>host.startsWith('[')||/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);
 
 // Schemes a browser knows: typed, they stay the "only http and https" refusal rather than becoming a search.
 const KNOWN_SCHEMES = /^(?:javascript|data|file|chrome|chrome-extension|chrome-untrusted|devtools|about|blob|filesystem|vbscript|view-source|mailto|tel|ftp|wss?):/i;
@@ -60,13 +63,18 @@ export function resolveNavigation(input: string, engine: SearchEngine = 'google'
   const addressLike = explicitWeb || !/\s/.test(value) && (!explicitScheme && (/^(?:localhost(?::\d+)?|(?:\d{1,3}\.){3}\d{1,3}|\[[\da-f:]+\])(?:[:/?#]|$)/i.test(value) || /^[^\s@/?#]+\.[^\s@/?#]+(?:[/?#]|$)/.test(value)));
   if (addressLike) {
     try {
-      const local = !explicitWeb&&localHostname(new URL(`https://${value}`).hostname);
-      const parsed = new URL(explicitScheme ? value : `${local ? 'http' : 'https'}://${value}`);
+      // Like Chrome's HTTPS-Upgrades, an address typed without a scheme tries https first and may then offer http (desktop/browser-services/https-first.cjs),
+      // except where https cannot be expected: local names and addresses, any IP address, and a port other than 443 (an http port such as 8080 answers a
+      // secure connection with an error). Those open over http, as in Chrome. An address typed with https:// or http:// stays as typed.
+      const typedHostname = explicitWeb ? '' : new URL(`https://${value}`).hostname, typedPort = /^[^/?#]*:(\d+)(?:[/?#]|$)/.exec(value)?.[1];
+      // Port 80 is http's own: Chrome drops it from the address first, so it tries https as for no port.
+      const local = !explicitWeb&&localHostname(typedHostname), plainHttp = !explicitWeb&&(local||ipAddress(typedHostname)||typedPort!==undefined&&typedPort!=='443'&&typedPort!=='80');
+      const parsed = new URL(explicitScheme ? value : plainHttp ? `http://${value}` : `https://${typedPort==='80' ? value.replace(/^([^/?#]*):80(?=[/?#]|$)/, '$1') : value}`);
       if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('Invalid web address');
       if (parsed.username || parsed.password) return { url: 'acira://new', contentKind: 'internal', error: 'Remove the sign-in details from the address.' };
       // "3.14" or "1.2" would parse as the IPv4 address 1.0.0.2: only all four parts make a bare number an address.
       const typedHost = value.replace(/[/?#][\s\S]*$/, '').replace(/:\d+$/, ''), shortNumber = /^[\d.]+$/.test(typedHost) && !/^(?:\d{1,3}\.){3}\d{1,3}\.?$/.test(typedHost);
-      if (explicitWeb || hostPort || /^[^/?#]*\//.test(value) || !shortNumber && (local || knownTopLevel(parsed.hostname))) return { url: parsed.toString(), contentKind: 'web', ...(!explicitWeb && !local && parsed.protocol === 'https:' ? { httpsFirst: true } : {}) };
+      if (explicitWeb || hostPort || /^[^/?#]*\//.test(value) || !shortNumber && (local || knownTopLevel(parsed.hostname))) return { url: parsed.toString(), contentKind: 'web', ...(!explicitWeb && !plainHttp && parsed.protocol === 'https:' ? { httpsFirst: true } : {}) };
     } catch { if (/^[^/?#]*\//.test(value) || hostPort || explicitWeb) return { url: 'acira://new', contentKind: 'internal', error: 'Check the web address and try again.' }; }
   }
   const bangLike = /^![a-z0-9]/i.test(value);

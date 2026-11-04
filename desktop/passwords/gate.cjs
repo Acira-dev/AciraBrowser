@@ -1,11 +1,11 @@
 'use strict';
-// The OS gate in front of reveal, copy, export and delete-all. Windows Hello (UserConsentVerifier: fingerprint, face, PIN);
-// when Hello isn't set up, the Windows account password prompt (CredUI) instead. Both run in a short-lived powershell.exe
-// from System32 with a fixed script and no user data in the command; Acira never sees the account password. A successful check
-// unlocks the actions for a short window. If neither can run the answer is "no", never "allow".
-const {execFile}=require('node:child_process');
-const path=require('node:path');
+// The OS gate in front of reveal, copy, export and delete-all, secured workspaces and saved Tor items. Windows Hello (UserConsentVerifier:
+// fingerprint, face, PIN), held in front of the Acira window; when Hello isn't set up, the Windows account password prompt (CredUI)
+// instead. Both run in acira-verify.exe (desktop/windows-helper.cjs), Acira's own signed helper: the message goes on its standard input,
+// the window as a plain number, and a one-word answer comes back. Acira never sees the account password and starts no script host. A
+// successful check unlocks the actions for a short window. If neither can run the answer is "no", never "allow".
 const {tr}=require('./text.cjs');
+const {helperPath,activeWindow,windowHandle,helperEnv,runHelper}=require('../windows-helper.cjs');
 
 const MESSAGES={
  tor:'Open your saved Tor items in Acira',
@@ -17,77 +17,20 @@ const MESSAGES={
  edit:'Change a saved password in Acira',
  generic:'Open your Acira passwords',
 };
+/** Hello answers that mean "Hello can't be used here": the account password prompt is offered instead. "error" too (Hello itself failed), and
+ * no answer at all from a helper that did run (it ended without writing one, as a crash inside Windows' own code does). */
+const HELLO_FALLBACK=new Set(['result:DeviceNotPresent','result:NotConfiguredForUser','result:DisabledByPolicy','error','']);
 
-const HELLO_SCRIPT=[
- "$ErrorActionPreference = 'Stop'",
- 'try {',
- ' Add-Type -AssemblyName System.Runtime.WindowsRuntime',
- ' [void][Windows.Security.Credentials.UI.UserConsentVerifier, Windows.Security.Credentials.UI, ContentType = WindowsRuntime]',
- " $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
- ' function Wait-Op($op, $type) { $task = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); [void]$task.Wait(-1); $task.Result }',
- ' $availability = Wait-Op ([Windows.Security.Credentials.UI.UserConsentVerifier]::CheckAvailabilityAsync()) ([Windows.Security.Credentials.UI.UserConsentVerifierAvailability])',
- " if (\"$availability\" -ne 'Available') { Write-Output ('unavailable:' + $availability); exit 0 }",
- ' $result = Wait-Op ([Windows.Security.Credentials.UI.UserConsentVerifier]::RequestVerificationAsync($env:ACIRA_GATE_MESSAGE)) ([Windows.Security.Credentials.UI.UserConsentVerificationResult])',
- " Write-Output ('result:' + $result)",
- "} catch { Write-Output 'error' }",
-].join('\n');
-
-// CredUI fallback: the system dialog lists only the signed-in account; LogonUser checks what was typed and the account
-// must be the current Windows user. The typed secret exists only inside this child process.
-const CRED_SCRIPT=[
- "$ErrorActionPreference = 'Stop'",
- "Add-Type -TypeDefinition @'",
- 'using System; using System.Runtime.InteropServices; using System.Text;',
- 'public static class AciraCred {',
- ' [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct CREDUI_INFO { public int cbSize; public IntPtr hwndParent; public string pszMessageText; public string pszCaptionText; public IntPtr hbmBanner; }',
- ' [DllImport("credui.dll", CharSet = CharSet.Unicode)] static extern int CredUIPromptForWindowsCredentials(ref CREDUI_INFO ui, int authError, ref uint authPackage, IntPtr inBuf, uint inSize, out IntPtr outBuf, out uint outSize, ref bool save, int flags);',
- ' [DllImport("credui.dll", CharSet = CharSet.Unicode)] static extern bool CredUnPackAuthenticationBuffer(int flags, IntPtr buf, uint size, StringBuilder user, ref int userLen, StringBuilder domain, ref int domLen, StringBuilder pwd, ref int pwdLen);',
- ' [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool LogonUser(string user, string domain, string pwd, int type, int provider, out IntPtr token);',
- ' [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);',
- ' [DllImport("ole32.dll")] static extern void CoTaskMemFree(IntPtr ptr);',
- ' public static string Verify(string message) {',
- '  CREDUI_INFO ui = new CREDUI_INFO(); ui.cbSize = Marshal.SizeOf(ui); ui.pszCaptionText = "Acira"; ui.pszMessageText = message;',
- '  uint package = 0; IntPtr outBuf; uint outSize; bool save = false;',
- '  int rc = CredUIPromptForWindowsCredentials(ref ui, 0, ref package, IntPtr.Zero, 0, out outBuf, out outSize, ref save, 0x200);',
- '  if (rc != 0) return "";',
- '  try {',
- '   StringBuilder user = new StringBuilder(513), domain = new StringBuilder(337), pwd = new StringBuilder(257);',
- '   int userLen = 513, domLen = 337, pwdLen = 257;',
- '   if (!CredUnPackAuthenticationBuffer(0, outBuf, outSize, user, ref userLen, domain, ref domLen, pwd, ref pwdLen)) return "";',
- '   string name = user.ToString(), dom = domain.ToString();',
- '   if (dom.Length == 0 && name.Contains("\\\\")) { int slash = name.IndexOf((char)92); dom = name.Substring(0, slash); name = name.Substring(slash + 1); }',
- '   IntPtr token;',
- '   bool ok = LogonUser(name, dom.Length == 0 ? null : dom, pwd.ToString(), 2, 0, out token);',
- '   pwd.Length = 0;',
- '   if (!ok) return "";',
- '   CloseHandle(token);',
- '   return (dom.Length == 0 ? "" : dom + "\\\\") + name;',
- '  } finally { CoTaskMemFree(outBuf); }',
- ' }',
- '}',
- "'@",
- "if ($env:ACIRA_GATE_COMPILE_ONLY -eq '1') { Write-Output 'compiled'; exit 0 }",
- 'try {',
- ' $who = [AciraCred]::Verify($env:ACIRA_GATE_MESSAGE)',
- " if (-not $who) { Write-Output 'result:Failed'; exit 0 }",
- " $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
- " $mine = $me.Split('\\')[-1]; $theirs = $who.Split('\\')[-1]",
- " if ($theirs -ieq $mine) { Write-Output 'result:Verified' } else { Write-Output 'result:Failed' }",
- "} catch { Write-Output 'error' }",
-].join('\n');
-
-const encode=script=>Buffer.from(script,'utf16le').toString('base64');
-const powershellPath=env=>path.join(env.SystemRoot||env.windir||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
-function runScript(script,message,{exec=execFile,env=process.env,timeoutMs=90000}={}){
- return new Promise(resolve=>{
-  try{
-   exec(powershellPath(env),['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',encode(script)],{windowsHide:true,timeout:timeoutMs,env:{...env,ACIRA_GATE_MESSAGE:message},maxBuffer:64*1024},(error,stdout)=>{
-    if(error&&error.killed)return resolve({code:'timeout'});
-    resolve({stdout:String(stdout||'').trim()});
-   });
-  }catch{resolve({code:'failed'});}
- });
+/**
+ * One check in the helper (`hello` or `password`). A prompt is modal to the Acira window it is parented to; if the helper is stopped
+ * while its prompt is up (a timeout), Windows could leave that window disabled, so it is enabled again when it was enabled before.
+ */
+async function runCheck(command,message,{win,exec,helper,timeoutMs,env}){
+ let enabled=false;try{enabled=Boolean(win&&!win.isDestroyed()&&win.isEnabled());}catch{}
+ try{return await runHelper([command,windowHandle(win)],message,{exec,helper,timeoutMs,env});}
+ finally{try{if(enabled&&!win.isDestroyed()&&!win.isEnabled())win.setEnabled(true);}catch{}}
 }
+
 const NOT={
  get cancelled(){return {ok:false,code:'cancelled',message:tr('pw.gate.cancelled','Cancelled.')};},
  get failed(){return {ok:false,code:'failed',message:tr('pw.gate.failed','Couldn’t verify it’s you. Try again.')};},
@@ -102,24 +45,29 @@ const NOT={
  */
 function testSwitchesAllowed({env=process.env,packaged}={}){return packaged===false&&Boolean(env.ACIRA_BROWSER_TEST_DATA);}
 
-/** Real verifier. Test switch ACIRA_PASSWORDS_TEST_GATE=allow|deny only works in an unpackaged run inside an isolated test profile. */
-function windowsVerifier({exec=execFile,env=process.env,platform=process.platform,timeoutMs=90000,packaged}={}){
- return async function verify(reason='generic'){
+/**
+ * Real verifier. Test switch ACIRA_PASSWORDS_TEST_GATE=allow|deny only works in an unpackaged run inside an isolated test profile.
+ * The prompt goes in front of the window that asked (`window`), else the focused Acira window.
+ */
+function windowsVerifier({exec,env=process.env,platform=process.platform,timeoutMs=90000,packaged,helper,window:parentWindow=activeWindow}={}){
+ return async function verify(reason='generic',{window:asked}={}){
   const testing=env.ACIRA_PASSWORDS_TEST_GATE&&testSwitchesAllowed({env,packaged});
   if(testing)return env.ACIRA_PASSWORDS_TEST_GATE==='allow'?{ok:true,method:'test'}:NOT.cancelled;
   if(platform!=='win32')return NOT.unavailable;
   const message=MESSAGES[reason]?tr('pw.verify.'+reason,MESSAGES[reason]):tr('pw.verify.generic',MESSAGES.generic);
-  const hello=await runScript(HELLO_SCRIPT,message,{exec,env,timeoutMs});
-  if(hello.code==='timeout')return NOT.timeout;
+  let win=null;try{win=asked&&!asked.isDestroyed?.()?asked:parentWindow?.()||null;}catch{}
+  const options={win,exec,helper:helper??helperPath({packaged}),timeoutMs,env:helperEnv(env)};
+  const hello=await runCheck('hello',message,options);
   const out=hello.stdout||'';
+  if(hello.code==='timeout'||out==='timeout')return NOT.timeout;
   if(out==='result:Verified')return {ok:true,method:'hello'};
   if(out==='result:Canceled')return NOT.cancelled;
-  if(out.startsWith('unavailable:')||out==='result:DeviceNotPresent'||out==='result:NotConfiguredForUser'||out==='result:DisabledByPolicy'){
-   const credential=await runScript(CRED_SCRIPT,message,{exec,env,timeoutMs});
-   if(credential.code==='timeout')return NOT.timeout;
-   return credential.stdout==='result:Verified'?{ok:true,method:'credential'}:credential.stdout==='result:Failed'?NOT.cancelled:NOT.unavailable;
+  if(!hello.code&&(out.startsWith('unavailable:')||HELLO_FALLBACK.has(out))){
+   const credential=await runCheck('password',message,options);
+   if(credential.code==='timeout'||credential.stdout==='timeout')return NOT.timeout;
+   return credential.stdout==='result:Verified'?{ok:true,method:'credential'}:credential.stdout==='result:Canceled'?NOT.cancelled:credential.stdout==='result:Failed'?NOT.failed:NOT.unavailable;
   }
-  return out==='result:RetriesExhausted'||out==='result:DeviceBusy'?NOT.failed:NOT.failed;
+  return NOT.failed; // RetriesExhausted, DeviceBusy, a helper that could not start, anything unexpected
  };
 }
 
@@ -139,14 +87,14 @@ function platformVerifier({platform=process.platform,macAuthentication,env=proce
  };
 }
 
-/** Short unlock window around a verifier. One prompt at a time; a prompt in flight is shared. */
+/** Short unlock window around a verifier. One prompt at a time; a prompt in flight is shared. `window`: the Acira window that asked. */
 function createGate({verify,now=Date.now,windowMs=60000}){
  let until=0,pending=null;
  return {
-  async ensure(reason){
+  async ensure(reason,window){
    if(now()<until)return {ok:true,method:'cached'};
    if(pending)return pending;
-   pending=(async()=>{try{const result=await verify(reason);if(result.ok)until=now()+windowMs;return result;}catch{return NOT.failed;}finally{pending=null;}})();
+   pending=(async()=>{try{const result=await verify(reason,{window});if(result.ok)until=now()+windowMs;return result;}catch{return NOT.failed;}finally{pending=null;}})();
    return pending;
   },
   lock(){until=0;},
@@ -154,4 +102,4 @@ function createGate({verify,now=Date.now,windowMs=60000}){
   remainingMs:()=>Math.max(0,until-now()),
  };
 }
-module.exports={createGate,windowsVerifier,platformVerifier,testSwitchesAllowed,MESSAGES,HELLO_SCRIPT,CRED_SCRIPT,runScript};
+module.exports={createGate,windowsVerifier,platformVerifier,testSwitchesAllowed,MESSAGES};

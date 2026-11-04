@@ -1,4 +1,4 @@
-import type { BrowserAction } from "../../runtime/types";
+import type { BrowserAction, BrowserProfile } from "../../runtime/types";
 import { runtime } from "../../runtime/client";
 import { t } from "../../i18n";
 import { PROFILE_PALETTE, isGreyProfileColor, profileColorFor } from "../../runtime/profileColors";
@@ -82,6 +82,14 @@ export const PROFILE_NAME_MAX = 40;
 export function saveProfile(dispatch: Dispatch, id: string, patch: { name: string; color?: string }) {
   dispatch({ type: "browser.profile.rename", id, name: patch.name.slice(0, PROFILE_NAME_MAX), ...(patch.color ? { color: patch.color } : {}) });
 }
+/** The first profile is made as "Personal" (runtime/core.ts) before the setup knows its language, and remembers that Acira chose that name
+ *  (BrowserProfile.defaultName). While nobody has named it, the first setup gives it its language's word for it, silently (the reducer checks
+ *  again that it is still the default); when that setup ends the name becomes the person's, so a later language or "Run setup again" never
+ *  renames it. Profiles from before this have no default name and are never renamed. */
+export const hasDefaultName = (profile?: Pick<BrowserProfile, "name" | "defaultName">) => !!profile?.defaultName && profile.defaultName === profile.name;
+export const nameDefaultProfile = (dispatch: Dispatch, id: string, name: string) =>
+  dispatch({ type: "browser.profile.rename", id, name: name.slice(0, PROFILE_NAME_MAX), defaultName: true });
+export const settleProfileName = (dispatch: Dispatch, id: string) => dispatch({ type: "browser.profile.update", id, defaultName: null });
 /** Color only, without renaming. */
 export const setColor = (dispatch: Dispatch, id: string, color: string) =>
   dispatch({ type: "browser.profile.update", id, color });

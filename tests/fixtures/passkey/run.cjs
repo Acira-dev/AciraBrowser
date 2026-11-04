@@ -4,7 +4,7 @@
 // with the "Passkeys and security keys" choice on (window.__passkeysAllowed, standing in for the main process's answer) and then switched off.
 // PublicKeyCredential.isConditionalMediationAvailable is Chromium's own: it is read before and after the guard (it never shows any window).
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, ipcMain } = require('electron');
 app.setPath('userData', path.join(os.tmpdir(), 'acira-passkey-' + process.pid));
 app.on('window-all-closed', () => { });
 process.on('uncaughtException', error => { process.stdout.write('ERROR ' + (error && error.stack || error) + '\n'); app.exit(1); });
@@ -12,7 +12,7 @@ process.on('unhandledRejection', error => { process.stdout.write('ERROR ' + (err
 // Credentials exist only in secure contexts; http://127.0.0.1 is one.
 const server = require('node:http').createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<!doctype html><title>t</title>' + (req.url === '/native' ? '<iframe src="/frame"></iframe>' : '<p>x</p>')); });
 const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'desktop', 'browser-services', 'passkey-guard-preload.cjs'), 'utf8');
-const match = /const guard = (function \(allowed, mac\) \{[\s\S]*?\n\});\r?\n/.exec(source);
+const match = /const guard = (function \(allowed, mac, refused\) \{[\s\S]*?\n\});\r?\n/.exec(source);
 if (!match) { process.stdout.write('ERROR guard script not found in the preload\n'); app.exit(1); }
 const guard = match[1];
 const STUB = `(async () => { window.__calls = []; const proto = CredentialsContainer.prototype;
@@ -96,7 +96,9 @@ app.whenReady().then(async () => {
   // The person turns the choice off while the page is open: the very next request is refused, a click or not.
   await win.webContents.executeJavaScript('window.__passkeysAllowed = false; window.__calls = []');
   const off = await win.webContents.executeJavaScript(CALLS, true);
-  const native = {};
+  const native = {}, notices = [];
+  // macOS: the guard's notice (main shows the toast; here it only records who asked). Answered "shown", so a document asks once.
+  ipcMain.handle('acira:passkey-refused', event => { notices.push({ top: !event.senderFrame?.parent, path: new URL(event.senderFrame?.url || 'about:blank').pathname }); return true; });
   if (process.platform !== 'win32') {
     const ses = session.fromPartition('passkey-native-' + process.pid);
     ses.registerPreloadScript({type: 'frame', filePath: path.join(__dirname, 'native-preload.cjs')});
@@ -117,6 +119,6 @@ app.whenReady().then(async () => {
     const popup = await popupReady;
     native.popup = await popup.webContents.executeJavaScript(NATIVE_PROBE);
   }
-  process.stdout.write('RESULT ' + JSON.stringify({ before, without, withGesture, off, native }) + '\n');
+  process.stdout.write('RESULT ' + JSON.stringify({ before, without, withGesture, off, native, notices }) + '\n');
   app.exit(0);
 });

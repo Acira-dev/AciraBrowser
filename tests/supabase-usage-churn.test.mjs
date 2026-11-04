@@ -1,6 +1,6 @@
 // beta.9, who stops using Acira, on the server side: the churn migration (gone and retention views over the daily messages already stored,
 // the Windows uninstall table and its view), the `uninstall` message in the usage function (strict validation, size, rate limit, probe),
-// the REST store and the deploy script. The views were also run on a real Postgres 17 (PGlite) with a made-up history; see the handover.
+// the REST store and the deploy script. The views were also run on a real Postgres 17 (PGlite) with a made-up history.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

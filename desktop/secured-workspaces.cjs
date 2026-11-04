@@ -65,7 +65,7 @@ function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonito
    const workspace=workspaceIn(controller.state,id);
    if(!workspace?.secured)return {ok:false,code:'missing'};
    if(workspace.unlocked)return {ok:true};
-   const verified=await gate.ensure('secured');
+   const verified=await gate.ensure('secured',controller.window);
    if(!verified?.ok)return {ok:false,code:verified?.code||'failed',message:verified?.message};
    let sealed;try{sealed=vault.read(id);}catch(error){return {ok:false,code:error?.code||'corrupt'};}
    if(!workspaceIn(controller.state,id)?.secured)return {ok:false,code:'missing'};
@@ -82,7 +82,7 @@ function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonito
    if(workspace.secured)return {ok:true};
    if(firstWorkspaceOf(controller.state,workspace.browserProfileId)===id)return {ok:false,code:'first'};
    if(!vault.available())return {ok:false,code:'unavailable'};
-   const verified=await gate.ensure('secured');
+   const verified=await gate.ensure('secured',controller.window);
    if(!verified?.ok)return {ok:false,code:verified?.code||'failed',message:verified?.message};
    controller.commitAction({type:'workspace.secured-set',id,secured:true});
    if(!workspaceIn(controller.state,id)?.secured)return {ok:false,code:'refused'};
@@ -94,7 +94,7 @@ function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonito
    const workspace=workspaceIn(controller.state,id);
    if(!workspace?.secured)return {ok:true};
    if(!workspace.unlocked)return {ok:false,code:'locked'};
-   const verified=await gate.ensure('secured');
+   const verified=await gate.ensure('secured',controller.window);
    if(!verified?.ok)return {ok:false,code:verified?.code||'failed',message:verified?.message};
    controller.commitAction({type:'workspace.secured-set',id,secured:false});
    api.forget(id);

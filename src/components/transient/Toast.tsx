@@ -8,6 +8,7 @@ import { classScale, motionSpeed, motionTokens, springEasing, springFor, type Mo
 import '../../styles/transient.css';
 
 import { t } from '../../i18n';
+import { ownTextDirection } from '../../i18n/direction';
 /** The transient-surface primitives (bible §4 Transient surfaces): one toast card, one stack, one status pill. Geometry
  * is computed here, not measured, so the page stack and the native overlay over websites (whose bounds main sizes
  * before it paints) always agree. */
@@ -89,7 +90,7 @@ export function ToastCard({ row, action, onDismiss }: { row: ToastRowModel; acti
   const { height } = toastRowSize(row);
   return <div className="t-toast" data-tone={row.tone} data-lines={height > TOAST_LINE ? 2 : 1} role={row.tone === 'error' ? 'alert' : 'status'} onKeyDown={event => dismissOnEscape(event, onDismiss)}>
     <ToastLead tone={row.tone} icon={row.icon} onDismiss={onDismiss} />
-    <span className="t-text" title={row.text}>{row.text}</span>
+    <span className="t-text" title={row.text} dir={ownTextDirection(row.text)}>{row.text}</span>
     {action}
   </div>;
 }
@@ -175,6 +176,6 @@ export function StatusPill({ text, icon, reducedMotion }: { text: string; icon?:
   return <motion.div className="t-pill" role="status" style={{ width: pillWidth(text), transformOrigin: '50% 100%' }}
     initial={enter.spring ? { opacity: 0, y: 10, scale: .94 } : { opacity: 0 }} animate={{ opacity: 1, y: 0, scale: 1, transition: enter.transition }}
     exit={exit.spring ? { opacity: 0, y: 6, scale: .97, transition: exit.transition } : { opacity: 0, transition: exit.transition }}>
-    <span className="t-glyph" aria-hidden="true">{glyph('status', icon)}</span><span className="t-text">{text}</span>
+    <span className="t-glyph" aria-hidden="true">{glyph('status', icon)}</span><span className="t-text" dir={ownTextDirection(text)}>{text}</span>
   </motion.div>;
 }

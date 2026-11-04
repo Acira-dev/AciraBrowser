@@ -23,16 +23,16 @@ test('saved toolbar layouts drop unknown buttons and gain new ones in their defa
   const ids=items.map(item=>item.id);
   assert.ok(ids.indexOf('profile')<ids.indexOf('downloads'));
   assert.deepEqual(items.find(item=>item.id==='downloads'),{id:'downloads',visible:true});
-  assert.equal(ids[0],'extensions');
+  assert.equal(ids.indexOf('extensions'),ids.indexOf('profile')+1,'a button the saved list lacks joins after the one it follows by default');
   assert.equal(items.length,defaultToolbarItems.length);
   assert.ok(!items.some(item=>(item.id as string)==='agent'));
   assert.deepEqual(normalizeToolbarItems('broken'),defaultToolbarItems);
 });
 test('keyboard moves stop at either end of the toolbar',()=>{
   const items=normalizeToolbarItems(undefined);
+  assert.equal(moveToolbarItem(items,'profile',-1)[0].id,'profile');
   assert.equal(moveToolbarItem(items,'extensions',-1)[0].id,'extensions');
-  assert.equal(moveToolbarItem(items,'downloads',-1)[0].id,'downloads');
-  assert.equal(moveToolbarItem(items,'profile',5).at(-1)!.id,'profile');
+  assert.equal(moveToolbarItem(items,items.at(-1)!.id,5).at(-1)!.id,items.at(-1)!.id);
 });
 import {opensSuggestionsOnFocus} from '../src/ui/addressSuggestions';
 test('focusing a new tab omnibox never opens the suggestion list, even while the field still shows the previous URL',()=>{

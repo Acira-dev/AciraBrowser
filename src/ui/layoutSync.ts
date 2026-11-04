@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { setRailPrefs } from './railPrefs';
 
 /** The tab layout lives in two places: the native setting `verticalTabs` (shared by every window and saved with the browser)
@@ -11,6 +11,17 @@ export const layoutRepair = (native: boolean, rail: boolean): { tabs: boolean } 
 
 /** A change made in Settings reaches the switch first and the setting an IPC round trip later; give that time to finish. */
 export const layoutRepairMs = 700;
+
+/** The switch to draw by. A profile that comes on screen in this window (profiles as spaces) brings its own switch, which may still say
+ * what it said when that profile was last on screen, or nothing yet for a new profile; AciraSidebar brings it in line with the setting
+ * right after that render. Drawn from the switch for that one render, the tab strip's row was taken down and put back (its tabs then
+ * slid in from a width measured mid-change) and the sidebar's tab rows dropped in again (founder, 3 Nov: "it glitches, then gets good").
+ * Until then the window keeps the setting's layout. */
+export function useShownTabsSwitch(native: boolean, rail: boolean, profileId: string): boolean {
+  const shown = useRef(profileId), arriving = shown.current !== profileId;
+  useEffect(() => { shown.current = profileId; }, [profileId]);
+  return arriving ? native : rail;
+}
 
 export function useLayoutRepair(native: boolean, rail: boolean, profileId: string, privateMode: boolean) {
   useEffect(() => {

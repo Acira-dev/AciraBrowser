@@ -175,3 +175,16 @@ test('a clipboard failure is a plain message, not a crash, and schedules no clea
  const before=h.timers.length;const result=await h.ask({type:'passwords.copy',id:(await h.ask({type:'passwords.list'})).items[0].id,field:'password'});
  assert.equal(result.error.code,'clipboard');assert.equal(h.timers.length,before);assert.equal(JSON.stringify(result).includes(SITE.password),false);
 });
+
+test('the Windows prompt for a saved password goes in front of the window that asked',async()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'acira-pws-window-')),seen=[];
+ try{
+  const gate=createGate({verify:async(reason,{window}={})=>{seen.push([reason,window]);return {ok:true,method:'test'};},windowMs:0});
+  const clip={text:'',async writeText(v){this.text=v;},async writeSecret(v){this.text=v;},async readText(){return this.text;},async clear(){this.text='';}};
+  const svc=createPasswords({dir,keys,gate,clipboard:clip,confirm:async()=>true,pickOpen:async()=>null,pickSave:async()=>null});
+  const win={id:'main window'},ask=request=>svc.handle(request,{profileId:'profile-personal',privateMode:false,window:win}).then(r=>r.passwords);
+  const saved=await ask({type:'passwords.save',...SITE}),id=saved.id||(await ask({type:'passwords.list'})).items[0].id;
+  assert.equal((await ask({type:'passwords.reveal',id})).password,SITE.password);
+  assert.deepEqual(seen,[['reveal',win]]);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

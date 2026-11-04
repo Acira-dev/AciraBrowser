@@ -20,6 +20,11 @@ export const fitMetrics = {
   slack: 1,
   /** Native Windows caption buttons, in DIPs; divide by the interface scale for CSS px. */
   captionDip: 138,
+  /** The compact tab strip folded to its + button (toolbar-controls.css lets it shrink this far). */
+  stripFolded: 34,
+  /** The compact tab strip's usable minimum: its + button and room for one tab between the scroll arrows. Below it the strip
+   * shows no tabs at all (CompactTabs: condensed under 90px beside the +; CompactTabs.css min-width). */
+  strip: 124,
 } as const;
 
 /** The caption buttons' width in CSS px for an interface scale (percent). Mac has none. */
@@ -84,4 +89,14 @@ export function fitToolbar(input: FitInput): FitResult {
   while (now.address < fitMetrics.addressMin && hidden.length < order.length) { hidden.push(order[hidden.length].id); now = measure(); }
   if (now.address < fitMetrics.addressMin && tabViewer > 0) { dropTabViewer = true; now = measure(); }
   return { hidden, dropTabViewer, address: Math.max(0, now.address), actions: now.actions };
+}
+
+/** Compact and Focus: the left column's floor (the grid's `--fit-lead`). `lead` counts the tab strip folded to its + button,
+ * as the fit does, and `address` is the field's room from `fitToolbar`. When the field can give the strip its usable minimum
+ * and still keep its own, the floor holds the strip at that minimum: the field gives way (it moves off the window's centre,
+ * then narrows) before the strip loses its tabs. Otherwise nothing changes: the strip folds as before and no button leaves
+ * the row for it. */
+export function compactLeadFloor(lead: number, address: number, strip: boolean): number {
+  const room = fitMetrics.strip - fitMetrics.stripFolded;
+  return strip && address - room >= fitMetrics.addressMin ? lead + room : lead;
 }

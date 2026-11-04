@@ -131,13 +131,25 @@ test('a device-wide command in progress prevents concurrent changes from another
   release(); await first;
 });
 
-test('the fixed Authenticode verifier passes the candidate only through child environment and rejects wrong publishers', async () => {
-  const f = fixture(); const calls = [];
-  const service = createVpnControl({ platform: 'win32', env: { ProgramFiles: root, SystemRoot: 'C:\\Windows' }, files: f.fs, run: async (file, args, options) => { calls.push({ file, args, options }); return { ok: true, stdout: '{"valid":true,"publisher":"Unrelated Publisher"}' }; } });
+test('the Authenticode check runs in Acira\'s own helper (never a script host), takes the path on standard input and rejects wrong publishers', async () => {
+  const f = fixture(), helper = 'C:\\Users\\me\\AppData\\Local\\Programs\\Acira Browser\\resources\\acira-verify.exe';
+  const exec = answer => { const calls = []; return { calls, exec: (file, args, options, callback) => { const call = { file, args, options, input: '' }; calls.push(call); setImmediate(() => callback(null, answer)); return { stdin: { on() {}, end(text) { call.input = text; } } }; } }; };
+  const wrong = exec('valid\r\nUnrelated Publisher\r\n');
+  const service = createVpnControl({ platform: 'win32', env: { ProgramFiles: root, SystemRoot: 'C:\\Windows' }, files: f.fs, run: async () => assert.fail('no command runs for an unverified provider'), windowsHelper: { helper, exec: wrong.exec } });
   assert.ok((await service.status()).providers.every(p => !p.verified));
-  assert.ok(calls.every(call => call.file === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'));
-  assert.ok(calls.every(call => call.args.includes('-NonInteractive') && !call.args.some(arg => /ExecutionPolicy|Bypass/.test(arg))));
-  assert.ok(calls.every(call => !call.args.join(' ').includes(root) && [mullvad, mullvadApp].includes(call.options.env.ACIRA_VPN_VERIFY_PATH)));
+  assert.ok(wrong.calls.length > 0);
+  assert.ok(wrong.calls.every(call => call.file === helper && call.args.length === 1 && call.args[0] === 'signature' && call.options.windowsHide === true));
+  assert.deepEqual(wrong.calls.map(call => call.input).sort(), [mullvad, mullvadApp].sort(), 'the candidate path travels on standard input only');
+  assert.ok(wrong.calls.every(call => !Object.keys(call.options.env || {}).some(name => /^ACIRA_/.test(name))));
+  const right = exec('valid\r\nMullvad VPN AB\r\n');
+  const trusted = createVpnControl({ platform: 'win32', env: { ProgramFiles: root }, files: f.fs, run: f.run, windowsHelper: { helper, exec: right.exec } });
+  assert.equal((await trusted.status()).providers.find(p => p.id === 'mullvad').verified, true);
+  const invalid = exec('invalid\r\nMullvad VPN AB\r\n');
+  const unsigned = createVpnControl({ platform: 'win32', env: { ProgramFiles: root }, files: f.fs, run: f.run, windowsHelper: { helper, exec: invalid.exec } });
+  assert.equal((await unsigned.status()).providers.find(p => p.id === 'mullvad').verified, false);
+  // A helper that is missing or blocked (an antivirus quarantine) verifies nothing.
+  const missing = createVpnControl({ platform: 'win32', env: { ProgramFiles: root }, files: f.fs, run: f.run, windowsHelper: { helper, exec: (file, args, options, callback) => { setImmediate(() => callback(Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT', syscall: 'spawn x.exe' }), '')); return { stdin: { on() {}, end() {} } }; } } });
+  assert.ok((await missing.status()).providers.every(p => !p.verified));
 });
 
 test('unsupported platforms retain provider setup links and never attempt a Windows executable', async () => {

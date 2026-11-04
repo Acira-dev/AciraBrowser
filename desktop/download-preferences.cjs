@@ -11,9 +11,20 @@ function fitName(stem,extension){
  return kept||'download';
 }
 
+/** Next free path in the folder: "report.pdf", then "report (1).pdf". taken(path) adds names the caller has handed out but whose file isn't on disk yet. */
+function nextFreePath(folder,name,taken=()=>false){
+ fs.mkdirSync(folder,{recursive:true});
+ const safe=path.basename(String(name||'download')).replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'')||'download';
+ const extension=path.extname(safe),stem=fitName(extension?safe.slice(0,-extension.length):safe,extension);
+ for(let n=0;n<10000;n++){const candidate=path.join(folder,n===0?stem+extension:`${stem} (${n})${extension}`);if(!fs.existsSync(candidate)&&!fs.existsSync(candidate+'.crdownload')&&!taken(candidate))return candidate;}
+ throw new Error('No free file name in the download folder.');
+}
+
 function createDownloadPreferences({file,defaultFolder}){
  let value={askWhere:false,folder:''};
- try{if(fs.statSync(file).size<8192){const saved=JSON.parse(fs.readFileSync(file,'utf8'));if(typeof saved.askWhere==='boolean')value.askWhere=saved.askWhere;if(typeof saved.folder==='string'&&path.isAbsolute(saved.folder))value.folder=saved.folder;}}catch{}
+ // a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile)
+ const saved=require('./atomic-file.cjs').readJsonFile(file,{maxBytes:8191});
+ if(saved){if(typeof saved.askWhere==='boolean')value.askWhere=saved.askWhere;if(typeof saved.folder==='string'&&path.isAbsolute(saved.folder))value.folder=saved.folder;}
  const folderUsable=folder=>{try{return path.isAbsolute(folder)&&fs.statSync(folder).isDirectory();}catch{return false;}};
  const effectiveFolder=()=>value.folder&&folderUsable(value.folder)?value.folder:defaultFolder;
  function save(){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(value));fs.renameSync(file+'.tmp',file);}
@@ -26,14 +37,7 @@ function createDownloadPreferences({file,defaultFolder}){
   }
   save();return get();
  }
- /** Next free path in the folder: "report.pdf", then "report (1).pdf". */
- function destination(name){
-  const folder=effectiveFolder();fs.mkdirSync(folder,{recursive:true});
-  const safe=path.basename(String(name||'download')).replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'')||'download';
-  const extension=path.extname(safe),stem=fitName(extension?safe.slice(0,-extension.length):safe,extension);
-  for(let n=0;n<10000;n++){const candidate=path.join(folder,n===0?stem+extension:`${stem} (${n})${extension}`);if(!fs.existsSync(candidate)&&!fs.existsSync(candidate+'.crdownload'))return candidate;}
-  throw new Error('No free file name in the download folder.');
- }
+ function destination(name,{taken}={}){return nextFreePath(effectiveFolder(),name,taken);}
  return {get,set,destination};
 }
-module.exports={createDownloadPreferences,fitName};
+module.exports={createDownloadPreferences,fitName,nextFreePath};

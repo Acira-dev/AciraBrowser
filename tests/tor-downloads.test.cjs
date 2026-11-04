@@ -2,6 +2,8 @@
 // Downloads from Tor tabs: the record says it came from Tor, opening such a file asks first (Tor Browser's download warning) until "Got it" is chosen, the choice is
 // one saved Tor preference that sits beside the security level, and nothing about the warning applies to an ordinary download.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path'), {EventEmitter} = require('node:events');
+// The usual rig environment puts the engine in test mode (no Save dialog, a test download folder): these tests drive the real flow.
+delete process.env.ACIRA_BROWSER_TEST_DATA; delete process.env.ACIRA_BROWSER_TEST_DOWNLOAD_DIR;
 const {createDownloads} = require('../desktop/downloads.cjs');
 const {createTorWindows} = require('../desktop/browser-services/tor-window.cjs');
 
@@ -19,13 +21,20 @@ function setup({tor, warning = () => true}) {
     app: {getPath: () => dir, getFileIcon: async () => ({isEmpty: () => false})}, shell: {showItemInFolder() {}, openPath: async file => { opened.push(file); return ''; }}, journalPath: path.join(dir, 'journal.json')});
   service.attach(session);
   return {dir, records, opened, boxes, service, setAnswer: value => { answer = value; },
-    async finish() { const item = new Item(path.join(dir, 'ip.json')); session.emit('will-download', {preventDefault() { throw new Error('denied'); }}, item, wc); await new Promise(setImmediate); fs.writeFileSync(item.saved, '{"IsTor":true}'); item.emit('done', {}, 'completed'); return records[0]; }};
+    async finish() { const item = new Item(path.join(dir, 'ip.json')); session.emit('will-download', {preventDefault() { throw new Error('denied'); }}, item, wc); await new Promise(setImmediate); fs.writeFileSync(item.saved, '{"IsTor":true}'); item.emit('done', {}, 'completed'); /* the Save dialog's answer came after Electron read the path: the file was parked and moves there now */ for (const end = Date.now() + 5000; records[0]?.status !== 'Ready' && Date.now() < end;) await new Promise(resolve => setTimeout(resolve, 5)); return records[0]; }};
 }
 const ask = (f, record) => f.service.command(record.id, 'open', 'A', f.records, {owner: {window: {}}});
 
 test('a download from a Tor tab is recorded as one; an ordinary one is not', async () => {
   const tor = setup({tor: true}), plain = setup({tor: false});
   assert.equal((await tor.finish()).tor, true);assert.equal((await plain.finish()).tor, undefined);
+});
+
+test('macOS: a download from a Tor tab carries the quarantine mark like any other, with no address', {skip: process.platform !== 'darwin' && 'macOS only'}, async () => {
+  const f = setup({tor: true}), record = await f.finish(), read = name => { try { return require('node:child_process').execFileSync('/usr/bin/xattr', ['-p', name, record.path], {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim(); } catch { return null; } };
+  assert.equal(record.status, 'Ready');
+  assert.match(read('com.apple.quarantine') || 'none', /^0081;[0-9a-f]{8};Acira Browser;$/);
+  assert.equal(read('com.apple.metadata:kMDItemWhereFroms'), null);
 });
 
 test('opening a Tor download asks first; Cancel opens nothing, Open file opens it', async () => {

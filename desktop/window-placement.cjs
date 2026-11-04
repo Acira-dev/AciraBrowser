@@ -3,9 +3,12 @@
 // session puts each window back where it was. A window opened while another is open gets that window's size, moved 24 px right and down
 // (wrapping to the top-left of the screen's work area when it would run off, like a Windows cascade), and never lands exactly on another window.
 // The file's top-level bounds/maximized/fullscreen mirror the first window, which is what the splash window at launch reads.
+// It is written whole or not at all (atomic-file.cjs). A file that cannot be read is kept aside as window-state.json.damaged-<time> and the windows
+// open where a first start puts them: only positions are lost, so nothing is asked.
 const fs = require('node:fs');
 const path = require('node:path');
 const {clampWindowBounds} = require('./native-policy.cjs');
+const {writeFileAtomic, keepDamaged} = require('./atomic-file.cjs');
 
 const STEP = 24, MAX_SAVED = 24;
 const validId = id => typeof id === 'string' && /^[\w-]{1,80}$/.test(id);
@@ -21,8 +24,14 @@ const cleanEntry = value => {
 };
 
 function readState(file) {
-  let raw = {};
-  try { const parsed = JSON.parse(fs.readFileSync(file, 'utf8')); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) raw = parsed; } catch {}
+  let raw = {}, text = null;
+  try { text = fs.readFileSync(file, 'utf8'); } catch {}
+  if (text !== null) {
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch {}
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) raw = parsed;
+    else if (keepDamaged(file)) console.warn('window-state.json could not be read; it was kept aside and the windows open in their usual place.');
+  }
   const windows = {};
   if (raw.windows && typeof raw.windows === 'object' && !Array.isArray(raw.windows)) for (const [id, value] of Object.entries(raw.windows).slice(0, MAX_SAVED * 2)) if (validId(id)) windows[id] = cleanEntry(value);
   return {lead: cleanEntry(raw), windows};
@@ -60,7 +69,7 @@ function save(file, windowId, entry, keep = []) {
   for (const id of Object.keys(state.windows)) if (!ids.includes(id)) delete state.windows[id];
   const lead = state.windows[ids[0]]?.bounds ? state.windows[ids[0]] : state.windows[windowId];
   fs.mkdirSync(path.dirname(file), {recursive: true});
-  fs.writeFileSync(file, JSON.stringify({...lead, windows: state.windows}));
+  writeFileAtomic(file, JSON.stringify({...lead, windows: state.windows}));
 }
 
 module.exports = {place, save, cascadeBounds, readState, STEP};

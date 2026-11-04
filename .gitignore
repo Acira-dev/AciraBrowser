@@ -29,3 +29,6 @@ supabase/.branches/
 
 desktop/browser-services/tor-engine/darwin-*/
 desktop/browser-services/tor-engine/.darwin-tor-*/
+
+# Built by scripts/build-installer-helper.cjs on Windows and shipped in the app (resources/acira-verify.exe); never committed
+packaging/installer/acira-verify.exe

@@ -7,9 +7,11 @@
 .app.style-acira[data-appearance=light] :is(.tab-strip-container,.acira-compact-tabs){--frame-selection-bg:var(--tab-selection-bg);--frame-selection-fg:var(--tab-selection-fg)}
 :root .app.style-acira[data-appearance=light] :is(.tab-strip-container,.acira-compact-tabs) :is(.browser-tab,.acira-compact-tab).selected{color:var(--tab-selection-fg)}
 /* The strip's selected tab is the toolbar surface (toolbar-controls.css), not a white card, so on a dark finish in light mode its ink is the
-   frame's, like every other tab on the strip (founder, 31 Oct: dark "New tab" on a dark tab). A private tab keeps its card and its ink. */
-:root:root .app.style-acira[data-appearance=light][data-chrome=dark] .tab-strip-container .tabs-strip>.browser-tab.selected:not([data-privacy]){color:var(--frame-text)}
-.app.style-acira[data-appearance=light] :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface=held]{background:var(--tab-carry-bg);color:var(--tab-carry-fg)}
+   frame's, like every other tab on the strip (founder, 31 Oct: dark "New tab" on a dark tab). A private or Tor tab sits on that same surface
+   under its wash, so it takes that ink too (it kept the card's dark ink: 1.7:1). A tab being carried, settling or making room is the
+   light card below and keeps the card's ink (founder, beta.10: the dragged tab's label was white on white). */
+:root:root .app.style-acira[data-appearance=light][data-chrome=dark] .tab-strip-container .tabs-strip>.browser-tab.selected:not([data-drag-surface]){color:var(--frame-text)}
+:root:root .app.style-acira[data-appearance=light] :is(.browser-tab,.acira-compact-tab,.tab-group-header)[data-drag-surface=held]{background:var(--tab-carry-bg);color:var(--tab-carry-fg)}
 .app .browser-tab:not(.selected):hover,.app .acira-compact-tab:not(.selected):hover{background:var(--frame-hover);color:var(--frame-hover-text)}
 .app :is(.browser-tab,.acira-compact-tab)[data-tab-group]:not(.selected):hover:not([data-drag-surface]){background:var(--group-tray-hover);color:var(--group-tab-text)}
 .app .browser-tab .tab-close:hover,.app .acira-compact-tab-close:hover{background:var(--frame-hover);color:var(--frame-hover-text)}

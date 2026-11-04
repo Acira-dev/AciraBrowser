@@ -44,8 +44,9 @@ export function UpdatePopover({ close, reducedMotion }: { close: () => void; red
  *  downloading by itself) shows the ring without a control. Nothing takes focus when it opens. */
 export function UpdateDownload({ update, reducedMotion }: { update: UpdateView; reducedMotion: boolean }) {
   const [reading, setReading] = useState(false), [asked, setAsked] = useState<'pause' | 'resume' | null>(null), notesBox = useRef<HTMLDivElement>(null);
-  // The press shows at once (main answers in a moment, then every window hears 'update-changed'); the next status settles it.
-  useEffect(() => setAsked(null), [update.phase]);
+  // The press shows at once (main answers in a moment, then every window hears 'update-changed'); the next status settles it. Every status read, not
+  // only a new phase: a Resume that cannot connect is paused again before this window reads 'downloading', and the press then stayed on screen.
+  useEffect(() => setAsked(null), [update]);
   const paused = asked ? asked === 'pause' : update.phase === 'paused', percent = Math.max(0, Math.min(100, update.percent));
   const toggle = () => { const next = paused ? 'resume' : 'pause'; setAsked(next); void (next === 'pause' ? pauseUpdate() : resumeUpdate()); };
   const ring = (

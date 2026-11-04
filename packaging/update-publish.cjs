@@ -79,6 +79,69 @@ function previousBlockMaps(live,{version,kept=BLOCKMAPS_KEPT}){
  for(const doc of live)for(const entry of doc.previousBlockMaps||[])add(entry?.version,entry?.url);
  return list.slice(0,kept);
 }
+/** A setup's blockmap, as the installed app reads it (desktop/browser-services/update-download.cjs): it must describe exactly this setup (offset 0, sizes
+ *  adding up to the setup's size), or every copy that updates from it falls back to downloading the whole setup. Throws with the reason. */
+function checkBlockMap(raw,{size}){
+ const {readBlockMap,blockMapSize}=require('../desktop/browser-services/update-download.cjs');
+ let map;try{map=readBlockMap(raw);}catch{throw Error('it is not a blockmap (gzipped JSON with one file, as electron-builder writes it)');}
+ if(map.files[0].offset!==0)throw Error('it starts '+map.files[0].offset+' bytes into the file, so it is not the whole setup\'s blockmap');
+ if(blockMapSize(map)!==size)throw Error('it describes a file of '+blockMapSize(map)+' bytes, not this '+size+'-byte setup: it belongs to another build');
+ return map;
+}
+// Staged rollout, the way electron-updater does it (AppUpdater.isStagingMatch): an installed copy makes a random id once (<userData>/.updaterId) and is
+// offered the document's version only when that id falls below stagingPercentage. No field means everyone, and the same copy gets the same answer at
+// every check, so raising the percentage only ever adds people. 0 offers it to nobody: that is a halt. `halted` records when and from what percentage, so
+// --resume-rollout can put it back; electron-updater ignores the field.
+/** --rollout and --widen take a whole percentage from 1 to 100. */
+function parsePercent(value,flag){
+ const number=Number(value);
+ if(!/^\d{1,3}$/.test(String(value))||number<1||number>100)throw Error(flag+' takes a whole percentage from 1 to 100, not '+value+'.');
+ return number;
+}
+/** {percentage, halted, before}: who a channel document reaches now. before is the percentage a halt recorded (null when unknown). */
+function rolloutOf(doc){
+ const raw=doc?.stagingPercentage,parsed=raw==null?100:Number.parseInt(raw,10),percentage=Number.isNaN(parsed)?100:Math.max(0,Math.min(100,parsed));
+ const before=doc?.halted&&Number.isInteger(doc.halted.percentage)&&doc.halted.percentage>=1&&doc.halted.percentage<=100?doc.halted.percentage:null;
+ return {percentage,halted:percentage===0,before};
+}
+const describeRollout=doc=>{const {percentage,halted}=rolloutOf(doc);return halted?'halted (offered to nobody)':percentage===100?'offered to every install':'offered to '+percentage+'% of installs';};
+/** The document offered to `percentage` of installs (100: the field goes, which electron-updater reads as everyone). Clears a halt. */
+function withRollout(doc,percentage){
+ const next={...doc};delete next.halted;
+ if(percentage===100)delete next.stagingPercentage;else next.stagingPercentage=percentage;
+ return next;
+}
+const haltDoc=(doc,{at})=>({...doc,stagingPercentage:0,halted:{at,percentage:rolloutOf(doc).percentage}});
+/** The architecture of a Mac update ZIP named in a channel document, or null. */
+const macArchOf=url=>/-mac-(arm64|x64)-update\.zip$/.exec(String(url||''))?.[1]||null;
+/** The release tag in a public release download URL, or null. */
+const tagOf=url=>/\/releases\/download\/([^/]+)\/[^/]+$/.exec(String(url||''))?.[1]||null;
+/** A live Mac document with one more architecture's ZIP. path and sha512 (electron-updater's old single-file fields) keep naming the first file. */
+const addMacFiles=(doc,files)=>({...doc,files:[...doc.files,...files]});
+/** Line diff of two small documents (before, after): '  ' unchanged, '- ' removed, '+ ' added. Enough for a feed document of a few dozen lines. */
+function lineDiff(before,after){
+ const a=String(before||'').replace(/\n$/,'').split('\n').filter((line,index,all)=>all.length>1||line),b=String(after||'').replace(/\n$/,'').split('\n');
+ const rows=a.length+1,cols=b.length+1,lcs=Array.from({length:rows},()=>new Array(cols).fill(0));
+ for(let i=a.length-1;i>=0;i--)for(let j=b.length-1;j>=0;j--)lcs[i][j]=a[i]===b[j]?lcs[i+1][j+1]+1:Math.max(lcs[i+1][j],lcs[i][j+1]);
+ const out=[];let i=0,j=0;
+ while(i<a.length||j<b.length){
+  if(i<a.length&&j<b.length&&a[i]===b[j]){out.push('  '+a[i]);i++;j++;}
+  else if(i<a.length&&(j===b.length||lcs[i+1][j]>=lcs[i][j+1])){out.push('- '+a[i]);i++;} // what goes, then what comes
+  else{out.push('+ '+b[j]);j++;}
+ }
+ return out;
+}
+/** A line diff with only `context` unchanged lines kept around each change; longer unchanged runs become one "… N unchanged lines" line. */
+function foldDiff(lines,context=2){
+ const near=lines.map((line,index)=>!line.startsWith('  ')||lines.slice(Math.max(0,index-context),index+context+1).some(other=>!other.startsWith('  ')));
+ const out=[];let skipped=0;
+ for(let index=0;index<lines.length;index++){
+  if(near[index]){if(skipped)out.push('  … '+skipped+' unchanged line'+(skipped===1?'':'s'));skipped=0;out.push(lines[index]);}
+  else skipped++;
+ }
+ if(skipped)out.push('  … '+skipped+' unchanged line'+(skipped===1?'':'s'));
+ return out;
+}
 const serializeFeed=doc=>JSON.stringify(doc,null,2)+'\n'; // JSON is YAML, and the public documents already use it
 function parseFeed(text){try{return JSON.parse(text);}catch{return require('js-yaml').load(text);}}
 /** Reads a feed document the way an installed app does (the real electron-updater parser). Throws if it is not a valid channel document. */
@@ -92,12 +155,14 @@ async function readLiveFeed({fetch,file,baseUrl=RAW_FEED_BASE}){
   const response=await fetch(new URL(file,baseUrl).href,{headers:{'cache-control':'no-cache'}});
   if(response.status===404)return {file,version:null,files:[]};
   if(!response.ok)return {file,error:'HTTP '+response.status};
-  const doc=parseFeed(await response.text());
+  const text=await response.text(),doc=parseFeed(text);
   if(!doc||typeof doc.version!=='string')return {file,error:'not a channel document'};
-  return {file,version:doc.version,files:doc.files||[],previousBlockMaps:Array.isArray(doc.previousBlockMaps)?doc.previousBlockMaps:[]};
+  return {file,version:doc.version,files:doc.files||[],previousBlockMaps:Array.isArray(doc.previousBlockMaps)?doc.previousBlockMaps:[],doc,text};
  }catch(error){return {file,error:String(error?.message||error)};}
 }
-function buildInfo({version,channel,platform,commit,assets,checks,builtAt}){
- return {schema:1,product:'Acira Browser',version,channel,platform,commit,publishedAt:builtAt,checks,files:assets.map(({name,size,sha256,sha512})=>({name,size,sha256,sha512}))};
+/** BUILD-INFO.json: what was published and what was checked. Only what the inputs decide (no clock), so a run that resumes after a failure
+ *  produces the same bytes as the one that uploaded it, and the anonymous byte check of the file already on the release passes. */
+function buildInfo({version,channel,platform,commit,assets,checks}){
+ return {schema:2,product:'Acira Browser',version,channel,platform,commit,checks,files:assets.map(({name,size,sha256,sha512})=>({name,size,sha256,sha512}))};
 }
-module.exports={ARCHES,CHANNELS,PLATFORMS,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};
+module.exports={ARCHES,CHANNELS,PLATFORMS,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,checkBlockMap,parsePercent,rolloutOf,describeRollout,withRollout,haltDoc,macArchOf,tagOf,addMacFiles,lineDiff,foldDiff,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};

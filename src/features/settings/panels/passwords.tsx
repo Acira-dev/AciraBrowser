@@ -120,7 +120,7 @@ function ProfilePasswords({ state }: SettingsPanelProps) {
     {!unusable && <>
       <SettingGroup title={t('pwp.savedPasswords')} id="passwords-list">
         <div className="pw-bar">
-          <label className="pw-search"><svg viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25L13 13"/></svg><input type="search" placeholder={t('pwp.search')} aria-label={t('pwp.search')} value={query} onChange={event => setQuery(event.target.value)}/></label>
+          <label className="pw-search" data-placeholder={t('pwp.search')}><svg viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25L13 13"/></svg><input type="search" placeholder={t('pwp.search')} aria-label={t('pwp.search')} value={query} onChange={event => setQuery(event.target.value)}/></label>
           <Button kind="primary" data-setting="passwords-add" onClick={() => { setAdding(true); setOpenId(''); }}>{t('pwp.addPassword')}</Button>
         </div>
         {summary.total > 0 && <p className="pw-summary" aria-live="polite">{summary.weak || summary.reused ? [summary.weak && t('pwp.weakCount', { count: summary.weak }), summary.reused && t('pwp.reusedCount', { count: summary.reused })].filter(Boolean).join(' · ') : t('pwp.allStrong', { count: summary.total })}<span>{t('pwp.checkedHere')}</span></p>}

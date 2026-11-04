@@ -4,7 +4,7 @@
 // answered quietly the way Chrome answers them with no passkey to offer. Passwords are untouched. The switch is read at every call (live).
 const {test}=require('node:test'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process'),path=require('node:path'),fs=require('node:fs'),vm=require('node:vm');
 const PRELOAD=path.join(__dirname,'..','desktop','browser-services','passkey-guard-preload.cjs');
-const source=fs.readFileSync(PRELOAD,'utf8'),GUARD=/const guard = (function \(allowed, mac\) \{[\s\S]*?\n\});\r?\n/.exec(source)[1];
+const source=fs.readFileSync(PRELOAD,'utf8'),GUARD=/const guard = (function \(allowed, mac, refused\) \{[\s\S]*?\n\});\r?\n/.exec(source)[1];
 
 // A stand-in window: Chromium's credential calls are recorded instead of reaching Windows; press() is a real click (a trusted event plus
 // transient activation, as Chromium gives); lapse() is the 5-second activation window running out.
@@ -24,7 +24,7 @@ function addEventListener(type, listener) { (listeners[type] = listeners[type] |
 function dispatch(type, isTrusted) { for (const listener of listeners[type] || []) listener({ type, isTrusted }); }
 function press() { dispatch('pointerdown', true); dispatch('click', true); navigator.userActivation.isActive = true; }
 function lapse() { navigator.userActivation.isActive = false; }
-var window = globalThis;
+var window = globalThis, top = globalThis;
 function HTMLIFrameElement(child) { this.child = child; }
 Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', { get() { if (this.child === 'other-origin') return { get location() { throw new Error('SecurityError'); } }; return this.child; }, configurable: true, enumerable: true });
 Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', { get() { return this.child && this.child.document; }, configurable: true, enumerable: true });
@@ -42,14 +42,17 @@ const publicKey={challenge:new Uint8Array(1)};
 
 // Exercise the preload entry point too, including its platform check. The tests
 // below that run GUARD directly model Windows, even on a macOS test machine.
-function preloadedPage(platform,href='https://accounts.example/',allowed=false){
+function preloadedPage(platform,href='https://accounts.example/',allowed=false,{answers=[],child=false}={}){
  const context=vm.createContext({AbortController,HREF:href,process:{platform}}),injected=[];
  vm.runInContext(WINDOW,context);
+ if(child)vm.runInContext('top = {}',context);
  const originals=vm.runInContext('[CredentialsContainer.prototype.get,CredentialsContainer.prototype.create,PublicKeyCredential.isConditionalMediationAvailable,PublicKeyCredential.getClientCapabilities]',context);
- const asked=[];
- context.require=name=>{assert.equal(name,'electron');return {ipcRenderer:{sendSync(channel){asked.push(channel);assert.equal(channel,'acira:passkeys-allowed');return allowed;}},contextBridge:{executeInMainWorld({func,args}){injected.push(func);return func(...args);}}};};
+ const asked=[],notices=[];
+ // invoke('acira:passkey-refused') is the notice: main answers whether it showed it (the next scripted answer, false when none is left).
+ const invoke=channel=>{notices.push(channel);assert.equal(channel,'acira:passkey-refused');const next=answers.shift();return next instanceof Error?Promise.reject(next):Promise.resolve(next===true);};
+ context.require=name=>{assert.equal(name,'electron');return {ipcRenderer:{sendSync(channel){asked.push(channel);assert.equal(channel,'acira:passkeys-allowed');return allowed;},invoke},contextBridge:{executeInMainWorld({func,args}){injected.push(func);return func(...args);}}};};
  vm.runInContext(source,context);
- return {run:code=>vm.runInContext(code,context),originals,injected,asked,calls:()=>JSON.parse(vm.runInContext('JSON.stringify(calls)',context))};
+ return {run:code=>vm.runInContext(code,context),originals,injected,asked,notices,calls:()=>JSON.parse(vm.runInContext('JSON.stringify(calls)',context))};
 }
 
 test('linux: the actual preload preserves native passkey APIs, requests and capabilities',async()=>{
@@ -71,13 +74,16 @@ test('linux: the actual preload preserves native passkey APIs, requests and capa
 // passkey" until the session expired. No Mac build has Apple's browser passkey entitlement, Electron shows no passkey sheet or phone QR
 // code, yet the engine told Google a passkey would work. What Electron 44.9.3 (and the shipped ECS runtime) answered on a Mac:
 const ELECTRON_MAC_CAPABILITIES={conditionalCreate:true,conditionalGet:true,'extension:appid':true,'extension:credProps':true,'extension:largeBlob':true,'extension:prf':true,hybridTransport:true,immediateGet:true,passkeyPlatformAuthenticator:true,relatedOrigins:true,signalAllAcceptedCredentials:true,signalCurrentUserDetails:true,signalUnknownCredential:true,userVerifyingPlatformAuthenticator:false};
-function macPage(){
+function macPage(refused=()=>{}){
  const context=vm.createContext({AbortController,HREF:'https://accounts.google.com/v3/signin/challenge/pk',ENGINE:ELECTRON_MAC_CAPABILITIES});vm.runInContext(WINDOW,context);
  vm.runInContext('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function isUserVerifyingPlatformAuthenticatorAvailable() { return Promise.resolve(false); }; PublicKeyCredential.getClientCapabilities = function getClientCapabilities() { return Promise.resolve(Object.assign({}, ENGINE)); };',context);
- vm.runInContext('('+GUARD+')',context)(()=>{throw new Error('a Mac never asks the main process');},true);
+ vm.runInContext('('+GUARD+')',context)(()=>{throw new Error('a Mac never asks the main process');},true,refused);
  const run=code=>vm.runInContext(code,context);
  return {context,run,calls:()=>JSON.parse(run('JSON.stringify(calls)')),press:()=>run('press()'),get:o=>run('navigator.credentials').get(o),create:o=>run('navigator.credentials').create(o)};
 }
+// What the engine itself answers when no authenticator has the passkey (Electron 44.9.3, Chromium 152, measured 4 Nov with a DevTools virtual
+// authenticator: NotAllowedError in 1 ms), and what Chrome answers when the person cancels its passkey sheet. A Mac refusal reads the same.
+const ENGINE_REFUSAL='NotAllowedError: The operation either timed out or was not allowed. See: https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.';
 const credential=transports=>({type:'public-key',id:new Uint8Array([1,2,3]),...(transports?{transports}:{})});
 // Google's passkey challenge: the account's passkeys (iCloud Keychain, Google Password Manager) listed with internal and hybrid transports.
 const googlePasskey={challenge:new Uint8Array(32),rpId:'google.com',timeout:300000,userVerification:'preferred',allowCredentials:[credential(['internal','hybrid'])]};
@@ -108,7 +114,7 @@ test('macOS: a passkey request is refused at once with NotAllowedError, press or
  ];
  for(const options of passkeyRequests){
   assert.equal(await settledWithin(outcome(p.get(options)),50),'settled','refused at once, not after the 5-minute timeout: '+JSON.stringify(options.publicKey.allowCredentials));
-  assert.equal(await outcome(p.get(options)),'NotAllowedError: The operation either timed out or was not allowed.','the error a cancelled sheet gives');
+  assert.equal(await outcome(p.get(options)),ENGINE_REFUSAL,'the error a cancelled sheet gives, word for word');
  }
  p.press();
  assert.match(await outcome(p.get({publicKey:googlePasskey})),/^NotAllowedError/,'a click does not change it: there is no sheet to open');
@@ -164,6 +170,102 @@ test('macOS: the actual preload installs the Mac answers in website and srcdoc f
   assert.deepEqual(p.calls(),['get']);assert.deepEqual(p.asked,[],'no setting is read on a Mac');
  }
  assert.equal(preloadedPage('darwin','file:///Users/someone/page.html').injected.length,0);
+});
+
+// macOS notice (founder, 3 Nov): Google's passkey page answered the refusal with "Make sure Bluetooth is on…" and his Bluetooth was on. The
+// guard tells the main process when the page itself asked for a passkey and was refused; main shows a toast saying it is Acira.
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('macOS: a passkey request the guard refuses tells the main process; autofill, immediate sign-in, security keys, passwords and child frames do not',async()=>{
+ const told=[],p=macPage(()=>told.push('refused'));
+ assert.equal(await outcome(p.get({publicKey:googlePasskey})),ENGINE_REFUSAL);
+ assert.equal(told.length,1,'Google\'s passkey challenge');
+ await outcome(p.get({publicKey:{challenge:new Uint8Array(1)}}));await outcome(p.create({publicKey}));
+ assert.equal(told.length,3,'"Sign in with a passkey" and "Create a passkey" too (once per page load is decided by the preload and main)');
+ await outcome(p.get({mediation:'immediate',publicKey}));
+ const controller=new AbortController(),pending=outcome(p.get({mediation:'conditional',publicKey,signal:controller.signal}));controller.abort(new DOMException('page moved on','AbortError'));await pending;
+ await outcome(p.create({mediation:'conditional',publicKey}));
+ assert.equal(await outcome(p.get({publicKey:{...googlePasskey,allowCredentials:[credential(['usb'])]}})),'GOT');
+ assert.equal(await outcome(p.get({password:true})),'GOT');
+ assert.equal(told.length,3,'nothing the person did not ask for, and nothing that was not refused');
+ // A child frame still about:blank, guarded by this page when it reaches it: refused the same way, but it does not speak for the page.
+ const bare=vm.createContext({AbortController,HREF:'about:blank'});vm.runInContext(WINDOW,bare);p.context.bareChild=vm.runInContext('globalThis',bare);
+ const reached=p.run('new HTMLIFrameElement(bareChild).contentWindow');
+ assert.equal(await outcome(reached.navigator.credentials.get({publicKey:googlePasskey})),ENGINE_REFUSAL);
+ assert.equal(told.length,3);
+ // A notice that fails (a closing frame) changes nothing about the answer.
+ const q=macPage(()=>{throw new Error('closing');});
+ assert.equal(await outcome(q.get({publicKey:googlePasskey})),ENGINE_REFUSAL);
+});
+
+test('macOS: the actual preload asks main from the top frame only, again until main has shown the notice, then never in that page load',async()=>{
+ const get='navigator.credentials.get({publicKey:{challenge:new Uint8Array(1)}})',create='navigator.credentials.create({publicKey:{challenge:new Uint8Array(1)}})';
+ // Main answers "not shown" (the page was not on screen), then "shown".
+ const p=preloadedPage('darwin','https://accounts.google.com/v3/signin/challenge/pk',false,{answers:[false,true]});
+ assert.equal(await outcome(p.run(get)),ENGINE_REFUSAL);await tick();
+ assert.deepEqual(p.notices,['acira:passkey-refused']);
+ await outcome(p.run(get));await tick();
+ assert.equal(p.notices.length,2,'not shown the first time: the next refusal asks again');
+ await outcome(p.run(get));await outcome(p.run(create));await tick();
+ assert.equal(p.notices.length,2,'shown: this page load never asks again');
+ assert.deepEqual(p.asked,[],'no setting is read on a Mac');
+ // While main is answering, another refusal does not ask twice; a failed answer (a closing window) counts as not shown.
+ const q=preloadedPage('darwin','https://accounts.google.com/',false,{answers:[new Error('closed'),true]});
+ await Promise.all([outcome(q.run(get)),outcome(q.run(get))]);await tick();
+ assert.equal(q.notices.length,1);
+ await outcome(q.run(get));await tick();
+ assert.equal(q.notices.length,2);
+ // A child frame (its top is another window) never asks; a security key never asks.
+ const child=preloadedPage('darwin','https://accounts.google.com/frame',false,{child:true,answers:[true]});
+ assert.equal(await outcome(child.run(get)),ENGINE_REFUSAL);await tick();
+ assert.deepEqual(child.notices,[]);
+ const key=preloadedPage('darwin','https://accounts.google.com/',false,{answers:[true]});
+ assert.equal(await key.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array(1),allowCredentials:[{type:"public-key",id:new Uint8Array(1),transports:["usb"]}]}})'),'GOT');await tick();
+ assert.deepEqual(key.notices,[]);
+});
+
+test('Windows: the refusal keeps its words and never asks for the Mac notice',async()=>{
+ const p=preloadedPage('win32');
+ assert.equal(await outcome(p.run('navigator.credentials.get({publicKey:{challenge:new Uint8Array(1)}})')),'NotAllowedError: The operation either timed out or was not allowed.');
+ await tick();assert.deepEqual(p.notices,[]);assert.deepEqual(p.asked,['acira:passkeys-allowed']);
+});
+
+test('macOS notice (main): a toast for the top frame of a website tab on screen, in its own space; nothing for iframes, other pages, background tabs, other spaces or closing windows',()=>{
+ const {createPasskeyNotice,NOTICE}=require('../desktop/browser-services/passkey-notice.cjs');
+ const shown=[],tm=id=>'['+id+']',contents=(destroyed=false)=>({isDestroyed:()=>destroyed}),top=url=>({parent:null,url});
+ const window=({visible=true,profile='profile-a',space='profile-a',closing=false}={})=>{
+  const wc=contents();
+  return {wc,c:{closing,state:{activeBrowserProfileId:space},pages:new Map([['tab-1',{view:{webContents:wc,getVisible:()=>visible},tabProfileId:profile}]]),toast:(text,options)=>shown.push({text,options})}};
+ };
+ const {wc,c}=window(),notice=createPasskeyNotice({controllers:new Set([c]),tm});
+ assert.equal(notice({sender:wc,senderFrame:top('https://accounts.google.com/v3/signin/challenge/pk')}),true);
+ assert.deepEqual(shown.splice(0),[{text:'[main.passkeysUnavailableMac]',options:{i18n:{id:NOTICE},tone:'info'}}],'the existing toast, info tone, in the interface language');
+ assert.equal(notice({sender:wc,senderFrame:{parent:{},url:'https://widget.example/'}}),false,'an iframe');
+ for(const url of ['file:///Users/someone/page.html','acira-browser-ui://ui/index.html','about:blank',''])assert.equal(notice({sender:wc,senderFrame:top(url)}),false,url||'no address');
+ assert.equal(notice({sender:wc,senderFrame:null}),false,'a frame already gone');
+ assert.equal(notice({sender:contents(true),senderFrame:top('https://a.example/')}),false,'a closed page');
+ assert.equal(notice({sender:contents(),senderFrame:top('https://a.example/')}),false,'a page that is not a tab (a pop-up window)');
+ assert.equal(notice(undefined),false);
+ for(const [label,options] of [['a tab in the background',{visible:false}],['another profile\'s space',{profile:'profile-b'}],['a closing window',{closing:true}]]){
+  const other=window(options);
+  assert.equal(createPasskeyNotice({controllers:new Set([other.c]),tm})({sender:other.wc,senderFrame:top('https://accounts.google.com/')}),false,label);
+ }
+ assert.deepEqual(shown,[],'no toast in any of those');
+});
+
+test('macOS notice: main answers the guard on a Mac only, and every catalog has the words',()=>{
+ const main=fs.readFileSync(path.join(__dirname,'..','desktop','main.cjs'),'utf8');
+ assert.match(main,/if\(process\.platform==='darwin'\)\{macPasskeys=[^\n]*ipcMain\.handle\('acira:passkey-refused',require\('\.\/browser-services\/passkey-notice\.cjs'\)\.createPasskeyNotice\(\{controllers,tm\}\)\);\}/);
+ assert.equal((main.match(/acira:passkey-refused/g)||[]).length,1);
+ const {NOTICE}=require('../desktop/browser-services/passkey-notice.cjs'),dir=path.join(__dirname,'..','src','i18n');
+ const english=JSON.parse(fs.readFileSync(path.join(dir,'en.json'),'utf8'));
+ assert.equal(english[NOTICE],'Acira can’t use passkeys on this Mac yet. Choose another way to sign in, like your password.');
+ const locales=fs.readdirSync(dir).filter(name=>/^[a-zA-Z-]+\.json$/.test(name)&&name!=='converted.json');
+ assert.equal(locales.length,13);
+ for(const file of locales){
+  const text=JSON.parse(fs.readFileSync(path.join(dir,file),'utf8'))[NOTICE];
+  assert.ok(typeof text==='string'&&/Acira/.test(text)&&/Mac/.test(text),file+' has the notice');
+  if(file!=='en.json')assert.notEqual(text,english[NOTICE],file+' is translated');
+ }
 });
 
 test('Windows: the actual preload still guards requests in HTTPS and srcdoc frames',async()=>{
@@ -349,7 +451,7 @@ test('the Windows guard covers every website frame, never needs another file (sa
  assert.match(blocking,/if\(process\.env\.ACIRA_BROWSER_TEST_DATA&&process\.env\.ACIRA_TEST_PASSKEY_STUB==='1'\)session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','passkey-test-stub-preload\.cjs'\)\}\);session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','passkey-guard-preload\.cjs'\)\}\)/);
  assert.equal((blocking.match(/passkey-test-stub-preload/g)||[]).length,1);
  // macOS: the guard's Mac answers need no main-process question, and an approved Apple bridge is registered after it, so it sits on top.
- assert.match(source,/process\.platform==='darwin'[\s\S]*executeInMainWorld\(\{func:guard,args:\[null,true\]\}\)/);
+ assert.match(source,/process\.platform==='darwin'[\s\S]*executeInMainWorld\(\{func:guard,args:\[null,true,refused\]\}\)/);
  assert.match(blocking,/'passkey-guard-preload\.cjs'\)\}\);if\(process\.platform==='darwin'\)session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','mac-passkey-preload\.cjs'\)\}\)/);
  assert.match(blocking,/if\(process\.platform==='win32'\)pipeline\.useHeaders\(passkeyPolicy\)/,'no Permissions-Policy denial on a Mac: security keys still work');
 });
@@ -387,11 +489,14 @@ test('Chromium on macOS: the engine claims passkeys; the registered preload answ
   assert.equal(mac.uvpaa,false,name);assert.equal(probe.conditionalAvailable,false,name);
   for(const capability of ['passkeyPlatformAuthenticator','hybridTransport','userVerifyingPlatformAuthenticator','conditionalGet','conditionalCreate','immediateGet'])assert.equal(mac.capabilities[capability],false,`${name}: ${capability}`);
   assert.equal(mac.capabilities['extension:prf'],probe.engine['extension:prf'],name+': extension support stays the engine\'s');
-  for(const label of ['passkey','discoverable','create']){assert.equal(mac[label],'NotAllowedError: The operation either timed out or was not allowed.',`${name}: ${label}`);assert.ok(mac[label+'Ms']<500,`${name}: ${label} refused at once (${mac[label+'Ms']} ms)`);}
+  for(const label of ['passkey','discoverable','create']){assert.equal(mac[label],ENGINE_REFUSAL,`${name}: ${label}`);assert.ok(mac[label+'Ms']<500,`${name}: ${label} refused at once (${mac[label+'Ms']} ms)`);}
   assert.equal(mac.securityKey,'STUBBED',name+': a security-key request reaches the engine');assert.equal(mac.createSecurityKey,'STUBBED',name);
   assert.equal(mac.password,'STUBBED',name+': passwords are untouched');
   assert.deepEqual(mac.calls,['get','create','get'],name+': only the security key and password calls reached the engine');
  }
+});
+test('Chromium on macOS: only a top frame asks for the notice, once per page load once main has shown it; an iframe never does',{skip:skip||process.platform!=='darwin'},()=>{
+ assert.deepEqual(result.notices,[{top:true,path:'/native'},{top:true,path:'/popup'}],'the page and the pop-up, each once for three refusals; the iframe not at all');
 });
 test('Chromium: without a press, autofill is unavailable, conditional sign-in waits for the abort and passkey calls are refused',{skip},()=>{
  const {without}=result;

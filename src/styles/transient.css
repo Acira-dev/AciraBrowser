@@ -59,6 +59,11 @@
   align-items: center;
   gap: 8px;
 }
+/* On an Acira page the stack lives inside the page, which clips: a narrow page (150% in a small window) cut a 420px card at both
+   ends. It keeps the same 16px margins inside the page as the stack keeps inside the window. */
+:root:root:root .page-area > .page-toast-slot > .t-stack {
+  max-width: calc(100% - 32px);
+}
 :root:root:root .overlay-toast {
   display: flex;
   flex-direction: column;
@@ -188,6 +193,10 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* An English message in an Arabic interface reads left to right (its full stop at its end) and stays where the text sits, by the glyph. */
+:root:root:root .t-text[dir='ltr'] {
+  text-align: end;
 }
 :root:root:root .t-toast[data-lines='2'] .t-text {
   display: -webkit-box;

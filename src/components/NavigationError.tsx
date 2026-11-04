@@ -1,6 +1,6 @@
 import {useEffect,useId,useRef,useState,type CSSProperties} from 'react';
 import {runtime} from '../runtime/client';import {useT} from '../i18n';import {settingsTargetAction} from '../ui/settingsView';import type {CertificateStatus,TabSession} from '../runtime/types';import type {ThreatStatus} from '../runtime/nativeNetwork';
-import {describeDestination,formatFingerprint,navigationFailure,type FailureKind} from '../ui/navigationFailure';
+import {describeDestination,formatFingerprint,navigationFailure,SECURE_CONNECTION_CODES,type FailureKind} from '../ui/navigationFailure';
 import {canOfferContinue,continueAnyway,exceptionMinutes} from '../ui/certificateOverride';
 import {CrossMark} from './CheckMark';
 import {OfflineGame} from './offline-game/OfflineGame';
@@ -33,16 +33,22 @@ export function NavigationError({tab,onEditAddress,onReport,reducedMotion=false}
  const goBack=()=>{if(backAvailable)void runtime.browserCommand({type:'back',tabId:tab.id});else void runtime.dispatch({type:'tab.navigate',tabId:tab.id,url:'acira://new'});},retry=()=>{setTrying(true);void runtime.browserCommand({type:'reload',tabId:tab.id}).finally(()=>setTimeout(()=>setTrying(false),900));};
  const offer=certificateError&&canOfferContinue(certificate,tab.error,tab.url)?certificate:undefined;
  const proceed=async()=>{if(!offer)return;setBusy(true);setProblem('');try{await continueAnyway(tab.id,offer.failure.ticketId);}catch(reason){setProblem(message(reason,t('error.warningChanged')));}finally{setBusy(false);}};
+ // A typed address that got https by default and could not make a secure connection: the page asks before opening it over http (main keeps the choice for ordinary profiles).
+ const httpOffer=Boolean(tab.httpsFirst)&&!crashed&&/^https:\/\//i.test(tab.url)&&failure.number!==undefined&&SECURE_CONNECTION_CODES.includes(failure.number);
+ const proceedHttp=async()=>{setBusy(true);setProblem('');try{await runtime.service({type:'https.allow-http',tabId:tab.id});}catch(reason){setProblem(message(reason,t('error.warningChanged')));}finally{setBusy(false);}};
+ // With "Always use HTTPS" on, main does not keep this choice: it lasts while this tab stays on the site, and the page asks again next time. The note says which.
+ const [strictHttps,setStrictHttps]=useState(false);
+ useEffect(()=>{setStrictHttps(false);if(!httpOffer)return;let alive=true;void runtime.service({type:'https.status',tabId:tab.id}).then(result=>{if(alive)setStrictHttps(result.https?.enabled===true);}).catch(()=>{});return()=>{alive=false;};},[tab.id,tab.error,tab.url,httpOffer]);
  const proceedThreat=async()=>{setBusy(true);setProblem('');try{await runtime.service({type:'threats.continue',tabId:tab.id});await runtime.browserCommand({type:'reload',tabId:tab.id});}catch(reason){setProblem(message(reason,'The warning changed. Reload the page to see it again.'));}finally{setBusy(false);}};
  const fingerprint=formatFingerprint(certificate?.failure?.fingerprint),fingerprintGroups=fingerprint?fingerprint.replace(/:/g,'').match(/.{1,4}/g)!.join(' '):'';
- const threatError=Boolean(threat),goBackFirst=certificateError||threatError,showBack=backAvailable||threatError,editable=Boolean(onEditAddress);
+ const threatError=Boolean(threat),goBackFirst=certificateError||threatError||httpOffer,showBack=backAvailable||threatError,editable=Boolean(onEditAddress);
  const technical=crashed?[[t('error.tech.reason'),(tab.error||'').replace(/^The page stopped responding:\s*/,'')||t('error.tech.crashed')],[t('error.tech.time'),seenAt]] as [string,string][]:[[t('error.tech.url'),shortAddress(tab.url,destination.address)],[t('error.tech.error'),`${failure.code}${failure.number!==undefined?` (${failure.number})`:''}`],[t('error.tech.host'),destination.host],...(threat?[[t('error.tech.blockedBy'),threat.list]]:[]),...(destination.port?[[t('error.tech.port'),destination.port]]:[]),...(failure.code==='NAVIGATION_FAILED'&&tab.error?[[t('error.tech.message'),tab.error]]:[]),...(fingerprintGroups?[['SHA‑256',fingerprintGroups]]:[]),[t('error.tech.time'),seenAt]] as [string,string][];
  const copy=()=>{const text=technical.map(([label,value])=>`${label}: ${value}`).join('\n');void navigator.clipboard?.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1400);}).catch(()=>{});};
  return <article className="navigation-error" aria-labelledby={id} data-failure-kind={failure.kind} data-motion={reducedMotion?'reduced':undefined}>
   <div className="ne-body">
-  <div className="ne-glyph" data-danger={certificateError||threatError||undefined} aria-hidden="true"><CrossMark size={16}/></div>
-  <div id={id} className="display-page ne-title" role="heading" aria-level={1}>{threat?threat.title:failure.title}</div>
-  <p className="lede ne-message">{threat?threat.cause:failure.message}</p>{failure.kind==='offline'&&<p className="ne-note ne-waiting" role="status">{t('error.offlineWaiting')}</p>}
+  <div className="ne-glyph" data-danger={certificateError||threatError||httpOffer||undefined} aria-hidden="true"><CrossMark size={16}/></div>
+  <div id={id} className="display-page ne-title" role="heading" aria-level={1}>{threat?threat.title:httpOffer?t('error.http.title'):failure.title}</div>
+  <p className="lede ne-message">{threat?threat.cause:httpOffer?t('error.http.message',{host:`\u2068${destination.host}\u2069`}):failure.message}</p>{failure.kind==='offline'&&<p className="ne-note ne-waiting" role="status">{t('error.offlineWaiting')}</p>}
   <dl className="ne-tech" aria-label={t('error.technicalDetails')}>{technical.map(([label,value])=><div key={label}><dt>{label}</dt><dd><bdi>{value}</bdi></dd></div>)}<button type="button" className="ne-copy" aria-label={t('error.copyTechnical')} onClick={copy}>{copied?t('error.copied'):t('error.copy')}</button></dl>
   <div className="ne-actions">
    {goBackFirst?<><button ref={primary} type="button" className="ne-button" data-primary onClick={goBack}>{t('error.goBack')}</button>{!threatError&&<button type="button" className="ne-button" onClick={retry} disabled={trying}>{trying?t('error.trying'):crashed?t('error.reload'):t('error.tryAgain')}</button>}</>:<><button ref={primary} type="button" className="ne-button" data-primary onClick={retry} disabled={trying} aria-busy={trying}>{trying?t('error.trying'):crashed?t('error.reload'):t('error.tryAgain')}</button>{showBack&&<button type="button" className="ne-button" onClick={goBack}>{t('error.goBack')}</button>}</>}
@@ -54,6 +60,13 @@ export function NavigationError({tab,onEditAddress,onReport,reducedMotion=false}
     <p>{t('error.cert.warning',{host:`\u2068${destination.host}\u2069`})}</p>
     <p className="ne-note">{t('error.cert.applies',{minutes:exceptionMinutes})}</p>
     <button type="button" className="ne-button" data-danger disabled={busy} onClick={()=>void proceed()}><span>{t('error.proceed',{host:`\u2068${destination.hostPort}\u2069`})}</span></button>
+   </div>}
+  </div>}
+  {httpOffer&&<div className="ne-unsafe">
+   {!armed?<button type="button" className="ne-link" data-danger onClick={()=>setArmed(true)}>{t('error.http.continue')}</button>:<div role="group" aria-label={t('error.http.group')}>
+    <p>{t('error.http.warning',{host:`\u2068${destination.host}\u2069`})}</p>
+    <p className="ne-note">{strictHttps?t('error.http.noteStrict'):t('error.http.note')}</p>
+    <button type="button" className="ne-button" data-danger disabled={busy} onClick={()=>void proceedHttp()}><span>{t('error.proceed',{host:`\u2068${destination.hostPort}\u2069`})}</span></button>
    </div>}
   </div>}
   {certificateError&&!offer&&certificate&&<p className="ne-note ne-unsafe">{certificate.failure?t('error.cert.noBypass'):t('error.cert.expired')}</p>}

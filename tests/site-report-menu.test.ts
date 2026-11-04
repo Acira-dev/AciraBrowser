@@ -9,7 +9,7 @@ import type { BrowserSnapshot, TabSession } from '../src/runtime/types';
 // Acira, and the menu's height with its new row. SiteReport imports its stylesheets; Node has no CSS loader, so a .css import loads empty here.
 register('data:text/javascript,' + encodeURIComponent("export async function load(url, context, next) { return url.endsWith('.css') ? { format: 'module', source: '', shortCircuit: true } : next(url, context); }"));
 (globalThis as { window?: unknown }).window ??= { acira: { platform: 'win32' } }; // the runtime client and the menu read window.acira at import
-const { SiteReport } = await import('../src/features/SiteReport');
+const { SiteReport, sendProblem, sendOutcome } = await import('../src/features/SiteReport');
 const { popupNaturalHeight } = await import('../src/ui/popup');
 
 const site = { id: 't1', url: 'https://en.wikipedia.org/wiki/Acira?x=1', contentKind: 'web' } as TabSession;
@@ -47,6 +47,30 @@ test('Page information, Protection and the warning page keep the form as it was:
   const html = form(site, ['site']);
   assert.doesNotMatch(html, /site-report-about|radiogroup/);
   assert.deepEqual(choices(html).map(([label]) => label), ['Blocked by mistake', 'Site doesn&#x27;t work', 'Cookie banner or pop-up problem', 'Something else']);
+});
+
+// beta.10: a 429 or 503 from the report server, or the app's hourly cap, said "Check your connection and try again", although the connection worked.
+test('Send not taken: nothing answered asks to check the connection; a refusal (429, 503, the hourly cap) says to try later', async () => {
+  assert.equal(sendProblem('offline'), "The report couldn't be sent. Check your connection and try again.");
+  assert.equal(sendProblem('later'), "The report couldn't be sent right now. Try again later.");
+  assert.equal(sendProblem(undefined), sendProblem('offline'), 'a refused request in main (a thrown error) is treated as not reaching anyone');
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/features/SiteReport.tsx', import.meta.url), 'utf8');
+  assert.match(source, /const unsent=sendOutcome\(\(await runtime\.service\(\{type:'site-report\.send',tabId:tab\.id,subject,kind,note\}\)\)\.siteReport\);if\(unsent\)\{setProblem\(unsent\);setBusy\(false\);return;\}dispatch\(\{type:'toast',text:t\('report\.thanks'\)\}\);/, 'a report main did not send is never thanked for');
+});
+
+// beta.10 review: main answers a site report whose tab closed or left the web with {available:false, reason:'not-a-website'} and sends nothing;
+// the form thanked the person anyway. Only sent:true is a thank-you.
+test('Send: only a report main says it sent is thanked for; a site that closed or left the web says so', async () => {
+  assert.equal(sendOutcome({ available: true, sent: true }), null);
+  assert.equal(sendOutcome({ available: false, reason: 'not-a-website' }), 'The site is no longer open in this tab. Open it again, then send the report.');
+  assert.equal(sendOutcome({ available: true, sent: false, failure: 'later' }), sendProblem('later'));
+  assert.equal(sendOutcome({ available: true, sent: false, failure: 'offline' }), sendProblem('offline'));
+  assert.equal(sendOutcome(undefined), sendProblem('offline'), 'no answer at all is not a thank-you either');
+  assert.equal(sendOutcome({ available: true }), sendProblem('offline'));
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
+  assert.match(main, /if\(!tab\|\|tab\.contentKind!=='web'\)return \{siteReport:\{available:false,reason:'not-a-website'\}\};/, 'the answer this covers');
 });
 
 const menuState = (extra: Partial<BrowserSnapshot> = {}, tab: Partial<TabSession> = {}) => ({

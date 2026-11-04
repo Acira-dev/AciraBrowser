@@ -51,8 +51,23 @@ function prepareForgetRecords(database,liveWindows,profileId,origin){
  const plans=[];for(const [id,snapshot]of windows){if(!snapshot.browserProfiles?.some(profile=>profile.id===profileId))continue;if(database&&snapshot.browserProfiles.some(profile=>profile.private))throw new Error('Private state cannot enter a stored Forget site plan.');const profiles=new Set(snapshot.browserProfiles.map(profile=>profile.id)),canonical={...snapshot,browsingHistory:[...history.values()].filter(record=>profiles.has(record.browserProfileId))};plans.push({id,snapshot:forgetOriginRecords(canonical,profileId,origin).snapshot});}
  if(!plans.length)throw new Error('Unknown local profile.');return {counts,windows:plans,history:[...history.values()],filesDeleted:false};
 }
+/** The site's remembered "Continue over http" choice (https-first.cjs) is an exception the person granted, like a permission, so Forget site drops it.
+ *  It is kept under the host that was typed, which need not be the page's (example.com typed, then sent on to www.example.com), so every choice on the
+ *  same registrable domain goes, the reach Forget site already has for cookies. The filtering choices kept in the same rows (protection, AI-free mode,
+ *  cookie banners) stay, as the Forget site dialog says ("site filtering preferences are kept"). A row left with nothing in it goes. */
+function forgetHttpChoice(database,profileId,origin){
+ const domain=site(origin).cookieDomain,update=database.db.prepare('UPDATE policies SET payload=? WHERE profile_id=? AND site=?'),remove=database.db.prepare('DELETE FROM policies WHERE profile_id=? AND site=?');let dropped=0;
+ for(const row of database.db.prepare("SELECT site,payload FROM policies WHERE profile_id=? AND site LIKE 'http://%'").all(profileId)){
+  let same=false;try{same=site(row.site).cookieDomain===domain;}catch{/* not a site address */}
+  const value=same?JSON.parse(row.payload):null;if(!value||!Object.hasOwn(value,'httpFallback'))continue;
+  const {httpFallback:_dropped,...kept}=value;
+  if(Object.keys(kept).length)update.run(JSON.stringify(kept),profileId,row.site);else remove.run(profileId,row.site);dropped++;
+ }
+ return dropped;
+}
 function commitForgetRecords(database,liveWindows,profileId,origin){
  return database.transaction(()=>{
+  forgetHttpChoice(database,profileId,origin);
   const plan=prepareForgetRecords(database,liveWindows,profileId,origin),upsert=database.db.prepare('INSERT INTO history(id,profile_id,visited_at,payload) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id,visited_at=excluded.visited_at,payload=excluded.payload');
   for(const record of plan.history)if(!(record.browserProfileId===profileId&&sameOrigin(record.url,origin)))upsert.run(record.id,record.browserProfileId,record.time,JSON.stringify(record));
   const remove=database.db.prepare('DELETE FROM history WHERE id=? AND profile_id=?');for(const row of database.db.prepare('SELECT id,payload FROM history WHERE profile_id=?').all(profileId))if(sameOrigin(JSON.parse(row.payload).url,origin))remove.run(row.id,profileId);

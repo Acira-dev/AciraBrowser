@@ -92,29 +92,31 @@ test('a damaged file with a stale write-ahead log: the log moves aside with it a
  opened.close();
 });
 
-test('the person chooses Quit: the file is left exactly as it was and Acira quits with the usual message',()=>{
+test('the person chooses Quit: the file is left exactly as it was and Acira quits, with no second message (the question says Quit changes nothing)',()=>{
  const db=seeded(['https://a.example/']),file=db.filename;backups.take(db,{now:Date.now()});db.close();
  const damaged=cutInHalf(file),h=harness(file,'quit');
  assert.equal(openBrowserDatabase(h.options),null);
- assert.equal(h.calls.asked.length,1);assert.equal(h.calls.quits,1);assert.match(h.calls.errors[0].text,/Nothing was changed or deleted/);
+ assert.equal(h.calls.asked.length,1);assert.equal(h.calls.quits,1);assert.deepEqual(h.calls.errors,[],'no "Nothing was changed" box after Quit');
  assert.deepEqual(fs.readFileSync(file),damaged);assert.equal(fs.readdirSync(path.dirname(file)).filter(name=>name.includes('damaged')).length,0);
 });
 
-test('no copy yet: no question, the usual explain-and-quit, the file untouched',()=>{
+test('no copy yet: nothing to restore, so the question is Start fresh or Quit; Quit leaves the file untouched (field-safety)',()=>{
  const db=seeded(['https://a.example/']),file=db.filename;db.close();
  const damaged=cutInHalf(file),h=harness(file,'restore');
- assert.equal(openBrowserDatabase(h.options),null);
- assert.equal(h.calls.asked.length,0);assert.equal(h.calls.quits,1);assert.match(h.calls.errors[0].text,/Nothing was changed or deleted/);
+ assert.equal(openBrowserDatabase(h.options),null,'"restore" is not on offer, so it counts as Quit');
+ assert.equal(h.calls.asked.length,1);assert.equal(h.calls.asked[0].restore,undefined);assert.equal(h.calls.asked[0].fresh,'Start fresh');assert.equal(h.calls.asked[0].preferred,'fresh');
+ assert.equal(h.calls.quits,1);assert.equal(h.calls.errors.length,0,'the question already said Quit changes nothing');
  assert.deepEqual(fs.readFileSync(file),damaged);
 });
 
-test('a profile written by a newer Acira is never restored over, even with a copy at hand',()=>{
+test('a profile written by a newer Acira is never restored over, even with a copy at hand: only Quit (the default) or Start fresh',()=>{
  const db=seeded(['https://a.example/']),file=db.filename;backups.take(db,{now:Date.now()});db.close();
  fs.rmSync(file);for(const suffix of ['-wal','-shm'])fs.rmSync(file+suffix,{force:true});
  const raw=new DatabaseSync(file);raw.exec('CREATE TABLE kept(value TEXT); INSERT INTO kept VALUES(\'tabs\'); PRAGMA user_version=7');raw.close();
  const before=fs.readFileSync(file),h=harness(file,'restore');
  assert.equal(openBrowserDatabase(h.options),null);
- assert.equal(h.calls.asked.length,0,'not even asked');assert.match(h.calls.errors[0].text,/newer Acira version/);assert.equal(h.calls.quits,1);
+ assert.equal(h.calls.asked.length,1);assert.equal(h.calls.asked[0].restore,undefined,'no restore on offer');assert.equal(h.calls.asked[0].preferred,'quit');
+ assert.match(h.calls.asked[0].text,/newer version of Acira/);assert.equal(h.calls.quits,1);
  assert.deepEqual(fs.readFileSync(file),before);
  assert.equal(backups.fileVersion(file),7);
 });
@@ -144,9 +146,10 @@ test('a copy that cannot be written moves everything back and says nothing was d
  assert.match(h.calls.errors[0].text,/Nothing was changed or deleted/);assert.deepEqual(fs.readFileSync(file),damaged,'the damaged file is back where it was');
 });
 
-test('main offers the restore with the real buttons, and takes the daily copy off the start-up path, not after a restore',()=>{
+test('main offers the restore with the real buttons, and takes the daily copy off the start-up path, not after a restore or a fresh start',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.match(main,/openBrowserDatabase\(\{[^\n]*backups:databaseBackups,supported:require\('\.\/database\.cjs'\)\.SCHEMA,/);
- assert.match(main,/dialog\.showMessageBoxSync\(\{type:'warning',title,message:title,detail:text,buttons:\[restore,quit\],defaultId:0,cancelId:1,noLink:true\}\)===0\?'restore':'quit'/);
- assert.match(main,/if\(!database\.restoredFrom\)setTimeout\(\(\)=>\{try\{databaseBackups\.take\(database\);\}/);
+ assert.match(main,/const offered=\[\['restore',restore\],\['fresh',fresh\],\['quit',quit\]\]\.filter\(\(\[,label\]\)=>label\);/);
+ assert.match(main,/dialog\.showMessageBoxSync\(\{type:'warning',title,message:title,detail:text,buttons:offered\.map\(\(\[,label\]\)=>label\),defaultId:Math\.max\(0,offered\.findIndex\(\(\[id\]\)=>id===preferred\)\),cancelId:offered\.length-1,noLink:true\}\);return offered\[picked\]\?\.\[0\]\|\|'quit';/);
+ assert.match(main,/if\(!database\.restoredFrom&&!database\.startedFresh\)setTimeout\(\(\)=>\{try\{databaseBackups\.take\(database\);\}/);
 });

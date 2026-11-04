@@ -57,6 +57,9 @@ function createProxySettings({database,getContext,getWindow,dialog}){
   if(!wc||wc.isDestroyed())throw new Error('Select a live website tab.');const owner=getContext(wc),state=lookup(wc.session),url=new URL(wc.getURL());if(owner?.profileId!==state.profileId||!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Select an owned website in this profile.');
   const route=await wc.session.resolveProxy(url.href);if(wc.isDestroyed()||contexts.get(wc.session)!==state||getContext(wc)?.profileId!==state.profileId||wc.getURL()!==url.href)throw new Error('The website changed before its route was resolved.');return {origin:url.origin,route:String(route).slice(0,2048),applied:state.applied};
  }
- return {attach,status,set,route,takeBack,release(session){const state=contexts.get(session);if(state)state.released=true;contexts.delete(session);}};
+ /** The Electron proxy configuration this session runs with now: an extension's while it controls the proxy, else the person's choice. Traffic that
+  *  must leave the way the profile's pages do (the update check and download, update-route.cjs) is given the same. */
+ const nativeRoute=session=>{const state=lookup(session),forced=forcedFor(session,state);return structuredClone(forced?forced.native:nativeProxy(state.choice));};
+ return {attach,status,nativeRoute,set,route,takeBack,release(session){const state=contexts.get(session);if(state)state.released=true;contexts.delete(session);}};
 }
 module.exports={createProxySettings,proxyChoice,nativeProxy};

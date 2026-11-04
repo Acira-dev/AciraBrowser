@@ -19,6 +19,13 @@
 .acira-compact-tab.selected:is(:hover,:focus-within) .acira-compact-tab-close{opacity:1;pointer-events:auto}
 .acira-compact-tab .acira-compact-tab-close:disabled{opacity:0;pointer-events:none}
 .acira-compact-tabs .acira-compact-tab .acira-compact-tab-close:hover{background:transparent;color:inherit}
+/* The current tab is a light card in light mode. Its × under the pointer took the frame's pressed square (--chrome-pressed: 13% of the frame's
+   ink on the frame, mac-material.css) and the frame's ink: where the frame or the toolbar is dark, a dark square holding a white × on the white
+   card, heavier than anywhere else, or one ink on the other's square (beta.10 notes). It is the same step on the card instead, as on a light
+   finish: 13% of the card's own ink (tab-ink.css), with that ink. Light finishes keep the frame's square, and private and Tor windows (their
+   own deep finish) keep theirs as before. */
+@container style(--chrome-tone: dark){.app.style-acira[data-appearance=light]:not([data-window-finish]) .acira-compact-tabs .acira-compact-tab.selected .acira-compact-tab-close:hover{background:color-mix(in srgb,var(--tab-selection-fg) 13%,transparent);color:var(--tab-selection-fg)}}
+@container style(--toolbar-tone: dark){.app.style-acira[data-appearance=light]:not([data-window-finish]) .acira-compact-tabs .acira-compact-tab.selected .acira-compact-tab-close:hover{background:color-mix(in srgb,var(--tab-selection-fg) 13%,transparent);color:var(--tab-selection-fg)}}
 .acira-compact-tab[data-labels=false] .acira-compact-tab-label{display:none}
 .acira-compact-tab[data-labels=false] .acira-compact-tab-inner{justify-content:center;padding:0}
 .acira-compact-tab[data-labels=false] .acira-compact-tab-close{position:absolute;left:calc(50% - 10px);top:5px}

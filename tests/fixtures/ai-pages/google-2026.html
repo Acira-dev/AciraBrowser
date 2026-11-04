@@ -6,7 +6,10 @@
 <!-- Structure copied from a live Google results page read on 26 Oct 2026 (desktop width): the AI Overview is the child of #rcnt that holds #m-x-content
      and is full width, its own content starts 104px in, like the organic results; the AI Mode tab is a role=listitem; the AI Mode pill's text includes its own style rules.
      Text is filler. ?mode=sync|late|stream decides when the AI block arrives, ?measure=1 records which frames showed it, ?theme= the colours: light, dark,
-     system (follows prefers-color-scheme) or switch (light, turning dark 600 ms after load). ?ink= is the colour the results area inherits: page (the theme's),
+     system (follows prefers-color-scheme), switch (light, turning dark 600 ms after load) or cssom (the same, through a rule added to the style sheet: no DOM
+     change and no media event, as Windows can apply an appearance change to an open page). ?layout=inset moves the results area 60px in from the window's edge
+     (the results column stays at 104px), as Bing's and Brave's results areas are; ?layout=responsive moves the results column to 24px below 1000px wide
+     (a media-query breakpoint, as Bing and Brave have). ?dir=rtl is the same page in Arabic page direction (results column 104px from the right). ?ink= is the colour the results area inherits: page (the theme's),
      fixed (#222 whatever the theme, as DuckDuckGo leaves it under its dark theme) or faint (60% black, as Bing has it). -->
 <style>
  :root{--bg:#fff;--fg:#202124;--muted:#4d5156;--link:#1a0dab}
@@ -14,6 +17,9 @@
  @media (prefers-color-scheme:dark){html.system{--bg:#202124;--fg:#bdc1c6;--muted:#9aa0a6;--link:#8ab4f8}}
  html.fixed #main{color:#222}
  html.faint #main{color:rgba(0,0,0,.6)}
+ html.inset #rcnt{margin-left:60px} html.inset .aiunit{padding-left:44px} html.inset #center_col,html.inset .videos{margin-left:44px}
+ @media (max-width:1000px){html.responsive #center_col,html.responsive .videos{margin-left:24px}html.responsive .aiunit{padding-left:24px}}
+ html.rtl #searchform{padding:16px 104px 0 0} html.rtl .tabs{padding-left:0;padding-right:104px} html.rtl .aiunit{padding:8px 104px 16px 0} html.rtl #center_col,html.rtl .videos{margin-left:0;margin-right:104px}
  body{margin:0;background:var(--bg);color:var(--fg);font:14px/22px Arial,sans-serif}
  #searchform{height:72px;padding:16px 0 0 104px;box-sizing:border-box}
  #searchbox{display:flex;align-items:center;width:560px;height:46px;border:1px solid var(--muted);border-radius:24px;padding:0 16px;box-sizing:border-box}
@@ -36,7 +42,13 @@
  if (q.get('theme') === 'dark') document.documentElement.classList.add('dark');
  if (q.get('theme') === 'system') document.documentElement.classList.add('system');
  if (q.get('theme') === 'switch') addEventListener('load', () => setTimeout(() => document.documentElement.classList.add('dark'), 600));
+ window.__darkenByCssom = () => { const sheet = document.querySelector('head style').sheet; sheet.insertRule('html:root{--bg:#202124;--fg:#bdc1c6;--muted:#9aa0a6;--link:#8ab4f8}', sheet.cssRules.length); };
+ if (q.get('theme') === 'cssom') addEventListener('load', () => setTimeout(window.__darkenByCssom, 600));
  if (q.get('ink') === 'fixed' || q.get('ink') === 'faint') document.documentElement.classList.add(q.get('ink'));
+ if (q.get('layout') === 'inset' || q.get('layout') === 'responsive') document.documentElement.classList.add(q.get('layout'));
+ if (q.get('dir') === 'rtl') { document.documentElement.dir = 'rtl'; document.documentElement.lang = 'ar'; document.documentElement.classList.add('rtl'); }
+ // Page activity that changes nothing the line depends on: n small paragraphs added below the results, one every `every` ms.
+ window.__churn = (n, every) => { let i = 0; const tick = () => { if (i++ >= n) return; const p = document.createElement('p'); p.textContent = 'update ' + i; document.getElementById('center_col').append(p); setTimeout(tick, every); }; tick(); };
  if (q.get('measure')) {
   window.__frames = []; window.__t0 = performance.now();
   const sample = () => { const aiVisible = [...document.querySelectorAll('#m-x-content,button[jsname="B6rgad"],a[href*="udm=50"]')].filter(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden').length; window.__frames.push([Math.round(performance.now() - window.__t0), aiVisible]); requestAnimationFrame(sample); };

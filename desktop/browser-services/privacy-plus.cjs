@@ -4,7 +4,7 @@ const {t}=require('./tx.cjs');
 // and fingerprint protection (F58). Application-wide, applied live (fingerprint protection from the next page load).
 // `passkeys` is the one choice that is off by default: sites may ask Windows for a passkey or security key only when the person turns it on
 // (a profile saved before the choice existed has no such key and reads as off). Open pages follow at their next passkey call.
-const fs = require('node:fs'), path = require('node:path'), { randomUUID } = require('node:crypto');
+const fs = require('node:fs'), path = require('node:path'), { randomUUID } = require('node:crypto'), { readJsonFile } = require('../atomic-file.cjs');
 const FINGERPRINT_LEVELS = Object.freeze(['off', 'standard', 'strict']);
 const DEFAULTS = Object.freeze({ cnameUncloaking: true, skipTrackingRedirects: true, stripTrackingParams: true, deAmp: true, fingerprint: 'standard', phishingLists: true, pageWarnings: true, passkeys: false });
 function normalize(value, base = DEFAULTS) {
@@ -19,7 +19,8 @@ function normalize(value, base = DEFAULTS) {
 }
 function createPrivacyPlus({ directory, fileSystem = fs }) {
   const file = path.join(directory, 'privacy-plus.json'); let saved = DEFAULTS;
-  try { if (fileSystem.statSync(file).size > 4096) throw new Error('too large'); const document = JSON.parse(fileSystem.readFileSync(file, 'utf8')); if (document.version === 1) saved = normalize(document.choice); } catch { /* A missing or damaged file means the defaults. */ }
+  // A missing or damaged file means the defaults; a damaged one is kept aside first (atomic-file.cjs readJsonFile).
+  try { const document = readJsonFile(file, { maxBytes: 4096, fileSystem }); if (document?.version === 1) saved = normalize(document.choice); } catch { /* choices this Acira does not know: the defaults */ }
   return {
     get: () => saved,
     set(patch) {

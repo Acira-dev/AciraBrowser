@@ -309,8 +309,10 @@ function Credit({ artwork, controls, caption = true }: { artwork: CatalogArtwork
   };
   return <figcaption className="nt-credit nt-vapor" data-caption={caption || undefined} style={step(3)}>
     <span ref={text} className="nt-credit-text" tabIndex={caption ? 0 : -1} aria-label={full} aria-describedby={id} aria-live="polite" hidden={!caption} onPointerEnter={() => { timer.current = setTimeout(show, 500); }} onPointerLeave={() => { clearTimeout(timer.current); if (document.activeElement !== text.current) hide(); }} onFocus={show} onBlur={hide} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); hide(); } }}>
-      <span className="nt-credit-title"><bdi>{title}</bdi></span>
-      {byline.length > 0 && <span className="nt-credit-meta"><bdi>{byline.join(' · ')}</bdi></span>}
+      {/* dir="auto": an English title in an Arabic interface is cut at its end ("Wheat Field with Cypr…"), not its start ("…t Field
+          with Cypresses"); new-tab-page.css keeps it on the interface's side. */}
+      <span className="nt-credit-title" dir="auto"><bdi>{title}</bdi></span>
+      {byline.length > 0 && <span className="nt-credit-meta" dir="auto"><bdi>{byline.join(' · ')}</bdi></span>}
     </span>
     <div ref={tip} id={id} className="t-tip nt-credit-tip" popover="manual" role="tooltip"><strong>{title}</strong>{[byline.join(' · '), museum].filter(Boolean).map(line => <span key={line}>{line}</span>)}</div>
     {controls}

@@ -68,8 +68,8 @@ const hasGpg = spawnSync('gpg', ['--version'], { stdio: 'ignore' }).status === 0
 say(`Tor engine${hasGpg ? ' (signature required)' : ' (pinned SHA-256; gpg not found, signature not checked)'}`);
 run(process.execPath, [path.join(root, 'scripts/fetch-tor.mjs'), ...(hasGpg ? ['--require-signature'] : [])]);
 
-// 4. Rebuild helpers from C#/frames, sign only for this build and restore exact
-// preexisting bytes (or initial absence in a fresh source checkout).
+// 4. Rebuild helpers from C#/frames (the installer's two and the app's acira-verify.exe, which electron-builder copies into resources),
+// sign only for this build and restore exact preexisting bytes (or initial absence in a fresh source checkout).
 fs.rmSync(builderOut, { recursive: true, force: true }); fs.mkdirSync(builderOut, { recursive: true });
 withInstallerHelpers({root, sign: helpers => {
   if (mode !== 'none') signFiles(helpers); else say('signing: not configured, installer and helpers stay UNSIGNED (Windows will warn).');
@@ -99,9 +99,13 @@ if (yamlValue('sha512') !== sha(path.join(assetsDir, setup), 'sha512', 'base64')
 const unpackedTor = path.join(builderOut, 'win-unpacked', 'resources', 'tor', 'tor.exe');
 const torPin = require(path.join(root, 'desktop/browser-services/tor-engine/tor-version.json')).files['tor.exe'].sha256;
 if (!fs.existsSync(unpackedTor) || sha(unpackedTor) !== torPin) problems.push('tor.exe is missing from the package or differs from the pinned hash');
+// acira-verify.exe: the Windows Hello / password check, browser icons and VPN signatures (desktop/windows-helper.cjs). Without it every secured workspace, saved Tor item and password stays locked.
+const unpackedVerify = path.join(builderOut, 'win-unpacked', 'resources', 'acira-verify.exe');
+if (!fs.existsSync(unpackedVerify)) problems.push('acira-verify.exe is missing from the package (resources/acira-verify.exe)');
 const exe = path.join(builderOut, 'win-unpacked', 'AciraBrowser.exe');
-const signature = { installer: signatureStatus(path.join(assetsDir, setup)), app: fs.existsSync(exe) ? signatureStatus(exe) : 'missing' };
-if (mode !== 'none' && (signature.installer !== 'Valid' || signature.app !== 'Valid')) problems.push(`signing was configured but signatures are not valid: ${JSON.stringify(signature)}`);
+const signature = { installer: signatureStatus(path.join(assetsDir, setup)), app: fs.existsSync(exe) ? signatureStatus(exe) : 'missing', verify: fs.existsSync(unpackedVerify) ? signatureStatus(unpackedVerify) : 'missing' };
+if (fs.existsSync(exe)) { const { WINDOWS, fuseProblems, describe } = require('../packaging/fuses.cjs'), wrong = await fuseProblems(exe, WINDOWS); if (wrong.length) problems.push('the packaged app ships the wrong Electron fuses: ' + describe(wrong)); } // read back from the built program
+if (mode !== 'none' && (signature.installer !== 'Valid' || signature.app !== 'Valid' || signature.verify !== 'Valid')) problems.push(`signing was configured but signatures are not valid: ${JSON.stringify(signature)}`);
 if (problems.length) fail('Verification failed:\n - ' + problems.join('\n - '));
 
 const files = fs.readdirSync(assetsDir).map(name => ({ name, bytes: fs.statSync(path.join(assetsDir, name)).size, sha256: sha(path.join(assetsDir, name)) }));
@@ -109,7 +113,7 @@ fs.writeFileSync(path.join(assetsDir, 'SHA256SUMS.txt'), files.map(f => `${f.sha
 fs.writeFileSync(path.join(out, 'release-manifest.json'), JSON.stringify({ tag, version, channel, commit, dirty: Boolean(dirty), signing: { mode, signature }, tor: torPin, builtAt: new Date().toISOString(), files }, null, 2) + '\n');
 say(`assets ready in ${assetsDir}`);
 for (const f of files) say(`  ${f.name}  ${(f.bytes / 1048576).toFixed(1)} MB  ${f.sha256.slice(0, 12)}…`);
-say(`signature: installer ${signature.installer}, app ${signature.app}${mode === 'none' ? ' (unsigned build; expected without signing)' : ''}`);
+say(`signature: installer ${signature.installer}, app ${signature.app}, acira-verify ${signature.verify}${mode === 'none' ? ' (unsigned build; expected without signing)' : ''}`);
 
 // 8. the GitHub draft release
 const upload = [...fs.readdirSync(assetsDir).map(name => path.join(assetsDir, name))];

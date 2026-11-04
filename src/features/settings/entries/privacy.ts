@@ -1,4 +1,5 @@
 import { defineSettings } from '../model';
+import { isMac } from '../../../ui/platform';
 
 import { t } from '../../../i18n';
 /** Stream E (privacy-release) controls. Anchors match the `id` on each SettingRow in panels/privacy.tsx and panels/extensions.tsx. */
@@ -20,7 +21,7 @@ const privacy = defineSettings('Privacy', [
   { id: 'safe-browsing-key', title: t("privacy.safeBrowsingWithYourOwn"), group: 'Google Safe Browsing (optional)', description: t("privacy.optionalExtraWarningsFromGoogle"), aliases: ['phishing', 'malware', 'safe browsing', 'google safe browsing', 'api key', 'scam', 'dangerous sites'], when: 'regular-profile' },
   { id: 'clear-browsing-data', title: t("privacy.clearBrowsingData"), group: 'Clear browsing data', description: t("privacy.historyDownloadsListCookiesSite"), aliases: ['clear history', 'delete history', 'clear cookies', 'clear cache', 'clear downloads', 'ctrl shift delete', 'wipe', 'privacy cleanup'], when: 'regular-profile' },
   { id: 'clear-browsing-data-range', title: t("privacy.clearBrowsingDataTimeRange"), group: 'Clear browsing data', description: t("privacy.lastHourDayWeek4"), aliases: ['last hour', 'last day', 'time range', 'past week', 'all time'], when: 'regular-profile' },
-]);
+]).filter((entry) => entry.id !== 'passkeys' || !isMac()); // a Mac has no passkey choice (the passkey guard answers there with no setting)
 
 // R3-74: how this profile reaches the internet lives in Connection, with the VPN app and Tor.
 const proxyEntries = defineSettings('Connection', [
