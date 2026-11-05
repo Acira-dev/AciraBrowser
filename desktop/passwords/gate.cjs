@@ -72,8 +72,9 @@ function windowsVerifier({exec,env=process.env,platform=process.platform,timeout
 }
 
 /** macOS owns biometric/password verification; cancellation or failure never unlocks secrets. */
-function platformVerifier({platform=process.platform,macAuthentication,env=process.env,...options}={}){
+function platformVerifier({platform=process.platform,macAuthentication,linuxAuthentication,env=process.env,...options}={}){
  if(platform==='win32')return windowsVerifier({platform,env,...options});
+ if(platform==='linux'){const verifier=linuxAuthentication||require('./linux-authentication.cjs').createLinuxAuthentication(options);return async()=>{if(env.ACIRA_PASSWORDS_TEST_GATE&&testSwitchesAllowed({env,packaged:options.packaged}))return env.ACIRA_PASSWORDS_TEST_GATE==='allow'?{ok:true,method:'test'}:NOT.cancelled;const result=await verifier.verify();return result.ok?result:{...result,message:tr('local.verificationUnavailable','Password verification isn’t available on this system.')};};}
  return async function verify(reason='generic'){
   if(env.ACIRA_PASSWORDS_TEST_GATE&&testSwitchesAllowed({env,packaged:options.packaged}))return env.ACIRA_PASSWORDS_TEST_GATE==='allow'?{ok:true,method:'test'}:NOT.cancelled;
   if(platform!=='darwin')return {ok:false,code:'unavailable',message:tr("local.verificationUnavailable","Password verification isn’t available on this system.")};

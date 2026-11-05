@@ -46,7 +46,9 @@ app.whenReady().then(async () => {
   const out = await Promise.all(cases.map(async spec => {
     const win = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false, preload } });
     const wc = win.webContents; wc.debugger.attach('1.3');
-    const started = Date.now(); await wc.loadURL(`http://127.0.0.1:${port}/page.html?case=${spec.case}${spec.delay ? '&delay=1' : ''}`);
+    await wc.loadURL(`http://127.0.0.1:${port}/page.html?case=${spec.case}${spec.delay ? '&delay=1' : ''}`);
+    // Measure the fixture's interaction schedule from the loaded page, not from process/load latency under parallel test load.
+    const started = Date.now();
     const record = { name: spec.name || spec.case, steps: {} };
     for (const step of spec.steps) {
       await sleep(Math.max(0, step.at - (Date.now() - started)));

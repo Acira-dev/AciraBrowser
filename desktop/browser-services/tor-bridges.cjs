@@ -19,18 +19,19 @@ const MODES=['off','builtin','custom'];
 function pluginLines(platform=process.platform){
  return Object.entries(PT_CONFIG.pluggableTransports||{}).map(([client,line])=>{
   const m=/^ClientTransportPlugin (\S+) exec \$\{pt_path\}(\S+\.exe)(.*)$/.exec(String(line));if(!m)return null;
-  const exe=platform==='darwin'?m[2].replace(/\.exe$/,''):m[2],separator=platform==='darwin'?'/':'\\';
+  const exe=platform!=='win32'?m[2].replace(/\.exe$/,''):m[2],separator=platform!=='win32'?'/':'\\';
   return {client,transports:m[1].split(','),exe,value:`${m[1]} exec ${PT_FOLDER}${separator}${exe}${m[3]}`};
  }).filter(Boolean);
 }
 /** Where the transport clients live: <resources>/tor/pluggable_transports in an installed app, tor-engine/win-x64/pluggable_transports in development. */
 function transportDirectory({resourcesPath=process.resourcesPath,platform=process.platform,arch=process.arch}={}){
  const candidates=[resourcesPath&&path.join(resourcesPath,'tor',PT_FOLDER),path.join(__dirname,'..','..','resources','tor',PT_FOLDER),path.join(__dirname,'tor-engine',platform==='win32'?'win-x64':platform+'-'+arch,PT_FOLDER)].filter(Boolean);
- return candidates.find(dir=>{try{return fs.statSync(path.join(dir,platform==='darwin'?'lyrebird':'lyrebird.exe')).isFile();}catch{return false;}})||null;
+ return candidates.find(dir=>{try{return fs.statSync(path.join(dir,platform!=='win32'?'lyrebird':'lyrebird.exe')).isFile();}catch{return false;}})||null;
 }
 const PINS=manifest.pluggableTransports?.files||{};
 /** SHA-256 pins of the transport clients (tor-version.json "pluggableTransports"), by file name. */
 const transportPins=({platform=process.platform,arch=process.arch,directory}={})=>{
+ if(platform==='linux'){const dir=directory||transportDirectory({platform,arch}),native=dir&&require('./tor-linux.cjs').readLinuxTor(path.join(path.dirname(dir),'tor'),{arch});return native?Object.fromEntries(Object.entries(native.record.files).filter(([name])=>name.startsWith(PT_FOLDER+'/')&&!name.includes('LICENSE')).map(([name,digest])=>[path.basename(name),digest])):{};}
  if(platform!=='darwin')return Object.fromEntries(Object.entries(PINS).filter(([name])=>name.endsWith('.exe')).map(([name,entry])=>[path.basename(name),entry.sha256]));
  const dir=directory||transportDirectory({platform,arch}),native=dir&&require('./tor-mac.cjs').readMacTor(path.join(path.dirname(dir),'tor'),{arch});
  return native?Object.fromEntries(Object.entries(native.record.files).filter(([name])=>name.startsWith(PT_FOLDER+'/')).map(([name,digest])=>[path.basename(name),digest])):{};

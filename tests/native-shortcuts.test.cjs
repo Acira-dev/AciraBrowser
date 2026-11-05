@@ -8,8 +8,8 @@ const make=(file)=>createShortcutRegistry({file,platform:win});
 const resolve=(r,input)=>r.resolve(input,resolveDefaultShortcut,shortcutKey);
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'acira-shortcuts-'));
 
-test('Tor commands are available on Mac/Windows and stay out of unsupported Linux bindings',()=>{
- for(const platform of ['linux']){
+test('Tor commands are available on supported Mac, Windows and Linux builds and stay out of unsupported platforms',()=>{
+ for(const platform of ['freebsd']){
   const r=createShortcutRegistry({platform});
   for(const id of ['tor-window','tor-tab']){
    assert.ok(!r.list().some(command=>command.id===id));
@@ -23,7 +23,7 @@ test('Tor commands are available on Mac/Windows and stay out of unsupported Linu
   assert.equal(r.importJson(JSON.stringify({version:1,bindings:{'tor-window':['Alt+Shift+N']}})).ok,true);
   assert.equal(resolve(r,key('n',['alt','shift'])),null);
  }
- for(const platform of ['darwin','win32']){const supported=createShortcutRegistry({platform});for(const id of ['tor-window','tor-tab'])assert(supported.list().some(command=>command.id===id));}
+ for(const platform of ['darwin','win32','linux']){const supported=createShortcutRegistry({platform});for(const id of ['tor-window','tor-tab'])assert(supported.list().some(command=>command.id===id));}
  const windows=createShortcutRegistry({platform:'win32'});
  for(const id of ['tor-window','tor-tab'])assert.ok(windows.list().some(command=>command.id===id));
  assert.equal(resolve(windows,key('n',['alt','shift'])).action,'tor-window');

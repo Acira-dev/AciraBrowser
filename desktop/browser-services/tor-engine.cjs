@@ -7,6 +7,7 @@ const {t}=require('./tx.cjs');
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),crypto=require('node:crypto'),{spawn}=require('node:child_process');
 const manifest=require('./tor-engine/tor-version.json');
 const {readMacTor}=require('./tor-mac.cjs');
+const {readLinuxTor}=require('./tor-linux.cjs');
 const {createTorMoat}=require('./tor-moat.cjs');
 const {createBridgeSettings,bridgeLines,bridgeArguments,bridgeSummary,neededClients,publicBridges,parseBridgeLines,transportDirectory,transportPins}=require('./tor-bridges.cjs');
 
@@ -109,7 +110,7 @@ const ERRORS={
 /** A development or demo checkout (run through the electron CLI) that has no tor.exe yet downloads it once, verified like a build would. Packaged installs never do: they ship it. */
 function repairDevEngine(){
  if(!process.defaultApp)return Promise.resolve(false);
- const script=path.join(__dirname,'..','..','scripts',process.platform==='darwin'?'fetch-tor-mac.mjs':'fetch-tor.mjs');if(!fs.existsSync(script))return Promise.resolve(false);
+ const script=path.join(__dirname,'..','..','scripts',process.platform==='darwin'?'fetch-tor-mac.mjs':process.platform==='linux'?'fetch-tor-linux.mjs':'fetch-tor.mjs');if(!fs.existsSync(script))return Promise.resolve(false);
  return new Promise(resolve=>{try{const child=spawn(process.execPath,[script,'--soft'],{env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},windowsHide:true,stdio:'ignore'});child.once('error',()=>resolve(false));child.once('exit',code=>resolve(code===0));}catch{resolve(false);}});
 }
 /** The in-memory session Acira's own Tor traffic (the engine updater) uses: nothing else ever loads in it. */
@@ -123,7 +124,7 @@ function createTorEngine({userData,platform=process.platform,executable=()=>torE
  const dataDirectory=path.join(userData,'tor','data'),runDirectory=path.join(userData,'tor','run');
  const limits={connect:CONNECT_TIMEOUT,stall:STALL_TIMEOUT,bridgeConnect:BRIDGE_CONNECT_TIMEOUT,bridgeStall:BRIDGE_STALL_TIMEOUT,controlFile:CONTROL_FILE_TIMEOUT,newnymRate:NEWNYM_RATE,newnymMargin:NEWNYM_MARGIN,retryDelays:AUTO_RETRY_DELAYS,slowRestarts:SLOW_RESTARTS,earlyStall:EARLY_STALL,blocked:BLOCKED_AFTER,...timeouts};
  const listeners=new Set(),leases=new Set();
- let status={state:'idle',progress:0,summary:'',error:null,socksPort:0,version:manifest.tor,blocked:null,bridges:null},child=null,control=null,starting=null,generation=0,timers=[],lastActivityAt=0,logTail=[],lastAppliedAt=0,circuitsUsed=false,exited=Promise.resolve(),retryTimer=null,retries=0,slowRestarts=0,wanted=false,launchedAt=0,warnings=0;const newnymWaiters=new Set();
+ let status={state:'idle',progress:0,summary:'',error:null,socksPort:0,version:platform==='linux'?require('./tor-linux.cjs').manifest.tor:manifest.tor,blocked:null,bridges:null},child=null,control=null,starting=null,generation=0,timers=[],lastActivityAt=0,logTail=[],lastAppliedAt=0,circuitsUsed=false,exited=Promise.resolve(),retryTimer=null,retries=0,slowRestarts=0,wanted=false,launchedAt=0,warnings=0;const newnymWaiters=new Set();
  const emit=patch=>{if(patch.state==='ready'){retries=0;slowRestarts=0;}status={...status,...(patch.state==='ready'||patch.state==='idle'?{slowRestarts:0}:{}),...(patch.state&&patch.state!=='error'?{retryInMs:0}:{}),...patch};for(const fn of [...listeners])try{fn(status);}catch(error){log('Tor status listener failed: '+error.message);}};
  const clearTimers=()=>{for(const t of timers)clearInterval(t),clearTimeout(t);timers=[];};
  const cancelRetry=()=>{if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}};
@@ -152,17 +153,17 @@ function createTorEngine({userData,platform=process.platform,executable=()=>torE
   if(/^STATUS_CLIENT /.test(line)){if(/\bCLOCK_SKEW\b/.test(line)){fail('clock',{reason:'CLOCK_SKEW'});return;}onBootstrap(parseBootstrap(line),gen);}}
  function teardown(){generation++;clearTimers();for(const done of [...newnymWaiters])done(false);const c=control,p=child;control=null;child=null;starting=null;if(c){c.send('SIGNAL SHUTDOWN').catch(()=>{});c.close();}if(p&&p.exitCode===null&&p.signalCode===null){exited=new Promise(resolve=>{const t=setTimeout(()=>{try{p.kill();}catch{}},3000);t.unref?.();p.once('exit',()=>{clearTimeout(t);resolve();});});}return exited;}
  let moat=null;const moatClient=()=>moat||(moat=moatFactory({userData,platform,transports,pins:transportHashes,verify:(file,sha)=>verify(file,sha),log}));
- const transportsInstalled=()=>{const dir=transports();return Boolean(dir)&&[platform==='darwin'?'lyrebird':'lyrebird.exe'].every(name=>fs.existsSync(path.join(dir,name)));};
+ const transportsInstalled=()=>{const dir=transports();return Boolean(dir)&&[platform!=='win32'?'lyrebird':'lyrebird.exe'].every(name=>fs.existsSync(path.join(dir,name)));};
  const checked=new Map(),streamListeners=new Set();
  /** One hash check per file per run. `expected` is the pinned hash for the bundled engine, or the hash recorded when an update was verified. */
- async function verify(file,expected=manifest.files['tor.exe'].sha256,companions={}){if(Object.keys(companions).some(name=>name!=='libevent-2.1.7.dylib'))return false;const key=file+'|'+expected+'|'+JSON.stringify(companions);if(!checked.has(key))checked.set(key,(async()=>await fileSha256(file)===expected&&(await Promise.all(Object.entries(companions).map(async([name,digest])=>/^[a-f0-9]{64}$/.test(digest)&&await fileSha256(path.join(path.dirname(file),name))===digest))).every(Boolean))().catch(()=>false));if(!await checked.get(key)){checked.delete(key);return false;}return true;}
+ async function verify(file,expected=manifest.files['tor.exe'].sha256,companions={}){if(Object.keys(companions).some(name=>!['libevent-2.1.7.dylib',...(platform==='linux'?['libcrypto.so.3','libssl.so.3','libevent-2.1.so.7']:[])].includes(name)))return false;const key=file+'|'+expected+'|'+JSON.stringify(companions);if(!checked.has(key))checked.set(key,(async()=>await fileSha256(file)===expected&&(await Promise.all(Object.entries(companions).map(async([name,digest])=>/^[a-f0-9]{64}$/.test(digest)&&await fileSha256(path.join(path.dirname(file),name))===digest))).every(Boolean))().catch(()=>false));if(!await checked.get(key)){checked.delete(key);return false;}return true;}
  async function launch(){
   const gen=++generation;let file=executable(),expected=manifest.files['tor.exe'].sha256,companions={},usingUpdate=false;
   // A newer engine installed by the updater (tor-update.cjs) is used when it still matches the hash recorded at install; otherwise the bundled one runs.
   try{const up=updated();if(up&&fs.existsSync(up.file)&&await verify(up.file,up.sha256,up.companions)){file=up.file;expected=up.sha256;companions=up.companions||{};usingUpdate=true;}else if(up)log('The updated Tor failed its check; using the bundled one.');}catch(error){log('Tor update lookup failed: '+error.message);}
   if(!file){emit({state:'starting',progress:0,summary:'Downloading Tor, one time',error:null,socksPort:0});try{await repair();}catch{}if(gen!==generation)return;file=executable();}
   if(!file){fail('missing');return;}
-  if(process.platform==='darwin'&&!usingUpdate&&path.basename(file)==='tor'){const native=readMacTor(file);if(!native){fail('integrity');return;}expected=native.sha256;companions=native.companions;}
+  if(['darwin','linux'].includes(process.platform)&&!usingUpdate&&path.basename(file)==='tor'){const native=process.platform==='linux'?readLinuxTor(file):readMacTor(file);if(!native){fail('integrity');return;}expected=native.sha256;companions=native.companions;}
   // Bridges: the lines for the person's choice (built-in lines in a fresh random order), and the transport clients they need.
   const choice=bridgeChoice.get(),lines=bridgeLines(choice);
   emit({state:'starting',progress:0,summary:'Starting Tor',tag:'starting',error:null,socksPort:0,blocked:null,bridges:bridgeSummary(choice,lines),firstConnection:!fs.existsSync(path.join(dataDirectory,'cached-microdesc-consensus'))});
@@ -183,7 +184,7 @@ function createTorEngine({userData,platform=process.platform,executable=()=>torE
   }
   fs.mkdirSync(dataDirectory,{recursive:true});fs.rmSync(runDirectory,{recursive:true,force:true});fs.mkdirSync(runDirectory,{recursive:true});
   logTail=[];lastActivityAt=Date.now();launchedAt=Date.now();warnings=0;status.lastWarning=null;
-  const proc=spawnTor(file,[...torArguments({dataDirectory,runDirectory,ownerPid,bridges:bridgeArguments(lines,platform),geoip:geoipFiles(file)}),...extraArguments()],{cwd,windowsHide:true,stdio:['ignore','pipe','pipe']});child=proc;
+  const proc=spawnTor(file,[...torArguments({dataDirectory,runDirectory,ownerPid,bridges:bridgeArguments(lines,platform),geoip:geoipFiles(file)}),...extraArguments()],{cwd,...(platform==='linux'?{env:require('./tor-linux.cjs').nativeEnvironment(file)}:{}),windowsHide:true,stdio:['ignore','pipe','pipe']});child=proc;
   let pending='';const onLog=chunk=>{pending+=chunk.toString('utf8');const lines=pending.split(/\r?\n/);pending=lines.pop();for(const line of lines){lastActivityAt=Date.now();logTail.push(line);if(logTail.length>40)logTail.shift();onBootstrap(parseLogBootstrap(line),gen);}};
   proc.stdout?.on('data',onLog);proc.stderr?.on('data',onLog);
   proc.once('error',error=>{if(gen===generation)fail('crashed',{reason:error.message});});

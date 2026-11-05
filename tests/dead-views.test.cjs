@@ -98,7 +98,7 @@ const {createAppDialog}=require(${JSON.stringify(path.join(__dirname,'../desktop
 app.whenReady().then(async()=>{
  const d=createAppDialog({BaseWindow,WebContentsView,ipcMain,nativeTheme,preload:${JSON.stringify(path.join(__dirname,'../desktop/dialog-preload.cjs'))},pageURL:${JSON.stringify(page)},fallback:{showMessageBox:async()=>({response:-1})}});
  const parent=new BaseWindow({width:600,height:400,show:false});let killed=0;
- ipcMain.on('acira:dialog-ready',event=>{if(!killed++){event.sender.forcefullyCrashRenderer();}});
+ ipcMain.on('acira:dialog-ready',event=>{if(!killed++){if(process.platform==='linux')process.kill(event.sender.getOSProcessId(),'SIGKILL');else event.sender.forcefullyCrashRenderer();}});
  const asked=d.showMessageBox(parent,{message:'Keep this file?',buttons:['Keep','Cancel'],defaultId:0,cancelId:1});
  const result=await Promise.race([asked,new Promise(r=>setTimeout(()=>r({timeout:true}),20000))]);
  require('fs').writeFileSync(${JSON.stringify(out)},JSON.stringify({result,killed}));d.dispose();app.exit(0);
@@ -125,7 +125,7 @@ app.whenReady().then(async()=>{
  const asked=card.showMessageBox({type:'question',message:'Leave this site?',buttons:['Leave','Stay'],defaultId:0,cancelId:1,site:{host:'example.com',centered:true}});
  for(let i=0;i<100&&!card.visible;i++)await wait(50);
  const first={visible:card.visible,token:card.current?.token,contents:card.webContents?.id};
- card.webContents.forcefullyCrashRenderer();
+ if(process.platform==='linux')process.kill(card.webContents.getOSProcessId(),'SIGKILL');else card.webContents.forcefullyCrashRenderer();
  for(let i=0;i<20;i++){await wait(50);if(!card.visible)break;}
  for(let i=0;i<100&&!(card.visible&&card.webContents?.id!==first.contents);i++)await wait(50);
  const second={visible:card.visible,token:card.current?.token,contents:card.webContents?.id};

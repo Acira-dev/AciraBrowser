@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "torBrowserVersion": "15.0.26",
+  "tor": "0.4.9.14",
+  "signingKey": "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290",
+  "platforms": {
+    "x64": {
+      "archive": {
+        "url": "https://dist.torproject.org/torbrowser/15.0.26/tor-expert-bundle-linux-x86_64-15.0.26.tar.gz",
+        "sha256": "19cf18726eecb362e0f21d27afa9ea9efe5da928bfdfbb1ceb5fe54519e87f4a"
+      },
+      "updateFeed": "https://aus1.torproject.org/torbrowser/update_3/release/download-linux-x86_64.json",
+      "files": {
+        "tor": {
+          "from": "tor/tor",
+          "sha256": "39c9db0654d2ec218892bd00f75eccb5b641a7222754436c2e4a8d2f764a57d3"
+        },
+        "libcrypto.so.3": {
+          "from": "tor/libcrypto.so.3",
+          "sha256": "418208c5c738864cb5653f3eeab650debcc71afbe50d08b0bd5a04b20f1d3c05"
+        },
+        "libssl.so.3": {
+          "from": "tor/libssl.so.3",
+          "sha256": "9c2438d086d6c299db04b0bc337bbc8c0acd26c19c71eada2173a5b2ef7cecac"
+        },
+        "libevent-2.1.so.7": {
+          "from": "tor/libevent-2.1.so.7",
+          "sha256": "b51ca562ec232785856c454ce4f3621d957f39d0db87919e237590b0331544ff"
+        },
+        "pluggable_transports/lyrebird": {
+          "from": "tor/pluggable_transports/lyrebird",
+          "sha256": "ee13ec155cf9b131a3e1b87bd6d697a10c42d04f2eaaeab6b1590c9971d41421"
+        },
+        "pluggable_transports/conjure-client": {
+          "from": "tor/pluggable_transports/conjure-client",
+          "sha256": "8308b51e99db80774983b916035c2eab6db9e37c930916d92babc6daf9494e54"
+        },
+        "geoip": {
+          "from": "data/geoip",
+          "sha256": "3099e91a4c8c87a1e6ab8a0b1e7407aea0314a2d8d048d654b4087b9ae103d9f"
+        },
+        "geoip6": {
+          "from": "data/geoip6",
+          "sha256": "10f50daba4156a5b1ae782c0db0478b4584901b1ed72cd619cddd4b9f2b03d6a"
+        },
+        "LICENSE.tor.txt": {
+          "from": "docs/tor.txt",
+          "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
+        },
+        "LICENSE.libevent.txt": {
+          "from": "docs/libevent.txt",
+          "sha256": "ff02effc9b331edcdac387d198691bfa3e575e7d244ad10cb826aa51ef085670"
+        },
+        "LICENSE.openssl.txt": {
+          "from": "docs/openssl.txt",
+          "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+        },
+        "pluggable_transports/LICENSE.lyrebird.txt": {
+          "from": "docs/lyrebird.txt",
+          "sha256": "2331e6517a15ce87e2a1d2838c314ca1b8f3c7a347ac28d370a7fccdb5964f40"
+        },
+        "pluggable_transports/LICENSE.conjure.txt": {
+          "from": "docs/conjure.txt",
+          "sha256": "0522541e3505d6669334f6eb488d4fde9c4af2234daec13170a0cf4d46d99e92"
+        }
+      }
+    }
+  }
+}

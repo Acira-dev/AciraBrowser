@@ -38,9 +38,9 @@ test('link menu: "Open link in private tab" from an ordinary tab; a private tab 
 });
 
 test('Tor link tabs are offered only where the bundled engine is supported; ordinary private tabs remain available',()=>{
- for(const platform of ['darwin','linux','win32']){
+ for(const platform of ['darwin','linux','win32','freebsd']){
   const f=setup({platform}),items=f.service.build(f.wc,{frame:f.frame,linkURL:'https://destination.example/'});
-  assert.equal(items.some(i=>i.id==='link-tor-tab'),platform!=='linux');
+  assert.equal(items.some(i=>i.id==='link-tor-tab'),['darwin','linux','win32'].includes(platform));
   assert.ok(items.some(i=>i.id==='link-private-tab'));
  }
 });

@@ -19,7 +19,7 @@ test('Mac password verification waits for the native device-owner decision and f
  const refused=platformVerifier({platform:'darwin',env:{},macAuthentication:{verify:async()=>({ok:false,code:'cancelled'})}});
  assert.equal((await refused('edit')).ok,false);
  assert.equal((await platformVerifier({platform:'darwin',env:{},macAuthentication:{verify:async()=>{throw Error('native failure')}}})('delete')).ok,false);
- assert.equal((await platformVerifier({platform:'linux',env:{}})('copy')).code,'unavailable');
+ assert.equal((await platformVerifier({platform:'linux',env:{},linuxAuthentication:{verify:async()=>({ok:false,code:'unavailable'})}})('copy')).code,'unavailable');
 });
 
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'acira-pw-'));

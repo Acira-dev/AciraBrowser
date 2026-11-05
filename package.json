@@ -23,7 +23,8 @@
     "build:windows": "node scripts/build-windows.mjs",
     "test:regressions": "node scripts/run-ui-regressions.mjs",
     "version:next": "node scripts/version-next.mjs",
-    "publish:update": "node scripts/publish-update.mjs"
+    "publish:update": "node scripts/publish-update.mjs",
+    "build:linux": "node scripts/build-linux.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.17.3",
@@ -339,7 +340,10 @@
       "tests/update-verify.test.cjs",
       "tests/publish-update.test.mjs",
       "tests/version-next.test.mjs",
-      "tests/windows-update-config.test.cjs"
+      "tests/windows-update-config.test.cjs",
+      "tests/app-updater-linux.test.cjs",
+      "tests/linux-authentication.test.cjs",
+      "tests/tor-linux.test.cjs"
     ],
     "serial": [
       "tests/search-preview.test.cjs",

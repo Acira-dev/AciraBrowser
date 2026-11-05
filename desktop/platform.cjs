@@ -62,5 +62,5 @@ function createMacMenuRouter({getControllers,getFallback,quit}) {
   };
 }
 // Mac builds ship a verified, natively signed Tor executable and its library.
-const bundledTorSupported=(platform=process.platform,arch=process.arch)=>platform==='win32'||platform==='darwin'&&['arm64','x64'].includes(arch);
+const bundledTorSupported=(platform=process.platform,arch=process.arch)=>platform==='win32'||platform==='darwin'&&['arm64','x64'].includes(arch)||platform==='linux'&&arch==='x64';
 module.exports={windowChrome,updateCaption,macMenuTemplate,createMacMenuRouter,windowMaterial,materialOptions,bundledTorSupported};

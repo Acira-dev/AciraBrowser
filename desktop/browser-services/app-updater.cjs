@@ -146,13 +146,13 @@ function updateFile(updater,{platform,arm64}){
  const current=updater?.updateInfoAndProvider;
  if(!current?.info||typeof current.provider?.resolveFiles!=='function')return null;
  try{
-  const {findFile}=require('electron-updater/out/providers/Provider'),extension=platform==='darwin'?'zip':'exe';
+  const {findFile}=require('electron-updater/out/providers/Provider'),extension=platform==='darwin'?'zip':platform==='linux'?'AppImage':'exe';
   let files=current.provider.resolveFiles(current.info);
   if(platform==='darwin')files=require('electron-updater/out/MacUpdater').MacUpdater.filterFilesForArch(files,arm64());
-  const file=platform==='darwin'?findFile(files,'zip',['pkg','dmg']):findFile(files,'exe');
+  const file=platform==='darwin'?findFile(files,'zip',['pkg','dmg']):findFile(files,platform==='linux'?'AppImage':'exe');
   const size=Number(file?.info?.size),sha512=file?.info?.sha512;
   if(!file?.url||typeof sha512!=='string'||!sha512||!Number.isSafeInteger(size)||size<=0)return null;
-  const pathname=decodeURIComponent(file.url.pathname),name=pathname.toLowerCase().endsWith('.'+extension)?path.basename(pathname):path.basename(String(file.info.url||''));
+  const pathname=decodeURIComponent(file.url.pathname),name=pathname.toLowerCase().endsWith('.'+extension.toLowerCase())?path.basename(pathname):path.basename(String(file.info.url||''));
   if(!name)return null;
   return {version:String(current.info.version||''),url:file.url.href,sha512,size,name,isAdminRightsRequired:file.info.isAdminRightsRequired===true};
  }catch{return null;}
@@ -190,7 +190,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  if(lastRun!==version||(saved.pending&&!pending)||(saved.download&&!held))try{persist();}catch{} // remember this version as the one that ran, so the note never shows for it again
  const installed=platform==='win32'&&app.isPackaged&&uninstallerPresent();
  // a QA build (its own identity, desktop/build-identity.cjs) never updates itself: the update would be the real Acira's installer
- const unsupported=stubbed?null:!app.isPackaged?'Updates apply to the installed app, not a development run.':qaBuild&&!env.ACIRA_UPDATE_TEST?'Updates are off in QA builds.':env.ACIRA_BROWSER_TEST_DATA&&!env.ACIRA_UPDATE_TEST?'Updates are off while running with a test profile.':platform==='darwin'?macAvailability():platform!=='win32'?'Automatic updates are unavailable on this platform.':!installed?'This is a portable copy. Download new versions from the releases page.':null;
+ const unsupported=stubbed?null:!app.isPackaged?'Updates apply to the installed app, not a development run.':qaBuild&&!env.ACIRA_UPDATE_TEST?'Updates are off in QA builds.':env.ACIRA_BROWSER_TEST_DATA&&!env.ACIRA_UPDATE_TEST?'Updates are off while running with a test profile.':platform==='darwin'?macAvailability():platform==='linux'?(env.APPIMAGE?null:'Automatic updates require the AppImage installation.'):platform!=='win32'?'Automatic updates are unavailable on this platform.':!installed?'This is a portable copy. Download new versions from the releases page.':null;
  // transferred/total (bytes) and speed (bytes a second) describe the download in progress; notes are the found version's plain-text release notes (from the
  // feed, so they can be read while it downloads). pausable: Acira's own download is running (or paused), so the interface offers pause and resume.
  const state={status:unsupported?'unsupported':'idle',version,available:null,progress:null,transferred:null,total:null,speed:null,notes:'',lastChecked:null,error:null,pausable:false};
@@ -490,6 +490,8 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    let release;handing=new Promise(resolve=>{release=resolve;});
    try{
     if(give)await give();
+    // A verified AppImage handed to the updater cache bypasses its download task, where it normally sets the executable bit.
+    if(platform==='linux')await fs.promises.chmod(pendingFile(where,target),0o755);
     held=null;state.pausable=false;try{persist();}catch{}
     await updater.downloadUpdate(); // finds the file in its cache, checks its SHA-512 again, then 'update-downloaded'
    }finally{handing=null;release();}

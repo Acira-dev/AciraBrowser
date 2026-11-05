@@ -32,3 +32,6 @@ desktop/browser-services/tor-engine/.darwin-tor-*/
 
 # Built by scripts/build-installer-helper.cjs on Windows and shipped in the app (resources/acira-verify.exe); never committed
 packaging/installer/acira-verify.exe
+
+# Downloaded, signature-verified Linux Tor binaries are release resources, never Git blobs.
+desktop/browser-services/tor-engine/linux-*/

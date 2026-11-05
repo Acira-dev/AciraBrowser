@@ -15,10 +15,14 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const suites = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).testSuites;
 const tsxCli = createRequire(path.join(root, 'package.json')).resolve('tsx/cli');
+// A bounded CI/VM override prevents parallel native Electron fixtures exhausting a Linux test host.
+const concurrency=process.env.ACIRA_TEST_CONCURRENCY;
+if(concurrency&&!/^(?:[1-9]|[1-5][0-9]|6[0-4])$/.test(concurrency))throw Error('ACIRA_TEST_CONCURRENCY must be 1 through 64.');
+const parallel=concurrency?['--test-concurrency='+concurrency]:[];
 const runners = {
-  node: files => [process.execPath, ['--test', ...files]],
+  node: files => [process.execPath, ['--test', ...parallel, ...files]],
   serial: files => [process.execPath, ['--test', '--test-concurrency=1', ...files]],
-  tsx: files => [process.execPath, [tsxCli, '--test', ...files]],
+  tsx: files => [process.execPath, [tsxCli, '--test', ...parallel, ...files]],
 };
 const wanted = process.argv.slice(2);
 for (const name of Object.keys(runners)) {

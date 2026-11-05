@@ -176,10 +176,10 @@ test('downloads of the same name that start together each get their own file', a
     const items = [f.begin(new Item('report.pdf')), f.begin(new Item('report.pdf')), f.begin(new Item('Report.pdf'))];
     await tick(); await tick();
     const saved = items.map(item => item.locked);
-    assert.equal(new Set(saved.map(file => file.toLowerCase())).size, 3, 'three different files: ' + saved.map(file => path.basename(file)).join(', '));
+    assert.equal(new Set(saved.map(file => process.platform === 'linux' ? file : file.toLowerCase())).size, 3, 'three different files: ' + saved.map(file => path.basename(file)).join(', '));
     items.forEach((item, n) => item.finish('copy ' + n));
     assert.deepEqual(saved.map(file => fs.readFileSync(file, 'utf8')), ['copy 0', 'copy 1', 'copy 2']);
-    assert.deepEqual(f.records.map(r => path.basename(r.path)), ['report.pdf', 'report (1).pdf', 'Report (2).pdf']);
+    assert.deepEqual(f.records.map(r => path.basename(r.path)), ['report.pdf', 'report (1).pdf', process.platform === 'linux' ? 'Report.pdf' : 'Report (2).pdf']);
     // Once a file is done its name is free again for the next check (the file on disk is what keeps it taken).
     const later = f.begin(new Item('notes.txt'));
     await tick(); await tick(); later.finish();

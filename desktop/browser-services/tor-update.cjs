@@ -11,6 +11,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {verifyDetached}=require('./tor-openpgp.cjs');
 const manifest=require('./tor-engine/tor-version.json');
 const macTor=require('./tor-mac.cjs');
+const linuxTor=require('./tor-linux.cjs');
 
 const WEEK=7*24*3600*1000,MAX_ARCHIVE=90*1024*1024;
 const versionParts=value=>String(value).split('.').map(part=>Number(part)||0);
@@ -30,7 +31,7 @@ function untar(buffer){
  }
  return files;
 }
-const runVersion=file=>new Promise(resolve=>execFile(file,['--version'],{timeout:10000,windowsHide:true},(error,stdout)=>resolve(error?null:/Tor version (\S+?)\.?\s/.exec(String(stdout))?.[1]||null)));
+const runVersion=file=>new Promise(resolve=>execFile(file,['--version'],{timeout:10000,windowsHide:true,...(process.platform==='linux'?{env:linuxTor.nativeEnvironment(file)}:{})},(error,stdout)=>resolve(error?null:/Tor version (\S+?)\.?\s/.exec(String(stdout))?.[1]||null)));
 async function download(url,{limit=MAX_ARCHIVE,timeout=180000,fetcher=fetch}={}){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
  try{const response=await fetcher(url,{signal:controller.signal,redirect:'follow',credentials:'omit'});if(!response.ok)throw new Error('HTTP '+response.status);
@@ -40,27 +41,27 @@ async function download(url,{limit=MAX_ARCHIVE,timeout=180000,fetcher=fetch}={})
 }
 
 const NO_FETCH=()=>Promise.reject(new Error('Tor updates go through Tor; no Tor connection was given.'));
-function createTorUpdater({userData,platform=process.platform,arch=process.arch,fetcher=NO_FETCH,now=()=>Date.now(),log=()=>{},feedUrl=platform==='darwin'?(macTor.spec(arch)?.updateFeed||manifest.updateFeed):manifest.updateFeed,bundled=manifest.torBrowserVersion,run=runVersion}={}){
+function createTorUpdater({userData,platform=process.platform,arch=process.arch,fetcher=NO_FETCH,now=()=>Date.now(),log=()=>{},feedUrl=platform==='darwin'?(macTor.spec(arch)?.updateFeed||manifest.updateFeed):platform==='linux'?(linuxTor.spec(arch)?.updateFeed||manifest.updateFeed):manifest.updateFeed,bundled=platform==='linux'?linuxTor.manifest.torBrowserVersion:manifest.torBrowserVersion,run=runVersion}={}){
  if(!userData)throw new Error('The updater needs a data folder.');
  const root=path.join(userData,'tor'),engineRoot=path.join(root,'engine'),file=path.join(root,'update.json');
  let record={auto:true,lastChecked:0,installed:null,latest:null,error:null},running=null,state='idle';
  try{record={...record,...JSON.parse(fs.readFileSync(file,'utf8'))};}catch{}
  const save=()=>{try{fs.mkdirSync(root,{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(record));fs.renameSync(file+'.tmp',file);}catch(error){log('Tor update record not saved: '+error.message);}};
  const current=()=>record.installed&&newer(record.installed.version,bundled)?record.installed:null;
- const status=()=>({auto:record.auto,state,current:current()?.version||bundled,tor:current()?.tor||manifest.tor,latest:record.latest,lastChecked:record.lastChecked,updatePending:Boolean(current()),error:record.error});
+ const status=()=>({auto:record.auto,state,current:current()?.version||bundled,tor:current()?.tor||(platform==='linux'?linuxTor.manifest.tor:manifest.tor),latest:record.latest,lastChecked:record.lastChecked,updatePending:Boolean(current()),error:record.error});
  /** The updated engine, if there is one and its file is still the one that was verified. Verified again at launch by the engine. */
- function updated(){const c=current();if(!c)return null;const exe=path.join(engineRoot,c.version,platform==='darwin'?'tor':'tor.exe');try{if(platform==='darwin'){const native=macTor.readMacTor(exe,{arch,pinned:false});return native&&native.sha256===c.sha256&&Object.entries(native.companions).every(([name,digest])=>c.companions?.[name]===digest)?{file:exe,sha256:c.sha256,companions:c.companions,version:c.version}:null;}return fs.statSync(exe).isFile()?{file:exe,sha256:c.sha256,version:c.version}:null;}catch{return null;}}
+ function updated(){const c=current();if(!c)return null;const exe=path.join(engineRoot,c.version,platform!=='win32'?'tor':'tor.exe');try{if(platform==='darwin'||platform==='linux'){const native=(platform==='linux'?linuxTor.readLinuxTor:macTor.readMacTor)(exe,{arch,pinned:false});return native&&native.sha256===c.sha256&&Object.entries(native.companions).every(([name,digest])=>c.companions?.[name]===digest)?{file:exe,sha256:c.sha256,companions:c.companions,version:c.version}:null;}return fs.statSync(exe).isFile()?{file:exe,sha256:c.sha256,version:c.version}:null;}catch{return null;}}
  async function install(version){
-  const target=platform==='darwin'?'macos-'+(arch==='arm64'?'aarch64':arch==='x64'?'x86_64':'unsupported'):'windows-x86_64';if(target.endsWith('unsupported'))throw Error('Unsupported Mac Tor architecture.');const name=`tor-expert-bundle-${target}-${version}.tar.gz`,base=`https://dist.torproject.org/torbrowser/${version}/${name}`;
+  const target=platform==='darwin'?'macos-'+(arch==='arm64'?'aarch64':arch==='x64'?'x86_64':'unsupported'):platform==='linux'?(arch==='x64'?'linux-x86_64':'linux-unsupported'):'windows-x86_64';if(target.endsWith('unsupported'))throw Error('Unsupported Tor architecture.');const name=`tor-expert-bundle-${target}-${version}.tar.gz`,base=`https://dist.torproject.org/torbrowser/${version}/${name}`;
   state='downloading';
   const archive=await download(base,{fetcher}),signature=await download(base+'.asc',{limit:64*1024,timeout:30000,fetcher});
   if(!verifyDetached(archive,signature))throw new Error('The release is not signed by a Tor Browser Developers key Acira knows. Not installed.');
-  const files=untar(gunzipSync(archive)),exe=files.get(platform==='darwin'?'tor/tor':'tor/tor.exe');if(!exe||exe.length<1e6)throw new Error('The release has no Tor executable.');
+  const files=untar(gunzipSync(archive)),exe=files.get(platform!=='win32'?'tor/tor':'tor/tor.exe');if(!exe||exe.length<1e6)throw new Error('The release has no Tor executable.');
   const dir=path.join(engineRoot,version+'.part');fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir,{recursive:true});
-  let native;if(platform==='darwin')native=await macTor.prepareMacTor({files,directory:dir,arch,version,archiveSha256:sha256(archive),pinned:false});else{fs.writeFileSync(path.join(dir,'tor.exe'),exe);const licence=files.get('docs/tor.txt');if(licence)fs.writeFileSync(path.join(dir,'LICENSE.tor.txt'),licence);}
-  const tor=await run(path.join(dir,platform==='darwin'?'tor':'tor.exe'));if(!tor){fs.rmSync(dir,{recursive:true,force:true});throw new Error('The new tor.exe did not run.');}
+  let native;if(platform==='darwin')native=await macTor.prepareMacTor({files,directory:dir,arch,version,archiveSha256:sha256(archive),pinned:false});else if(platform==='linux')native=linuxTor.prepareLinuxTor({files,directory:dir,arch,version,archiveSha256:sha256(archive),pinned:false});else{fs.writeFileSync(path.join(dir,'tor.exe'),exe);const licence=files.get('docs/tor.txt');if(licence)fs.writeFileSync(path.join(dir,'LICENSE.tor.txt'),licence);}
+  const tor=await run(path.join(dir,platform!=='win32'?'tor':'tor.exe'));if(!tor){fs.rmSync(dir,{recursive:true,force:true});throw new Error('The new tor.exe did not run.');}
   const finalDir=path.join(engineRoot,version);fs.rmSync(finalDir,{recursive:true,force:true});fs.renameSync(dir,finalDir);
-  record.installed={version,tor,sha256:native?.files.tor||sha256(exe),...(native?{companions:{'libevent-2.1.7.dylib':native.files['libevent-2.1.7.dylib']}}:{}),installedAt:now()};
+  record.installed={version,tor,sha256:native?.files.tor||sha256(exe),...(native?{companions:platform==='linux'?Object.fromEntries(linuxTor.LIBRARIES.map(name=>[name,native.files[name]])):{'libevent-2.1.7.dylib':native.files['libevent-2.1.7.dylib']}}:{}),installedAt:now()};
   for(const old of fs.readdirSync(engineRoot))if(old!==version)fs.rmSync(path.join(engineRoot,old),{recursive:true,force:true});
  }
  /** Looks for a newer release (at most weekly unless forced) and installs it. Never throws; the result is in status(). */
