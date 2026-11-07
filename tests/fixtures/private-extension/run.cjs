@@ -3,7 +3,8 @@
 // private session (a session kept in a folder), with its settings copied in one way; a memory-only private session beside it gets nothing; the folder goes away.
 const path = require('node:path'), os = require('node:os'), fs = require('node:fs'), http = require('node:http');
 const { app, session, BrowserWindow } = require('electron');
-const root = fs.mkdtempSync(path.join(process.env.ACIRA_TEST_TMP || os.tmpdir(), 'acira-private-electron-'));
+const root = process.env.ACIRA_PRIVATE_SWEEP_ROOT || fs.mkdtempSync(path.join(process.env.ACIRA_TEST_TMP || os.tmpdir(), 'acira-private-electron-'));
+if (!path.basename(root).startsWith('acira-private-electron-')) throw Error('Use only the owned private-extension fixture');
 app.setPath('userData', path.join(root, 'user-data'));
 app.on('window-all-closed', () => { });
 process.on('uncaughtException', error => { process.stdout.write('ERROR ' + (error && error.stack || error) + '\n'); app.exit(1); });
@@ -29,6 +30,11 @@ async function pageAttributes(ses, url) {
 }
 
 app.whenReady().then(async () => {
+  if (process.env.ACIRA_PRIVATE_SWEEP_ROOT) {
+    const removed = sessions.sweep(app.getPath('userData'));
+    const remaining = fs.readdirSync(path.join(app.getPath('userData'), 'Partitions')).filter(name => name.startsWith(sessions.PREFIX));
+    process.stdout.write('SWEEP ' + JSON.stringify({ removed, remaining }) + '\n'); app.exit(0); return;
+  }
   const server = http.createServer((request, response) => { response.setHeader('content-type', 'text/html'); response.end('<!doctype html><title>t</title><p>page</p>'); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}/`, result = {};

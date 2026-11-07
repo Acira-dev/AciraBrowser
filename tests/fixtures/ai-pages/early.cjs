@@ -70,7 +70,8 @@ app.whenReady().then(async () => {
     const win = new BrowserWindow({ show: false, width: 1280, height: 900, webPreferences: { sandbox: !spec.probe, contextIsolation: true, preload, zoomFactor: spec.zoom || 1 } });
     await win.loadURL(`http://${host}:${port}/${spec.page || 'google-2026.html'}?measure=1&mode=${spec.mode || 'sync'}&theme=${spec.theme || 'light'}&ink=${spec.ink || 'page'}&layout=${spec.layout || 'flush'}&dir=${spec.dir || 'ltr'}&ghost=${spec.ghost || 'none'}`);
     await sleep(spec.wait || 1400);
-    if (spec.switchTo) { nativeTheme.themeSource = spec.switchTo; await sleep(400); }
+    // Windows may omit the media-query event; allow the existing 750 ms appearance fallback its documented one-second bound.
+    if (spec.switchTo) { nativeTheme.themeSource = spec.switchTo; await sleep(1000); }
     if (spec.rezoom) { win.webContents.setZoomFactor(spec.rezoom); await sleep(700); }
     let probe = null;
     if (spec.probe) {
