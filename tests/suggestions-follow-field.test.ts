@@ -53,8 +53,8 @@ test('the suggestions anchor is placed at once and again once the layout has set
   const app = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const start = app.indexOf("useLayoutEffect(() => { if (overlay !== 'suggestions')");
   assert.ok(start > 0);
-  const effect = app.slice(start, app.indexOf('workspaceOpen]);', start));
+  const effect = app.slice(start, app.indexOf('addrBlock]);', start));
   assert.match(effect, /const read = \(\) => popupAnchor\('suggestions', state, undefined, effectiveMode\)/);
   assert.match(effect, /keep\(read\(\)\);\s*return settleAnchor\(read, keep\);/, 'at the commit, then settled; the cleanup cancels a wait a newer change replaces');
-  assert.match(app, /\}, \[overlay, effectiveMode, size\.width, style, s\.showHome, s\.verticalTabs, workspaceOpen\]\);/);
+  assert.match(app, /\}, \[overlay, effectiveMode, size\.width, style, s\.showHome, s\.verticalTabs, workspaceOpen, addrBlock\]\);/);
 });

@@ -106,7 +106,7 @@ test('test mode: the stand-in updater finds, "downloads" and records quitAndInst
 test('outside test mode a development run never updates itself', () => {
   const updater = createAppUpdater({ app: { getVersion: () => '1.0.0', isPackaged: false, getPath: () => folder() }, dir: folder(), env: { ACIRA_UPDATE_STUB: '1' }, schedule: () => null, every: () => null, qaBuild: false });
   assert.equal(updater.status().supported, false);
-  assert.equal(CHECK_EVERY, 8 * 60 * 60 * 1000);
+  assert.equal(CHECK_EVERY, 2 * 60 * 60 * 1000, 'beta.11 looks every 2 hours (it was 8); update-pickup.test.cjs has the rest');
 });
 
 test('the interface is wired: pill beside the menu button, a top menu row, and a quiet toast when the new version came without notes', () => {

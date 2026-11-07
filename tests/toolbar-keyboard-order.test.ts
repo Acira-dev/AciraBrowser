@@ -14,7 +14,7 @@ test('no CSS order moves a toolbar action away from its place in the DOM', () =>
 });
 
 test('the actions are built in the saved order, the profile button among them, the pinned extensions after a leading profile', () => {
-  const row = app.slice(app.indexOf('const shownItems = toolbarItems.filter(item => item.visible)'));
+  const row = app.slice(app.indexOf('const shownItems = '));
   assert.match(row, /lead = shownItems\[0\]\?\.id === 'profile' \? 1 : 0;/);
   assert.match(row, /\{shownItems\.slice\(0, lead\)\.map\(item => toolbarAction\(item\.id\)\)\}<BrowserExtensionActions target=\{extensionTarget\}\/>\{shownItems\.slice\(lead\)\.map\(item => toolbarAction\(item\.id\)\)\}/);
   assert.match(app, /\{parts\.exitFocus \? layoutToggle : optionalActions\}/);

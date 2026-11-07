@@ -4,6 +4,18 @@ const focusable = 'input:not(:disabled):not([type=hidden]),button:not(:disabled)
 
 const clearFound = new WeakMap<Element, number>();
 
+/** Resolves once `node` has stopped moving (its top unchanged for three frames), or after `limit` ms. */
+async function settled(node: HTMLElement, limit = 700): Promise<void> {
+  const started = performance.now();
+  let last = Number.NaN, still = 0;
+  while (performance.now() - started < limit && still < 3) {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const top = node.getBoundingClientRect().top;
+    still = top === last ? still + 1 : 0;
+    last = top;
+  }
+}
+
 /**
  * Bring a registered control into view: expand its collapsed group, scroll to it, focus it and
  * highlight it briefly. Never activates the control. Resolves false when the control is not
@@ -18,13 +30,16 @@ export async function revealSetting(scope: HTMLElement, entry: SettingsEntry, re
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   }
   if (!target) return false;
+  let opened = false;
   if (entry.expand) {
     const details = scope.querySelector<HTMLDetailsElement>(`#${CSS.escape(entry.expand)}`);
-    if (details) details.open = true;
+    if (details) { opened = !details.open; details.open = true; }
   }
   for (let node: HTMLElement | null = target; node && node !== scope; node = node.parentElement) {
-    if (node instanceof HTMLDetailsElement) node.open = true;
+    if (node instanceof HTMLDetailsElement) { opened ||= !node.open; node.open = true; }
   }
+  // A fold that has just opened grows over a short transition: scrolling now would aim at a row that is still on its way down.
+  if (opened) await settled(target);
   target.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
   const focusTarget = () => {
     const control = target!.matches(focusable) ? target! : target!.querySelector<HTMLElement>(focusable);

@@ -10,6 +10,9 @@
 .address-suggestion-copy small{font-size:11px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .address-suggestion[aria-selected=true] .address-suggestion-copy small{color:var(--muted)}
 .address-suggestion-source,.address-suggestion-action{font-size:11px;white-space:nowrap;color:inherit}
+/* An answer (a sum, a conversion, a time) reads as the result: the figure first, large and even-width, the question under it. */
+.address-suggestion[data-kind=answer] .address-suggestion-copy>span{font-size:15px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.address-suggestion-key{flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .address-suggestion-enter{flex:0 0 16px;visibility:hidden;color:var(--menu-t3,var(--muted))}
 .address-suggestion-remove{flex:0 0 28px;width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
 .address-suggestion-remove:hover{background:color-mix(in srgb,currentColor 10%,transparent)}

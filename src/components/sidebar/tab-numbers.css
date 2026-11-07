@@ -1,0 +1,8 @@
+/* Tab numbers while Ctrl/Cmd is held (ui/tabNumbers.ts, desktop/tab-numbers.cjs). The figure sits where the close button is, a little
+   nearer the title (as in the approved picture), at the row's end, in the New tab count's own figure style (12px, tabular, the quiet ink), and the close button and the pinned row's
+   sound meter give way to it at once for as long as it shows (so the two never overlap): a label, never a second control; they fade back as ever on release. It appears with a short fade and goes at once;
+   reduced motion (the sidebar's own rule at the end of sidebar.css) takes the fade away. */
+.app.style-acira .acira-sidebar .sb-tab-number{position:absolute;inset-block:0;inset-inline-end:8.5px;width:var(--tab-control,20px);display:grid;place-items:center;pointer-events:none;color:var(--sb-quiet);font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;animation:sb-tab-number-in 100ms var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number{color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-tab:has(>.sb-tab-number)>:is(.sb-tab-close,.sb-tab-sound){opacity:0;pointer-events:none;transition:none}
+@keyframes sb-tab-number-in{from{opacity:0}}

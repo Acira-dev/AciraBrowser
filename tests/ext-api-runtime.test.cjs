@@ -41,10 +41,10 @@ function nativeRuntime(manifest, {contexts = []} = {}) {
   };
 }
 
-function setup(manifestExtra = {}, {worker = true, answer = () => undefined, contexts} = {}) {
+function setup(manifestExtra = {}, {worker = true, answer = () => undefined, contexts, incognito = false} = {}) {
   const manifest = {manifest_version: 3, permissions: [], ...manifestExtra};
   const native = nativeRuntime(manifest, {contexts});
-  const world = extensionWorld(manifest, {packages: packages(), worker, answer, native: {runtime: native.runtime}, browser: {runtime: {id: ID}}});
+  const world = extensionWorld(manifest, {packages: packages(), worker, answer, incognito, native: {runtime: native.runtime}, browser: {runtime: {id: ID}}});
   return {world, chrome: world.chrome, native};
 }
 
@@ -516,4 +516,15 @@ test('onInstalled: the page-side event is the main process\' (Chromium\'s never 
   world.emit('runtime.onInstalled', {reason: 'update', previousVersion: '1.0'});
   assert.deepEqual(heard, [{reason: 'install'}, {reason: 'update', previousVersion: '1.0'}]);
   assert.equal(chrome.runtime.onInstalled.hasListeners(), true);
+});
+
+test('inside a private session that runs the extension (Allow in private tabs) it is allowed in incognito, and says it is in an incognito context', async () => {
+  for (const worker of [false, true]) {
+    const {chrome} = setup({}, {worker, incognito: true});
+    assert.equal(await chrome.extension.isAllowedIncognitoAccess(), true);
+    assert.equal(await new Promise(resolve => chrome.extension.isAllowedIncognitoAccess(resolve)), true);
+    assert.equal(await chrome.extension.isAllowedFileSchemeAccess(), false, 'file access is still never given');
+    assert.equal(chrome.extension.inIncognitoContext, true);
+  }
+  assert.notEqual(setup({}, {worker: false}).chrome.extension.inIncognitoContext, true, 'an ordinary profile is not an incognito context');
 });

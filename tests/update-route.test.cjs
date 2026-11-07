@@ -58,7 +58,7 @@ test('a route that is not confirmed sends nothing; no profile keeps the system r
 });
 
 test('main routes the updater through electron-updater\'s session, the one Acira\'s own download uses too',()=>{
- const call=main.slice(main.indexOf("createAppUpdater({app,"),main.indexOf('appUpdater.start();'));
+ const call=main.slice(main.indexOf("createAppUpdater({app,"),main.indexOf('setupGate.after(()=>appUpdater.start());'));
  assert.ok(call.length>0&&call.length<400&&call.endsWith('beforeInstall:flushForUpdate,route:updateRoute()});'),'the updater is given the route');
  const fn=main.slice(main.indexOf('function updateRoute(){'),main.indexOf('\n',main.indexOf('function updateRoute(){')));
  assert.match(fn,/session\.fromPartition\('electron-updater',\{cache:false\}\)/);

@@ -12,7 +12,7 @@ test('Mac secured labels name its actual verifier without rewriting user workspa
 test('a Mac says macOS where Settings names the system, and only there',()=>{
   assert.equal(platformCatalogText('language.system','Same as Windows','darwin'),'Same as macOS');
   assert.equal(platformCatalogText('language.system','Same as Windows','win32'),'Same as Windows');
-  assert.equal(platformCatalogText('browsersettings.animationSystemOff','Off while Windows asks to reduce motion.','darwin'),'Off while macOS asks to reduce motion.');
+  assert.equal(platformCatalogText('browsersettings.animationSystemOff','None while Windows asks to reduce motion.','darwin'),'None while macOS asks to reduce motion.');
   assert.equal(platformCatalogText('privacy.passkeysDetail','Let sites ask Windows for a passkey.','darwin'),'Let sites ask macOS for a passkey.');
   assert.equal(platformCatalogText('rewind.viewWindows','Windows','darwin'),'Windows','Windows the list of browser windows stays');
 });

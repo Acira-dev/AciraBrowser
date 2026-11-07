@@ -185,7 +185,7 @@ test('Settings and the connect page reach bridges through tor-window, from any w
 
 test('Acira’s own Tor traffic (the engine updater) never goes direct: it needs the engine’s Tor fetch',()=>{
  const update=read('desktop/browser-services/tor-update.cjs');assert.match(update,/fetcher=NO_FETCH/);
- assert.match(read('desktop/browser-services/tor-window.cjs'),/createTorUpdater\(\{userData,log,fetcher:\(url,init\)=>tor\.fetch\(url,init\)\}\)/);
+ assert.match(read('desktop/browser-services/tor-window.cjs'),/createTorUpdater\(\{userData,log,fetcher:\(url,init\)=>tor\.fetch\(url,init\),ready:\(\)=>tor\.whenReady\(\)\}\)/);
 });
 
 test('a connection that goes silent after the first handshake starts again on another route by itself, with no error and no Tor page open; unwarm() ends the retrying',async()=>{

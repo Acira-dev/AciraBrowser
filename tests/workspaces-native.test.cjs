@@ -106,10 +106,10 @@ test('the window wiring: one window per open workspace, scoped shortcuts, other 
  for(const type of ['workspace.create','workspace.select','workspace.update','workspace.delete','workspace.restore','workspace.move-tabs'])assert.ok(main.includes(`'${type}'`),`${type} is in main's actionNames`);
  assert.match(main,/action\.type==='workspace\.select'&&!privateMode/,'picking a workspace another window has open brings that window forward');
  assert.match(main,/c\.state\.activeWorkspaceId===action\.id/);
- // Scoped to the open workspace: listedTabs is workspaceTabs without a favorite's own tab in the sidebar layout (favoriteTabs.ts).
+ // Scoped to the open workspace: listedTabs is workspaceTabs (favoriteTabs.ts).
  assert.match(main,/case 'select-tab':\{const here=listedTabs\(state\)/);
  assert.match(main,/case 'cycle-tab':\{[^}]*const here=listedTabs\(state\)/);
- assert.match(read('src/runtime/favoriteTabs.ts'),/const here = workspaceTabs\(state\);/);
+ assert.match(read('src/runtime/favoriteTabs.ts'),/export const listedTabs = \(state: BrowserSnapshot\): TabSession\[\] => workspaceTabs\(state\);/);
  assert.match(main,/case 'switch-workspace':/);
  assert.match(main,/normalizeWorkspaces\(state\)/);
  for(const name of ['workspaceTabs','listedTabs','normalizeWorkspaces','windowWorkspaces','scopeToWorkspace','workspaceIdOf'])assert.equal(typeof runtime[name],'function',name);

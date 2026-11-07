@@ -37,7 +37,9 @@ test('the tab layout stays what it is when another profile comes on screen in th
 test('Settings › Profiles offers the choice with two or more profiles, and always while profiles are spaces', () => {
   const manager = src('src/features/accounts/ProfileManager.tsx');
   assert.match(manager, /if \(count < 2 && value === "workspaces"\) return null;/);
-  assert.match(manager, /onChange=\{\(next\) => dispatch\(\{ type: "settings\.update", patch: \{ spaces: next \} \}\)\}/);
+  // 6 Nov: the row is the segmented control "Open profiles: In this window · In separate windows" (profileModel.tsx), which writes the same setting.
+  assert.match(manager, /<OpenProfilesControl state=\{state\} dispatch=\{dispatch\} \/>/);
+  assert.match(src('src/features/accounts/profileModel.tsx'), /next === openProfilesValue\(settings\) \? null : \{ type: "settings\.update", patch: \{ spaces: next \} \}/);
   const en = JSON.parse(src('src/i18n/en.json'));
   for (const id of ['profiles.switchBetween', 'profiles.switchWorkspaces', 'profiles.switchWorkspacesDetail', 'profiles.switchSpaces', 'profiles.switchSpacesDetail', 'profiles.switchSecured']) assert.ok(en[id], id);
   assert.ok(en['profiles.switchSpacesDetail'].includes('{key}'));
@@ -54,7 +56,7 @@ test('profiles as spaces: a profile added in Settings opens its space in this wi
   // QA #11: adding "Dana" left the space on screen where it was.
   const manager = src('src/features/accounts/ProfileManager.tsx');
   assert.match(manager, /if \(created\.color\.toLowerCase\(\) !== wait\.color\.toLowerCase\(\)\) setProfileColor\(dispatch, created\.id, wait\.color\);\s*\/\/[^\n]*\n\s*if \(spaces\) dispatch\(\{ type: "browser\.profile\.select", id: created\.id, here: true \}\);/);
-  assert.match(manager, /<CreateProfile profiles=\{profiles\} dispatch=\{dispatch\} intentKey=\{tab \? settingsViewKey\(tab\) : ""\} spaces=\{state\.settings\.spaces === "profiles"\} \/>/);
+  assert.match(manager, /<CreateProfile state=\{state\} profiles=\{profiles\} dispatch=\{dispatch\} intentKey=\{tab \? settingsViewKey\(tab\) : ""\} spaces=\{state\.settings\.spaces === "profiles"\} \/>/);
 });
 
 test('profiles as spaces: another profile on screen takes the last space\'s toasts with it, before the newest toast is added (QA #8)', () => {

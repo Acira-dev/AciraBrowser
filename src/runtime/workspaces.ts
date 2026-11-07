@@ -97,9 +97,7 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
   const counts: Record<string, { tabs: number; pages: number }> = {};
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
-    // A favorite's own tab is the favorite's (favoriteTabs.ts), shown in its tile and not in any workspace's list. Every other tab
-    // counts in its own profile's workspace, so only listed ones count (with profiles as spaces, every profile's).
-    if (tab.favoriteId) continue;
+    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any.
     const entry = counts[workspaceIdOf(state, tab)];
     if (entry) { entry.tabs++; if (tab.url !== 'acira://new') entry.pages++; }
   }

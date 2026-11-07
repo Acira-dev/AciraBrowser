@@ -1,0 +1,8 @@
+{
+  "electron": "44.9.3",
+  "release": "44.9.3+wvcus",
+  "repository": "castlabs/electron-releases",
+  "platforms": {
+    "x64": {"sha256": "1ab1e5aa4566f218873d272af1a57c6162ad83911a69bbd4b0e341c37c6c40fc", "bytes": 158806556}
+  }
+}

@@ -132,9 +132,7 @@
 @keyframes edge-glide-address { from { translate: var(--edge-address-dx, 0px) 0; } }
 @keyframes edge-glide-tabs { from { translate: var(--edge-tabs-dx, 0px) 0; } }
 
-/* Animation Off (and a system that asks for less motion): no travel, an 80ms fade of what appears. */
-:root[data-edge-fade] .app .browser-shell:not([data-seamless='hidden']) > *:not(.navigation-progress),
-:root[data-edge-fade] .app .acira-sidebar.is-peek { animation: edge-fade-in 80ms linear both; }
+/* Animation None (Reduce motion, or a system that asks for less motion): no view transition at all (chromeEdge startEdgeTransition), what appears is there at once. */
 
 /* The View group in the toolbar menu (MenuChoice): the choice's check takes the column the switches use, and a shortcut ends before it. */
 :root:root:root .browser-popup .menu-choice > .menu-choice-check { flex: 0 0 28px; display: grid; justify-items: end; margin-left: auto; pointer-events: none; }

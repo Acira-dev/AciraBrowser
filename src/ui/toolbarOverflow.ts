@@ -21,6 +21,8 @@ function watch(toolbar: Element) {
  * (CSS hides them; the » below then gathers them). The Acira menu and the caption buttons never move.
  * Runs in the frame after a change, once per distinct width/content (a signature on the row skips repeats). */
 function fitRow(toolbar: HTMLElement) {
+  // Sidebar mode's morph moves the row's width for a few hundred ms: it is fitted once, when the morph has settled.
+  if (document.documentElement.hasAttribute('data-sm-morph')) return;
   const actions = toolbar.querySelector<HTMLElement>(':scope > .toolbar-actions');
   const leading = toolbar.querySelector<HTMLElement>(':scope > .acira-leading-controls');
   if (!actions || !leading || !toolbar.getClientRects().length) return;

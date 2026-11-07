@@ -5,3 +5,5 @@
 .acira-seg button:focus-visible { outline: 2px solid var(--seg-ring, var(--focus-ring-color, var(--accent, #3b6eea))); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .acira-seg-thumb, .acira-seg button { transition: none; } }
 [data-reduced-motion='true'] .acira-seg-thumb { transition: none; }
+/* Right to left: the first segment is on the right, so the thumb starts at the right edge and moves left (it sat under the wrong segment in Arabic). */
+html[dir='rtl'] .acira-seg-thumb { left: auto; right: 2px; transform: translateX(calc(var(--seg-index, 0) * -100%)); }

@@ -12,18 +12,20 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const HOOK_ENV = Object.freeze([
   'ACIRA_DEV', // the interface from the dev server at http://127.0.0.1:5194, which the browser bridge then trusts
   'ACIRA_PREVIEW_RECORD', // preview build records and process metadata written into the profile
-  'ACIRA_UPDATE_TEST', 'ACIRA_UPDATE_FEED', 'ACIRA_UPDATE_STUB', 'ACIRA_UPDATE_STUB_VERSION', 'ACIRA_UPDATE_STUB_NOTES', // another update feed, a stand-in updater
+  'ACIRA_UPDATE_TEST', 'ACIRA_UPDATE_FEED', 'ACIRA_UPDATE_FEED_FALLBACK', 'ACIRA_UPDATE_STUB', 'ACIRA_UPDATE_STUB_VERSION', 'ACIRA_UPDATE_STUB_NOTES', // another update feed, a stand-in updater
   'ACIRA_UPDATE_TEST_VERSION', 'ACIRA_UPDATE_TEST_ARCH', 'ACIRA_UPDATE_TEST_PLATFORM', // a pretend version (an older one would be offered a downgrade), arch or platform
   'ACIRA_UPDATE_TEST_FRESH_MS', // how long a feed answer counts as fresh (test mode only), so a rig can rehearse the Windows quit check at once
+  'ACIRA_UPDATE_TEST_PRIMARY_WITHIN_MS', 'ACIRA_UPDATE_TEST_FALLBACK_WITHIN_MS', // how long each feed address is given before the next is asked (test mode only), so a rig need not wait 15 s for a silent one
   'ACIRA_SPELLCHECK_DICTIONARY_URL', // spelling dictionaries from another server
   'ACIRA_SAFE_BROWSING_KEY', // a Safe Browsing key that replaces the one saved in Settings
   'ACIRA_KEEP_ELECTRON_UA', // Electron's own user agent, which names Acira's engine to every site
   'ACIRA_BROWSER_TEST_HIDDEN', 'ACIRA_TEST_APP_DIALOG', 'ACIRA_TEST_SHARE_PICKER', // no window on screen; dialogs answered without the person
   'ACIRA_QA_RUN', 'ACIRA_QA_LIVE_GOOGLE', // QA host rules
+  'ACIRA_SIMULATE_SYSTEM_THEME', // a pretend Linux desktop theme ({"dark":true,"accent":"#9141ac"}) for pictures and tests of Match my system theme
   // These already need a test profile where they are read; dropped too, so a later change that forgets that check stays safe.
   'ACIRA_TEST_QUIET_NETWORK', 'ACIRA_TEST_TOR_SIMULATE_BLOCK', 'ACIRA_TEST_PASSKEY_STUB', 'ACIRA_TEST_DATABASE_CHOICE', 'ACIRA_TEST_SERVICES_DELAY_MS',
   'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT',
-  'ACIRA_SITE_ALLOWLIST_ENDPOINT', 'ACIRA_EXT_NOTIFICATIONS_NATIVE', 'ACIRA_WINDOWS_BUILD',
+  'ACIRA_SITE_ALLOWLIST_ENDPOINT', 'ACIRA_SITE_ALLOWLIST_FILE', 'ACIRA_EXT_NOTIFICATIONS_NATIVE', 'ACIRA_WINDOWS_BUILD',
 ]);
 // The other ACIRA_ names the shipped code reads, and why a real build keeps them (tests/test-hooks-packaged.test.cjs makes every new one
 // pick a list).

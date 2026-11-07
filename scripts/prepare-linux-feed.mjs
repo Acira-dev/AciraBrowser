@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Superseded for beta.11 and later: the Linux machine runs `npm run handoff:linux` and the Mac publishes all three platforms with scripts/release-publish.mjs (docs/launch/UPDATE_HOST.md).
 import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),yaml=require('js-yaml'),args=process.argv.slice(2),value=flag=>{const i=args.indexOf(flag);return i<0?undefined:args[i+1];};
 const image=path.resolve(args[0]||''),output=path.resolve(value('--output')||path.join(path.dirname(image),'public-feed'));

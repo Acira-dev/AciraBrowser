@@ -33,4 +33,15 @@ function windowOnActiveSpace(window){
  try{return !!bridge.windowOnActiveSpace(window.getNativeWindowHandle());}
  catch(error){if(!warningShown){console.warn('Mac window space:',error.message);warningShown=true;}return false;}
 }
-module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip,windowOnActiveSpace};
+// Two-finger swipe between pages (swipe-nav.cjs): every precise scroll of the window arrives as callback(phase, momentumPhase, dx, dy, x, y, natural),
+// the phases as NSEventPhase bits and the point in window pixels from the top left. Read only; the scroll itself is never touched. False when unavailable.
+function watchScroll(window,callback){
+ if(!bridge?.watchScroll||!window||window.isDestroyed()||typeof callback!=='function')return false;
+ try{return !!bridge.watchScroll(window.getNativeWindowHandle(),callback);}
+ catch(error){if(!warningShown){console.warn('Mac swipe:',error.message);warningShown=true;}return false;}
+}
+function unwatchScroll(window){
+ if(!bridge?.unwatchScroll||!window||window.isDestroyed())return false;
+ try{return !!bridge.unwatchScroll(window.getNativeWindowHandle());}catch{return false;}
+}
+module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip,windowOnActiveSpace,watchScroll,unwatchScroll};

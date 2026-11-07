@@ -28,7 +28,7 @@ test('the ribbon close button is a 20px box in the 26px ribbon, whatever the gen
     for (const rule of rules(css(file))) {
       if (!/(^|[;\s])(width|min-width|height|flex-basis|flex):/.test(rule.body)) continue;
       // A size rule whose last compound is the bare .icon-button and whose context is not another component's own row.
-      for (const part of rule.selector.split(',').map(item => item.trim())) if (/(^|[\s>])\.icon-button$/.test(part) && !/\.(?:find-row|tab-strip-add|navigation-controls|toolbar-actions|workspace-rail|acira-focus-row|compact-navigation|browser-toolbar)\b/.test(part)) generic.push({ file, selector: part });
+      for (const part of rule.selector.split(',').map(item => item.trim())) if (/(^|[\s>])\.icon-button$/.test(part) && !/\.(?:find-row|tab-strip-add|navigation-controls|toolbar-actions|workspace-rail|acira-focus-row|compact-navigation|browser-toolbar|sb-addr-more-in)\b/.test(part)) generic.push({ file, selector: part });
     }
   assert.ok(generic.some(item => item.selector === '.app.style-acira .icon-button'), 'the generic 28px rule is the one this guards against');
   for (const item of generic) assert.ok(heavier('.app .split-label>.split-label-close.icon-button', item.selector), `${item.selector} (${item.file}) must not outweigh the ribbon close rule`);

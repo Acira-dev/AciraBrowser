@@ -24,7 +24,12 @@ module.exports = {
   namespaces: ['tabs'],
   install(api) {
     // Without the host's tab model (desktop/main.cjs extensionBrowser().tabModel) there is nothing to read or write: the engine's handlers stay.
-    if (!api.store()?.impl?.tabModel) { api.log('no tabModel hook: the engine\'s tabs handlers stay'); return {}; }
+    if (!api.store()?.impl?.tabModel) {
+      api.log('no tabModel hook: the engine\'s tabs handlers stay');
+      // The page script of tabs.sendMessage asks for the page behind a tab id; with no tab model (a private session that runs extensions) a tab id IS its page's id.
+      try { api.handle('acira.tabs.pageId', (event, tabId) => { let found = null; try { found = api.store()?.getTabById?.(tabId) || null; } catch { /* unknown tab */ } return found && !found.isDestroyed?.() ? found.id : null; }); } catch { /* the handler already exists */ }
+      return {};
+    }
     const model = createTabsModel(api);
     const store = () => api.store();
     const fresh = windowId => model.windows().find(w => w.id === windowId) || null;

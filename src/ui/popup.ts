@@ -2,7 +2,7 @@ import {isTorSupported} from './platform';
 import type { BrowserSnapshot,Rectangle,TabSession } from '../runtime/types';
 import { groupForTab } from '../runtime/tabGroups';
 import { menuHeight,menuRowHeight,readMenuLayout,platformMenuLayout } from './menuPrefs';
-import { windowWorkspaces } from '../runtime/workspaces';
+import { profilesAsSpaces,windowWorkspaces } from '../runtime/workspaces';
 import { splitGroupMenu } from '../runtime/splitPlacement';
 import { peekWorkspaceTarget } from './workspaceTargetStore';
 import { updatePanelPhase } from './updatePhase';
@@ -59,7 +59,8 @@ const panelChrome=12;
 const profileOf=(state:BrowserSnapshot)=>state.tabs?.find(tab=>tab.id===state.activeTabId)?.browserProfileId||'';
 /** The main menu's height: its rows from the person's layout (R3-43) plus, in a Tor tab or window (R3-61), the one extra row (New Tor identity) at the same row height. */
 /** R4-16 + R4-19: the two Layout rows (View, Tabs) join the page group after Split view, Zoom or Find, at the same row height. */
-export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].some(id=>main.includes(id))?2:0;
+/** View, Tabs and Sidebar mode. */
+export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].some(id=>main.includes(id))?3:0;
 /** The Tor rows: New Tor identity, and on a website also New Tor circuit for this site (Tor Browser's pair). */
 const torMenuRows=(state:BrowserSnapshot)=>{if(!inTorContext(state))return 0;const tab=state.tabs.find(item=>item.id===state.activeTabId);return tab?.contentKind==='web'&&/^https?:/i.test(tab.url||'')?2:1;};
 /** "Report a problem…" under Settings, while this build can send reports and outside Tor (App.tsx reportSubjects). */
@@ -100,7 +101,7 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   if(kind==='split')return base+Math.max(1,state.tabs.length-1)*44;
   // Profiles are 44px identity rows above one divider and two 30px actions (one profile measured at 125); outside a private window "Add profile…" is one more 30px row under the list.
   // R4-48: plus the Workspaces section (divider 9, its two-line head 46, a 30px row per workspace, New workspace… until eight) outside a private window.
-  if(kind==='profile'){const own=state.browserProfiles.find(item=>item.id===state.activeBrowserProfileId),n=own&&!own.private?windowWorkspaces(state).length:0;return 81+Math.max(1,state.browserProfiles.length)*44+(own&&!own.private?30:0)+(n?9+46+n*30+(n<8?30:0):0);}
+  if(kind==='profile'){const own=state.browserProfiles.find(item=>item.id===state.activeBrowserProfileId),n=own&&!own.private?windowWorkspaces(state).length:0,between=own&&!own.private&&(state.browserProfiles.filter(item=>!item.private).length>=2||profilesAsSpaces(state));/* Open profiles: a divider (9), its name and the segmented control under the profiles (70) */return 81+Math.max(1,state.browserProfiles.length)*44+(own&&!own.private?30:0)+(between?79:0)+(n?9+46+n*30+(n<8?30:0):0);}
   // The downloads panel (extensions' panel system): up to five 44px rows (one 32px row says there are none), a divider and the 30px See all downloads row.
   if(kind==='downloads'){const rows=Math.min(PANEL_DOWNLOAD_ROWS,profileDownloads(state,state.activeBrowserProfileId||profileOf(state)).length);return panelChrome+(rows?rows*PANEL_DOWNLOAD_ROW_HEIGHT:32)+9+30;}
   // Recently closed (R3-39): the header, up to six 52px rows (title and site), a divider and the "Open Rewind" row; measured for the real list.
@@ -150,7 +151,9 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   if(kind==='split-context'){const split=target?.id?state.windowUi.splitGroups?.find(item=>item.tabIds.includes(target.id!)):undefined,menu=split?splitGroupMenu(state,split):null,rows=menu?Number(menu.targets.length>0)+Number(menu.grouped):0;return 171+(rows?9+30*rows:0);}
   if(kind==='group-preview')return 178;
   // Tab bar menu (strip blank space and the + button): new tab, private, Tor; the three windows; reopen closed tab.
-  if(kind==='strip-context')return isTorSupported()?240:180;
+  // In the sidebar's tab list the menu ends with a divider and the two section rows (Hide this section, Customize sidebar…): 9 + 2 x 30;
+  // plus a divider and New workspace… (Add profile… with profiles as spaces) once the window has workspaces to add to: 39.
+  if(kind==='strip-context'){const n=windowWorkspaces(state).length;return (isTorSupported()?240:180)+(state.settings?.verticalTabs?69:0)+((profilesAsSpaces(state)||n>0&&n<8)?39:0);}
   if(kind==='bookmark-context')return 300;
   if(kind==='bookmark-edit')return 317;
   if(kind==='favorite-edit')return 239;
@@ -160,7 +163,8 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   const lockRows=(id?:string)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===id);return !own||list[0]?.id===own.id?0:!own.secured?53:own.unlocked?87:-69;};
   // Next / previous workspace (two 30px rows) join New workspace…'s group once there are two workspaces; at eight they keep that group's divider (9).
   if(kind==='workspace-menu'){const count=Math.max(1,windowWorkspaces(state).length),cycle=count>1?60+(count<8?0:9):0;return 235+count*44+(count<8?39:0)+cycle+lockRows(state.activeWorkspaceId);}
-  if(kind==='workspace-context'){const target=peekWorkspaceTarget();return 107+lockRows(target&&'workspaceId' in target?target.workspaceId:undefined);}
+  // The sidebar's own menu (target mode 'sidebar'): New workspace… (Add profile…) with its divider (39) and Customize sidebar… (30), in 12px of padding (81 measured, 6 Nov); a workspace's menu gets New workspace… and its divider on top (39) until eight.
+  if(kind==='workspace-context'){const target=peekWorkspaceTarget(),n=windowWorkspaces(state).length,canNew=profilesAsSpaces(state)||n>0&&n<8;if(target?.mode==='sidebar')return 42+(canNew?39:0);return 107+(canNew&&!profilesAsSpaces(state)?39:0)+lockRows(target&&'workspaceId' in target?target.workspaceId:undefined);}
   // The form: new has "Start with", its live line and the scope note (472 measured before R4-48, plus a second note line and the scope note), edit does not (384; new 634 measured with R3-38's Lock this workspace row).
   if(kind==='workspace-edit')return peekWorkspaceTarget()?.mode==='edit'?384:634;
   // One 40px row (critique round 6): glyph, input, count, previous, next, close.
@@ -177,8 +181,8 @@ export const measuredPopupKinds=['tabs','workspace-menu','switcher','palette','b
 const lockThisRowShown=(state:BrowserSnapshot)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===state.activeWorkspaceId);return !!own&&list[0]?.id!==own.id&&!own.secured;};
 export const popupEstimateMeasured=(kind:string,state:BrowserSnapshot)=>measuredPopupKinds.includes(kind)&&!(kind==='workspace-menu'&&lockThisRowShown(state));
 
-/** The Acira menu at its 30px rows and at its dense 26px rows: 19 rows (17 + the two Layout rows), four 9px dividers, 12px of container. */
-export const menuFullHeight=648,menuDenseHeight=568;
+/** The Acira menu at its 30px rows and at its dense 26px rows: 20 rows (17 + the three Layout rows: View, Tabs, Sidebar mode), four 9px dividers, 12px of container. */
+export const menuFullHeight=678,menuDenseHeight=594;
 /** F02 (M's sweep, 900×600): when the space below the menu button is shorter than the full menu, the menu takes its dense
  * rows and fits without scrolling. The chrome (geometry) and the overlay (rows) decide with this one rule, from the window
  * and the button, never from the content, so nothing oscillates. */

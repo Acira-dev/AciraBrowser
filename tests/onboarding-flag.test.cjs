@@ -39,8 +39,9 @@ test('a profile made from another browser keeps the card away until its short se
 
 test('main applies it to the window start-up status and to every setup command', () => {
   const main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
-  assert.match(main, /const syncOnboarding=r=>\{const patch=require\('\.\/accounts\/onboarding-flag\.cjs'\)\.onboardingPatch\(r,state\.settings\);if\(patch\)dispatch\(\{type:'settings\.update',patch\}\);return r;\};/);
-  assert.match(main, /\.then\(r=>decide\(setupPending\(syncOnboarding\(r\)\)\),\(\)=>decide\(false\)\)/, 'start-up status');
+  // beta.11: the same answers also release the first-run hold on Acira's own scheduled downloads (setup-gate.cjs, tests/setup-gate.test.cjs).
+  assert.match(main, /const syncOnboarding=r=>\{const patch=require\('\.\/accounts\/onboarding-flag\.cjs'\)\.onboardingPatch\(r,state\.settings\);if\(patch\)dispatch\(\{type:'settings\.update',patch\}\);[^]*?if\(setupFinished\(r\)\)setupGate\.release\(\);return r;\};/);
+  assert.match(main, /\.then\(r=>\{const pending=setupPending\(syncOnboarding\(r\)\);if\(!pending\)setupGate\.release\(\);decide\(pending\);\},\(\)=>\{setupGate\.release\(\);decide\(false\);\}\)/, 'start-up status');
   assert.match(main, /return created\.id;\}\}\)\.then\(syncOnboarding\);\}\);/, 'the acira:setup bridge');
   // The card's own rules are untouched: it still asks for the flag and the quiet moment.
   const moment = fs.readFileSync(path.join(__dirname, '../src/features/metrics/ratingMoment.ts'), 'utf8');

@@ -1,6 +1,6 @@
 'use strict';
 const path=require('node:path');
-// Protected video needs Widevine. Qualified Mac ECS builds install it automatically.
+// Protected video needs Widevine. ECS builds (Mac, and Windows Widevine builds) install it automatically.
 // Other runtimes, unsupported codecs, or component failures can still reject it. The page's own request for it is refused by the engine; a small preload (protected-media-preload.cjs) notices
 // the refusal and tells us once per frame. We pass on only the tab and the site, never anything the page said.
 const attached=new WeakSet(),lastTold=new Map(),held=new Map();

@@ -56,7 +56,7 @@ test('a new goal during a move is picked up by the move that is running',()=>{
 test('main.cjs hands the radius to the move and only sets it directly when the page does not move',()=>{
  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','desktop','main.cjs'),'utf8');
  assert.match(source,/next\.pageMotion,next\.pageSpring,pageRadius[,)]/,'the move carries the radius');
- assert.match(source,/pageRadius,\['full','compact','seamless'\]\.includes\(effectiveView\(state\.settings,state\.windowUi\)\)&&next\.views\.length===1,layoutPace\(next\.motionSpeed\)\)/,'only the normal, Compact and Seamless views\' single page glides with its size held, at the speed\'s pace');
+ assert.match(source,/pageRadius,\(\['full','compact','seamless'\]\.includes\(effectiveView\(state\.settings,state\.windowUi\)\)\|\|\(effectiveView\(state\.settings,state\.windowUi\)==='focus'&&state\.settings\.addressInSidebar&&state\.settings\.verticalTabs\)\|\|next\.pageHold===true\)&&next\.views\.length===1,layoutPace\(next\.motionSpeed\),next\.pageEdgeLag\)/,'only the normal, Compact and Seamless views\' single page glides with its size held, at the speed\'s pace');
  assert.match(source,/else if\(\(entry\.radiusGoal\?\?entry\.radius\)!==pageRadius\)\{if\(entry\.boundsTimer\)entry\.radiusGoal=pageRadius;else applyRadius\(entry,pageRadius\);\}/,'no move: set at once, or hand it to the running one');
  assert.doesNotMatch(source,/entry\.view\.setBorderRadius\(Math\.round\(radius\)\)/,'no flip on the first frame any more');
 });
@@ -65,4 +65,37 @@ test('the page dissolve is off unless ACIRA_DISSOLVE=1: neither the slide clock 
  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','desktop','main.cjs'),'utf8');
  assert.match(source,/get dissolve\(\)\{return process\.env\.ACIRA_DISSOLVE!==\'1\'\|\|chromeFloated\|\|pictureHold\?null:pageDissolve;\}/,'no dissolve on the slide clock by default');
  assert.match(source,/if\(process\.env\.ACIRA_DISSOLVE===\'1\'&&action\.type===\'ui\.update\'&&action\.patch&&[^;]*pageDissolve\.warm\(\);/,'and no layer is warmed for it (a renderer of ~100 MB)');
+});
+
+// Founder, 5 Nov 2026 (the docked sidebar's button, a website): "the page card's top-left corner starts square and then becomes rounded during the slide". The card the interface draws
+// beside the sidebar is round from its first frame, but the page view's radius travelled with the eased move from 0, so for the first frames (the page already 30 px along) the view's
+// square corner stood over the interface's round one and then rounded in steps. In the docked sidebar's slide the radius is the card's from the first frame; closing, the card goes square
+// with the glide as before; a slide with a spring of its own (Seamless) and every move that is not held keep the ramp.
+function held(entry,start,target,radius,spring){
+ let now=0,queued=null;const radii=[],bounds=[];
+ const view={bounds:{...start},getBounds(){return {...this.bounds};},setBounds(next){this.bounds={...next};bounds.push({...next});},setBorderRadius(value){radii.push(value);},webContents:{isDestroyed:()=>false}};
+ const clock={now:()=>now,later:fn=>{queued=fn;return 1;},cancel:()=>{queued=null;}};
+ entry.view=view;
+ placePageBounds(entry,target,true,clock,1000/60,'slide',spring,radius,true);
+ for(let i=0;i<200&&queued;i++){now+=1000/60;const fn=queued;queued=null;fn();}
+ return {radii,bounds};
+}
+test('the docked sidebar opening: the page is round from its first frame, at the card\'s radius, and stays so',()=>{
+ const entry={radius:0};
+ const {radii,bounds}=held(entry,{x:0,y:36,width:1272,height:722},{x:240,y:36,width:1026,height:716},8);
+ assert.deepEqual([...new Set(radii)],[8],'one value, from the first frame: '+radii);
+ assert.ok(bounds.length>15,'and the page still glides');
+ assert.equal(entry.radius,8);assert.equal(entry.radiusGoal,undefined);
+});
+test('the docked sidebar closing: the page goes square with the glide, as before',()=>{
+ const entry={radius:8};
+ const {radii}=held(entry,{x:240,y:36,width:1026,height:716},{x:0,y:36,width:1272,height:722},0);
+ assert.ok(radii.length>=5&&radii[0]>0,'a run of steps, the first not yet square: '+radii);
+ for(let i=1;i<radii.length;i++)assert.ok(radii[i]<=radii[i-1],'it only shrinks: '+radii);
+ assert.equal(radii.at(-1),0);
+});
+test('a held slide with a spring of its own (entering Seamless) still rounds with the glide',()=>{
+ const entry={radius:0};
+ const {radii}=held(entry,{x:0,y:36,width:1272,height:722},{x:6,y:6,width:1260,height:746},8,{duration:.34,bounce:0});
+ assert.ok(radii[0]<8&&radii.at(-1)===8,'ramps up: '+radii);
 });

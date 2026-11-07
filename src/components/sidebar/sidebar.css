@@ -71,6 +71,7 @@
 .app.style-acira .acira-sidebar .sb-app-more{background:transparent;color:var(--sb-muted);font:500 var(--text-12,12px)/1 var(--font-ui,inherit);font-variant-numeric:tabular-nums}
 .app.style-acira .acira-sidebar .sb-app-more:hover{background:var(--sb-hover);color:var(--sb-fg)}
 .app.style-acira .acira-sidebar .sb-flip{transform:rotate(180deg)}
+.app.style-acira .acira-sidebar .sb-app[data-morph]{opacity:0}/* a favorite's tile is held back while its card morphs into it (ui/favoriteMorph.ts); the morph fades it in */
 .app.style-acira .acira-sidebar .sb-app[data-drop]::before{content:'';position:absolute;top:6px;bottom:6px;width:2px;border-radius:1px;background:var(--sb-ring);pointer-events:none}
 .app.style-acira .acira-sidebar .sb-app[data-drop=before]::before{left:-4px}
 .app.style-acira .acira-sidebar .sb-app[data-drop=after]::before{right:-4px}
@@ -220,7 +221,14 @@
 .app.style-acira .acira-sidebar .sb-group{position:relative;display:flex;flex-direction:column;margin:0}
 .app.style-acira .acira-sidebar .sb-group>.sb-group-header{display:flex;align-items:center;gap:8px;width:100%;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-radius);background:none;color:var(--sb-fg);font:500 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-group>.sb-group-header:hover{background:var(--sb-hover)}
-.app.style-acira .acira-sidebar .sb-group-swatch{display:block;width:10px;height:10px;border-radius:3px;background:var(--group-color)}
+/* The group's folder (founder, 6 Nov: groups read as folders): Acira's own Folder and FolderOpen glyphs in the icon column, stacked,
+   the closed one while collapsed and the open one otherwise, crossfading on the fold's clock (the speed setting scales it, Off is
+   instant). Stroke in the group's colour with a 22% tint of it as the fill. (Mixing ink into the stroke was tried: --sb-fg is
+   translucent, so in the dark sidebar it only dimmed the colour.) */
+.app.style-acira .acira-sidebar .sb-group-folder{color:var(--group-color)}
+.app.style-acira .acira-sidebar .sb-group-folder>svg{grid-area:1/1;fill:color-mix(in srgb,var(--group-color) 22%,transparent);transition:opacity calc(.12s * var(--motion-scale,1)) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-group-folder>svg:first-child,.app.style-acira .acira-sidebar .sb-group[data-collapsed] .sb-group-folder>svg:last-child{opacity:0}
+.app.style-acira .acira-sidebar .sb-group[data-collapsed] .sb-group-folder>svg:first-child{opacity:1}
 .app.style-acira .acira-sidebar .sb-group-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
 .app.style-acira .acira-sidebar .sb-group-header>small{font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-group-header>svg{flex:none;margin-right:4px;color:var(--sb-label);opacity:0;transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring),opacity var(--sb-dur) var(--sb-ease)}
@@ -320,7 +328,9 @@ html[data-sidebar-resizing] .app.style-acira:not(.native-layer){transition:none!
  .app.style-acira .acira-sidebar :is(.sb-app,.sb-tab)[aria-current]{forced-color-adjust:none;background:Highlight;color:HighlightText}
  .app.style-acira .acira-sidebar .sb-app{outline:1px solid ButtonText}
  .app.style-acira .acira-sidebar :is(.sb-tab[data-drop],.sb-app[data-drop])::before,.app.style-acira .acira-sidebar .sb-resize::after{background:Highlight}
- .app.style-acira .acira-sidebar .sb-group-members::before,.app.style-acira .acira-sidebar .sb-group-swatch{background:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group-members::before{background:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group-folder{color:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group-folder>svg{fill:none}
  .app.style-acira .acira-sidebar :focus-visible{outline-color:Highlight}
  .app.style-acira .acira-sidebar .sb-zone-head{background:Canvas;backdrop-filter:none}
 }
@@ -446,6 +456,9 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
 /* The card's two states crossfade as it moves (the docked sidebar's outline fades out with it), always the card's own height. */
 :root[data-mode-switch=layout]::view-transition-old(acira-page),
 :root[data-mode-switch=layout]::view-transition-new(acira-page){height:100%}
+/* A website's two left corners are its own, the native view's (round from the slide's first frame, page-motion.cjs), and the page and this card are on two clocks, a few pixels
+   apart on every frame: the card's outline at its left corners then showed beside the page's curve as a light crescent (founder, 5 Nov). The outline begins where the curve ends. */
+:root[data-mode-switch=layout]:has(.browser-body>.page-area>.page-content[data-native])::view-transition-image-pair(acira-page){clip-path:polygon(14px -4px,calc(100% + 4px) -4px,calc(100% + 4px) calc(100% + 4px),14px calc(100% + 4px),14px calc(100% - 14px),-4px calc(100% - 14px),-4px 14px,14px 14px)}
 :root[data-mode-switch=layout]::view-transition-old(acira-page-content),
 :root[data-mode-switch=layout]::view-transition-old(acira-page-split){animation:none;opacity:0}
 /* The content lays out live (sharedMotion followPage): its layer is the live element itself, never a final-size picture centred in a moving box. */
@@ -484,10 +497,6 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
 /* Favorites explained (Round 2): a small info mark rests on the separator's right end while the Favorites are hovered
    or focused; its tooltip says what they are and how to add, edit or turn them off. */
 .app.style-acira .acira-sidebar .sb-apps-region{position:relative}
-.app.style-acira .acira-sidebar .sb-apps-info{position:absolute;z-index:1;right:8px;bottom:-14px;display:grid;place-items:center;width:16px;height:16px;padding:0;border:0;border-radius:50%;background:none;color:var(--sb-quiet);opacity:0;-webkit-app-region:no-drag;transition:opacity var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
-.app.style-acira .acira-sidebar .sb-apps-region:is(:hover,:focus-within) .sb-apps-info{opacity:1}
-.app.style-acira .acira-sidebar .sb-apps-info:is(:hover,:focus-visible){color:var(--sb-fg)}
-.app.style-acira .acira-sidebar .sb-apps-info:focus-visible{outline:2px solid var(--sb-ring);outline-offset:1px}
 /* Long titles scroll on hover like B's strip (ui/titleMarquee.ts moves .sb-tab-title-text); while they scroll both ends fade. */
 .app.style-acira .acira-sidebar .sb-tab-title>.sb-tab-title-text{display:inline-block;vertical-align:top;white-space:nowrap}
 .app.style-acira .acira-sidebar .sb-tab-title[data-marquee]{-webkit-mask-image:linear-gradient(to right,transparent,#000 12px,#000 calc(100% - 20px),transparent);mask-image:linear-gradient(to right,transparent,#000 12px,#000 calc(100% - 20px),transparent)}

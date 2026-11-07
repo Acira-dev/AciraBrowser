@@ -44,6 +44,6 @@ test('Mac feed is consumed by the actual updater parser, selects the matching ar
  const base=new URL('https://example.org/releases/'),info=parseUpdateInfo(text,'beta-mac.yml',base),files=resolveFiles(info,base);
  assert.equal(info.version,'0.2.0-beta.1');assert.equal(info.files[0].size,bytes.length);assert.equal(info.files[0].sha512,crypto.createHash('sha512').update(bytes).digest('base64'));
  assert.equal(MacUpdater.filterFilesForArch(files,true).length,1);assert.equal(MacUpdater.filterFilesForArch(files,false).length,0,'Intel cannot select the Apple Silicon archive');
- await writeMacUpdateConfig(output);const config=await fs.readFile(path.join(output,'app-update.yml'),'utf8');assert.match(config,/AciraBrowserUpdates/);assert.doesNotMatch(config,/AciraBrowserNoAI|token|password|secret/i);
+ await writeMacUpdateConfig(output);const config=await fs.readFile(path.join(output,'app-update.yml'),'utf8');assert.match(config,/update\.acirabrowser\.com/,'a new build asks the new address first; the GitHub feed is its compiled-in fallback');assert.doesNotMatch(config,/AciraBrowserNoAI|token|password|secret/i);
  await assert.rejects(writeMacUpdateFeed({output,version:'0.2.0',zip,arch:'x64'}),/architecture-labelled/);
 });

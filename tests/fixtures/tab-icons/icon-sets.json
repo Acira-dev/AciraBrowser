@@ -1,0 +1,550 @@
+[
+ {
+  "site": "www.notion.com",
+  "page": "https://www.notion.com/",
+  "announced": [
+   "https://www.notion.com/front-static/favicon.ico"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://www.notion.com/front-static/favicon.ico",
+    "sizes": "",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.notion.com/front-static/logo-ios.png",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://www.notion.com/front-static/favicon.ico": {
+    "type": "image/vnd.microsoft.icon",
+    "w": 64,
+    "h": 64
+   },
+   "https://www.notion.com/front-static/logo-ios.png": {
+    "type": "image/png",
+    "w": 512,
+    "h": 512
+   }
+  }
+ },
+ {
+  "site": "www.twitch.tv",
+  "page": "https://www.twitch.tv/",
+  "announced": [
+   "https://assets.twitch.tv/assets/favicon-16-24c010b0dab5e56aef81.png",
+   "https://assets.twitch.tv/assets/favicon-32-5c61aa63605bca4f740d.png"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://assets.twitch.tv/assets/favicon-32-5c61aa63605bca4f740d.png",
+    "sizes": "32x32",
+    "type": "image/png"
+   },
+   {
+    "rel": "icon",
+    "href": "https://assets.twitch.tv/assets/favicon-16-24c010b0dab5e56aef81.png",
+    "sizes": "16x16",
+    "type": "image/png"
+   }
+  ],
+  "files": {
+   "https://assets.twitch.tv/assets/favicon-32-5c61aa63605bca4f740d.png": {
+    "type": "image/png",
+    "w": 32,
+    "h": 32
+   },
+   "https://assets.twitch.tv/assets/favicon-16-24c010b0dab5e56aef81.png": {
+    "type": "image/png",
+    "w": 16,
+    "h": 16
+   }
+  }
+ },
+ {
+  "site": "www.apple.com",
+  "page": "https://www.apple.com/",
+  "announced": [
+   "https://www.apple.com/favicon.ico"
+  ],
+  "links": [],
+  "files": {
+   "https://www.apple.com/favicon.ico": {
+    "type": "image/x-icon",
+    "w": 64,
+    "h": 64
+   }
+  }
+ },
+ {
+  "site": "www.bbc.com",
+  "page": "https://www.bbc.com/",
+  "announced": [
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-16x16.png",
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-32x32.png",
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon.ico"
+  ],
+  "links": [
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/apple-touch-icon.png",
+    "sizes": "180x180",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-32x32.png",
+    "sizes": "32x32",
+    "type": "image/png"
+   },
+   {
+    "rel": "icon",
+    "href": "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-16x16.png",
+    "sizes": "16x16",
+    "type": "image/png"
+   },
+   {
+    "rel": "alternate icon",
+    "href": "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon.ico",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/apple-touch-icon.png": {
+    "type": "image/png",
+    "w": 180,
+    "h": 180
+   },
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-32x32.png": {
+    "type": "image/png",
+    "w": 32,
+    "h": 32
+   },
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon-16x16.png": {
+    "type": "image/png",
+    "w": 16,
+    "h": 16
+   },
+   "https://static.files.bbci.co.uk/bbcdotcom/web/20261103-153842-3889e7dacf-web-3.27.0-4/favicon.ico": {
+    "type": "image/vnd.microsoft.icon",
+    "w": 48,
+    "h": 48
+   }
+  }
+ },
+ {
+  "site": "www.mozilla.org",
+  "page": "https://www.mozilla.org/en-US/",
+  "announced": [
+   "https://www.mozilla.org/media/img/favicons/mozilla/favicon-196x196.e143075360ea.png",
+   "https://www.mozilla.org/media/img/favicons/mozilla/favicon.d0be64e474b1.ico"
+  ],
+  "links": [
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.mozilla.org/media/img/favicons/mozilla/apple-touch-icon.05aa000f6748.png",
+    "sizes": "180x180",
+    "type": "image/png"
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.mozilla.org/media/img/favicons/mozilla/favicon-196x196.e143075360ea.png",
+    "sizes": "196x196",
+    "type": "image/png"
+   },
+   {
+    "rel": "shortcut icon",
+    "href": "https://www.mozilla.org/media/img/favicons/mozilla/favicon.d0be64e474b1.ico",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://www.mozilla.org/media/img/favicons/mozilla/apple-touch-icon.05aa000f6748.png": {
+    "type": "image/png",
+    "w": 180,
+    "h": 180
+   },
+   "https://www.mozilla.org/media/img/favicons/mozilla/favicon-196x196.e143075360ea.png": {
+    "type": "image/png",
+    "w": 196,
+    "h": 196
+   },
+   "https://www.mozilla.org/media/img/favicons/mozilla/favicon.d0be64e474b1.ico": {
+    "type": "image/vnd.microsoft.icon",
+    "w": 64,
+    "h": 64
+   }
+  }
+ },
+ {
+  "site": "www.amazon.com",
+  "page": "https://www.amazon.com/",
+  "announced": [
+   "https://www.amazon.com/favicon.ico"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://www.amazon.com/favicon.ico",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://www.amazon.com/favicon.ico": {
+    "type": "image/x-icon",
+    "w": 48,
+    "h": 48
+   }
+  }
+ },
+ {
+  "site": "www.linkedin.com",
+  "page": "https://www.linkedin.com/",
+  "announced": [
+   "https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca": {
+    "type": "image/x-icon",
+    "w": 64,
+    "h": 64
+   }
+  }
+ },
+ {
+  "site": "stackoverflow.com",
+  "page": "https://stackoverflow.com/questions",
+  "announced": [
+   "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.ico?v=562fb39d93c8",
+   "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.svg?v=916c1b91e14c"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.ico?v=562fb39d93c8",
+    "sizes": "32x32",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.svg?v=916c1b91e14c",
+    "sizes": "",
+    "type": "image/svg+xml"
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://stackoverflow.com/Content/Sites/stackoverflow/Img/apple-touch-icon.png?v=9168b8ec82a5",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.ico?v=562fb39d93c8": {
+    "type": "image/x-icon",
+    "w": 48,
+    "h": 48
+   },
+   "https://stackoverflow.com/Content/Sites/stackoverflow/Img/favicon.svg?v=916c1b91e14c": {
+    "type": "image/svg+xml",
+    "w": 72,
+    "h": 72
+   },
+   "https://stackoverflow.com/Content/Sites/stackoverflow/Img/apple-touch-icon.png?v=9168b8ec82a5": {
+    "type": "image/png",
+    "w": 180,
+    "h": 180
+   }
+  }
+ },
+ {
+  "site": "www.netflix.com",
+  "page": "https://www.netflix.com/lb-en/",
+  "announced": [
+   "https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2023.ico"
+  ],
+  "links": [
+   {
+    "rel": "shortcut icon",
+    "href": "https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2023.ico",
+    "sizes": "",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.png",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2023.ico": {
+    "type": "image/x-icon",
+    "w": 48,
+    "h": 48
+   },
+   "https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.png": {
+    "type": "image/png",
+    "w": 64,
+    "h": 64
+   }
+  }
+ },
+ {
+  "site": "www.reddit.com",
+  "page": "https://www.reddit.com/?solution=6a585493d0f6d95b6a585493d0f6d95b&js_challenge=1&jsc_token=2824be10929bdc604753c70a67a1c331da157ce9ff45183bd899380c406b2819&jsc_orig_r=",
+  "announced": [
+   "https://www.redditstatic.com/shreddit/assets/favicon/128x128.png",
+   "https://www.redditstatic.com/shreddit/assets/favicon/192x192.png",
+   "https://www.redditstatic.com/shreddit/assets/favicon/64x64.png"
+  ],
+  "links": [
+   {
+    "rel": "icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/64x64.png",
+    "sizes": "64x64",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/128x128.png",
+    "sizes": "128x128",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/192x192.png",
+    "sizes": "192x192",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/76x76.png",
+    "sizes": "76x76",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/120x120.png",
+    "sizes": "120x120",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/152x152.png",
+    "sizes": "152x152",
+    "type": ""
+   },
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://www.redditstatic.com/shreddit/assets/favicon/180x180.png",
+    "sizes": "180x180",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://www.redditstatic.com/shreddit/assets/favicon/64x64.png": {
+    "type": "image/png",
+    "w": 64,
+    "h": 64
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/128x128.png": {
+    "type": "image/png",
+    "w": 128,
+    "h": 128
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/192x192.png": {
+    "type": "image/png",
+    "w": 192,
+    "h": 192
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/76x76.png": {
+    "type": "image/png",
+    "w": 76,
+    "h": 76
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/120x120.png": {
+    "type": "image/png",
+    "w": 120,
+    "h": 120
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/152x152.png": {
+    "type": "image/png",
+    "w": 152,
+    "h": 152
+   },
+   "https://www.redditstatic.com/shreddit/assets/favicon/180x180.png": {
+    "type": "image/png",
+    "w": 180,
+    "h": 180
+   }
+  }
+ },
+ {
+  "site": "en.wikipedia.org",
+  "page": "https://en.wikipedia.org/wiki/Main_Page",
+  "announced": [
+   "https://en.wikipedia.org/static/favicon/wikipedia.ico"
+  ],
+  "links": [
+   {
+    "rel": "apple-touch-icon",
+    "href": "https://en.wikipedia.org/static/apple-touch/wikipedia.png",
+    "sizes": "",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+    "sizes": "",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://en.wikipedia.org/static/apple-touch/wikipedia.png": {
+    "type": "image/png",
+    "w": 160,
+    "h": 160
+   },
+   "https://en.wikipedia.org/static/favicon/wikipedia.ico": {
+    "type": "image/vnd.microsoft.icon",
+    "w": 48,
+    "h": 48
+   }
+  }
+ },
+ {
+  "site": "github.com",
+  "page": "https://github.com/",
+  "announced": [
+   "https://github.githubassets.com/favicons/favicon.png",
+   "https://github.githubassets.com/favicons/favicon.svg"
+  ],
+  "links": [
+   {
+    "rel": "alternate icon",
+    "href": "https://github.githubassets.com/favicons/favicon.png",
+    "sizes": "",
+    "type": "image/png"
+   },
+   {
+    "rel": "icon",
+    "href": "https://github.githubassets.com/favicons/favicon.svg",
+    "sizes": "",
+    "type": "image/svg+xml"
+   }
+  ],
+  "files": {
+   "https://github.githubassets.com/favicons/favicon.png": {
+    "type": "image/png",
+    "w": 32,
+    "h": 32
+   },
+   "https://github.githubassets.com/favicons/favicon.svg": {
+    "type": "image/svg+xml",
+    "w": 32,
+    "h": 32
+   }
+  }
+ },
+ {
+  "site": "accounts.google.com",
+  "page": "https://accounts.google.com/v3/signin/identifier?continue=https://mail.google.com/mail/u/0/&emr=1&followup=https://mail.google.com/mail/u/0/&osid=1&passive=1209600&service=mail&flowName=GlifWebSignIn&flowEntry=ServiceLogin&dsh=S370687475:1793924945239598",
+  "announced": [
+   "https://accounts.google.com/favicon.ico"
+  ],
+  "links": [],
+  "files": {
+   "https://accounts.google.com/favicon.ico": {
+    "type": "image/x-icon",
+    "w": 32,
+    "h": 32
+   }
+  }
+ },
+ {
+  "site": "www.youtube.com",
+  "page": "https://www.youtube.com/",
+  "announced": [
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon.ico",
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_144x144.png",
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_32x32.png",
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_48x48.png",
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_96x96.png"
+  ],
+  "links": [
+   {
+    "rel": "shortcut icon",
+    "href": "https://www.youtube.com/s/desktop/92ead095/img/favicon.ico",
+    "sizes": "",
+    "type": "image/x-icon"
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.youtube.com/s/desktop/92ead095/img/favicon_32x32.png",
+    "sizes": "32x32",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.youtube.com/s/desktop/92ead095/img/favicon_48x48.png",
+    "sizes": "48x48",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.youtube.com/s/desktop/92ead095/img/favicon_96x96.png",
+    "sizes": "96x96",
+    "type": ""
+   },
+   {
+    "rel": "icon",
+    "href": "https://www.youtube.com/s/desktop/92ead095/img/favicon_144x144.png",
+    "sizes": "144x144",
+    "type": ""
+   }
+  ],
+  "files": {
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon.ico": {
+    "type": "image/x-icon",
+    "w": 48,
+    "h": 48
+   },
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_32x32.png": {
+    "type": "image/png",
+    "w": 32,
+    "h": 32
+   },
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_48x48.png": {
+    "type": "image/png",
+    "w": 48,
+    "h": 48
+   },
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_96x96.png": {
+    "type": "image/png",
+    "w": 96,
+    "h": 96
+   },
+   "https://www.youtube.com/s/desktop/92ead095/img/favicon_144x144.png": {
+    "type": "image/png",
+    "w": 144,
+    "h": 144
+   }
+  }
+ }
+]

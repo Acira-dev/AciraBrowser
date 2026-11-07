@@ -29,9 +29,10 @@ test('Mac: a downloaded update waiting for Install now is not checked for again,
 test('Mac: the scheduled checks skip a waiting update too',async t=>{
  const native=squirrel(),runs=[];
  const updater=mac(folder(t),native,{schedule:fn=>{runs.push(fn);return null;},every:fn=>{runs.push(fn);return null;}});
- updater.start();assert.equal(runs.length,2,'the first check and the 8-hour loop');
+ updater.start();assert.equal(runs.length,1,'the first check; the regular round is armed once that has run');
  runs[0]();await new Promise(resolve=>setImmediate(resolve));assert.equal(updater.status().status,'ready');
- runs[1]();runs[1]();await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(runs.length>=2,'now the regular round is waiting (every answer re-arms it)');
+ runs.at(-1)();runs.at(-1)();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(native.checks,1);assert.equal(updater.status().status,'ready');
 });
 

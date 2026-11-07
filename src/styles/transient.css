@@ -285,11 +285,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   :root:root:root :is(.t-place, .t-slot .t-toast > *) {
-    transition-duration: 100ms;
+    transition-duration: 0ms;
   }
 }
 :root:root:root .app[data-reduced-motion='true'] :is(.t-place, .t-slot .t-toast > *) {
-  transition-duration: 100ms;
+  transition-duration: 0ms;
 }
 /* Reduced motion: the glyph and the × swap at once, with no scale. */
 @media (prefers-reduced-motion: reduce) {
@@ -331,7 +331,7 @@
   from { opacity: 0; transform: translateY(100%); }
 }
 :root:root:root .app[data-reduced-motion='true'] .t-solo > .t-toast {
-  animation-duration: 100ms;
+  animation-duration: 0ms;
 }
 @media (prefers-reduced-motion: reduce) {
   :root:root:root .t-solo > .t-toast { animation: none; }
@@ -463,10 +463,10 @@
   to { opacity: 1; transform: translate(-50%, -50%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  :root:root:root .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 100ms; }
+  :root:root:root .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 0ms; }
 }
 :root:root:root .app[data-reduced-motion='true'] ~ .t-tip,
-:root:root:root body:has(.app[data-reduced-motion='true']) .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 100ms; }
+:root:root:root body:has(.app[data-reduced-motion='true']) .t-tip { --tip-from: translate(-50%, -50%); animation-duration: 0ms; }
 
 /* ── Mode and appearance switches (sharedMotion startModeTransition): one crossfade of the whole frame, and every
    element with a view-transition-name glides to its new place, 240ms expo-out. ── */

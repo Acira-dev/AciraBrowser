@@ -10,6 +10,15 @@ test('legacy layout combinations migrate to one effective choice without losing 
   const closed=reduceBrowser(restored,{type:'ui.update',patch:{workspaceOpen:false,webWorkspaceOpen:false}});assert.equal(closed.windowUi.workspaceOpen,false);
  }
 });
+test('Open new tabs in front is a boolean setting, off by default, and an old save gets the default',()=>{
+ const {validateAction}=require('../desktop/validation.cjs'),s=createInitialState();
+ assert.equal(s.settings.openTabsInFront,false);
+ for(const value of [true,false])assert.doesNotThrow(()=>validateAction({type:'settings.update',patch:{openTabsInFront:value}},s));
+ for(const value of [1,'yes',null,{}])assert.throws(()=>validateAction({type:'settings.update',patch:{openTabsInFront:value}},s),/openTabsInFront/);
+ assert.equal(reduceBrowser(s,{type:'settings.update',patch:{openTabsInFront:true}}).settings.openTabsInFront,true);
+ const old=createInitialState();delete old.settings.openTabsInFront;old.windowUi.workspaceOpen=false;old.windowUi.webWorkspaceOpen=false;
+ assert.equal(restoreSnapshot(old).settings.openTabsInFront,false,'a save from before the setting reads as off');
+});
 test('custom material settings are bounded at the native boundary and recover safely from invalid storage',()=>{
  const {validateAction,validateLayout}=require('../desktop/validation.cjs'),s=createInitialState();
  for(const value of [39,101,NaN,Infinity,'70'])assert.throws(()=>validateAction({type:'settings.update',patch:{glassOpacity:value}},s));

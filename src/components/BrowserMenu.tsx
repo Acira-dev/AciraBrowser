@@ -14,7 +14,7 @@ import type { BrowserAction,TabSession } from '../runtime/types';
 import '../styles/submenu.css';import './Segmented.css';import '../styles/menu-layout.css';
 import type { WindowView } from '../runtime/windowView';import { windowViewName } from '../ui/windowViewText';import { shortcutFor } from '../ui/shortcutKeys';
 import { t } from '../i18n';
-import { LockKeyhole } from './AppIcons';
+import { LockKeyhole, PanelsTopLeft } from './AppIcons';
 import { restartToUpdate,useUpdateReady } from '../features/updates/useUpdateReady';
 /** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter.
  * Its glyph says the state with the switch (founder after beta.7: both rows were shields, and on or off should show): the sparkles
@@ -57,7 +57,7 @@ export interface MenuParts {
   torCircuit?:()=>void;torCircuitKey?:string;
   /** R4-16 + R4-19: the Layout rows (View: Full · Compact · Seamless, Tabs: Top · Sidebar), applied live to the same settings as
    * Settings › Window view and Make it yours. Absent (tests, the preview) means no rows. */
-  view?:WindowView;setView?:(view:WindowView)=>void;sidebarTabs?:boolean;setSidebarTabs?:(side:boolean)=>void;
+  view?:WindowView;setView?:(view:WindowView)=>void;sidebarTabs?:boolean;setSidebarTabs?:(side:boolean)=>void;/** Sidebar mode: tabs and the address bar in the sidebar (ui/sidebarMode.ts). */sidebarMode?:boolean;setSidebarMode?:(on:boolean)=>void;
   /** "Report a problem…" under Settings: the menu turns into the report form (about this site or about Acira). Absent while this build
    * cannot send reports, and in Tor (App.tsx reportSubjects); the menu is then as before. */
   report?:()=>void;
@@ -111,11 +111,12 @@ export function MenuSegment<T extends string>({label,value,options}:{label:strin
   </div>;
 }
 /** R4-16 + R4-19: two short rows in the page group, no divider of their own; the menu stays open so the change is seen. */
-function LayoutRows({view,setView,sidebarTabs,setSidebarTabs}:Required<Pick<MenuParts,'setView'|'setSidebarTabs'>>&{view?:WindowView;sidebarTabs:boolean}){
+function LayoutRows({view,setView,sidebarTabs,setSidebarTabs,sidebarMode,setSidebarMode}:Required<Pick<MenuParts,'setView'|'setSidebarTabs'>>&{view?:WindowView;sidebarTabs:boolean;sidebarMode:boolean;setSidebarMode?:(on:boolean)=>void}){
   const tip=(mode:(typeof menuLayoutViews)[number])=>{const [id,written]=viewShortcut[mode],key=shortcutFor(id,written||undefined);return key?`${windowViewName(mode)} · ${key}`:windowViewName(mode);};
   return <div className="menu-layout" role="group" aria-label={`${t("browsermenu.view")} · ${t("yours.tabs")}`}>
     <div className="menu-layout-row"><span>{t("browsermenu.view")}</span><MenuSegment label={t("browsermenu.view")} value={view} options={menuLayoutViews.map(mode=>({id:mode,tip:tip(mode),Icon:viewGlyph[mode],choose:()=>setView(mode)}))}/></div>
     <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={sidebarTabs?'side':'top'} options={[{id:'top',text:t("browsermenu.tabsTop"),tip:t("yours.tabsTop"),Icon:TabsTopGlyph,choose:()=>setSidebarTabs(false)},{id:'side',text:t("browsermenu.tabsSidebar"),tip:t("yours.tabsSide"),Icon:PanelLeft,choose:()=>setSidebarTabs(true)}] as const}/></div>
+    {setSidebarMode&&<MenuToggle icon={PanelsTopLeft} label={t("sidebarmode.title")} on={sidebarMode} onToggle={()=>setSidebarMode(!sidebarMode)}/>}
   </div>;
 }
 /** Where the Layout rows sit: after Split view (or Zoom, or Find) in the person's main list; nowhere when the page group is gone. */
@@ -129,7 +130,7 @@ export function BrowserMenu({layout=defaultMenuLayout,torActive=false,torIdentit
   const nodes=menuNodes(parts),row=parts.row;
   // R3-61: the identity row sits with the new-window group (after New Tor window); with that row moved or hidden it closes the list. Popup height counts it in a Tor context (popup.ts).
   const identity=torActive&&torIdentity&&row(t("tornewtab.newTorIdentity"),TorIdentityGlyph,torIdentity,'Ctrl Shift U'),circuit=identity&&torCircuit&&row(t("tor.circuit.new"),TorCircuitGlyph,torCircuit,torCircuitKey),torRows=identity&&<>{identity}{circuit}</>;
-  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setSidebarTabs?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} sidebarTabs={!!parts.sidebarTabs} setSidebarTabs={parts.setSidebarTabs}/>}:undefined;
+  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setSidebarTabs?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} sidebarTabs={!!parts.sidebarTabs} setSidebarTabs={parts.setSidebarTabs} sidebarMode={!!parts.sidebarMode} setSidebarMode={parts.setSidebarMode}/>}:undefined;
   return <>
     {import.meta.env.DEV&&<><div className="menu-preview-label">{t('menu.localPreview')}</div><button type="button" className="menu-row" onClick={()=>{const channel=new BroadcastChannel('acira-live-preview');channel.postMessage('refresh');channel.close();}}><UpdateGlyph size={16}/><span>{t('menu.refreshPreview')}</span></button><hr/></>}
     <UpdateRow row={row}/>

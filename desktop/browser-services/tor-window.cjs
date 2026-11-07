@@ -193,7 +193,7 @@ function publicStatus(status){return {state:status.state,progress:status.progres
  bridges:status.bridges?{type:status.bridges.type,count:status.bridges.count}:null,blocked:status.blocked?{phase:status.blocked.phase,progress:status.blocked.progress,offline:Boolean(status.blocked.offline),bridges:status.blocked.bridges||null}:null};}
 
 function createTorWindows({app,contentBlocking,userData,vault=null,engine=null,log=message=>console.warn(message),allContents=()=>require('electron').webContents.getAllWebContents(),contentsOf=session=>allContents().filter(wc=>wc.session===session),webContentsFromId=id=>{try{return require('electron').webContents.fromId(id)||null;}catch{return null;}}}={}){
- const updater=engine?null:createTorUpdater({userData,log,fetcher:(url,init)=>tor.fetch(url,init)}),tor=engine||createTorEngine({userData,log,updated:()=>updater.updated()});
+ const updater=engine?null:createTorUpdater({userData,log,fetcher:(url,init)=>tor.fetch(url,init),ready:()=>tor.whenReady()}),tor=engine||createTorEngine({userData,log,updated:()=>updater.updated()});
  const windows=new Map();
  // The onion address each Tor page's latest main-frame response offered (webContents id -> {url, onion}); it counts only while the page still shows that address.
  const onionHints=new Map();

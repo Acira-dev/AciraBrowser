@@ -363,3 +363,8 @@
 .pm-suggest .st-copy .pm-problem {
   margin-top: 2px;
 }
+
+/* The choice inside the add form: its label over the segmented control, like the colours above it. */
+.pm-create .pm-open {
+  display: grid;
+}

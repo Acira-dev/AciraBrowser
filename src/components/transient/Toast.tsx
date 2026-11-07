@@ -110,9 +110,10 @@ export function toastMotion(reducedMotion?: boolean) {
   const fade = (id: MotionTokenId) => ({ duration: motionTokens[id][1] * classScale(speed, 'E'), ease: 'easeOut' as const });
   const instant = !enterSpec || !exitSpec || !stackSpec;
   return {
-    enter: instant ? { spring: false, transition: { duration: .1 } } : { spring: true, transition: { type: 'spring' as const, duration: enterSpec.duration, bounce: enterSpec.bounce, opacity: fade('materialize') } },
-    exit: instant ? { spring: false, transition: { duration: .1 } } : { spring: true, transition: { type: 'spring' as const, duration: exitSpec.duration, bounce: 0, opacity: fade('menu.fade') } },
-    move: instant ? { duration: 100, easing: 'linear' } : springEasing(stackSpec, 1),
+    // None (Reduce motion): the card is there and gone at once, no fade (it was 100ms until 6 Nov).
+    enter: instant ? { spring: false, transition: { duration: 0 } } : { spring: true, transition: { type: 'spring' as const, duration: enterSpec.duration, bounce: enterSpec.bounce, opacity: fade('materialize') } },
+    exit: instant ? { spring: false, transition: { duration: 0 } } : { spring: true, transition: { type: 'spring' as const, duration: exitSpec.duration, bounce: 0, opacity: fade('menu.fade') } },
+    move: instant ? { duration: 0, easing: 'linear' } : springEasing(stackSpec, 1),
   };
 }
 /** How long a host must keep a leaving toast's room (bounds, overlay) so the exit is never cut off: the exit spring's

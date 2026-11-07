@@ -200,4 +200,16 @@ function passwordSavingOffByExtension(profileId){
 /** For tests. */
 function reset(){stores.clear();for(const key of Object.keys(providers))delete providers[key];}
 
-module.exports={createStore,forProfile,existing,registerHost,unregisterHost,hostFor,proxyOverride,userProxyConfig,webRtcPolicy,passwordSavingOffByExtension,provide,fact,reset,SCOPES,WEBRTC_ORDER};
+/** What the extensions allowed in private hold in the ordinary profile's store (their proxy and privacy settings), copied ONE WAY into a private session's own store before
+ *  it starts, as a private window inherits the regular settings in Chrome. Only those extensions' values; nothing the private session sets goes back. */
+function seedPrivateStore({userData,fromKey,toUserData,toKey,extensionIds=[]}){
+ try{
+  const raw=JSON.parse(fs.readFileSync(fileFor(userData,fromKey),'utf8'));if(!raw||raw.version!==1)return false;
+  const keep=new Set(extensionIds),object=value=>(value&&typeof value==='object'&&!Array.isArray(value)?value:{});
+  const pick=source=>Object.fromEntries(Object.entries(object(source)).filter(([id])=>keep.has(id)));
+  const prefs={};for(const [setting,perExtension] of Object.entries(object(raw.prefs))){const chosen=pick(perExtension);if(Object.keys(chosen).length)prefs[setting]=chosen;}
+  const file=fileFor(toUserData,toKey);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({version:1,installed:pick(raw.installed),names:pick(raw.names),prefs}));return true;
+ }catch{return false;}
+}
+
+module.exports={seedPrivateStore,fileFor,createStore,forProfile,existing,registerHost,unregisterHost,hostFor,proxyOverride,userProxyConfig,webRtcPolicy,passwordSavingOffByExtension,provide,fact,reset,SCOPES,WEBRTC_ORDER};

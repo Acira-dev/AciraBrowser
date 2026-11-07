@@ -1,0 +1,41 @@
+/* Sidebar mode's morph (ui/sidebarMorph.ts plays it, ui/sidebarMorphPlan.ts is the choreography).
+   Two attributes on the root, set by the engine and nothing else:
+   - data-sm-pin: while the layout is switched and measured. The header, the toolbar and the bookmarks row take the place React gives them at once (their motion
+     elements glide to it by script on the next frame, which would leave the first read at the old place), and nothing that animates by CSS may start from the old one.
+   - data-sm-morph: while the morph plays. The browser's own layout is walked from the old numbers to the new ones by the engine (--sm-*), element by element,
+     each on the element that reads it (registered below, so a number written on one element is not inherited by the whole window).
+   The ghost (a copy of the old chrome, its own `.app` marked data-sm-ghost) is never touched by these rules: the engine moves it by inline style. */
+@property --sm-col { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-hdr { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-mt { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-mr { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-mb { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-ml { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-rad { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-ring { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-rail-x { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-rail-w { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-aw { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-ah { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --sm-addr-left { syntax: '<number>'; inherits: false; initial-value: 0; }
+
+/* ---- pinned (switching and measuring, and for the whole morph) ---- */
+:root:root:root[data-sm-pin] .app:not([data-sm-ghost]) { transition: none !important; }
+:root:root:root[data-sm-pin] .app:not([data-sm-ghost]) .ed-rail { transition: none !important; }
+:root:root:root[data-sm-pin] .app:not([data-sm-ghost]) .browser-root > .browser-shell { height: var(--sm-final-hdr) !important; }
+:root:root:root[data-sm-pin] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .acira-persistent-toolbar,
+:root:root:root[data-sm-pin] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .acira-bookmarks-row { transform: translateY(var(--sm-final-y, 0px)) !important; }
+
+/* ---- playing ---- */
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) { --navigation-width: calc(var(--sm-col) * 1px) !important; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root > .browser-shell { height: calc(var(--sm-hdr) * 1px) !important; overflow: visible !important; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .acira-bookmarks-row { transform: translateY(calc(var(--sm-hdr) * 1px - var(--sm-bar-h, 0px))) !important; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root .browser-body > .page-area {
+  margin: calc(var(--sm-mt) * 1px) calc(var(--sm-mr) * 1px) calc(var(--sm-mb) * 1px) calc(var(--sm-ml) * 1px) !important;
+  border-radius: calc(var(--sm-rad) * 1px) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sm-ring-color, rgb(0 0 0 / .08)) calc(var(--sm-ring) * 100%), transparent) !important;
+}
+:root:root:root[data-sm-morph][data-sm-rail] .app:not([data-sm-ghost]) > .ed-rail { width: calc(var(--sm-rail-w) * 1px) !important; justify-self: start; translate: calc(var(--sm-rail-x) * 1px) 0; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root.addr-side > .browser-shell > .acira-persistent-toolbar { left: calc(var(--sm-addr-left) * 1px) !important; }
+/* The address field is one element: its box (position by translate, size here) is walked by the engine, its text and icons stay as they are. */
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .acira-persistent-toolbar > .address-bar[data-sm-size] { width: calc(var(--sm-aw) * 1px) !important; min-width: 0 !important; max-width: none !important; flex: none !important; justify-self: start; }

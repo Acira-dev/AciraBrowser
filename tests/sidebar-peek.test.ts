@@ -6,6 +6,7 @@ import { createInitialState, reduceBrowser, restoreSnapshot } from '../src/runti
 import { SIDEBAR_PEEK_DEFAULT, sidebarPeekDefaults, sidebarPeekOf } from '../src/runtime/windowView';
 import { sidebarControl } from '../src/ui/layoutMode';
 import core from '../src/features/settings/entries/core';
+import sidebarEntries from '../src/features/settings/entries/sidebar';
 import { searchSettings } from '../src/features/settings/search';
 import type { SettingsContext } from '../src/features/settings/model';
 const require = createRequire(import.meta.url);
@@ -59,16 +60,19 @@ test('the keyboard is unaffected: opening and closing the sidebar works the same
   assert.equal(sidebarControl(s).open, true);
 });
 
-test('Settings: the row sits under Window view for Full, Compact and Focus (Seamless keeps its own two), and search finds it', () => {
-  const source = readFileSync(new URL('../src/features/BrowserSettings.tsx', import.meta.url), 'utf8');
-  const row = source.indexOf('id="sidebar-peek"'), view = source.indexOf('id="window-view"'), seamless = source.indexOf('id="seamless-edge-top"');
-  assert.ok(row > view && row < seamless, 'right after the Window view cards');
-  assert.match(source.slice(row - 200, row), /windowView !== "seamless" && tabLayout === "sidebar"/, 'only for the selected view, and only with tabs in the sidebar');
-  assert.match(source.slice(row, row + 400), /sidebarPeekOf\(s\)\[windowView\]/, 'it reads and writes the selected view\'s switch');
-  const context: SettingsContext = { customGlassColors: true, privateProfile: false, desktop: true, websiteOpen: true, appearanceChanged: true, toolbarChanged: true, newTabChanged: true };
-  const entry = core.find((item) => item.id === 'sidebar-peek');
+test('Settings: the row is in Tabs › Sidebar and, for Full, Compact and Focus, under Window view (Seamless keeps its own two), and search finds it', () => {
+  const rows = readFileSync(new URL('../src/features/settings/SidebarRows.tsx', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../src/features/BrowserSettings.tsx', import.meta.url), 'utf8');
+  const row = rows.indexOf('id="sidebar-peek"');
+  assert.ok(row > 0, 'the shared sidebar rows draw it');
+  assert.match(rows.slice(row - 500, row), /if \(!s\.verticalTabs\) return null;[\s\S]*if \(windowView !== 'seamless' && sidebarModeOn\(s\)\) return null;\s*if \(windowView !== 'seamless'\)/, 'only with tabs in the sidebar, not in Seamless, and not in Sidebar mode (a closed sidebar always comes back from the edge there)');
+  assert.match(rows.slice(row, row + 400), /sidebarPeekOf\(s\)\[windowView\]/, 'it reads and writes the selected view\'s switch');
+  const view = settings.indexOf('id="window-view"'), edge = settings.indexOf('{windowView !== "seamless" && <SidebarEdgeRows');
+  assert.ok(view > 0 && edge > view, 'Appearance › Layout keeps it right after the Window view cards');
+  const context: SettingsContext = { customGlassColors: true, privateProfile: false, desktop: true, websiteOpen: true, appearanceChanged: true, toolbarChanged: true, newTabChanged: true, verticalTabs: true };
+  const all = [...core, ...sidebarEntries], entry = all.find((item) => item.id === 'sidebar-peek');
   assert.equal(entry?.title, 'Show the closed sidebar at the left edge');
-  assert.equal(entry?.section, 'Appearance'); assert.equal(entry?.group, 'Layout');
+  assert.equal(entry?.section, 'Tabs'); assert.equal(entry?.group, 'Sidebar');
   for (const query of ['closed sidebar', 'sidebar opens by itself', 'peek sidebar', 'left edge'])
-    assert.ok(searchSettings(core, query, context).slice(0, 3).some((hit) => hit.entry.id === 'sidebar-peek'), query);
+    assert.ok(searchSettings(all, query, context).slice(0, 3).some((hit) => hit.entry.id === 'sidebar-peek'), query);
 });

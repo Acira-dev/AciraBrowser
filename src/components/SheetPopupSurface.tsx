@@ -37,8 +37,8 @@ function BackdropSources({videos}:{videos:BackdropVideo[]}) {
 
 // Frequent popups (right-click menus, palette, Ctrl+Tab, suggestions, find, zoom) and keyboard-opened ones skip the haze,
 // never the motion (founder rule: quick but beautiful, never zero): the glass settles in 110ms from the input frame and the
-// rows run the short cascade (below). Reduced motion is a plain fade; closes finish within the native retirement budget.
-const quickOpenMs=110,reducedOpenMs=90,closeMs=130;
+// rows run the short cascade (below). Reduced motion (Animation speed None) is a cut, no fade; closes finish within the native retirement budget.
+const quickOpenMs=110,reducedOpenMs=0,closeMs=130;   // None (Reduce motion) opens at once: 0 (it was a 90ms fade until 6 Nov)
 // R4-17: the tab viewer (Alt+T or its toolbar button) keeps a visible formation at every speed except Off (Premium ≈325 /
 // 240 ms perceptual, Fast ≈0.6× of that); the glass is dense from the input frame. Founder, 27 Oct ("let it open from center
 // outwards"; tabViewerMotion.ts): no aperture and no top-down cascade any more. The plane scales up from 96% around the
@@ -221,7 +221,7 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
     const viewerSpring=tabViewer?tabViewerSpring(!inactive):null;
     const duration=tabViewer?viewerSpring?.duration??reducedOpenMs:(inactive?(keyed||sceneKey.endsWith(':toast')?0:closeMs):reduced?reducedOpenMs:quick?quickOpenMs:centered?formationDialogMs:formationOpenMs)*(reduced?1:stretch);
     // The signature open (cascade, above): the glass is on screen from the input frame (.7, scale .985, its frost
-    // thickening out of the mist) and the rows form on their own clock; reduced motion is a plain fade from 0.
+    // thickening out of the mist) and the rows form on their own clock; reduced motion is a cut (a zero-length plan paints its last frame at once).
     // Keyboard, 100x/day and centred panels (Alt+T) open dense: dark from their first frame in dark, never a grey plate.
     const glassFloor=quick||centered&&!inactive?1:0;
     const signature=!inactive&&!switching&&!reversing&&!reduced&&!sceneKey.endsWith(':toast');

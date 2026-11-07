@@ -2,7 +2,7 @@
 // Recover CSS minimum/intrinsic dimensions when native preferred size reports an
 // initial tiny viewport. Only public PopupView/BrowserWindow/WebContents APIs.
 function fitExtensionAction(popup){
- const window=popup?.browserWindow,wc=window?.webContents;if(!window||!wc)return()=>{};
+ const window=popup?.browserWindow,wc=popup?.webContents||window?.webContents;if(!window||!wc)return()=>{};
  const timers=new Set();let disposed=false,busy=false,queued=false;
  const sameExtension=()=>{try{const u=new URL(wc.getURL());return u.protocol==='chrome-extension:'&&u.hostname===popup.extensionId;}catch{return false;}};
  async function measure(){if(disposed||busy||window.isDestroyed()||wc.isDestroyed()||!sameExtension())return;busy=true;

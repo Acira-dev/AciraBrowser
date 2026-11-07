@@ -3,6 +3,9 @@
 // isolates the profile/cache even after Squirrel relaunches without launch env.
 //   node qa/mac-update-delivery.mjs <old Acira Browser.app> <next build receipt.json>   the new build is a real build (its mac-widevine-package.json)
 //   node qa/mac-update-delivery.mjs <old Acira Browser.app> --next-version 0.1.0-beta.7 the new build is the old one with its version raised (to rehearse before a build exists)
+//   ... --primary 503|404|html|garbage|hang|refused   beta.11 and later ask a first address and fall back to a second (desktop/browser-services/update-feeds.cjs): the first is made to fail this way and the
+//                                 signed copy must still find, download and install the update from the second (the rig's feed). Default ok: the first address answers.
+//   ... --from-receipt <old build's mac-widevine-package.json>   with the next build's receipt, result.json records both update ZIPs' SHA-512 (scripts/rehearsal-receipt.mjs turns it into the receipt release-publish asks for)
 //   ... --app-code <candidate>    both copies run a committed candidate's desktop/ and dist/ (node scripts/release-build-mac-head.mjs qa/artifacts/release-committed-x)
 //                                 inside the signed build, so a change to the update flow can be rehearsed before a signed build of it exists (report.appCode names the commit)
 // Evidence: result.json also carries what the app did while it quit (quitTrace: app and native updater events, from the copy's own process) and what
@@ -13,6 +16,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -29,6 +33,7 @@ const asar=require('@electron/asar');
 async function packageInfo(bundle){const plain=path.join(bundle,'Contents/Resources/app/package.json');try{return JSON.parse(await fs.readFile(plain,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;asar.uncacheAll();return JSON.parse(asar.extractFile(path.join(bundle,'Contents/Resources/app.asar'),'package.json').toString());}}
 async function expandedApp(bundle,output){const plain=path.join(bundle,'Contents/Resources/app');if(await fs.stat(plain).then(s=>s.isDirectory(),()=>false))return plain;await fs.mkdir(output,{recursive:true});asar.uncacheAll();asar.extractAll(path.join(bundle,'Contents/Resources/app.asar'),output);return output;}
 const from=(await packageInfo(given)).version;
+async function updateZipSha512(at){if(at<0)return null;try{return JSON.parse(await fs.readFile(path.resolve(process.argv[at+1]),'utf8')).updateZip?.sha512||null;}catch{return null;}} // a build's mac-widevine-package.json
 const SCALE=Number(process.env.MAC_UPDATE_TIMEOUT_SCALE||1); // a busy Mac starts the signed copies slowly
 const id=String(Date.now()),root=path.resolve(process.env.MAC_UPDATE_ROOT||path.join('.qa-profiles','mac-update-'+id)),profile=path.join(root,'profile'),feed=path.join(root,'feed'),installed=path.join(path.resolve(process.env.MAC_UPDATE_APPS||root),'Applications-'+id+'/Acira Browser.app'),payload=path.join(root,'payload/Acira Browser.app'),out=path.resolve(process.env.MAC_UPDATE_OUT||'qa/artifacts/mac-update-'+id);
 await Promise.all([fs.mkdir(profile,{recursive:true}),fs.mkdir(feed,{recursive:true}),fs.mkdir(out,{recursive:true})]);
@@ -69,12 +74,22 @@ const next=raise>=0?await raised(process.argv[raise+1]):JSON.parse(await fs.read
 const requests=[],report={appCode:code?{commit:code.commit,candidate:code.candidate}:'the signed build\'s own',passed:false,scope:'Real native updater with isolated signed QA identity/profile bootstrap; application code the signed build\'s own unless appCode names a committed candidate, no mock updater, no public feed changes. Local update test does not qualify notarization or downloaded-file Gatekeeper.',from,to:next.version,commit:next.commit,root,checks:[],requests};let browser,cdp,restoredPage,manual;
 const fixture=await httpFixture(async(req,res)=>{requests.push(req.url);try{const name=decodeURIComponent(new URL(req.url,'http://127.0.0.1').pathname).slice(1);assert(name&&path.basename(name)===name);const file=path.join(feed,name),stat=await fs.stat(file);res.setHeader('Content-Length',stat.size);res.setHeader('Content-Type',name.endsWith('.zip')?'application/zip':'application/yaml');createReadStream(file).pipe(res);}catch{res.writeHead(404);res.end();}});
 const base='http://127.0.0.1:'+fixture.port+'/';
+// The first address, when a failure mode is asked for: a scripted server (or a closed port), with the rig's own feed as the fallback address.
+const primaryAt=process.argv.indexOf('--primary'),primaryMode=primaryAt>=0?process.argv[primaryAt+1]:'ok';
+assert(['ok','503','404','html','garbage','hang','refused'].includes(primaryMode),'--primary is ok, 503, 404, html, garbage, hang or refused.');
+let primaryServer=null,primaryBase=base;const primaryHits=[];
+if(primaryMode!=='ok'){
+ primaryServer=http.createServer((req,res)=>{primaryHits.push(req.url);if(primaryMode==='hang')return;if(primaryMode==='503'||primaryMode==='404'){res.statusCode=Number(primaryMode);return res.end('no');}res.setHeader('content-type','text/plain');res.end(primaryMode==='html'?'<!doctype html><title>Site not found</title>':':\n  - [unclosed');});
+ await new Promise(resolve=>primaryServer.listen(0,'127.0.0.1',resolve));primaryBase='http://127.0.0.1:'+primaryServer.address().port+'/';
+ if(primaryMode==='refused'){await new Promise(resolve=>primaryServer.close(resolve));primaryServer=null;} // the port is closed: connection refused
+}
+const feedEnv=primaryMode==='ok'?'':`\nprocess.env.ACIRA_UPDATE_FEED_FALLBACK=${JSON.stringify(base)};\nprocess.env.ACIRA_UPDATE_TEST_PRIMARY_WITHIN_MS='3000';`;
 const executable=()=>path.join(installed,'Contents/MacOS/AciraBrowser');
 const check=async(name,fn)=>{await fn();report.checks.push(name);console.log('PASS '+name);};
 async function clone(source,target){
  await fs.mkdir(path.dirname(target),{recursive:true});await fs.cp(source,target,{recursive:true,verbatimSymlinks:true});
  const resources=path.join(target,'Contents/Resources/app'),archived=await fs.access(path.join(target,'Contents/Resources/app.asar')).then(()=>true,()=>false);if(archived)await expandedApp(target,resources);const pkgFile=path.join(resources,'package.json'),pkg=JSON.parse(await fs.readFile(pkgFile,'utf8'));pkg.main='qa-updater-entry.cjs';await fs.writeFile(pkgFile,JSON.stringify(pkg,null,2)+'\n');
- const entry=`'use strict';\nprocess.env.ACIRA_BROWSER_TEST_DATA=${JSON.stringify(profile)};\nprocess.env.ACIRA_BROWSER_TEST_HIDDEN='1';\nprocess.env.ACIRA_TEST_QUIET_NETWORK='1';\nprocess.env.ACIRA_UPDATE_TEST='1';\nprocess.env.ACIRA_UPDATE_FEED=${JSON.stringify(base)};\nrequire('node:os').homedir=()=>${JSON.stringify(path.join(root,'fixture-home'))};\nrequire('node:fs').mkdirSync(require('node:os').homedir(),{recursive:true});\nrequire('electron').app.commandLine.appendSwitch('remote-debugging-port','0');\nrequire('electron').app.commandLine.appendSwitch('use-mock-keychain');\nrequire('./desktop/main.cjs');\n{const trace=event=>{try{require('node:fs').appendFileSync(${JSON.stringify(trace)},JSON.stringify({event,at:Date.now(),pid:process.pid})+'\\n');}catch{}},{app,autoUpdater}=require('electron');trace('start');for(const name of ['before-quit','window-all-closed','will-quit','quit'])app.on(name,()=>trace('app:'+name));for(const name of ['update-downloaded','before-quit-for-update','error'])autoUpdater.on(name,()=>trace('updater:'+name));process.on('exit',()=>trace('exit'));}\nif(!require('node:path').resolve(require('electron').app.getPath('userData')).startsWith(${JSON.stringify(profile)})){console.error('Aborting: userData is not the rig profile');require('electron').app.exit(97);}\n`;
+ const entry=`'use strict';\nprocess.env.ACIRA_BROWSER_TEST_DATA=${JSON.stringify(profile)};\nprocess.env.ACIRA_BROWSER_TEST_HIDDEN='1';\nprocess.env.ACIRA_TEST_QUIET_NETWORK='1';\nprocess.env.ACIRA_UPDATE_TEST='1';\nprocess.env.ACIRA_UPDATE_FEED=${JSON.stringify(primaryBase)};${feedEnv}\nrequire('node:os').homedir=()=>${JSON.stringify(path.join(root,'fixture-home'))};\nrequire('node:fs').mkdirSync(require('node:os').homedir(),{recursive:true});\nrequire('electron').app.commandLine.appendSwitch('remote-debugging-port','0');\nrequire('electron').app.commandLine.appendSwitch('use-mock-keychain');\nrequire('./desktop/main.cjs');\n{const trace=event=>{try{require('node:fs').appendFileSync(${JSON.stringify(trace)},JSON.stringify({event,at:Date.now(),pid:process.pid})+'\\n');}catch{}},{app,autoUpdater}=require('electron');trace('start');for(const name of ['before-quit','window-all-closed','will-quit','quit'])app.on(name,()=>trace('app:'+name));for(const name of ['update-downloaded','before-quit-for-update','error'])autoUpdater.on(name,()=>trace('updater:'+name));process.on('exit',()=>trace('exit'));}\nif(!require('node:path').resolve(require('electron').app.getPath('userData')).startsWith(${JSON.stringify(profile)})){console.error('Aborting: userData is not the rig profile');require('electron').app.exit(97);}\n`;
  await fs.writeFile(path.join(resources,'qa-updater-entry.cjs'),entry);
  const infoFile=path.join(target,'Contents/Info.plist'),info=plist.parse(await fs.readFile(infoFile,'utf8'));info.CFBundleIdentifier='computer.acira.qa.updater.'+id;info.CFBundleDisplayName='Acira update test';await fs.writeFile(infoFile,plist.build(info));
  if(archived)await require('../packaging/macos/widevine.cjs').sealAsar(target);
@@ -147,10 +162,11 @@ try{
   const state=await restoredPage.evaluate(()=>window.acira.getSnapshot());assert.equal(state.settings.onboardingComplete,true);assert.equal(state.settings.appearance,'dark');assert(state.workspaces.some(w=>w.name==='Preserved study workspace'));assert(state.tabs.some(t=>t.url==='acira://history'));assert.equal(await fs.readFile(path.join(profile,'sentinel'),'utf8'),'keep existing profile');await restoredPage.screenshot({path:path.join(out,'beta3-after-update.png')});report.preserved={tabs:state.tabs.map(t=>t.url),workspace:state.workspaces.map(w=>w.name),onboardingComplete:state.settings.onboardingComplete};
  });
  report.passed=true;
+ report.rehearsal={from:{version:from,sha512:await updateZipSha512(process.argv.indexOf('--from-receipt')),app:path.basename(given)},to:{version:next.version,sha512:next.updateZip?.sha512||null},fileBytes:(await fs.stat(zip)).size,primary:primaryMode,primaryRequests:primaryHits.length,feedRequests:requests.length,automaticRelaunch:report.automaticRelaunch};
 }catch(e){report.error=String(e.stack||e);process.exitCode=1;try{for(const page of browser?.context?.pages()||[])await page.screenshot({path:path.join(out,'failure-'+(page.url().includes('view=overlay')?'overlay':page.url().includes('ui/index.html')?'window':'page')+'.png'),timeout:5000}).catch(()=>{});}catch{}}
 finally{
  if(restoredPage)try{await restoredPage.evaluate(()=>window.acira.windowControl('close'));}catch{}
- await cdp?.close().catch(()=>{});await browser?.close().catch(()=>{});if(manual&&manual.exitCode===null){await sleep(1500);if(manual.exitCode===null)manual.kill('SIGTERM');}await fixture.close();
+ await cdp?.close().catch(()=>{});await browser?.close().catch(()=>{});if(manual&&manual.exitCode===null){await sleep(1500);if(manual.exitCode===null)manual.kill('SIGTERM');}await fixture.close();primaryServer?.closeAllConnections?.();primaryServer?.close();
  // Retire only this test's app icons; all source packages and evidence remain.
  for(const app of [installed,payload])try{await run('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-u',app]);await fs.rename(app,app.replace(/\.app$/,'.bundle'));}catch{}
  try{report.quitTrace=(await fs.readFile(trace,'utf8')).trim().split('\n').map(line=>JSON.parse(line));}catch{}

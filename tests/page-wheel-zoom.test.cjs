@@ -70,7 +70,7 @@ test('other platforms keep Chromium\'s own Ctrl+wheel zoom (zoom-changed): the p
 });
 test('main answers the preload\'s wheel step for the visible active tab only',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
- assert.match(main,/pageBridge\.on\('acira:page-wheel-zoom',\(event,input\)=>\{[^]*?tab\.id!==state\.activeTabId[^]*?websiteWheelZoom\(current,input,entry\.wheelZoom\?\?=\{\}\);if\(zoom!==null\)browserCommand\(\{type:'zoom',tabId:tab\.id,zoom\}\);\}\);/,'main steps a website through a per-tab running total');
+ assert.match(main,/pageBridge\.on\('acira:page-wheel-zoom',\(event,input\)=>\{[^]*?tab\.id!==state\.activeTabId[^]*?websiteWheelZoom\(current,input,entry\.wheelZoom\?\?=\{\}\);if\(zoom!==null\)browserCommand\(\{type:'zoom',tabId:tab\.id,zoom,instant:true\}\);\}\);/,'main steps a website through a per-tab running total, and a wheel step is instant (only plus, minus and Reset glide)');
 });
 
 // Ctrl+wheel over a website on a Mac sent one zoom step per wheel event: a trackpad's Control + two-finger scroll is about 60 small events a

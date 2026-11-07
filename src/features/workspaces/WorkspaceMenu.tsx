@@ -1,11 +1,12 @@
 import { useState, type CSSProperties } from 'react';
-import { ArrowLeft, ArrowRight, Check, LockKeyhole, Palette, PenLine, Plus, Trash2, Users } from '../../components/AppIcons';
+import { ArrowLeft, ArrowRight, Check, LockKeyhole, Palette, PenLine, Plus, SlidersHorizontal, Trash2, Users } from '../../components/AppIcons';
 import { securedRequest } from './securedClient';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
 import { workspacePlaying } from '../../ui/workspaceAudio';
 import { MAX_WORKSPACES, activeWorkspaceOf, cycledWorkspace, profilesAsSpaces, windowWorkspaces, workspaceCounts } from '../../runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot } from '../../runtime/types';
 import { openSettings } from '../../ui/settingsView';
+import { runtime } from '../../runtime/client';
 import { openWorkspacePopupFromPopup, takeWorkspaceTarget } from '../../ui/workspaceTarget';
 import { CYCLE_COMMANDS, SpaceIdentity, cycleKey, nameIn, shownColor, shownName, workspaceKey } from './WorkspaceSwitcher';
 import { commandLabel } from '../../ui/shortcutKeys';
@@ -24,6 +25,9 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
   const [target] = useState(() => mode === 'context' ? takeWorkspaceTarget() : null), [confirming, setConfirming] = useState(false);
   // With profiles as spaces this lists the profiles (the space switcher), with no workspace to make, rename or delete.
   const spaces = profilesAsSpaces(state), list = windowWorkspaces(state), counts = state.workspaceTabCounts ?? workspaceCounts(state);
+  // The sidebar's own menu (right-click on its empty space or on the workspace row): New workspace… (Add profile… with profiles as spaces) and Customize sidebar….
+  const sidebar = mode === 'context' && target?.mode === 'sidebar', canNew = spaces || list.length > 0 && list.length < MAX_WORKSPACES;
+  const makeOne = () => spaces ? (close(), openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' })) : next(() => openWorkspacePopupFromPopup(state, 'workspace-edit', { mode: 'new' }));
   const subject = mode === 'context' ? list.find(item => target && 'workspaceId' in target && item.id === target.workspaceId) : activeWorkspaceOf(state);
   const profile = state.browserProfiles.find(item => item.id === state.activeBrowserProfileId);
   // Another popup opens from this one on the next turn, once this one has gone.
@@ -48,7 +52,12 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
     if (sound) parts.push(t('tabsound.playing'));
     return parts.join(' · ');
   };
+  if (sidebar) return <div className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
+    {canNew && <><button type="button" role="menuitem" className="acira-menu-row" data-workspace-new onClick={makeOne}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t(spaces ? 'profiles.add' : 'workspaces.new')}</span><span /></button><hr className="acira-menu-sep" /></>}
+    <button type="button" role="menuitem" className="acira-menu-row" onClick={() => { close(); void runtime.browserCommand({ type: 'ui', tabId: state.activeTabId, action: 'customize-sidebar' }); }}><SlidersHorizontal className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('sidebarcustomize.customizeSidebar')}</span><span /></button>
+  </div>;
   return <div className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
+    {mode === 'context' && canNew && !spaces && <><button type="button" role="menuitem" className="acira-menu-row" data-workspace-new onClick={makeOne}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.new')}</span><span /></button><hr className="acira-menu-sep" /></>}
     {mode === 'list' && <>
       <div className="ws-menu-head" role="presentation">
         <span className="ws-menu-head-title">{spaces ? t('profiles.panel') : t('workspaces.panel')}</span>

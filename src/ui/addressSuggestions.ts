@@ -5,8 +5,11 @@ import type { BrowserAction,BrowserSnapshot,SearchEngine } from '../runtime/type
 import { bookmarksVisibleFrom,historyVisibleFrom,tabVisibleFrom } from './suggestionPrivacy';
 
 import { t } from '../i18n';
-export type AddressSuggestionKind='tab'|'bookmark'|'history'|'url'|'search';
-export interface AddressSuggestion {id:string;kind:AddressSuggestionKind;title:string;url:string;detail:string;tabId?:string;historyId?:string}
+import { answerFor } from './addressAnswers';
+import { matchCommands,type AddressCommand } from './addressCommands';
+export type AddressSuggestionKind='tab'|'bookmark'|'history'|'url'|'search'|'answer'|'command';
+/** An `answer` row (a calculation, a conversion, the time in a city) has no address: choosing it copies `copy`. A `command` row runs the registry command `commandId`, with its shortcut in `keys`. */
+export interface AddressSuggestion {id:string;kind:AddressSuggestionKind;title:string;url:string;detail:string;tabId?:string;historyId?:string;copy?:string;commandId?:string;keys?:string}
 export const searchEngineName=(engine:SearchEngine)=>({google:'Google',duckduckgo:'DuckDuckGo',bing:'Bing'})[engine]||'Google';
 
 function normalizedUrl(input:string):string|null{
@@ -27,7 +30,7 @@ function matchScore(query:string,title:string,url:string){
 
 /** Pure local ranking. Profile-specific history never crosses browsing profiles, and no source crosses a privacy line
  * (`suggestionPrivacy.ts`): an ordinary tab never names a private, Tor or secured tab; a Tor tab reads nothing ordinary. */
-export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'tabs'|'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'bookmarks'|'settings'>&Partial<Pick<BrowserSnapshot,'websiteLanguage'|'browserProfiles'>>,limit=8):AddressSuggestion[]{
+export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'tabs'|'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'bookmarks'|'settings'>&Partial<Pick<BrowserSnapshot,'websiteLanguage'|'browserProfiles'>>,limit=8,extras:{commands?:readonly AddressCommand[];now?:Date}={}):AddressSuggestion[]{
  const query=input.trim().slice(0,4096),normalized=query.toLocaleLowerCase(),current=state.tabs.find(tab=>tab.id===state.activeTabId),profile=current?.browserProfileId||state.activeBrowserProfileId;
  const viewer=current??{browserProfileId:profile},history=historyVisibleFrom(state,viewer,state.browsingHistory),bookmarks=bookmarksVisibleFrom(state,viewer)?state.bookmarks:[];
  const candidates=new Map<string,{item:AddressSuggestion;score:number;order:number}>();let order=0;
@@ -56,7 +59,17 @@ export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'
  }
  const first=local.find(item=>item!==typed&&completesAddress(normalized,item.url))??(typed?.kind==='search'?knownSite(normalized,local):undefined);
  const ordered=[...first?[first]:[],...typed?[typed]:[],...local.filter(item=>item!==first&&item!==typed)];
- return ordered.slice(0,Math.max(1,limit));
+ return withExtraRows(query,ordered,extras).slice(0,Math.max(1,limit));
+}
+
+/** The rows that are not places: an answer first (it is what was asked for), then the typed row Enter takes as ever, then matching commands, then the rest. Typing a URL or an ordinary search adds nothing, so Enter does what it always did. */
+function withExtraRows(query:string,rows:AddressSuggestion[],extras:{commands?:readonly AddressCommand[];now?:Date}):AddressSuggestion[]{
+ const answer=answerFor(query,extras.now?{now:extras.now}:{});
+ const commands=matchCommands(query,extras.commands??[]);
+ if(!answer&&!commands.length)return rows;
+ const answerRow:AddressSuggestion[]=answer?[{id:'answer',kind:'answer',title:answer.value,url:'',detail:answer.detail,copy:answer.copy}]:[];
+ const commandRows:AddressSuggestion[]=commands.map(command=>({id:`command:${command.id}`,kind:'command',title:command.name,url:'',detail:'',commandId:command.id,...command.shortcut?{keys:command.shortcut}:{}}));
+ return [...answerRow,...rows.slice(0,1),...commandRows,...rows.slice(1)];
 }
 
 /** A typed prefix of a web address the profile already knows: "you" → youtube.com, "youtube.com/wat" → that page.
@@ -97,7 +110,7 @@ export function addressSuggestionAction(suggestion:AddressSuggestion,switchToTab
 
 /** Tab accepts a local completion without visiting it; Enter performs navigation. */
 export function addressCompletion(query:string,suggestion:AddressSuggestion):string|null{
- if(suggestion.kind==='search')return null;
+ if(suggestion.kind==='search'||suggestion.kind==='answer'||suggestion.kind==='command')return null;
  const value=addressDisplayUrl(suggestion.url),input=query.trim();
  // Only a visible prefix can be completed in place; anything else would replace the typed text.
  return input&&value.toLocaleLowerCase().startsWith(input.toLocaleLowerCase())&&value.length>input.length?value:null;

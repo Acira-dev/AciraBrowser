@@ -70,7 +70,7 @@ export function bulkCloseTargets(s:BrowserSnapshot,action:BulkCloseAction):strin
   const index=s.tabs.findIndex(tab=>tab.id===action.id);
   if(index<0)return [];
   const anchor=s.tabs[index];
-  // Never another profile's tabs, and never another workspace's (R3-57: a workspace's tabs are its own). A favorite's tab is
-  // not in the tab list, so like a pinned tab it stays (favoriteTabs.ts).
-  return s.tabs.filter((tab,i)=>tab.id!==anchor.id&&!tab.pinned&&!tab.favoriteId&&tab.browserProfileId===anchor.browserProfileId&&(tab.workspaceId??'')===(anchor.workspaceId??'')&&(action.type==='tab.close.others'||(action.type==='tab.close.left'?i<index:i>index))).map(tab=>tab.id);
+  // Never another profile's tabs, and never another workspace's (R3-57: a workspace's tabs are its own). A favorite's tab is a tab of the
+  // list like another, so it closes with the rest (its favorite stays, favoriteTabs.ts).
+  return s.tabs.filter((tab,i)=>tab.id!==anchor.id&&!tab.pinned&&tab.browserProfileId===anchor.browserProfileId&&(tab.workspaceId??'')===(anchor.workspaceId??'')&&(action.type==='tab.close.others'||(action.type==='tab.close.left'?i<index:i>index))).map(tab=>tab.id);
 }

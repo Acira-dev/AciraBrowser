@@ -20,6 +20,7 @@ export type SettingsAvailability =
   | 'custom-glass-colors' // Glass opacity + color wells only render with custom colors on
   | 'regular-profile' // hidden/disabled in private windows
   | 'desktop' // needs the native Electron bridge
+  | 'system-theme' // Linux: the desktop gave a theme to match (desktop/linux-theme.cjs)
   | 'website-open' // needs an open website tab in this profile
   | 'appearance-changed' // Reset rows exist only while something differs from the default
   | 'toolbar-changed'
@@ -32,6 +33,8 @@ export interface SettingsContext {
   customGlassColors: boolean;
   privateProfile: boolean;
   desktop: boolean;
+  /** Linux only: Settings › Appearance › Match my system theme exists. */
+  systemTheme?: boolean;
   websiteOpen: boolean;
   appearanceChanged?: boolean;
   toolbarChanged?: boolean;
@@ -93,6 +96,8 @@ export function isAvailable(entry: SettingsEntry, context: SettingsContext) {
       return !context.privateProfile;
     case 'desktop':
       return context.desktop;
+    case 'system-theme':
+      return Boolean(context.systemTheme);
     case 'website-open':
       return context.websiteOpen;
     case 'appearance-changed':

@@ -1,4 +1,4 @@
-Acira Browser 0.1.0-beta.10 for Linux x86_64
+Acira Browser 0.1.0-beta.11 for Linux x86_64
 
 This is an unsigned Linux beta. Validation coverage is Ubuntu 24.04 x86_64
 under WSL2 on this Windows laptop, with WSLg window rendering. Do not infer
@@ -28,6 +28,13 @@ Run ./Install-Acira.sh --uninstall from the extracted setup files.
 Browser profiles/passwords are preserved. The shared PolicyKit action is not
 removed automatically because another Acira installation may still need it.
 
+SYSTEM THEME
+Settings > Appearance > Theme > "Match my system theme" (Linux only, off by default). On, Acira follows your
+desktop's light or dark setting and its accent colour; its own finishes, layout and fonts stay as they are.
+GNOME 47 or newer and KDE Plasma 6 share an accent colour. Plasma 5 shares its colour scheme's highlight.
+GNOME 46 (Ubuntu 24.04) and desktops without a portal share light or dark only, so Acira keeps its own accent.
+Checks for a real GNOME and KDE desktop: docs/launch/LINUX_THEME_CHECKS.md.
+
 UPDATES / DEPLOYMENT HANDOFF
 The AppImage contains the real Linux updater. An actual lower-version QA
 AppImage -> beta 10 install/relaunch must pass before this release is uploaded.
@@ -35,13 +42,15 @@ The generated beta-linux.yml/latest-linux.yml assets are deployment metadata,
 not evidence that the public Linux update feed is live. A private GitHub
 download cannot serve anonymous public update clients.
 
-After hosting the AppImage at a permanent public HTTPS URL, prepare metadata:
-  node scripts/prepare-linux-feed.mjs <AppImage> --asset-url <public-HTTPS-URL>
-This verifies the local build hash and anonymous download availability, then
-writes beta-linux.yml/latest-linux.yml. It uploads nothing.
-The configured Linux feed is:
-  https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/linux/
-Publish the prepared metadata there only when the public payload is available.
+From beta.11 the release is not published from this machine. After building, run
+  npm run handoff:linux
+It checks the AppImage (hash, version, the update address inside it), records the result in
+HANDOFF.json and uploads everything to a PRIVATE release of the private source repository.
+The Mac then collects it and publishes all three platforms with one command (docs/launch/UPDATE_HOST.md).
+The Linux feed an installed copy asks is:
+  https://update.acirabrowser.com/linux/      (first)
+  https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/linux/      (frozen fallback)
+scripts/prepare-linux-feed.mjs (beta.10) is no longer the way to publish.
 No public repository or website is changed by this private release handoff.
 
 REBUILD

@@ -38,9 +38,11 @@ test('link menu: "Open link in private tab" from an ordinary tab; a private tab 
 });
 
 test('Tor link tabs are offered only where the bundled engine is supported; ordinary private tabs remain available',()=>{
- for(const platform of ['darwin','linux','win32','freebsd']){
-  const f=setup({platform}),items=f.service.build(f.wc,{frame:f.frame,linkURL:'https://destination.example/'});
-  assert.equal(items.some(i=>i.id==='link-tor-tab'),['darwin','linux','win32'].includes(platform));
+ // The bundled Tor exists for Windows, Mac (Apple chip and Intel) and 64-bit Intel/AMD Linux; not for ARM Linux or other systems. The machine running
+ // the test must not decide the answer, so each case names its processor.
+ for(const [platform,arch,tor] of [['darwin','arm64',true],['darwin','x64',true],['linux','x64',true],['linux','arm64',false],['win32','x64',true],['win32','arm64',true],['freebsd','x64',false]]){
+  const f=setup({platform,arch}),items=f.service.build(f.wc,{frame:f.frame,linkURL:'https://destination.example/'});
+  assert.equal(items.some(i=>i.id==='link-tor-tab'),tor,platform+' '+arch);
   assert.ok(items.some(i=>i.id==='link-private-tab'));
  }
 });

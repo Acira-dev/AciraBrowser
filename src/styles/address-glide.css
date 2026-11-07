@@ -1,0 +1,26 @@
+/* The address text rests in the middle of the address bar and glides to the left edge while the bar is in use, and back.
+   ui/addressGlide.ts is the logic, components/AddressField.tsx measures the middle (--af-center) and what the at-rest text leaves out in
+   front of the domain (--af-pre), and hands over the time and Acira's spring (--af-ms, --af-ease). A time of 0 (Reduce motion, animation
+   speed Off) places the text without a glide.
+
+   One number, --af-p (1 = in the middle, 0 = at the left), moves the at-rest layer, the input's own text and the cross-fade between them,
+   so they cannot drift apart. Only fields that take a `glide` carry data-glide; the new tab page's own search field does not. */
+@property --af-p { syntax: '<number>'; inherits: true; initial-value: 1; }
+
+.app .address-field[data-glide] { --af-p: 1; }
+/* Only a text that has a middle to go to glides; one with no room for it (see glideLayout) swaps as it always did. */
+.app .address-field[data-glide][data-glidable] { transition: --af-p var(--af-ms, 0ms) var(--af-ease, linear); }
+.app .address-field[data-glide][data-aligned] { --af-p: 0; }
+/* The at-rest layer moves from the left (after what it leaves out) to the middle. */
+.app .address-field[data-glide] .address-display { transform: translate(calc(var(--af-pre, 0px) + (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)), -50%); opacity: var(--af-p); }
+/* The input's own text starts left of the shown text by what the shown text leaves out, so the domain is in the same place in both
+   through the glide, and the two cross-fade without doubling. */
+.app.style-acira .browser-shell .address-bar .address-field[data-glide] > input { padding-left: calc(8px + (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)) !important; }
+.app.style-acira .address-field[data-glide][data-crossfade] > input { color: color-mix(in srgb, var(--text-primary, currentColor) calc((1 - var(--af-p)) * 100%), transparent); caret-color: transparent; }
+.app.style-acira .address-field[data-glide][data-crossfade] > input::selection { background: color-mix(in srgb, Highlight calc((1 - var(--af-p)) * 100%), transparent); }
+/* Measures text in the input's font (the placeholder, the part of the address the at-rest text leaves out). */
+.address-ruler { position: absolute; left: 0; top: 0; visibility: hidden; white-space: pre; pointer-events: none; font: 400 13px/1 var(--font-ui); font-variant-ligatures: no-contextual; }
+@media (forced-colors: active) {
+  /* The at-rest layer is not drawn there (the field's own text is), so nothing is moved. */
+  .app .address-field[data-glide] { --af-p: 0; --af-center: 0px !important; --af-pre: 0px !important; transition: none; }
+}

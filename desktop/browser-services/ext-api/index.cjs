@@ -383,6 +383,8 @@ function rendererRuntime(ctx){
  }
  const report=(message,error)=>{try{console.error(message,error);}catch(e){}};
  const api=Object.freeze({extensionId,manifest,isWorker,has,available,
+  /** True in a private session that runs this extension ("Allow in private tabs"): the extension is allowed in incognito. */
+  incognito:ctx.incognito===true,
   /** The permissions and host patterns this extension holds now: {permissions, origins}. */
   permissions:()=>({permissions:[...permissions],origins:[...origins]}),
   call,event,build,buildType,extend,bindings,errors:bindings.errors,withLastError,
@@ -480,11 +482,11 @@ function rendererRuntime(ctx){
 
 /** The preload text for one session: an expression that evaluates to the renderer runtime of every package.
  *  options: {packages, grants} (grants: the permission table's snapshot(), {id: {permissions, origins}}). */
-function rendererSource({packages=loadPackages(),grants={}}={}){
+function rendererSource({packages=loadPackages(),grants={},incognito=false}={}){
  const list=packages.filter(pkg=>pkg.renderer).map(pkg=>`{name: ${JSON.stringify(pkg.name)}, namespaces: ${JSON.stringify(pkg.namespaces)}, renderer: (${asExpression(pkg.renderer)})}`);
  const granted={};for(const [id,value] of Object.entries(grants&&typeof grants==='object'?grants:{}))if(/^[a-p]{32}$/.test(id)&&value&&typeof value==='object')granted[id]={permissions:Array.isArray(value.permissions)?value.permissions:[],origins:Array.isArray(value.origins)?value.origins:[]};
  const minVersions={};for(const [name,rule] of Object.entries(surface().permissions||{}))if(rule&&rule.minManifestVersion)minVersions[name]=rule.minManifestVersion;
- return `(${rendererRuntime.toString()})({ electron, extensionId, manifest, ExtensionEvent, withLastError: acira_withLastError, createBindings: (${createBindings.toString()}), schema: ${schemaSource()}, permissionMinVersion: ${JSON.stringify(minVersions)}, guards: ${JSON.stringify(ESSENTIAL_GUARDS)}, grants: ${JSON.stringify(granted)}, packages: [${list.join(', ')}] })`;
+ return `(${rendererRuntime.toString()})({ electron, extensionId, manifest, ExtensionEvent, withLastError: acira_withLastError, createBindings: (${createBindings.toString()}), schema: ${schemaSource()}, permissionMinVersion: ${JSON.stringify(minVersions)}, guards: ${JSON.stringify(ESSENTIAL_GUARDS)}, grants: ${JSON.stringify(granted)}, packages: [${list.join(', ')}], incognito: ${incognito===true} })`;
 }
 
 module.exports={loadPackages,installPackages,installEventGate,namespaceOfEvent,rendererSource,rendererRuntime,schemaSource,slimSpec,asExpression,failure,namespaceOfHandler,ACCESS_DENIED};

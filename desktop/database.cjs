@@ -91,6 +91,7 @@ class BrowserDatabase{
  setPermission(profile,requester,embedder,permission,decision){if(decision==='ask')this.db.prepare('DELETE FROM permissions WHERE profile_id=? AND requester=? AND embedder=? AND permission=?').run(profile,requester,embedder,permission);else this.db.prepare('INSERT INTO permissions VALUES(?,?,?,?,?) ON CONFLICT(profile_id,requester,embedder,permission) DO UPDATE SET decision=excluded.decision').run(profile,requester,embedder,permission,decision);}
  permissions(profile){return this.db.prepare('SELECT requester,embedder,permission,decision FROM permissions WHERE profile_id=?').all(profile);}
  setPolicy(profile,site,value){this.db.prepare('INSERT INTO policies VALUES(?,?,?) ON CONFLICT(profile_id,site) DO UPDATE SET payload=excluded.payload').run(profile,site,json(value));}
+ deletePolicy(profile,site){this.db.prepare('DELETE FROM policies WHERE profile_id=? AND site=?').run(profile,site);}
  policy(profile,site){const row=this.db.prepare('SELECT payload FROM policies WHERE profile_id=? AND site=?').get(profile,site);return row?parse(row.payload):null;}
  policies(profile){return this.db.prepare('SELECT site,payload FROM policies WHERE profile_id=?').all(profile).map(row=>({site:row.site,...parse(row.payload)}));}
  recordImport(batch){this.db.prepare('INSERT INTO imports VALUES(?,?,?)').run(batch.id,batch.profileId,json(batch));}

@@ -4,7 +4,9 @@ import { useListMotion } from '../ui/sharedMotion';
 import type { AddressSuggestion } from '../ui/addressSuggestions';
 import { addressDisplayUrl } from '../ui/addressSuggestions';
 import './AddressSuggestions.css';
+import { Equal,Command as CommandGlyph } from 'lucide-react';
 import { Return,Search,X } from './AppIcons';
+import { PreviewIcon } from './PreviewIcon';
 import { SiteIdentityIcon } from './SiteIdentityIcon';
 
 import { t } from '../i18n';
@@ -26,12 +28,12 @@ export function AddressSuggestions({items,activeIndex,query,onActiveIndexChange,
  return <div className="address-suggestions" onPointerLeave={()=>{pointer.current=null;}}>
   <motion.ul ref={list} id={listId} role="listbox" aria-label={t("app.addressSuggestions")} initial={false} animate={{height:Math.max(1,items.length)*ADDRESS_SUGGESTION_ROW_HEIGHT}} transition={{duration,ease:[.16,1,.3,1]}}>
    {activeIndex>=0&&activeIndex<items.length&&<motion.li aria-hidden="true" data-motion-skip className="address-suggestion-selection" initial={false} animate={{y:activeIndex*ADDRESS_SUGGESTION_ROW_HEIGHT}} transition={{duration:reducedMotion?0:.14/Math.max(.5,speed),ease:[.16,1,.3,1]}}/>}
-   {items.map((item,index)=><li key={item.id} id={`${listId}-${index}`} className="address-suggestion" role="option" aria-selected={index===activeIndex}
+   {items.map((item,index)=><li key={item.id} id={`${listId}-${index}`} className="address-suggestion" data-kind={item.kind==="answer"||item.kind==="command"?item.kind:undefined} role="option" aria-selected={index===activeIndex}
      onPointerDown={event=>event.preventDefault()} onMouseDown={event=>event.preventDefault()/* the field keeps focus, its draft and the open list */} onPointerMove={event=>{const previous=pointer.current;pointer.current={x:event.clientX,y:event.clientY};if(!previous||previous.x!==event.clientX||previous.y!==event.clientY)onActiveIndexChange(index);}}
      onClick={()=>onChoose(item)}>
-     <span className="address-suggestion-icon">{item.kind==='search'?<Search size={16}/>:<SiteIdentityIcon url={item.url} size={16}/>}</span>
-     <span className="address-suggestion-copy"><span><Match text={item.title} query={query}/></span><small>{item.kind==='search'?item.detail:addressDisplayUrl(item.url)}</small></span>
-     {item.kind==='tab'?<button type="button" className="address-suggestion-action" aria-label={t("addresssuggestions.switchToExistingTabTitle", { title: item.title })} title={t("addresssuggestions.switchToThisTabShift")} aria-keyshortcuts="Shift+Enter" onClick={event=>{event.stopPropagation();onChoose(item,true);}}>{t("addresssuggestions.switchToTab")}</button>:<span className="address-suggestion-source">{item.kind==='search'?'':item.detail}</span>}
+     <span className="address-suggestion-icon">{item.kind==='search'?<Search size={16}/>:item.kind==='answer'?<PreviewIcon icon={Equal}/>:item.kind==='command'?<PreviewIcon icon={CommandGlyph}/>:<SiteIdentityIcon url={item.url} size={16}/>}</span>
+     <span className="address-suggestion-copy"><span><Match text={item.title} query={query}/></span><small>{item.kind==='search'||item.kind==='answer'?item.detail:item.kind==='command'?t('addresssuggestions.command'):addressDisplayUrl(item.url)}</small></span>{item.kind==='command'&&item.keys&&<span className="address-suggestion-key">{item.keys}</span>}
+     {item.kind==='tab'?<button type="button" className="address-suggestion-action" aria-label={t("addresssuggestions.switchToExistingTabTitle", { title: item.title })} title={t("addresssuggestions.switchToThisTabShift")} aria-keyshortcuts="Shift+Enter" onClick={event=>{event.stopPropagation();onChoose(item,true);}}>{t("addresssuggestions.switchToTab")}</button>:<span className="address-suggestion-source">{item.kind==='search'||item.kind==='answer'||item.kind==='command'?'':item.detail}</span>}
      {item.kind==='history'&&item.historyId?<button type="button" className="address-suggestion-remove" tabIndex={-1} aria-label={t("addresssuggestions.removeTitleFromHistory", { title: item.title })} title={t("addresssuggestions.removeFromHistoryShiftDelete")} onClick={event=>{event.stopPropagation();if(item.historyId)onRemove(item.historyId);}}><X size={15} aria-hidden="true"/></button>:<Return className="address-suggestion-enter" size={16} aria-hidden="true"/>}
     </li>)}
    {!items.length&&<li className="address-suggestion-empty">{t("addresssuggestions.enterAWebsiteOrSearch")}</li>}

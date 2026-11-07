@@ -13,7 +13,7 @@ const manifest=require('./tor-engine/tor-version.json');
 const macTor=require('./tor-mac.cjs');
 const linuxTor=require('./tor-linux.cjs');
 
-const WEEK=7*24*3600*1000,MAX_ARCHIVE=90*1024*1024;
+const WEEK=7*24*3600*1000,MAX_ARCHIVE=90*1024*1024,RETRY_AFTER=30*60*1000,FEED_WITHIN=30000;
 const versionParts=value=>String(value).split('.').map(part=>Number(part)||0);
 const newer=(a,b)=>{const x=versionParts(a),y=versionParts(b);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0;}return false;};
 const sha256=buffer=>crypto.createHash('sha256').update(buffer).digest('hex');
@@ -41,10 +41,12 @@ async function download(url,{limit=MAX_ARCHIVE,timeout=180000,fetcher=fetch}={})
 }
 
 const NO_FETCH=()=>Promise.reject(new Error('Tor updates go through Tor; no Tor connection was given.'));
-function createTorUpdater({userData,platform=process.platform,arch=process.arch,fetcher=NO_FETCH,now=()=>Date.now(),log=()=>{},feedUrl=platform==='darwin'?(macTor.spec(arch)?.updateFeed||manifest.updateFeed):platform==='linux'?(linuxTor.spec(arch)?.updateFeed||manifest.updateFeed):manifest.updateFeed,bundled=platform==='linux'?linuxTor.manifest.torBrowserVersion:manifest.torBrowserVersion,run=runVersion}={}){
+/** The feed answered nothing in time: say so in words, not "This operation was aborted". */
+const readable=error=>error&&error.name==='AbortError'?'The Tor update feed did not answer in time.':String(error&&error.message||error);
+function createTorUpdater({userData,platform=process.platform,arch=process.arch,fetcher=NO_FETCH,now=()=>Date.now(),log=()=>{},feedUrl=platform==='darwin'?(macTor.spec(arch)?.updateFeed||manifest.updateFeed):platform==='linux'?(linuxTor.spec(arch)?.updateFeed||manifest.updateFeed):manifest.updateFeed,bundled=platform==='linux'?linuxTor.manifest.torBrowserVersion:manifest.torBrowserVersion,run=runVersion,ready=()=>Promise.resolve(),retryAfter=RETRY_AFTER}={}){
  if(!userData)throw new Error('The updater needs a data folder.');
  const root=path.join(userData,'tor'),engineRoot=path.join(root,'engine'),file=path.join(root,'update.json');
- let record={auto:true,lastChecked:0,installed:null,latest:null,error:null},running=null,state='idle';
+ let record={auto:true,lastChecked:0,installed:null,latest:null,error:null},running=null,state='idle',failedAt=0;
  try{record={...record,...JSON.parse(fs.readFileSync(file,'utf8'))};}catch{}
  const save=()=>{try{fs.mkdirSync(root,{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(record));fs.renameSync(file+'.tmp',file);}catch(error){log('Tor update record not saved: '+error.message);}};
  const current=()=>record.installed&&newer(record.installed.version,bundled)?record.installed:null;
@@ -64,18 +66,26 @@ function createTorUpdater({userData,platform=process.platform,arch=process.arch,
   record.installed={version,tor,sha256:native?.files.tor||sha256(exe),...(native?{companions:platform==='linux'?Object.fromEntries(linuxTor.LIBRARIES.map(name=>[name,native.files[name]])):{'libevent-2.1.7.dylib':native.files['libevent-2.1.7.dylib']}}:{}),installedAt:now()};
   for(const old of fs.readdirSync(engineRoot))if(old!==version)fs.rmSync(path.join(engineRoot,old),{recursive:true,force:true});
  }
- /** Looks for a newer release (at most weekly unless forced) and installs it. Never throws; the result is in status(). */
+ /** Looks for a newer release (at most weekly unless forced) and installs it. Never throws; the result is in status().
+  * The week counts only once the feed has really been read. Tor's first start takes 20 to 60 seconds, and the feed's own 20 seconds used to
+  * run from the moment the Tor tab opened (the request waited for Tor inside them): on a first start the check timed out and was written
+  * down as done, so Tor was not looked at again for a week. Now the check waits for Tor to be connected (`ready`) and only then asks the feed.
+  * A check that could not read the feed is not recorded, so the next Tor start tries again; within one run it waits 30 minutes, so that every
+  * new Tor tab does not ask again. A feed that was read but whose download failed after it still counts for the week (one large download is
+  * not repeated at every start). */
  function check({force=false}={}){
   if(running)return running;
   if(!force&&(!record.auto||now()-record.lastChecked<WEEK))return Promise.resolve(status());
+  if(!force&&failedAt&&now()-failedAt<retryAfter)return Promise.resolve(status());
   running=(async()=>{
-   state='checking';record.error=null;
+   state='checking';record.error=null;let feedRead=false;
    try{
-    const feed=JSON.parse((await download(feedUrl,{limit:256*1024,timeout:20000,fetcher})).toString('utf8')),latest=String(feed.version||'');
+    await ready();
+    const feed=JSON.parse((await download(feedUrl,{limit:256*1024,timeout:FEED_WITHIN,fetcher})).toString('utf8')),latest=String(feed.version||'');
     if(!/^\d+(\.\d+){1,3}$/.test(latest))throw new Error('Unreadable update feed.');
-    record.latest=latest;record.lastChecked=now();
+    record.latest=latest;record.lastChecked=now();feedRead=true;failedAt=0;
     if(newer(latest,current()?.version||bundled))await install(latest);
-   }catch(error){record.error=String(error.message||error).slice(0,200);record.lastChecked=now();log('Tor update: '+record.error);}
+   }catch(error){record.error=readable(error).slice(0,200);if(!feedRead)failedAt=now();log('Tor update: '+record.error);}
    state='idle';save();return status();
   })().finally(()=>{running=null;});
   return running;

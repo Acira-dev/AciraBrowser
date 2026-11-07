@@ -5,7 +5,7 @@ import { navigationTitle } from './navigation';
 export const DEFAULT_FAVORITES = [
   { url: 'https://mail.google.com/', label: 'Gmail', icon: '/site-icons/gmail.ico' },
   { url: 'https://docs.google.com/document/', label: 'Google Docs', icon: '/site-icons/docs.png' },
-  { url: 'https://www.youtube.com/', label: 'YouTube', icon: '/site-icons/youtube.ico' },
+  { url: 'https://www.youtube.com/', label: 'YouTube', icon: '/site-icons/youtube.png' },
   { url: 'https://drive.google.com/', label: 'Google Drive', icon: '/site-icons/drive.png' },
 ] as const;
 

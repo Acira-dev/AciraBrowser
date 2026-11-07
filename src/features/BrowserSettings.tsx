@@ -14,12 +14,15 @@ import { miniTheme } from "./settings/miniTheme";
 import { onSettingsTarget, raiseSettingsIntent, settingsDestination, settingsIntentSection, settingsView, settingsViewKey, takeSettingsTarget } from "../ui/settingsView";
 import { toolbarLayout, toolbarLayoutPatch } from "../runtime/toolbarLayout";
 import { formatShortcut } from "../ui/platform";
+import { matchesSystemTheme, systemThemeActions, useSystemTheme } from "../ui/systemTheme";
 import { shortcutFor } from "../ui/shortcutKeys";
 import { toolbarVisibilityItems } from "../ui/toolbarMenu";
 import { resetToolbarItems } from "../ui/toolbarPrefs";
-import { effectiveView, seamlessEdgesOf, sidebarPeekOf, windowViews, type WindowView } from "../runtime/windowView";
+import { effectiveView, seamlessEdgesOf, windowViews, type WindowView } from "../runtime/windowView";
 import { windowViewDetail, windowViewName } from "../ui/windowViewText";
 import { MiniView } from "./settings/WindowViewCards";
+import { AddressInSidebarRow, SidebarEdgeRows, SidebarModeRow } from "./settings/SidebarRows";
+import { SidebarGroups } from "./settings/panels/sidebar";
 import type {
   BrowserAction,
   BrowserSnapshot,
@@ -201,6 +204,7 @@ const profilePanels = settingsPanels.filter(
 );
 
 export function BrowserSettings({ state, dispatch }: Props) {
+  const desktopTheme = useSystemTheme();
   const tab = state.tabs.find((tab) => tab.id === state.activeTabId)!,
     view = settingsView(settingsViewKey(tab));
   const [section, publishSection] = useState(view.section),
@@ -225,14 +229,42 @@ export function BrowserSettings({ state, dispatch }: Props) {
       view.query = value;
       publishQuery(value);
     };
+  /** Until when a layout change is settling (see below); the scroll is not kept while it does. */
+  const layoutSettles = useRef(0), scrollTrail = useRef<[number, number][]>([]);
   useLayoutEffect(() => {
     const node = main.current;
     if (!node) return;
     node.scrollTop = view.scrollTop;
+    // The position is kept as it changes, not only when this page goes away (an element that has moved reports 0 by then).
+    let restoring = true;
+    const settled = requestAnimationFrame(() => { restoring = false; });
+    // Heard on the document (a scroll does not bubble, but it can be captured): the page's box may be replaced while this view stays.
+    const remember = (event: Event) => { const box = main.current; if (!restoring && event.target === box && box && performance.now() >= layoutSettles.current) { view.scrollTop = box.scrollTop; scrollTrail.current = [...scrollTrail.current.slice(-7), [performance.now(), box.scrollTop]]; } };
+    document.addEventListener('scroll', remember, { capture: true, passive: true });
     return () => {
-      view.scrollTop = node.scrollTop;
+      cancelAnimationFrame(settled);
+      document.removeEventListener('scroll', remember, { capture: true });
+      if (node.isConnected && performance.now() >= layoutSettles.current) view.scrollTop = node.scrollTop;
     };
   }, [view]);
+  // A switch that moves the toolbar or the tabs (Sidebar mode, Address bar in the sidebar, the Tabs cards) makes the window lay out again,
+  // and the page's box changes size for a moment: the browser pulls the scroll in, and nothing puts it back. For a moment after such a
+  // change the kept position is not overwritten, and it is put back each time the page's size changes and once more when the moment ends.
+  const layoutKey = `${state.settings.verticalTabs}|${state.settings.addressInSidebar}`, layoutSeen = useRef(layoutKey);
+  useLayoutEffect(() => {
+    if (layoutSeen.current === layoutKey) return;
+    layoutSeen.current = layoutKey;
+    // The browser's pull can come before this runs, so the position to keep is the last one that stood for a moment.
+    const node = main.current, keep = scrollTrail.current.filter(([at]) => at < performance.now() - 300).at(-1)?.[1] ?? view.scrollTop;
+    if (!node || !keep) return;
+    layoutSettles.current = performance.now() + 1600;
+    const put = () => { if (node.isConnected && node.scrollTop !== keep && node.scrollHeight - node.clientHeight >= keep) node.scrollTop = keep; view.scrollTop = keep; };
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(put) : null;
+    watch?.observe(node);
+    for (const child of Array.from(node.children)) watch?.observe(child);
+    const timer = window.setTimeout(() => { put(); watch?.disconnect(); layoutSettles.current = 0; }, 1600);
+    return () => { window.clearTimeout(timer); watch?.disconnect(); };
+  }, [layoutKey]);
   const s = {
       ...state.settings,
       reducedTransparency:
@@ -282,6 +314,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
         (s as unknown as Record<string, unknown>)[key] !== value,
     ) ||
     s.interfaceScale !== 100 ||
+    Boolean(s.systemTheme) ||
     Boolean(s.reducedMotion) ||
     s.animationSpeed === "fast" ||
     Boolean(s.reducedTransparency) ||
@@ -298,6 +331,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       customGlassColors: customColors,
       privateProfile: Boolean(profile?.private),
       desktop: Boolean(runtime.platform),
+      systemTheme: desktopTheme.supported,
       websiteOpen: Boolean(zoomTarget),
       appearanceChanged,
       toolbarChanged,
@@ -314,6 +348,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       newTabIsChanged,
       stockSearch,
       s.verticalTabs,
+      desktopTheme.supported,
     ],
   );
 
@@ -427,6 +462,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
         <>
           <SettingGroup title={tr("settings.layoutGroup")} id="layout">
             <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} columns={4} />
+            <SidebarModeRow state={state} dispatch={dispatch} />
+            <AddressInSidebarRow state={state} dispatch={dispatch} />
             <SettingRow
               id="window-view"
               title={tr("windowview.title")}
@@ -440,16 +477,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 options={windowViews.map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} /> }))}
               />
             </SettingRow>
-            {windowView !== "seamless" && tabLayout === "sidebar" && (
-              <SettingRow id="sidebar-peek" title={tr("windowview.closedSidebarEdge")}>
-                <Switch
-                  label={tr("windowview.closedSidebarEdge")}
-                  checked={sidebarPeekOf(s)[windowView]}
-                  onChange={(on) => update({ sidebarPeek: { ...sidebarPeekOf(s), [windowView]: on } })}
-                />
-              </SettingRow>
-            )}
-            {windowView === "seamless" && (
+            {windowView !== "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
+            {windowView === "seamless" && !(tabLayout === "sidebar" && s.addressInSidebar) && (
               <SettingRow id="seamless-edge-top" title={tr("windowview.edgeTop")}>
                 <Switch
                   label={tr("windowview.edgeTop")}
@@ -458,15 +487,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 />
               </SettingRow>
             )}
-            {windowView === "seamless" && tabLayout === "sidebar" && (
-              <SettingRow id="seamless-edge-side" title={tr("windowview.edgeSide")}>
-                <Switch
-                  label={tr("windowview.edgeSide")}
-                  checked={seamlessEdgesOf(s).side}
-                  onChange={(side) => update({ seamlessEdges: { ...seamlessEdgesOf(s), side } })}
-                />
-              </SettingRow>
-            )}
+            {windowView === "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
           </SettingGroup>
           <SettingGroup title={tr("settings.themeGroup")}>
             <SettingRow
@@ -487,6 +508,19 @@ export function BrowserSettings({ state, dispatch }: Props) {
               />
             </SettingRow>
             <ProfileScope state={state} dispatch={dispatch} setting="appearance" id="appearance-scope" />
+            {desktopTheme.supported && (
+              <SettingRow
+                id="match-system-theme"
+                title={tr("systemtheme.title")}
+                detail={tr("systemtheme.detail")}
+              >
+                <Switch
+                  label={tr("systemtheme.title")}
+                  checked={matchesSystemTheme(s)}
+                  onChange={(on) => systemThemeActions(state, on).forEach(dispatch)}
+                />
+              </SettingRow>
+            )}
             <SettingRow
               id="glass-finish"
               title={tr("appearancecontrols.finish")}
@@ -733,6 +767,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                     update({
                       ...palettePreference(defaultAppearancePalette),
                       interfaceScale: 100,
+                      ...(s.systemTheme ? { systemTheme: false } : {}),
                       reducedMotion: false,
                       animationSpeed: "premium",
                       reducedTransparency: false,
@@ -856,6 +891,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
             <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} />
             <SettingCrossLink to="window-view" section="Appearance" title={tr("windowview.title")} />
           </SettingGroup>
+          <SidebarGroups state={state} dispatch={dispatch} />
           <SettingGroup>
             <SettingRow
               id="compact-tab-titles"
@@ -900,6 +936,13 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 label={tr("linkpreview.title")}
                 checked={s.linkPreview !== false}
                 onChange={(linkPreview) => update({ linkPreview })}
+              />
+            </SettingRow>
+            <SettingRow id="open-tabs-in-front" title={tr("tabsinfront.title")} detail={tr("tabsinfront.detail")}>
+              <Switch
+                label={tr("tabsinfront.title")}
+                checked={Boolean(s.openTabsInFront)}
+                onChange={(openTabsInFront) => update({ openTabsInFront })}
               />
             </SettingRow>
             <SettingRow id="ask-before-closing" title={tr("closeGuard.askTitle")} detail={tr("closeGuard.askDetail")}>

@@ -4,7 +4,7 @@
 function createStorageDurability({setTimer=setTimeout,clearTimer=clearTimeout,setRepeat=setInterval,clearRepeat=clearInterval,now=Date.now,delayMs=1200,maxWaitMs=5000,storageEveryMs=5000,onError=()=>{}}={}){
  const attached=new WeakSet();
  function attach(session){
-  if(!session||attached.has(session)||typeof session.isPersistent!=='function'||!session.isPersistent())return false;
+  if(!session||attached.has(session)||typeof session.isPersistent!=='function'||!require('./browser-services/private-extension-sessions.cjs').persistent(session))return false;
   attached.add(session);
   let timer=null,firstChange=0;
   const flush=()=>{timer=null;firstChange=0;try{Promise.resolve(session.cookies.flushStore()).catch(onError);}catch(error){onError(error);}};

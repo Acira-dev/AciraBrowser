@@ -96,12 +96,11 @@ function subscribe(listener:()=>void){window.addEventListener(EVENT,listener);wi
 export const readSidebarApps=(profile='',privateMode=false)=>read(profile,privateMode);
 export function useSidebarApps(profile='',privateMode=false){return useSyncExternalStore(subscribe,()=>read(profile,privateMode));}
 
-/** What a click on a favorite tile does (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"). A favorite owns
- * one tab (runtime/favoriteTabs.ts): a plain click opens it the first time, switches back to it after that (bringing it in from
- * another workspace, its page, scroll, sign-in and media as they were), and on the favorite's own tab, once you have browsed
- * away, takes it back to the favorite's address (Arc). On its own tab at that address a click does nothing: never a second copy.
- * Middle-click and Ctrl/Cmd+click still open an ordinary background tab at the address, and Shift+click a new window. Pure,
- * so the rule is tested without a window. This replaces R3-72 (a second click opened a fresh tab). */
+/** What a click on a favorite tile does. A favorite is linked to one tab (runtime/favoriteTabs.ts), an ordinary tab of the list: a plain click opens
+ * it the first time, goes to it after that (in its own workspace, its page, scroll, sign-in and media as they were), and on that tab, once you
+ * have browsed away, takes it back to the favorite's address (Arc). On that tab at that address a click does nothing: never a second copy.
+ * Middle-click and Ctrl/Cmd+click still open an ordinary background tab at the address, and Shift+click a new window. Pure, so the rule is
+ * tested without a window. */
 export interface AppClick{button:number;ctrlKey?:boolean;metaKey?:boolean;shiftKey?:boolean}
 export type AppClickPlan={kind:'none'}|{kind:'open'}|{kind:'select';tabId:string}|{kind:'home';tabId:string}|{kind:'new-tab'}|{kind:'new-window'};
 export function appClickPlan<T extends {id:string;url:string;browserProfileId:string;favoriteId?:string}>(click:AppClick,app:SidebarApp,tabs:readonly T[],activeTabId:string,profile:string):AppClickPlan{
@@ -113,8 +112,5 @@ export function appClickPlan<T extends {id:string;url:string;browserProfileId:st
  if(tab.id!==activeTabId)return {kind:'select',tabId:tab.id};
  return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
-/** Whether a tab shows in the sidebar's tab list: a favorite's own tab lives in its tile instead, unless Favorites are hidden
- * (then it is listed like any tab). A tab whose favorite was removed is listed until the sidebar hands it back (AciraSidebar). */
-export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>)=>!(tab.favoriteId&&!favorites.hidden&&favorites.apps.some(app=>app.id===tab.favoriteId));
-/** The favorite's own tab in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
+/** The tab a favorite is linked to in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
 export const appTabFor=<T extends {browserProfileId:string;favoriteId?:string}>(app:SidebarApp,tabs:readonly T[],profile:string):T|undefined=>favoriteTabOf(tabs,app.id,profile);

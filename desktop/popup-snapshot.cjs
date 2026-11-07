@@ -12,7 +12,7 @@ function popupBackdropPageOwned(state,id,entry,{privateMode,mayBrowse,sessionFor
  if(tab.privacy){if(!native.private||native.tab!==id)return false;}
  else if(native.id!==profile.id||native.partition!==profile.partition||!!native.private!==!!profile.private||!!native.tor!==!!profile.tor)return false;
  const expected=tab.privacy||(profile.tor?'tor':profile.private?'private':undefined),actual=entry.privacy||(native.tor?'tor':native.private?'private':undefined);
- return expected===actual&&!wc.isDestroyed()&&wc.session===sessionFor(native.partition)&&wc.session.isPersistent()===!native.private;
+ return expected===actual&&!wc.isDestroyed()&&wc.session===sessionFor(native.partition)&&require('./browser-services/private-extension-sessions.cjs').persistent(wc.session)===!native.private;
 }
 
 /** All inputs come from the owned native resolver. The renderer supplies no crop or source selector. */

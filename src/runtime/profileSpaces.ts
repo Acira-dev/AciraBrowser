@@ -74,7 +74,7 @@ export function workspacesToGroups(s: BrowserSnapshot): ToGroupsResult {
       // Each own group's members are taken before anything is renamed: the loose tabs' group may take a name one of them had. A group
       // with no open tab (it stands for closed tabs, and comes back with one) is left where it is.
       const ownGroups = s.tabGroups.filter(group => group.browserProfileId === profile.id && group.workspaceId === workspace.id).map(group => ({ group, members: tabs.filter(tab => tab.group === group.name) })).filter(item => item.members.length);
-      const loose = tabs.filter(tab => !tab.pinned && !tab.group && !tab.favoriteId);
+      const loose = tabs.filter(tab => !tab.pinned && !tab.group);
       const standsFor = (original?: string) => s.tabGroups.find(group => group.browserProfileId === profile.id && !group.workspaceId && group.fromWorkspaceId === workspace.id && group.fromGroup === original);
       if (loose.length) {
         const existing = standsFor(undefined);

@@ -1,8 +1,8 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {runtime} from '../runtime/client';
-import type {ServiceResult,TabSession} from '../runtime/types';
+import type {PageScripts,ServiceResult,TabSession} from '../runtime/types';
 import {Disclosure,SwitchRow} from '../components/PanelParts';
-import {Activity,Globe2,Info,PanelTop} from '../components/AppIcons';
+import {Activity,Code2,Globe2,Info,PanelTop} from '../components/AppIcons';
 import {ProtectionIcon} from '../components/ProtectionIcon';
 import '../styles/shields.css';
 
@@ -13,8 +13,8 @@ const count=new Intl.NumberFormat('en-US');
 const reason=(error:unknown)=>error instanceof Error?error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/,''):'Could not change protection.';
 
 /** Privacy as facts on the panel system: one row: the switch for this site with the blocked count; tapping the row opens the detail list. Counts come from the running blocker. */
-export function ShieldsSummary({tab,blockingOnly=false,privateMode=false}:{tab:TabSession;blockingOnly?:boolean;privateMode?:boolean}){
- const [privacy,setPrivacy]=useState<Privacy>(),[filters,setFilters]=useState<Filters>(),[cookies,setCookies]=useState<'block'|'allow'>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[changed,setChanged]=useState(false);
+export function ShieldsSummary({tab,blockingOnly=false,privateMode=false,tor=false}:{tab:TabSession;blockingOnly?:boolean;privateMode?:boolean;/** A Tor tab keeps its own security levels, so it has no script switch. */tor?:boolean}){
+ const [privacy,setPrivacy]=useState<Privacy>(),[filters,setFilters]=useState<Filters>(),[cookies,setCookies]=useState<'block'|'allow'>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[changed,setChanged]=useState(false),[scripts,setScripts]=useState<PageScripts>();
  const generation=useRef(0),saving=useRef(false),requestVersion=useRef(0);
  const supported=tab.contentKind==='web'&&(!blockingOnly||/^https?:\/\//i.test(tab.url));
  const ready=supported&&!tab.loading&&!tab.error;
@@ -24,12 +24,13 @@ export function ShieldsSummary({tab,blockingOnly=false,privateMode=false}:{tab:T
   read();
   const timer=blockingOnly?setInterval(read,1500):undefined;
   void runtime.service({type:'filters.status',tabId:tab.id}).then(result=>alive&&setFilters(result.filters)).catch(()=>undefined);
+  if(!tor)void runtime.service({type:'scripts.status',tabId:tab.id}).then(result=>alive&&setScripts(result.scripts)).catch(()=>undefined);
   if(!blockingOnly){
   void runtime.service({type:'network.status'}).then(result=>alive&&setCookies(result.network?.engine?.thirdPartyCookies==='unknown'?undefined:result.network?.engine?.thirdPartyCookies)).catch(()=>undefined);
   }
   return()=>{alive=false;clearInterval(timer);};
- },[tab.id,blockingOnly]);
- useEffect(()=>{generation.current++;saving.current=false;setBusy(false);setPrivacy(undefined);setFilters(undefined);setChanged(false);setError('');const cleanup=ready?load():undefined;return()=>{generation.current++;cleanup?.();};},[tab.id,tab.url,ready,load]);
+ },[tab.id,blockingOnly,tor]);
+ useEffect(()=>{generation.current++;saving.current=false;setBusy(false);setPrivacy(undefined);setFilters(undefined);setScripts(undefined);setChanged(false);setError('');const cleanup=ready?load():undefined;return()=>{generation.current++;cleanup?.();};},[tab.id,tab.url,ready,load]);
  const change=async(blocking:boolean)=>{if(saving.current)return;const version=generation.current;requestVersion.current++;saving.current=true;setBusy(true);setError('');try{const result=await runtime.service({type:'privacy.set',tabId:tab.id,blocking,scope:'site'});if(version===generation.current){setPrivacy(result.privacy);setChanged(true);}}catch(problem){if(version===generation.current)setError(reason(problem));}finally{if(version===generation.current){saving.current=false;setBusy(false);}}};
  if(!supported)return blockingOnly?<div className="acira-menu-row acira-menu-row-fact" role="status"><Info size={16} className="acira-menu-icon"/><span className="acira-menu-title">{t('protection.openWebsite')}</span><span/></div>:null;
  const hosts=new Map<string,number>();for(const item of privacy?.details??[])hosts.set(item.hostname,(hosts.get(item.hostname)??0)+1);
@@ -38,10 +39,12 @@ export function ShieldsSummary({tab,blockingOnly=false,privateMode=false}:{tab:T
  const answering=filters?.rejectCookies!==false,answer=filters?.cookieAnswer,answerLabel=answer?.state==='answered'?t("shieldssummary.cookieRejected"):answer?.state==='pay-or-consent'?t("shieldssummary.cookieLeftPaid"):answer?.state==='not-answered'?t("shieldssummary.cookieNotAnswered"):'';
  const on=privacy?.blocking===true,banners=filters?.annoyances===true,aiOn=filters?.aiContent===true,popupAds=filters?.popupAds!==false;
  const setFilter=async(patch:{aiContent?:boolean;annoyances?:boolean;rejectCookies?:boolean;popupAds?:boolean})=>{setBusy(true);setError('');try{const result=await runtime.service({type:'filters.set',tabId:tab.id,scope:'site',patch});setFilters(result.filters);if(!('popupAds' in patch))setChanged(true);}catch(problem){setError(reason(problem));}finally{setBusy(false);}};
+ const changeScripts=async()=>{if(!scripts||saving.current)return;const version=generation.current;setBusy(true);setError('');try{const result=await runtime.service({type:'scripts.set',tabId:tab.id,blocked:!scripts.blocked});if(version===generation.current){setScripts(result.scripts);setChanged(true);}}catch(problem){if(version===generation.current)setError(reason(problem));}finally{if(version===generation.current)setBusy(false);}};
+ const showScripts=!tor&&scripts?.supported!==false;
  return <section className="shields" aria-label={t("shieldssummary.protectionOnThisSite")} aria-busy={busy} data-popup-pending={ready&&!error&&(!privacy||!blockingOnly&&!filters)||undefined}>
   {blockingOnly&&<div className="acira-menu-row acira-menu-row-identity protection-identity"><Globe2 size={16} className="acira-menu-icon"/><span className="acira-menu-title"><bdi>{new URL(tab.url).hostname}</bdi><span className="acira-menu-sub">{t(privateMode?'protection.temporary':'protection.saved')}</span></span><span/></div>}
   {blockingOnly&&<div className="acira-menu-sep" role="separator"/>}
-  {blockingOnly?<><SwitchRow id={`blocking-${tab.id}`} icon={<ProtectionIcon size={16} className="acira-menu-icon"/>} label={t('protection.site')} checked={on} disabled={busy||!privacy||!ready} onChange={()=>void change(!on)}/><SwitchRow id={`popups-${tab.id}`} icon={<PanelTop size={16} className="acira-menu-icon"/>} label={t('protection.popupAds')} checked={popupAds&&on} disabled={busy||!filters||!ready||!on} onChange={()=>void setFilter({popupAds:!popupAds})}/><div className="acira-menu-sep" role="separator"/><div className="acira-menu-row acira-menu-row-fact" role="status"><Activity size={16} className="acira-menu-icon"/><span className="acira-menu-title">{privacy?t('protection.blocked',{count:(privacy.blocked??0).toLocaleString(currentLocale())}):!ready?t('site.afterLoad'):!error?t('protection.reading'):''}</span><span/></div>{privacy?.siteOff&&(privacy.warnings||privacy.thirdPartyCookiesBlocked)&&<div className="acira-menu-row acira-menu-row-fact" role="status"><Info size={16} className="acira-menu-icon"/><span className="acira-menu-title">{t(privacy.warnings?(privacy.thirdPartyCookiesBlocked?'protection.stillOnCookies':'protection.stillOn'):'protection.stillOnCookiesOnly')}</span><span/></div>}{top.length>0&&<Disclosure title={t('privacy.protection')}>{top.map(([host,n])=><div className="shields-host" key={host}><span><bdi>{host}</bdi></span><b>{n.toLocaleString(currentLocale())}</b></div>)}</Disclosure>}</>:<>
+  {blockingOnly?<><SwitchRow id={`blocking-${tab.id}`} icon={<ProtectionIcon size={16} className="acira-menu-icon"/>} label={t('protection.site')} checked={on} disabled={busy||!privacy||!ready} onChange={()=>void change(!on)}/><SwitchRow id={`popups-${tab.id}`} icon={<PanelTop size={16} className="acira-menu-icon"/>} label={t('protection.popupAds')} checked={popupAds&&on} disabled={busy||!filters||!ready||!on} onChange={()=>void setFilter({popupAds:!popupAds})}/>{showScripts&&<SwitchRow id={`scripts-${tab.id}`} icon={<Code2 size={16} className="acira-menu-icon"/>} label={t('protection.scripts')} checked={scripts?.blocked===true} disabled={busy||!scripts||!ready} onChange={()=>void changeScripts()}/>}<div className="acira-menu-sep" role="separator"/><div className="acira-menu-row acira-menu-row-fact" role="status"><Activity size={16} className="acira-menu-icon"/><span className="acira-menu-title">{privacy?t('protection.blocked',{count:(privacy.blocked??0).toLocaleString(currentLocale())}):!ready?t('site.afterLoad'):!error?t('protection.reading'):''}</span><span/></div>{privacy?.siteOff&&(privacy.warnings||privacy.thirdPartyCookiesBlocked)&&<div className="acira-menu-row acira-menu-row-fact" role="status"><Info size={16} className="acira-menu-icon"/><span className="acira-menu-title">{t(privacy.warnings?(privacy.thirdPartyCookiesBlocked?'protection.stillOnCookies':'protection.stillOn'):'protection.stillOnCookiesOnly')}</span><span/></div>}{top.length>0&&<Disclosure title={t('privacy.protection')}>{top.map(([host,n])=><div className="shields-host" key={host}><span><bdi>{host}</bdi></span><b>{n.toLocaleString(currentLocale())}</b></div>)}</Disclosure>}</>:<>
   <Disclosure className="shields-main" title={on?(privacy?`${t("privacy.protection")} · ${t("protection.blocked",{count:count.format(privacy.blocked??0)})}`:t("privacy.protection")):t("shieldssummary.protectionOffOnThisSite")}
    control={<button type="button" role="switch" aria-label={t("shieldssummary.protectionOnThisSite")} aria-checked={on} className="shields-switch" disabled={busy||!privacy||!ready} onClick={event=>{event.preventDefault();event.stopPropagation();void change(!on);}}><span aria-hidden="true"/></button>}>
    {answerLabel&&<div className="shields-host"><span>{t("shieldssummary.cookieBanner")}</span><b>{answerLabel}</b></div>}
@@ -54,6 +57,7 @@ export function ShieldsSummary({tab,blockingOnly=false,privateMode=false}:{tab:T
   <SwitchRow id={`answer-${tab.id}`} label={t("shieldssummary.answerCookieBannersOnThis")} checked={answering} disabled={busy||!filters||!ready} onChange={()=>void setFilter({rejectCookies:!answering})}/>
   <SwitchRow id={`banners-${tab.id}`} label={t("shieldssummary.hideCookieBannersOnThis")} checked={banners&&!siteOff} disabled={busy||!filters||!ready||siteOff} onChange={()=>void setFilter({annoyances:!banners})}/>
   <SwitchRow id={`popups-${tab.id}`} label={t('protection.popupAds')} checked={popupAds&&on} disabled={busy||!filters||!ready||!on} onChange={()=>void setFilter({popupAds:!popupAds})}/>
+  {showScripts&&<SwitchRow id={`scripts-${tab.id}`} label={t('protection.scripts')} checked={scripts?.blocked===true} disabled={busy||!scripts||!ready} onChange={()=>void changeScripts()}/>}
   </>}
   {changed&&<div className="acira-menu-row acira-menu-row-fact" role="status"><span/><span className="acira-menu-title">{t("shieldssummary.reloadToApply")}</span><button type="button" className="shields-text" onClick={()=>void runtime.browserCommand({type:'reload',tabId:tab.id})}>{t("error.reload")}</button></div>}
   {error&&<p className="shields-error" role="alert">{error}</p>}

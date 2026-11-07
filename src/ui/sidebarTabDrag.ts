@@ -15,7 +15,7 @@ export function previewTabOrder(ids:readonly string[],from:string,to:string,posi
 }
 
 /** Full row inside the list/bookmarks, glass site icon everywhere else. Native page contents never resize. */
-export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,activeWorkspace:string){
+export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,activeWorkspace:string,options:{stay?:boolean}={}){
   const home=row.getBoundingClientRect(),scroll=row.closest<HTMLElement>('.sb-scroll'),scrollTop=scroll?.scrollTop??0,sidebar=row.closest<HTMLElement>('.acira-sidebar');
   const rows=[...root.querySelectorAll<HTMLElement>('.sb-tab:not(.sb-flip-ghost)')].filter(node=>node.getBoundingClientRect().height>0);
   // What makes room, each as one piece: a tab row, a split card (its panes go with it), a group's header, New tab. Only the rows
@@ -40,8 +40,8 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
   preview.style.color=host.dataset.appearance==='light'?(card.getPropertyValue('--tab-carry-fg').trim()||paint.color):paint.color;
   preview.style.setProperty('--surface',card.getPropertyValue('--tab-carry-bg').trim()||card.getPropertyValue('--surface'));
   preview.style.setProperty('--carry-font',paint.font);
-  host.append(gap,homeSlot,preview);row.dataset.sidebarDragSource='';
-  let pointer=grab,p=0,target=0,stop:(()=>void)|undefined,ended=false,projected:BrowserAction|null=null,bookmarkZone:HTMLElement|null=null,before:string|null=null,forkFrame:((now:number)=>void)|undefined,forkTargets:(()=>LiquidTarget[])|undefined;
+  host.append(gap,homeSlot,preview);if(!options.stay)row.dataset.sidebarDragSource='';
+  let pointer=grab,p=0,target=0,stop:(()=>void)|undefined,ended=false,projected:BrowserAction|null=null,bookmarkZone:HTMLElement|null=null,favoriteOn=false,before:string|null=null,forkFrame:((now:number)=>void)|undefined,forkTargets:(()=>LiquidTarget[])|undefined;
   const delta=()=>scrollTop-(scroll?.scrollTop??0);
   const bounds=(node:HTMLElement)=>{const box=boxes.get(node);return box?new DOMRect(box.x,box.y+delta(),box.width,node.classList.contains('sb-tab')?box.height:node.getBoundingClientRect().height):laid(node);};
   // Where a node lies out, without the room this drag gave it: its own translate and its section's (a section still gliding back
@@ -94,9 +94,18 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     else showGap(null);
     for(const [node,offset] of want)shift(node,offset);
   };
+  /** A tab over Favorites that would make a favorite: it is a copy that goes up, so the tab list stays as it is, the row back in its place and its
+   *  place open as an empty slot (as over the saved pages); the tiles make room in the grid (the sidebar draws that slot). */
+  const projectFavorite=()=>{
+    row.dataset.sidebarDragSource='';
+    const own=bounds(row);Object.assign(homeSlot.style,{width:own.width+'px',height:own.height+'px',transform:`translate3d(${own.left}px,${own.top}px,0)`,opacity:'1'});
+    before=null;showGap(null);
+    for(const [node] of [...moves])shift(node,0);
+  };
   const project=(action:BrowserAction|null)=>{
     projected=action;
     if(bookmarkZone){projectBookmark(bookmarkZone);return;}
+    if(favoriteOn){projectFavorite();return;}
     row.dataset.sidebarDragSource='';before=null;homeSlot.style.opacity='0';
     // The saved pages close their slot again.
     for(const [node] of [...moves])if(!pieces.includes(node)&&!following.includes(node))shift(node,0);
@@ -170,26 +179,17 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     requestAnimationFrame(watch);
   };
   place();
-  return {
-    bounds,
-    /** The saved page this drop goes before (null: after the last one). */
-    bookmarkBefore:()=>before,
-    /** A bookmark is a copy, and the copy is made as liquid (founder, 31 Oct: "split down the middle", "each part turns into just the icon",
-     *  "each icon, asynchronously, goes back to its place and expands"). The carried row splits down its middle as split view's glass does
-     *  (liquidFork: the browser's gooey union of two rounded shapes, the neck stretching and letting go; the springs are the carried
-     *  chip's own row -> chip morph, `tab.split`). Each half gives up its text and is the tab's icon on a small glass chip; one floats up
-     *  to the tab's empty place and the other to the new saved row, a little apart in time, and each opens into its full row there
-     *  (`tab.merge`). The real rows take over from the next frame. The glass is one WebGL layer (exact every frame); the icons and titles
-     *  ride crisp above it, moved by transforms and opacity only. */
-    bookmark(destination:()=>HTMLElement|null,onSettled:()=>void){
+  /** The split (founder, 31 Oct) for a saved page and, the same way, for a favorite (6 Nov): `tile` is the favorite's tile, where the second half ends as the
+   *  icon-only tile instead of a row. `tile.stay`: no drag, the tab's row stays where it is and only a copy of it goes (the tab menu, Cmd+Shift+D, the "+" form). */
+  const split=(destination:()=>HTMLElement|null,onSettled:()=>void,tile?:{slot?:()=>DOMRect|null;stay?:boolean})=>{
       if(ended)return;ended=true;stop?.();liquid.dispose();forkFrame=undefined;forkTargets=undefined;
-      const scale=motionScale(),began=performance.now(),start=preview.getBoundingClientRect(),slot=gap.style.opacity==='1'?gap.getBoundingClientRect():start;
+      const scale=motionScale(),began=performance.now(),start=preview.getBoundingClientRect(),slot=tile?.slot?.()??(gap.style.opacity==='1'?gap.getBoundingClientRect():start),stay=Boolean(tile?.stay);
       const home=homeSlot.style.opacity==='1'?homeSlot.getBoundingClientRect():row.getBoundingClientRect();
-      row.dataset.sidebarDragSource='';
+      if(!stay)row.dataset.sidebarDragSource='';
       let arrived=false,cleaned=false,frameId=0,settledAt=0;
       const clocks:{stop():void}[]=[],faces:HTMLElement[]=[];
       // The saved row is in the page: the room made for it goes, and it is scrolled to if it lies out of sight.
-      const arrive=()=>{const saved=destination();if(arrived||!saved)return;arrived=true;observer.disconnect();settleRoom();for(const animation of saved.getAnimations())animation.cancel();saved.scrollIntoView({block:'nearest'});};
+      const arrive=()=>{const saved=destination();if(arrived||!saved)return;arrived=true;observer.disconnect();settleRoom();for(const animation of saved.getAnimations())animation.cancel();if(!tile)saved.scrollIntoView({block:'nearest'});};
       const observer=new MutationObserver(arrive);observer.observe(sidebar??document.body,{childList:true,subtree:true});
       let material:ReturnType<typeof liquidFork>=null;
       const clean=()=>{if(cleaned)return;cleaned=true;cancelAnimationFrame(frameId);observer.disconnect();for(const clock of clocks)clock.stop();if(!arrived)restoreRoom();onSettled();delete row.dataset.sidebarDragSource;material?.dispose();preview.remove();for(const node of faces)node.remove();homeSlot.remove();gap.remove();};
@@ -199,7 +199,8 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       const tones=getComputedStyle(row),canvas=document.createElement('canvas');canvas.width=canvas.height=1;
       const ctx=canvas.getContext('2d');let fill='#2b2c30';
       if(ctx){for(const value of [tones.getPropertyValue('--sidebar-rgb').trim()||tones.getPropertyValue('--chrome-rgb').trim(),tones.backgroundColor,'rgb(255 255 255 / .04)']){ctx.fillStyle=/^\d/.test(value)?`rgb(${value.replace(/,/g,' ')})`:value;ctx.fillRect(0,0,1,1);}const c=ctx.getImageData(0,0,1,1).data;fill=`rgb(${c[0]} ${c[1]} ${c[2]})`;}
-      material=liquidFork(host,fill);
+      // A copy that goes while the row stays is plain cards (no glass over the row that stays): its own surface lifts off the row and gives way to the tile's.
+      material=stay?null:liquidFork(host,fill);
       const W=start.width,H=start.height,CHIP=28;
       type Rect={left:number;top:number;width:number;height:number};
       type Half={node:HTMLElement;glyph:HTMLElement;text:HTMLElement};
@@ -207,7 +208,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       type Inner={icon:number;title:number;width:number};
       const inner=(el:HTMLElement|null|undefined,r:Rect):Inner=>{const icon=el?.querySelector('.sb-tab-icon')?.getBoundingClientRect(),title=el?.querySelector('.sb-tab-title')?.getBoundingClientRect();return {icon:icon&&icon.width?icon.left-r.left+(icon.width-16)/2:8,title:title&&title.width?title.left-r.left:32,width:title&&title.width?title.width:Math.max(0,r.width-40)};};
       const half=(width:number):Half=>{
-        const node=preview.cloneNode(true) as HTMLElement;node.classList.add('sidebar-bookmark-copy','sidebar-split-face');
+        const node=preview.cloneNode(true) as HTMLElement;node.classList.add('sidebar-split-face');if(!stay)node.classList.add('sidebar-bookmark-copy');
         node.getAnimations().forEach(a=>a.cancel());node.style.setProperty('--chip-p','0');node.style.setProperty('--row-p','1');
         // fillChipIcon may have put its picture in front of the copied icon: one icon only.
         if(!node.firstElementChild?.classList.contains('sidebar-drag-icon'))node.querySelector('.sidebar-drag-icon')?.remove();
@@ -216,7 +217,8 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
         if(material)node.classList.add('sidebar-liquid-face');
         host.append(node);faces.push(node);return {node,glyph,text};
       };
-      const first=half(W),second=half(W);
+      const first=stay?null:half(W),second=half(W);
+      const active=row.getAttribute('aria-current')==='true';
       preview.style.visibility='hidden';
       const ease=(value:number)=>{const t=Math.max(0,Math.min(1,value));return t*t*(3-2*t);};
       const lerp=(a:number,b:number,t:number)=>a+(b-a)*t;
@@ -232,8 +234,8 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       run('openA',spring('tab.merge'),.36);run('openB',spring('tab.merge'),.43);
       const grown={a:false,b:false};let endA:Inner|null=null,endB:Inner|null=null,inked=false;
       // Where one half is this frame: its chip (the half shrunk about its own centre, flown to its landing) opened into its row.
-      const draw=(part:Half,late:boolean,from:{x:number;y:number},at:Rect,end:Inner,fly:number,fold:number,open:number,grow:'a'|'b')=>{
-        const land={x:at.left+end.icon+8,y:at.top+at.height/2},wide=lerp(W/2,CHIP,fold),tall=lerp(H,CHIP,fold);
+      const draw=(part:Half,late:boolean,from:{x:number;y:number},at:Rect,end:Inner,fly:number,fold:number,open:number,grow:'a'|'b',iconOnly=false,w0=W/2)=>{
+        const land={x:at.left+end.icon+8,y:at.top+at.height/2},wide=lerp(w0,CHIP,fold),tall=lerp(H,CHIP,fold);
         const lift=Math.sin(Math.PI*Math.max(0,Math.min(1,fly)))*9,cx=lerp(from.x,land.x,fly),cy=lerp(from.y,land.y,fly)-lift;
         const r:Rect={left:lerp(cx-wide/2,at.left,open),top:lerp(cy-tall/2,at.top,open),width:lerp(wide,at.width,open),height:lerp(tall,at.height,open)};
         if(open>0&&!grown[grow]){grown[grow]=true;part.text.style.width=end.width+'px';}
@@ -242,33 +244,61 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
         part.glyph.style.transform=`translate3d(${lerp(base,end.icon,open).toFixed(3)}px,${((r.height-16)/2).toFixed(3)}px,0)`;
         part.glyph.style.opacity=late?String(ease((fold-.15)/.5)):'1';
         // Before the open the title is the half of the row the cut left; after it, the row's own.
-        const shown=open>0?ease((open-.4)/.5):1-Math.max(0,Math.min(1,fold*2.5));
+        const shown=open>0&&!iconOnly?ease((open-.4)/.5):1-Math.max(0,Math.min(1,fold*2.5));
         part.text.style.transform=`translate3d(${open>0?end.title:late?32-W/2:32}px,${((r.height-H)/2).toFixed(3)}px,0)`;part.text.style.opacity=String(shown);
         return r;
       };
       const frame=(now:number)=>{
         if(cleaned)return;arrive();
         const saved=destination(),to=saved&&saved.getBoundingClientRect().width?saved.getBoundingClientRect():slot,tab=row.isConnected&&row.offsetHeight?row.getBoundingClientRect():home;
-        const mid=start.top+H/2,apart=7*P.split;
-        // Measured every frame: a saved row's nesting settles as its section opens, and the handoff must land on where it ends up.
-        endA=inner(row.isConnected?row:null,tab);endB=inner(saved,to);
+        const mid=start.top+H/2,apart=stay?0:7*P.split;
+        // Measured every frame: a saved row's nesting settles as its section opens, and the handoff must land on where it ends up. A favorite's tile
+        // is icon only: its icon is centred and there is no title.
+        endA=inner(row.isConnected?row:null,tab);endB=tile?{icon:(to.width-16)/2,title:0,width:0}:inner(saved,to);
         // A page that is open in a tab reads at full ink in its saved row: the copy takes that ink as it arrives.
-        if(saved&&!inked){inked=true;const ink=getComputedStyle(saved).getPropertyValue('--sb-fg').trim();if(ink&&saved.hasAttribute('data-open')){second.node.style.transition='color 220ms';second.node.style.color=ink;}}
-        const a=draw(first,false,{x:start.left+W/4-apart,y:mid},tab,endA!,P.flyA,P.fold,P.openA,'a');
-        const b=draw(second,true,{x:start.left+W*3/4+apart,y:mid},to,endB!,P.flyB,P.fold,P.openB,'b');
-        const done=P.openA>=.985&&P.openB>=.985;if(done&&!settledAt)settledAt=now;
-        material?.draw(box(a),box(b),1-ease((P.split-.12)/.7),settledAt?1-ease((now-settledAt)/(140*scale)):1);
+        if(!tile&&saved&&!inked){inked=true;const ink=getComputedStyle(saved).getPropertyValue('--sb-fg').trim();if(ink&&saved.hasAttribute('data-open')){second.node.style.transition='color 220ms';second.node.style.color=ink;}}
+        const a=first?draw(first,false,{x:start.left+W/4-apart,y:mid},tab,endA!,P.flyA,P.fold,P.openA,'a'):null;
+        const b=stay?draw(second,false,{x:start.left+W/2,y:mid},to,endB!,P.flyB,P.fold,P.openB,'b',true,W):draw(second,true,{x:start.left+W*3/4+apart,y:mid},to,endB!,P.flyB,P.fold,P.openB,'b',Boolean(tile));
+        const done=(stay||P.openA>=.985)&&P.openB>=.985;if(done&&!settledAt)settledAt=now;
+        const out=settledAt?ease((now-settledAt)/(140*scale)):0;
+        if(a)material?.draw(box(a),box(b),1-ease((P.split-.12)/.7),1-out);
+        // The tile is held (the sidebar draws it at opacity 0) until the copy has landed on it; then it is there and the copy's surface fades away over it.
+        // The glass (or the copy's surface) fades out over a tile and a row that are already there, so nothing dips between them.
+        if(tile&&settledAt&&!stay)delete row.dataset.sidebarDragSource;
+        if(tile&&saved){
+          saved.style.opacity=settledAt?'1':'0';
+          if(stay){
+            const surface=getComputedStyle(saved).backgroundColor,alpha=/,\s*([\d.]+)\)$/.exec(surface)?.[1],solid=!alpha||Number(alpha)>.95;
+            second.node.style.backgroundColor=solid&&out>0?surface:'';
+            second.node.style.setProperty('--row-p',String(Math.min(active?1:ease(P.split/.3),1-out)));
+          }
+        }
         if(settledAt&&now-settledAt>=140*scale&&arrived){clean();return;}
         if(now-began>(2.2*scale+1.5)*1000){clean();return;}
         frameId=requestAnimationFrame(frame);
       };
       frame(performance.now());
-    },
-    move(point:Point,full:boolean,action:BrowserAction|null,bookmarks:HTMLElement|null=null){
+  };
+  return {
+    bounds,
+    /** The saved page this drop goes before (null: after the last one). */
+    bookmarkBefore:()=>before,
+    /** A bookmark is a copy, and the copy is made as liquid (founder, 31 Oct: "split down the middle", "each part turns into just the icon",
+     *  "each icon, asynchronously, goes back to its place and expands"). The carried row splits down its middle as split view's glass does
+     *  (liquidFork: the browser's gooey union of two rounded shapes, the neck stretching and letting go; the springs are the carried
+     *  chip's own row -> chip morph, `tab.split`). Each half gives up its text and is the tab's icon on a small glass chip; one floats up
+     *  to the tab's empty place and the other to the new saved row, a little apart in time, and each opens into its full row there
+     *  (`tab.merge`). The real rows take over from the next frame. The glass is one WebGL layer (exact every frame); the icons and titles
+     *  ride crisp above it, moved by transforms and opacity only. */
+    bookmark(destination:()=>HTMLElement|null,onSettled:()=>void){split(destination,onSettled);},
+    /** A tab becoming a favorite is this same split with the tile as its end: a copy splits off the tab (liquid, in two halves while the tab is
+     *  carried; one copy while the tab's row stays), goes up and ends as the icon-only tile, the other tiles having made room. */
+    favorite(destination:()=>HTMLElement|null,onSettled:()=>void,options:{slot?:()=>DOMRect|null;stay?:boolean}={}){split(destination,onSettled,options);},
+    move(point:Point,full:boolean,action:BrowserAction|null,bookmarks:HTMLElement|null=null,favorites=false){
       if(ended)return;pointer=point;
       // Between the list and the saved pages (a separator, a section's edge) nothing changes: re-arranging there moved the sections
       // under the pointer and back.
-      if(!full||action||bookmarks){bookmarkZone=full?bookmarks:null;project(full?action:null);}
+      if(!full||action||bookmarks||favorites!==favoriteOn){bookmarkZone=full?bookmarks:null;favoriteOn=full&&favorites&&!bookmarks;project(full?action:null);}
       const next=full?0:1;liquid.point(point,!full);
       if(next!==target){target=next;stop?.();const scale=motionScale();if(!scale)p=next;else{const controls=animate(p,next,{...morphSpring(next?'tab.split':'tab.merge',scale),onUpdate:value=>{p=value;place();}});stop=()=>controls.stop();}}
       place();
@@ -312,3 +342,4 @@ export function sidebarRowArea(point:Point,sidebar:HTMLElement|null,wasFull=true
   const bottom=Math.max(edge.top,...zones.map(box=>box.bottom)),pad=wasFull?8:0;
   return point.x>=edge.left-pad&&point.x<=edge.right+pad&&point.y>=edge.top&&point.y<=bottom+pad;
 }
+

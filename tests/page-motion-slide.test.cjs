@@ -100,14 +100,20 @@ function glide(start,target,{smooth=true,load,stop,then}={}){
 for(const [name,start,target] of [
  ['open',{x:0,y:36,width:1272,height:722},{x:240,y:36,width:1026,height:716}],
  ['close',{x:240,y:36,width:1026,height:716},{x:0,y:36,width:1272,height:722}],
-]) test(`${name} sidebar, smooth: the page glides every frame and lays out once`,()=>{
- const {view,bounds,sizes}=glide(start,target);
+]) test(`${name} sidebar, smooth: the page glides every frame, its width (the re-wrap) changes once, and its far bottom edge rises on the spring`,()=>{
+ const {view,bounds}=glide(start,target);
  assert.deepEqual(view.bounds,target,'lands exactly on the final size');
- assert.ok(sizes.length<=2,'the site sees its final size, and at most one other: '+sizes);
+ const widths=[...new Set(bounds.map(b=>b.width))];
+ assert.ok(widths.length<=2&&widths.includes(target.width)&&widths.every(w=>w===start.width||w===target.width),'the site sees its final width, and at most one other: it re-wraps once: '+widths);
  assert.ok(bounds.length>15,'the page moves on many frames: '+bounds.length);
- const widest=Math.max(start.width,target.width);
- assert.ok(bounds.every(b=>b.width<=widest&&b.height<=Math.max(start.height,target.height)),'never larger than the larger of its two sizes');
- assert.ok(bounds.slice(0,-1).every(b=>b.width===widest),'the size is held while the page is on its way');
+ const widest=Math.max(start.width,target.width),tall=Math.max(start.height,target.height),short=Math.min(start.height,target.height);
+ assert.ok(bounds.every(b=>b.width<=widest&&b.height<=tall&&b.height>=short),'never larger than the larger of its two sizes');
+ assert.ok(bounds.slice(0,-1).every(b=>b.width===widest),'the width is held while the page is on its way');
+ // The card's bottom margin (6px) grows and shrinks with the slide, as the interface's card does: the bottom line is never popped in or out at the landing (founder, 5 Nov).
+ const bottoms=bounds.map(b=>b.y+b.height);
+ assert.ok(bottoms.every((y,i)=>i===0||(target.y+target.height>start.y+start.height?y>=bottoms[i-1]:y<=bottoms[i-1])),'the bottom edge only moves one way');
+ assert.ok(new Set(bottoms.slice(0,-1)).size>=4,'in steps on the way, not one jump at the landing: '+[...new Set(bottoms)]);
+ assert.ok(Math.abs(bottoms.at(-2)-bottoms.at(-1))<=1,'the last frame before the landing is within a pixel of it');
  const xs=bounds.map(b=>b.x);
  assert.ok(xs.every((x,i)=>i===0||(target.x>start.x?x>=xs[i-1]:x<=xs[i-1])),'the page only moves one way');
  assert.ok(bounds.every(b=>b.y===36),'the top edge stays put');

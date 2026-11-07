@@ -1,10 +1,12 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
-// Site icons for History, Bookmarks and Downloads. Those pages never ask the network for an icon: while you are on a site, its icon is
-// fetched once (the same request the tab already made, without cookies), shrunk to 32px and kept on this computer as an image, so the
-// page can show it later with no request at all. Private windows keep nothing, and an icon is forgotten as soon as the profile no longer
-// has the site in its history, bookmarks or open tabs.
-const MAX_BYTES=65536,MAX_PER_PROFILE=400,FRESH=7*86400000,SIZE=32;
+// Site icons for History, Bookmarks, Downloads and the New Tab tiles. Those pages never ask the network for an icon: while you are on a site,
+// the icon the tab already fetched (the tab's own request, without cookies, so nothing more is asked of the site) is kept on this computer as
+// an image up to 96px (a New Tab tile draws 24 CSS px, 48 to 72 device pixels), so the page can show it later with no request at all. An .ico
+// is cut down to its one best picture and an SVG is kept as it is. Private windows keep nothing, and an icon is forgotten as soon as the
+// profile no longer has the site in its history, bookmarks or open tabs.
+const {normalizeIcon}=require('./icon-image.cjs');
+const MAX_BYTES=262144,MAX_PER_PROFILE=400,FRESH=7*86400000,SIDE=96,ENTRY_MAX=24*1024,NEED=48,VERSION=2;
 
 function createFaviconStore({file,nativeImage,now=()=>Date.now()}){
  let data={version:1,profiles:{}},loaded=false,timer=null;
@@ -23,24 +25,29 @@ function createFaviconStore({file,nativeImage,now=()=>Date.now()}){
   try{const parsed=new URL(url);return /^https?:$/.test(parsed.protocol)&&parsed.hostname?parsed.hostname.replace(/^www\./,'').toLowerCase():null;}catch{return null;}
  };
 
- /** `iconUrl` is the icon the page just announced. Resolves true when a new icon was stored. */
- async function remember({session,profileId,privateMode,pageUrl,iconUrl}){
-  if(privateMode||!session||typeof profileId!=='string'||!profileId)return false;
+ const shape=bytes=>normalizeIcon({bytes,need:NEED,maxSide:SIDE,maxOut:ENTRY_MAX,nativeImage});
+ /** `iconUrl` is the icon the page announced; `icon` ({bytes}) is that file as the tab already fetched it, so nothing is asked of the site a
+  *  second time. Without `icon` the file is fetched here through `session` (no cookies). Resolves true when a new icon was stored. */
+ async function remember({session,profileId,privateMode,pageUrl,iconUrl,icon}){
+  if(privateMode||typeof profileId!=='string'||!profileId)return false;
   const host=hostOf(pageUrl);
   if(!host||!/^https?:\/\//i.test(iconUrl||''))return false;
+  if(!session&&!(icon&&Buffer.isBuffer(icon.bytes)))return false;
   load();
   const profile=(data.profiles[profileId]??={}),known=profile[host];
-  if(known&&known.url===iconUrl&&now()-known.at<FRESH)return false;
+  if(known&&known.url===iconUrl&&known.v===VERSION&&now()-known.at<FRESH)return false;
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),6000);
   try{
-   const response=await session.fetch(iconUrl,{credentials:'omit',signal:controller.signal});
-   if(!response.ok||!/^image\//i.test(response.headers.get('content-type')||''))return false;
-   const bytes=Buffer.from(await response.arrayBuffer());
+   let bytes=icon&&Buffer.isBuffer(icon.bytes)?icon.bytes:null;
+   if(!bytes){
+    const response=await session.fetch(iconUrl,{credentials:'omit',signal:controller.signal});
+    if(!response.ok||!/^image\//i.test(response.headers.get('content-type')||''))return false;
+    bytes=Buffer.from(await response.arrayBuffer());
+   }
    if(!bytes.length||bytes.length>MAX_BYTES)return false;
-   let image=nativeImage.createFromBuffer(bytes);
-   if(!image||image.isEmpty())return false;
-   if(image.getSize().width>SIZE)image=image.resize({width:SIZE,quality:'best'});
-   profile[host]={url:iconUrl,data:image.toDataURL(),at:now()};
+   const kept=shape(bytes);
+   if(!kept)return false;
+   profile[host]={url:iconUrl,data:kept.data,at:now(),v:VERSION};
    const hosts=Object.keys(profile);
    if(hosts.length>MAX_PER_PROFILE)for(const old of hosts.sort((a,b)=>profile[a].at-profile[b].at).slice(0,hosts.length-MAX_PER_PROFILE))delete profile[old];
    save();
@@ -72,7 +79,7 @@ function createFaviconStore({file,nativeImage,now=()=>Date.now()}){
    if(Object.keys(profile).length>=MAX_PER_PROFILE)break;
    const host=typeof rawHost==='string'?rawHost.replace(/^www\./,'').toLowerCase():'';
    if(!host||profile[host]||!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>MAX_BYTES)continue;
-   try{let image=nativeImage.createFromBuffer(bytes);if(!image||image.isEmpty())continue;if(image.getSize().width>SIZE)image=image.resize({width:SIZE,quality:'best'});profile[host]={url:'',data:image.toDataURL(),at:0};added++;}catch{}
+   try{const kept=shape(bytes);if(!kept)continue;profile[host]={url:'',data:kept.data,at:0,v:VERSION};added++;}catch{}
   }
   if(added)save();
   return added;

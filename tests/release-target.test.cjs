@@ -112,12 +112,14 @@ test('no release or update file hardcodes the releases repository', () => {
   }
 });
 
-test('the updater interval label matches the code in every catalog (8 hours)', () => {
+test('the updater interval label matches the code in every catalog (2 hours since beta.11)', () => {
   const { CHECK_EVERY } = require('../desktop/browser-services/app-updater.cjs');
-  assert.equal(CHECK_EVERY, 8 * 60 * 60 * 1000);
+  assert.equal(CHECK_EVERY, 2 * 60 * 60 * 1000);
   for (const file of fs.readdirSync(path.join(root, 'src', 'i18n')).filter(name => /^[A-Za-z-]+\.json$/.test(name) && name !== 'converted.json')) {
     const text = JSON.parse(read('src', 'i18n', file))['updates.checksAtLaunchAndEvery'];
-    assert.match(text, /\b8\b/, `${file}: ${text}`); assert.doesNotMatch(text, /\b6\b/, `${file}: ${text}`);
+    assert.match(text, file === 'ar.json' ? /ساعتين/ : /\b2\b/, `${file}: ${text}`); assert.doesNotMatch(text, /\b(?:6|8)\b/, `${file}: ${text}`);
+    const detail = JSON.parse(read('src', 'i18n', file))['updates.autoDetail'];
+    assert.match(detail, file === 'ar.json' ? /ساعتين/ : /\b2\b/, `${file} autoDetail: ${detail}`);
   }
 });
 

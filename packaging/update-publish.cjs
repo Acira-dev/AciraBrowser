@@ -5,8 +5,8 @@
 // Order that keeps users safe (docs/launch/PUBLIC_UPDATES.md): payloads first, verified anonymously, the channel documents last.
 const path=require('node:path'),{createHash}=require('node:crypto'),{createReadStream}=require('node:fs');
 const semver=require('semver');
-const {DEFAULT_FEED_URL,UPDATE_REPOSITORY}=require('./update-feed.cjs');
-const ARCHES=['arm64','x64'],CHANNELS=['beta','stable'],PLATFORMS=['mac','windows'];
+const {LEGACY_FEED_URL,DEFAULT_FEED_URL,UPDATE_REPOSITORY}=require('./update-feed.cjs');
+const ARCHES=['arm64','x64'],CHANNELS=['beta','stable'],PLATFORMS=['mac','windows'],ALL_PLATFORMS=[...PLATFORMS,'linux']; // PLATFORMS: what --widen/--halt touch by default; Linux joins with the bridge release (beta.11)
 // Versions already on people's computers. A release must be higher than all of them or nobody updates to it.
 const SHIPPED=Object.freeze([
  Object.freeze({version:'0.1.0-beta.6.local.4',what:'the Mac build people installed on 1 November'}),
@@ -16,7 +16,7 @@ const RELEASE_VERSION=/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/; // what ships; never a "
 const WINDOWS_VERSION=/^0\.1\.\d+-beta\.\d+$/; // scripts/build-windows.mjs refuses any other version
 const ASSET_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]*$/; // GitHub rewrites other characters, which would break the URLs written into the feed
 const NOTES_MAX=1000; // desktop/browser-services/app-updater.cjs shows at most this many characters of release notes
-const RAW_FEED_BASE=DEFAULT_FEED_URL;
+const RAW_FEED_BASE=LEGACY_FEED_URL; // the GitHub raw feed: where the bridge release (beta.11) is written and read back; packaging/update-targets.cjs has both targets
 
 function versionProblems(version,channel){
  if(!CHANNELS.includes(channel))return ['The channel must be beta or stable.'];
@@ -30,9 +30,9 @@ function versionProblems(version,channel){
 function newerProblems(version,references){
  return references.filter(reference=>reference.version&&semver.valid(reference.version)&&!semver.gt(version,reference.version)).map(reference=>version+' is not newer than '+reference.version+' ('+reference.label+'); an installed copy only updates to a higher version.');
 }
-const feedFiles=(channel,platform)=>(channel==='stable'?['latest','beta']:['beta']).map(name=>name+(platform==='mac'?'-mac':'')+'.yml'); // a stable release also reaches people following the beta channel
+const feedFiles=(channel,platform)=>(channel==='stable'?['latest','beta']:['beta']).map(name=>platform==='linux'?'linux/'+name+'-linux.yml':name+(platform==='mac'?'-mac':'')+'.yml'); // a stable release also reaches people following the beta channel
 function releaseTag({version,platform,commit}){
- if(!PLATFORMS.includes(platform))throw Error('Unknown platform '+platform+'.');
+ if(!ALL_PLATFORMS.includes(platform))throw Error('Unknown platform '+platform+'.');
  if(!/^[0-9a-f]{7,40}$/.test(String(commit)))throw Error('A release tag needs the build commit (7 to 40 hex characters), got '+commit+'.');
  return 'v'+version+'-'+platform+'-'+commit.slice(0,8);
 }
@@ -56,8 +56,12 @@ function releaseNotes(raw){
  const bullets=lines(source).filter(line=>!/^#{1,6}\s/.test(line)).map(bullet);
  return {markdown:"## What's new\n"+bullets.join('\n')+'\n',plain:bullets.join('\n')};
 }
-function releaseBody({notes,platform}){
- return (notes.markdown?notes.markdown+'\n':'')+(platform==='mac'?'The disk images (DMG) are for new installs; installed copies of Acira update themselves from the update archives.':'AciraBrowserSetup.exe is the installer; installed copies of Acira update themselves from it.')+' SHA-256 checksums are in SHA256SUMS.txt.\n';
+// A release carries this line in its body while it must not appear on the website's download page: from the upload until the founder says it is time
+// (beta.12), and for good on the bridge release (beta.11, which new visitors are never offered). The website skips a release whose body has it.
+const HIDDEN_MARKER='<!-- acira:hidden -->';
+const INSTALL_LINE={mac:'The disk images (DMG) are for new installs; installed copies of Acira update themselves from the update archives.',windows:'AciraBrowserSetup.exe is the installer; installed copies of Acira update themselves from it.',linux:'The AppImage is the program and AciraBrowser-Linux-SetupFiles.zip installs it (Install-Acira.sh); installed copies of Acira update themselves from the AppImage.'};
+function releaseBody({notes,platform,hidden=false}){
+ return (hidden?HIDDEN_MARKER+'\n':'')+(notes.markdown?notes.markdown+'\n':'')+INSTALL_LINE[platform]+' SHA-256 checksums are in SHA256SUMS.txt.\n';
 }
 /** The Mac channel document: writeMacUpdateFeed's output (relative names, hashes it computed) with absolute release URLs, a name and the notes. */
 function finalizeMacFeed(baseText,{urlFor,releaseName,releaseNotes:notes}){
@@ -67,6 +71,19 @@ function finalizeMacFeed(baseText,{urlFor,releaseName,releaseNotes:notes}){
 function windowsFeed({version,file,url,releaseDate,releaseName,releaseNotes:notes,previousBlockMaps=[]}){
  return {version,files:[{url,sha512:file.sha512,size:file.size}],path:url,sha512:file.sha512,releaseDate,releaseName,...(notes?{releaseNotes:notes}:{}),...(previousBlockMaps.length?{previousBlockMaps}:{})};
 }
+/** The Linux channel document: one AppImage (the same shape as the Windows one, without blockmaps). */
+function linuxFeed({version,file,url,releaseDate,releaseName,releaseNotes:notes}){
+ return {version,files:[{url,sha512:file.sha512,size:file.size}],path:url,sha512:file.sha512,releaseDate,releaseName,...(notes?{releaseNotes:notes}:{})};
+}
+/** How soon installs on beta.11 and later should look again (seconds; the app keeps it between 10 minutes and 24 hours). Older builds ignore the field. */
+const withNextCheck=(doc,seconds)=>{
+ if(!Number.isInteger(seconds)||seconds<600||seconds>86400)throw Error('nextCheckSeconds is a whole number from 600 to 86400.');
+ return {...doc,nextCheckSeconds:seconds};
+};
+/** A bridge document in its frozen form: offered to everyone, no staging, no halt note, no pace. */
+const frozenDoc=doc=>{const next={...doc};delete next.stagingPercentage;delete next.halted;delete next.nextCheckSeconds;return next;};
+/** The addresses an app-update.yml of a new build may name (the new host, or the frozen GitHub feed for an old-style build). */
+const ALLOWED_FEEDS=Object.freeze([DEFAULT_FEED_URL,LEGACY_FEED_URL]);
 const BLOCKMAPS_KEPT=6;
 /** Where earlier Windows setups' blockmaps are, newest first: the live channel documents' own setups (their URL + .blockmap) and the notes they carried.
  *  An installed Acira downloads only what changed since its own setup (desktop/browser-services/app-updater.cjs), which needs its own version's
@@ -165,4 +182,4 @@ async function readLiveFeed({fetch,file,baseUrl=RAW_FEED_BASE}){
 function buildInfo({version,channel,platform,commit,assets,checks}){
  return {schema:2,product:'Acira Browser',version,channel,platform,commit,checks,files:assets.map(({name,size,sha256,sha512})=>({name,size,sha256,sha512}))};
 }
-module.exports={ARCHES,CHANNELS,PLATFORMS,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,checkBlockMap,parsePercent,rolloutOf,describeRollout,withRollout,haltDoc,macArchOf,tagOf,addMacFiles,lineDiff,foldDiff,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};
+module.exports={ARCHES,CHANNELS,PLATFORMS,ALL_PLATFORMS,HIDDEN_MARKER,ALLOWED_FEEDS,linuxFeed,withNextCheck,frozenDoc,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,checkBlockMap,parsePercent,rolloutOf,describeRollout,withRollout,haltDoc,macArchOf,tagOf,addMacFiles,lineDiff,foldDiff,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};

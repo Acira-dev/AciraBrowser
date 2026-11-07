@@ -1,3 +1,4 @@
+import { blockSlideOf, type BlockSlide } from './addressInSidebar';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { springAt, springEasing, springs, type SpringSpec } from './springs';
 import { classScale, frequentStretch, kick, motionPaceOf, springFor, springForFrequent, stripMs, type MotionClass, type MotionTokenId, type SpeedName } from './motionTokens';
@@ -336,7 +337,45 @@ function followPage(before: DOMRect | null | undefined): { start: () => void; st
   return { start, stop };
 }
 
+/** The frame's band above the page card, its strip below it and the docked sidebar's width, as the layout stands (the toolbar is 36 px in Full, 32 in Compact and Focus; the card
+ * keeps a 6 px margin below). The layout switch's glass veil (view-morph.css) tints the band and the strip across the sidebar's column for the whole slide, which the sliding
+ * sidebar leaves bare ahead of its edge (founder, 5 Nov, Windows), and keeps the frame's old or new picture off the column's middle, where the sidebar's own veil lies. Read
+ * before the switch (the frame it leaves) and after its update (the frame it shows): a docked sidebar in either one sets them, the frame with none leaves them as they were. */
+function measureFrameBands(before: boolean): void {
+  const style = document.documentElement.style, rail = document.querySelector<HTMLElement>('.app > .ed-rail.is-expanded:not(.is-peek)')?.getBoundingClientRect?.();
+  if (!rail || !rail.width) { if (before) style.setProperty('--frame-rail-width', '0px'); return; }
+  const card = document.querySelector<HTMLElement>('.browser-body > .page-area')?.getBoundingClientRect?.(), height = typeof window === 'undefined' ? 0 : window.innerHeight;
+  if (!card || !card.width || !height) return;
+  style.setProperty('--frame-rail-width', `${rail.width}px`);
+  style.setProperty('--frame-band-top', `${Math.max(0, card.top)}px`);
+  style.setProperty('--frame-band-bottom', `${Math.max(0, height - card.bottom)}px`);
+}
+
+/** The spring the native page's top edge follows when a layout switch raises it (entering Seamless: the toolbar's hide spring, chromeEdge.ts), or null for the sidebar's curve. */
+let pageRiseSpring: (() => { duration: number; bounce: number } | null) | null = null;
+export const registerPageRiseSpring = (source: () => { duration: number; bounce: number } | null): void => { pageRiseSpring = source; };
+/** The page's top edge rising over the toolbar's row (entering Seamless): the controls that leave ride up with it on its spring, instead of standing there while the page covers them
+ * from below (founder, 6 Nov). `--page-rise` is the distance, `--page-rise-ms` and `--page-rise-ease` the spring; view-morph.css reads them. */
+function measurePageRise(before: DOMRect | null | undefined): void {
+  const root = document.documentElement, after = document.querySelector('.page-content')?.getBoundingClientRect?.();
+  if (!before || !after) return;
+  const rise = Math.round(before.top - after.top); if (rise < 8) return;
+  const spec = pageRiseSpring?.(), fallback = { duration: PAGE_GLIDE_MS * motionPace(), easing: PAGE_SPRING }, spring = spec ? springEasing(spec, 1) : fallback;
+  root.style.setProperty('--page-rise', `${rise}px`); root.style.setProperty('--page-rise-ms', `${Math.round(spring.duration)}ms`); root.style.setProperty('--page-rise-ease', spring.easing);
+  root.dataset.pageRise = '';
+}
+const clearPageRise = (): void => { const root = document.documentElement; if (!('pageRise' in root.dataset)) return; delete root.dataset.pageRise; for (const name of ['--page-rise', '--page-rise-ms', '--page-rise-ease']) root.style.removeProperty(name); };
 type ModeTransition = { ready: Promise<void>; finished: Promise<void> };
+/** The transition that is playing now, as a promise that settles once its layers are gone and `data-mode-switch` has been cleared. A layout switch asked for while one is playing
+ * cannot start its own (a view transition replaces the running one, and without one the new layout would show at once under the old one's layers, the page jumping to its end state
+ * while main glides it from where it stands): it waits for this, then plays as a morph of its own. Capped, so a window that never finishes a transition cannot hold a switch back. */
+let playing: Promise<void> | null = null;
+const SETTLE_MAX_MS = 700;
+export const modeSwitchPlaying = (): boolean => playing !== null;
+export function whenModeSwitchSettled(): Promise<void> {
+  const wait = playing; if (!wait) return Promise.resolve();
+  return Promise.race([wait.then(whenModeSwitchSettled), new Promise<void>(resolve => setTimeout(resolve, SETTLE_MAX_MS))]);
+}
 /** A layout switch (the sidebar docking or leaving, the compact chrome) in the interface is a view transition: its new frame is rendered and
  * snapshotted before its layers start to move. The native page's own glide used to start the moment the new layout reached the main process,
  * which is before that, so the page ran ahead of the card it sits in by however long the snapshot took (5 to 16 pt, and different on every
@@ -357,7 +396,7 @@ type ViewTransitionStart = (update: () => void) => ModeTransition;
  * switch can't stop halfway while the page is busy. `update` must apply the change synchronously (flushSync). Its
  * duration is `240ms × --motion-scale` (transient.css). `edge` is Seamless's reveal and hide (ui/chromeEdge.ts): the spring comes from
  * `--edge-ms` and `--edge-ease`, set just before (seamless.css). */
-export function startModeTransition(update: () => void, kind: 'appearance' | 'layout' | 'edge' = 'appearance'): ModeTransition | null {
+export function startModeTransition(update: () => void, kind: 'appearance' | 'layout' | 'edge' = 'appearance', slideHint?: BlockSlide): ModeTransition | null {
   const start = (document as Document & { startViewTransition?: ViewTransitionStart }).startViewTransition;
   const root = document.documentElement;
   if (!start || reducedMotion() || document.visibilityState !== 'visible' || root.hasAttribute('data-fr-switch') || root.hasAttribute('data-mode-switch')) { update(); return null; }
@@ -365,11 +404,15 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   // An appearance switch under the crossfade starts no color transitions (transient.css): the attribute and the new
   // tokens land in one commit, so nothing has to be found and finished afterwards (F04).
   const before = kind === 'layout' ? document.querySelector('.page-content')?.getBoundingClientRect() : null;
+  const blockBefore = kind === 'layout' ? document.querySelector<HTMLElement>('.browser-shell[data-sbmode]')?.dataset.sbmode : undefined;
+  // The picture of the old state is taken when the switch starts, so a block that is about to leave with the sidebar must already be one layer (its controls un-named) then.
+  if (slideHint === 'out' && blockBefore === 'block') root.dataset.blockSlide = 'out';
+  if (kind === 'layout') measureFrameBands(true);
   let follow: ReturnType<typeof followPage> = null;
   const run = () => {
     if(kind === 'appearance') root.dataset.themeSettle = '';
     update();
-    if(kind === 'layout') { follow = followPage(before); if (follow) root.dataset.pageFollow = ''; }
+    if(kind === 'layout') { const slide = blockSlideOf(blockBefore, document.querySelector<HTMLElement>('.browser-shell[data-sbmode]')?.dataset.sbmode); if (slide) root.dataset.blockSlide = slide; else delete root.dataset.blockSlide; measureFrameBands(false); measurePageRise(before); follow = followPage(before); if (follow) root.dataset.pageFollow = ''; }
   };
   const transition = start.call(document, run);
   if (kind === 'layout' && transition.ready) {
@@ -380,7 +423,9 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   // A newer reveal or workspace selection can skip this snapshot. Its update still
   // completes; consuming ready's rejection avoids an uncaught animation-only error.
   void transition.ready?.then(() => follow?.start(), () => {});
-  transition.finished.finally(() => { follow?.stop(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.pageFollow; delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
+  transition.finished.finally(() => { follow?.stop(); if (kind === 'layout') clearPageRise(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.pageFollow; delete root.dataset.blockSlide; delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
+  const mine: Promise<void> = transition.finished.then(() => {}, () => {}).then(() => { if (playing === mine) playing = null; });
+  playing = mine;
   return transition;
 }
 

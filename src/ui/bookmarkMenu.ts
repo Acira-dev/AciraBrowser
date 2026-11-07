@@ -11,13 +11,19 @@ export type BookmarkTarget=
  |{kind:'folder';node:BookmarkNode;bar:boolean}
  |{kind:'root'}
  |{kind:'new';parentId:string|null}
- |{kind:'page';url:string};
+ |{kind:'page';url:string}
+ /** A sidebar section's own menu (`node:zone-<section id>`; a menu ref travels to the popup as a node id, and main accepts only word characters, dots and dashes there): Hide this section, Customize sidebar… */
+ |{kind:'zone';section:string};
 
 export const bookmarkRef=(id:string)=>`node:${id}`;
+/** A sidebar section's own menu: `zoneRef('history')`. */
+export const ZONE_REF='node:zone-';
+export const zoneRef=(section:string)=>ZONE_REF+section;
 
 export function bookmarkTarget(ref:string,nodes:BookmarkNode[],profileId:string):BookmarkTarget|null{
  const mine=nodes.filter(node=>node.browserProfileId===profileId);
  if(ref==='node:root')return {kind:'root'};
+ if(ref.startsWith(ZONE_REF))return {kind:'zone',section:ref.slice(ZONE_REF.length)};
  if(ref.startsWith('node:new:')){const id=ref.slice(9);return {kind:'new',parentId:id!=='root'&&mine.some(node=>node.id===id&&!node.url)?id:null};}
  if(ref.startsWith('node:')){const node=mine.find(item=>item.id===ref.slice(5));if(!node)return null;return node.url?{kind:'bookmark',node}:{kind:'folder',node,bar:isBarFolder(node)};}
  if(!ref)return null;

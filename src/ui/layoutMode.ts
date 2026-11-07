@@ -42,4 +42,10 @@ export function sidebarLayoutChanged(previous: Pick<BrowserSnapshot, 'windowUi' 
   const a = previous.windowUi, b = next.windowUi;
   return a.workspaceOpen !== b.workspaceOpen || a.webWorkspaceOpen !== b.webWorkspaceOpen || a.focusMode !== b.focusMode || a.view !== b.view || windowViewOf(previous.settings) !== windowViewOf(next.settings) || previous.settings.verticalTabs !== next.settings.verticalTabs;
 }
+/** The layout change takes the sidebar away: it is open for the active tab now and closed for the tab that will be active. Asked before a layout switch starts, so a Sidebar-mode window
+ * can fold the address block into the sidebar's own slide out (sharedMotion.ts, address-in-sidebar.css): the picture of the old state is taken when the switch starts. */
+export function sidebarCloses(now: Pick<BrowserSnapshot, 'windowUi' | 'tabs' | 'activeTabId'>, nextUi: Pick<BrowserSnapshot['windowUi'], 'workspaceOpen' | 'webWorkspaceOpen'>, nextActiveTabId: string, nextTabs: Pick<BrowserSnapshot, 'tabs'>['tabs'] = now.tabs): boolean {
+  const openFor = (ui: Pick<BrowserSnapshot['windowUi'], 'workspaceOpen' | 'webWorkspaceOpen'>, tabs: Pick<BrowserSnapshot, 'tabs'>['tabs'], id: string) => { const tab = tabs.find(item => item.id === id); return tab ? workspaceIsOpen(ui, tab) : ui.workspaceOpen; };
+  return openFor(now.windowUi, now.tabs, now.activeTabId) && !openFor(nextUi, nextTabs, nextActiveTabId);
+}
 export function useSidebarPeek() { return useChromeEdge().side; }

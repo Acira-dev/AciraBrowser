@@ -41,7 +41,11 @@ function createWindowsHost({electron, available, destination, createWindow, atta
       const own = electron.BrowserWindow.fromWebContents(contents);
       if (own) return (typeof own.getParentWindow === 'function' && own.getParentWindow()) || own;
     } catch { /* not a window of its own */ }
-    for (const window of electron.BaseWindow.getAllWindows()) { if (alive(window) && contains(window.contentView, contents)) return window; }
+    for (const window of electron.BaseWindow.getAllWindows()) {
+      if (!alive(window) || !contains(window.contentView, contents)) continue;
+      // A toolbar popup is a window of its own (extension-popup-window.cjs) that belongs to the browser window it opened from.
+      return (typeof window.getParentWindow === 'function' && window.getParentWindow()) || window;
+    }
     return null;
   }
 

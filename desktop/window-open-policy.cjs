@@ -44,12 +44,13 @@ function readFeatures(features) {
 
 /**
  * details: Electron's window-open details ({disposition, features}). link: the click was on a link the person is pointing at.
+ * openInFront: the "Open new tabs in front" setting; a link opened with Ctrl/Cmd-click or a middle click (Chromium's background-tab) then opens in front.
  * Returns {kind: 'tab' | 'popup' | 'window', background, noopener}; 'window' is a new browser window (Shift+click on a link).
  */
-function decideWindowOpen(details, {link = false} = {}) {
+function decideWindowOpen(details, {link = false, openInFront = false} = {}) {
   const {popup, noopener} = readFeatures(details?.features);
   const disposition = details?.disposition;
-  if (disposition === 'background-tab') return {kind: 'tab', background: true, noopener};
+  if (disposition === 'background-tab') return {kind: 'tab', background: openInFront !== true, noopener};
   if (disposition === 'foreground-tab' || disposition === 'default') return {kind: 'tab', background: false, noopener};
   if (popup) return {kind: 'popup', background: false, noopener};
   if (disposition === 'new-window' && link) return {kind: 'window', background: false, noopener: true};
@@ -68,11 +69,11 @@ function decideWindowOpen(details, {link = false} = {}) {
  *   'deny'             anything that is not a web address
  * background: the tab opens behind the current one. privateTab: carry the opener's privacy to the new tab or window.
  */
-function routeWindowOpen(details, {link = false, privateTab = false, tor = false, sameSession = true} = {}) {
+function routeWindowOpen(details, {link = false, privateTab = false, tor = false, sameSession = true, openInFront = false} = {}) {
   const url = String(details?.url ?? '');
   const web = /^https?:\/\//i.test(url);
   if (!web && url !== 'about:blank') return {route: 'deny', background: false, privateTab};
-  const verdict = decideWindowOpen(details, {link});
+  const verdict = decideWindowOpen(details, {link, openInFront});
   const privateKind = Boolean(privateTab || tor);
   if (!web) return {route: 'popup', background: false, privateTab};
   if (verdict.kind === 'window') return {route: 'window', background: false, privateTab};

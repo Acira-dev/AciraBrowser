@@ -7,7 +7,7 @@ import { openWorkspacePopupFromPopup } from "../../ui/workspaceTarget";
 import { shownColor, shownName, workspaceKey } from "../workspaces/WorkspaceSwitcher";
 import "../../styles/workspaces.css";
 import { formatShortcut } from "../../ui/platform";
-import { ProfileAvatar } from "./profileModel";
+import { OpenProfilesControl, ProfileAvatar } from "./profileModel";
 import { useT } from "../../i18n";
 import { openSettings } from "../../ui/settingsView";
 import "./profile-switcher.css";
@@ -97,6 +97,16 @@ export function ProfileSwitcher({
           <span className="acira-menu-title">{t("profiles.add")}</span>
           <span />
         </button>
+      )}
+      {/* Open profiles (Settings › Profiles › Switch between): In this window or In separate windows, the same segmented control as Settings. With two or more profiles, and while they are spaces so it can be undone. The menu closes a moment after the choice, once the segment has slid. */}
+      {!privateHere && (profiles.length >= 2 || profilesAsSpaces(state)) && (
+        <>
+          <hr className="acira-menu-sep" />
+          <div className="pf-open" role="group" aria-label={t("profiles.openProfiles")}>
+            <span className="ws-menu-head-title">{t("profiles.openProfiles")}</span>
+            <OpenProfilesControl state={state} dispatch={dispatch} onChosen={() => setTimeout(close, 260)} />
+          </div>
+        </>
       )}
       {/* A private window holds only its own private profile, so there is nothing to open or manage from it. */}
       {workspaces.length > 0 && (

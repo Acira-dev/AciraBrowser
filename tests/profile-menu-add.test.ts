@@ -61,7 +61,7 @@ test('an intent raised on a Settings tab only reaches that tab', () => {
 
 test('popups: the profile menu estimate holds the Add profile… row outside a private window only', async () => {
   const popup = read('../src/ui/popup.ts');
-  assert.match(popup, /\*44\+\(own&&!own\.private\?30:0\)\+\(n\?/);
+  assert.match(popup, /\*44\+\(own&&!own\.private\?30:0\)\+\(between\?79:0\)\+\(n\?/, 'Open profiles (79: a divider and its 70px block) joins the rows once there are two profiles');
 });
 
 test('the Workspaces heading and its sentence start on the rows\' icon edge, not the text column', () => {

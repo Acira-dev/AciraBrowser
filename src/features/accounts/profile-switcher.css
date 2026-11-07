@@ -40,3 +40,14 @@
   opacity: 1;
   outline: none;
 }
+
+/* Open profiles: its name over the shared segmented control, which takes the menu's width so both choices read in full. */
+.pf-open {
+  display: grid;
+  gap: 6px;
+  padding: 6px 8px 8px;
+}
+.pf-open .acira-seg {
+  display: grid;
+  width: 100%;
+}

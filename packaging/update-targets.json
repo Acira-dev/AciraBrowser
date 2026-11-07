@@ -1,0 +1,6 @@
+{
+  "comment": "Where the release tools write. 'legacy' is the GitHub raw feed that every build up to beta.10 reads and that beta.11 and later fall back to: beta.11 is the last release written there, then it is frozen (docs/launch/UPDATE_HOST.md). 'current' is update.acirabrowser.com (GitHub Pages, folder docs/ of the repository named here) and the releases beta.12 and later are attached to. 'currentRepo' stays the same repository until the founder decides to start a new one for beta.12 on (decision 1 in previews/update-server/PLAN.md): change this one line, nothing else.",
+  "legacyRepo": "Acira-dev/AciraBrowserUpdates",
+  "currentRepo": "Acira-dev/AciraBrowserUpdates",
+  "handoffRepo": "Acira-dev/AciraBrowser-dev"
+}

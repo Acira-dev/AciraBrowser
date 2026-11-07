@@ -8,8 +8,9 @@ import { favoriteTabOf, listedTabs } from '../src/runtime/favoriteTabs';
 import { scopeToWorkspace, workspaceCounts, workspaceIdOf } from '../src/runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot } from '../src/runtime/types';
 
-// A favorite owns one tab (reviewer, 2 Nov: "fav tabs aren't a tab. when you click in the fav tab, it opens a new tab. so it's
-// basically a bookmark"). The reducer half: runtime/favoriteTabs.ts and its uses in core.ts.
+// A favorite is linked to one tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; founder, 6 Nov: "the tab must not
+// disappear when it's added to Favorites"). The tab is an ordinary tab of the list, where it was; the tile reaches it. The reducer half:
+// runtime/favoriteTabs.ts and its uses in core.ts.
 const run = (state: BrowserSnapshot, ...actions: BrowserAction[]) => actions.reduce(reduceBrowser, state);
 const YT = 'https://www.youtube.com/';
 function base(): BrowserSnapshot {
@@ -79,13 +80,17 @@ test('a duplicate of the favorite\'s tab is an ordinary tab', () => {
   assert.equal(owners(state).length, 1);
 });
 
-test('Close other tabs, Close tabs to the right leave the favorite\'s tab open, like a pinned one', () => {
+test('Close other tabs, Close tabs to the right close the favorite\'s tab like any tab of the list (the favorite stays)', () => {
   let state = open(base());
   const own = owners(state)[0].id;
   state = run(state, { type: 'tab.select', id: 'a' });
-  assert.ok(!bulkCloseTargets(state, { type: 'tab.close.others', id: 'a' }).includes(own));
-  assert.ok(!bulkCloseTargets(state, { type: 'tab.close.right', id: 'a' }).includes(own));
+  assert.ok(bulkCloseTargets(state, { type: 'tab.close.others', id: 'a' }).includes(own));
+  assert.ok(bulkCloseTargets(state, { type: 'tab.close.right', id: 'a' }).includes(own));
+  assert.ok(!bulkCloseTargets(state, { type: 'tab.close.left', id: 'a' }).includes(own));
   assert.ok(bulkCloseTargets(state, { type: 'tab.close.others', id: 'a' }).includes('b'));
+  // A pinned tab still stays, favorite or not.
+  state = run(state, { type: 'tab.pin', id: own });
+  assert.ok(!bulkCloseTargets(state, { type: 'tab.close.others', id: 'a' }).includes(own));
 });
 
 test('favorites are per profile: another profile\'s tab of the same favorite id is not this one\'s', () => {
@@ -98,49 +103,47 @@ test('favorites are per profile: another profile\'s tab of the same favorite id 
   assert.equal(new Set(owners(state).map(tab => tab.browserProfileId)).size, 2);
 });
 
-test('the favorite\'s tab follows you into the workspace on screen instead of opening a copy there', () => {
+test('the favorite\'s tab stays in its own workspace: its tile opens that workspace, never a copy', () => {
   let state = open(base());
   const own = owners(state)[0].id, main = state.activeWorkspaceId;
   state = run(state, { type: 'workspace.create', name: 'Work' });
   const work = state.activeWorkspaceId;
   assert.notEqual(work, main);
   assert.ok(!scopeToWorkspace(state).tabs.some(tab => tab.id === own), 'it is in Main, not shown in Work');
-  state = run(state, { type: 'tab.select', id: own, here: true });
+  state = run(state, { type: 'tab.select', id: own });
   assert.equal(state.activeTabId, own);
-  assert.equal(state.activeWorkspaceId, work, 'Work stays open');
-  assert.equal(workspaceIdOf(state, state.tabs.find(tab => tab.id === own)!), work);
+  assert.equal(state.activeWorkspaceId, main, 'Main opens: the tab did not move');
+  assert.equal(workspaceIdOf(state, state.tabs.find(tab => tab.id === own)!), main);
   assert.equal(owners(state).length, 1);
   // tab.new for the favorite does the same (a click that raced the snapshot).
-  state = run(state, { type: 'workspace.select', id: main });
+  state = run(state, { type: 'workspace.select', id: work });
   state = open(state);
   assert.equal(state.activeTabId, own);
   assert.equal(state.activeWorkspaceId, main);
   assert.equal(owners(state).length, 1);
-  // A plain select (tab search) still switches workspace, as before.
-  state = run(state, { type: 'workspace.select', id: work });
-  state = run(state, { type: 'tab.select', id: own });
-  assert.equal(state.activeWorkspaceId, main);
+  assert.equal(state.tabs.length, 4, 'a, b, the favorite\'s tab and Work\'s new tab: no second copy');
 });
 
-test('the favorite\'s tab never crosses into or out of a secured workspace: selecting it opens its own workspace', () => {
+test('a secured workspace\'s tabs are never turned into plain ones: selecting a favorite\'s tab opens its own workspace', () => {
   let state = open(base());
   const own = owners(state)[0].id, main = state.activeWorkspaceId;
   state = run(state, { type: 'workspace.create', name: 'Health' });
   const health = state.activeWorkspaceId;
   state = run(state, { type: 'workspace.secured-set', id: health, secured: true });
-  state = run(state, { type: 'tab.select', id: own, here: true });
+  state = run(state, { type: 'tab.select', id: own });
   assert.equal(state.activeTabId, own);
   assert.equal(state.activeWorkspaceId, main, 'it stayed in Main and Main opened');
   assert.equal(state.tabs.find(tab => tab.id === own)!.privacy, undefined, 'never turned into a secured tab');
 });
 
-test('a tab dropped on Favorites (or Ctrl+Shift+D) becomes the favorite\'s own tab; null hands it back', () => {
+test('a tab dropped on Favorites (or Ctrl+Shift+D, or the tab menu) is linked to the favorite and stays where it is; null unlinks it', () => {
   let state = run(base(), { type: 'tab.group.create', tabId: 'b', name: 'G' });
   assert.ok(state.tabs.find(tab => tab.id === 'b')!.group);
   state = run(state, { type: 'tab.favorite', id: 'b', favoriteId: 'app-b' });
   assert.equal(state.tabs.find(tab => tab.id === 'b')!.favoriteId, 'app-b');
-  assert.equal(state.tabs.find(tab => tab.id === 'b')!.group, '', 'it leaves its tab group');
-  // Adopting another tab moves the favorite to it.
+  assert.ok(state.tabs.find(tab => tab.id === 'b')!.group, 'it stays in its tab group');
+  assert.deepEqual(state.tabs.map(tab => tab.id), ['a', 'b'], 'and keeps its place in the order');
+  // Linking another tab moves the link to it.
   state = run(state, { type: 'tab.favorite', id: 'a', favoriteId: 'app-b' });
   assert.deepEqual(owners(state, 'app-b').map(tab => tab.id), ['a']);
   state = run(state, { type: 'tab.favorite', id: 'a', favoriteId: null });
@@ -170,36 +173,35 @@ test('restart: the favorite\'s tab comes back as its tab (saved with the window)
 test('the bridge takes the favorite fields from the interface and refuses anything else',()=>{
   const { validateAction } = createRequire(import.meta.url)('../desktop/validation.cjs') as { validateAction: (action: unknown, snapshot: unknown) => unknown };
   const snapshot = { tabs: [{ id: 'tab-1', browserProfileId: 'p' }], browserProfiles: [{ id: 'p' }], workspaces: [] };
-  for (const ok of [{ type: 'tab.new', url: YT, favoriteId: 'app-mh2x1abc' }, { type: 'tab.select', id: 'tab-1', here: true }, { type: 'tab.favorite', id: 'tab-1', favoriteId: 'app-1' }, { type: 'tab.favorite', id: 'tab-1', favoriteId: null }])
+  for (const ok of [{ type: 'tab.new', url: YT, favoriteId: 'app-mh2x1abc' }, { type: 'tab.select', id: 'tab-1' }, { type: 'tab.favorite', id: 'tab-1', favoriteId: 'app-1' }, { type: 'tab.favorite', id: 'tab-1', favoriteId: null }])
     assert.deepEqual(validateAction(ok, snapshot), ok);
-  for (const bad of [{ type: 'tab.favorite', id: 'tab-1', favoriteId: 'a b' }, { type: 'tab.favorite', id: 'tab-1' }, { type: 'tab.favorite', id: 'tab-2', favoriteId: 'x' }, { type: 'tab.new', favoriteId: 7 }, { type: 'tab.select', id: 'tab-1', here: 'yes' }])
+  for (const bad of [{ type: 'tab.favorite', id: 'tab-1', favoriteId: 'a b' }, { type: 'tab.favorite', id: 'tab-1' }, { type: 'tab.favorite', id: 'tab-2', favoriteId: 'x' }, { type: 'tab.new', favoriteId: 7 }, { type: 'tab.select', id: 'tab-1', here: true }])
     assert.throws(() => validateAction(bad, snapshot), JSON.stringify(bad));
   assert.match(readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8'), /'tab\.rename','tab\.favorite'\]\)actionNames\.add\(name\)/, 'the interface may send tab.favorite');
 });
 
-test('workspace tab counts leave out the favorite\'s own tab, as the list does (the workspace menu)', () => {
+test('workspace tab counts include the favorite\'s tab, as the list does (the workspace menu)', () => {
   let state = open(base());
   state = run(state, { type: 'workspace.create', name: 'Work' });
   const main = state.workspaces[0].id, work = state.activeWorkspaceId;
-  assert.deepEqual(workspaceCounts(state)[main], { tabs: 2, pages: 2 }, 'a and b; the favorite\'s tab is in its tile');
-  state = run(state, { type: 'tab.select', id: owners(state)[0].id, here: true });
+  assert.deepEqual(workspaceCounts(state)[main], { tabs: 3, pages: 3 }, 'a, b and the favorite\'s tab');
   assert.deepEqual(workspaceCounts(state)[work], { tabs: 1, pages: 0 }, 'only Work\'s new tab');
 });
 
-test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk the list on screen: in the sidebar layout a favorite\'s own tab is skipped, in the strip it counts', () => {
+test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk the list on screen: the favorite\'s tab is in it, in the sidebar and in the strip', () => {
   let state = open(base());
   const own = owners(state)[0].id;
   state = run(state, { type: 'settings.update', patch: { verticalTabs: true } });
-  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b'], 'Ctrl+9 (the last tab) is b, the last row of the list');
+  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'Ctrl+9 (the last tab) is the favorite\'s, the last row of the list');
   state = run(state, { type: 'settings.update', patch: { verticalTabs: false } });
-  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'the strip lists it');
+  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'the strip lists it too');
   // Only the open workspace's tabs, as before.
   state = run(state, { type: 'settings.update', patch: { verticalTabs: true } }, { type: 'workspace.create', name: 'Work' });
   assert.equal(listedTabs(state).length, 1);
-  // Main's keys use it; from the favorite's own tab Ctrl+PageDown goes to the first listed tab, PageUp to the last.
+  // Main's keys use it.
   const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(main, /case 'cycle-tab':\{[^}]*const here=listedTabs\(state\),i=here\.findIndex\(t=>t\.id===active\.id\);if\(!here\.length\|\|i<0&&!active\.favoriteId\)break;/);
-  assert.match(main, /id:\(i<0\?\(command\.direction>0\?here\[0\]:here\.at\(-1\)\):here\[\(i\+command\.direction\+here\.length\)%here\.length\]\)\.id/);
+  assert.match(main, /case 'cycle-tab':\{[^}]*const here=listedTabs\(state\),i=here\.findIndex\(t=>t\.id===active\.id\);if\(!here\.length\|\|i<0\)break;/);
+  assert.match(main, /id:here\[\(i\+command\.direction\+here\.length\)%here\.length\]\.id/);
   assert.match(main, /case 'select-tab':\{const here=listedTabs\(state\),target=command\.index<0\?here\.at\(-1\):here\[command\.index\]/);
   assert.match(main, /case 'move-tab':\{const here=listedTabs\(state\),index=here\.findIndex\(t=>t\.id===active\.id\),neighbor=index<0\?undefined:/);
   assert.match(readFileSync(new URL('../src/runtime/core.ts', import.meta.url), 'utf8'), /export \{ listedTabs \} from '\.\/favoriteTabs';/, 'main reads it from the runtime bundle');

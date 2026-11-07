@@ -180,3 +180,33 @@ test('a pop-up opens at the size it asked for, as its page area, kept on the ope
   assert.deepEqual(popupBounds('popup', screen), {width: 640, height: 760, useContentSize: false}, 'no size asked: the old default window');
   assert.deepEqual(popupBounds('width=500', null), {width: 500, height: 760, useContentSize: true}, 'no display known: unclamped');
 });
+
+// ---- "Open new tabs in front" (settings.openTabsInFront, off by default) ----
+test('open in front: Ctrl/Cmd-click and middle click (background-tab) open in front when the setting is on, and only then', () => {
+  const policy = (disposition, features = '', link = true, openInFront) => shape(decideWindowOpen({disposition, features}, {link, openInFront}));
+  assert.equal(policy('background-tab', '', true), 'tab:background', 'off by default');
+  assert.equal(policy('background-tab', '', true, false), 'tab:background');
+  assert.equal(policy('background-tab', '', true, true), 'tab:foreground');
+  assert.equal(policy('background-tab', '', false, true), 'tab:foreground');
+  assert.equal(policy('background-tab', 'noopener', true, true), 'tab:foreground:noopener');
+  assert.equal(policy('foreground-tab', '', true, true), 'tab:foreground', 'target=_blank already opens in front');
+  assert.equal(policy('background-tab', 'width=500,height=600', false, true), 'tab:foreground', 'the disposition still wins over a feature string');
+  assert.equal(policy('background-tab', '', true, 'yes'), 'tab:background', 'only the setting being true counts');
+});
+
+test('open in front: the route carries it to every kind of tab, and changes nothing else', () => {
+  assert.equal(route('background-tab', '', {link: true}), 'tab:background');
+  assert.equal(route('background-tab', '', {link: true, openInFront: true}), 'tab');
+  assert.equal(route('background-tab', '', {openInFront: true}), 'tab-with-opener');
+  assert.equal(route('background-tab', '', {link: true, privateTab: true, openInFront: true}), 'tab:private');
+  assert.equal(route('background-tab', '', {link: true, privateTab: true, tor: true, openInFront: true}), 'tab:private');
+  assert.equal(route('new-window', '', {link: true, openInFront: true}), 'window', 'Shift+click still opens a window');
+  assert.equal(route('new-window', 'width=500,height=600', {openInFront: true}), 'popup', 'a pop-up is still a pop-up');
+  assert.equal(route('foreground-tab', '', {link: true, openInFront: true}), 'tab');
+});
+
+test('open in front: main.cjs passes the setting to both window-open handlers (the page and its pop-ups)', () => {
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
+  assert.ok(main.includes("openInFront:state.settings.openTabsInFront===true"), 'the page handler passes the setting to routeWindowOpen');
+  assert.ok(main.includes("background:details.disposition==='background-tab'&&state.settings.openTabsInFront!==true"), 'a pop-up\'s links follow it too');
+});

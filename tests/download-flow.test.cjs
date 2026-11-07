@@ -351,7 +351,7 @@ test('a person\'s own click or key press in the page between two downloads means
     assert.equal(asked.length, 2, 'input in another tab changes nothing here');
   } finally { f.cleanup(); }
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
-  assert.match(main, /wc\.on\('input-event',\(_e,input\)=>\{pointerHeld\.note\(input\);if\(input\.type==='mouseDown'\|\|input\.type==='rawKeyDown'\|\|input\.type==='touchStart'\)downloads\?\.userActed\(tab\.id\);\}\);/, 'each page tells downloads about the person\'s clicks and key presses');
+  assert.match(main, /wc\.on\('input-event',\(_e,input\)=>\{pointerHeld\.note\(input\);(?:if\(input\.type==='mouseWheel'\)tabNumberHold\.interrupt\(\);)?if\(input\.type==='mouseDown'\|\|input\.type==='rawKeyDown'\|\|input\.type==='touchStart'\)downloads\?\.userActed\(tab\.id\);\}\);/, 'each page tells downloads about the person\'s clicks and key presses');
 });
 
 test('a just-finished file held for a moment (a Windows antivirus scan) still moves to the chosen place, not the fallback', async () => {

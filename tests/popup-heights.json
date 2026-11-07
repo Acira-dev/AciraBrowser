@@ -10,7 +10,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -214,7 +214,7 @@
    "workspaces": 1,
    "recent": 0
   },
-  "measured": 240
+  "measured": 279
  },
  {
   "kind": "split-context",
@@ -280,7 +280,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -374,7 +374,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -622,5 +622,19 @@
    "recent": 0
   },
   "measured": 222
+ },
+ {
+  "kind": "profile",
+  "label": "3 profiles, 3 workspaces",
+  "state": {
+   "tabs": 4,
+   "web": false,
+   "bookmarks": 6,
+   "downloads": 0,
+   "profiles": 3,
+   "workspaces": 3,
+   "recent": 0
+  },
+  "measured": 497
  }
 ]

@@ -31,6 +31,9 @@ export const motionTokens = {
   'panel.expand': ['S', .210, 0], 'panel.collapse': ['S', .150, 0],
   'press.down': ['L', .075, 0], 'press.up': ['L', .210, .3], 'hover.lift': ['L', .115, 0],
   'materialize': ['E', .170, 0],
+  // A plus, minus or Reset step on a page glides like a pinch before the real zoom lands (ui/pageZoomGlide.ts, desktop/page-zoom-glide.cjs): a frequent
+  // surface, so Premium takes 40% of the stretch (205 ms), Fast .6 (95 ms), Off lands at once.
+  'page.zoom': ['S', .160, 0],
   // R3-68 Seamless: the toolbar and sidebar reveal on stiffness 400 / damping 33 (ζ .83, +1% overshoot, settled within 2% in
   // ≈ 200 ms) and leave critically damped on stiffness 1330 / damping 73 (≈ 160 ms), about two thirds of the way in.
   'seamless.reveal': ['S', .315, .175], 'seamless.hide': ['S', .170, 0],

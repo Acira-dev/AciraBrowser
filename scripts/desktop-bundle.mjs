@@ -48,6 +48,8 @@ export const PATH_LOADED = [
   'desktop/rewind/peek-frame-preload.cjs',
   'desktop/tab-card.html',
   'desktop/tab-card-preload.cjs',
+  'desktop/swipe-nav.html',
+  'desktop/swipe-nav-preload.cjs',
   'desktop/site-prompt.html',
   'desktop/site-prompt-preload.cjs',
   'desktop/browser-services/js-dialog-preload.cjs',

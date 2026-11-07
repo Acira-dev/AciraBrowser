@@ -342,8 +342,89 @@ static napi_value WindowOnActiveSpace(napi_env env, napi_callback_info info) {
     napi_value answer; napi_get_boolean(env, on, &answer); return answer;
   }
 }
+
+// Two-finger swipe between pages (desktop/swipe-nav.cjs). A local event monitor sees every trackpad scroll the window gets, with the
+// phase NSEvent keeps for it: a finger on the pad is Began / Changed / Ended, the coast after it lifts is the momentum phase. Chromium's
+// wheel events do not carry either, and without them a swipe cannot tell "still held" from "let go". The monitor only reads: it returns
+// every event unchanged, so scrolling is never touched. Only precise (trackpad or Magic Mouse) scrolls of a watched window are sent, one
+// call each: (phase, momentumPhase, deltaX, deltaY, x, y, natural), the point in window pixels from the top left of the content view.
+@interface AciraSwipeWatch : NSObject {
+@public
+  napi_threadsafe_function sink;
+  __weak NSView *view;
+}
+@end
+@implementation AciraSwipeWatch
+- (void)dealloc { if (sink) napi_release_threadsafe_function(sink, napi_tsfn_release); }
+@end
+struct SwipeSample { int phase, momentum, natural; double dx, dy, x, y; };
+static id SwipeMonitor = nil;
+static NSMapTable<NSWindow *, AciraSwipeWatch *> *SwipeWatched() { static NSMapTable *table = nil; if (!table) table = [NSMapTable weakToStrongObjectsMapTable]; return table; }
+static void SwipeDeliver(napi_env env, napi_value callback, void *context, void *data) {
+  auto *sample = static_cast<SwipeSample *>(data);
+  if (env && callback) {
+    napi_value args[7], undefined; napi_get_undefined(env, &undefined);
+    napi_create_int32(env, sample->phase, &args[0]); napi_create_int32(env, sample->momentum, &args[1]);
+    napi_create_double(env, sample->dx, &args[2]); napi_create_double(env, sample->dy, &args[3]);
+    napi_create_double(env, sample->x, &args[4]); napi_create_double(env, sample->y, &args[5]);
+    napi_create_int32(env, sample->natural, &args[6]);
+    napi_call_function(env, undefined, callback, 7, args, nullptr);
+  }
+  delete sample;
+}
+static void SwipeInstallMonitor() {
+  if (SwipeMonitor) return;
+  SwipeMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel handler:^NSEvent *(NSEvent *event) {
+    NSWindow *window = event.window; AciraSwipeWatch *watch = window ? [SwipeWatched() objectForKey:window] : nil;
+    NSView *view = watch ? watch->view : nil;
+    if (!watch || !view || !watch->sink || !event.hasPreciseScrollingDeltas) return event;
+    int phase = (int)event.phase, momentum = (int)event.momentumPhase;
+    if (!phase && !momentum) return event;
+    NSPoint point = [view convertPoint:event.locationInWindow fromView:nil];
+    double top = view.isFlipped ? point.y : NSHeight(view.bounds) - point.y;
+    auto *sample = new SwipeSample{phase, momentum, event.isDirectionInvertedFromDevice ? 1 : 0, (double)event.scrollingDeltaX, (double)event.scrollingDeltaY, (double)point.x, top};
+    if (napi_call_threadsafe_function(watch->sink, sample, napi_tsfn_nonblocking) != napi_ok) delete sample;
+    return event;
+  }];
+}
+static void SwipeRemoveMonitorIfIdle() {
+  if (SwipeMonitor && SwipeWatched().count == 0) { [NSEvent removeMonitor:SwipeMonitor]; SwipeMonitor = nil; }
+}
+static NSView *SwipeViewOf(napi_env env, napi_value value) {
+  size_t length = 0; void *bytes = nullptr;
+  if (napi_get_buffer_info(env, value, &bytes, &length) != napi_ok || length != sizeof(void *)) return nil;
+  uintptr_t address = 0; std::memcpy(&address, bytes, sizeof(address));
+  return address ? (__bridge NSView *)(reinterpret_cast<void *>(address)) : nil;
+}
+// watchScroll(windowHandle, callback) -> true once the window's trackpad scrolls are being reported to callback.
+static napi_value WatchScroll(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    size_t argc = 2; napi_value args[2]; napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    napi_valuetype type = napi_undefined; if (argc == 2) napi_typeof(env, args[1], &type);
+    NSView *view = argc == 2 && type == napi_function && [NSThread isMainThread] ? SwipeViewOf(env, args[0]) : nil;
+    napi_value answer; bool ok = false;
+    if (view && view.window) {
+      AciraSwipeWatch *watch = [AciraSwipeWatch new]; watch->view = view; watch->sink = nullptr;
+      napi_value name; napi_create_string_utf8(env, "acira-swipe-scroll", NAPI_AUTO_LENGTH, &name);
+      if (napi_create_threadsafe_function(env, args[1], nullptr, name, 0, 1, nullptr, nullptr, nullptr, SwipeDeliver, &watch->sink) == napi_ok) {
+        napi_unref_threadsafe_function(env, watch->sink);   // the monitor never keeps the process alive
+        [SwipeWatched() setObject:watch forKey:view.window]; SwipeInstallMonitor(); ok = true;
+      }
+    }
+    napi_get_boolean(env, ok, &answer); return answer;
+  }
+}
+static napi_value UnwatchScroll(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    size_t argc = 1; napi_value args[1]; napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    NSView *view = argc == 1 && [NSThread isMainThread] ? SwipeViewOf(env, args[0]) : nil;
+    if (view && view.window) { [SwipeWatched() removeObjectForKey:view.window]; SwipeRemoveMonitorIfIdle(); }
+    napi_value answer; napi_get_boolean(env, view != nil, &answer); return answer;
+  }
+}
 NAPI_MODULE_INIT() {
   InstallMacPasskeys(env,exports);
+  { napi_value watch, unwatch; napi_create_function(env, "watchScroll", NAPI_AUTO_LENGTH, WatchScroll, nullptr, &watch); napi_set_named_property(env, exports, "watchScroll", watch); napi_create_function(env, "unwatchScroll", NAPI_AUTO_LENGTH, UnwatchScroll, nullptr, &unwatch); napi_set_named_property(env, exports, "unwatchScroll", unwatch); }
   { napi_value onSpace; napi_create_function(env, "windowOnActiveSpace", NAPI_AUTO_LENGTH, WindowOnActiveSpace, nullptr, &onSpace); napi_set_named_property(env, exports, "windowOnActiveSpace", onSpace); }
   napi_value set, inspect, buttons, available, authenticate;
   napi_create_function(env, "setAppearance", NAPI_AUTO_LENGTH, Set, nullptr, &set);

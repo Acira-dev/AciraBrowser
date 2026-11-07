@@ -1,6 +1,8 @@
-import { useEffect,useRef,useState,type FocusEvent,type KeyboardEvent,type PointerEvent,type RefObject } from 'react';
+import { useEffect,useLayoutEffect,useRef,useState,type CSSProperties,type FocusEvent,type KeyboardEvent,type PointerEvent,type RefObject,type TransitionEvent } from 'react';
 import type { BrowserStyle,SearchEngine } from '../runtime/types';
 import { urlDisplay } from '../ui/urlDisplay';
+import { glideGuardMs,glideLayout,hiddenPrefixLength,startsGlide,type Glide } from '../ui/addressGlide';
+import '../styles/address-glide.css';
 import { addressDisplayMap,hitDisplay,mapDisplayChar,mapDisplaySelection,stepAddressGesture,wordAt,type AddressGesture,type AddressGestureEffect } from '../ui/addressSelection';
 
 import { t } from '../i18n';
@@ -50,7 +52,8 @@ function paintDisplay(nodes: readonly Text[], a: number, b: number) {
  * and drag on the at-rest text keeps that text (and paints the drag on it) until release, then shows the full address
  * with exactly the dragged characters selected; a double click selects the word under the first press, a triple click
  * everything. Once the field shows the full address, the pointer is left to the browser. */
-export function AddressField({inputRef, value, onChange, onFocus, onBlur, onModifiedEnter, suggestionOpen=false,popupTrigger=false,activeSuggestionId,suggestionListId='address-suggestions',onSuggestionKeyDown,placeholder=t('addressfield.placeholder'),label=t('addressfield.label')}: {
+export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur, onModifiedEnter, suggestionOpen=false,popupTrigger=false,activeSuggestionId,suggestionListId='address-suggestions',onSuggestionKeyDown,placeholder=t('addressfield.placeholder'),label=t('addressfield.label')}: {
+  /** The address text at rest sits in the middle of the field and glides to the left edge while the field is in use (and back): its time and easing (ui/addressGlide.ts). `ms` 0 places it without a glide (Reduce motion, speed Off). Left out: the text stays at the left, as ever. */glide?: Glide;
   centerWithin?: string; label?: string; placeholder?: string; inputRef: RefObject<HTMLInputElement | null>; value: string; onChange: (value: string) => void;
   onFocus: () => void; onBlur: (event:FocusEvent<HTMLInputElement>) => void; style: BrowserStyle; reducedMotion: boolean; speed: number;
   onModifiedEnter: (value: string, newTab: boolean) => void;
@@ -60,7 +63,39 @@ export function AddressField({inputRef, value, onChange, onFocus, onBlur, onModi
   const [focused, setFocused] = useState(false), [keyboard, setKeyboard] = useState(false), [holding, setHolding] = useState(false);
   const displayRef = useRef<HTMLSpanElement>(null), gesture = useRef<AddressGesture>({kind:'idle'}), held = useRef(false), swallowMouse = useRef(false);
   const measured = useRef<ReturnType<typeof measureDisplay>|null>(null);
-  const display = !focused || holding ? urlDisplay(value) : null;
+  // The glide (ui/addressGlide.ts). `aligned` is where the text is headed: at the left (the field is in use) or in the middle. A press that
+  // holds the at-rest text for a drag leaves it in the middle until release. A change of it starts a glide, and for its length the at-rest
+  // layer stays mounted and cross-fades with the input's own text (address-glide.css reads one number, --af-p, for both and for the move).
+  const aligned = focused && !holding, fieldRef = useRef<HTMLDivElement>(null), rulerRef = useRef<HTMLSpanElement>(null);
+  const [wasAligned, setWasAligned] = useState(aligned), [glideOn, setGlideOn] = useState(false);
+  if (wasAligned !== aligned) { setWasAligned(aligned); setGlideOn(startsGlide(wasAligned, aligned, glide)); }
+  useEffect(() => {
+    if (!glideOn || !glide) return;
+    const guard = window.setTimeout(() => setGlideOn(false), glideGuardMs(glide)); // the end of the transition ends it; this is for a window that never paints
+    return () => window.clearTimeout(guard);
+  }, [glideOn, wasAligned, glide?.ms]);
+  const display = !focused || holding || glideOn ? urlDisplay(value) : null;
+  // Where the middle is: measured here (the text's width in the field's own font), applied as CSS numbers on the field.
+  const shownKey = display ? display.prefix + display.domain + display.rest + display.insecure : '';
+  useLayoutEffect(() => {
+    const field = fieldRef.current, ruler = rulerRef.current, input = inputRef.current;
+    if (!glide || !field || !ruler || !input) return;
+    const measure = () => {
+      const shown = displayRef.current; let textWidth: number;
+      if (shown) { const range = document.createRange(); range.selectNodeContents(shown); textWidth = range.getBoundingClientRect().width; }
+      else if (!aligned) { ruler.textContent = value || placeholder; textWidth = ruler.getBoundingClientRect().width; }
+      else return; // in use and nothing at rest to place: the text is at the left
+      const map = shown ? addressDisplayMap(input.value) : null, hidden = map ? hiddenPrefixLength(map.index) : 0;
+      let hiddenWidth = 0; if (hidden > 0) { ruler.textContent = input.value.slice(0, hidden); hiddenWidth = ruler.getBoundingClientRect().width; }
+      const layout = glideLayout({ fieldWidth: field.clientWidth, textWidth, hiddenPrefixWidth: hiddenWidth });
+      field.style.setProperty('--af-center', layout.center + 'px'); field.style.setProperty('--af-pre', layout.pre + 'px');
+      field.toggleAttribute('data-glidable', layout.center > 0); // no room: the text stays at the left and swaps as it always did
+    };
+    measure();
+    const watch = new ResizeObserver(measure); watch.observe(field);
+    document.fonts?.addEventListener('loadingdone', measure); // the first measure may come before Inter has loaded
+    return () => { watch.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
+  }, [!!glide, value, placeholder, aligned, shownKey]);
 
   const parked = useRef<{start:number|null;end:number|null;direction:'forward'|'backward'|'none'|null;timer:number}|null>(null);
   useEffect(() => () => window.clearTimeout(parked.current?.timer), []);
@@ -82,7 +117,9 @@ export function AddressField({inputRef, value, onChange, onFocus, onBlur, onModi
   };
   const hit = (event: PointerEvent<HTMLInputElement>) => measured.current ? hitDisplay(measured.current.edges, event.clientX, measured.current.clipRight) : {caret:0,char:0};
 
-  return <div className="address-field" data-focused={focused} data-keyboard-focus={focused && keyboard} data-display={display ? true : undefined} data-holding={holding || undefined}>
+  return <div ref={fieldRef} className="address-field" data-focused={focused} data-keyboard-focus={focused && keyboard} data-display={display && (!glideOn || holding) ? true : undefined} data-holding={holding || undefined}
+    {...(glide ? { 'data-glide': '', 'data-aligned': aligned || undefined, 'data-crossfade': glideOn && !holding && display ? '' : undefined, style: { '--af-ms': glide.ms + 'ms', '--af-ease': glide.ease } as CSSProperties, onTransitionEnd: (event: TransitionEvent) => { if (event.target === event.currentTarget && event.propertyName === '--af-p') setGlideOn(false); } } : {})}>
+    {glide && <span ref={rulerRef} className="address-ruler" aria-hidden="true"/>}
     {display && <span ref={displayRef} className="address-display" aria-hidden="true">
       {display.insecure && <span className="address-insecure">{t("addressfield.notSecure")}</span>}
       <span data-url-part className="address-quiet">{display.prefix}</span><span data-url-part className="address-domain">{display.domain}</span><span data-url-part className="address-quiet">{display.rest}</span>

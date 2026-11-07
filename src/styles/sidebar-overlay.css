@@ -90,11 +90,18 @@
    while the sidebar floats: it lay in the frame's own picture during the slide and so stood still, cut off short of the moving
    sidebar (founder, 30 Oct). */
 .sidebar-page-rim { display:none; }
-:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim { display:block; position:fixed; inset:0; z-index:1; pointer-events:none; clip-path:inset(0 0 0 var(--sf-rim-x,0px)); }
-:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim-low { clip-path:inset(var(--sf-rim-mid,0px) 0 0 var(--sf-rim-x,0px)); }
+:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim { display:block; position:fixed; inset:0; z-index:1; pointer-events:none; clip-path:polygon(var(--sf-rim-line-x,var(--sf-rim-x,0px)) 0,100% 0,100% 100%,var(--sf-rim-x,0px) 100%,var(--sf-rim-x,0px) var(--sf-rim-top,0px),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-top,0px)); }
+:root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim-low { clip-path:polygon(var(--sf-rim-x,0px) var(--sf-rim-mid,0px),100% var(--sf-rim-mid,0px),100% 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-bottom,0px),var(--sf-rim-x,0px) var(--sf-rim-bottom,0px)); }
 .sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:rgb(0 0 0 / .08); stroke-width:1; }
 .app[data-chrome=dark] .sidebar-page-rim>svg { stroke:rgb(255 255 255 / .06); }
+/* The stroke waits for the sidebar while it slides in (chromeEdge applyEdge): the picture it would be captured in holds it at its final place, so it stood alone ahead of the sliding edge. It fades in as the sidebar lands.
+   Only while an edge transition plays: with none (another switch is playing, the page is hidden) there is nothing to wait for. */
+.sidebar-page-rim .rim-edge { transition:opacity calc(140ms * var(--motion-scale,1)) ease-out; }
+:root[data-mode-switch=edge][data-edge-rim=wait] .sidebar-page-rim .rim-edge { opacity:0; transition:none; }
 :root[data-sidebar-overlay] .app .browser-root .browser-body>.page-area { box-shadow:none!important; }
+/* The line's clip is two steps: its row (the one above the card's top, the one below its bottom) starts where the card's left corner curve ends, and everything else (the stroke up the
+   sidebar's edge and round the corner) from the sidebar's edge. Both ride the sidebar's edge on the same clip, so the motion is what it was; only the straight line no longer runs over
+   the corner's curve and a pixel into the sidebar (founder, 5 Nov: "the line runs past the curve"). --sf-rim-line-x is the end of the curve, 2px short so the line overlaps the stroke's last bit. */
 /* While the sidebar slides, each piece is captured whole (a capture leaves out its holder's clip) and shown through a clip that
    travels with the sidebar's edge, on the same whole-pixel steps as the sidebar, while the line itself stays put: its left end
    stays on the corner, so the line stretches out with a leaving sidebar and shortens before an arriving one. Its right and bottom
@@ -104,8 +111,8 @@
 :root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-rim-low>svg { view-transition-name:acira-page-rim-low; }
 :root[data-mode-switch=edge]::view-transition-group(acira-page-rim),
 :root[data-mode-switch=edge]::view-transition-group(acira-page-rim-low) { animation:none; }
-:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:inset(-2px -100vw -100vh var(--sf-rim-x,0px)); }
-:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim-low) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:inset(var(--sf-rim-mid,0px) -100vw -100vh var(--sf-rim-x,0px)); }
+:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:polygon(var(--sf-rim-line-x,var(--sf-rim-x,0px)) -2px,calc(100% + 100vw) -2px,calc(100% + 100vw) calc(100% + 100vh),var(--sf-rim-x,0px) calc(100% + 100vh),var(--sf-rim-x,0px) var(--sf-rim-top,0px),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-top,0px)); }
+:root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim-low) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:polygon(var(--sf-rim-x,0px) var(--sf-rim-mid,0px),calc(100% + 100vw) var(--sf-rim-mid,0px),calc(100% + 100vw) calc(100% + 100vh),var(--sf-rim-line-x,var(--sf-rim-x,0px)) calc(100% + 100vh),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-bottom,0px),var(--sf-rim-x,0px) var(--sf-rim-bottom,0px)); }
 :root[data-mode-switch=edge]::view-transition-new(acira-page-rim):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-draw-top var(--edge-ms) cubic-bezier(.4,0,.2,1) both; left:round(calc(var(--desktop-band-right-to,0px) - var(--desktop-band-right)),var(--px,.5px)); }
 :root[data-mode-switch=edge]::view-transition-new(acira-page-rim-low):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-draw-low var(--edge-ms) cubic-bezier(.4,0,.2,1) both; left:round(calc(var(--desktop-band-right-to,0px) - var(--desktop-band-right)),var(--px,.5px)); top:round(calc(var(--desktop-band-bottom-to,0px) - var(--desktop-band-bottom)),var(--px,.5px)); }
 :root[data-mode-switch=edge]::view-transition-old(acira-page-rim):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-fade var(--edge-ms) linear both; left:round(calc(var(--desktop-band-right-from,0px) - var(--desktop-band-right)),var(--px,.5px)); }

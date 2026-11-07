@@ -35,7 +35,7 @@ test('the pace: 1 at Premium and Off, .6 in Fast; main reads it from the layout\
   // The interface sends motionSpeed = 1 / --motion-scale (App.tsx); Off sends 1.
   for (const [speed, scale] of [['premium', 1.7], ['fast', .6]] as const) assert.ok(Math.abs(layoutPace(1 / scale) - motionPaceOf(speed)) < 1e-9, speed);
   assert.equal(layoutPace(1), 1); assert.equal(layoutPace(undefined), 1); assert.equal(layoutPace('nonsense'), 1);
-  assert.match(read('desktop/main.cjs'), /placePageBounds\(entry,bounds,animated,[^;]*,layoutPace\(next\.motionSpeed\)\);/);
+  assert.match(read('desktop/main.cjs'), /placePageBounds\(entry,bounds,animated,[^;]*,layoutPace\(next\.motionSpeed\),next\.pageEdgeLag\);/);
 });
 
 /** Drives placePageBounds frame by frame (60 Hz) and returns when its last frame ran (ms) and where the page was halfway through. */

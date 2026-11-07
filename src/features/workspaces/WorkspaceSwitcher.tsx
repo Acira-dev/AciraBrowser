@@ -96,7 +96,8 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
     if (workspace && !spaces && event.key === 'F2') { event.preventDefault(); openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'edit', workspaceId: workspace.id, focus: 'name' }); return; }
     moveFocus(event);
   };
-  return <div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}>
+  return <div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}
+    onContextMenu={event => { if ((event.target as HTMLElement).closest('.sb-ws:not(.sb-ws-add)')) return; event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event, { mode: 'sidebar' }); }}>
     <span ref={pill} className="sb-ws-pill" aria-hidden="true" />
     {list.map((workspace, index) => {
       const open = workspace.id === active, name = nameIn(state, workspace), key = workspaceKey(index), color = shownColor(state, workspace), playing = workspacePlaying(state, workspace.id);

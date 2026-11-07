@@ -81,7 +81,8 @@ test('options: one way of changing the live version at a time, percentages from 
  assert.throws(()=>parseArguments(['--version',VERSION,'--widen','50','--rollout','20']),/--rollout sets the share for a new version/);
  assert.throws(()=>parseArguments(['--version',VERSION,'--halt','--rollout','20']),/--rollout sets the share/);
  assert.throws(()=>parseArguments(['--version',VERSION,'--add-arch','--rollout','20']),/--rollout sets the share/);
- assert.throws(()=>parseArguments(['--version',VERSION,'--halt','--platform','linux']),/mac or windows/);
+ assert.throws(()=>parseArguments(['--version',VERSION,'--halt','--platform','freebsd']),/mac, windows or linux/);
+ assert.equal(parseArguments(['--version',VERSION,'--halt','--platform','linux']).platform,'linux');
  assert.throws(()=>parseArguments(['--version',VERSION,'--platform','mac']),/--platform goes with --widen, --halt or --resume-rollout/);
  assert.throws(()=>parseArguments(['--version',VERSION,'--halt','--mac-dir','x']),/takes no files \(--mac-dir\)/);
  assert.throws(()=>parseArguments(['--version',VERSION,'--widen','40','--windows-dir','x']),/takes no files/);

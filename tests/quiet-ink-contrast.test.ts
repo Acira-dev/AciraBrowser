@@ -145,9 +145,10 @@ test('the sidebar\'s group dot keeps 3:1 for all nine colours on every light sid
     const side = hex(rgbOf(t['--sidebar-rgb']));
     for (const name of Object.keys(concept)) { const [L, C, H] = declared(darkPalette, `--tab-group-${name}`)!.match(/[\d.]+/g)!.map(Number); assert.ok(contrast(fromOklch(L, C, H * Math.PI / 180), side) >= 3, `${palette.name} ${dark ? 'dark' : 'light'}: ${name} on the dark sidebar`); }
   }
-  // A Windows contrast theme forces the dot's fill to the page colour: it is drawn in CanvasText, like the group's line.
+  // A Windows contrast theme forces the group's line to the page colour: it is drawn in CanvasText, and so is the folder glyph (unfilled).
   const forced = rules('components/sidebar/sidebar.css').filter(([, , inside, prelude]) => inside && prelude === '@media(forced-colors:active)');
-  assert.ok(forced.some(([list, body]) => list.split(',').includes('.app.style-acira .acira-sidebar .sb-group-swatch') && /background:CanvasText/.test(body)), 'the dot shows in forced colours');
+  assert.ok(forced.some(([list, body]) => list.split(',').includes('.app.style-acira .acira-sidebar .sb-group-members::before') && /background:CanvasText/.test(body)), 'the group line shows in forced colours');
+  assert.ok(forced.some(([list, body]) => list.split(',').includes('.app.style-acira .acira-sidebar .sb-group-folder') && /color:CanvasText/.test(body)), 'the folder glyph shows in forced colours');
 });
 
 test('the compact strip\'s current tab: its × under the pointer is a quiet step of the card, with the card\'s ink, where the frame or toolbar is dark', () => {

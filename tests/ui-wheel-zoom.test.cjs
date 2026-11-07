@@ -56,7 +56,8 @@ test('only a trusted Ctrl+wheel over the page area is taken; Alt, the toolbar, a
 
 test('main tells the interface when a zoom command reached a page it draws, so a pinch is cleared even when the level stays',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
- assert.match(main,/if\(!wc\)\{if\(c\.type==='zoom'\)\{browserEvent\(tab\.id,\{zoom:[^]*?emitBrowser\(\{type:'page-zoom-set',tabId:tab\.id\}\);\}return;\}/);
+ // The event goes first, and says whether the step is one the page may glide (plus, minus, Reset: not a wheel step), so the interface knows before the new level arrives (ui/pageZoomGlide.ts).
+ assert.match(main,/if\(!wc\)\{if\(c\.type==='zoom'\)\{[^]*?emitBrowser\(\{type:'page-zoom-set',tabId:tab\.id,glide:!c\.instant\}\);browserEvent\(tab\.id,\{zoom:[^]*?\}return;\}/);
 });
 
 test('a level another window saved for an Acira page reaches the tabs on it here, as it does for a site',()=>{

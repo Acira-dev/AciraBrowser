@@ -9,7 +9,7 @@ const at=main.indexOf("wc.on('did-create-window'"),block=main.slice(at,main.inde
 test('a link in a pop-up window opens a tab of the opener, not nothing',()=>{
  assert.ok(at>0&&block.includes('popup.webContents.setWindowOpenHandler(details=>'),'the pop-up window has its own open handler');
  assert.ok(!block.includes("setWindowOpenHandler(()=>({action:'deny'}))"),'it no longer refuses everything');
- assert.match(block,/dispatch\(\{type:'tab\.new',url:details\.url,background:details\.disposition==='background-tab',browserProfileId:tab\.browserProfileId,afterId:tab\.id/,'the link becomes a tab beside the opener');
+ assert.match(block,/dispatch\(\{type:'tab\.new',url:details\.url,background:details\.disposition==='background-tab'&&state\.settings\.openTabsInFront!==true,browserProfileId:tab\.browserProfileId,afterId:tab\.id/,'the link becomes a tab beside the opener (in front when "Open new tabs in front" is on)');
 });
 
 test('only web addresses behind a click and the ad judge become tabs, and the window opens no window of its own',()=>{

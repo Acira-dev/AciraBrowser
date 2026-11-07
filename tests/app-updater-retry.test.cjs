@@ -1,6 +1,6 @@
 'use strict';
 // After an offline start the updater used to wait 8 hours for its next look (hunt-stability #5). A failed check or download now tries again 2, 10 and
-// 30 minutes later, then on the 8-hour round; waking the Mac or the network coming back tries at once. The status shows nothing new.
+// 30 minutes later, then on the 2-hour round; waking the Mac or the network coming back tries at once. The status shows nothing new.
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{EventEmitter}=require('node:events');
 const {createAppUpdater,CHECK_EVERY}=require('../desktop/browser-services/app-updater.cjs');
 const {createNetworkWatch}=require('../desktop/browser-services/network-retry.cjs');
@@ -28,15 +28,15 @@ function feed(net){
 const make=(extra)=>createAppUpdater({app:{getVersion:()=>'1.0.0',isPackaged:true,getPath:()=>os.tmpdir()},dir:folder(),platform:'win32',env:{},uninstallerPresent:()=>true,qaBuild:false,every:()=>null,...extra});
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 
-test('offline at start: tried again at 2, 10 and 30 minutes, then left to the 8-hour round',async()=>{
+test('offline at start: tried again at 2, 10 and 30 minutes, then left to the regular round',async()=>{
  const net={online:false},t=timers(),autoUpdater=feed(net),changes=[];
  const updater=make({autoUpdater,schedule:t.schedule,cancel:t.cancel,onChange:s=>changes.push(s.status)});
  await updater.check();
  assert.equal(updater.status().status,'error');assert.equal(autoUpdater.checks,1);
  assert.deepEqual(t.list.map(x=>x.delay),[2*MIN],'one failure (an error event and a rejected check) is one rung');
  for(const delay of [2*MIN,10*MIN,30*MIN]){t.fire(delay);await settle();}
- assert.equal(autoUpdater.checks,4);assert.deepEqual(t.list,[],'after the ladder only the 8-hour round is left');
- assert.equal(CHECK_EVERY,8*60*MIN);
+ assert.equal(autoUpdater.checks,4);assert.deepEqual(t.list,[],'after the ladder only the regular round is left');
+ assert.equal(CHECK_EVERY,2*60*MIN);
  assert.ok(changes.every(s=>['checking','error'].includes(s)),'nothing new is shown: checking and error, as before');
 });
 

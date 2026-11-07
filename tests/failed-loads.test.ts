@@ -72,7 +72,7 @@ test('main settles a navigation that never commits on the page that stayed (Stop
   const stopped = main.slice(main.indexOf("wc.on('did-stop-loading'"));
   assert.match(stopped, /waitingForCommit\(wc\.getURL\(\)\)\|\|entry\.navigation\.phase==='loading'&&entry\.navigation\.failure\)\{[^]*?pageState\(tab\.id,false,\{restored:true,error:/, 'the tab is re-described from the page that stayed (also a stopped reload of an error page), without recording a visit');
   assert.match(main, /entry\.navigation\.failure=\{url,error:/, 'a page that stayed on its error page keeps that error');
-  assert.match(main, /entry\.navigation\.failure=\{url,error:[^]*?wc\.setZoomFactor\(preferredZoom\(current,url\)\)/, 'a failed address gets its own zoom, not the previous page\'s');
+  assert.match(main, /entry\.navigation\.failure=\{url,error:[^]*?setPageZoom\(wc,preferredZoom\(current,url\)\)/, 'a failed address gets its own zoom, not the previous page\'s');
 });
 
 // The error page and the certificate chip ask main for the certificate / threat status of their tab. When the tab closes or turns into an

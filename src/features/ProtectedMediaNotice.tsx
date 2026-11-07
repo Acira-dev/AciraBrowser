@@ -3,7 +3,7 @@ import { runtime } from '../runtime/client';
 import type { BrowserAction, BrowserSnapshot } from '../runtime/types';
 
 import { t } from '../i18n';
-/** Explain a rejected protected-playback request once per site. Supported Mac builds prepare Widevine automatically;
+/** Explain a rejected protected-playback request once per site. ECS builds (Mac, Windows Widevine builds) prepare Widevine automatically;
  * other builds, unsupported codecs or component/service failures may still reject it. */
 export const protectedMediaText = "Acira couldn't start protected playback on this site.";
 const storageKey = 'acira-protected-media-seen';

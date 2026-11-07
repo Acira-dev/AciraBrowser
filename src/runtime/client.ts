@@ -6,9 +6,13 @@ import { startWorkspaceTransition,workspaceSwitched } from '../ui/workspaceMotio
 import type { BrowserAction,BrowserEvent,BrowserLayout,BrowserRuntime,BrowserSnapshot } from './types';
 import { undoImportBatches } from '../ui/importedFavorites';
 import { restoreSidebarApp } from '../ui/sidebarApps';
-import { appearanceChanged, startModeTransition } from '../ui/sharedMotion';
-import { opensOrClosesSidebar,sidebarLayoutChanged } from '../ui/layoutMode';
+import { restoreHiddenSection } from '../ui/sidebarSections';
+import { appearanceChanged, modeSwitchPlaying, startModeTransition, whenModeSwitchSettled } from '../ui/sharedMotion';
+import { opensOrClosesSidebar,sidebarCloses,sidebarLayoutChanged } from '../ui/layoutMode';
 import { chromeLayoutChanged } from '../ui/chromeLayout';
+import { morphDirection } from '../ui/sidebarMode';
+import { sidebarMorphDirection,sidebarMorphRunning,startSidebarMorph } from '../ui/sidebarMorph';
+import { setRailPrefs } from '../ui/railPrefs';
 import { currentLocale,saidAs,translateText } from '../i18n';
 import { withMessageIds } from '../i18n/said';
 declare global{interface Window{acira?:BrowserRuntime;__acira?:{getState():BrowserSnapshot;dispatch(action:BrowserAction):void}}}
@@ -41,8 +45,20 @@ const MODE_UPDATE_MS=150;
 // after a newer one: two clicks on the space pills within a frame (each switch is optimistic) showed the second space, then the
 // first again when its transition's update ran, until main's snapshot came.
 let heldModeUpdate:(()=>void)|null=null;
-const modeSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace')=>{heldModeUpdate?.();let done=false;const run=()=>{if(done)return;done=true;if(heldModeUpdate===run)heldModeUpdate=null;modeUpdatePending=false;update();};heldModeUpdate=run;modeUpdatePending=true;if(kind==='workspace')startWorkspaceTransition(run);else startModeTransition(run,kind);if(!done)setTimeout(run,MODE_UPDATE_MS);};
-const OPTIMISTIC=new Set<string>(['tab.select','tab.new','tab.close','workspace.select','split.resize']);
+// A layout switch asked for while another transition plays (the sidebar sliding, a view changing) waits for it to land and then plays as a morph of its own, in the order asked: it never
+// runs under the first one's layers (the layout would jump to its end while the page glides from where it is). Snapshots wait behind it (modeUpdatePending), as behind any held switch.
+let queuedLayouts=0,layoutQueue:Promise<void>=Promise.resolve();
+const startSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace',slideHint?:()=>'out'|undefined)=>{heldModeUpdate?.();let done=false;const run=()=>{if(done)return;done=true;if(heldModeUpdate===run)heldModeUpdate=null;modeUpdatePending=queuedLayouts>0;update();};heldModeUpdate=run;modeUpdatePending=true;if(kind==='workspace')startWorkspaceTransition(run);else startModeTransition(run,kind,slideHint?.());if(!done)setTimeout(run,MODE_UPDATE_MS);};
+const modeSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace',slideHint?:()=>'out'|undefined)=>{
+ if(kind==='layout'&&sidebarMorphRunning()&&startSidebarMorph(update,sidebarMorphDirection()))return;
+ if(kind==='layout'&&(queuedLayouts>0||modeSwitchPlaying())){queuedLayouts++;modeUpdatePending=true;layoutQueue=layoutQueue.then(()=>whenModeSwitchSettled()).then(()=>{queuedLayouts--;startSwitch(update,'layout',slideHint);});return;}
+ startSwitch(update,kind,slideHint);
+};
+/** Sidebar mode on or off, from one snapshot to the next: 'in' (tabs and the address bar in the sidebar), 'out', or (a morph already running takes any layout change) its own direction. */
+const morphOf=(previous:BrowserSnapshot,next:BrowserSnapshot)=>morphDirection(previous,next,sidebarMorphRunning(),sidebarLayoutChanged(previous,next)||chromeLayoutChanged(previous,next),sidebarMorphDirection());
+/** The profile's own tabs switch is drawn from the setting a round trip later; in a morph it goes in the same render, or the strip would be taken down before the sidebar is there. */
+const syncRail=(next:BrowserSnapshot)=>{const tab=next.tabs.find(item=>item.id===next.activeTabId)||next.tabs[0];if(!tab)return;setRailPrefs({tabs:!!next.settings.verticalTabs},tab.browserProfileId,!!next.browserProfiles.find(profile=>profile.id===tab.browserProfileId)?.private);};
+const OPTIMISTIC=new Set<string>(['tab.select','tab.new','tab.close','workspace.select','split.resize','sidebar.mode']);
 /** The tab main most recently said is active. A snapshot is painted a frame later (a window that draws no frames, up to 100 ms), so a
  * key that arrives in between (Ctrl+T, then Ctrl+L and typing at once) is meant for this tab while the chrome still shows the last one. */
 let newestActiveTab:string|null=null;
@@ -64,7 +80,7 @@ export function useBrowser(){
   // frame, before that frame paints. The overlay layer has no frames while hidden, so it applies each one at once.
   const batch=!location.search.includes('view=overlay');let pending:BrowserSnapshot|null=null,frame=0,timer:ReturnType<typeof setTimeout>|undefined;
   // A snapshot that changes the theme, finish, tint or glass crossfades in as one frame (A's mode transition).
-  const flush=()=>{cancelAnimationFrame(frame);clearTimeout(timer);frame=0;if(modeUpdatePending&&pending){frame=requestAnimationFrame(flush);timer=setTimeout(flush,MODE_UPDATE_MS);return;}const next=pending;pending=null;if(!next)return;if(appearanceChanged(shown,next))modeSwitch(()=>flushSync(()=>apply(next)));else if(workspaceSwitched(shown,next))modeSwitch(()=>flushSync(()=>apply(next)),'workspace');else if(sidebarLayoutChanged(shown,next)||chromeLayoutChanged(shown,next))modeSwitch(()=>flushSync(()=>apply(next)),'layout');else flushSync(()=>apply(next));};
+  const flush=()=>{cancelAnimationFrame(frame);clearTimeout(timer);frame=0;if(modeUpdatePending&&pending){frame=requestAnimationFrame(flush);timer=setTimeout(flush,MODE_UPDATE_MS);return;}const next=pending;pending=null;if(!next)return;const stale=!!optimistic.current&&next.revision<optimistic.current.base+optimistic.current.count,morph=stale?null:morphOf(latest.current,next),applyNow=()=>{apply(next);if(morph)syncRail(next);/* the profile's tabs switch goes in the same render, however the switch is played */};if(appearanceChanged(shown,next))modeSwitch(()=>flushSync(applyNow));else if(workspaceSwitched(shown,next))modeSwitch(()=>flushSync(applyNow),'workspace');else if(morph&&startSidebarMorph(()=>flushSync(applyNow),morph)){/* played as Sidebar mode's morph */}else if(sidebarLayoutChanged(shown,next)||chromeLayoutChanged(shown,next)){const shownNow=latest.current;/* main confirming what an optimistic switch already put on screen is not another layout switch */if(sidebarLayoutChanged(shownNow,next)||chromeLayoutChanged(shownNow,next))modeSwitch(()=>flushSync(applyNow),'layout',()=>sidebarCloses(latest.current,next.windowUi,next.activeTabId,next.tabs)?'out' as const:undefined);else flushSync(applyNow);}else flushSync(applyNow);};
   const receive=(raw:BrowserSnapshot)=>{if(!raw)return;const next=complete(raw);if(batch)newestActiveTab=next.activeTabId??null;if(!batch)return apply(next);
    // Native Cmd/Ctrl+T and tab shortcuts precede the next keystroke. Commit their
    // foreground owner now, like optimistic pointer actions, so input cannot land
@@ -77,9 +93,11 @@ export function useBrowser(){
   const unsubscribe=runtime.subscribe(receive);void runtime.getSnapshot().then(full=>apply(complete(full)));return()=>{unsubscribe();cancelAnimationFrame(frame);clearTimeout(timer);};},[]);
  const dispatch=(action:BrowserAction)=>{/* A toast written in the language on screen goes with its message id, so a language change shows it in the new one. */if(action.type==='toast')action=withMessageIds(action,saidAs);if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
   // Undo of a removed favorite: it comes back with the live tab it had handed to the tab list, if that tab is still open and unclaimed.
+  // Undo of Hide this section (ui/sidebarSections.ts): the section is shown again, from whichever view shows the toast.
+  if(action.type==='sidebar.section.restore'){restoreHiddenSection(action.token);return;}
   if(action.type==='favorite.restore'){restoreSidebarApp(action.token,(appId,tabIds)=>{const tab=latest.current.tabs.find(tab=>tabIds.includes(tab.id)&&!tab.favoriteId);if(tab)dispatch({type:'tab.favorite',id:tab.id,favoriteId:appId});});return;}
   // Opening or closing the sidebar shows on the input frame (G, Round 2); main's snapshot confirms it a frame later.
-  if(opensOrClosesSidebar(action)&&action.type==='ui.update'){const patch=action.patch;modeSwitch(()=>flushSync(()=>setState(previous=>{const own=Object.hasOwn(patch,'view')?patch.view??undefined:Object.hasOwn(patch,'focusMode')?viewForFocus(previous.settings,previous.windowUi,patch.focusMode===true)??undefined:previous.windowUi.view;return {...previous,windowUi:{...previous.windowUi,...patch,view:own,focusMode:own==='focus'}};})),'layout');}
+  if(opensOrClosesSidebar(action)&&action.type==='ui.update'){const patch=action.patch,hint=()=>sidebarCloses(latest.current,{...latest.current.windowUi,...patch},latest.current.activeTabId)?'out' as const:undefined;modeSwitch(()=>flushSync(()=>setState(previous=>{const own=Object.hasOwn(patch,'view')?patch.view??undefined:Object.hasOwn(patch,'focusMode')?viewForFocus(previous.settings,previous.windowUi,patch.focusMode===true)??undefined:previous.windowUi.view;return {...previous,windowUi:{...previous.windowUi,...patch,view:own,focusMode:own==='focus'}};})),'layout',hint);}
   let sent=action,dispatched=false;
   // A workspace with no tab here gets a new one with a fresh id: only main may make that, so its switch is not optimistic.
   if(native&&OPTIMISTIC.has(action.type)&&!location.search.includes('view=overlay')&&(action.type!=='workspace.select'||workspaceHasTabs(latest.current,action.id))){
@@ -88,7 +106,7 @@ export function useBrowser(){
    // Its answer is a later task, so it can never arrive before the optimistic state below is in place.
    void runtime.dispatch(sent).catch(error=>console.error('Browser action failed',error));dispatched=true;
    try{const base=latest.current,started=performance.now(),next=reduceBrowser(base,sent),reduced=performance.now();
-    if(next!==base){const wait=optimistic.current;if(wait)clearTimeout(wait.timer);const count=(wait?.count??0)+1,baseRevision=wait?.base??base.revision,timer=setTimeout(()=>{optimistic.current=null;void runtime.getSnapshot().then(real=>real&&setState(complete(real)));},900);optimistic.current={base:baseRevision,count,timer};const shown={...next,revision:base.revision};latest.current=shown;if(workspaceSwitched(base,next))modeSwitch(()=>flushSync(()=>setState(shown)),'workspace');else flushSync(()=>setState(shown));const rendered=performance.now();(window as unknown as {__optimistic?:object}).__optimistic={action:action.type,reduceMs:+(reduced-started).toFixed(2),renderMs:+(rendered-reduced).toFixed(2)};}
+    if(next!==base){const wait=optimistic.current;if(wait)clearTimeout(wait.timer);const count=(wait?.count??0)+1,baseRevision=wait?.base??base.revision,timer=setTimeout(()=>{optimistic.current=null;void runtime.getSnapshot().then(real=>real&&setState(complete(real)));},900);optimistic.current={base:baseRevision,count,timer};const shown={...next,revision:base.revision};latest.current=shown;if(workspaceSwitched(base,next))modeSwitch(()=>flushSync(()=>setState(shown)),'workspace');else{/* Sidebar mode plays on the press frame as its morph; main's snapshot, a moment later, finds nothing left to change */const direction=action.type==='sidebar.mode'?morphOf(base,next):null;if(!(direction&&startSidebarMorph(()=>flushSync(()=>{setState(shown);syncRail(next);}),direction))){const settle=()=>flushSync(()=>{setState(shown);if(action.type==='sidebar.mode')syncRail(next);});if(action.type==='sidebar.mode'&&direction)modeSwitch(settle,'layout');else settle();}}const rendered=performance.now();(window as unknown as {__optimistic?:object}).__optimistic={action:action.type,reduceMs:+(reduced-started).toFixed(2),renderMs:+(rendered-reduced).toFixed(2)};}
    }catch(error){console.warn('Optimistic update skipped',error);}
   }
   if(!dispatched)void runtime.dispatch(sent).catch(error=>console.error('Browser action failed',error));};

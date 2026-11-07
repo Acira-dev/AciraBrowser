@@ -1,6 +1,7 @@
-import type { BrowserAction, BrowserProfile } from "../../runtime/types";
+import type { BrowserAction, BrowserProfile, BrowserSnapshot } from "../../runtime/types";
+import { Segmented } from "../../components/Segmented";
 import { runtime } from "../../runtime/client";
-import { t } from "../../i18n";
+import { t, useT } from "../../i18n";
 import { PROFILE_PALETTE, isGreyProfileColor, profileColorFor } from "../../runtime/profileColors";
 import "./profile-manager.css";
 
@@ -99,6 +100,32 @@ export const setAvatar = (dispatch: Dispatch, id: string, avatar: string | null)
 export const createProfile = (dispatch: Dispatch, name: string) =>
   dispatch({ type: "browser.profile.create", name: name.slice(0, PROFILE_NAME_MAX) });
 export const selectProfile = (dispatch: Dispatch, id: string) => dispatch({ type: "browser.profile.select", id });
+
+/** The segment the setting stands for: profiles as spaces is "In this window"; anything else, also a setting never chosen, is a window for each profile. */
+export const openProfilesValue = (settings: Pick<BrowserSnapshot["settings"], "spaces">): "profiles" | "workspaces" => (settings.spaces === "profiles" ? "profiles" : "workspaces");
+/** What choosing a segment does: the existing Switch between update, or nothing when it is the choice already in force. */
+export const openProfilesAction = (settings: Pick<BrowserSnapshot["settings"], "spaces">, next: "profiles" | "workspaces"): BrowserAction | null =>
+  next === openProfilesValue(settings) ? null : { type: "settings.update", patch: { spaces: next } };
+/** "Open profiles: In this window · In separate windows": the one place the choice is made, as Settings › Profiles › Switch between
+ *  (`settings.spaces`: profiles as spaces, or a window for each profile with workspaces inside it). The existing segmented control,
+ *  used by the profile menu, the top of Settings › Profiles and the add-profile form, so it reads the same wherever it is met.
+ *  Nothing is stored beyond the setting itself; the windows follow as they do for the Settings row (desktop/main.cjs asks first when a page would lose something). */
+export function OpenProfilesControl({ state, dispatch, onChosen }: { state: Pick<BrowserSnapshot, "settings">; dispatch: Dispatch; onChosen?: () => void }) {
+  const text = useT();
+  return (
+    <Segmented
+      label={text("profiles.openProfiles")}
+      value={openProfilesValue(state.settings)}
+      options={[["profiles", text("profiles.inThisWindow")], ["workspaces", text("profiles.inSeparateWindows")]] as const}
+      onChange={(next) => {
+        const action = openProfilesAction(state.settings, next);
+        if (!action) return;
+        dispatch(action);
+        onChosen?.();
+      }}
+    />
+  );
+}
 
 const removalReasons = (): Record<string, string> => ({
   "last-profile": t("profiles.err.lastProfile"),

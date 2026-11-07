@@ -110,3 +110,35 @@ if(process.isMainFrame)window.addEventListener('click',event=>{
  if(target&&target!=='_self'&&target!=='_top'&&target!=='_parent')return;
  ipcRenderer.send('acira:link-intent',String(link.href).slice(0,4096));
 },{passive:true});
+// Two-finger swipe between pages (macOS; desktop/swipe-nav.cjs). Main sees the trackpad's phases but not the page, so for a sideways wheel this says what
+// the page could still scroll that way: the scrollers from the element under the pointer outward (overflow auto or scroll, how far each is scrolled and
+// can scroll, its overscroll-behavior-x) and the page's own, plus whether the page cancelled the wheel. Main decides; nothing here starts a navigation.
+// A passive listener, ignoring anything vertical, sent at most every 50 ms; a page never sees it and its scrolling is not touched.
+if(process.platform==='darwin'&&process.isMainFrame){
+ let lastSent=0,lastToward=0;
+ const describe=(node,style)=>({scrolls:true,left:node.scrollLeft,max:node.scrollWidth-node.clientWidth,rtl:style.direction==='rtl',behavior:style.overscrollBehaviorX||'auto'});
+ const chainOf=event=>{
+  const chain=[],html=document.documentElement,body=document.body,root=document.scrollingElement||html;
+  for(const node of event.composedPath()){
+   if(!(node instanceof Element)||node===html||node===body||node===root)continue;
+   const style=getComputedStyle(node),overflow=style.overflowX;
+   if(overflow!=='auto'&&overflow!=='scroll'&&overflow!=='overlay')continue;
+   chain.push(describe(node,style));
+   if(chain.length>=24)break;
+  }
+  // The page's own scroller: the viewport takes the body's overflow when the root sets none of its own; hidden and clip do not scroll by wheel.
+  const rootStyle=getComputedStyle(html),bodyStyle=body?getComputedStyle(body):rootStyle,source=rootStyle.overflowX==='visible'?bodyStyle:rootStyle;
+  const behavior=rootStyle.overscrollBehaviorX!=='auto'?rootStyle.overscrollBehaviorX:bodyStyle.overscrollBehaviorX;
+  chain.push({scrolls:source.overflowX!=='hidden'&&source.overflowX!=='clip',left:root.scrollLeft,max:root.scrollWidth-root.clientWidth,rtl:rootStyle.direction==='rtl',behavior:behavior||'auto'});
+  return chain;
+ };
+ window.addEventListener('wheel',event=>{
+  if(!event.isTrusted||event.ctrlKey||!event.deltaX||Math.abs(event.deltaX)<=Math.abs(event.deltaY))return;
+  const toward=event.deltaX<0?-1:1,at=performance.now();
+  if(toward===lastToward&&at-lastSent<50)return;
+  lastSent=at;lastToward=toward;
+  const chain=chainOf(event);   // the path is only there while the event is being dispatched
+  // The page's handlers have all run once this task starts: only then is it known whether one of them cancelled the wheel.
+  setTimeout(()=>{try{ipcRenderer.send('acira:swipe-facts',{toward,prevented:event.defaultPrevented,chain});}catch{}},0);
+ },{capture:true,passive:true});
+}

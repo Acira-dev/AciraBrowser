@@ -40,6 +40,19 @@ const OUTSIDE_CAP = 2500;          // ... for at most this long
 const ENGAGED_DWELL = { top: 650, side: 650 };
 const ENGAGED_PUSH = { top: 260, side: 260 };
 
+// Animation speed (Settings > Appearance): the waits between the pointer and the bar are about intent, not motion, but "Fast" and "None" ask for a bar
+// that does not make you wait (founder, 6 Nov: Briski's "it takes 1 second to appear": the 650ms engaged wait below was most of it, whatever the speed).
+// PREMIUM is the numbers above, untouched (the same objects). FAST serves Fast and None (Off / Reduce motion): the motion differs, the waits do not.
+// Floors, from simulating the controller against passing pointers (tests/edge-reveal.test.cjs "Fast waits"): 60/30ms is the shortest rest/arrival pair that
+// keeps every crossing of the zone, every slide along it faster than 0.4px/ms and every touch of 30ms or less a pass (30ms is also two samples of the 16ms
+// poller); below it touches of 20 to 30ms and slides up to 0.5px/ms reveal. The engaged waits (a control under the pointer) keep most of R8's reason, a click
+// on a control just reached lands 150 to 450ms after arriving: 400 / 180ms give the click most of that window; Premium keeps 650 / 260.
+const PREMIUM = { dwell: DWELL, push: DWELL_PUSH, engaged: ENGAGED_DWELL, engagedPush: ENGAGED_PUSH, grace: GRACE, keyGrace: KEY_GRACE, minVisible: MIN_VISIBLE, lockout: LOCKOUT };
+const FAST = { dwell: { top: 60, side: 60 }, push: { top: 30, side: 30 }, engaged: { top: 400, side: 400 }, engagedPush: { top: 180, side: 180 }, grace: { top: 180, side: 120 }, keyGrace: 250, minVisible: 250, lockout: 150 };
+/** The waits for each speed the interface reports (`input.speed`: 'premium' | 'fast' | 'off'); anything else is Premium. */
+const WAITS = { premium: PREMIUM, fast: FAST, off: FAST };
+const waitsFor = speed => (typeof speed === 'string' && Object.hasOwn(WAITS, speed) ? WAITS[speed] : PREMIUM);
+
 const ZONES = ['top', 'side'];
 const TRACE = !!process.env.ACIRA_EDGE_TRACE;   // timestamps of every change, on stdout, for the QA rig
 const fresh = () => ({ phase: 'hidden', since: 0, shownAt: 0, leaveAt: 0, lockUntil: 0, blocked: false, outsideAt: 0, pinned: false, held: false, keyed: false, returnWait: false, via: '' });
@@ -69,14 +82,16 @@ const distanceOutside = (point, b) => {
  * (what keeps a showing edge open: a popup, a drag, focus in the chrome), size {topHeight, sideWidth} (how big the revealed chrome
  * is, DIPs), pressed (a button held in any frame, an in-page drag, a native menu or dialog: nothing reveals), engaged (the page
  * reports something to use under the pointer: a longer rest is needed, see ENGAGED_DWELL), band (DIPs of screen above the window that the system keeps for itself
- * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere). Pins (Ctrl+Shift+E) are set with pin(). */
+ * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere), speed ('premium', 'fast' or 'off': which waits apply, see WAITS).
+ * Pins (Ctrl+Shift+E) are set with pin(). */
 function createEdgeController({ now = Date.now } = {}) {
   const zones = { top: fresh(), side: fresh() };
-  let lastBounds = null, prev = null, lastInside = null, exit = null, crossed = null;
+  let lastBounds = null, prev = null, lastInside = null, exit = null, crossed = null, T = PREMIUM;
 
   const geometryChanged = () => { for (const zone of ZONES) { const z = zones[zone]; if (z.phase === 'dwelling') { z.phase = 'hidden'; z.since = 0; } z.blocked = true; } exit = null; crossed = null; };
 
   function sample(input) {
+    T = waitsFor(input.speed);
     const t = now(), b = input.bounds, point = input.point;
     // The window moved or resized (grabbing its border must not pop the sidebar): block both zones until the pointer leaves them.
     if (lastBounds && b && !same(lastBounds, b)) geometryChanged();
@@ -168,14 +183,14 @@ function createEdgeController({ now = Date.now } = {}) {
         // dwell counts only while the pointer stays within SWEEP px along the edge (sampling-rate independent).
         else if (Math.abs(along[zone] - z.anchor) > SWEEP && !caption) { z.since = t; z.fast = false; z.anchor = along[zone]; }
         const engaged = !!input.engaged && !caption;
-        const need = zone === 'top' && caption ? 0 : engaged ? (pushing[zone] ? ENGAGED_PUSH[zone] : ENGAGED_DWELL[zone]) : pushing[zone] || z.fast ? DWELL_PUSH[zone] : DWELL[zone];
+        const need = zone === 'top' && caption ? 0 : engaged ? (pushing[zone] ? T.engagedPush[zone] : T.engaged[zone]) : pushing[zone] || z.fast ? T.push[zone] : T.dwell[zone];
         if (t - z.since >= need) { z.phase = 'shown'; z.shownAt = t; z.leaveAt = 0; z.held = false; z.keyed = false; z.via = caption && zone === 'top' ? 'caption' : 'pointer'; why[zone] = z.via; }
         continue;
       }
 
       // shown or leaving
       // Window deactivation (main's blur, not the interface's) hides at once, unless something holds the edge open.
-      if (!input.focused && !held) { Object.assign(z, fresh(), { lockUntil: t + LOCKOUT, blocked: trigger[zone] }); why[zone] = 'blur'; continue; }
+      if (!input.focused && !held) { Object.assign(z, fresh(), { lockUntil: t + T.lockout, blocked: trigger[zone] }); why[zone] = 'blur'; continue; }
       const wasHeld = z.held; z.held = held;
       if (held) { z.phase = 'shown'; z.leaveAt = 0; z.returnWait = false; why[zone] = z.pinned ? 'pinned' : 'hold'; continue; }
       // A hold just ended with the pointer outside the window (a menu closed): wait until it is back, then grace.
@@ -184,8 +199,8 @@ function createEdgeController({ now = Date.now } = {}) {
       if (keeps) { z.phase = 'shown'; z.leaveAt = 0; if (onChrome[zone]) z.keyed = false; why[zone] = near && !onChrome[zone] ? 'outside' : 'pointer'; continue; }
       // Not on the chrome, nothing holds it: the grace runs. A timer that is running is never restarted by jitter.
       if (z.phase === 'shown') { z.phase = 'leaving'; z.leaveAt = t; }
-      if (t - z.leaveAt >= (z.keyed ? KEY_GRACE : GRACE[zone]) && t - z.shownAt >= MIN_VISIBLE) {
-        Object.assign(z, fresh(), { lockUntil: t + LOCKOUT, blocked: trigger[zone] }); why[zone] = 'left';
+      if (t - z.leaveAt >= (z.keyed ? T.keyGrace : T.grace[zone]) && t - z.shownAt >= T.minVisible) {
+        Object.assign(z, fresh(), { lockUntil: t + T.lockout, blocked: trigger[zone] }); why[zone] = 'left';
       } else why[zone] = 'grace';
     }
     return { top: zones.top.phase === 'shown' || zones.top.phase === 'leaving', side: zones.side.phase === 'shown' || zones.side.phase === 'leaving', why };
@@ -194,7 +209,7 @@ function createEdgeController({ now = Date.now } = {}) {
   /** Pin an edge open (Ctrl+Shift+E in Seamless) or let it go; letting go starts the normal grace. */
   function pin(zone, on) { if (!zones[zone]) return; zones[zone].pinned = !!on; }
   /** Esc, or a click in the page: hide the edge now. It stays hidden until the pointer has left its zone and the lockout is over. */
-  function dismiss(zone) { const z = zones[zone]; if (!z) return; Object.assign(z, fresh(), { lockUntil: now() + LOCKOUT, blocked: true }); }
+  function dismiss(zone) { const z = zones[zone]; if (!z) return; Object.assign(z, fresh(), { lockUntil: now() + T.lockout, blocked: true }); }
   const pinned = zone => !!zones[zone]?.pinned;
   const phase = zone => zones[zone].phase;
   /** Is anything shown or about to be (the poller keeps its fast cadence while so). */
@@ -220,7 +235,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       // A fullscreen window is the only thing its display shows: another app holding the keyboard (the other monitor, Spotlight, a notification) must not stop
       // its edges, or the sidebar "would not reveal" until a click gave the window the keyboard back. `live()` is main's word for that (the window's Space is showing).
       const state = item.state, effective = view(state), focused = !!win.isFocused?.() || !!item.live?.(), peek = item.peek?.() || null;
-      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek };
+      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, speed: item.speed?.() || 'premium' };
       const enabled = enabledEdges(input);
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
       if (TRACE) { const line = JSON.stringify({ ...input, enabled }); if (line !== entry.input) { entry.input = line; console.log('[edge-input]', Date.now(), line); } }
@@ -267,4 +282,4 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
   return { tick, pin: (item, zone, on) => { entryOf(item).edge.pin(zone, on); }, dismiss: (item, zone) => { entryOf(item).edge.dismiss(zone); }, pinned: (item, zone) => !!seen.get(item)?.edge.pinned(zone), entryFor: item => seen.get(item) };
 }
 
-module.exports = { createEdgeController, watchChromeEdges, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };
+module.exports = { createEdgeController, watchChromeEdges, WAITS, waitsFor, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };

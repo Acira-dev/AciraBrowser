@@ -1,15 +1,26 @@
 import { defineSettings } from '../model';
 
-import { t } from '../../../i18n';
-/** Stream G · sidebar controls, rendered by `panels/sidebar.tsx` in the Tabs section. */
+import { t, translateText } from '../../../i18n';
+/** Sidebar controls, one group in Settings › Tabs (`panels/sidebar.tsx`, shown right under the Tabs layout card). The address bar and the
+ * left-edge rows are the same settings as in Appearance › Layout; search names this place. */
 export default defineSettings('Tabs', [
   { id: 'ctrl-tab', title: t("sidebar.ctrlTabSwitchesTo"), group: 'Switching tabs', description: t("sidebar.nextTabLikeChromeThe"), aliases: ['ctrl tab', 'ctrl shift tab', 'next tab', 'previous tab', 'mru', 'recent tabs', 'recently used', 'tab switcher', 'tab viewer', 'alt tab', 'cycle tabs', 'last tab', 'switch tabs'] },
+  { id: 'sidebar', title: t("acirasidebar.sidebar"), group: 'Sidebar', signpost: true, description: t("sidebar.showOrHideTheSidebar"), aliases: ['sidebar', 'side bar', 'sidebar settings', 'sidebar options', 'side panel', 'left panel', 'rail', 'customize sidebar', 'customise sidebar'] },
+  { id: 'sidebar-mode', title: t("sidebarmode.title"), group: 'Sidebar', signpost: true, description: t("sidebarmode.detail"), aliases: ['sidebar mode', 'sidebar only', 'everything in sidebar', 'all in sidebar', 'tabs and address bar in sidebar', 'arc style', 'zen style', 'arc mode', 'zen mode', 'vertical mode', 'one step'] },
   { id: 'sidebar-visible', title: t("sidebar.showSidebar"), group: 'Sidebar', description: t("sidebar.showOrHideTheSidebar"), aliases: ['hide sidebar', 'collapse sidebar', 'side panel', 'rail', 'ctrl shift e'] },
+  { id: 'address-in-sidebar', title: t("windowview.addressInSidebar"), group: 'Sidebar', signpost: true, description: t("windowview.addressInSidebarDetail"), aliases: ['address bar', 'url bar', 'search bar', 'location bar', 'omnibox', 'address bar in sidebar', 'url in sidebar', 'address in the sidebar', 'arc style', 'move address bar', 'sidebar address bar'] },
+  { id: 'sidebar-peek', title: t("windowview.closedSidebarEdge"), group: 'Sidebar', description: t("windowview.closedSidebarEdgeDetail"), aliases: ['closed sidebar', 'left edge', 'peek sidebar', 'hover sidebar', 'sidebar opens by itself', 'sidebar opens on hover', 'auto open sidebar', 'sidebar pops out', 'sidebar keeps opening'], when: 'vertical-tabs' },
+  { id: 'seamless-edge-side', title: t("windowview.edgeSide"), group: 'Sidebar', description: t("windowview.seamlessDetail"), aliases: ['seamless', 'left edge', 'reveal sidebar', 'hover sidebar', 'peek sidebar'], when: 'vertical-tabs' },
   { id: 'sidebar-shortcut', title: t("sidebar.ctrlSTogglesTheSidebar"), group: 'Sidebar', description: t("sidebar.withVerticalTabsCtrlS"), aliases: ['ctrl s', 'save page', 'sidebar shortcut', 'keyboard', 'helium'] },
   { id: 'sidebar-apps', title: t("acirasidebar.favorites"), group: 'Sidebar', description: t("sidebar.sitesKeptAtTheTop"), aliases: ['favourites', 'sidebar apps', 'pinned sites', 'app icons', 'shortcuts', 'pinned apps', 'dia', 'essentials'] },
   { id: 'sidebar-new-tabs-top', title: t("sidebar.newTabsAtTheTop"), group: 'Sidebar', description: t("sidebar.openNewTabsAboveYour"), aliases: ['tab order', 'new tab position', 'top of list', 'reverse tabs'] },
   { id: 'sidebar-width', title: t("sidebar.sidebarWidth"), group: 'Sidebar', description: t("sidebar.resetTheSidebarToIts"), aliases: ['resize sidebar', 'wider', 'narrower', 'sidebar size'] },
   { id: 'sidebar-reset', title: t("sidebar.resetSidebarLayout"), group: 'Sidebar', description: t("sidebar.restoreSidebarVisibilityAppsWidth"), aliases: ['restore sidebar', 'default layout', 'reset tabs'] },
-  { id: 'sidebar-section-tabs', title: t("sidebar.sidebarSections"), group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['reorder sidebar', 'sidebar order', 'hide history in sidebar', 'sections'] },
-  { id: 'sidebar-customize', title: t("sidebar.customizeInTheSidebar"), group: 'Sidebar sections', description: t("sidebar.editTheSectionsInThe"), aliases: ['customize sidebar'] },
+  { id: 'sidebar-section-tabs', title: t("sidebar.sidebarSections"), anchor: 'sidebar-sections', group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['reorder sidebar', 'sidebar order', 'hide history in sidebar', 'sections', 'hide sections', 'show sections'] },
+  { id: 'sidebar-section-bookmarks', title: translateText('Bookmarks'), group: 'Sidebar sections', signpost: true, description: t("sidebar.showHideAndReorderTabs"), aliases: ['bookmarks in sidebar', 'bookmarks in the sidebar', 'hide bookmarks', 'show bookmarks', 'bookmarks under tabs', 'bookmarks below tabs', 'bookmarks above tabs', 'move bookmarks', 'bookmarks section'] },
+  { id: 'sidebar-section-pinned', title: translateText('Pinned tabs'), group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['pinned tabs in sidebar', 'hide pinned tabs', 'show pinned tabs', 'pinned section'] },
+  { id: 'sidebar-section-downloads', title: translateText('Downloads'), group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['downloads in sidebar', 'downloads in the sidebar', 'show downloads', 'hide downloads', 'downloads section'] },
+  { id: 'sidebar-section-history', title: translateText('History'), group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['history in sidebar', 'history in the sidebar', 'show history', 'hide history', 'history section'] },
+  { id: 'sidebar-section-reading', title: translateText('Reading list'), group: 'Sidebar sections', description: t("sidebar.showHideAndReorderTabs"), aliases: ['reading list in sidebar', 'reading list in the sidebar', 'show reading list', 'hide reading list', 'reading section'] },
+  { id: 'sidebar-customize', title: t("sidebar.customizeInTheSidebar"), group: 'Sidebar sections', description: t("sidebar.editTheSectionsInThe"), aliases: ['customize sidebar', 'customise sidebar', 'edit sidebar', 'rearrange sidebar', 'drag sections'] },
 ]);

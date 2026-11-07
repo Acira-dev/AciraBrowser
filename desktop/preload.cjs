@@ -27,6 +27,7 @@ ipcRenderer.on('acira:popup-viewport',(_event,value)=>applyPopupViewport(value))
 window.addEventListener('DOMContentLoaded',()=>{if(popupViewport)applyPopupViewport(popupViewport);void ipcRenderer.invoke('acira:popup-viewport').then(applyPopupViewport,()=>{});},{once:true});
 contextBridge.exposeInMainWorld('acira',{
  platform:process.platform,initialSnapshot:ipcRenderer.sendSync('acira:initial-snapshot'),
+ systemTheme:()=>ipcRenderer.sendSync('acira:system-theme'),subscribeSystemTheme:subscription('acira:system-theme-changed'),
  getSnapshot:()=>ipcRenderer.invoke('acira:snapshot'),dispatch:action=>invoke('acira:dispatch',action).then(()=>{}),subscribe:subscription('acira:state'),
  browserCommand:command=>invoke('acira:browser-command',command),setBrowserLayout:layout=>send('acira:set-layout',layout),getBrowserLayout:()=>ipcRenderer.invoke('acira:get-layout'),subscribeLayout:subscription('acira:layout'),subscribeBrowser:subscription('acira:browser-event'),closeOverlay:id=>send('acira:close-overlay',id),overlayReady:(id,stage,provider)=>invoke('acira:overlay-ready',id,stage,provider),popupBackdrop:id=>invoke('acira:popup-backdrop',id),popupBackdropSnapshot:id=>invoke('acira:popup-backdrop-snapshot',id),startPopupCapture:(id,key)=>invoke('acira:start-popup-capture',id,key),
  extensions:request=>invoke('acira:extensions',request),

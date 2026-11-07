@@ -1,4 +1,4 @@
-// Reduced motion / animation speed Off: a view switch is one step, no view transition, page placed once.
+// Reduced motion / animation speed None (was Off): a view switch is one step, no view transition, page placed once.
 import {launch, sleep, httpFixture, startProbe, stopProbe} from './lib.mjs';
 const fixture = await httpFixture((_q, r) => { r.setHeader('Content-Type', 'text/html'); r.end('<title>M</title><body style="margin:0;background:#ff00ff;height:100vh">'); });
 const app = await launch({name: 'rd', settings: {onboardingComplete: true, reducedMotion: true, appearance: 'light'}});

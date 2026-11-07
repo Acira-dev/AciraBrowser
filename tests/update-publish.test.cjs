@@ -45,7 +45,8 @@ test('release tags keep the website working: platform and version are readable f
   assert.equal(/mac/i.test(tag),platform==='mac');assert.equal(/windows/i.test(tag),platform==='windows');
   assert.equal(/^v?(.+?)-(?:mac|windows)/i.exec(tag)[1],'0.1.0-beta.7','both releases of a version share one label, so the download page lists them together');
  }
- assert.throws(()=>U.releaseTag({version:'0.1.0-beta.7',platform:'linux',commit}),/Unknown platform/);
+ assert.equal(U.releaseTag({version:'0.1.0-beta.11',platform:'linux',commit}),'v0.1.0-beta.11-linux-b62c4715','Linux joined with the bridge release (beta.11)');
+ assert.throws(()=>U.releaseTag({version:'0.1.0-beta.7',platform:'freebsd',commit}),/Unknown platform/);
  assert.throws(()=>U.releaseTag({version:'0.1.0-beta.7',platform:'mac',commit:'main'}),/commit/);
 });
 test('asset URLs are the exact public release URLs, and names GitHub would rewrite are refused',()=>{

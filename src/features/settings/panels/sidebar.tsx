@@ -9,6 +9,7 @@ import { useFlip } from '../../../ui/sharedMotion';
 import { moveSection, openSidebarCustomize, saveSections, sectionLayout, sectionShown, SECTION_NAMES, toggleSection, type SectionId } from '../../../ui/sidebarSections';
 import { ArrowUp } from '../../../components/AppIcons';
 import { readCtrlTabMode, setCtrlTabMode, subscribeCtrlTabMode, type CtrlTabMode } from '../../../ui/tabMru';
+import { AddressInSidebarRow, SidebarEdgeRows, SidebarModeRow } from '../SidebarRows';
 
 import { t, translateText, type MessageId } from '../../../i18n';
 const ctrlTabDetail: Record<CtrlTabMode, MessageId> = {
@@ -19,8 +20,10 @@ const ctrlTabDetail: Record<CtrlTabMode, MessageId> = {
 /** A sidebar section's name in the interface language (sidebarSections.ts keeps the English names). */
 const sectionName = (id: SectionId) => translateText(SECTION_NAMES[id]);
 
-/** Sidebar apps, width and a one-step reset. Sidebar-only tabs stays in C's Tabs group. */
-function SidebarSettings({ state, dispatch }: SettingsPanelProps) {
+/** Settings › Tabs › Sidebar: every sidebar choice in one place, right under the Tabs layout card (BrowserSettings puts it there):
+ * show it, the address bar in it, the left edge, Favorites, new tabs, width, a reset, and below it the sections (show, hide, reorder).
+ * The Window view's own rows stay in Appearance › Layout; the address bar and the edge rows are the same settings in both places. */
+export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   const tab = state.tabs.find((item) => item.id === state.activeTabId) || state.tabs[0];
   const profile = state.browserProfiles.find((item) => item.id === tab.browserProfileId);
   const privateMode = !!profile?.private;
@@ -36,22 +39,19 @@ function SidebarSettings({ state, dispatch }: SettingsPanelProps) {
     setRailPrefs({ tabs: false, newTabsTop: true, newTabsTopChosen: false }, tab.browserProfileId, privateMode);
     dispatch({ type: 'settings.update', patch: { verticalTabs: false } });
   };
-  const ctrlTab = useSyncExternalStore(subscribeCtrlTabMode, readCtrlTabMode);
   const layout = sectionLayout(rail), listed: SectionId[] = ['favorites', 'pinned', ...layout.order];
   const save = (next: typeof layout) => saveSections(next, tab.browserProfileId, privateMode);
   // Rows swap places on the morph spring (R3-55).
   const sections = useRef<HTMLDivElement>(null);
   useFlip(sections, layout.order.join(','));
   return (<>
-    <SettingGroup title={t("sidebar.switchingTabs")} id="tab-switching">
-      <SettingRow id="ctrl-tab" title={t("sidebar.ctrlTabSwitchesTo")} detail={t(ctrlTabDetail[ctrlTab])}>
-        <Select<CtrlTabMode> label={t("sidebar.ctrlTabSwitchesTo")} value={ctrlTab} onChange={setCtrlTabMode} options={[{ value: 'next', label: t("sidebar.nextTab") }, { value: 'recent', label: t("sidebar.recentlyUsedTab") }, { value: 'viewer', label: t("core.showTabViewer") }]} />
-      </SettingRow>
-    </SettingGroup>
     <SettingGroup title={t("acirasidebar.sidebar")} id="sidebar">
+      <SidebarModeRow state={state} dispatch={dispatch} />
       <SettingRow id="sidebar-visible" title={t("sidebar.showSidebar")} detail={t("sidebar.showSidebarDetail")}>
         <Switch label={t("sidebar.showSidebar")} checked={open} onChange={(next) => dispatch({ type: 'ui.update', patch: sidebarPatch(next) })} />
       </SettingRow>
+      <AddressInSidebarRow state={state} dispatch={dispatch} always />
+      <SidebarEdgeRows state={state} dispatch={dispatch} describe />
       <SettingRow id="sidebar-shortcut" title={t("sidebar.ctrlSTogglesTheSidebar")} detail={t("sidebar.ctrlSDetail")}>
         <Switch label={t("sidebar.ctrlSTogglesTheSidebar")} checked={state.settings.sidebarShortcut !== false} onChange={(next) => dispatch({ type: 'settings.update', patch: { sidebarShortcut: next } })} />
       </SettingRow>
@@ -69,7 +69,7 @@ function SidebarSettings({ state, dispatch }: SettingsPanelProps) {
       </SettingRow>
       {privateMode && <SettingNote>{t("sidebar.favoritesAddedInAPrivate")}</SettingNote>}
     </SettingGroup>
-    <SettingGroup title={t("sidebar.sidebarSections")} id="sidebar-sections" bodyRef={sections} fold>
+    <SettingGroup title={t("sidebar.sidebarSections")} id="sidebar-sections" bodyRef={sections} fold foldDetail={t("sidebar.showHideAndReorderTabs")}>
       {listed.map((id) => {
         const at = layout.order.indexOf(id), movable = at >= 0;
         return <SettingRow key={id} id={'sidebar-section-' + id} title={sectionName(id)}>
@@ -87,5 +87,17 @@ function SidebarSettings({ state, dispatch }: SettingsPanelProps) {
   </>);
 }
 
-const panel: SettingsPanel = { section: 'Tabs', order: 50, Component: SidebarSettings };
+/** Ctrl+Tab stays a panel of its own, below the Tabs rows. */
+function SwitchingTabs() {
+  const ctrlTab = useSyncExternalStore(subscribeCtrlTabMode, readCtrlTabMode);
+  return (
+    <SettingGroup title={t("sidebar.switchingTabs")} id="tab-switching">
+      <SettingRow id="ctrl-tab" title={t("sidebar.ctrlTabSwitchesTo")} detail={t(ctrlTabDetail[ctrlTab])}>
+        <Select<CtrlTabMode> label={t("sidebar.ctrlTabSwitchesTo")} value={ctrlTab} onChange={setCtrlTabMode} options={[{ value: 'next', label: t("sidebar.nextTab") }, { value: 'recent', label: t("sidebar.recentlyUsedTab") }, { value: 'viewer', label: t("core.showTabViewer") }]} />
+      </SettingRow>
+    </SettingGroup>
+  );
+}
+
+const panel: SettingsPanel = { section: 'Tabs', order: 50, Component: SwitchingTabs };
 export default panel;

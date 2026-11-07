@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {appClickPlan,appTabFor,listedInSidebar} from '../src/ui/sidebarApps';
+import {appClickPlan,appTabFor} from '../src/ui/sidebarApps';
 
 // A click on a favorite tile (reviewer, 2 Nov: "fav tabs aren't a tab. when you click in the fav tab, it opens a new tab").
 // A favorite owns one tab, found by its `favoriteId` (runtime/favoriteTabs.ts): the first click opens it, later clicks return
@@ -42,26 +42,24 @@ test('Ctrl or Cmd click and middle-click open an ordinary background tab; Shift+
   assert.deepEqual(appClickPlan({button:2},youtube,tabs,'b','p1'),{kind:'none'},'right-click is the edit menu, not an open');
 });
 
-test('the tab list leaves out a favorite\'s own tab, unless Favorites are hidden or the favorite is gone',()=>{
-  const favorites={apps:[youtube],hidden:false};
-  assert.equal(listedInSidebar(tab('b','https://www.youtube.com/','yt'),favorites),false);
-  assert.equal(listedInSidebar(tab('a','https://www.youtube.com/'),favorites),true,'an ordinary YouTube tab is listed');
-  assert.equal(listedInSidebar(tab('b','https://www.youtube.com/','yt'),{...favorites,hidden:true}),true,'Favorites off: listed like any tab');
-  assert.equal(listedInSidebar(tab('b','https://www.youtube.com/','gone'),favorites),true,'its favorite was removed: listed');
+test('a favorite\'s tab is an ordinary row of the tab list: nothing filters it out, whether Favorites are shown, hidden or the favorite is gone',()=>{
+  const source=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
+  assert.equal(/listedInSidebar|listed\(/.test(source),false,'the sidebar has no filter for it');
+  assert.equal(/listedInSidebar/.test(readFileSync(new URL('../src/ui/sidebarApps.ts',import.meta.url),'utf8')),false);
 });
 
-test('the sidebar runs the plan, hides favorites\' tabs from the list, adopts dropped tabs and says what a click on the away tile does',()=>{
+test('the sidebar runs the plan, lists favorites\' tabs like any tab, links dropped tabs and says what a click on the away tile does',()=>{
   const source=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
   assert.match(source,/const plan=appClickPlan\(event,app,favoriteScope\(state\),state\.activeTabId,profileId\)/,'it looks in every workspace of the window');
   assert.match(source,/plan\.kind==='open'\)\{dispatch\(\{type:'tab\.new',url:app\.url,browserProfileId:profileId,favoriteId:app\.id\}\)/);
-  assert.match(source,/plan\.kind==='select'\)\{dispatch\(\{type:'tab\.select',id:plan\.tabId,here:true\}\)/);
+  assert.match(source,/plan\.kind==='select'\)\{dispatch\(\{type:'tab\.select',id:plan\.tabId\}\)/,'it goes to the tab where it is: its own workspace opens, nothing moves');
   assert.match(source,/plan\.kind==='home'\)\{dispatch\(\{type:'tab\.navigate',url:app\.url,tabId:plan\.tabId\}\)/);
-  assert.match(source,/const profileTabs=state\.tabs\.filter\(tab=>tab\.browserProfileId===profileId&&listed\(tab\)\)/);
-  assert.match(source,/members:state\.tabs\.filter\(tab=>listed\(tab\)&&groupForTab/);
-  assert.match(source,/dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:added\.id\}\)/,'a tab dropped on Favorites or pinned with Ctrl+Shift+D becomes the favorite\'s tab');
+  assert.match(source,/const profileTabs=state\.tabs\.filter\(tab=>tab\.browserProfileId===profileId\)/);
+  assert.match(source,/members:state\.tabs\.filter\(tab=>groupForTab\(state,tab\)\?\.id===group\.id\)/);
+  assert.match(source,/dispatch\(\{type:'tab\.favorite',id:adopt,favoriteId:app\.id\}\)/,'a tab dropped on Favorites or pinned with Ctrl+Shift+D is linked to the favorite and stays in the list (one function, applyFavorite)');
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:null\}\)/,'a removed favorite hands its tab back');
   assert.match(source,/const tab=appTabFor\(app,favoriteScope\(state\),profileId\),active=tab\?\.id===state\.activeTabId;/);
-  assert.match(source,/<WorkspaceTitle state=\{state\} count=\{state\.tabs\.filter\(listed\)\.length\}\/>/,'the workspace title counts the tabs the list shows');
+  assert.match(source,/<WorkspaceTitle state=\{state\}\/>/,'the workspace title counts every tab of the workspace');
   assert.match(source,/title=\{away\?t\("acirasidebar\.clickToGoBack",\{host:appHost\(app\.url\)\|\|address\(app\.url\)\}\):`\$\{app\.title\} · \$\{address\(app\.url\)\}`\}/);
   const en=JSON.parse(readFileSync(new URL('../src/i18n/en.json',import.meta.url),'utf8')) as Record<string,string>;
   assert.equal(en['acirasidebar.clickToGoBack'],'Click to go back to {host}');
@@ -81,7 +79,7 @@ test('Close tab: the favorite\'s right-click editor offers it only while the fav
   assert.equal(en['app.closeTab'],'Close tab');
 });
 
-test('Ctrl+Tab\'s Next tab walks the list on screen too: a favorite\'s own tab is skipped in the sidebar',()=>{
+test('Ctrl+Tab\'s Next tab walks the list on screen too: a favorite\'s tab is a tab of it',()=>{
   const sidebar=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
-  assert.match(sidebar,/cycle=vertical\?state\.tabs\.filter\(tab=>!tab\.favoriteId&&tab\.browserProfileId===profile\):state\.tabs;const target=nextInCycle\(tabCycleOrder\(cycle,state\.tabGroups,state\.activeTabId,vertical\)/);
+  assert.match(sidebar,/cycle=vertical\?state\.tabs\.filter\(tab=>tab\.browserProfileId===profile\):state\.tabs;const target=nextInCycle\(tabCycleOrder\(cycle,state\.tabGroups,state\.activeTabId,vertical\)/);
 });

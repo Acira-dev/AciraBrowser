@@ -11,6 +11,8 @@
 //   enableNodeCliInspectArguments: the Windows qualification rigs that build-windows.mjs runs (qa/release-package-launch.mjs and the
 //     others) drive the exact packaged program through Playwright, which attaches with --inspect. Turning it off needs those rigs to
 //     drive a copy with only this fuse flipped back on, and the payload check to allow that one difference.
+//   The Windows Widevine build (`npm run build:windows:widevine`) ships SHIPPED, because free EVS VMP-signs only that set: the rigs drive a twin
+//   that carries WINDOWS, and a sealed copy of it (app.asar, its hash in the program, SHIPPED) ships (packaging/windows-widevine.cjs).
 //   enableCookieEncryption is on, as on Mac: sign-ins are kept encrypted on disk with the Windows account key (DPAPI), the key that
 //   desktop/browser-services/encryption-bootstrap.cjs commits before any website session. Cookies saved by an earlier build stay
 //   readable (Chromium reads a plain row as before). Turning it off again later would lose the encrypted ones.

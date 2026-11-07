@@ -27,9 +27,15 @@
 // installer ever runs; ACIRA_UPDATE_TEST_VERSION pretends the app is that version (to rehearse the "updated" note); ACIRA_UPDATE_TEST_ARCH
 // (arm64/x64) and ACIRA_UPDATE_TEST_PLATFORM=win32 choose the file and the route (a Mac's zip, or the Windows setup and its differential).
 const fs=require('node:fs'),path=require('node:path'),{EventEmitter}=require('node:events'),{createRetry}=require('./network-retry.cjs'),fetched=require('./update-download.cjs');
-const CHECK_DELAY=20*1000,CHECK_EVERY=8*60*60*1000; // every 8 hours, like Dia
+const feedRules=require('./update-feeds.cjs'),hosts=require('./update-hosts.cjs');
+// Where it asks (beta.11 on, docs/launch/UPDATE_HOST.md): update.acirabrowser.com first, then the frozen GitHub feed when the first gives no usable answer
+// (update-feeds.cjs has the rules). Pickup: 20 s after launch, then every 2 hours (up to 10 minutes later, so the installs do not ask together), again when the
+// computer wakes or a window gets focus after 2 hours without an answer (nudge), and at the pace a document asks for with nextCheckSeconds (10 minutes to 24 hours).
+// Update traffic says only "AciraUpdater" (no version, no system), and never sends the install's staging id: the share is decided on this computer.
+const CHECK_DELAY=20*1000,CHECK_EVERY=2*60*60*1000,CHECK_JITTER=10*60*1000,HINT_MIN=10*60*1000,HINT_MAX=24*60*60*1000,NUDGE_QUIET=5*60*1000;
+const UPDATE_USER_AGENT='AciraUpdater';
 // A failed check or download (offline at start, a dropped connection) tries again 2, 10 and 30 minutes later and as soon as the network comes back or the
-// Mac wakes (network-retry.cjs), instead of 8 hours later. Nothing new is shown: the status says 'error' as before until an attempt succeeds.
+// Mac wakes (network-retry.cjs), instead of at the next regular round. Nothing new is shown: the status says 'error' as before until an attempt succeeds.
 const CHANNELS=['stable','beta'];
 const NOTES_MAX=1000,FLUSH_TIMEOUT=5000,PROGRESS_EVERY=400; // the interface hears about download progress at most this often (ms), and only when the percent moved
 // A build can be pulled from the feed after this computer downloaded it (a halt: stagingPercentage 0; a rollback to an older build; this install no
@@ -41,21 +47,7 @@ const READY_RECHECK=30*60*1000,ASK_WITHIN=8*1000,FRESH_FOR=5*60*1000,QUIT_ASK=12
 const RESUMES=2; // a download that goes quiet or whose connection drops goes on at once from the byte it had, this many times, before it counts as failed
 const count=value=>Number.isFinite(value)&&value>=0?Math.round(value):null;
 const clean=value=>String(value?.message||value||'Update check failed.').replace(/\s+/g,' ').slice(0,200);
-/** True when version a is lower than b in semver order, as electron-updater compares them (a release is above its pre-releases, numeric
- *  pre-release fields compare as numbers: beta.9 < beta.10); false when either is not a version. */
-function lowerThan(a,b){
- const parse=value=>{const m=/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(value??'').trim());return m?{core:[+m[1],+m[2],+m[3]],pre:m[4]?m[4].split('.'):[]}:null;};
- const x=parse(a),y=parse(b);if(!x||!y)return false;
- for(let i=0;i<3;i++)if(x.core[i]!==y.core[i])return x.core[i]<y.core[i];
- if(!x.pre.length||!y.pre.length)return x.pre.length>0&&!y.pre.length;
- for(let i=0;i<Math.max(x.pre.length,y.pre.length);i++){
-  const p=x.pre[i],q=y.pre[i];
-  if(p===undefined)return true;if(q===undefined)return false;if(p===q)continue;
-  const pn=/^\d+$/.test(p),qn=/^\d+$/.test(q);
-  return pn&&qn?Number(p)<Number(q):pn!==qn?pn:p<q; // numeric fields sort below alphanumeric ones
- }
- return false;
-}
+const {lowerThan}=feedRules;
 /** A connection that went quiet or dropped, not a refusal, a wrong file or a damaged one: worth going on from the same byte at once. */
 const dropped=error=>['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT'].includes(error?.code)||!error?.code&&(error instanceof TypeError&&/fetch failed|terminated|network/i.test(error.message)||/net::ERR_(CONNECTION|NETWORK|INTERNET|TIMED_OUT|EMPTY_RESPONSE)/.test(String(error?.message||'')));
 /** electron-updater hands over release notes as HTML or Markdown text (GitHub's release body), or a list of {version,note}. Shown as plain text only. */
@@ -68,8 +60,8 @@ function notesText(raw){
  return text.length>NOTES_MAX?text.slice(0,NOTES_MAX-1).trimEnd()+'…':text;
 }
 /** Test-only stand-in for electron-updater: finds a fake newer version, "downloads" it, and records quitAndInstall instead of running an installer. */
-function createStubUpdater({env,dir,platform=process.platform,app=null}){
- const stub=new EventEmitter(),logFile=path.join(dir,'update-stub-log.json');
+function createStubUpdater({env,dir,platform=process.platform,app=null,version=null}){
+ const stub=new EventEmitter(),logFile=path.join(dir,'update-stub-log.json'),running=version||(typeof app?.getVersion==='function'?app.getVersion():'0.0.0');
  stub.log=event=>{let rows=[];try{rows=JSON.parse(fs.readFileSync(logFile,'utf8'));}catch{}rows.push({event,at:Date.now()});try{fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(logFile,JSON.stringify(rows));}catch{}};
  // With a local feed (ACIRA_UPDATE_FEED, handed over by setFeedURL; the channel document is JSON: version, releaseNotes, files with url, size and sha512)
  // it describes its files the way electron-updater does (updateInfoAndProvider, resolveFiles, a download cache), so Acira's own resumable download runs
@@ -87,7 +79,7 @@ function createStubUpdater({env,dir,platform=process.platform,app=null}){
   if(!onQuit&&stub.autoInstallOnAppQuit&&typeof app?.once==='function'){onQuit=true;app.once('quit',()=>{if(!stub.quitAndInstallCalled&&stub.autoInstallOnAppQuit)stub.log({installOnQuit:found?.version});});}
  };
  async function fetchFile(){
-  const base=stub.feed.replace(/\/*$/,'/'),file=found.files?.[0];
+  const base=answer.base,file=found.files?.[0];
   if(!file)return;
   const response=await fetch(new URL(file.url,base)),total=Number(response.headers.get('content-length'))||Number(file.size)||0,reader=response.body.getReader(),began=Date.now();
   let transferred=0;
@@ -97,11 +89,17 @@ function createStubUpdater({env,dir,platform=process.platform,app=null}){
   }
   downloaded({version:found.version,releaseNotes:found.releaseNotes});
  }
+ let answer={base:null};
+ // The same rules as the real provider (update-feeds.cjs): the first address, the next only when the first gives nothing usable, and a later address only counts when it offers something newer.
  async function fromFeed(){
-  const base=stub.feed.replace(/\/*$/,'/'),info=await(await fetch(new URL('latest.yml',base))).json();
+  const feeds=stub.feeds||[{name:'primary',url:stub.feed}];
+  const read=await feedRules.readChannel({feeds,channelFile:'latest.yml',current:running,floor:stub.floor,
+   request:async url=>{const response=await fetch(url);if(!response.ok)throw Object.assign(new Error('HTTP '+response.status),{code:'ERR_UPDATE_HTTP'});return response.text();},
+   parse:text=>JSON.parse(text),primaryWithin:stub.primaryWithin,fallbackWithin:stub.fallbackWithin});
+  const info=read.info,base=new URL(read.feed.url.replace(/\/*$/,'/'));answer={base,feed:read.feed.name};
   // a halt (stagingPercentage 0) is "nothing for this install", as electron-updater's own check says it, so a live rig can rehearse a pulled build
   if(Number(info.stagingPercentage)===0){stub.emit('update-not-available',{version:info.version});return;}
-  found=info;stub.updateInfoAndProvider={info,provider:{resolveFiles:doc=>(doc.files||[]).map(file=>({url:new URL(file.url,base),info:file}))}};
+  found=info;stub.updateInfoAndProvider={info,provider:{baseUrl:base,answeredBy:read.feed.name,resolveFiles:doc=>(doc.files||[]).map(file=>({url:new URL(file.url,base),info:file}))}};
   stub.emit('update-available',{version:info.version,releaseNotes:info.releaseNotes,files:info.files});
   if(stub.autoDownload)await fetchFile();
  }
@@ -129,7 +127,11 @@ function createStubUpdater({env,dir,platform=process.platform,app=null}){
  stub.quitAndInstall=(silent,forceRun)=>{
   stub.quitAndInstallCalled=true;stub.log({quitAndInstall:{silent,forceRun}});
  };
- stub.setFeedURL=config=>{stub.feed=typeof config?.url==='string'?config.url:null;};
+ stub.setFeedURL=config=>{
+  stub.feeds=Array.isArray(config?.feeds)?config.feeds.filter(feed=>typeof feed?.url==='string'):null;
+  stub.floor=typeof config?.floor==='function'?config.floor:undefined;stub.primaryWithin=config?.primaryWithin;stub.fallbackWithin=config?.fallbackWithin;
+  stub.feed=stub.feeds?.[0]?.url||(typeof config?.url==='string'?config.url:null);
+ };
  return stub;
 }
 /** Whether this Mac takes the arm64 files, decided as electron-updater's MacUpdater decides it: Apple silicon, or an x64 build under Rosetta. */
@@ -160,12 +162,18 @@ function updateFile(updater,{platform,arm64}){
 /** The network for Acira's own update download: electron-updater's own session (no cache; main points its proxy at the active profile's route before
  *  every check and download, see `route` and update-route.cjs), or plain fetch outside Electron. */
 function updaterFetch(){
- try{const {session}=require('electron');const own=session.fromPartition('electron-updater',{cache:false});return (url,init)=>own.fetch(url,init);}catch{return globalThis.fetch;}
+ try{const own=updaterSession();return (url,init)=>own.fetch(url,init);}catch{return globalThis.fetch;}
+}
+/** electron-updater's own session (the partition its checks and Acira's download both use), saying only "AciraUpdater": no version, no system. */
+function updaterSession(){
+ const {session}=require('electron'),own=session.fromPartition('electron-updater',{cache:false});
+ try{own.setUserAgent(UPDATE_USER_AGENT);}catch{/* an older Electron: the default user agent stays */}
+ return own;
 }
 /** Closes every connection of electron-updater's own session (its check, and Acira's download, see updaterFetch); outside Electron, nothing. */
 function closeUpdaterConnections(){try{const {session}=require('electron');void session.fromPartition('electron-updater',{cache:false}).closeAllConnections?.()?.catch?.(()=>{});}catch{}}
 function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null}){
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -174,6 +182,9 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  let autoDownload=true,channel=/-/.test(String(version))?'beta':'stable'; // a pre-release build follows pre-releases until the person chooses Stable
  let saved={};try{saved=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
  autoDownload=saved.autoDownload!==false;if(CHANNELS.includes(saved.channel))channel=saved.channel;
+ // The founder's own machines can be pointed at the testers folder of the new host (docs/launch/UPDATE_HOST.md): updater.json "testersFeed": true, set with
+ // scripts/update-tester.mjs. There is no Settings control, and it only ever means https://update.acirabrowser.com/testers/ (never GitHub, never another address).
+ const testersFeed=saved.testersFeed===true;
  // The notes of the update that was downloaded last, kept with its version so they are still there after the restart that installs it.
  let pending=saved.pending&&typeof saved.pending.version==='string'?{version:saved.pending.version,notes:String(saved.pending.notes||'')}:null;
  // First launch on a new version: a note, once. A file without lastRunVersion (fresh install, or a build from before this existed) is not an update.
@@ -186,7 +197,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   ?{version:raw.version,from:String(raw.from||''),sha512:raw.sha512,size:raw.size,notes:String(raw.notes||'').slice(0,NOTES_MAX),paused:raw.paused===true,dir:fetched.ownDir(raw.dir)?raw.dir:null}:null;
  let held=heldFrom(saved.download);
  if(held&&(held.from!==version||held.version===version)){fetched.discard(held.dir);held=null;}
- const persist=()=>{try{fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(file,JSON.stringify({autoDownload,channel,lastRunVersion:version,...(pending?{pending}:{}),...(held?{download:held}:{})}),{mode:0o600});}catch{throw new Error('The update preference could not be saved.');}};
+ const persist=()=>{try{fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(file,JSON.stringify({autoDownload,channel,lastRunVersion:version,...(testersFeed?{testersFeed:true}:{}),...(pending?{pending}:{}),...(held?{download:held}:{})}),{mode:0o600});}catch{throw new Error('The update preference could not be saved.');}};
  if(lastRun!==version||(saved.pending&&!pending)||(saved.download&&!held))try{persist();}catch{} // remember this version as the one that ran, so the note never shows for it again
  const installed=platform==='win32'&&app.isPackaged&&uninstallerPresent();
  // a QA build (its own identity, desktop/build-identity.cjs) never updates itself: the update would be the real Acira's installer
@@ -212,6 +223,9 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  // asking: the feed is asked whether a version is still offered (ask()); its answer is not acted on the usual way. answeredAt: when the feed last
  // answered. watchdog: electron-updater's own download, given up when quiet.
  let background=null,handing=null,looking=false,asking=null,answeredAt=-Infinity,watchdog=null;
+ // Pickup (see the top of this file): nextTimer is the pending regular check; hintMs the pace the last document asked for (nextCheckSeconds); lastLook when a look last began;
+ // firstRan: the first check, 20 s after start, has happened (a wake or a focus before that does not start one earlier).
+ let nextTimer=null,hintMs=null,lastLook=-Infinity,firstRan=false;
  const arm64=()=>typeof arm64Mac==='function'?arm64Mac():testing&&env.ACIRA_UPDATE_TEST_ARCH?env.ACIRA_UPDATE_TEST_ARCH==='arm64':(armMac??=macArm64());
  const retry=createRetry({run:()=>{void check();},schedule,cancel,now,watch:network});
  // electron-updater both emits 'error' and rejects the check: one failure per attempt
@@ -220,15 +234,17 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  const wantsPrompt=()=>state.status==='ready'&&state.available!==null&&promptedFor!==state.available;
  // The first launch on a new version: its notes, shown once in a popup (only when the feed had notes; without them a quiet toast says it, see main announceUpdate).
  const wantsWelcome=()=>Boolean(whatsNew?.notes)&&!welcomed;
- const status=()=>({...state,autoDownload,channel,supported:!unsupported,reason:unsupported,prompt:wantsPrompt(),welcome:wantsWelcome(),whatsNew:whatsNew?{version:whatsNew.version,notes:whatsNew.notes}:null});
+ const status=()=>({...state,autoDownload,channel,testersFeed,supported:!unsupported,reason:unsupported,prompt:wantsPrompt(),welcome:wantsWelcome(),whatsNew:whatsNew?{version:whatsNew.version,notes:whatsNew.notes}:null});
  const changed=()=>{try{onChange(status());}catch{/* the interface refreshes on its next look */}};
  function setup(){
   if(updater||unsupported)return updater;
-  updater=stubbed?createStubUpdater({env,dir,platform,app}):autoUpdater||require('electron-updater').autoUpdater;
+  updater=stubbed?createStubUpdater({env,dir,platform,app,version}):autoUpdater||require('electron-updater').autoUpdater;
   // A signed build's updates are checked for Acira's signature by Acira's own helper: electron-updater's own check would start a script host.
   if(platform==='win32'&&!stubbed&&'verifyUpdateCodeSignature' in updater)updater.verifyUpdateCodeSignature=updateSignature||require('../windows-helper.cjs').updateSignatureCheck({packaged:app?.isPackaged});
   // Acira downloads the file itself (startDownload: resumable, pausable); electron-updater finds updates, then takes the finished file from its cache.
-  updater.autoDownload=false;updater.autoInstallOnAppQuit=true;updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false; /* each release carries latest.yml (Stable) and beta.yml (Beta); setting a channel turns allowDowngrade on, so it is reset */ updater.logger=null;if(env.ACIRA_UPDATE_TEST&&env.ACIRA_UPDATE_FEED)updater.setFeedURL({provider:'generic',url:env.ACIRA_UPDATE_FEED});// test-only: points the installed build at a local feed
+  updater.autoDownload=false;updater.autoInstallOnAppQuit=true;updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false; /* each release carries latest.yml (Stable) and beta.yml (Beta); setting a channel turns allowDowngrade on, so it is reset */ updater.logger=null;
+  if(!stubbed)tidyUpdateSession();
+  chooseFeeds();
   // A whole update ('ready') stays what the person is offered while Acira looks again (Windows checks while it waits): the same version found again,
   // a failed look (offline) and the look itself change nothing on screen (no flicker to "downloading" or back to "available"). A newer version is
   // downloaded quietly behind it and replaces it only once whole; until then Install now and install-on-quit take the whole one. It is pulled
@@ -239,7 +255,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   // a found update counts as success only when nothing is downloaded automatically: a download that keeps failing must climb the ladder, not restart it
   updater.on('update-available',info=>{
    if(asking)return asking.finish(!info?.version||info.version===asking.version?'same':lowerThan(info.version,asking.version)?'pulled':'newer');
-   answeredAt=now();
+   answeredAt=now();noteHint(info);
    if(state.status==='ready'){
     if(!info?.version||info.version===state.available){retry.succeeded();state.lastChecked=now();changed();return;} // the same update, already whole
     if(!lowerThan(info.version,state.available)){
@@ -265,7 +281,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   const supersededOnly=(info,version)=>Boolean(info?.version&&version&&lowerThan(version,info.version));
   updater.on('update-not-available',info=>{
    if(asking)return asking.finish(supersededOnly(info,asking.version)?'same':'pulled');
-   answeredAt=now();retry.succeeded();resuming=false;resumed=null;disarm();stopBehind();
+   answeredAt=now();noteHint(info);retry.succeeded();resuming=false;resumed=null;disarm();stopBehind();
    if(held){fetched.discard(held.dir);held=null;try{persist();}catch{}}
    if(state.status==='ready'&&supersededOnly(info,state.available)){state.lastChecked=now();changed();return;}
    if(state.status==='ready')pullDownloaded();
@@ -287,6 +303,31 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   updater.on('error',(error,message)=>{if(asking)return asking.finish(null);if(!looking&&/^Cannot check for updates/.test(String(message||'')))return;fail(error);});
   return updater;
  }
+ /** The addresses this build asks, in order (update-hosts.cjs): the one its app-update.yml names, then the frozen GitHub feed when that is the new host; only
+  *  the testers folder when this computer opted in. Test mode (ACIRA_UPDATE_TEST) can name a local feed, and a second one to rehearse the fallback. */
+ function feedList(){
+  if(env.ACIRA_UPDATE_TEST&&env.ACIRA_UPDATE_FEED){
+   const list=[{name:'primary',url:env.ACIRA_UPDATE_FEED}];
+   if(env.ACIRA_UPDATE_FEED_FALLBACK)list.push({name:'fallback',url:env.ACIRA_UPDATE_FEED_FALLBACK});
+   return list;
+  }
+  if(stubbed)return [];
+  let text=null;
+  try{text=readConfig?readConfig():fs.readFileSync(path.join(resources||'','app-update.yml'),'utf8');}catch{/* no app-update.yml: electron-updater's own default */}
+  return hosts.feedsFor({primary:hosts.feedUrlFromConfig(text),testers:testersFeed});
+ }
+ /** Hands the list to electron-updater as one provider that applies the fallback rules (update-feeds.cjs). No list, or no setFeedURL: its own default. */
+ function chooseFeeds(){
+  const feeds=feedList();
+  if(!feeds.length||typeof updater.setFeedURL!=='function')return;
+  const within=raw=>{const value=Number(env.ACIRA_UPDATE_TEST&&raw);return Number.isFinite(value)&&value>0?value:undefined;}; // test-only: a rig need not wait 15 s for a silent first address
+  let updateProvider=null;
+  if(!stubbed){try{updateProvider=feedProvider||feedRules.createFeedProviderClass();}catch{return;}}
+  // floor: what this computer already knows (an update found or downloaded): a later address only counts when it offers something newer than that
+  updater.setFeedURL({provider:'custom',updateProvider,feeds,current:version,floor:()=>state.available,primaryWithin:within(env.ACIRA_UPDATE_TEST_PRIMARY_WITHIN_MS),fallbackWithin:within(env.ACIRA_UPDATE_TEST_FALLBACK_WITHIN_MS)});
+ }
+ /** Update traffic says only "AciraUpdater" (no version, no system). */
+ function tidyUpdateSession(){try{if(tidySession)tidySession();else updaterSession();}catch{/* outside Electron */}}
  /** A failed look or download. A whole update stays offered when only a look failed (offline) or only the newer download behind it failed (its file
   *  is untouched until the newer one is handed over: background is cleared first). Install now can be clicked again (electron-updater could not start
   *  the installer, for example). A Resume that got no new byte (offline, the feed unreachable) is paused again with its bytes, and says the connection
@@ -530,7 +571,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   return look();
  }
  async function look(){
-  failedRound=false;looking=true;
+  failedRound=false;looking=true;lastLook=now();
   // route: the check leaves by the active profile's route (its proxy); a route that is not confirmed sends nothing and counts as a failed look
   try{await lookUp();}catch(error){fail(error);}finally{looking=false;}
   return status();
@@ -632,8 +673,29 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  }
  /** The note for the first launch on a new version (null when there is none). The version is already recorded as having run, so it is never offered again. */
  const whatsNewInfo=()=>whatsNew;
+ /** The next regular check: CHECK_EVERY (or the pace the last document asked for) plus up to CHECK_JITTER, so installs do not all ask in the same minute. */
+ function armNext(){
+  if(!started)return;
+  if(nextTimer!==null&&nextTimer!==undefined){cancel(nextTimer);nextTimer=null;}
+  const base=hintMs??CHECK_EVERY,delay=base+Math.floor(random()*Math.min(CHECK_JITTER,base*.2));
+  nextTimer=schedule(()=>{nextTimer=null;void check();armNext();},delay);nextTimer?.unref?.();
+ }
+ /** A document may ask to be looked at again sooner or later: nextCheckSeconds, kept between 10 minutes and 24 hours; absent or invalid, the usual pace. */
+ function noteHint(info){
+  const seconds=Number(info?.nextCheckSeconds);
+  hintMs=Number.isFinite(seconds)&&seconds>0?Math.min(HINT_MAX,Math.max(HINT_MIN,Math.round(seconds*1000))):null;
+  armNext();
+ }
+ /** The computer woke or a window got focus: looks now when the feed's last answer is older than CHECK_EVERY (never within NUDGE_QUIET of the last look, never while busy). */
+ function nudge(){
+  if(unsupported||!started||!firstRan||asking)return false;
+  if(['checking','downloading','paused'].includes(state.status))return false;
+  const at=now();
+  if(at-lastLook<NUDGE_QUIET||at-answeredAt<CHECK_EVERY)return false;
+  void check();return true;
+ }
  // and while an update waits (Windows; a Mac's waits with Squirrel.Mac and is not looked at again), every READY_RECHECK, so a pulled build is dropped
- function start(){if(started||unsupported)return;started=true;const run=()=>{void check();};const first=schedule(run,stubbed?1500:CHECK_DELAY);first?.unref?.();const loop=every(run,CHECK_EVERY);loop?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
- return {status,check,download,pause,resume,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
+ function start(){if(started||unsupported)return;started=true;const first=schedule(()=>{firstRan=true;void check();armNext();},stubbed?1500:CHECK_DELAY);first?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
+ return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
 }
-module.exports={createAppUpdater,createStubUpdater,notesText,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_DELAY,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
+module.exports={createAppUpdater,createStubUpdater,notesText,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};

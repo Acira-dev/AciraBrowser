@@ -1,10 +1,20 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {prepareWidevine}=require('../desktop/browser-services/widevine.cjs');
-test('stock and Windows runtimes keep their existing startup without component calls',async()=>{
+test('a stock runtime (the plain Windows build) and Linux keep their existing startup without component calls',async()=>{
  let called=false;
- await prepareWidevine({platform:'win32',components:{whenReady(){called=true;throw Error('Must not run');}}});
+ // Stock Electron has no `components`: the plain Windows build gets here with none, as before.
+ assert.equal((await prepareWidevine({platform:'win32'})).status,'unavailable');
+ await prepareWidevine({platform:'linux',components:{whenReady(){called=true;throw Error('Must not run');}}});
  assert.equal(called,false);
  assert.equal((await prepareWidevine({platform:'darwin'})).status,'unavailable');
+ const {supported}=require('../desktop/browser-services/widevine.cjs');
+ assert.equal(supported('win32',undefined),false);assert.equal(supported('linux',{whenReady(){}}),false);
+});
+test('a Windows ECS runtime (npm run build:windows:widevine) installs and reports the CDM as the Mac one does',async()=>{
+ let done=false;
+ const result=await prepareWidevine({platform:'win32',components:{whenReady:async()=>{done=true;},status:()=>({cdm:{title:'Widevine Content Decryption Module',version:'4.10.3112.0'}})}});
+ assert(done);assert.deepEqual(result,{status:'ready',version:'4.10.3112.0'});
+ assert.equal(require('../desktop/browser-services/widevine.cjs').widevineState().expected,true,'a refused page on Windows is held and reloaded too');
 });
 test('a Mac ECS runtime waits for a real ready CDM and records its version',async()=>{
  let done=false;
@@ -64,6 +74,8 @@ test('a newer start replaces an older one: the older install cannot overwrite th
 test('main starts the install without waiting for it unless the CDM is already on disk, and hands the state to refused pages',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.doesNotMatch(main,/await require\('\.\/browser-services\/widevine\.cjs'\)\.prepareWidevine/,'a first run used to wait up to 20 s here before any window');
+ assert.match(main,/if\(require\('\.\/browser-services\/widevine\.cjs'\)\.supported\(process\.platform,require\('electron'\)\.components\)\)\{const widevine=/,'Mac and Windows ECS runtimes start it; a stock runtime skips it');
+ assert.doesNotMatch(main,/process\.platform==='darwin'&&require\('electron'\)\.components/,'no longer Mac only');
  assert.match(main,/const installing=widevine\.prepareWidevine\(\{[^}]*watch:networkWatch\(\)/);
  assert.match(main,/if\(widevine\.installedOnDisk\(app\.getPath\('userData'\)\)\)\{let timer;await Promise\.race\(\[installing,new Promise\(resolve=>\{timer=setTimeout\(resolve,2000\);\}\)\]\);/);
  assert.match(main,/widevine\.onWidevineChange\(cdm=>require\('\.\/browser-services\/protected-media\.cjs'\)\.cdmChanged\(cdm\)\)/);

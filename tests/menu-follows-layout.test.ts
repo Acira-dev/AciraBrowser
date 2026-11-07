@@ -18,5 +18,5 @@ test('the open Acira menu re-hangs from its button once a layout change has sett
 });
 
 test('the address suggestions follow the field when the tab layout or the sidebar changes', () => {
-  assert.match(app, /\}, \[overlay, effectiveMode, size\.width, style, s\.showHome, s\.verticalTabs, workspaceOpen\]\);/);
+  assert.match(app, /\}, \[overlay, effectiveMode, size\.width, style, s\.showHome, s\.verticalTabs, workspaceOpen, addrBlock\]\);/);
 });

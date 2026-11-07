@@ -19,7 +19,7 @@ assert.ok(fromPage?.initializer,'the window.open adoption expression exists');
 const adoptPeek=new Function('tab','peek','openedViews',`const fromPage=(${fromPage.initializer.getText(source)});return (${adopted.initializer.getText(source)});`);
 
 test('a private page gets its own in-memory profile, session and cleanup', () => {
-  has(main, "partition:'acira-private-tab-'+randomUUID()", 'a partition without persist: is in memory only');
+  has(main, "partition:source?privateTemporary.newPartition('tab'):'acira-private-tab-'+randomUUID()", 'a partition without persist: is in memory only; only a profile with an extension allowed in private gets a temporary one (tests/private-extension-sessions.test.cjs)');
   has(main, "id:'private-tab-'+randomUUID()", 'the private- prefix is what permissions, downloads, spelling and blocking read as "keep nothing"');
   has(main, 'const profile=pageProfile(tab);', 'ensurePage builds the page from pageProfile');
   has(main, 'view.webContents.once(\'destroyed\',()=>retirePrivateTab(entry))', 'the session is retired when the page goes, however it goes');
@@ -31,8 +31,10 @@ test('a private page gets its own in-memory profile, session and cleanup', () =>
 
 test('nothing a private page does is remembered by the services', () => {
   has(main, "if(!privateMode&&!entry.privateTab)closedPages.remember(id,wc);", 'no undo-close memory');
-  has(main, 'void tabIcons().fetchIcon(wc.session,icon)', 'the icon comes through the page\'s own (private) session');
-  has(main, 'if(icon&&!torMode&&!entry.privateTab)void require(\'./browser-services/favicon-store.cjs\')', 'and is never stored');
+  has(main, 'void tabIcons().resolvePageIcon(wc,', 'the icon comes through the page\'s own (private) session');
+  has(main, 'if(found&&!entry.privateTab)void require(\'./browser-services/favicon-store.cjs\')', 'and is never stored');
+  const iconBranch=main.slice(main.indexOf('if(torMode){const pick=require(\'./browser-services/icon-pick.cjs\')'),main.indexOf('else void tabIcons().resolvePageIcon(wc,'));
+  assert.ok(iconBranch.length>50&&!iconBranch.includes('favicon-store'),'a Tor tab\'s icon is never stored either');
   has(main, "if(entry.privateTab)return 'private';", 'a private tab never sleeps or freezes (its session would lose its place)');
   has(main, 'profileId:tab.privacy?pages.get(tab.id)?.profileId||tab.browserProfileId:tab.browserProfileId,privateMode:privateMode||Boolean(tab.privacy)', 'site data, Reader, output and forget-site see a private tab as private');
   has(main, 'private:privateMode||Boolean(tab.privacy),privateTab:Boolean(tab.privacy)', 'the context menu offers private-safe commands');

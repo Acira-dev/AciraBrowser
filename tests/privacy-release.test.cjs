@@ -110,7 +110,8 @@ test('app updater: the test feed override reaches the updater after the channel 
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'acira-upd-'));
   const updater=createAppUpdater({app:{isPackaged:true,getVersion:()=>'0.1.0-beta.1',getPath:()=>dir},dir,platform:'win32',env:{ACIRA_UPDATE_TEST:'1',ACIRA_UPDATE_FEED:'http://127.0.0.1:1'},autoUpdater:fake,uninstallerPresent:()=>true});
   await updater.check();
-  assert.deepEqual(fake.feeds,[{provider:'generic',url:'http://127.0.0.1:1'}]);assert.equal(fake.channel,'beta');
+  assert.equal(fake.feeds.length,1);assert.equal(fake.feeds[0].provider,'custom','beta.11: one provider that asks the addresses in order (update-feeds.cjs)');
+  assert.deepEqual(fake.feeds[0].feeds,[{name:'primary',url:'http://127.0.0.1:1'}]);assert.equal(fake.channel,'beta');
 });
 
 test('packaging config stays unsigned without secrets and switches to signing from environment only',()=>{

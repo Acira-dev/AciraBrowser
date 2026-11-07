@@ -183,13 +183,12 @@ test('Seamless (R4-59): a reveal or hide moves the toolbar as one layer; no cont
   // A sidebar pinned first, the top bar floated in after: the travel an earlier reveal left would cut 234px off the page's left edge (bare glass in the gap), and the frame's veil, whose
   // hole began at the page beside the sidebar, covered the pinned column under the sidebar's own copy (a darker column below the bar).
   assert.match(edgeSource, /if \(edge\.pinned\.side\) root\.style\.setProperty\('--sf-sidebar-travel', '0px'\);/);
-  assert.match(edgeSource, /under = \(h: Hole\) => pageRect!\.left < h\.x \|\| \(edge\.pinned\.side && h\.x > 0\)/);
+  assert.match(edgeSource, /under = \(h: Hole\) => snapPx\(pageRect!\.left\) < h\.x \|\| \(edge\.pinned\.side && h\.x > 0\)/);
   // A sidebar leaving (Compact, Focus or Seamless): the card line's stroke up the sidebar's edge is dropped before the old picture is taken. Its picture is held still while only the clip follows the
   // sidebar, so it stood at the old edge as a second page card (a hairline and a rounded corner through the text) beside the real edge sliding away.
   assert.match(edgeSource, /if \(shownBefore\.side && !shownAfter\.side\) dropRimEdge\(\);\n  const ms = startEdgeTransition\(/);
-  assert.match(edgeSource, /function dropRimEdge\(\): void \{\n  for \(const path of document\.querySelectorAll\('\.sidebar-page-rim path'\)\) \{ const d = path\.getAttribute\('d'\); if \(d\) path\.setAttribute\('d', d\.split\('M'\)\.slice\(0, 2\)\.join\('M'\)\); \}/);
-  // The line's path is the top run first, then (beside a floating sidebar) the stroke up the sidebar's edge as a second subpath: keeping the first two parts of a split on 'M' keeps the run only.
-  assert.equal('M6 5.5H1190A9 9 0 0 1 1199 14V380M239.5 380V14A9 9 0 0 1 247 5.5'.split('M').slice(0, 2).join('M'), 'M6 5.5H1190A9 9 0 0 1 1199 14V380');
+  assert.match(edgeSource, /function dropRimEdge\(\): void \{\n  for \(const path of document\.querySelectorAll\('\.sidebar-page-rim \.rim-edge'\)\) path\.setAttribute\('d', ''\);/);
+  // The stroke up the sidebar's edge is its own path (.rim-edge, since 7 Nov): emptying it leaves the line's own path, the run, as the split on 'M' did (tests/sidebar-rim-edge-wait.test.ts).
   // The address field and Compact's tab strip glide by their left edge alone in an edge switch (their width animation cannot run on the compositor and made them start a frame late).
   assert.match(css, /::view-transition-group\(acira-address\) \{ animation-name: edge-glide-address;/);
   assert.match(css, /::view-transition-group\(acira-mini-tabs\) \{ animation-name: edge-glide-tabs;/);
@@ -222,4 +221,24 @@ test('Seamless: a view switch sends the docked layout at once on the way out and
   assert.equal(edge.seamlessEntrySpring(), null, 'no entry, no spring');
   edge.noteSeamlessEntry();
   assert.equal(edge.seamlessEntrySpring(), null, 'with motion off (no document here) the page is placed at once, as before');
+});
+
+// Animation speed None (Reduce motion: the harness above runs with matchMedia matching): a reveal and a hide are cuts. No view transition, and no fade either
+// (Off used to fade what appeared in over 80ms; the founder, 6 Nov: None is no animation at all).
+test('None: the edge reveals and hides at once, with no view transition and no fade', async () => {
+  edge.setEdgeFloatable(true, true); await reset();
+  const seen = new Set<string>();
+  const watch = () => { for (const key of Object.keys(root.dataset)) seen.add(key); };
+  await say(true); watch();
+  assert.equal(edge.currentEdge().side, true, 'the sidebar is there as soon as main says so');
+  await say(false); watch();
+  assert.equal(edge.currentEdge().side, false, 'and gone as soon as main says so');
+  await say(false, true); watch();
+  assert.equal(edge.currentEdge().top, true, 'the toolbar the same');
+  await say(false); watch();
+  assert.equal(seen.has('edgeFade'), false, 'no fade attribute');
+  assert.equal(seen.has('modeSwitch'), false, 'no view transition');
+  assert.equal(root.style.getPropertyValue('--edge-ms'), '', 'no edge duration was set');
+  assert.equal(root.style.getPropertyValue('--edge-fade-ms'), '');
+  await reset();
 });

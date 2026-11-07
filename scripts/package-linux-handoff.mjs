@@ -8,5 +8,5 @@ await fs.chmod(path.join(output,'Install-Acira.sh'),0o755);await fs.chmod(path.j
 const names=[image,...Object.keys(copies),'beta-linux.yml','latest-linux.yml'];
 let sums='';for(const name of names){const data=await fs.readFile(path.join(output,name));sums+=createHash('sha256').update(data).digest('hex')+'  '+name+'\n';}
 await fs.writeFile(path.join(output,'SHA256SUMS.txt'),sums);
-await fs.writeFile(path.join(output,'LINUX-BUILD-RESULT.json'),JSON.stringify({schema:1,version,platform:'linux',arch:'x64',qa,appImage:image,sourceBase:'c2baba7da06c5de3df8bdb336a61cb286a90a1ee',sourceCommit:process.env.ACIRA_LINUX_SOURCE_COMMIT||null,signing:'unsigned',feed:'https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/linux/',publicFeedPublished:false},null,2)+'\n');
+await fs.writeFile(path.join(output,'LINUX-BUILD-RESULT.json'),JSON.stringify({schema:1,version,platform:'linux',arch:'x64',qa,appImage:image,sourceBase:'c2baba7da06c5de3df8bdb336a61cb286a90a1ee',sourceCommit:process.env.ACIRA_LINUX_SOURCE_COMMIT||null,signing:'unsigned',feed:'https://update.acirabrowser.com/linux/',publicFeedPublished:false},null,2)+'\n');
 console.log('Linux handoff files and checksums saved in '+output);

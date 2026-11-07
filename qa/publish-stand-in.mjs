@@ -11,14 +11,17 @@ import http from 'node:http';
 import path from 'node:path';
 
 export const REPO='Acira-dev/AciraBrowserUpdates';
-const DOWNLOAD=/^https:\/\/github\.com\/Acira-dev\/AciraBrowserUpdates\/releases\/download\/([^/]+)\/([^/?#]+)$/;
-const RAW=/^https:\/\/raw\.githubusercontent\.com\/Acira-dev\/AciraBrowserUpdates\/main\/feed\/([^/?#]+)$/;
+const escape=text=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+// update.acirabrowser.com: GitHub Pages of the repository's docs/ folder (the new host, scripts/release-publish.mjs)
+const PAGES=/^https:\/\/update\.acirabrowser\.com\/([^?#]+)$/;
 /** A channel document's text: a version alone is a document that offers it with no files (0.0.0 is standby); an object is written as the publisher writes it. */
 export const feedText=value=>typeof value==='string'?JSON.stringify({version:value,files:[]}):JSON.stringify(value,null,2)+'\n';
 
-/** feed: {file: version | document}. dir: keep uploaded assets on disk there (large files); without it they stay in memory. */
-export function createStandIn({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0.0.0','latest-mac.yml':'0.0.0','latest.yml':'0.0.0'},dir=null}={}){
- const state={releases:new Map(),feed:Object.fromEntries(Object.entries(feed).map(([file,value])=>[file,feedText(value)])),head:'head0',history:[],log:[],pendingTree:null,commits:0,commitBody:null,
+/** feed: {file: version | document} (folder feed/, the GitHub raw feed). docs: the same for folder docs/ (what update.acirabrowser.com serves). repo: the repository this
+ *  stand-in is (default REPO). dir: keep uploaded assets on disk there (large files); without it they stay in memory. */
+export function createStandIn({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0.0.0','latest-mac.yml':'0.0.0','latest.yml':'0.0.0'},docs={},dir=null,repo=REPO}={}){
+ const DOWNLOAD=new RegExp('^https://github\\.com/'+escape(repo)+'/releases/download/([^/]+)/([^/?#]+)$'),RAW=new RegExp('^https://raw\\.githubusercontent\\.com/'+escape(repo)+'/main/feed/([^?#]+)$');
+ const state={releases:new Map(),repo,feed:Object.fromEntries(Object.entries(feed).map(([file,value])=>[file,feedText(value)])),docs:Object.fromEntries(Object.entries(docs).map(([file,value])=>[file,feedText(value)])),head:'head0',history:[],log:[],pendingTree:null,commits:0,commitBody:null,
   failUpload:null,corrupt:null,corruptOnce:false,moveMainDuringPublish:false,isPrivate:false,canPush:true,downloadsWithCredentials:0};
  const notFound=message=>Object.assign(Error(message),{stderr:message});
  const find=tag=>{const release=state.releases.get(tag);if(!release)throw notFound('release not found');return release;};
@@ -48,16 +51,27 @@ export function createStandIn({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0
   const [command,...rest]=args;
   if(command==='release'){
    const [sub,tag]=rest;
-   if(sub==='view'){const release=find(tag);return JSON.stringify({tagName:tag,isDraft:release.isDraft,assets:[...release.assets].map(([name,asset])=>({name,size:asset.size}))});}
+   if(sub==='list'){ // gh release list --repo <slug> --json tagName,... : newest first
+    return JSON.stringify([...state.releases].reverse().map(([tagName,release])=>({tagName,isDraft:release.isDraft,isPrerelease:release.prerelease})));
+   }
+   if(sub==='view'){const release=find(tag);return JSON.stringify({tagName:tag,isDraft:release.isDraft,body:release.notes,isPrerelease:release.prerelease,assets:[...release.assets].map(([name,asset])=>({name,size:asset.size}))});}
+   if(sub==='download'){ // gh release download <tag> --repo <slug> --dir <folder> [--pattern <glob>]: every asset (or the matching ones) into the folder
+    const release=find(tag),folder=rest[rest.indexOf('--dir')+1],pattern=rest.includes('--pattern')?new RegExp('^'+escape(rest[rest.indexOf('--pattern')+1]).replace(/\\\*/g,'.*')+'$'):null;
+    await fs.mkdir(folder,{recursive:true});
+    for(const [name,asset] of release.assets){if(pattern&&!pattern.test(name))continue;await fs.writeFile(path.join(folder,name),asset.file?await fs.readFile(asset.file):asset.bytes);}
+    state.log.push('DOWNLOAD-RELEASE '+tag);return '';
+   }
    if(sub==='create'){state.releases.set(tag,{isDraft:true,prerelease:rest.includes('--prerelease'),assets:new Map(),notes:await fs.readFile(rest[rest.indexOf('--notes-file')+1],'utf8')});return '';}
    if(sub==='upload'){const file=rest[2];await upload(tag,path.basename(file),await fs.readFile(file));return '';} // like the real gh: the asset is named after the file
-   if(sub==='edit'){const release=find(tag);if(rest.includes('--draft=false'))release.isDraft=false;return '';}
+   if(sub==='edit'){const release=find(tag);if(rest.includes('--draft=false'))release.isDraft=false;if(rest.includes('--notes-file'))release.notes=await fs.readFile(rest[rest.indexOf('--notes-file')+1],'utf8');return '';}
    if(sub==='delete-asset'){const release=find(tag),asset=release.assets.get(rest[2]);if(!asset)throw notFound('asset not found');if(asset.file)await fs.rm(asset.file,{force:true});release.assets.delete(rest[2]);return '';}
   }
   if(command==='api'){
    const method=rest.includes('-X')?rest[rest.indexOf('-X')+1]:'GET',endpoint=rest.find(item=>item.startsWith('repos/'))||'';
-   if(endpoint===`repos/${REPO}`)return JSON.stringify({private:state.isPrivate,default_branch:'main',permissions:{push:state.canPush}});
-   if(endpoint.startsWith(`repos/${REPO}/contents/feed/`)){const file=endpoint.split('/feed/')[1].split('?')[0];if(!state.feed[file])throw notFound('HTTP 404');return JSON.stringify({content:Buffer.from(state.feed[file]).toString('base64')});}
+   if(rest[0]==='user')return JSON.stringify({login:state.login||'Acira-dev'});
+   if(endpoint===`repos/${repo}`)return JSON.stringify({private:state.isPrivate,default_branch:'main',permissions:{push:state.canPush}});
+   if(endpoint.startsWith(`repos/${repo}/contents/feed/`)){const file=endpoint.split('/feed/')[1].split('?')[0];if(!state.feed[file])throw notFound('HTTP 404');return JSON.stringify({content:Buffer.from(state.feed[file]).toString('base64')});}
+   if(endpoint.startsWith(`repos/${repo}/contents/docs/`)){const file=endpoint.split('/docs/')[1].split('?')[0];if(state.docs[file]===undefined)throw notFound('HTTP 404');return JSON.stringify({content:Buffer.from(state.docs[file]).toString('base64')});}
    if(endpoint.endsWith('/git/ref/heads/main'))return JSON.stringify({object:{sha:state.head}});
    if(/\/git\/commits\/[^/]+$/.test(endpoint)&&method==='GET')return JSON.stringify({tree:{sha:'tree-of-'+state.head}});
    if(endpoint.endsWith('/git/trees')){state.pendingTree=JSON.parse(input);return JSON.stringify({sha:'newtree'});}
@@ -66,8 +80,11 @@ export function createStandIn({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0
     if(state.moveMainDuringPublish)throw notFound('Update is not a fast forward (HTTP 422)');
     const body=JSON.parse(input);if(body.force!==false)throw notFound('the stand-in only accepts fast-forward updates (force:false)');
     if(state.commitBody?.parents?.[0]!==state.head)throw notFound('Update is not a fast forward (HTTP 422)');
-    for(const entry of state.pendingTree.tree)state.feed[entry.path.replace(/^feed\//,'')]=entry.content;
-    state.head='commit'+state.commits;state.history.push({sha:state.head,message:state.commitBody.message,feed:{...state.feed}});state.log.push('FEED COMMITTED');return '{}';
+    for(const entry of state.pendingTree.tree){ // sha:null deletes a file, as in GitHub's trees API
+     const [map,name]=entry.path.startsWith('docs/')?[state.docs,entry.path.replace(/^docs\//,'')]:[state.feed,entry.path.replace(/^feed\//,'')];
+     if(entry.sha===null)delete map[name];else map[name]=entry.content;
+    }
+    state.head='commit'+state.commits;state.history.push({sha:state.head,message:state.commitBody.message,feed:{...state.feed},docs:{...state.docs}});state.log.push('FEED COMMITTED');return '{}';
    }
   }
   throw Error('stand-in gh: unexpected '+args.join(' '));
@@ -83,6 +100,8 @@ export function createStandIn({feed={'beta-mac.yml':'0.1.0-beta.4','beta.yml':'0
   }
   const raw=RAW.exec(String(url));
   if(raw)return state.feed[raw[1]]?new Response(state.feed[raw[1]]):new Response('',{status:404});
+  const page=PAGES.exec(String(url));
+  if(page)return state.docs[page[1]]?new Response(state.docs[page[1]]):new Response('',{status:404});
   throw Error('stand-in fetch: unexpected '+url);
  };
  return {state,gh,fetch,upload,seedRelease};
@@ -96,8 +115,8 @@ export function serveStandIn(model,{host='127.0.0.1',port=0}={}){
   try{
    if(req.method==='POST'&&url.pathname==='/gh'){const {args,input}=JSON.parse(Buffer.concat(await req.toArray()).toString());const out=await model.gh(args,{input});res.writeHead(200);return res.end(out);}
    if(req.method==='PUT'&&parts[0]==='upload'&&parts.length===3){await model.upload(parts[1],parts[2],req);res.writeHead(200);return res.end('');}
-   if(req.method==='GET'&&(parts[0]==='download'&&parts.length===3||parts[0]==='raw'&&parts[1]==='feed'&&parts.length===3)){
-    const target=parts[0]==='download'?`https://github.com/${REPO}/releases/download/${parts[1]}/${parts[2]}`:`https://raw.githubusercontent.com/${REPO}/main/feed/${parts[2]}`;
+   if(req.method==='GET'&&(parts[0]==='download'&&parts.length===3||parts[0]==='raw'&&parts[1]==='feed'&&parts.length>=3||parts[0]==='pages'&&parts.length>=2)){
+    const target=parts[0]==='download'?`https://github.com/${model.state.repo}/releases/download/${parts[1]}/${parts[2]}`:parts[0]==='pages'?`https://update.acirabrowser.com/${parts.slice(1).join('/')}`:`https://raw.githubusercontent.com/${model.state.repo}/main/feed/${parts.slice(2).join('/')}`;
     const response=await model.fetch(target,{headers:req.headers.authorization?{authorization:req.headers.authorization}:{}});
     res.writeHead(response.status,Object.fromEntries(response.headers));
     if(!response.body)return res.end();

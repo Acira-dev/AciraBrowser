@@ -12,6 +12,8 @@ import { copyText } from '../../ui/pageActions';
 import { openWorkspacePage } from '../../ui/workspaceView';
 import { bookmarkStep,bookmarkTarget,branchOf,pagesIn,sortedByName } from '../../ui/bookmarkMenu';
 import { folderTitle } from '../../ui/bookmarkFolderName';
+import { SECTION_NAMES,sidebarWindowId,type SectionId } from '../../ui/sidebarSections';
+import { SectionMenu,sectionActions } from './SectionActions';
 
 import { t } from '../../i18n';
 type Row=(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string)=>ReactNode;
@@ -30,6 +32,8 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
  const [view,setView]=useState<'menu'|'edit'|'new'>(target?.kind==='new'?'new':'menu');
  const editable=!state.browserProfiles.find(profile=>profile.id===profileId)?.private;
  if(!target)return <p className="bm-menu-note">{t("bookmarkmenu.thisBookmarkWasRemoved")}</p>;
+ // A section's own menu (Downloads, History, Reading list, Favorites): Hide this section and Customize sidebar…
+ if(target.kind==='zone'){const section=target.section as SectionId;return section in SECTION_NAMES?<SectionMenu row={row} windowId={sidebarWindowId(state)} section={section} close={close}/>:null;}
  const run=(action:()=>void)=>()=>{action();close();};
  const deleted=(text:string,gone:BookmarkNode[])=>dispatch({type:'toast',text,action:{label:t("toast.undo"),command:{type:'bookmark.restore',nodes:gone.map(node=>({...node}))}}});
  const sortHere=(parentId:string|null)=>sortedByName(parentId,state.bookmarkNodes,profileId).forEach((node,index)=>dispatch({type:'bookmark.move',id:node.id,parentId,index}));
@@ -74,6 +78,8 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
   {editable&&row(t("bookmarkmenu.sortByName"),ListFilter,run(()=>sortHere(null)))}
   {editable&&sep('a')}
   {row(t("bookmarkmenu.openBookmarks"),ArrowUpRight,run(()=>openWorkspacePage('bookmarks',state,dispatch)),'Ctrl Shift O')}
+  {sep('c')}
+  {sectionActions(row,sidebarWindowId(state),'bookmarks',close)}
  </>;
 }
 

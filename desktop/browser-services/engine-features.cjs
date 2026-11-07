@@ -3,6 +3,12 @@
 // third-party cookies are blocked in frames, workers and requests; Topics, Protected Audience, Shared Storage and
 // Attribution Reporting surfaces are absent from pages.
 const AD_API_FEATURES=Object.freeze(['BrowsingTopics','BrowsingTopicsDocumentAPI','PrivacySandboxAdsAPIs','InterestGroupStorage','AdInterestGroupAPI','Fledge','FledgeBiddingAndAuctionServer','FledgeNonce','SharedStorageAPI','PrivateAggregationApi','AttributionReportingCrossAppWeb','TrustTokens','PrivateStateTokens']);
+// FedCM (the browser-drawn account chooser behind Google's "Continue with Google" button and One Tap) is switched off. The engine ships the
+// API (window.IdentityCredential, navigator.credentials.get({identity})) but Electron has no chooser UI for it, so every request is dismissed
+// at once ("NetworkError: Error retrieving a token", issue UiDismissedNoEmbargo). Google Identity Services sees the API, takes the FedCM path
+// and never falls back, so the button did nothing (seen on pinterest.com, whose button asks for FedCM in 'active' mode). Without the API a page takes the
+// route Firefox and Safari get: the button opens Google's own sign-in window with its opener. No cookie or storage rule changes.
+const FEDCM_FEATURES=Object.freeze(['FedCm']);
 const THIRD_PARTY_COOKIE_FEATURES=Object.freeze(['ForceThirdPartyCookieBlockingEnabled','ThirdPartyStoragePartitioning']);
 // Network state partitioning (Brave ships it; Tor Browser's first-party isolation does the same): sockets, TLS sessions and server
 // properties are keyed by the top-level site, so two sites that embed the same third party never share a connection to it. A Tor
@@ -19,7 +25,7 @@ function mergeFeatures(app,{enable=[],disable=[]}){
 function configureEngineFeatures({app,thirdPartyCookies='block'}){
  if(!['block','allow'].includes(thirdPartyCookies))throw new Error('Choose block or allow for third-party cookies.');
  const block=thirdPartyCookies==='block';
- mergeFeatures(app,{enable:[...(block?THIRD_PARTY_COOKIE_FEATURES:['ThirdPartyStoragePartitioning']),...NETWORK_PARTITION_FEATURES],disable:[...AD_API_FEATURES,...(block?[]:['ForceThirdPartyCookieBlockingEnabled'])]});
+ mergeFeatures(app,{enable:[...(block?THIRD_PARTY_COOKIE_FEATURES:['ThirdPartyStoragePartitioning']),...NETWORK_PARTITION_FEATURES],disable:[...AD_API_FEATURES,...FEDCM_FEATURES,...(block?[]:['ForceThirdPartyCookieBlockingEnabled'])]});
  return {thirdPartyCookies:block?'block':'allow',adApis:'removed',scope:'application',changeRequiresRestart:true};
 }
 /** Read-only runtime truth: what this process was actually started with. */
@@ -28,4 +34,4 @@ function engineFeatureStatus(app){
  const enabled=app.commandLine.getSwitchValue('enable-features').split(',').map(name),disabled=app.commandLine.getSwitchValue('disable-features').split(',').map(name);
  return {thirdPartyCookies:enabled.includes('ForceThirdPartyCookieBlockingEnabled')?'block':'allow',adApis:AD_API_FEATURES.every(feature=>disabled.includes(feature))?'removed':'available'};
 }
-module.exports={configureEngineFeatures,engineFeatureStatus,AD_API_FEATURES,THIRD_PARTY_COOKIE_FEATURES,NETWORK_PARTITION_FEATURES};
+module.exports={configureEngineFeatures,engineFeatureStatus,AD_API_FEATURES,FEDCM_FEATURES,THIRD_PARTY_COOKIE_FEATURES,NETWORK_PARTITION_FEATURES};

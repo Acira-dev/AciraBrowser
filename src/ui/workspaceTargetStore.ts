@@ -6,7 +6,9 @@
  */
 const KEY = 'acira-workspace-target';
 /** `start: 'current'` (the tab menu's Move to › New workspace…) preselects This tab, for `tabId` when given (R4-48). */
-export type WorkspaceTarget = { mode: 'new'; start?: 'current'; tabId?: string } | { mode: 'edit'; workspaceId: string; focus?: 'name' | 'icon' } | { mode: 'context'; workspaceId: string };
+export type WorkspaceTarget = { mode: 'new'; start?: 'current'; tabId?: string } | { mode: 'edit'; workspaceId: string; focus?: 'name' | 'icon' } | { mode: 'context'; workspaceId: string }
+  /** The sidebar's own right-click menu (empty space, the workspace row): New workspace… and Customize sidebar…, about no workspace in particular. */
+  | { mode: 'sidebar' };
 
 export function setWorkspaceTarget(target: WorkspaceTarget): void {
   try { localStorage.setItem(KEY, JSON.stringify({ ...target, at: Date.now() })); } catch { /* the popup then opens for a new workspace */ }
@@ -18,6 +20,7 @@ function read(consume: boolean): WorkspaceTarget | null {
     if (!value || typeof value !== 'object') return null;
     const { mode, workspaceId, focus, at, start, tabId } = value as Record<string, unknown>;
     if (typeof at !== 'number' || Date.now() - at > 2 * 60_000) return null;
+    if (mode === 'sidebar') return { mode };
     if (mode === 'new') return { mode, ...(start === 'current' ? { start } : {}), ...(start === 'current' && typeof tabId === 'string' && tabId.length <= 200 ? { tabId } : {}) };
     if ((mode === 'edit' || mode === 'context') && typeof workspaceId === 'string') return mode === 'edit' ? { mode, workspaceId, ...(focus === 'icon' || focus === 'name' ? { focus } : {}) } : { mode, workspaceId };
   } catch { /* no target */ }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import type { BrowserRuntime } from '../runtime/types';
-import { motionScale, motionSpeed, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
+import { motionScale, motionSpeed, registerPageRiseSpring, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
 import { noteUse } from '../features/metrics/noteUse';
 
 /** R3-68 Seamless, the interface's half. Main (desktop/edge-reveal.cjs) watches the pointer and says when the toolbar (top edge)
@@ -74,7 +74,7 @@ export function seamlessEntrySpring(): { duration: number; bounce: number } | nu
 }
 
 /** Plays `update` (which must apply the change synchronously) as the reveal or hide of an edge. The spring's perceptual duration
- * already carries the speed setting (Premium stretches it); Off applies the change at once with an 80 ms fade. */
+ * already carries the speed setting (Premium stretches it); None (Animation speed "None", the Reduce motion switch) applies the change at once: a cut, no fade. */
 export function startEdgeTransition(kind: 'reveal' | 'hide', update: () => void, headerHeight = 72): number {
   if (kind === 'reveal') noteUse('seamlessReveals'); // R4-60: counted only while usage sharing is on, as a daily bucket
   const token: MotionTokenId = kind === 'reveal' ? 'seamless.reveal' : 'seamless.hide', spec = springFor(token, motionSpeed());
@@ -82,7 +82,6 @@ export function startEdgeTransition(kind: 'reveal' | 'hide', update: () => void,
   if (!spec) {
     edgeTransition = null;
     update();
-    if (kind === 'reveal') { root.dataset.edgeFade = ''; window.setTimeout(() => { delete root.dataset.edgeFade; }, 120); }
     return 0;
   }
   // R4-24 (founder: "moves at a linear speed"): a strong ease-out for the reveal (fast start, gentle landing, no overshoot) and an
@@ -145,6 +144,11 @@ export function pixelSteps(bezier: readonly [number, number, number, number], st
   }
   return `linear(${stops.join(',')},1 100%)`;
 }
+/** An edge of the interface as the screen draws it: a box is painted on its nearest whole device pixel, so at 125% the 6px inset (7.5 device px) is drawn from the 8th. The frame's cut-out,
+ * the sidebar's slide and the page's covered edge are measured from such edges; taken unsnapped, the cut-out and the picture (or the page) filling it met on half a pixel and left a
+ * row or column of half-tinted glass along the card's edge (a thin bright line on Windows at 125% and 175%, founder, 5 Nov), and a slide of 292.5 device pixels moved the sidebar's edge
+ * and the page's by different fractions each frame. Whole numbers at 100% and 200% for whole CSS lengths: unchanged there. */
+export const snapPx = (value: number): number => { const ratio = window.devicePixelRatio || 1; return Math.round(value * ratio) / ratio; };
 function syncPixelEase(): void {
   const root = document.documentElement, ease = root.style.getPropertyValue('--edge-ease').trim(), ratio = window.devicePixelRatio || 1;
   const steps = Math.round((parseFloat(root.style.getPropertyValue('--sf-sidebar-travel')) || 0) * ratio), key = `${ease}|${steps}`;
@@ -168,7 +172,7 @@ function syncDesktopMaterial(app:HTMLElement,visible:Hole[]):void {
   root.style.setProperty('--desktop-toolbar-bg-position',`${-toolbar.x}px ${-toolbar.y}px`);
   const regions=[toolbar,sidebar,...(floatFrame?visible.map(h=>({x:h.x,y:h.y,width:h.w,height:h.h,radius:8})):[])];
   const key=JSON.stringify(regions);if(key===desktopMaterialKey)return;desktopMaterialKey=key;
-  const clip={left:sidebar.width?Math.max(0,sidebar.x+sidebar.width-(pageRect?.left||0)):0,top:toolbar.height?Math.max(0,toolbar.y+toolbar.height-(pageRect?.top||0)):0};
+  const clip={left:sidebar.width?Math.max(0,snapPx(sidebar.x+sidebar.width)-snapPx(pageRect?.left||0)):0,top:toolbar.height?Math.max(0,snapPx(toolbar.y+toolbar.height)-snapPx(pageRect?.top||0)):0};
   // One transition can sync more than once (a toolbar arriving with the sidebar measures its height a frame after the layout changes).
   // Its first pass fixes where the page's edges start and later passes move only where they end: otherwise the second pass started
   // the card at its final place while the sidebar was still arriving, with bare glass between them.
@@ -407,6 +411,8 @@ function paintPageHoles(app: HTMLElement, area: DOMRect): void {
     return bottom > top ? { ...hole, y: top, h: bottom - top } : hole;
   });
   const W = Math.ceil(window.innerWidth), H = Math.ceil(window.innerHeight), r = 8;
+  // The frame's cut-out and its pieces take the edges the screen paints (snapPx), so the picture or the page filling the hole covers it to its last pixel.
+  const veil = rows.map(hole => { const x = snapPx(hole.x), y = snapPx(hole.y); return { ...hole, x, y, w: snapPx(hole.x + hole.w) - x, h: snapPx(hole.y + hole.h) - y }; });
   // The page's own clip rounds the card's corners at the sidebar's edge only at its top and its bottom. Stacked panes meet the edge in between too: each pane the sidebar covers is cut there with the
   // same curve (split-groups.css), or the upper one kept a wedge of its page under the corner piece's tint and the lower one a square corner.
   const panes = document.querySelectorAll<HTMLElement>('.page-area .page-pane[data-pane]');
@@ -415,25 +421,25 @@ function paintPageHoles(app: HTMLElement, area: DOMRect): void {
     if (cover > .5) { pane.dataset.sfCover = ''; pane.style.setProperty('--sf-pane-cover', `${cover}px`); } else { delete pane.dataset.sfCover; pane.style.removeProperty('--sf-pane-cover'); }
   }
   // The frame's own veil covers the bands above and below the page; the moving sidebar's copy leaves them to it (sidebar-overlay.css).
-  app.style.setProperty('--sf-frame-top', `${Math.max(0, Math.min(...rows.map(h => h.y)))}px`);
-  app.style.setProperty('--sf-frame-bottom', `${Math.max(0, H - Math.max(...rows.map(h => h.y + h.h)))}px`);
+  app.style.setProperty('--sf-frame-top', `${Math.max(0, Math.min(...veil.map(h => h.y)))}px`);
+  app.style.setProperty('--sf-frame-bottom', `${Math.max(0, H - Math.max(...veil.map(h => h.y + h.h)))}px`);
   // The moving sidebar carries its own copy of the shared finish. Keep the frame's hole over
   // the resting page, so a full-width opaque strip cannot snap in ahead of the sliding contents.
-  const firstLeft = Math.min(...visible.map(h => h.x));
+  const firstLeft = Math.min(...visible.map(h => h.x)), veilLeft = Math.min(...veil.map(h => h.x));
   // Where the hole reaches back under the sidebar, its left corners stay beneath the sidebar's own copy of the finish:
   // square them, or the frame's veil doubles in those two corners over the desktop material.
   // A pinned sidebar sits beside the page, so the page's resting left edge is already its own: the hole stayed at the sidebar's edge and the frame's veil covered the whole column too, under the
   // sidebar's own copy (a column darker than the band above it, 19 against 27, for as long as the top bar stood with it).
-  const solid = webHoles(rows), under = (h: Hole) => pageRect!.left < h.x || (edge.pinned.side && h.x > 0), backing: (Hole & { square?: boolean })[] = floatFrame && pageRect ? solid.map(h => h.x === firstLeft ? ({ ...h, square: under(h) }) : h) : solid;
+  const solid = webHoles(veil), under = (h: Hole) => snapPx(pageRect!.left) < h.x || (edge.pinned.side && h.x > 0), backing: (Hole & { square?: boolean })[] = floatFrame && pageRect ? solid.map(h => h.x === veilLeft ? ({ ...h, square: under(h) }) : h) : solid;
   // The sidebar's own copy of the finish tints its whole column between the frame's bands, so the frame's veil is cut out of that column as well, not only behind the panes: in a stacked
   // split the strip and the gap between two panes (and a pane the interface draws) stood in the veil there and read a darker stripe across the sidebar (26 against 41 in dark).
-  const column = floatFrame && pageRect && rows.some(h => h.x === firstLeft && under(h)) ? ` M0 ${Math.max(0, Math.min(...rows.map(h => h.y)))}H${firstLeft}V${Math.min(H, Math.max(...rows.map(h => h.y + h.h)))}H0Z` : '';
+  const column = floatFrame && pageRect && veil.some(h => h.x === veilLeft && under(h)) ? ` M0 ${Math.max(0, Math.min(...veil.map(h => h.y)))}H${veilLeft}V${Math.min(H, Math.max(...veil.map(h => h.y + h.h)))}H0Z` : '';
   const d = `M0 0H${W}V${H}H0Z` + column + backing.map(({ x, y, w, h, square }) => square ? ` M${x} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x}Z` : ` M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`).join('');
   if (!holdVeil) app.style.setProperty('--sf-mask', `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${W}' height='${H}'><path fill-rule='evenodd' d='${d}'/></svg>`)}")`);
   // A narrow, independently moving part of the same frame carries the page's rounded left
   // corners. It sits outside the sidebar's existing content clip; the website stays untouched.
   // Its top and bottom corners are two pieces: the bottom one also follows the card's bottom edge while that moves (sidebar-overlay.css).
-  const firsts = rows.filter(h => h.x === firstLeft), mask = (path: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${r}' height='${H}'><path d='${path}'/></svg>`)}")`;
+  const firsts = veil.filter(h => h.x === veilLeft), mask = (path: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${r}' height='${H}'><path d='${path}'/></svg>`)}")`;
   app.style.setProperty('--sf-corner-x', `${firstLeft}px`);
   // Where the frame's tint has its cut-out begins: the top corner piece is drawn from here down only while it rides the page's edge, since above it the frame's own tint is
   // already there and a second one read as a darker notch (held with the tint while the top bar leaves).
@@ -443,7 +449,7 @@ function paintPageHoles(app: HTMLElement, area: DOMRect): void {
   app.style.setProperty('--sf-corner-mask', mask(firsts.filter(h => !h.label).map(({ y }) => `M0 ${y}H${r}A${r} ${r} 0 0 0 0 ${y + r}Z`).join(' ')));
   // Only the card's own bottom corner gets a piece. Where another pane stands below, the corner reveals the split's ground (the colour of the gap between the panes) and a piece would tint it
   // twice, a dark wedge at the upper pane's corner (22 against 31 for the gap, 39 for the sidebar).
-  const cardBottom = Math.max(...rows.map(h => h.y + h.h));
+  const cardBottom = Math.max(...veil.map(h => h.y + h.h));
   app.style.setProperty('--sf-corner-mask-low', mask(firsts.filter(h => h.y + h.h > cardBottom - 1).map(({ y, h }) => `M0 ${y + h}V${y + h - r}A${r} ${r} 0 0 0 ${r} ${y + h}Z`).join(' ')));
   // The card's frame line (its top, right and bottom; the docked card's ring) in two pieces, so the bottom can follow the card's
   // bottom edge while the top stays (sidebar-overlay.css). Both reach back to the page's resting left edge; at rest their holders
@@ -454,11 +460,16 @@ function paintPageHoles(app: HTMLElement, area: DOMRect): void {
   // The left end wears the card's curve and edge like the right (the lining used to stop where the curve began): a separate stroke up the sidebar's
   // edge, round the corner and into the line, so the ring is the whole card's outline wherever the sidebar meets it.
   const left = firstLeft - .5, sidebarEdge = pageRect && firstLeft > pageRect.left;
-  app.querySelector('.sidebar-page-rim-top path')?.setAttribute('d', `M${reach} ${card.top - .5}H${card.right - r}A${o} ${o} 0 0 1 ${card.right + .5} ${card.top + r}V${mid}${sidebarEdge ? `M${left} ${mid}V${card.top + r}A${o} ${o} 0 0 1 ${firstLeft + r} ${card.top - .5}` : ''}`);
-  app.querySelector('.sidebar-page-rim-low path')?.setAttribute('d', `M${reach} ${card.bottom + .5}H${card.right - r}A${o} ${o} 0 0 0 ${card.right + .5} ${card.bottom - r}V${mid - 16}${sidebarEdge ? `M${left} ${mid - 16}V${card.bottom - r}A${o} ${o} 0 0 0 ${firstLeft + r} ${card.bottom + .5}` : ''}`);
-  for (const [name, value] of [['x', sidebarEdge ? firstLeft - 1 : firstLeft + r], ['top', card.top], ['right', card.right], ['bottom', card.bottom], ['mid', mid]] as const) root.style.setProperty(`--sf-rim-${name}`, `${value}px`);
+  // The stroke up the sidebar's edge is its own path (.rim-edge): it waits for the sidebar while that slides in (data-edge-rim, sidebar-overlay.css). The line's row starts 2px inside the end of the
+  // curve (--sf-rim-line-x), so the stroke's arc stops there, where the line takes over: two separate paths, each with the stroke's alpha, would paint the 2px they share twice (as one path they painted the union).
+  const joint = Math.sqrt(o * o - 4);
+  app.querySelector('.sidebar-page-rim-top path')?.setAttribute('d', `M${reach} ${card.top - .5}H${card.right - r}A${o} ${o} 0 0 1 ${card.right + .5} ${card.top + r}V${mid}`);
+  app.querySelector('.sidebar-page-rim-top .rim-edge')?.setAttribute('d', sidebarEdge ? `M${left} ${mid}V${card.top + r}A${o} ${o} 0 0 1 ${firstLeft + r - 2} ${card.top + r - joint}` : '');
+  app.querySelector('.sidebar-page-rim-low path')?.setAttribute('d', `M${reach} ${card.bottom + .5}H${card.right - r}A${o} ${o} 0 0 0 ${card.right + .5} ${card.bottom - r}V${mid - 16}`);
+  app.querySelector('.sidebar-page-rim-low .rim-edge')?.setAttribute('d', sidebarEdge ? `M${left} ${mid - 16}V${card.bottom - r}A${o} ${o} 0 0 0 ${firstLeft + r - 2} ${card.bottom - r + joint}` : '');
+  for (const [name, value] of [['x', sidebarEdge ? firstLeft - 1 : firstLeft + r], ['line-x', sidebarEdge ? firstLeft + r - 2 : firstLeft + r], ['top', card.top], ['right', card.right], ['bottom', card.bottom], ['mid', mid]] as const) root.style.setProperty(`--sf-rim-${name}`, `${value}px`);
   // Retain the outgoing travel when React collapses the layout for the exit snapshot.
-  if (!pageRect || firstLeft > pageRect.left) root.style.setProperty('--sf-sidebar-travel', `${pageRect ? firstLeft - pageRect.left : firstLeft}px`);
+  if (!pageRect || firstLeft > pageRect.left) root.style.setProperty('--sf-sidebar-travel', `${pageRect ? snapPx(firstLeft) - snapPx(pageRect.left) : snapPx(firstLeft)}px`);
   // Where the line's left end is, relative to the card beside the sidebar: in from the page's left edge as the sidebar arrives, back
   // out to it as the sidebar leaves.
   // A top bar arriving or leaving with the sidebar staying (data-edge-top in / out): the line's left end has nowhere to travel. It ran in from the sidebar's width away as if the
@@ -473,7 +484,7 @@ function paintPageHoles(app: HTMLElement, area: DOMRect): void {
  * sidebar's edge was, a card edge with a rounded corner and a hairline through the text, for most of the hide, beside the real edge sliding away with the sidebar (a second page card in
  * Compact and Focus, 2-3 frames at full speed, most of the slide when slowed). The stroke leaves the line before its picture is taken; the card's edge is the page's own clip and the corner pieces. */
 function dropRimEdge(): void {
-  for (const path of document.querySelectorAll('.sidebar-page-rim path')) { const d = path.getAttribute('d'); if (d) path.setAttribute('d', d.split('M').slice(0, 2).join('M')); }
+  for (const path of document.querySelectorAll('.sidebar-page-rim .rim-edge')) path.setAttribute('d', '');
 }
 /** Rebind page input after choosing another tab or changing split panes, without replaying the reveal. */
 export function refreshEdgeFloat(): void {
@@ -617,6 +628,9 @@ export function applyEdge(next: EdgeState): void {
   // to its new one (seamless.css). Drawn as one slab, its new picture started at the slab's old left edge, with the first control
   // over the traffic lights and the arriving sidebar, and a leaving sidebar made the controls jump a caption's width at once.
   document.documentElement.dataset.edgeToolbar = shownBefore.top && shownAfter.top ? 'stays' : 'slab';
+  // The stroke up the sidebar's edge (the left end of the card's ring) is not drawn while the sidebar slides in: held at its final place it stood alone ahead of the moving edge, a second
+  // rounded card outline for most of the slide (founder, 7 Nov, dark: "a line glitching on the lining of the sidebar"). It fades in once the sidebar has landed (sidebar-overlay.css).
+  if (shownAfter.side && !shownBefore.side) document.documentElement.dataset.edgeRim = 'wait'; else delete document.documentElement.dataset.edgeRim;
   // Whether the top bar arrives or leaves: the page's top corner beside the sidebar rides the card's moving top edge (sidebar-overlay.css edge-corner-lift-*).
   // Only while the sidebar stays: when it comes or goes with the bar, the layout is measured again after the layout change (the bar's height lands a frame later), so the
   // offsets the corner rides are not yet known when the pieces are captured.
@@ -625,10 +639,10 @@ export function applyEdge(next: EdgeState): void {
   holdVeil = shownBefore.top && !shownAfter.top && floatFrame;
   if (shownBefore.side && !shownAfter.side) dropRimEdge();
   const ms = startEdgeTransition(reveal ? 'reveal' : 'hide', update, headerPx);
-  if (!edgeTransition) { delete document.documentElement.dataset.edgeToolbar; delete document.documentElement.dataset.edgeTop; holdVeil = false; }
+  if (!edgeTransition) { delete document.documentElement.dataset.edgeToolbar; delete document.documentElement.dataset.edgeTop; delete document.documentElement.dataset.edgeRim; holdVeil = false; }
   if (edgeTransition) {
     edgeBusy = true;
-    const settled = () => { edgeBusy = false; delete document.documentElement.dataset.edgeToolbar; delete document.documentElement.dataset.edgeTop; if (holdVeil) { holdVeil = false; refreshEdgeFloat(); } const requested = pendingEdge; pendingEdge = null; if (requested) applyEdge(requested); };
+    const settled = () => { edgeBusy = false; delete document.documentElement.dataset.edgeToolbar; delete document.documentElement.dataset.edgeTop; delete document.documentElement.dataset.edgeRim; if (holdVeil) { holdVeil = false; refreshEdgeFloat(); } const requested = pendingEdge; pendingEdge = null; if (requested) applyEdge(requested); };
     void edgeTransition.finished.then(settled, settled);
   }
   if (enteringFloat && floatFrame) presentFloat(edgeTransition?.ready);
@@ -683,3 +697,4 @@ export function useChromePress(): boolean {
   }, []);
   return pressing;
 }
+registerPageRiseSpring(seamlessEntrySpring);

@@ -12,7 +12,7 @@ test('the default composition is the measured menu: 588px for the main menu, 360
   assert.equal(menuHeight(defaultMenuLayout, 'main'), 588);
   assert.equal(menuHeight(defaultMenuLayout, 'more'), 360);
   assert.equal(menuHeight(defaultMenuLayout, 'main', 26), 516, 'the dense menu at 26px rows is the measured 516px');
-  assert.equal(popupNaturalHeight('menu', state), 588 + 2 * 30, 'plus the two Layout rows (R4-16, R4-19)');
+  assert.equal(popupNaturalHeight('menu', state), 588 + 3 * 30, 'plus the three Layout rows: View, Tabs and Sidebar mode (R4-16, R4-19, and the sidebar findability switch)');
   assert.equal(popupNaturalHeight('more-tools', state), 360);
 });
 
@@ -76,7 +76,7 @@ test('a submenu opened from the menu starts with a back row: More tools and Down
   assert.equal(popupNaturalHeight('downloads', state, { parent: 'menu' }), popupNaturalHeight('downloads', state) + submenuHeaderHeight);
   assert.equal(popupNaturalHeight('bookmarks', state, { parent: 'menu' }), popupNaturalHeight('bookmarks', state));
   assert.equal(popupNaturalHeight('recent-closed', state, { parent: 'menu' }), popupNaturalHeight('recent-closed', state), 'Recently closed keeps its title bar: the back row replaces the title');
-  assert.equal(popupNaturalHeight('menu', state, { parent: 'menu' }), 588 + 2 * 30);
+  assert.equal(popupNaturalHeight('menu', state, { parent: 'menu' }), 588 + 3 * 30);
 });
 
 test('a layout saved before Recently closed replaced "Reopen closed tab" keeps that row\'s place and choice', () => {
@@ -95,10 +95,10 @@ test('a layout saved before Recently closed replaced "Reopen closed tab" keeps t
 });
 
 test('R4-16 + R4-19: the Layout rows ride with the page group and the menu still fits without scrolling', () => {
-  assert.equal(menuLayoutRows(defaultMenuLayout.main), 2);
+  assert.equal(menuLayoutRows(defaultMenuLayout.main), 3, 'View, Tabs and Sidebar mode');
   assert.equal(menuLayoutRows(defaultMenuLayout.main.filter(id => !['find', 'zoom', 'split'].includes(id))), 0, 'no page group, no rows');
   assert.equal(menuFullHeight, popupNaturalHeight('menu', state));
-  // 1080p at 150% (about 680 CSS px of window): the dense rows still fit under the menu button.
+  // 1080p at 150% (about 680 CSS px of window): the dense rows still fit under the menu button (72 + 678 x 26/30 + 20 = 680 of 700).
   assert.equal(menuDense(680), true);
   assert.ok(72 + popupNaturalHeight('menu', state) * 26 / 30 + 20 <= 680 + 20);
 });

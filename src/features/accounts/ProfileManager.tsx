@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { MessageId } from "../../i18n";
 import type { BrowserAction, BrowserProfile, BrowserSnapshot } from "../../runtime/types";
 import { Check, Plus } from "../../components/AppIcons";
-import { Select, SettingGroup, SettingRow, Switch } from "../settings/controls";
+import { SettingGroup, SettingRow, Switch } from "../settings/controls";
 import { isMac } from "../../ui/platform";
 import { useT } from "../../i18n";
 import { ProfileSuggestions } from "./ProfileSuggestions";
@@ -10,6 +10,7 @@ import { onSettingsIntent, settingsViewKey, takeSettingsIntent } from "../../ui/
 import {
   PROFILE_NAME_MAX,
   ProfileAvatar,
+  OpenProfilesControl,
   createProfile,
   looksLikeEmail,
   photoFromFile,
@@ -39,6 +40,8 @@ export function ProfileManager({ state, dispatch }: Props) {
   const tab = state.tabs.find((item) => item.id === state.activeTabId);
   return (
     <>
+      {/* Open profiles sits at the top (Settings › Profiles › Switch between): with two or more profiles, and while they are spaces so it can be undone. */}
+      <OpenProfiles state={state} dispatch={dispatch} count={profiles.length} />
       <SettingGroup title={t("profiles.yourProfiles")}>
         <div ref={heading} tabIndex={-1} className="pm-anchor" />
         {profiles.map((profile, index) => (
@@ -60,8 +63,7 @@ export function ProfileManager({ state, dispatch }: Props) {
             spaces={state.settings.spaces === "profiles"}
           />
         ))}
-        <CreateProfile profiles={profiles} dispatch={dispatch} intentKey={tab ? settingsViewKey(tab) : ""} spaces={state.settings.spaces === "profiles"} />
-        <SwitchBetween state={state} dispatch={dispatch} count={profiles.length} />
+        <CreateProfile state={state} profiles={profiles} dispatch={dispatch} intentKey={tab ? settingsViewKey(tab) : ""} spaces={state.settings.spaces === "profiles"} />
       </SettingGroup>
       {/* Other browsers' accounts on this computer, each one click from being its own profile. */}
       <ProfileSuggestions state={state} dispatch={dispatch} />
@@ -69,9 +71,9 @@ export function ProfileManager({ state, dispatch }: Props) {
   );
 }
 
-/** "Switch between": workspaces inside each profile, a window for each profile (the default), or profiles as spaces, every profile
- *  in one window (runtime/profileSpaces.ts). Shown with two or more profiles, and always while profiles are spaces so it can be undone. */
-function SwitchBetween({ state, dispatch, count }: Props & { count: number }) {
+/** "Open profiles" (the "Switch between" setting): profiles as spaces, every profile in this window (runtime/profileSpaces.ts), or a window for each
+ *  profile with workspaces inside it (the default). Shown with two or more profiles, and always while profiles are spaces so it can be undone. */
+function OpenProfiles({ state, dispatch, count }: Props & { count: number }) {
   const t = useT();
   const value = state.settings.spaces === "profiles" ? "profiles" : "workspaces";
   if (count < 2 && value === "workspaces") return null;
@@ -79,14 +81,11 @@ function SwitchBetween({ state, dispatch, count }: Props & { count: number }) {
   const keys = isMac() ? "⌃1–8" : "Alt+1–8";
   const detail = value === "profiles" ? t("profiles.switchSpacesDetail", { key: keys }) : `${t("profiles.switchWorkspacesDetail")}${secured ? ` ${t("profiles.switchSecured")}` : ""}`;
   return (
-    <SettingRow id="profile-spaces" title={t("profiles.switchBetween")} detail={detail}>
-      <Select
-        value={value}
-        label={t("profiles.switchBetween")}
-        options={[{ value: "workspaces", label: t("profiles.switchWorkspaces") }, { value: "profiles", label: t("profiles.switchSpaces") }]}
-        onChange={(next) => dispatch({ type: "settings.update", patch: { spaces: next } })}
-      />
-    </SettingRow>
+    <SettingGroup>
+      <SettingRow id="profile-spaces" title={t("profiles.openProfiles")} detail={detail}>
+        <OpenProfilesControl state={state} dispatch={dispatch} />
+      </SettingRow>
+    </SettingGroup>
   );
 }
 
@@ -397,7 +396,7 @@ function ProfileRow({
 }
 
 /** "New profile" as the group's last row; it opens in place to a name and a color. */
-function CreateProfile({ profiles, dispatch, intentKey, spaces = false }: { profiles: BrowserProfile[]; dispatch: Props["dispatch"]; intentKey: string; /** Profiles as spaces: the new profile's space opens in this window once it exists. */ spaces?: boolean }) {
+function CreateProfile({ state, profiles, dispatch, intentKey, spaces = false }: { state: BrowserSnapshot; profiles: BrowserProfile[]; dispatch: Props["dispatch"]; intentKey: string; /** Profiles as spaces: the new profile's space opens in this window once it exists. */ spaces?: boolean }) {
   const t = useT();
   const used = new Set(profiles.map((profile) => profile.color.toLowerCase()));
   const suggested = (profileColors.find((item) => !used.has(item.value.toLowerCase())) || profileColors[0]).value;
@@ -500,6 +499,13 @@ function CreateProfile({ profiles, dispatch, intentKey, spaces = false }: { prof
           {taken && <small id={takenHint} className="pm-problem pm-name-taken" role="alert">{t("profiles.nameTaken", { name: taken })}</small>}
         </label>
         <Swatches label={t("profiles.color")} value={chosen} onChange={setColor} />
+        {/* The first time the choice matters (this is the second profile) the row at the top of the page is not shown yet, so the choice is here, already set to what it is now: the same control, no question window. */}
+        {profiles.length === 1 && (
+          <div className="pm-field pm-open" role="group" aria-label={t("profiles.openProfiles")}>
+            <span>{t("profiles.openProfiles")}</span>
+            <OpenProfilesControl state={state} dispatch={dispatch} />
+          </div>
+        )}
         <div className="pm-actions">
           <button type="submit" className="st-button primary" disabled={!valid}>
             {t("profiles.create")}

@@ -103,7 +103,9 @@ test('Layout leads Appearance: Tabs and Window view are registered there, in the
   assert.equal(byId('sidebar-only-tabs')?.group, 'Layout');
   assert.equal(byId('window-view')?.group, 'Layout');
   // The group name is not reused for unrelated rows (bookmarks bar, interface size and animation speed used to share it).
-  assert.deepEqual(all.filter((entry) => entry.section === 'Appearance' && entry.group === 'Layout').map((entry) => entry.id), ['sidebar-only-tabs', 'window-view', 'sidebar-peek', 'seamless-edge-top', 'seamless-edge-side']);
+  assert.deepEqual(all.filter((entry) => entry.section === 'Appearance' && entry.group === 'Layout').map((entry) => entry.id), ['sidebar-only-tabs', 'window-view', 'seamless-edge-top']);
+  // The sidebar's own rows moved to Tabs › Sidebar, where the sidebar's other options are (their Appearance rows are live copies of the same settings).
+  for (const id of ['sidebar-mode', 'address-in-sidebar', 'sidebar-peek', 'seamless-edge-side']) assert.deepEqual([byId(id)?.section, byId(id)?.group], ['Tabs', 'Sidebar'], id);
   assert.equal(byId('sidebar-only-tabs')?.title, 'Tabs', 'the name the menu and Make it yours use');
 });
 
@@ -111,11 +113,41 @@ test('every common word for the tab layout finds it first or second, with typos 
   for (const query of ['sidebar', 'vertical tabs', 'tabs on the side', 'tabs on top', 'toolbar view', 'horizontal tabs', 'tab layout', 'layout', 'view', 'sidebar view', 'side tabs', 'tabs']) {
     assert.ok(found(query).slice(0, 2).includes('sidebar-only-tabs'), `${query}: ${found(query).slice(0, 3).join(', ')}`);
   }
-  for (const query of ['sidebr', 'vertcal tabs', 'horizonal tabs', 'toolbr view', 'layot', 'sidbar']) assert.equal(found(query)[0], 'sidebar-only-tabs', `${query}: ${found(query).slice(0, 3).join(', ')}`);
+  for (const query of ['vertcal tabs', 'horizonal tabs', 'toolbr view', 'layot']) assert.equal(found(query)[0], 'sidebar-only-tabs', `${query}: ${found(query).slice(0, 3).join(', ')}`);
+  // "sidebar" leads with the Sidebar group (Tabs › Sidebar), the Tabs layout choice follows, typos included.
+  for (const query of ['sidebar', 'sidebr', 'sidbar']) assert.deepEqual(found(query).slice(0, 2), ['sidebar', 'sidebar-only-tabs'], query);
   // "view" and "layout" are the Window view's words too: both rows are offered.
   for (const query of ['view', 'layout', 'toolbar view']) assert.ok(found(query).slice(0, 3).includes('window-view'), query);
   // A signpost ranks first only for its own words; a longer query about something else is not taken over.
   assert.equal(found('sidebar width')[0], 'sidebar-width');
+});
+
+// Sidebar findability: every sidebar option has one obvious home, Tabs › Sidebar, and the words people use land on it.
+test('sidebar words land on the Sidebar group: sidebar, sidebar mode, bookmarks in sidebar, address bar, url bar', () => {
+  assert.equal(found('sidebar')[0], 'sidebar');
+  assert.equal(found('sidebar mode')[0], 'sidebar-mode');
+  for (const query of ['everything in sidebar', 'sidebar only']) assert.equal(found(query)[0], 'sidebar-mode', query);
+  for (const query of ['bookmarks in sidebar', 'bookmarks in the sidebar', 'hide bookmarks', 'bookmarks under tabs', 'bookmarks below tabs']) assert.equal(found(query)[0], 'sidebar-section-bookmarks', query);
+  for (const query of ['address bar', 'url bar', 'address bar in sidebar']) assert.equal(found(query)[0], 'address-in-sidebar', query);
+  // The left-edge rows are drawn with tabs in the sidebar only, so search offers them only then; the address row is offered either way (with tabs on top it says what it needs).
+  for (const query of ['left edge', 'closed sidebar']) assert.ok(['sidebar-peek', 'seamless-edge-side'].includes(searchSettings(all, query, { ...context, verticalTabs: true }, 12)[0].entry.id), query);
+  assert.ok(!searchSettings(all, 'closed sidebar', { ...context, verticalTabs: false }, 12).some((hit) => hit.entry.id === 'sidebar-peek'), 'no row to jump to with tabs on top');
+  assert.equal(found('address bar')[0], 'address-in-sidebar');
+  for (const id of ['sidebar', 'sidebar-mode', 'address-in-sidebar', 'sidebar-peek', 'sidebar-apps', 'sidebar-section-bookmarks', 'sidebar-section-pinned', 'sidebar-section-downloads', 'sidebar-section-history', 'sidebar-section-reading', 'sidebar-customize']) assert.equal(byId(id)?.section, 'Tabs', id);
+});
+
+test('the rows the registry names exist in Tabs › Sidebar, and the Appearance rows are live copies', () => {
+  const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
+  const panel = read('src/features/settings/panels/sidebar.tsx'), settings = read('src/features/BrowserSettings.tsx'), rows = read('src/features/settings/SidebarRows.tsx');
+  for (const id of ['sidebar-mode', 'address-in-sidebar', 'sidebar-peek', 'seamless-edge-side', 'sidebar-visible', 'sidebar-apps', 'sidebar-customize']) assert.ok(`${panel}${rows}`.includes(`id="${id}"`) || `${panel}${rows}`.includes(`id={'sidebar-section-`) || id === 'seamless-edge-side', id);
+  // Tabs › Sidebar sits right under the Tabs layout card; Sidebar sections shows what is inside before it is opened.
+  const tabs = settings.slice(settings.indexOf('{section === "Tabs" &&'), settings.indexOf('id="compact-tab-titles"'));
+  assert.ok(tabs.indexOf('<TabLayoutRow') < tabs.indexOf('<SidebarGroups') && tabs.indexOf('<SidebarGroups') > 0);
+  assert.match(panel, /id="sidebar-sections" bodyRef=\{sections\} fold foldDetail=\{t\("sidebar\.showHideAndReorderTabs"\)\}/);
+  // Appearance › Layout and Tabs › Sidebar read and write the same settings through the same components.
+  assert.match(settings, /<SidebarModeRow state=\{state\} dispatch=\{dispatch\} \/>/);
+  assert.match(settings, /<SidebarEdgeRows state=\{state\} dispatch=\{dispatch\} \/>/);
+  assert.match(panel, /<SidebarEdgeRows state=\{state\} dispatch=\{dispatch\} describe \/>/);
 });
 
 test('Tabs and Window view render in Appearance › Layout first, Tabs is mirrored at the top of Tabs, one writer for both', () => {
