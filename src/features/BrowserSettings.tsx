@@ -952,6 +952,21 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 onChange={(askBeforeClosing) => update({ askBeforeClosing })}
               />
             </SettingRow>
+            <SettingRow
+              id="on-startup"
+              title={tr("onstartup.title")}
+              detail={s.onStartup === "newtab" ? tr("onstartup.detailNewTab") : tr("onstartup.detailContinue")}
+            >
+              <Select
+                label={tr("onstartup.title")}
+                value={s.onStartup === "newtab" ? "newtab" : "continue"}
+                options={[
+                  { value: "continue", label: tr("onstartup.optContinue") },
+                  { value: "newtab", label: tr("onstartup.optNewTab") },
+                ]}
+                onChange={(value) => update({ onStartup: value as "continue" | "newtab" })}
+              />
+            </SettingRow>
           </SettingGroup>
         </>
       )}

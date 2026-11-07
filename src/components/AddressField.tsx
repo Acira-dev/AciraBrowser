@@ -89,7 +89,7 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
       let hiddenWidth = 0; if (hidden > 0) { ruler.textContent = input.value.slice(0, hidden); hiddenWidth = ruler.getBoundingClientRect().width; }
       const layout = glideLayout({ fieldWidth: field.clientWidth, textWidth, hiddenPrefixWidth: hiddenWidth });
       field.style.setProperty('--af-center', layout.center + 'px'); field.style.setProperty('--af-pre', layout.pre + 'px');
-      field.toggleAttribute('data-glidable', layout.center > 0); // no room: the text stays at the left and swaps as it always did
+      field.toggleAttribute('data-glidable', layout.glides); // no text to move: it swaps at once
     };
     measure();
     const watch = new ResizeObserver(measure); watch.observe(field);
@@ -99,8 +99,11 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
 
   const parked = useRef<{start:number|null;end:number|null;direction:'forward'|'backward'|'none'|null;timer:number}|null>(null);
   useEffect(() => () => window.clearTimeout(parked.current?.timer), []);
+  // The full address is shown from its start (the omnibox's way), so the field's text lines up with the shown text the whole glide: a narrow field would scroll to the end of a long address.
+  const fromStart = (input: HTMLInputElement | null | undefined) => { if (glide && input) input.scrollLeft = 0; };
   const release = () => { held.current = false; measured.current = null; setHolding(false); highlights()?.delete(DRAG_HIGHLIGHT); };
-  const finishBlur = (event: FocusEvent<HTMLInputElement>) => { setFocused(false); pointer.current = false; focusClick.current=null; gesture.current={kind:'idle'}; if(held.current)release(); onBlur(event); };
+  const finishBlur = (event: FocusEvent<HTMLInputElement>) => { fromStart(inputRef.current); // (the event's currentTarget is gone by the time a parked blur finishes)
+    setFocused(false); pointer.current = false; focusClick.current=null; gesture.current={kind:'idle'}; if(held.current)release(); onBlur(event); };
   const apply = (effect: AddressGestureEffect, input: HTMLInputElement) => {
     if (effect.type === 'hold') {
       held.current = true; setHolding(true); pointer.current = true; setKeyboard(false);
@@ -164,7 +167,7 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
       }}
       onPointerCancel={event => {focusClick.current=null; const step = stepAddressGesture(gesture.current, {type:'cancel',pointerId:event.pointerId}); gesture.current = step.state; apply(step.effect, event.currentTarget);}}
       onLostPointerCapture={event => {if (gesture.current.kind !== 'press') return; const step = stepAddressGesture(gesture.current, {type:'cancel',pointerId:event.pointerId}); gesture.current = step.state; apply(step.effect, event.currentTarget);}}
-      onClick={event => {const click=focusClick.current;focusClick.current=null;if(click&&!click.moved&&event.detail===1)event.currentTarget.select();}}
+      onClick={event => {const click=focusClick.current;focusClick.current=null;if(click&&!click.moved&&event.detail===1){event.currentTarget.select();fromStart(event.currentTarget);}}}
       onChange={event => onChange(event.target.value)}
       onKeyDown={event => {
         if (gesture.current.kind === 'clicked') gesture.current = {kind:'idle'};
@@ -180,7 +183,7 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
         // Back from a press on the suggestion list: the field never lost the person's draft, so nothing restarts.
         const back = parked.current;
         if (back) { window.clearTimeout(back.timer); parked.current = null; if (back.start !== null && back.end !== null) event.target.setSelectionRange(back.start, back.end, back.direction ?? undefined); return; }
-        setFocused(true); setKeyboard(!pointer.current); onFocus(); if(!focusClick.current&&!held.current)event.target.select();}}
+        setFocused(true); setKeyboard(!pointer.current); onFocus(); if(!focusClick.current&&!held.current){event.target.select();fromStart(event.target);}}}
       onBlur={event => {
         // The open suggestion list is its own native view: a press on it (a row, a ×) takes focus for a moment and main hands
         // it straight back. Until it is clear the field really lost focus, nothing closes and the text, caret and selection stay.

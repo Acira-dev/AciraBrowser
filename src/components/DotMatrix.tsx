@@ -131,10 +131,11 @@ const join = (paint: (t: number) => boolean | void) => { painters.add(paint); if
  * (the sound equaliser) is sharp at 100%, 150% and 200% instead of soft round dots: [dot, gap] in device pixels per scale. */
 export const crispSpec = (dpr: number) => dpr < 1.25 ? [2, 1] : dpr < 1.75 ? [3, 2] : [4, 2];
 
-export function DotMatrix({ preset = 'loader', size = 16, width, height, snap = false, rows, cols, tone = 'ink', reducedMotion = false, label, className = '', progress = 0, state, bare = false }: {
+export function DotMatrix({ preset = 'loader', size = 16, width, height, snap = false, rows, cols, tone = 'ink', reducedMotion = false, label, className = '', progress = 0, state, bare = false, dot = .7 }: {
   preset?: MatrixPreset; size?: number; /** A non-square canvas (the audio meter): the grid stays square-celled and centred in it. */ width?: number; height?: number;
   /** Crisp mode: the canvas is exactly the grid (its CSS size follows the screen's pixel density), dots are square and pixel-aligned. */ snap?: boolean;
   /** No unlit grid behind the lights: only the lit dots are drawn. */ bare?: boolean;
+  /** How much of its cell a dot fills (its diameter over the cell), .7 by default. A small matrix takes less, so the gap between dots stays a clear two device pixels on a 2x screen instead of closing into bars. */ dot?: number;
   rows?: number; cols?: number; tone?: MatrixTone; reducedMotion?: boolean; label?: string; className?: string;
   /** Real progress, 0–1, for the patterns that show it (torConnecting); each step cross-fades its new dots in. */ progress?: number;
   /** Passed through as data-state for the owner's styling (Tor's error ink). */ state?: string;
@@ -157,7 +158,7 @@ export function DotMatrix({ preset = 'loader', size = 16, width, height, snap = 
       [on, off] = toneColors(tone, style.color, style.getPropertyValue('--ed-blue'));
     };
     if (snap) { node.width = gridW; node.height = gridH; } else { node.width = Math.round((width ?? size) * scale); node.height = Math.round((height ?? size) * scale); }
-    const cell = snap ? dotPx + gapPx : Math.min(node.width / C, node.height / R), radius = cell * .35;
+    const cell = snap ? dotPx + gapPx : Math.min(node.width / C, node.height / R), radius = cell * dot / 2;
     const ox = (node.width - cell * C) / 2, oy = (node.height - cell * R) / 2;
     // A change of state cross-fades from the last frame shown, dot by dot; the first frame of a matrix just appears.
     const last = painted.current, from = !reducedMotion && last && last.R === R && last.C === C ? last : null, start = performance.now() / 1000;
@@ -192,6 +193,6 @@ export function DotMatrix({ preset = 'loader', size = 16, width, height, snap = 
     const observer = new IntersectionObserver(([entry]) => { leave(); visible = Boolean(entry?.isIntersecting); leave = visible ? join(paint) : () => {}; });
     observer.observe(node);
     return () => { observer.disconnect(); themed.disconnect(); leave(); };
-  }, [preset, size, width, height, snap, dotPx, gapPx, R, C, tone, reducedMotion, step, bare]);
+  }, [preset, size, width, height, snap, dotPx, gapPx, R, C, tone, reducedMotion, step, bare, dot]);
   return <canvas ref={canvas} className={`dot-matrix ${className}`} style={snap ? { width: gridW / density, height: gridH / density } : { width: width ?? size, height: height ?? size }} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} data-preset={preset} data-state={state} />;
 }

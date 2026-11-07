@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createTabNumberHold, HOLD_MS, LINGER_MS } = require('../desktop/tab-numbers.cjs');
+const { createTabNumberHold, HOLD_MS, LINGER_MS, CHORD_MS } = require('../desktop/tab-numbers.cjs');
 
 // When the tab numbers show and hide (desktop/tab-numbers.cjs). A fake clock stands in for setTimeout.
 function rig(platform) {
@@ -236,3 +236,245 @@ test('the delay is 250 ms, and events that are not key presses are ignored', () 
   assert.deepEqual(r.log, []);
   assert.equal(r.hold.phase, 'idle');
 });
+
+// ---- Two-digit tab numbers (beta.12): with the modifier down, 1 then 5 within CHORD_MS is tab 15. -------------------------------
+
+// The hold as main wires it: a digit is a number key; a first digit waits only when a tab with that tens digit exists; `select`
+// takes a place (1-based, -1 the last tab) and is logged with the clock. `verdicts` are what `note` told main about each key.
+function chordRig(platform, tabs) {
+  let count = tabs;
+  const base = rig(platform), typedLog = [], picks = [];
+  const mac = platform === 'darwin', mod = mac ? 'Meta' : 'Control', flags = mac ? { meta: true } : { control: true };
+  const shownLog = base.log;
+  let now = 0, next = 1;
+  const timers = new Map();
+  const hold = createTabNumberHold({
+    platform,
+    isNumberKey: input => /^[1-9]$/.test(input.key) && !input.shift && !input.alt,
+    digitOf: input => /^[0-9]$/.test(input.key) ? Number(input.key) : -1,
+    naturalDigit: input => /^[1-9]$/.test(input.key) ? Number(input.key) : -1,
+    tabCount: () => count,
+    select: position => picks.push(`${position}@${now}`),
+    onChange: shown => shownLog.push(`${shown ? 'show' : 'hide'}@${now}${hold.typed !== null ? ':typed' + hold.typed : ''}`),
+    onTyped: digit => typedLog.push(digit === null ? 'clear' : 'typed' + digit),
+    setTimer: (fn, ms) => { const id = next++; timers.set(id, { at: now + ms, fn }); return id; },
+    clearTimer: id => { timers.delete(id); },
+  });
+  const advance = ms => {
+    const end = now + ms;
+    for (;;) {
+      const due = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      timers.delete(due[0]); now = due[1].at; due[1].fn();
+    }
+    now = end;
+  };
+  const key = (type, k, extra = {}) => hold.note({ type, key: k, shift: false, alt: false, control: false, meta: false, isAutoRepeat: false, ...extra });
+  return {
+    hold, advance, timers, picks, typedLog, shown: shownLog, setCount: n => { count = n; },
+    down: () => key('keyDown', mod, flags),
+    up: () => key('keyUp', mod),
+    press: (k, extra = {}) => key('keyDown', k, { ...flags, ...extra }),
+    release: k => key('keyUp', k, flags),
+    now: () => now,
+  };
+}
+
+for (const platform of ['darwin', 'win32', 'linux']) {
+  const label = platform === 'darwin' ? 'Cmd on macOS' : `Ctrl on ${platform}`;
+
+  test(`${label}: 1 then 5 within the time is tab 15, and the first digit does nothing on its own while it waits`, () => {
+    const r = chordRig(platform, 20);
+    r.down(); r.advance(300);
+    assert.equal(r.hold.shown, true);
+    assert.equal(r.press('1'), 'wait', 'main must not run Go to tab 1');
+    assert.equal(r.hold.typed, 1);
+    r.release('1'); r.advance(400);
+    assert.deepEqual(r.picks, [], 'nothing yet');
+    assert.equal(r.press('5'), 'taken', 'main runs nothing else with the second digit');
+    assert.deepEqual(r.picks, ['15@700']);
+    assert.equal(r.hold.typed, null);
+    assert.equal(r.hold.shown, true, 'the numbers stay while digits are pressed');
+    r.release('5'); r.advance(CHORD_MS * 3);
+    assert.deepEqual(r.picks, ['15@700'], 'and nothing more happens when the time would have run out');
+    r.up();
+    assert.deepEqual(r.picks, ['15@700']);
+  });
+
+  test(`${label}: with 9 tabs or fewer no digit waits (a single digit acts at once, as always), and with 12 only 1 waits`, () => {
+    const nine = chordRig(platform, 9);
+    nine.down(); nine.advance(300);
+    for (const k of ['1', '5', '9']) assert.equal(nine.press(k), undefined, `${k} is an ordinary shortcut with 9 tabs`);
+    assert.equal(nine.hold.typed, null);
+    assert.deepEqual(nine.picks, []);
+    const twelve = chordRig(platform, 12);
+    twelve.down(); twelve.advance(300);
+    assert.equal(twelve.press('2'), undefined, '20 does not exist: 2 acts at once');
+    assert.equal(twelve.press('9'), undefined, '90 does not exist: Ctrl+9 is the last tab at once');
+    assert.equal(twelve.press('1'), 'wait', '10, 11 and 12 do');
+    assert.equal(twelve.hold.typed, 1);
+    const ten = chordRig(platform, 10);
+    ten.down(); ten.advance(300);
+    assert.equal(ten.press('1'), 'wait', 'ten tabs is where it starts');
+  });
+
+  test(`${label}: letting go after one digit sends it to that tab at once; 9 alone is the last tab`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(60);
+    assert.equal(r.press('1'), 'wait');
+    r.release('1'); r.advance(120);
+    assert.deepEqual(r.picks, []);
+    r.up();
+    assert.deepEqual(r.picks, ['1@180'], 'at the moment of the release, not after the time');
+    assert.equal(r.timers.size, 0, 'no timer is left');
+    assert.equal(r.hold.typed, null);
+    const nine = chordRig(platform, 120);
+    nine.down(); nine.advance(500);
+    assert.equal(nine.press('9'), 'wait', 'with 90 or more tabs 9 can be followed by a digit');
+    nine.up();
+    assert.deepEqual(nine.picks, ['-1@500'], 'alone it is still the last tab');
+    const ninety = chordRig(platform, 120);
+    ninety.down(); ninety.advance(500); ninety.press('9'); ninety.press('5');
+    assert.deepEqual(ninety.picks, ['95@500'], 'with a second digit the two-digit number wins');
+  });
+
+  test(`${label}: a digit nobody follows goes to its tab when the time runs out, and the numbers then go as after any digit`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(300);
+    assert.equal(r.press('1'), 'wait'); r.release('1');
+    r.advance(CHORD_MS - 1);
+    assert.deepEqual(r.picks, []);
+    assert.equal(r.hold.shown, true, 'the linger does not take them away while a digit waits');
+    r.advance(1);
+    assert.deepEqual(r.picks, [`1@${300 + CHORD_MS}`]);
+    assert.equal(r.hold.typed, null);
+    assert.equal(r.hold.shown, true);
+    r.advance(LINGER_MS);
+    assert.equal(r.hold.shown, false, 'a release nobody heard still ends them');
+  });
+
+  test(`${label}: the second digit may be 0 (1 then 0 is tab 10), and a tab that does not exist does nothing`, () => {
+    const r = chordRig(platform, 12);
+    r.down(); r.advance(300);
+    r.press('1');
+    assert.equal(r.press('0'), 'taken', 'Ctrl+0 is the zoom reset; here it is the second digit');
+    assert.deepEqual(r.picks, ['10@300']);
+    r.press('1'); assert.equal(r.press('5'), 'taken');
+    assert.deepEqual(r.picks, ['10@300'], 'there is no tab 15 of 12: nothing');
+    assert.equal(r.hold.typed, null);
+    assert.equal(r.hold.shown, true);
+    r.press('1'); r.press('2');
+    assert.deepEqual(r.picks, ['10@300', '12@300']);
+  });
+
+  test(`${label}: any other key sends the waiting digit to its tab first (and tells main so), then does what it does`, () => {
+    for (const [name, extra] of [['c', {}], ['Shift', { shift: true }], ['Tab', {}], ['5', { shift: true }], ['3', { alt: true }]]) {
+      const r = chordRig(platform, 14);
+      r.down(); r.advance(300);
+      assert.equal(r.press('1'), 'wait');
+      r.advance(200);
+      assert.equal(r.press(name, extra), 'flushed', `${name} follows the digit`);
+      assert.deepEqual(r.picks, ['1@500'], name);
+      assert.equal(r.hold.shown, false, `${name} hides the numbers as it always did`);
+      assert.equal(r.hold.typed, null);
+    }
+  });
+
+  test(`${label}: a wheel turn sends it, a window blur drops it, a new press of the modifier sends it`, () => {
+    const wheel = chordRig(platform, 14);
+    wheel.down(); wheel.advance(300); wheel.press('1'); wheel.hold.interrupt();
+    assert.deepEqual(wheel.picks, ['1@300']);
+    const blur = chordRig(platform, 14);
+    blur.down(); blur.advance(300); blur.press('1'); blur.hold.cancel(); blur.advance(CHORD_MS * 2);
+    assert.deepEqual(blur.picks, [], 'the person went elsewhere: no surprise tab change');
+    assert.equal(blur.hold.typed, null);
+    assert.equal(blur.timers.size, 0);
+    const again = chordRig(platform, 14);
+    again.down(); again.advance(300); again.press('1'); again.down();
+    assert.deepEqual(again.picks, ['1@300'], 'a lost key-up cannot strand a digit');
+  });
+
+  test(`${label}: a release Chromium swallowed (the next key says the modifier is up) sends the waiting digit`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(300); r.press('1');
+    r.hold.note({ type: 'keyUp', key: '1', shift: false, alt: false, control: false, meta: false, isAutoRepeat: false });
+    assert.deepEqual(r.picks, ['1@300']);
+    assert.equal(r.hold.shown, false);
+  });
+
+  test(`${label}: a held first digit (auto-repeat) is not a second press, and the modifier's own repeat changes nothing`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(300);
+    assert.equal(r.press('1'), 'wait');
+    assert.equal(r.press('1', { isAutoRepeat: true }), 'taken');
+    assert.equal(r.hold.typed, 1);
+    r.hold.note({ type: 'keyDown', key: platform === 'darwin' ? 'Meta' : 'Control', shift: false, alt: false, control: platform !== 'darwin', meta: platform === 'darwin', isAutoRepeat: true });
+    assert.equal(r.hold.typed, 1, 'main sends this repeat itself to get the release heard');
+    assert.equal(r.hold.shown, true);
+    assert.deepEqual(r.picks, []);
+    r.up();
+    assert.deepEqual(r.picks, ['1@300']);
+  });
+
+  test(`${label}: a digit pressed before the numbers show still waits, and they show with it typed when the delay is over`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(80);
+    assert.equal(r.press('1'), 'wait');
+    assert.equal(r.hold.shown, false);
+    r.advance(HOLD_MS);
+    assert.deepEqual(r.shown, [`show@${HOLD_MS}:typed1`], 'the figures arrive on time (a quarter second after the modifier) with the 1 already typed');
+    assert.equal(r.press('3'), 'taken');
+    assert.deepEqual(r.picks, ['13@' + (80 + HOLD_MS)]);
+    // and if the number is finished before they ever show, they never do for this hold
+    const quick = chordRig(platform, 14);
+    quick.down(); quick.advance(30); quick.press('1'); quick.press('4'); quick.advance(2000);
+    assert.deepEqual(quick.shown, []);
+    assert.deepEqual(quick.picks, ['14@30']);
+    // a quick Cmd+1 and release flashes nothing
+    const tap = chordRig(platform, 14);
+    tap.down(); tap.advance(40); tap.press('1'); tap.release('1'); tap.up(); tap.advance(2000);
+    assert.deepEqual(tap.shown, []);
+    assert.deepEqual(tap.picks, ['1@40']);
+  });
+
+  test(`${label}: the typed digit is reported while it waits and cleared when it is done, however it ends`, () => {
+    const r = chordRig(platform, 30);
+    r.down(); r.advance(300);
+    r.press('2'); r.press('7');
+    r.press('1'); r.up();
+    assert.deepEqual(r.typedLog, ['typed2', 'clear', 'typed1', 'clear']);
+    assert.deepEqual(r.picks, ['27@300', '1@300']);
+  });
+
+  test(`${label}: the tab count is read when the digit is pressed and again for the second (tabs may close in between)`, () => {
+    const r = chordRig(platform, 14);
+    r.down(); r.advance(300);
+    r.press('1');
+    r.setCount(12);
+    assert.equal(r.press('4'), 'taken');
+    assert.deepEqual(r.picks, [], 'tab 14 went away: nothing');
+    r.setCount(5);
+    assert.equal(r.press('1'), undefined, 'with 5 tabs no digit waits any more');
+  });
+
+  test(`${label}: Escape and a mouse press drop a waiting digit (nothing is acted on); the numbers go with Escape and stay with the press`, () => {
+    const esc = chordRig(platform, 14);
+    esc.down(); esc.advance(300); esc.press('1');
+    assert.equal(esc.press('Escape'), undefined, 'Escape is not "flushed": the digit was dropped');
+    assert.deepEqual(esc.picks, []);
+    assert.equal(esc.hold.typed, null);
+    assert.equal(esc.hold.shown, false);
+    esc.advance(CHORD_MS * 2);
+    assert.deepEqual(esc.picks, [], 'and it does not come back when the time would have run out');
+    const click = chordRig(platform, 14);
+    click.down(); click.advance(300); click.press('1');
+    click.hold.abandon();
+    assert.deepEqual(click.picks, []);
+    assert.equal(click.hold.typed, null);
+    assert.equal(click.hold.shown, true);
+    click.advance(CHORD_MS * 2);
+    assert.deepEqual(click.picks, [], 'a click on another tab is not followed by a jump to tab 1');
+    click.hold.abandon(); // nothing waiting: nothing happens
+    assert.equal(click.hold.shown, false, 'the numbers still end by the linger, as after any digit');
+  });
+}

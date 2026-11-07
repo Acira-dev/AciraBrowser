@@ -261,30 +261,44 @@ test('light cards hand their own ink to everything inside them, after every othe
   assert.match(css('styles.css'), /@container style\(--brand-tone: dark\)\{\.brand-logo\[data-brand-tone=auto\] img\.brand-light\{display:none\}/);
 });
 
-test('a sleeping tab is quieter, not gone: the lowest dims that keep 3:1 icons and 4.5:1 sidebar titles on every finish', () => {
-  // The lowest strengths that keep a single stroke at 3:1 (and the sidebar title at 4.5:1), solved on real pixels: the glass over a
-  // white and a black desktop, window captures and Windows styling. Strip and compact icons need 66.4% on light frames and 45.4% on
-  // dark ones; sidebar icons 75.5% of the 68% row ink (light frames) and 67.5% of a 55% ink (dark); the dark-frame sidebar title 53.4%.
-  assert.match(rule('components/tab-sleeping.css', '[data-sleeping] .site-identity-icon')[1], /opacity: 0\.46;/, 'dark frames');
-  assert.match(css('components/tab-sleeping.css'), /@media not \(forced-colors: active\) \{ \.app\.style-acira:not\(\[data-chrome=dark\]\) \[data-sleeping\] \.site-identity-icon \{ opacity: 0\.68; \} \}/, 'light frames; forced colours keep the full icon');
-  assert.match(rule('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-tab[data-sleeping] .sb-tab-icon')[1], /^opacity:var\(--sb-sleeping-icon\)$/);
-  assert.match(rule('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-tab[data-sleeping] .site-identity-icon')[1], /^opacity:1$/, 'the two dims never stack');
-  assert.match(rule('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-tab[data-sleeping]:not([aria-current=true]):not(:hover)')[1], /^color:var\(--sb-sleeping,var\(--sb-faint\)\)$/);
+test('a sleeping tab is clearly quieter, not gone: icons and titles dimmed on every finish, titles still 3:1 and icon strokes 2:1', () => {
+  // beta.12: beta.10 had pushed sleeping tabs to the lowest dims that kept 3:1 icons and 4.5:1 titles, and a sleeping tab then hardly
+  // differed from an awake one (the strip's title was not dimmed at all). Now the icon is about half strength (52% on light frames, 44% on
+  // dark), the title 66% (light frames) or 56% (dark) of an awake tab's in the strip and about two thirds of one in the sidebar; floors: titles 3:1, a single icon stroke 2:1.
+  const sleeping = css('components/tab-sleeping.css');
+  assert.match(sleeping, /@media not \(forced-colors: active\) \{\s*\.browser-tab\[data-sleeping\]:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.site-identity-icon,\s*\.acira-compact-tab:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.acira-compact-tab-icon\[data-sleeping\] \.site-identity-icon \{ opacity: 0\.44; \}/, 'strip and compact icons, dark frames; forced colours keep them at full');
+  assert.match(sleeping, /\.app\.style-acira:not\(\[data-chrome=dark\]\) \.browser-tab\[data-sleeping\]:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.site-identity-icon,\s*\.app\.style-acira:not\(\[data-chrome=dark\]\) \.acira-compact-tab:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.acira-compact-tab-icon\[data-sleeping\] \.site-identity-icon \{ opacity: 0\.52; \}/, 'strip and compact icons, light frames');
+  assert.match(sleeping, /@media not \(forced-colors: active\) \{[^@]*\.browser-tab\[data-sleeping\]:not\(\.selected\):not\(:hover\):not\(:focus-visible\)>\.tab-title,\s*\.acira-compact-tab:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.acira-compact-tab-icon\[data-sleeping\]~\.acira-compact-tab-label \{ opacity: 0\.56; \}/, 'strip and compact titles, dark frames; forced colours keep them at full');
+  assert.match(sleeping, /\.app\.style-acira:not\(\[data-chrome=dark\]\) \.browser-tab\[data-sleeping\]:not\(\.selected\):not\(:hover\):not\(:focus-visible\)>\.tab-title,\s*\.app\.style-acira:not\(\[data-chrome=dark\]\) \.acira-compact-tab:not\(\.selected\):not\(:hover\):not\(:focus-visible\) \.acira-compact-tab-icon\[data-sleeping\]~\.acira-compact-tab-label \{ opacity: 0\.66; \}/, 'strip and compact titles, light frames');
+  // The states that stay clear are never matched by the dim: a selected (waking) tab, a hovered one, a keyboard-focused one.
+  for (const state of ['.selected', ':hover', ':focus-visible']) assert.ok(sleeping.includes(`:not(${state})`), `the dim skips ${state}`);
+  // All-asleep group label (strip and compact strip) and sidebar header.
+  assert.match(sleeping, /\.tab-group-header\[data-all-asleep\] \.tab-group-label:not\(:hover\):not\(:focus-visible\)>:is\(span,small,svg\) \{ opacity: 0\.6; \}/);
+  assert.match(css('components/TabGroupTray.tsx'), /data-all-asleep=\{allAsleep\|\|undefined\}/);
+  assert.match(css('components/TabGroupTray.tsx'), /groupForTab\(\{tabGroups:groups\},member\)\?\.id===group\.id/, 'members are found by the group name in scope, like everywhere else');
+  assert.match(css('components/sidebar/AciraSidebar.tsx'), /data-all-asleep=\{members\.length>0&&members\.every\(member=>member\.sleeping\)\|\|undefined\}/);
+  assert.match(css('components/sidebar/sidebar.css'), /\.sb-group\[data-all-asleep\]>\.sb-group-header:not\(:hover\):not\(:focus-visible\) :is\(\.sb-group-name,\.sb-group-folder,small\)\{opacity:\.62\}/);
+  // Sidebar: the row's title takes --sb-sleeping; the icon wrapper takes --sb-sleeping-icon of the row's rest ink, and the current, hovered and focused rows are skipped.
+  const quiet = ':not([aria-current=true]):not(:hover):not(:has(.sb-tab-main:focus-visible))';
+  assert.match(rule('components/sidebar/sidebar.css', `.app.style-acira .acira-sidebar .sb-tab[data-sleeping]${quiet}`)[1], /^color:var\(--sb-sleeping,var\(--sb-faint\)\)$/);
+  assert.match(rule('components/sidebar/sidebar.css', `.app.style-acira .acira-sidebar .sb-tab[data-sleeping]${quiet} .sb-tab-icon`)[1], /^opacity:var\(--sb-sleeping-icon\);color:var\(--sb-rest\)$/);
   const sidebarBlock = (list: string, name: string) => Number(rules('components/sidebar/sidebar.css').map(([l, body, inside]) => !inside && l === list && body.match(new RegExp(`${name}:(?:rgb\\(var\\(--ink\\) \\/ )?([\\d.]+)`))?.[1]).find(Boolean));
-  const light = {title: sidebarBlock('.app.style-acira .ed-rail.acira-sidebar', '--sb-faint'), icon: sidebarBlock('.app.style-acira .ed-rail.acira-sidebar', '--sb-sleeping-icon')};
+  const light = {title: sidebarBlock('.app.style-acira .ed-rail.acira-sidebar', '--sb-sleeping'), icon: sidebarBlock('.app.style-acira .ed-rail.acira-sidebar', '--sb-sleeping-icon')};
   const dark = {title: sidebarBlock('.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar', '--sb-sleeping'), icon: sidebarBlock('.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar', '--sb-sleeping-icon')};
-  assert.deepEqual({light, dark}, {light: {title: .68, icon: .76}, dark: {title: .55, icon: .68}});
-  // An awake row's icon takes the row's rest ink (--sb-rest): 76% on light frames, 62% on dark ones.
+  assert.deepEqual({light, dark}, {light: {title: .52, icon: .52}, dark: {title: .42, icon: .5}});
+  // An awake row rests at 76% of its ink on light frames and 62% on dark ones; a sleeping title is about two thirds of that, a sleeping icon about half.
   const rest = (list: string) => Number(rules('components/sidebar/sidebar.css').map(([l, body, inside]) => !inside && l === list && body.match(/--sb-rest:color-mix\(in srgb,var\(--sb-fg\) (\d+)%,transparent\)/)?.[1]).find(Boolean)) / 100;
   const awake = {light: rest('.app.style-acira .ed-rail.acira-sidebar'), dark: rest('.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar')};
   assert.deepEqual(awake, {light: .76, dark: .62});
   for (const [name, settings] of finishes) for (const appearance of [false, true]) {
     const t = themeTokens({...base, ...settings} as typeof base, appearance), chromeDark = t['--chrome-tone'] === 'dark', at = `${name} ${appearance ? 'dark' : 'light'}`;
-    const sidebar = '#' + t['--sidebar-rgb'].split(' ').map(v => Number(v).toString(16).padStart(2, '0')).join(''), v = t['--sidebar-tone'] === 'dark' ? dark : light;
-    assert.ok(contrast(mix(t['--sidebar-ink'], sidebar, v.title), sidebar) >= 4.5, `${at}: sleeping sidebar title`);
-    assert.ok(contrast(mix(t['--sidebar-ink'], sidebar, v.title * v.icon), sidebar) >= 3, `${at}: sleeping sidebar icon`);
-    assert.ok(v.title * v.icon <= .7 * (t['--sidebar-tone'] === 'dark' ? awake.dark : awake.light), `${at}: at most 70% of an awake row's icon`);
+    const sidebar = '#' + t['--sidebar-rgb'].split(' ').map(v => Number(v).toString(16).padStart(2, '0')).join(''), tone = t['--sidebar-tone'] === 'dark', v = tone ? dark : light, rest = tone ? awake.dark : awake.light;
+    assert.ok(contrast(mix(t['--sidebar-ink'], sidebar, v.title), sidebar) >= 3, `${at}: sleeping sidebar title`);
+    assert.ok(contrast(mix(t['--sidebar-ink'], sidebar, rest * v.icon), sidebar) >= 2, `${at}: sleeping sidebar icon stroke`);
+    assert.ok(v.title <= .7 * rest, `${at}: sleeping title at most 70% of an awake row's`);
+    assert.ok(v.icon <= .55, `${at}: sleeping icon about half strength`);
     const row = over(token(chromeDark ? '.app.style-acira[data-chrome=dark]' : '.app.style-acira', '--tab-strip-recess')!, t['--frame']);
-    assert.ok(contrast(mix(t['--frame-text'], row, .8 * (chromeDark ? .46 : .68)), row) >= 3, `${at}: sleeping strip icon`);
+    assert.ok(contrast(mix(t['--frame-text'], row, .8 * (chromeDark ? .44 : .52)), row) >= 2, `${at}: sleeping strip icon stroke`);
+    assert.ok(contrast(mix(t['--frame-text'], row, .8 * (chromeDark ? .56 : .66)), row) >= 3, `${at}: sleeping strip title`);
   }
 });

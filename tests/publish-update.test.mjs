@@ -196,6 +196,18 @@ test('a rehearsal tolerates artifacts built as another version, and can never be
  // but a rehearsal still cannot rehearse a version the feed would refuse
  assert.equal((await planUpdate(macOptions(w,{rehearsal:true,version:'0.1.0-beta.4'}),baseDeps(w,github))).ok,false);
 });
+test('long notes: a list past 1000 characters warns that beta.11 copies cut it; only past the app\'s own limit is the list cut for everyone',async t=>{
+ const w=await workspace(t),github=fakeGitHub();
+ const bullets=count=>Array.from({length:count},(_,n)=>'- Item '+n+' '+'words '.repeat(20)).join('\n')+'\n';
+ await fs.writeFile(w.notes,bullets(12)); // about 1700 characters: beta.11's list was 1528
+ const medium=await planUpdate(macOptions(w),baseDeps(w,github));
+ assert.equal(medium.ok,true);assert.match(medium.warnings.join('\n'),/Copies of Acira up to beta\.11 show only the first 1000/);assert.doesNotMatch(medium.warnings.join('\n'),/the app shows the first/);
+ await fs.writeFile(w.notes,bullets(60));
+ const huge=await planUpdate(macOptions(w),baseDeps(w,github));
+ assert.match(huge.warnings.join('\n'),new RegExp('the app shows the first '+U.NOTES_MAX));
+ await fs.writeFile(w.notes,'- Faster tabs\n- Sidebar fix\n');
+ assert.deepEqual((await planUpdate(macOptions(w),baseDeps(w,github))).warnings.filter(line=>/characters/.test(line)),[],'a short list warns about nothing');
+});
 test('publishing needs notes (or --no-notes) and a readable live feed; the dry run only warns',async t=>{
  const w=await workspace(t),github=fakeGitHub();
  const noNotes=macOptions(w,{'notes-file':undefined});

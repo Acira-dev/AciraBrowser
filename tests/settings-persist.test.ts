@@ -13,6 +13,7 @@ const different: Record<string, (value: any) => unknown> = {
   toolbarLayout: v => (v === 'expanded' ? 'automatic' : 'expanded'),
   tabViewerDensity: v => (v === 'compact' ? 'comfortable' : 'compact'),
   tabHoverCard: v => (v === 'preview' ? 'off' : 'preview'),
+  onStartup: v => (v === 'continue' ? 'newtab' : 'continue'),
   animationSpeed: v => (v === 'fast' ? 'premium' : 'fast'),
   glassOpacity: () => 61,
   surfaceColor: () => '#112233',

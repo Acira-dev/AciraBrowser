@@ -15,7 +15,8 @@ const SHIPPED=Object.freeze([
 const RELEASE_VERSION=/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/; // what ships; never a ".local.N" build
 const WINDOWS_VERSION=/^0\.1\.\d+-beta\.\d+$/; // scripts/build-windows.mjs refuses any other version
 const ASSET_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]*$/; // GitHub rewrites other characters, which would break the URLs written into the feed
-const NOTES_MAX=1000; // desktop/browser-services/app-updater.cjs shows at most this many characters of release notes
+const NOTES_OLD_MAX=1000; // what beta.11 and earlier copies of Acira show of a release's notes
+const NOTES_MAX=6000; // desktop/browser-services/app-updater.cjs keeps at most this many characters of release notes (installed copies up to beta.11 stop at 1000)
 const RAW_FEED_BASE=LEGACY_FEED_URL; // the GitHub raw feed: where the bridge release (beta.11) is written and read back; packaging/update-targets.cjs has both targets
 
 function versionProblems(version,channel){
@@ -182,4 +183,4 @@ async function readLiveFeed({fetch,file,baseUrl=RAW_FEED_BASE}){
 function buildInfo({version,channel,platform,commit,assets,checks}){
  return {schema:2,product:'Acira Browser',version,channel,platform,commit,checks,files:assets.map(({name,size,sha256,sha512})=>({name,size,sha256,sha512}))};
 }
-module.exports={ARCHES,CHANNELS,PLATFORMS,ALL_PLATFORMS,HIDDEN_MARKER,ALLOWED_FEEDS,linuxFeed,withNextCheck,frozenDoc,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,checkBlockMap,parsePercent,rolloutOf,describeRollout,withRollout,haltDoc,macArchOf,tagOf,addMacFiles,lineDiff,foldDiff,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};
+module.exports={ARCHES,CHANNELS,PLATFORMS,ALL_PLATFORMS,HIDDEN_MARKER,ALLOWED_FEEDS,linuxFeed,withNextCheck,frozenDoc,SHIPPED,RELEASE_VERSION,WINDOWS_VERSION,NOTES_MAX,NOTES_OLD_MAX,RAW_FEED_BASE,UPDATE_REPOSITORY,versionProblems,newerProblems,feedFiles,releaseTag,assetUrl,describeFile,checksumsText,releaseNotes,releaseBody,finalizeMacFeed,windowsFeed,previousBlockMaps,checkBlockMap,parsePercent,rolloutOf,describeRollout,withRollout,haltDoc,macArchOf,tagOf,addMacFiles,lineDiff,foldDiff,serializeFeed,parseFeed,readWithUpdater,readLiveFeed,buildInfo};

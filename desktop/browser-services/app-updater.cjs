@@ -37,7 +37,7 @@ const UPDATE_USER_AGENT='AciraUpdater';
 // A failed check or download (offline at start, a dropped connection) tries again 2, 10 and 30 minutes later and as soon as the network comes back or the
 // Mac wakes (network-retry.cjs), instead of at the next regular round. Nothing new is shown: the status says 'error' as before until an attempt succeeds.
 const CHANNELS=['stable','beta'];
-const NOTES_MAX=1000,FLUSH_TIMEOUT=5000,PROGRESS_EVERY=400; // the interface hears about download progress at most this often (ms), and only when the percent moved
+const NOTES_MAX=6000,FLUSH_TIMEOUT=5000,PROGRESS_EVERY=400; /* the most release notes kept (a whole list, 1528 characters for beta.11, scrolls in the popup; this only stops a runaway feed). packaging/update-publish.cjs warns at the same number. */ // the interface hears about download progress at most this often (ms), and only when the percent moved
 // A build can be pulled from the feed after this computer downloaded it (a halt: stagingPercentage 0; a rollback to an older build; this install no
 // longer in a staged rollout). Windows asks the feed again while an update waits (READY_RECHECK), at Install now (waiting at most ASK_WITHIN for an
 // answer), and when Acira quits with an update waiting and the last answer is older than FRESH_FOR (QUIT_ASK at most, see atQuit). Both platforms ask
@@ -57,7 +57,10 @@ function notesText(raw){
  text=text.replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g,'$1').replace(/<\s*br\s*\/?>/gi,'\n').replace(/<\/(?:p|div|h[1-6]|ul|ol)\s*>/gi,'\n').replace(/<li[^>]*>/gi,'• ').replace(/<\/li\s*>/gi,'\n').replace(/<[^>]*>/g,'')
   .replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&amp;/g,'&')
   .replace(/^\s*[-*]\s+/gm,'• ').replace(/^#{1,6}\s*/gm,'').replace(/\*\*|__/g,'').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
- return text.length>NOTES_MAX?text.slice(0,NOTES_MAX-1).trimEnd()+'…':text;
+ if(text.length<=NOTES_MAX)return text;
+ // too long even for that: whole lines are kept (never half a bullet), and a line longer than the limit by itself is cut
+ const cut=text.slice(0,NOTES_MAX-1),lines=cut.slice(0,cut.lastIndexOf('\n')).trimEnd();
+ return (lines.length>NOTES_MAX/2?lines:cut.trimEnd())+'…';
 }
 /** Test-only stand-in for electron-updater: finds a fake newer version, "downloads" it, and records quitAndInstall instead of running an installer. */
 function createStubUpdater({env,dir,platform=process.platform,app=null,version=null}){
@@ -698,4 +701,4 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  function start(){if(started||unsupported)return;started=true;const first=schedule(()=>{firstRan=true;void check();armNext();},stubbed?1500:CHECK_DELAY);first?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
  return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
 }
-module.exports={createAppUpdater,createStubUpdater,notesText,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
+module.exports={createAppUpdater,createStubUpdater,notesText,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};

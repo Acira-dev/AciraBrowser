@@ -60,6 +60,18 @@ function assign(state:BrowserSnapshot,tabIds:string[],group:TabGroup|null){
  if(group){group.collapsed=false;if(selected.some(tab=>tab.id===state.activeTabId))group.lastActiveTabId=state.activeTabId;const others=state.tabs.filter(tab=>!selected.includes(tab));const last=lastIndex(others,tab=>tab.group===group.name&&inScope(tab,group));if(last>=0){others.splice(last+1,0,...selected);state.tabs=others;}}
  reconcileTabGroups(state);
 }
+/** A fold or unfold of a group that the interface may draw on the click's own frame (runtime/client.ts applies the same reducer at once and main's snapshot,
+ * a round trip later, replaces it). Only the `collapsed` flag changes and the current tab stays where it is. A fold that would move the selection (the group of
+ * the current tab collapsing without `keepActive`, as the strip does) can end with a new tab whose id only main makes, so that one waits for main. */
+export function isGroupFold(state:Pick<BrowserSnapshot,'tabs'|'tabGroups'|'activeTabId'>,action:BrowserAction):boolean{
+ if(action.type!=='tab.group.update')return false;
+ const keys=Object.keys(action.patch);if(keys.length!==1||keys[0]!=='collapsed'||typeof action.patch.collapsed!=='boolean')return false;
+ const group=state.tabGroups.find(item=>item.id===action.id);if(!group)return false;
+ if(action.keepActive)return true;
+ const active=state.tabs.find(tab=>tab.id===state.activeTabId),home=active&&groupForTab(state,active);
+ if(!home)return true;
+ return home.id===group.id?!action.patch.collapsed:!home.collapsed;
+}
 /** Pick the nearest visible page after the collapsing block, then before it. */
 export function nextExpandedGroupTab(state:Pick<BrowserSnapshot,'tabs'|'tabGroups'>,groupId:string):TabSession|undefined {
  const members=state.tabs.map((tab,index)=>groupForTab(state,tab)?.id===groupId?index:-1).filter(index=>index>=0);

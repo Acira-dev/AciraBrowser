@@ -465,6 +465,7 @@ export async function planUpdate(options,deps){
  const notes=U.releaseNotes(notesText);
  if(!notes.markdown&&!adding){(options.publish&&!options['no-notes']?problems:warnings).push('No release notes. Installed copies show them in the "what\'s new" popup after the update. Pass --notes-file <file> (one bullet per line)'+(options.publish?' or --no-notes.':'.'));}
  if(notes.plain.length>U.NOTES_MAX)warnings.push('The notes are '+notes.plain.length+' characters; the app shows the first '+U.NOTES_MAX+'.');
+ else if(notes.plain.length>U.NOTES_OLD_MAX)warnings.push('The notes are '+notes.plain.length+' characters. Copies of Acira up to beta.11 show only the first '+U.NOTES_OLD_MAX+' of them in the update popup (and again after the restart); newer copies show the whole list.');
  // --- the plan: releases and feed files ---
  const releaseDate=now().toISOString(),plan={mode:adding?'add-arch':'release',version,channel,rehearsal,rollout,repo:target.repo,target,releases:[],feeds:[],verify:[],untouched:[],releaseDate};
  const finish=ok=>({ok:ok&&problems.length===0,problems,warnings,plan,checks,live,assets});

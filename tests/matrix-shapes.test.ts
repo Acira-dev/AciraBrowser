@@ -58,7 +58,7 @@ test('private is a diagonal sweep: the lit dots share one diagonal and the grid 
 });
 
 test('Added is a check stroke lit on the whole classic grid: two intensities, one connected stroke, no dot removed',()=>{
-  for(const R of [5,7]){
+  for(const R of [5,6,7]){
     const cells=grid((r,c)=>checkLights(r,c,R,R),R);
     for(const v of cells.flat())assert.ok(v===0||v===1,`dim or lit only, got ${v}`);
     const on=cells.flatMap((row,r)=>row.map((v,c)=>v?[r,c]:null)).filter(Boolean) as number[][];
@@ -70,4 +70,11 @@ test('Added is a check stroke lit on the whole classic grid: two intensities, on
     assert.ok(elbow[0][1]>0&&elbow[0][1]<R-1,'the elbow is inside the stroke, so it reads as a check and not a slash');
   }
   assert.equal(lit(grid((r,c)=>checkLights(r,c,4,5),4,5)),0,'a non-square grid rests dim');
+});
+
+test('the update mark\'s check is centred on its grid, both ways, so it does not hug the top',()=>{
+ const centred=(R:number)=>{const on=grid((r,c)=>checkLights(r,c,R,R),R).flatMap((row,r)=>row.map((v,c)=>v?[r,c]:null)).filter(Boolean) as number[][];
+  const rows=on.map(d=>d[0]),cols=on.map(d=>d[1]);return {top:Math.min(...rows),bottom:Math.max(...rows),left:Math.min(...cols),right:Math.max(...cols)};};
+ for(const R of [6,7]){const box=centred(R);assert.equal(box.top+box.bottom,R-1,R+'x'+R+': as far from the top as from the bottom');assert.equal(box.left+box.right,R-1,R+'x'+R+': and from both sides');}
+ const old=centred(5);assert.notEqual(old.top+old.bottom,4,'the 5x5 check is not centred: that was the bug');
 });

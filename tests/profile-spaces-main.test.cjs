@@ -113,7 +113,8 @@ test('profiles as spaces: a restored window is settled to the choice at start, b
 test('profiles as spaces: a joined window\'s record is deleted, not left behind with its copy of history', () => {
   assert.match(main, /from\.adoptParts\(profilesIn\(record\)\.map\(profile=>takePart\(record,profile\)\)\);\}profileWindows\.forget\(id\);try\{database\.deleteWindow\(id\);\}catch\{\}/);
   assert.match(main, /function closeEmpty\(\)\{if\(!mainWindow\|\|mainWindow\.isDestroyed\(\)\)return;closeGate\.passed=true;discardRecord=true;mainWindow\.close\(\);\}/);
-  assert.match(main, /mainWindow\.on\('closed',\(\)=>\{pageDissolve\.destroy\(\);if\(discardRecord\)try\{database\.deleteWindow\(windowId\);\}catch\{\}/);
+  // A record about to be deleted is not written by the close-time flush (save-queue.cjs): the pending save is cancelled, then the record goes.
+  assert.match(main, /mainWindow\.on\('closed',\(\)=>\{(?:\/\*[^*]*\*\/)?if\(discardRecord\)saves\.cancel\(\);else saves\.flush\(\);pageDissolve\.destroy\(\);if\(discardRecord\)try\{database\.deleteWindow\(windowId\);\}catch\{\}/);
   const { BrowserDatabase } = require('../desktop/database.cjs');
   const runtime = require('../desktop/runtime.cjs');
   const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'acira-spaces-db-')), db = new BrowserDatabase(path.join(dir, 'browser.sqlite'));

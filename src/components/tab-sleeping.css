@@ -1,9 +1,24 @@
-/* A tab the memory saver put to sleep keeps its place; only its icon goes quiet. It wakes (and reloads) when opened. Quiet, not gone:
-   the lowest strengths that keep the icon's stroke at 3:1 on every finish, measured on the glass over a white and a black desktop
-   (beta.10): 46% on dark frames (45% was just short there), 68% on light ones (45% was about 2:1). */
-[data-sleeping] .site-identity-icon { opacity: 0.46; }
-@media not (forced-colors: active) { .app.style-acira:not([data-chrome=dark]) [data-sleeping] .site-identity-icon { opacity: 0.68; } }
-@media (forced-colors: active) { [data-sleeping] .site-identity-icon { opacity: 1; } }
+/* A tab the memory saver put to sleep keeps its place and goes clearly quieter: its icon and its title (beta.12; beta.10 only made them easier
+   to read, and a sleeping tab then hardly differed from an awake one). Quiet, not gone: the icon keeps its colours (so a site is still told
+   from the next), at 52% on light frames and 44% on dark ones, and the title is 66% / 56% of an awake tab's (a 3:1 title and 2:1 icon stroke on every finish). A tab that is selected (waking up),
+   hovered or keyboard-focused is full strength again, and forced colours keep everything at full. It wakes (and reloads) when opened. */
+@media not (forced-colors: active) {
+  .browser-tab[data-sleeping]:not(.selected):not(:hover):not(:focus-visible) .site-identity-icon,
+  .acira-compact-tab:not(.selected):not(:hover):not(:focus-visible) .acira-compact-tab-icon[data-sleeping] .site-identity-icon { opacity: 0.44; }
+  .app.style-acira:not([data-chrome=dark]) .browser-tab[data-sleeping]:not(.selected):not(:hover):not(:focus-visible) .site-identity-icon,
+  .app.style-acira:not([data-chrome=dark]) .acira-compact-tab:not(.selected):not(:hover):not(:focus-visible) .acira-compact-tab-icon[data-sleeping] .site-identity-icon { opacity: 0.52; }
+  .browser-tab[data-sleeping]:not(.selected):not(:hover):not(:focus-visible)>.tab-title,
+  .acira-compact-tab:not(.selected):not(:hover):not(:focus-visible) .acira-compact-tab-icon[data-sleeping]~.acira-compact-tab-label { opacity: 0.56; }
+  .app.style-acira:not([data-chrome=dark]) .browser-tab[data-sleeping]:not(.selected):not(:hover):not(:focus-visible)>.tab-title,
+  .app.style-acira:not([data-chrome=dark]) .acira-compact-tab:not(.selected):not(:hover):not(:focus-visible) .acira-compact-tab-icon[data-sleeping]~.acira-compact-tab-label { opacity: 0.66; }
+}
+.browser-tab[data-sleeping] .site-identity-icon, .acira-compact-tab-icon[data-sleeping] .site-identity-icon { transition: opacity .12s; }
+.browser-tab[data-sleeping]>.tab-title, .acira-compact-tab-icon[data-sleeping]~.acira-compact-tab-label { transition: opacity .12s; }
+/* A group whose tabs are all asleep goes quiet the same way: its name, its count and its chevron (the strip and the compact strip; the sidebar's is in sidebar.css). */
+@media not (forced-colors: active) {
+  .tab-group-header[data-all-asleep] .tab-group-label:not(:hover):not(:focus-visible)>:is(span,small,svg) { opacity: 0.6; }
+}
+.tab-group-header[data-all-asleep] .tab-group-label>:is(span,small,svg) { transition: opacity .12s; }
 /* A tab using the camera, microphone or screen shows a recording dot; the sidebar row also gets a one-click stop. */
 .sb-tab-capture > span, .browser-tab[data-capturing]::before { width: 7px; height: 7px; border-radius: 50%; background: var(--danger, #d93025); }
 .sb-tab-capture { display: grid; place-items: center; }

@@ -9,7 +9,7 @@
    One grid: the scroll region is inset 6px, rows pad 6px, the 16px icon column starts at x=12 and every top-level
    title at x=36; children step 12px per level. */
 .app.style-acira .ed-rail.acira-sidebar{
- --sb-fg:var(--chrome-fg,var(--ed-ink));--sb-muted:var(--chrome-text-2,rgb(var(--ink) / .64));--sb-label:rgb(var(--ink) / .68);--sb-faint:rgb(var(--ink) / .68);--sb-quiet:rgb(var(--ink) / .52);--sb-sleeping-icon:.76;
+ --sb-fg:var(--chrome-fg,var(--ed-ink));--sb-muted:var(--chrome-text-2,rgb(var(--ink) / .64));--sb-label:rgb(var(--ink) / .68);--sb-faint:rgb(var(--ink) / .68);--sb-quiet:rgb(var(--ink) / .52);--sb-sleeping:rgb(var(--ink) / .52);--sb-sleeping-icon:.52;
  --sb-hover:var(--menu-hover,rgb(var(--ink) / .045));--sb-selected:rgb(var(--ink) / .07);--sb-rest:color-mix(in srgb,var(--sb-fg) 76%,transparent);
  --sb-current:#fff;--sb-current-shadow:var(--shadow-card,0 0 0 1px rgb(0 0 0 / .08),0 1px 1px rgb(0 0 0 / .02),0 1px 2px rgb(0 0 0 / .05));
  --sb-tile:rgb(var(--ink) / .04);--sb-tile-current:var(--sb-current);
@@ -25,7 +25,7 @@
  overflow:hidden;font-family:var(--font-ui,inherit);
 }
 .app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{
- --sb-danger:#ff6b70;--sb-rest:color-mix(in srgb,var(--sb-fg) 62%,transparent);--sb-label:rgb(var(--ink) / .50);--sb-faint:rgb(var(--ink) / .50);--sb-quiet:rgb(var(--ink) / .44);--sb-sleeping:rgb(var(--ink) / .55);--sb-sleeping-icon:.68;--sb-hover:rgb(var(--ink) / .06);--sb-line:rgb(var(--ink) / .10);
+ --sb-danger:#ff6b70;--sb-rest:color-mix(in srgb,var(--sb-fg) 62%,transparent);--sb-label:rgb(var(--ink) / .50);--sb-faint:rgb(var(--ink) / .50);--sb-quiet:rgb(var(--ink) / .44);--sb-sleeping:rgb(var(--ink) / .42);--sb-sleeping-icon:.5;--sb-hover:rgb(var(--ink) / .06);--sb-line:rgb(var(--ink) / .10);
  --sb-current:var(--tab-surface,rgb(255 255 255 / .10));--sb-current-shadow:inset 0 0 0 1px var(--tab-rim,rgb(255 255 255 / .10)),inset 0 1px 0 rgb(255 255 255 / .06),0 1px 2px rgb(0 0 0 / .28);
  --sb-tile:rgb(var(--ink) / .05);--sb-rail:.45;
 }
@@ -165,12 +165,15 @@
 .app.style-acira .acira-sidebar :is(.sb-tab-main,.sb-new-tab,.sb-bookmark,.sb-folder,.sb-group-header):focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
 .app.style-acira .acira-sidebar .sb-tab-icon{flex:none;display:grid;place-items:center;width:16px;height:16px;transition:opacity var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-tab-title{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
-/* Sleeping: a quieter favicon and title (concept: 50% and 44%) at the lowest strengths that keep 3:1 and 4.5:1 on every finish
-   (beta.10, measured on the glass): --sb-sleeping-icon of the row's faint ink, which already quiets the icon. The strip's own sleeping
-   dim (tab-sleeping.css) must not stack on it: together they left about 1.4:1. */
-.app.style-acira .acira-sidebar .sb-tab[data-sleeping]:not([aria-current=true]):not(:hover){color:var(--sb-sleeping,var(--sb-faint))}
-.app.style-acira .acira-sidebar .sb-tab[data-sleeping] .sb-tab-icon{opacity:var(--sb-sleeping-icon)}
-.app.style-acira .acira-sidebar .sb-tab[data-sleeping] .site-identity-icon{opacity:1}
+/* Sleeping (beta.12): a clearly quieter favicon and title. The title is 52% of the ink on light frames and 42% on dark ones (an awake row rests at
+   76% and 62%, so about 68% of an awake title); the icon is 52% / 50% of the row's rest ink, so its colours (and a line icon's strokes) stay readable but
+   plainly quieter. The row's own dim is not stacked on the icon: it keeps the rest ink and only the wrapper's opacity changes. The current row, a hovered
+   row and a keyboard-focused row are full strength again. */
+.app.style-acira .acira-sidebar .sb-tab[data-sleeping]:not([aria-current=true]):not(:hover):not(:has(.sb-tab-main:focus-visible)){color:var(--sb-sleeping,var(--sb-faint))}
+.app.style-acira .acira-sidebar .sb-tab[data-sleeping]:not([aria-current=true]):not(:hover):not(:has(.sb-tab-main:focus-visible)) .sb-tab-icon{opacity:var(--sb-sleeping-icon);color:var(--sb-rest)}
+/* A group whose tabs are all asleep: its name, count and folder go quiet like a sleeping title (the strip's group labels do the same in tab-sleeping.css). */
+@media not (forced-colors: active){.app.style-acira .acira-sidebar .sb-group[data-all-asleep]>.sb-group-header:not(:hover):not(:focus-visible) :is(.sb-group-name,.sb-group-folder,small){opacity:.62}}
+.app.style-acira .acira-sidebar .sb-group[data-all-asleep]>.sb-group-header :is(.sb-group-name,.sb-group-folder,small){transition:opacity var(--sb-dur) var(--sb-ease)}
 /* R5-11 (founder: "the loading dots are too faint, they don't look like it's working"): the dots take the row's text colour, and a row that's not current rests in the dim ink, so a loading tab's dots drew at about half strength. A loading icon always lights in the full foreground. */
 .app.style-acira .acira-sidebar .sb-tab .sb-tab-icon[data-loading]{opacity:1;color:var(--sb-fg)}
 /* Close: a 20px button with a 12px glyph at the row's right end, on hover, on the current tab and on focus; always

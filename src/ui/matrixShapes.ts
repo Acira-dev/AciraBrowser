@@ -7,9 +7,11 @@ export const switchedOff = (_r?: number, _c?: number) => .16;
 
 /** Added (R4-08b, founder: "morphs to a dot-matrix check"): the whole square grid stays, and the dots on a check stroke
  * light at full while the rest hold their dim base. Not a picture made by leaving dots out: every dot is still there.
- * 5x5 and 7x7 grids only; any other grid rests dim. */
+ * 5x5, 6x6 and 7x7 grids only; any other grid rests dim. */
 const CHECKS: Record<number, ReadonlySet<string>> = {
   5: new Set(['2,0', '3,1', '2,2', '1,3', '0,4']),
+  // 6x6 (the update mark): rows 1-4 of 0-5 and columns 0-5, so the check is centred on the grid both ways; the 5x5 one spans rows 0-3 of 0-4 and hugs the top
+  6: new Set(['2,0', '3,1', '4,2', '3,3', '2,4', '1,5']),
   7: new Set(['3,0', '4,1', '5,2', '4,3', '3,4', '2,5', '1,6']),
 };
 export const checkLights = (r: number, c: number, R: number, C: number) => (R === C && CHECKS[R]?.has(r + ',' + c) ? 1 : 0);

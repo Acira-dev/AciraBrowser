@@ -1,15 +1,15 @@
 /* Address bar in the sidebar (Settings › Appearance › Layout; off by default; only with tabs in the sidebar).
    ui/addressInSidebar.ts is the logic, AddressMore.tsx the pill.
    The toolbar stays where it is in the tree (so every style, popup anchor and shortcut that names it keeps working) and is laid
-   over the top of the sidebar by `.browser-root.addr-side`: row 1 Back, Reload, Forward in the middle and the sidebar button at
-   the far right; row 2 the address field at the sidebar's full width; row 3 the pill. Everything else the toolbar held sits in
+   over the top of the sidebar by `.browser-root.addr-side`: row 1 Back, Reload, Forward (mid-row on the Mac, clear of the traffic lights; in the left corner on
+   Windows and Linux) and the sidebar button at the far right; row 2 the address field at the sidebar's full width; row 3 the pill. Everything else the toolbar held sits in
    the row the pill opens into. Nothing is restyled: the buttons, the field and the popups are the ones the toolbar always had. */
 
 /* One number, --addr-t (0 = the 4 px line, 1 = the open row), drives the pill, the row and the fade; the sidebar's content moves
    down by the same amount on the same curve and time (the --addr-open-* and --addr-close-* values AddressMore publishes from
    Acira's morph spring). --addr-w0 and --addr-a0 are the line's hover width and strength. */
 @property --addr-t { syntax: '<number>'; inherits: true; initial-value: 0; }
-@property --addr-w0 { syntax: '<length>'; inherits: true; initial-value: 72px; }
+@property --addr-w0 { syntax: '<length>'; inherits: true; initial-value: 96px; }
 @property --addr-a0 { syntax: '<number>'; inherits: true; initial-value: .24; }
 
 /* overflow: visible takes the root's "hidden" away, and with it the grid item's zero minimum height: the window's one grid row then grew to
@@ -39,45 +39,61 @@
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .sidebar-toggle-control { order: 2; margin-left: auto; }
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation :is(.icon-button, .sidebar-toggle-control) { width: 28px; min-width: 28px; height: 28px; flex: 0 0 28px; }
 
+/* Windows and Linux: there are no traffic lights over the sidebar's top-left for the three arrows to clear (on the Mac they sit just right of them, mid-row), so Back, Reload and Forward
+   take the row's left corner, 8 px in like the field beneath, and the sidebar button keeps the right end. The window buttons are over the page column's top-right, not here. */
+:root:root:root:not([data-platform=darwin]) .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .navigation-controls { left: 0; transform: translateY(-50%); }
+
 /* row 2: the field, the sidebar's full width */
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar > .address-bar { grid-row: 2; grid-column: 1; width: 100% !important; max-width: none !important; min-width: 0; margin: 2px 0 0 !important; flex: none; }
 
-/* row 3: the pill: 10 px tall at rest (a 4 px line, 3 px of air above and below), 32 px of buttons when open */
+/* row 3: the pill: 10 px tall at rest in the layout (a 4 px line, 3 px of air above and below), 32 px of buttons when open. The line is 96 px long (72 before), 124 under the pointer
+   (92 before); its hit area is the field's full width and 14 px tall (10 before: down to where the favorites start), see PILL_LINE in ui/addressInSidebar.ts. */
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar > .sb-addr-more {
   grid-row: 3; grid-column: 1; position: relative; container-type: inline-size; -webkit-app-region: no-drag;
   height: calc(10px + 28px * var(--addr-t));
-  --addr-t: 0; --addr-w0: 72px; --addr-a0: .24;
+  --addr-t: 0; --addr-w0: 96px; --addr-a0: .24;
   transition: --addr-t var(--addr-close-dur, 300ms) var(--addr-close-ease, ease), --addr-w0 .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1)), --addr-a0 .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1));
 }
-:root:root:root .browser-root.addr-side .sb-addr-more:hover { --addr-w0: 92px; --addr-a0: .42; }
+:root:root:root .browser-root.addr-side .sb-addr-more:hover { --addr-w0: 124px; --addr-a0: .42; }
 :root:root:root .browser-root.addr-side .sb-addr-more[data-open] {
-  --addr-t: 1; --addr-w0: 92px; --addr-a0: .42;
+  --addr-t: 1; --addr-w0: 124px; --addr-a0: .42;
   transition: --addr-t var(--addr-open-dur, 500ms) var(--addr-open-ease, ease), --addr-w0 .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1)), --addr-a0 .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1));
 }
-/* The line grows into the row: width, height, corner and fill from the one number; the fill reaches the sidebar's tile fill (5% ink)
-   before the buttons appear, and the buttons fade in only once the shape is wide enough to hold them. */
+/* The line grows into the row: width, height, corner and fill from the one number; the fill reaches the sidebar's tile fill (5% ink) before the buttons appear,
+   and the buttons fade in only once the shape is wide enough to hold them. The row is SOLID: under the ink, a plate of the sidebar's own colour comes in over the first
+   fifth of the morph, so nothing the row passes over (the favorites, the tab list, a page behind a floating sidebar) shows through it on any frame (beta.12: it was
+   the ink alone, 5% over whatever was there, and the founder saw the favorites and the page through it). The line itself (t = 0) is the same as before. */
 :root:root:root .browser-root.addr-side .sb-addr-shape {
+  --addr-ink: calc(var(--addr-a0) + (.05 - var(--addr-a0)) * min(1, var(--addr-t) * 1.8));
   position: absolute; left: 50%; top: 3px; overflow: hidden; transform: translateX(-50%);
   width: min(100cqw, calc(var(--addr-w0) + (100cqw - var(--addr-w0)) * var(--addr-t)));
   height: calc(4px + 28px * var(--addr-t)); border-radius: calc(2px + 5px * var(--addr-t));
-  background: rgb(var(--ink) / calc(var(--addr-a0) + (.05 - var(--addr-a0)) * min(1, var(--addr-t) * 1.8)));
+  background: linear-gradient(rgb(var(--ink) / var(--addr-ink)), rgb(var(--ink) / var(--addr-ink))), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / clamp(0, calc(var(--addr-t) * 5), 1));
+  transition: opacity .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1));
 }
 :root:root:root .browser-root.addr-side .sb-addr-more-in {
   position: absolute; left: 50%; top: 50%; width: 100cqw; height: 32px; display: flex; align-items: center; padding: 0;
   transform: translate(-50%, -50%) scale(calc(.92 + .08 * min(1, var(--addr-t))));
   opacity: clamp(0, calc((var(--addr-t) - .62) * 4.2), 1);
 }
+/* The buttons are 28 px high in the 32 px row (2 px above and below), so they stand 2 px in from the row's two ends as well: a hover box then sits evenly inside the row's rounded
+   shape, the same on all four sides, instead of touching its left end (Home) or right end (the … button). */
+:root:root:root .browser-root.addr-side .sb-addr-more-in { box-sizing: border-box; padding: 0 2px; }
 :root:root:root .browser-root.addr-side .sb-addr-more-in > .icon-button { width: 28px; min-width: 28px; height: 28px; flex: 0 0 28px; }
 :root:root:root .browser-root.addr-side .sb-addr-more-in > .toolbar-actions { flex: 1; display: flex; align-items: center; gap: 0; height: 28px; margin: 0; padding: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 :root:root:root .browser-root.addr-side .sb-addr-more-in > .toolbar-actions > .toolbar-optional-profile { display: none; }
 :root:root:root .browser-root.addr-side .sb-addr-more-in > .toolbar-actions > .toolbar-menu-control { margin-left: auto; }
 :root:root:root .browser-root.addr-side .sb-addr-more-in > .toolbar-actions > :is(.icon-button, .profile-button) { width: 28px; min-width: 28px; height: 28px; flex: 0 0 28px; }
-/* The button over the 10 px zone takes the click, Enter and Tab; once open, the row's buttons are under the pointer instead. */
+/* The button over the 10 px of the pill's layout takes the click, Enter and Tab (a popup that hangs from a closed pill hangs from this box, App.tsx); its hit area reaches 4 px further down, to 14 px, through the pseudo-element below; once open, the row's buttons are under the pointer instead. */
 :root:root:root .browser-root.addr-side .sb-addr-pill { position: absolute; left: 0; right: 0; top: 0; height: 10px; padding: 0; border: 0; border-radius: 5px; background: none; cursor: default; }
+:root:root:root .browser-root.addr-side .sb-addr-pill::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 4px; }
 :root:root:root .browser-root.addr-side .sb-addr-more[data-open] .sb-addr-pill { pointer-events: none; }
 :root:root:root .browser-root.addr-side .sb-addr-pill:focus-visible { outline: 2px solid var(--focus-ring-color, var(--accent)); outline-offset: 0; }
-/* While the field is in use the suggestion list hangs over the pill's place. */
-:root:root:root .browser-root.addr-side:has(.address-bar:focus-within) .sb-addr-shape { opacity: 0; }
+/* While the suggestion list is open it hangs over the pill's place: the pill steps aside (AddressMore's `suggesting`). A field that is merely in use (focused, its address
+   selected, nothing typed: no list) does not move the pill: it stays, and the row opens over it with the field's focus kept (beta.12; the pill used to vanish with the
+   field's focus ring, and a row opened from there was invisible and then popped in the moment the focus left). */
+:root:root:root .browser-root.addr-side .sb-addr-more[data-suggesting] .sb-addr-shape { opacity: 0; }
+:root:root:root .browser-root.addr-side .sb-addr-more[data-suggesting] .sb-addr-pill { pointer-events: none; }
 
 /* The toolbar's own fitting (which hides buttons in a narrow row) does not apply: every button has its place in the row. */
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar [data-fit-hidden] { display: inline-flex !important; }

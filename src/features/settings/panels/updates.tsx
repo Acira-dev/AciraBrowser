@@ -4,7 +4,7 @@ import type { UpdateStatus } from '../../../runtime/nativeNetwork';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import type { SettingsPanel } from '../panels';
 import { version as aciraVersion } from '../../../../package.json';
-import { releaseVersion } from '../../../ui/releaseVersion';
+import { chromiumSuffix, releaseVersion } from '../../../ui/releaseVersion';
 
 import { t } from '../../../i18n';
 import { describe, rowAction } from '../updateRow';
@@ -50,7 +50,7 @@ function Updates() {
   }, [busy]);
   return (
     <SettingGroup title={t("updates.updates")}>
-      <SettingRow id="app-updates" title={t("updates.aciraAciraversionChromium", { aciraVersion: releaseVersion(aciraVersion), chromium: chromium ? ` (Chromium ${chromium})` : '' })} detail={describe(status)}>
+      <SettingRow id="app-updates" title={t("updates.aciraAciraversionChromium", { aciraVersion: releaseVersion(aciraVersion), chromium: chromiumSuffix(chromium) })} detail={describe(status)}>
         {button.action === 'update.install'
           ? <button type="button" className="st-button primary" onClick={() => void act('update.install')}>{t("updates.restartToUpdate")}</button>
           : button.action === 'update.resume'

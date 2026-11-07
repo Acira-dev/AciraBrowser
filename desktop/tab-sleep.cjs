@@ -68,7 +68,40 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
  }
  /** Call when a tab is shown or touched so the idle clock restarts. */
  function touch(id){const item=record(id);item.lastVisible=now();item.retryAfter=0;}
- return {sweep,touch,frozen:id=>!!records.get(id)?.frozen};
+ /** The user's own "Put to sleep" (a tab's menu, a group's, a workspace's): the same protections as the sweep and the same adapter.sleep, none of the waiting.
+  *  The tab on screen, anything protectedReason names (audio, capture, edits, pinned, never-sleep sites, ...) and a page that asks to stay all stay awake, each with its reason.
+  *  The Memory Saver switch does not matter: it governs the automatic sleep, this is a request. A tab with no native page is already asleep (or gone) and is listed apart.
+  *  Returns {slept: ids, stayed: {id: reason}, asleep: ids}. */
+ async function sleepNow(ids){
+  const choice=memorySaverChoice(settings()),report={slept:[],stayed:{},asleep:[]};
+  const byId=new Map(adapter.tabs().map(tab=>[tab.id,tab]));
+  const one=async id=>{
+   const tab=byId.get(id);
+   if(!tab){report.asleep.push(id);return;}
+   if(adapter.isVisible(id)){report.stayed[id]='visible';return;}
+   const item=records.get(id);
+   // A frozen page cannot run the safety check (the sweep wakes it first too); the next sweep freezes it again if it stays.
+   if(item?.frozen){item.frozen=false;try{await adapter.unfreeze(id);}catch{}}
+   const reason=await adapter.protectedReason(tab,choice);
+   if(reason){report.stayed[id]=reason;return;}
+   const result=await adapter.sleep(id);
+   if(result?.slept){report.slept.push(id);records.delete(id);}else report.stayed[id]=result?.reason||'not-safe';
+  };
+  const wanted=[...new Set((Array.isArray(ids)?ids:[]).filter(id=>typeof id==='string'))];
+  // A few at a time: each check may wait on its page for a moment, and a workspace can hold dozens of tabs.
+  for(let at=0;at<wanted.length;at+=SLEEP_NOW_BATCH)await Promise.all(wanted.slice(at,at+SLEEP_NOW_BATCH).map(id=>one(id).catch(()=>{report.stayed[id]='not-safe';})));
+  return report;
+ }
+ return {sweep,touch,sleepNow,frozen:id=>!!records.get(id)?.frozen};
+}
+const SLEEP_NOW_BATCH=4;
+/** Why a tab stayed awake, in the few kinds the toast can say plainly: 'screen' (it is the tab on screen), 'media' (sound, camera, microphone, screen, video, picture-in-picture),
+ *  'edits' (typed form input, a password, a chosen file, an editable page or canvas), or 'other'. */
+function stayAwakeKind(reason){
+ if(reason==='visible')return 'screen';
+ if(['audio','recently-audible','capturing','playing-media-or-live-stream','picture-in-picture'].includes(reason))return 'media';
+ if(['edited-form','credential-or-file-input','editable-or-canvas-content'].includes(reason))return 'edits';
+ return 'other';
 }
 /** Runs inside the page (serialised with toString): is it safe to close? Edited fields, credentials, editable/canvas pages and live media are not. */
 function inspectPage(){
@@ -82,4 +115,4 @@ function inspectPage(){
  for(const media of document.querySelectorAll('audio,video'))if(!media.paused&&!media.ended||media.srcObject instanceof MediaStream&&media.srcObject.getTracks().some(track=>track.readyState==='live'))return {safe:false,reason:'playing-media-or-live-stream'};
  return {safe:true};
 }
-module.exports={underPressure,inspectPage,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};
+module.exports={underPressure,inspectPage,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};

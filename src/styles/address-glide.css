@@ -1,23 +1,37 @@
-/* The address text rests in the middle of the address bar and glides to the left edge while the bar is in use, and back.
-   ui/addressGlide.ts is the logic, components/AddressField.tsx measures the middle (--af-center) and what the at-rest text leaves out in
-   front of the domain (--af-pre), and hands over the time and Acira's spring (--af-ms, --af-ease). A time of 0 (Reduce motion, animation
-   speed Off) places the text without a glide.
+/* The address text rests in the middle of the address bar when there is room (at the left in a narrow field: the sidebar's) and glides to
+   the full address's place while the bar is in use, and back; the field's fill and ring go with it on the same time and spring.
+   ui/addressGlide.ts is the logic, components/AddressField.tsx measures where the text rests (--af-center), what the at-rest text leaves out in
+   front of the domain (--af-pre), and hands over the time and Acira's spring (--af-ms, --af-ease; the bar gets the same two from App.tsx).
+   A time of 0 (Reduce motion, animation speed Off) places the text without a glide.
 
-   One number, --af-p (1 = in the middle, 0 = at the left), moves the at-rest layer, the input's own text and the cross-fade between them,
-   so they cannot drift apart. Only fields that take a `glide` carry data-glide; the new tab page's own search field does not. */
+   One number, --af-p (1 = at rest, 0 = in use), moves the at-rest layer, the input's own text and the cross-fade between them,
+   so they cannot drift apart. The domain travels from --af-center to --af-pre (left from the middle, or right from the left edge in a
+   narrow field, where the field's own text starts --af-pre to the left of the shown text, behind the field's left padding).
+   Only fields that take a `glide` carry data-glide; the new tab page's own search field does not. */
 @property --af-p { syntax: '<number>'; inherits: true; initial-value: 1; }
 
 .app .address-field[data-glide] { --af-p: 1; }
-/* Only a text that has a middle to go to glides; one with no room for it (see glideLayout) swaps as it always did. */
+/* Only a text there is something to move for glides (data-glidable); with none the swap is instant. */
 .app .address-field[data-glide][data-glidable] { transition: --af-p var(--af-ms, 0ms) var(--af-ease, linear); }
 .app .address-field[data-glide][data-aligned] { --af-p: 0; }
-/* The at-rest layer moves from the left (after what it leaves out) to the middle. */
-.app .address-field[data-glide] .address-display { transform: translate(calc(var(--af-pre, 0px) + (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)), -50%); opacity: var(--af-p); }
+/* Where the domain is now: from --af-center (at rest) to --af-pre (in use). The at-rest layer moves there and is cut where the field's text box ends, so a narrow field's
+   text never runs over the buttons while it travels right. */
+.app .address-field[data-glide] { --af-shift: calc(var(--af-pre, 0px) + (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)); }
+.app .address-field[data-glide] .address-display { transform: translate(var(--af-shift), -50%); clip-path: inset(-4px var(--af-shift) -4px 0); opacity: var(--af-p); }
 /* The input's own text starts left of the shown text by what the shown text leaves out, so the domain is in the same place in both
-   through the glide, and the two cross-fade without doubling. */
-.app.style-acira .browser-shell .address-bar .address-field[data-glide] > input { padding-left: calc(8px + (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)) !important; }
+   through the glide, and the two cross-fade without doubling. Where that start is left of the field's text box (the shown text rests at
+   the left, or near it), the padding stops at 8 px and the text-indent carries the rest, so the field's text comes in from behind the edge. */
+.app.style-acira .browser-shell .address-bar .address-field[data-glide] > input { padding-left: calc(8px + max(0px, (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p))) !important; text-indent: min(0px, (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)); }
 .app.style-acira .address-field[data-glide][data-crossfade] > input { color: color-mix(in srgb, var(--text-primary, currentColor) calc((1 - var(--af-p)) * 100%), transparent); caret-color: transparent; }
 .app.style-acira .address-field[data-glide][data-crossfade] > input::selection { background: color-mix(in srgb, Highlight calc((1 - var(--af-p)) * 100%), transparent); }
+/* The field's ring goes with the text: its colour fades in and out on the same time and spring (the bar gets --af-ms and --af-ease from App.tsx), so a click,
+   Cmd/Ctrl+L, Esc and a click away are one motion of text and ring. It rests as a transparent ring of the same size. The field's fill keeps its own quick
+   transition (it is the hover's too). A press that holds the at-rest text for a drag leaves the ring until the release, which is when the text starts to travel. */
+.app.style-acira .browser-shell .address-bar:has(.address-field[data-glide]) { transition: background .22s, border-color .22s, box-shadow .22s, outline-color var(--af-ms, 0ms) var(--af-ease, linear); }
+@media not (forced-colors: active) {
+  .app.style-acira .browser-shell .address-bar:has(.address-field[data-glide]):not(:focus-within) { outline: 2px solid transparent; outline-offset: -2px; }
+  .app.style-acira .browser-shell .address-bar:has(.address-field[data-glide][data-holding]):focus-within { outline-color: transparent; }
+}
 /* Measures text in the input's font (the placeholder, the part of the address the at-rest text leaves out). */
 .address-ruler { position: absolute; left: 0; top: 0; visibility: hidden; white-space: pre; pointer-events: none; font: 400 13px/1 var(--font-ui); font-variant-ligatures: no-contextual; }
 @media (forced-colors: active) {

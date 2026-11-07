@@ -48,7 +48,7 @@ test('main.cjs: no tab page or session can be made before the services are open'
 });
 
 test('main.cjs: windows first, then content blocking, then the gate opens', () => {
-  const windows = at('for(const id of restorableWindowIds())createBrowserWindow('), blocking = at('contentBlocking=createContentBlocking(', windows), opened = at('servicesGate.open()', blocking);
+  const windows = at('else{restoreStartWindows();'), blocking = at('contentBlocking=createContentBlocking(', windows), opened = at('servicesGate.open()', blocking);
   assert.ok(windows < blocking && blocking < opened, 'createContentBlocking runs after the windows are made and before the gate opens');
   assert.equal(main.indexOf('contentBlocking=createContentBlocking('), blocking, 'and it is created in one place only');
   assert.match(main.slice(blocking, opened + 40), /servicesGate\.open\(\)/);

@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
-const { createAppUpdater, notesText, CHECK_EVERY } = require('../desktop/browser-services/app-updater.cjs');
+const { createAppUpdater, notesText, NOTES_MAX, CHECK_EVERY } = require('../desktop/browser-services/app-updater.cjs');
 
 const root = path.join(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
@@ -60,7 +60,17 @@ test('the notes are kept with the downloaded version and read as plain text', as
   assert.equal(saved.pending.notes, 'Faster start-up.\n• One\n• Two & three');
   assert.equal(notesText(['A', { version: '1', note: 'B **bold**' }]), 'A\nB bold');
   assert.equal(notesText(undefined), '');
-  assert.ok(notesText('x'.repeat(5000)).length <= 1000);
+  assert.ok(notesText('x'.repeat(9000)).length <= NOTES_MAX, 'a runaway feed is still bounded');
+  // the whole list is kept (beta.11's notes were 1528 characters and the popup cut them at 1000)
+  const list = Array.from({ length: 13 }, (_, n) => '- Item number ' + (n + 1) + ' of a long list: ' + 'words '.repeat(18)).join('\n');
+  assert.ok(list.length > 1500 && list.length < 3000);
+  const whole = notesText(list);
+  assert.equal(whole.split('\n').length, 13, 'every item is there');
+  assert.ok(whole.startsWith('• Item number 1 of') && whole.includes('• Item number 13 of') && !whole.endsWith('…'), 'nothing is cut');
+  // only a list past the limit is cut, and then between two items, never inside one
+  const huge = notesText(Array.from({ length: 200 }, (_, n) => '- Item ' + n + ' ' + 'x'.repeat(60)).join('\n'));
+  assert.ok(huge.length <= NOTES_MAX && huge.endsWith('…'));
+  assert.ok(huge.slice(0, -1).split('\n').every(line => /^• Item \d+ x{60}$/.test(line)), 'whole items only');
   assert.equal(/<|>/.test(notesText('<script>alert(1)</script>Hi')), false, 'markup never reaches the sheet');
 });
 

@@ -2,6 +2,7 @@ import { useEffect,useRef,useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createInitialState,persistedSnapshot,reduceBrowser,restoreSnapshot,viewForFocus } from './core';
 import { scopeToWorkspace,workspaceHasTabs } from './workspaces';
+import { isGroupFold } from './tabGroups';
 import { startWorkspaceTransition,workspaceSwitched } from '../ui/workspaceMotion';
 import type { BrowserAction,BrowserEvent,BrowserLayout,BrowserRuntime,BrowserSnapshot } from './types';
 import { undoImportBatches } from '../ui/importedFavorites';
@@ -59,6 +60,7 @@ const morphOf=(previous:BrowserSnapshot,next:BrowserSnapshot)=>morphDirection(pr
 /** The profile's own tabs switch is drawn from the setting a round trip later; in a morph it goes in the same render, or the strip would be taken down before the sidebar is there. */
 const syncRail=(next:BrowserSnapshot)=>{const tab=next.tabs.find(item=>item.id===next.activeTabId)||next.tabs[0];if(!tab)return;setRailPrefs({tabs:!!next.settings.verticalTabs},tab.browserProfileId,!!next.browserProfiles.find(profile=>profile.id===tab.browserProfileId)?.private);};
 const OPTIMISTIC=new Set<string>(['tab.select','tab.new','tab.close','workspace.select','split.resize','sidebar.mode']);
+// A group's fold or unfold (tab.group.update with only `collapsed`, isGroupFold) is optimistic too: the header's click draws it on its own frame instead of after main's answer.
 /** The tab main most recently said is active. A snapshot is painted a frame later (a window that draws no frames, up to 100 ms), so a
  * key that arrives in between (Ctrl+T, then Ctrl+L and typing at once) is meant for this tab while the chrome still shows the last one. */
 let newestActiveTab:string|null=null;
@@ -100,7 +102,7 @@ export function useBrowser(){
   if(opensOrClosesSidebar(action)&&action.type==='ui.update'){const patch=action.patch,hint=()=>sidebarCloses(latest.current,{...latest.current.windowUi,...patch},latest.current.activeTabId)?'out' as const:undefined;modeSwitch(()=>flushSync(()=>setState(previous=>{const own=Object.hasOwn(patch,'view')?patch.view??undefined:Object.hasOwn(patch,'focusMode')?viewForFocus(previous.settings,previous.windowUi,patch.focusMode===true)??undefined:previous.windowUi.view;return {...previous,windowUi:{...previous.windowUi,...patch,view:own,focusMode:own==='focus'}};})),'layout',hint);}
   let sent=action,dispatched=false;
   // A workspace with no tab here gets a new one with a fresh id: only main may make that, so its switch is not optimistic.
-  if(native&&OPTIMISTIC.has(action.type)&&!location.search.includes('view=overlay')&&(action.type!=='workspace.select'||workspaceHasTabs(latest.current,action.id))){
+  if(native&&(OPTIMISTIC.has(action.type)||isGroupFold(latest.current,action))&&!location.search.includes('view=overlay')&&(action.type!=='workspace.select'||workspaceHasTabs(latest.current,action.id))){
    if(action.type==='tab.new'&&!action.id)sent={...action,id:'tab-'+crypto.randomUUID()};
    // Main hears of the action before this frame is drawn, so a still it lays over the page area (a new tab page leaving) lands on the same frame.
    // Its answer is a later task, so it can never arrive before the optimistic state below is in place.

@@ -4,7 +4,7 @@ import { frequentStretch } from './motionTokens';
 /** The address text at rest sits in the middle of the address bar and glides to the left edge when the bar takes focus (a click,
  * Cmd/Ctrl+L), and back to the middle when it lets go (Esc, a click in the page, after navigating).
  *
- * This file is the logic without the DOM: where the middle is, what the field's own text is offset by, the glide's time and easing,
+ * This file is the logic without the DOM: where the text rests, what the field's own text is offset by, the glide's time and easing,
  * and when a focus change starts one. AddressField.tsx measures and applies it; address-glide.css moves one number (`--af-p`) that
  * the at-rest layer, the input's own text and the cross-fade between them all read, so they cannot drift apart.
  * tests/address-glide.test.ts pins it. */
@@ -13,23 +13,28 @@ import { frequentStretch } from './motionTokens';
 export const FIELD_PADDING = 8;
 
 export interface GlideLayout {
-  /** How far right of the left edge the shown text starts when it rests in the middle. 0 means there is no glide: the text stays at the
-   * left (it fills the box, or has too little room left to hold what it leaves out in front), as it always did. */
+  /** How far right of the left edge the shown text starts when it rests (CSS px). In the middle when there is room for it and for what
+   * it leaves out in front; 0 when there is not (a narrow sidebar field, a long address): it rests at the left, as it always did. */
   center: number;
   /** The width of what the at-rest text leaves out in front of the domain (`https://`, `www.`). The field's own text starts that far left
    * of the shown text, so the domain is in the same place in both through the whole glide and they cross-fade without doubling. */
   pre: number;
+  /** Whether there is a glide to play: any text in a field with room for padding. The domain travels from where the text rests to where the
+   * full address puts it (left from the middle, or right from the left edge when the field is too narrow to rest in the middle), the field's
+   * own text slides in behind it. false = no text to move: the swap is instant. */
+  glides: boolean;
 }
 
-/** The middle of the field's text box for a text `textWidth` wide in a field `fieldWidth` wide (both CSS px). Whole and half pixels
- * only, so the text is never blurred by a quarter-pixel position. A text that fills the box has no middle to go to, and neither has one
- * with so little room left that the piece it leaves out in front would not fit before it: the two layers could not line up, so it stays
- * at the left and swaps as before, with nothing doubled. */
+/** Where the at-rest text rests and what it leaves out in front, for a text `textWidth` wide in a field `fieldWidth` wide (both CSS px).
+ * Whole and half pixels only, so the text is never blurred by a quarter-pixel position. A text that fills the box, or one with so little
+ * room left that the piece it leaves out in front would not fit before it, rests at the left (`center` 0) and its domain travels RIGHT by
+ * `pre` as the field takes focus: the two layers still line up through the whole glide (the field's own text starts `pre` to the left of
+ * the shown text, behind the left edge), so a narrow sidebar field morphs like a wide toolbar one. */
 export function glideLayout(input: { fieldWidth: number; textWidth: number; hiddenPrefixWidth?: number }): GlideLayout {
   const inner = input.fieldWidth - FIELD_PADDING * 2, width = Math.max(0, input.textWidth), pre = Math.max(0, input.hiddenPrefixWidth ?? 0);
-  if (!(inner > 0) || !(width > 0) || width >= inner) return { center: 0, pre: 0 };
-  const center = Math.round(inner - width) / 2;
-  return pre > center ? { center: 0, pre: 0 } : { center, pre };
+  if (!(inner > 0) || !(width > 0)) return { center: 0, pre: 0, glides: false };
+  const room = Math.round(inner - width) / 2;
+  return { center: width < inner && pre <= room ? room : 0, pre, glides: true };
 }
 
 /** The offset into the field's full text of the first character the at-rest text shows, when that is a real piece of it (a name

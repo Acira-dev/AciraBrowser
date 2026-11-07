@@ -89,7 +89,7 @@ test('the windows to reopen keep one whose record cannot be read, so it asks ins
 
 test('main: a window waiting on the question never saves over its record, and the start reads through saved-window.cjs',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
- assert.match(main,/function save\(\)\{saveDue=0;try\{if\(!privateMode&&!webApp&&!recordUnreadable\)database\?\.saveWindow\(windowId,persistedSnapshot\(state\)\);/);
+ assert.match(main,/createSaveQueue\(\{write\(\)\{try\{if\(!privateMode&&!webApp&&!recordUnreadable\)database\?\.saveWindow\(windowId,persistedSnapshot\(state\)\);/);
  assert.match(main,/const saved=await require\('\.\/saved-window\.cjs'\)\.readSavedWindow\(\{database,windowId,restoreSnapshot\}\);if\(saved\?\.unavailable\)\{[^\n]*?\}if\(saved\?\.damaged\)\{[^\n]*recordUnreadable=true;const outcome=await savedWindows\(\)\.recover\(windowId,saved\.damaged\);if\(outcome\.choice!=='fresh'\)throw [^\n]*recordUnreadable=false;state=outcome\.state;/);
  assert.match(main,/buttons:\[tm\('main\.dataFreshButton'\),tm\('main\.dataQuitButton'\)\],defaultId:0,cancelId:1/);
  assert.equal((main.match(/database\.readWindow\(windowId\)/g)||[]).length,0,'no other read of this window\'s record can throw out of the start');

@@ -51,7 +51,7 @@
 .app .update-pill:is([data-phase='downloading'], [data-phase='paused']):is(:hover, [aria-expanded='true']) { background: var(--frame-hover, color-mix(in srgb, currentColor 8%, transparent)); }
 .app .update-pill:is([data-phase='downloading'], [data-phase='paused']):active { transform: none; }
 .app .update-pill[data-phase='paused'] .update-pill-mark { opacity: 0.5; }
-.update-pill-mark { flex: none; display: inline-grid; width: 16px; height: 16px; line-height: 0; }
+.update-pill-mark { flex: none; display: inline-grid; place-items: center; width: 14px; height: 14px; line-height: 0; }
 .update-pill-mark > .dot-matrix { display: block; }
 @keyframes update-pill-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .app .update-pill { animation: none; } }
@@ -74,12 +74,22 @@
   text-wrap: pretty;
   overflow-wrap: anywhere;
 }
-/* The notes scroll in the popup system's own scroll region (overlay thumb, edge fades); the box stops at 11 lines (+ its 2px and 8px padding). */
-.update-popover { --notes-max: 186px; }
-.update-whatsnew { --notes-max: 250px; } /* centred in the window with room to spare: 15 lines */
+/* The notes scroll in the popup system's own scroll region (overlay thumb, edge fades). The whole list is there (a 1528-character list is about
+   15 items), so the box is tall enough to read several items at once and scrolls past that: 260px under the toolbar, 360px (never more than
+   half the window) when it is centred in the window with room to spare. */
+.update-popover { --notes-max: 260px; }
+.update-whatsnew { --notes-max: min(360px, 56vh); }
 .update-pop-scroll { display: flex; min-height: 0; max-height: var(--notes-max); }
 .update-pop-scroll > .scroll-region > .popup-scroll { overflow-y: auto; max-height: var(--notes-max); overscroll-behavior: contain; }
-.update-pop-notes { flex: none; white-space: pre-wrap; outline: none; }
+.update-pop-notes { flex: none; outline: none; }
+/* One item per bullet, 8px between items (12px where the notes leave a blank line), the dot in its own 12px column so a wrapped line stays under the
+   words. Before, the notes were one block of pre-wrapped text: every item ran straight into the next one. */
+.update-pop-notes > :is(ul, p) { margin: 0; padding: 0; }
+.update-pop-notes > :is(ul, p) + :is(ul, p) { margin-top: 8px; }
+.update-pop-notes > [data-gap] { margin-top: 12px !important; }
+.update-pop-list { list-style: none; display: grid; row-gap: 8px; }
+.update-pop-list > li { position: relative; padding-inline-start: 12px; }
+.update-pop-list > li::before { content: '•'; position: absolute; inset-inline-start: 0; }
 .update-pop-notes:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring-color, var(--accent, #3b6eea)); border-radius: 6px; }
 .update-pop-actions { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }
 .update-pop-gap { flex: 1 1 auto; }

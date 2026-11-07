@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { DotMatrix } from '../../components/DotMatrix';
+import { UpdateMark } from './UpdateMark';
 import { t } from '../../i18n';
 import { claimUpdatePrompt, claimWhatsNew, formatBytes, formatShare, useUpdateStatus, useWhatsNew, type UpdateView } from './useUpdateReady';
 import './update-pill.css';
@@ -41,7 +41,7 @@ export function UpdatePill({ onOpen, onOpenNotes, active, canAsk, reducedMotion 
   return (
     <button type="button" className="update-pill" data-update-pill data-phase={update.phase} data-popup-trigger="" data-tip={tip} aria-label={label}
       aria-haspopup="dialog" aria-expanded={active} onClick={onOpen}>
-      <span className="update-pill-mark" aria-hidden="true"><DotMatrix preset={ready ? 'check' : paused ? 'progressHeld' : 'progress'} size={16} rows={5} progress={update.percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
+      <span className="update-pill-mark" aria-hidden="true"><UpdateMark preset={ready ? 'check' : paused ? 'progressHeld' : 'progress'} progress={update.percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
       {ready && <span className="update-pill-label">{t('update.pill')}</span>}
     </button>
   );

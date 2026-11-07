@@ -2,7 +2,7 @@ import { useEffect,useLayoutEffect,useRef,useState,type ReactNode } from 'react'
 import { groupForTab,TAB_GROUP_COLORS } from '../runtime/tabGroups';
 import type { BrowserAction,BrowserSnapshot,TabGroup,TabGroupColor,TabSession } from '../runtime/types';
 import { tabGroupColor } from '../ui/theme';
-import { Check,ChevronLeft,ChevronRight,Copy,Folder,Layers3,Plus,Slash } from './AppIcons';
+import { Check,ChevronLeft,ChevronRight,Copy,Folder,Layers3,Moon,Plus,Slash } from './AppIcons';
 import { WorkspaceGlyph,workspaceIcon } from './WorkspaceGlyph';
 import { profilesAsSpaces, windowWorkspaces } from '../runtime/workspaces';
 import { shownName } from '../features/workspaces/WorkspaceSwitcher';
@@ -10,6 +10,7 @@ import { openWorkspacePopupFromPopup } from '../ui/workspaceTarget';
 import './TabGroups.css';
 import { MenuFormFlyout } from './MenuFormFlyout';
 import { newTabInGroupActions } from './sidebar/sidebarActions';
+import { groupSleepTabs,sleepAction } from '../runtime/tabSleepMenu';
 
 import { t,type MessageId } from '../i18n';
 export function nextGroupName(state:Pick<BrowserSnapshot,'tabGroups'>,profile:string){let name=t('tabgroupcontrols.newGroup'),suffix=2;while(state.tabGroups.some(group=>group.browserProfileId===profile&&group.name===name))name=t('tabgroupcontrols.newGroupN',{number:suffix++});return name;}
@@ -57,7 +58,9 @@ export function TabGroupControls({state,tab,dispatch,scope='tab',close=()=>{}}:{
   section==='close'?<>{item(t('tabgroupcontrols.closeTabsN',{count:members.length}),()=>{members.forEach(member=>dispatch({type:'tab.close',id:member.id}));close();},undefined,false,true)}{item(t('dialog.cancel'),()=>setSection(null))}</>:
   scope==='tab'?<>{/* Private and Tor tabs take no group (runtime/tabGroups.ts): the row was offered anyway, and "New tab group" opened an empty menu for a group that was never made. */(!tab.privacy||tab.privacy==='secured')&&item(labels.groups,()=>setSection('groups'),<Folder size={15}/>,true)}{group&&item(t('acirasidebar.splitRemoveFromGroup'),()=>run({type:'tab.group.assign',tabIds:[tab.id],groupId:null}))}{/* R4-48: always offered outside private windows, so Move to › New workspace… is a way in even with one workspace. */own.length>0&&!tab.privacy&&!profilesAsSpaces(state)&&item(t('workspaces.moveTo'),()=>setSection('workspaces'),<Layers3 size={15}/>,true)}</>:
   group&&<><MenuFormFlyout title={`${t('main.edit')} ${group.name}`}>{dismiss=><GroupEditor key={group.id} group={group} groups={state.tabGroups} dispatch={dispatch} close={dismiss}/>}</MenuFormFlyout><hr/>{item(t('acirasidebar.newTabInGroup'),()=>{/* The same actions as the header's "+": the tab is named and placed after the group's last tab by its own action, then joined. A plain new tab was appended at the end of the list first, and the sidebar (new tabs at the top) moved it out of the group again. */newTabInGroupActions(group,members.at(-1)?.id,tab.browserProfileId,'tab-'+crypto.randomUUID()).forEach(dispatch);close();},<Plus size={15}/>)}
-   {item(t('tabgroupcontrols.copyLinks'),()=>{void navigator.clipboard.writeText(members.map(tab=>tab.url).join('\n')).then(close).catch(()=>dispatch({type:'toast',text:t("tabgroupcontrols.couldnTCopyTheLinks"),tone:'error'}));},<Copy size={15}/>)}<hr/>
+   {item(t('tabgroupcontrols.copyLinks'),()=>{void navigator.clipboard.writeText(members.map(tab=>tab.url).join('\n')).then(close).catch(()=>dispatch({type:'toast',text:t("tabgroupcontrols.couldnTCopyTheLinks"),tone:'error'}));},<Copy size={15}/>)}
+   {/* Put to sleep (beta.12): every member the Memory Saver may sleep; the tab on screen, pinned, private and tabs already asleep are left out, and main skips any that is playing or holds typed input. */(sleeping=>sleeping.length>0&&item(t('tabsleep.menuGroup'),()=>{const sleep=sleepAction(sleeping);if(sleep)run(sleep);},<Moon size={15}/>))(groupSleepTabs(state,group.id))}
+   <hr/>
    {item(t('acirasidebar.splitRename'),()=>{close();void command({type:'ui',tabId:tab.id,action:'rename-group',targetTabId:tab.id});})}
    {item(group.collapsed?t('tabgroupcontrols.expandGroup'):t('tabgroupcontrols.collapseGroup'),()=>run({type:'tab.group.update',id:group.id,patch:{collapsed:!group.collapsed}}))}
    <hr/>

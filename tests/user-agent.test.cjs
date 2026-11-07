@@ -124,6 +124,80 @@ test('production wiring registers language preferences without identity header r
   assert.ok(!bundle.includes("'desktop/browser-services/chrome-identity.cjs'"), 'policy is inlined into main, not copied as a sandboxed preload');
 });
 
+test('WhatsApp Web refuses an unknown product token: only its host gets the token-free string, and a tab gets its own back when it leaves', () => {
+  const { EventEmitter } = require('node:events');
+  const { tokenIntolerantUrl, sendHeaders } = require('../desktop/browser-services/site-user-agent.cjs');
+  const own = chromeUserAgent(sample), plain = `${base} Chrome/152.0.0.0 Safari/537.36`;
+  assert.equal(own, `${plain} AciraBrowser/${appVersion}`);
+  for (const url of ['https://web.whatsapp.com/', 'https://web.whatsapp.com/login/?x=1', 'wss://web.whatsapp.com/ws/chat']) assert.equal(tokenIntolerantUrl(url), true, url);
+  for (const url of ['http://web.whatsapp.com/', 'https://web.whatsapp.com.evil.test/', 'https://evil.test/web.whatsapp.com', 'https://web.whatsapp.com@evil.test/', 'https://www.whatsapp.com/', 'https://static.whatsapp.net/', 'https://example.com/', 'about:blank', '', null, undefined]) assert.equal(tokenIntolerantUrl(url), false, String(url));
+  const tab = () => { const value = new EventEmitter(); Object.assign(value, { ua: own, session: { getUserAgent: () => own }, setUserAgent(next) { value.ua = next; }, isDestroyed: () => false }); return value; };
+  const request = (url, extra = {}) => ({ url, resourceType: 'mainFrame', requestHeaders: { 'user-agent': own, Accept: '*/*' }, ...extra });
+  const session = { getUserAgent: () => own };
+  const navigate = (contents, url, extra = {}) => contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false, url, ...extra });
+
+  // The wire: any request to the host, from a page, a worker or a socket, loses only the Acira token; everything else is left exactly alone.
+  assert.deepEqual(sendHeaders(request('https://web.whatsapp.com/sw.js', { resourceType: 'serviceWorker' }), session).requestHeaders, { 'user-agent': plain, Accept: '*/*' });
+  assert.deepEqual(sendHeaders(request('wss://web.whatsapp.com/ws/chat', { resourceType: 'webSocket' }), session).requestHeaders, { 'user-agent': plain, Accept: '*/*' });
+  assert.deepEqual(sendHeaders(request('https://example.com/app.js', { resourceType: 'script' }), session), {});
+  assert.deepEqual(sendHeaders(request('https://static.whatsapp.net/x.js', { resourceType: 'script' }), session), {});
+  assert.deepEqual(sendHeaders({ url: 'https://web.whatsapp.com/', resourceType: 'mainFrame' }, session), {}, 'no headers, nothing to do');
+  assert.deepEqual(sendHeaders({ ...request('https://web.whatsapp.com/'), requestHeaders: { Accept: '*/*' } }, session), {}, 'no User-Agent header to change');
+  assert.deepEqual(sendHeaders({ ...request('https://web.whatsapp.com/'), requestHeaders: { 'User-Agent': plain } }, session), {}, 'already token-free');
+
+  // A tab that never met the host is never touched, and does not even get a listener.
+  const bystander = tab();
+  assert.deepEqual(sendHeaders(request('https://example.com/', { webContents: bystander }), session), {});
+  assert.equal(bystander.ua, own); assert.equal(bystander.listenerCount('did-start-navigation'), 0);
+
+  // The tab: the first top-level request sets its own string and starts it following its main-frame navigations.
+  const page = tab();
+  assert.equal(sendHeaders(request('https://web.whatsapp.com/', { webContents: page }), session).requestHeaders['user-agent'], plain);
+  assert.equal(page.ua, plain, 'navigator.userAgent agrees with the wire');
+  sendHeaders(request('https://web.whatsapp.com/', { webContents: page }), session);
+  assert.equal(page.listenerCount('did-start-navigation'), 1, 'followed once, not once per request');
+  assert.equal(page.listenerCount('did-redirect-navigation'), 1);
+  navigate(page, 'https://web.whatsapp.com/', { isSameDocument: true }); assert.equal(page.ua, plain);
+  navigate(page, 'https://example.com/', { isSameDocument: true }); assert.equal(page.ua, plain, 'an in-page change is not a navigation');
+  navigate(page, 'https://example.com/', { isMainFrame: false }); assert.equal(page.ua, plain, 'a frame is not the tab');
+  navigate(page, 'https://example.com/'); assert.equal(page.ua, own, 'leaving restores the session string before the next page exists');
+  navigate(page, 'https://web.whatsapp.com/'); assert.equal(page.ua, plain, 'coming back');
+  page.emit('did-redirect-navigation', { isMainFrame: true, isSameDocument: false, url: 'https://example.org/away' }); assert.equal(page.ua, own, 'a redirect away');
+  page.emit('did-redirect-navigation', { isMainFrame: true, isSameDocument: false, url: 'https://web.whatsapp.com/' }); assert.equal(page.ua, plain, 'a redirect to the host');
+  assert.equal(page.listenerCount('did-start-navigation'), 1);
+
+  // The request that leaves: Chromium built its headers before the tab was told, so it still carries the token-free string; it is put right.
+  navigate(page, 'https://web.whatsapp.com/'); assert.equal(page.ua, plain);
+  navigate(page, 'https://example.com/'); assert.equal(page.ua, own);
+  const leaving = sendHeaders(request('https://example.com/', { webContents: page, requestHeaders: { 'user-agent': plain, Accept: '*/*' } }), session);
+  assert.deepEqual(leaving.requestHeaders, { 'user-agent': own, Accept: '*/*' });
+  assert.deepEqual(sendHeaders(request('https://example.com/', { webContents: page }), session), {}, 'a request already carrying the session string is left alone');
+  assert.deepEqual(sendHeaders(request('https://example.com/', { webContents: page, requestHeaders: { 'user-agent': 'curl/8.0' } }), session), {}, 'a string that is not the token-free form of the session\'s is never replaced');
+  // ... and when the navigation event was missed altogether, the request and the tab are both put right.
+  navigate(page, 'https://web.whatsapp.com/'); assert.equal(page.ua, plain);
+  const missed = sendHeaders(request('https://example.org/', { webContents: page, requestHeaders: { 'user-agent': plain } }), session);
+  assert.equal(missed.requestHeaders['user-agent'], own); assert.equal(page.ua, own);
+  const subresource = sendHeaders(request('https://example.org/a.js', { webContents: page, resourceType: 'script', requestHeaders: { 'user-agent': plain } }), session);
+  assert.deepEqual(subresource, {}, 'only top-level navigations are corrected');
+
+  // The tab is found through its id when the details carry no object, and a destroyed or odd tab never throws.
+  const byId = tab();
+  assert.equal(sendHeaders(request('https://web.whatsapp.com/', { webContentsId: 7 }), session, details => (details.webContentsId === 7 ? byId : null)).requestHeaders['user-agent'], plain);
+  assert.equal(byId.ua, plain);
+  const gone = tab(); gone.isDestroyed = () => true;
+  assert.equal(sendHeaders(request('https://web.whatsapp.com/', { webContents: gone }), session).requestHeaders['user-agent'], plain);
+  assert.equal(gone.ua, own, 'a destroyed tab is left alone'); assert.equal(gone.listenerCount('did-start-navigation'), 0);
+  const refusing = tab(); refusing.setUserAgent = () => { throw new Error('closing'); };
+  assert.equal(sendHeaders(request('https://web.whatsapp.com/', { webContents: refusing }), session).requestHeaders['user-agent'], plain, 'the header layer still works');
+  assert.equal(sendHeaders(request('https://web.whatsapp.com/'), session).requestHeaders['user-agent'], plain, 'no tab behind it (a worker)');
+
+  // Wiring: ordinary sessions only (Tor has no token), registered with the identity hook, one place.
+  const main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
+  assert.match(main, /pipeline\.useSendHeaders\(details=>torIdentitySession\(ses\)\?\{\}:require\('\.\/browser-services\/site-user-agent\.cjs'\)\.sendHeaders\(details,ses\)\)/);
+  assert.equal(main.split('site-user-agent.cjs').length, 2);
+  assert.ok(main.indexOf('addNativeHints(details)') < main.indexOf('site-user-agent.cjs'), 'runs after the identity hints are in place');
+});
+
 let result, problem;
 let electron;
 try { electron = require('electron'); if (typeof electron !== 'string' || !fs.existsSync(electron)) electron = null; } catch {}

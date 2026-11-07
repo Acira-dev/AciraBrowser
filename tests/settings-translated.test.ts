@@ -70,7 +70,8 @@ const NAMES = new Set(['Personal', 'Work', 'Google', 'Bing', 'DuckDuckGo', 'Brav
   'Mullvad VPN', 'Proton VPN', 'IVPN', 'Chrome', 'Edge', 'Firefox', 'Arc', 'Zen', 'Safari', 'Opera', 'Vivaldi', 'Snowflake', 'obfs4', 'meek', 'Page Up', 'Page Down', 'Del', 'Tab', 'Win']);
 const paintings = (JSON.parse(fs.readFileSync(path.join(root, 'public/artwork/catalog-v2/catalog.json'), 'utf8')).paintings as { name: string; artist?: string; date?: string; alt?: string; provider?: string }[]);
 const data = new Set(paintings.flatMap(item => [item.name, item.alt, item.artist, item.provider, item.artist && item.date ? `${item.artist}, ${item.date}` : '', item.artist && item.date ? `${item.name} · ${item.artist}, ${item.date}` : ''].filter(Boolean) as string[]));
-const looksLikeData = (text: string) => !/\s/.test(text) && /[./:@%]/.test(text) || /^Acira \d/.test(text) || /^Tor [\d.]+ · /.test(text);
+// The release's name ("Acira 0.1", "Acira Beta 12", with " (Chromium 152)" after it) is a name, the same in every language.
+const looksLikeData = (text: string) => !/\s/.test(text) && /[./:@%]/.test(text) || /^Acira (?:\d|Beta \d)/.test(text) || /^Tor [\d.]+ · /.test(text);
 
 /** What one language's Settings shows (tests/fixtures/settings-text.ts), section by section, and the search registry's words. */
 async function settingsText(locale: string): Promise<{ sections: Record<string, string[]>; registry: string[] }> {

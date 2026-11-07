@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { DotMatrix } from '../../components/DotMatrix';
+import { UpdateMark } from './UpdateMark';
 import { ScrollRegion } from '../../components/ScrollRegion';
+import { NoteList } from './NoteList';
 import { t } from '../../i18n';
 import { useWhatsNew } from './useUpdateReady';
 import './update-pill.css';
@@ -14,10 +15,10 @@ export function WhatsNewPopover({ close, reducedMotion }: { close: () => void; r
   return (
     <div className="update-popover update-whatsnew" role="group" aria-labelledby="whatsnew-title" data-popup-pending={note ? undefined : ''}>
       <div className="acira-menu-row acira-menu-row-identity">
-        <span className="acira-menu-icon update-pop-mark" aria-hidden="true"><DotMatrix preset="check" size={16} rows={5} tone="accent" reducedMotion={reducedMotion} /></span>
+        <span className="acira-menu-icon update-pop-mark" aria-hidden="true"><UpdateMark panel preset="check" tone="accent" reducedMotion={reducedMotion} /></span>
         <span className="acira-menu-title" id="whatsnew-title">{note ? t('update.updatedTo', { version: note.version }) : t('update.whatsNew')}<span className="acira-menu-sub">{t('update.whatsNew')}</span></span><span />
       </div>
-      <div className="update-pop-scroll"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}>{note?.notes ?? ''}</div></ScrollRegion></div>
+      <div className="update-pop-scroll"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}><NoteList notes={note?.notes ?? ''} /></div></ScrollRegion></div>
       <div className="update-pop-actions">
         <span className="update-pop-gap" />
         <button type="button" className="acira-button acira-button-primary" onClick={close}>{t('update.close')}</button>

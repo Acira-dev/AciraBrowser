@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { ArrowLeft, ArrowRight, Check, LockKeyhole, Palette, PenLine, Plus, SlidersHorizontal, Trash2, Users } from '../../components/AppIcons';
+import { ArrowLeft, ArrowRight, Check, LockKeyhole, Moon, Palette, PenLine, Plus, SlidersHorizontal, Trash2, Users } from '../../components/AppIcons';
 import { securedRequest } from './securedClient';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
 import { workspacePlaying } from '../../ui/workspaceAudio';
@@ -7,6 +7,7 @@ import { MAX_WORKSPACES, activeWorkspaceOf, cycledWorkspace, profilesAsSpaces, w
 import type { BrowserAction, BrowserSnapshot } from '../../runtime/types';
 import { openSettings } from '../../ui/settingsView';
 import { runtime } from '../../runtime/client';
+import { sleepAction, workspaceSleepTabs } from '../../runtime/tabSleepMenu';
 import { openWorkspacePopupFromPopup, takeWorkspaceTarget } from '../../ui/workspaceTarget';
 import { CYCLE_COMMANDS, SpaceIdentity, cycleKey, nameIn, shownColor, shownName, workspaceKey } from './WorkspaceSwitcher';
 import { commandLabel } from '../../ui/shortcutKeys';
@@ -37,6 +38,8 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
   // R3-38: a locked workspace offers one thing, Unlock: renaming, recolouring and deleting it need it open (a passer-by can't change it), and the
   // switcher stays short enough for a short window at 150% (the Unlock row replaces three).
   const locked = !!subject?.secured && !subject.unlocked;
+  // Put to sleep (beta.12): the workspace's tabs in this window that the Memory Saver may sleep (the tab on screen, pinned and private tabs and tabs already asleep are left out; main skips any that is playing or holds typed input).
+  const sleepers = subject && !spaces && !locked ? workspaceSleepTabs(state, subject.id) : [];
   const remove = () => {
     if (!subject || list.length < 2) return;
     // A workspace with pages open asks once, in place; one holding only new tabs goes at once. Either way the toast keeps Undo.
@@ -87,6 +90,7 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
     {!spaces && !locked && <>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('name')}><PenLine className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.rename')}</span><span /></button>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('icon')}><Palette className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.iconColor')}</span><span /></button>
+      {sleepers.length > 0 && <button type="button" role="menuitem" className="acira-menu-row" data-workspace-sleep onClick={() => { const sleep = sleepAction(sleepers); if (sleep) dispatch(sleep); close(); }}><Moon className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('tabsleep.menuWorkspace')}</span><span /></button>}
     </>}
     {!spaces && subject && list[0]?.id !== subject.id && <>
       {!locked && <hr className="acira-menu-sep" />}
