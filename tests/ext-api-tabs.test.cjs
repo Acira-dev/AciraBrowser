@@ -287,10 +287,37 @@ test('captureVisibleTab asks the engine\'s capture about the window Acira says i
   void wcOf; void docs; void other;
 });
 
+test('sendMessage reports "no receiver" like Chrome: a Manifest V3 page asks the engine for its promise form (the engine\'s lastError is not visible to the page); a Manifest V2 page keeps the callback form', async () => {
+  const noReceiver = 'Could not establish connection. Receiving end does not exist.';
+  const forms = [], zoomSeen = [];
+  // The engine as it behaves in Acira: with a callback it runs the callback with NO lastError the page can read (it sets its own and logs
+  // "Unchecked runtime.lastError"); without one it rejects.
+  const native = {tabs: {sendMessage(tabId, message, ...rest) {
+    const callback = typeof rest[rest.length - 1] === 'function' ? rest.pop() : null;
+    forms.push(callback ? 'callback' : 'promise');
+    if (callback) { callback(); return undefined; }
+    return Promise.reject(new Error(noReceiver));
+  }, getZoomSettings(...rest) { zoomSeen.push(rest.filter(value => typeof value !== 'function')); return Promise.resolve({mode: 'automatic', scope: 'per-origin'}); }}};
+  const v3 = scene({native, manifest: {manifest_version: 3, permissions: []}});
+  const id = v3.wcOf(v3.one, v3.docs).id, tabs = v3.rig.world.chrome.tabs;
+  await assert.rejects(tabs.sendMessage(id, {checkInstalled: true}), {message: noReceiver});
+  const seenInCallback = await new Promise(resolve => tabs.sendMessage(id, {checkInstalled: true}, response => resolve([response, v3.rig.world.chrome.runtime.lastError && v3.rig.world.chrome.runtime.lastError.message])));
+  assert.deepEqual(seenInCallback, [undefined, noReceiver], 'the callback form sets chrome.runtime.lastError (YouTube Inline Fullscreen\'s popup injects its script on it)');
+  assert.deepEqual(forms, ['promise', 'promise'], 'a Manifest V3 page never uses the engine\'s callback form');
+  // the members that share the wrapper are given the page behind the tab id too (Chromium knows pages, an extension holds Acira's tab ids)
+  const docsTab = plain(await tabs.query({active: true, windowId: v3.one.id}))[0];
+  assert.deepEqual(plain(await tabs.getZoomSettings(docsTab.id)), {mode: 'automatic', scope: 'per-origin'});
+  assert.deepEqual(zoomSeen, [[id]], 'Chromium got the page\'s id (the same lookup tabs.sendMessage makes)');
+  forms.length = 0;
+  const v2 = scene({native, manifest: {manifest_version: 2, permissions: []}});
+  await v2.rig.world.chrome.tabs.sendMessage(v2.wcOf(v2.one, v2.docs).id, 'x');
+  assert.deepEqual(forms, ['callback'], 'a Manifest V2 page has no promise form from the engine');
+});
+
 test('sendMessage and connect go to Electron unchanged (given the page\'s own id): promise and callback forms, Chromium\'s argument checks, a tab with no page', async () => {
   const seen = [];
   const native = {tabs: {
-    sendMessage(tabId, message, ...rest) { const callback = rest.pop(); seen.push(['sendMessage', tabId, message, ...rest]); callback({echo: message}); },
+    sendMessage(tabId, message, ...rest) { const callback = typeof rest[rest.length - 1] === 'function' ? rest.pop() : null; seen.push(['sendMessage', tabId, message, ...rest]); if (callback) { callback({echo: message}); return undefined; } return Promise.resolve({echo: message}); },
     connect(tabId, info) { seen.push(['connect', tabId, info]); return {name: (info && info.name) || ''}; }
   }};
   const {rig, one, docs, sleeping, wcOf} = scene({native});

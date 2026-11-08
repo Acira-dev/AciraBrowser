@@ -74,6 +74,27 @@ test('settings Acira fixes answer truthfully: the real value, not_controllable, 
   } finally { w.dispose(); }
 });
 
+test('address and card autofill: Acira has neither, so an extension can hold them off, and a password manager sees itself in control (Bitwarden\'s "default password manager" check)', async () => {
+  const w = world({packages: ['privacy'], extensions: {[A]: ext, [B]: ext}, storeKey: 'autofill'});
+  try {
+    chromeSettings.provide({passwordsEnabled: () => true});
+    for (const [name] of table.OFF_ONLY) {
+      const path = 'privacy.' + name;
+      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, name + ' before');
+      await w.call(A, path + '.set', {value: true});
+      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, name + ': "on" is not used, there is no autofill to switch on');
+      await w.call(A, path + '.set', {value: false});
+      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controlled_by_this_extension'}, name + ' held off');
+    }
+    await w.call(A, PW + '.set', {value: false});
+    const overridden = async id => { let all = true; for (const name of ['autofillAddressEnabled', 'autofillCreditCardEnabled', 'passwordSavingEnabled']) { const got = await w.call(id, 'privacy.services.' + name + '.get', {}); all = all && got.levelOfControl === 'controlled_by_this_extension' && !got.value; } return all; };
+    assert.equal(await overridden(A), true, 'the extension that switched all three off is the default password manager');
+    assert.equal(await overridden(B), false, 'another extension is not');
+    await w.call(A, 'privacy.services.autofillAddressEnabled.clear', {});
+    assert.equal(await overridden(A), false, 'clearing one gives the control back');
+  } finally { w.dispose(); }
+});
+
 test('passwordSavingEnabled: an extension may switch the built-in offer off, never back on for someone who turned it off', async () => {
   const w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'pw'});
   try {

@@ -73,10 +73,9 @@ function sidebarAlpha(value: string, chromeDark: boolean, light: boolean, window
 }
 const colourOf = (file: string, selector: string) => { const found = rules(file).filter(([list, , inside]) => !inside && list === selector); assert.equal(found.length, 1, `${file}: one rule ${selector}`); return declared(found[0][1], 'color')!; };
 
-test('the sidebar\'s counts and the New tab "+" (the quiet ink) keep 3:1 on every finish, the counts one colour', () => {
+test('the sidebar\'s count and the New tab "+" (the quiet ink) keep 3:1 on every finish, one colour (the New tab row no longer carries a count, beta.14)', () => {
   const marks = {
     'the workspace title\'s "12 tabs"': colourOf('styles/workspaces.css', '.sb-ws-title-count'),
-    'the New tab row\'s count': colourOf('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-new-end>small'),
     'the New tab "+"': colourOf('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-new-tab>.sb-tab-icon'),
     'the Bookmarks mark': colourOf('components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-zone-mark'),
   };

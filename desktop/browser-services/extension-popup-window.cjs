@@ -16,6 +16,7 @@
 // The extension's page is never touched: no CSS, no script, its size logic stays in extension-action-sizing.cjs.
 const {EventEmitter} = require('node:events');
 const {placePopup, interfaceScale, anchorOnScreen} = require('./extension-popup-placement.cjs');
+const {fitStep, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
 
 // The library's limits for a popup's size.
 const BOUNDS = Object.freeze({minWidth: 25, minHeight: 25, maxWidth: 800, maxHeight: 600});
@@ -30,6 +31,9 @@ function popupFrame({platform = process.platform, scale = 1} = {}) {
 }
 
 const clampSize = (value, min, max) => Math.floor(Math.min(max, Math.max(Number(value) || 0, min)));
+// After a resize the page is measured to see whether it fits (extension-popup-fit.cjs): a short wait lets the page lay out in its new window,
+// and a handful of rounds is more than the worst case needs (a scrollbar's room, then a pixel or two of rounding).
+const FIT_DELAY = 40, FIT_ROUNDS = 6;
 
 class ExtensionPopup extends EventEmitter {
   /** opts: {extensionId, session, parent, url, anchorRect (CSS px of the interface page), alignment}; deps: {electron, platform}. */
@@ -42,18 +46,24 @@ class ExtensionPopup extends EventEmitter {
     this.extensionId = opts.extensionId;
     this.anchorRect = opts.anchorRect;
     this.alignment = opts.alignment;
+    this.base = undefined;                    // the size the page asked for (inside the library's limits)
+    this.extra = {width: 0, height: 0};       // what the window has been given on top, to hold the page (scrollbar room, rounding)
+    this.size = undefined;                    // the size of the window as this class last set it
+    this.fitTimer = undefined;
     const {BaseWindow, WebContentsView} = electron;
     this.frame = popupFrame({platform, scale: interfaceScale(opts.parent)});
     this.window = new BaseWindow({
       show: false, frame: false, parent: opts.parent, movable: false, maximizable: false, minimizable: false, fullscreenable: false, resizable: false, skipTaskbar: true,
-      width: BOUNDS.minWidth, height: BOUNDS.minHeight, ...this.frame.window
+      // Hidden, and as large as a popup may be while its page loads: Chrome loads the page at that size, and pages that size themselves from
+      // window.innerWidth / innerHeight in a script (Surfshark's does: body width = innerWidth) are fixed at whatever they read, here 25 x 25.
+      width: BOUNDS.maxWidth, height: BOUNDS.maxHeight, ...this.frame.window
     });
     this.view = new WebContentsView({webPreferences: {session: opts.session, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true}});
     // An extension page that sets no background is white, as in the library's window.
     this.view.setBackgroundColor('#ffffff');
     if (this.frame.radius) this.view.setBorderRadius(this.frame.radius);
     this.window.contentView.addChildView(this.view);
-    this.view.setBounds({x: 0, y: 0, width: BOUNDS.minWidth, height: BOUNDS.minHeight});
+    this.view.setBounds({x: 0, y: 0, width: BOUNDS.maxWidth, height: BOUNDS.maxHeight});
     this.webContents = this.view.webContents;
     this.webContents.on('preferred-size-changed', this.updatePreferredSize);
     this.webContents.on('devtools-closed', this.maybeClose);
@@ -80,6 +90,7 @@ class ExtensionPopup extends EventEmitter {
   destroy = () => {
     if (this.destroyed) return;
     this.destroyed = true;
+    clearTimeout(this.fitTimer);
     if (this.parent) {
       if (!this.parent.isDestroyed()) this.parent.off('closed', this.destroy);
       this.parent = undefined;
@@ -108,13 +119,49 @@ class ExtensionPopup extends EventEmitter {
   /** Resolves when the popup finishes loading. */
   whenReady() { return this.readyPromise; }
 
-  /** The size the page asks for, inside the library's limits; the popup keeps its place under the icon at every size. */
+  /**
+   * The size the page asks for, inside the library's limits; the popup keeps its place under the icon at every size. What the window was given
+   * on top of that to hold the page (a scrollbar's room, a pixel of rounding) stays while the page asks for the same size and is measured
+   * again when it asks for another.
+   */
   setSize(rect) {
     if (!this.window || !this.parent) return;
-    const size = {width: clampSize(rect?.width, BOUNDS.minWidth, BOUNDS.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, BOUNDS.maxHeight)};
+    const base = {width: clampSize(rect?.width, BOUNDS.minWidth, BOUNDS.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, BOUNDS.maxHeight)};
+    if (!this.base || this.base.width !== base.width || this.base.height !== base.height) this.extra = {width: 0, height: 0};
+    this.base = base;
+    this.resize();
+    this.fitSoon(FIT_ROUNDS);
+  }
+
+  /** The window at the page's size plus what it was given on top, never past the library's limits. */
+  resize() {
+    const size = {width: Math.min(BOUNDS.maxWidth, this.base.width + this.extra.width), height: Math.min(BOUNDS.maxHeight, this.base.height + this.extra.height)};
+    this.size = size;
     this.emit('will-resize', size);
     this.place(size);
     this.emit('resized');
+  }
+
+  fitSoon(rounds) {
+    clearTimeout(this.fitTimer);
+    if (this.destroyed || rounds <= 0) return;
+    this.fitTimer = setTimeout(() => { void this.fit(rounds); }, FIT_DELAY);
+    this.fitTimer.unref?.();
+  }
+
+  /** Measures the page in its window; if it does not fit and the window may still grow, grows it (once per round) and measures again. */
+  async fit(rounds) {
+    const contents = this.webContents;
+    if (this.destroyed || !this.window || !this.base || !contents || contents.isDestroyed() || typeof contents.executeJavaScript !== 'function') return;
+    let metrics;
+    try { metrics = await contents.executeJavaScript(METRICS_SCRIPT); } catch { return; }   // a page that is loading or going away
+    if (this.destroyed || !this.window || this.window.isDestroyed()) return;
+    // The size this class set, not getBounds(): Windows hands back whole pixels converted to DIPs, a value off by one at 125 % and 150 %.
+    const step = fitStep(metrics, this.size, {maxWidth: BOUNDS.maxWidth, maxHeight: BOUNDS.maxHeight});
+    if (!step.width && !step.height) return;
+    this.extra = {width: this.extra.width + step.width, height: this.extra.height + step.height};
+    this.resize();
+    this.fitSoon(rounds - 1);
   }
 
   /** The library's updatePosition(): for the current size. */

@@ -8,8 +8,13 @@
  *  (Ctrl+wheel zooms on Windows and Linux) and when the window loses focus. A modifier that was pressed with another key already
  *  down, or that stopped counting, does not start them again until it is let go and pressed again.
  *
- *  HOLD_MS is 250 (the idea sheet's figure): a quick chord lands well inside it, and a deliberate hold shows them after a quarter of a
- *  second (measured in the dev build: key down in main to the figure painted, 257–266 ms). The timers are injected so a test drives the clock.
+ *  HOLD_MS is 140 (beta.14; it was 250 until beta.13, and a tester found the numbers slow to come). A quick chord (Cmd+C, Cmd+T…) lands well
+ *  inside it, and so does a click made while the modifier is down (a Ctrl/Cmd+click opens a link in a new tab): a mouse press before the numbers
+ *  show spends the hold too, see `abandon`. Measured in the dev build, key down in main to the figure: first drawn 150–155 ms, half ink about
+ *  180 ms, full ink about 225 ms (was 262, 288, 330), the same with a website or the interface holding focus, right after a tab switch and
+ *  on a tab that was never loaded. The pipeline after the timer (IPC, React, paint) is 10–15 ms, so the wait is nearly all of it. A chord
+ *  whose second key comes up to about 155 ms after the modifier never draws any ink; the fade (100 ms, ease-out) is the signature one and is
+ *  unchanged. The timers are injected so a test drives the clock.
  *
  *  Two digits (beta.12): with the modifier down, 1 then 5 within CHORD_MS goes to tab 15. A first digit WAITS for a second only when
  *  a tab with that tens digit exists (10 × digit ≤ the number of tabs: with 12 tabs only 1 can be followed by anything, with 9 or
@@ -19,7 +24,7 @@
  *  A second digit is 0–9 (Ctrl+0 is the zoom reset otherwise); if no such tab exists nothing happens. `note` tells main what to do with
  *  the key: 'wait' (a first digit now waiting: do not run Go to tab), 'taken' (a second digit, already acted on: run nothing) or
  *  'flushed' (a waiting digit acted just before this key). `typed` is the waiting digit, for the numbers on screen. */
-const HOLD_MS = 250;
+const HOLD_MS = 140;
 /** After a number key the numbers stay at most this long unless the modifier's release is heard. Main handles Ctrl/Cmd+digit and stops the
  *  key (the page never sees it), and Chromium then drops every key-up until the next key-down on that page: when the tab does not change
  *  (it is already the current one, or there is none with that number) the focus stays on the same page and the release never arrives. */
@@ -108,8 +113,15 @@ function createTabNumberHold({ platform = process.platform, delay = HOLD_MS, lin
     },
     /** A wheel turn or a click that is not a key: Ctrl+wheel zooms the page, so the numbers go (a waiting digit acts first). */
     interrupt() { if (phase !== 'idle') settle('spent'); },
-    /** A mouse press (a click on a tab or a page): the person is choosing with the pointer now, so a waiting digit is dropped, not acted on. The numbers stay as they were. */
-    abandon() { if (typed === null) return; finishChord(false); if (phase === 'shown') keepShown(); },
+    /** A mouse press (a click on a tab or a page): the person is choosing with the pointer now, so a waiting digit is dropped, not acted on. Numbers
+     *  already on screen stay as they were; before they show, the modifier is being used with the mouse (Ctrl/Cmd+click), not held to look, so
+     *  they will not show for this hold. */
+    abandon() {
+      if (phase === 'waiting') settle('spent');
+      if (typed === null) return;
+      finishChord(false);
+      if (phase === 'shown') keepShown();
+    },
     /** Window blur, hide, close: the key-up goes to whatever has focus now. A waiting digit is dropped, not acted on. */
     cancel() { settle('idle', false); },
     get shown() { return phase === 'shown'; },

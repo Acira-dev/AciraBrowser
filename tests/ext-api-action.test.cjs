@@ -138,6 +138,25 @@ test('icons: setIcon keeps imageData (all sizes) or path dictionaries, per tab o
   } finally { icon.setImageEncoder(null); fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
+test('per-tab values are kept under the tab\'s page id: a tab woken from sleep keeps its stable extension id (2000000002) but the toolbar knows it as its page (5)', async () => {
+  const h = actionHost();
+  // the tabs package: extension tab id -> the id of the tab's current page (null while the tab has none)
+  h.handlers.set('acira.tabs.pageId', {callback: (_event, tabId) => (tabId === 2000000002 ? 5 : tabId === 2000000003 ? null : tabId), allowRemote: false, extensionContext: false});
+  const call = (name, ...args) => h.call(`action.${name}`, null, ...args);
+  await call('setBadgeText', {text: 'LOCK'});
+  await call('setBadgeText', {text: '2', tabId: 2000000002});
+  assert.equal(await call('getBadgeText', {tabId: 2000000002}), '2', 'the extension reads back what it set under its own id');
+  assert.equal(h.engine.getAction(ID).tabs[5].text, '2', 'the toolbar button of that tab (page 5) shows it');
+  assert.equal(h.engine.getAction(ID).tabs[2000000002], undefined, 'nothing is left under the id the toolbar never asks for');
+  await call('setIcon', {path: 'icon.png', tabId: 2000000002});
+  await call('disable', 2000000002);
+  assert.equal(h.engine.getAction(ID).tabs[5].enabled, false);
+  assert.equal(await call('isEnabled', 2000000002), false);
+  assert.equal(await call('getBadgeText', {tabId: 9}), 'LOCK', 'an ordinary tab keeps its id and still falls back to the global value');
+  await call('setBadgeText', {text: 'x', tabId: 2000000003});
+  assert.equal(h.engine.getAction(ID).tabs[2000000003].text, 'x', 'a tab with no page yet keeps the id as given');
+});
+
 test('enable and disable: per tab or for the extension; a disabled button ignores clicks; right-click still works', async () => {
   const h = actionHost();
   const call = (name, ...args) => h.call(`action.${name}`, null, ...args);

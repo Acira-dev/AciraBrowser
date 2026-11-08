@@ -128,7 +128,8 @@ test('Favorites at the bottom: stored as a profile choice, absent for the defaul
 test('the placement is one control in the Favorites row, the layout puts the tiles above the workspace row, and the strings exist in every language', () => {
   const settings = read('src/features/settings/panels/sidebar.tsx');
   assert.match(settings, /<SettingRow id="sidebar-apps"[\s\S]*?<Select<'top' \| 'bottom'> label=\{t\("sidebar\.favoritesPosition"\)\}[\s\S]*?disabled=\{apps\.hidden\}[\s\S]*?<Switch label=\{t\("sidebar\.showFavoritesInTheSidebar"\)\}/, 'the Favorites row holds the switch and the position, no new row');
-  assert.match(settings, /setSidebarAppsPlace\(tab\.browserProfileId, privateMode, 'top'\)/, 'Reset sidebar layout puts them back at the top');
+  assert.match(settings, /setSidebarAppsPlace\(tab\.browserProfileId, privateMode, to\.appsPlace\)/, 'Reset sidebar layout writes the place from the shared reset list');
+  assert.match(read('src/features/settings/changed.ts'), /appsPlace: 'top' as 'top' \| 'bottom'/, 'and the list puts them back at the top');
   const sidebar = read('src/components/sidebar/AciraSidebar.tsx');
   assert.match(sidebar, /const favoritesBottom=show\('favorites'\)&&favorites\.place==='bottom'/);
   assert.ok(sidebar.indexOf('<SidebarMedia') < sidebar.indexOf('className="sb-favorites-bottom"') && sidebar.indexOf('className="sb-favorites-bottom"') < sidebar.indexOf('<WorkspaceRow'), 'media card, then the tiles, then the workspace row and the footer');

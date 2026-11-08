@@ -454,6 +454,15 @@ FunctionEnd
     ; (the updater removing the previous version) straight to the real uninstaller, so silent paths never see a window.
     File "/oname=$INSTDIR\AciraRemove.exe" "${BUILD_RESOURCES_DIR}\installer\acira-uninstall.exe"
     WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" UninstallString '"$INSTDIR\AciraRemove.exe" /currentuser'
+    ; Settings > Apps shows DisplayVersion. electron-builder writes it from ${VERSION} (registryAddInstallInfo), but a beta.12 install showed 0.1.0-beta.6 after updates, so it is written
+    ; again here, last, for EVERY install (an update included): in the key this setup writes, and in the current-user key of an earlier install when that is another key.
+    WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion" "${VERSION}"
+    Push $R0
+    ReadRegStr $R0 HKCU "${AC_OLD_UNINSTALL_KEY}" "DisplayName"
+    ${If} $R0 != ""
+      WriteRegStr HKCU "${AC_OLD_UNINSTALL_KEY}" "DisplayVersion" "${VERSION}"
+    ${EndIf}
+    Pop $R0
   !endif
   WriteRegStr HKCU "${AC_REG_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${AC_REG_KEY}\Capabilities" "ApplicationName" "${AC_REG_APP}"

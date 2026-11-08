@@ -5,7 +5,10 @@
 // tab the person just used the extension on answered "Cannot access contents of the page" (and Chromium's own tab ids are not Acira's, so its answer
 // can be an endless wait). The renderer side (scripting-renderer.cjs) asks here first for an extension that holds activeTab: with a live grant for that
 // tab and origin the code runs in the tab (the extension's isolated world for the main frame; subframes of allFrames run in the page's world); without
-// one the answer is {unavailable: true} and Chromium's own executeScript / insertCSS go on as before.
+// one the answer is {unavailable: true} and Chromium's own executeScript / insertCSS go on as before. The same answer when the extension's host permissions
+// already cover the tab's page: Chromium's own call runs `files` in the extension's content-script world, which has chrome.runtime (this file's world has
+// no chrome object at all, so a password manager's autofill bundle injected after the person clicked its toolbar button failed on its first chrome.runtime
+// use: no inline menu, no page details).
 const fs=require('node:fs'),path=require('node:path');
 const activeTab=require('./surfaces/active-tab.cjs');
 
@@ -23,6 +26,10 @@ module.exports={
    const wc=api.store()?.getTabById?.(tabId);
    if(!wc||wc.isDestroyed?.()||!hasActiveTab(event.extension)||!activeTab.has(api.session,event.extension.id,wc.id,wc.getURL()))return null;
    return wc;
+  }
+  /** Chromium would let this extension script the page on its own host permissions: its own executeScript is the right one (real content-script world). */
+  function hostAccess(extension,wc){
+   try{return !!api.permissions&&typeof api.permissions.hasOrigin==='function'&&!!api.permissions.hasOrigin(extension,wc.getURL());}catch{return false;}
   }
   function read(extension,files){
    const root=path.resolve(extension.path||'');
@@ -60,7 +67,7 @@ module.exports={
 
   api.handle('scripting.activeTab.executeScript',async(event,details)=>{
    const wc=tabOf(event,details?.target);
-   if(!wc)return UNAVAILABLE;
+   if(!wc||hostAccess(event.extension,wc))return UNAVAILABLE;
    const code=typeof details.source==='string'?details.source:Array.isArray(details.files)?read(event.extension,details.files).join('\n;\n'):null;
    if(code===null||code.length>MAX_SOURCE)throw new Error('Exactly one of \'func\' and \'files\' must be specified.');
    const out=[];
@@ -75,7 +82,7 @@ module.exports={
   });
   api.handle('scripting.activeTab.insertCSS',async(event,details)=>{
    const wc=tabOf(event,details?.target);
-   if(!wc)return UNAVAILABLE;
+   if(!wc||hostAccess(event.extension,wc))return UNAVAILABLE;
    const css=typeof details.css==='string'?details.css:Array.isArray(details.files)?read(event.extension,details.files).join('\n'):null;
    if(css===null||css.length>MAX_SOURCE)throw new Error('Exactly one of \'css\' and \'files\' must be specified.');
    for(const frame of framesOf(event.extension,wc,details.target)){

@@ -293,16 +293,16 @@ test('the "Allow user scripts" request is validated',()=>{
  assert.throws(()=>validateExtensionRequest({type:'pin',profileId:'p',extensionId:ID,pinned:true,allowed:true},profiles),/Unexpected/);
 });
 
-test('chrome.bookmarks, history and sessions read the profile\'s own records and refuse changes',async()=>{
- const {bookmarksApi,historyApi,sessionsApi,bookmarkTree,READ_ONLY_BOOKMARKS}=require('../desktop/browser-services/extension-store-apis.cjs');
+test('chrome.bookmarks, history and sessions read the profile\'s own records; history and sessions refuse changes',async()=>{
+ const {bookmarksApi,historyApi,sessionsApi,bookmarkTree}=require('../desktop/browser-services/extension-store-apis.cjs');
  const nodes=[{id:'f',parentId:null,title:'Work',position:1,createdAt:5},{id:'a',parentId:'f',title:'Acira docs',url:'https://acira.test/docs',position:0,createdAt:10},{id:'b',parentId:null,title:'News',url:'https://news.test/',position:0,createdAt:20}];
  const tree=bookmarkTree(nodes);assert.equal(tree.id,'0');assert.equal(tree.children[0].id,'1');
- assert.deepEqual(tree.children[0].children.map(n=>n.title),['News','Work'],'ordered by position');assert.equal(tree.children[0].children[1].children[0].url,'https://acira.test/docs');
+ assert.deepEqual(tree.children[0].children.map(n=>n.title),['News'],'top-level pages are on the bar');assert.deepEqual(tree.children[1].children.map(n=>n.title),['Work'],'top-level folders are in Other bookmarks');assert.equal(tree.children[1].children[0].children[0].url,'https://acira.test/docs');
  const b=bookmarksApi(()=>nodes);
  assert.deepEqual(b.search({},'acira').map(n=>n.id),['a']);assert.deepEqual(b.search({},{url:'https://news.test/'}).map(n=>n.id),['b']);
  assert.deepEqual(b.getRecent({},1).map(n=>n.id),['b']);assert.deepEqual(b.getChildren({},'f').map(n=>n.id),['a']);
  assert.equal(b.get({},['a'])[0].children,undefined);assert.deepEqual(b.get({},['nope']),{__acira_error:"Can't find bookmark for id."});
- assert.deepEqual(b.write(),{__acira_error:READ_ONLY_BOOKMARKS});
+ assert.deepEqual(b.create({},{title:'x'}),{__acira_error:'Acira cannot change bookmarks right now.'},'no store to write into: refused in plain words');
  const now=Date.now(),visits=[{id:'1',url:'https://a.test/',title:'A',time:new Date(now-1000).toISOString()},{id:'2',url:'https://a.test/',title:'A2',time:new Date(now-500).toISOString()},{id:'3',url:'https://old.test/',title:'Old',time:new Date(now-3*86400000).toISOString()}];
  const h=historyApi(()=>visits);
  assert.deepEqual(h.search({},{text:''}).map(i=>[i.url,i.visitCount,i.title]),[['https://a.test/',2,'A2']],'last 24 hours by default, one item per address');
@@ -315,7 +315,8 @@ test('chrome.bookmarks, history and sessions read the profile\'s own records and
  const withPerm=permissions=>({extension:{id:ID,manifest:{manifest_version:3,permissions}}});
  assert.equal((await handlers.get('bookmarks.getTree').callback(withPerm(['bookmarks'])))[0].id,'0');
  assert.deepEqual(await handlers.get('bookmarks.getTree').callback(withPerm([])),{__acira_error:"'bookmarks' permission is required."});
- assert.ok((await handlers.get('bookmarks.create').callback(withPerm(['bookmarks']),{title:'x'})).__acira_error);
+ assert.ok((await handlers.get('bookmarks.create').callback(withPerm(['bookmarks']),{title:'x'})).__acira_error,'no write store given: refused');
+ assert.deepEqual(await handlers.get('bookmarks.create').callback(withPerm([]),{title:'x'}),{__acira_error:"'bookmarks' permission is required."});
  assert.equal(await handlers.get('search.query').callback(withPerm(['search']),{text:'acira browser'}),undefined);assert.deepEqual(searched,[{text:'acira browser',disposition:undefined,tabId:undefined}]);
  const world=extensionWorld({manifest_version:3,permissions:['bookmarks','history','sessions','search']});
  for(const name of ['bookmarks','history','sessions','search'])assert.equal(typeof world.chrome[name],'object',name);assert.equal(extensionWorld({manifest_version:3,permissions:['idle']}).chrome.idle.IdleState.LOCKED,'locked');assert.equal(typeof extensionWorld({manifest_version:3,permissions:['idle']}).chrome.idle.onStateChanged.addListener,'function');

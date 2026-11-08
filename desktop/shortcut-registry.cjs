@@ -142,6 +142,7 @@ const expand=(accel,platform)=>canonical(accel,platform);
 // On a Mac the delete key (Backspace) is ⌫ and forward delete (fn+delete) is ⌦, as macOS menus print them.
 const display=(accel,platform)=>accel.split('+').map(part=>platform==='darwin'?({Ctrl:'⌃',Alt:'⌥',Shift:'⇧',Cmd:'⌘',Backspace:'⌫',Delete:'⌦'}[part]||part):part).join(platform==='darwin'?'':' + ');
 
+const PARKED_ID=/^ext:/,PARKED_MAX=400,PARKED_ID_MAX=300;   // ids of extension commands (desktop/browser-services/ext-api/commands.cjs PREFIX)
 const RESERVED_COMBOS=new Set(['Ctrl+C','Ctrl+V','Ctrl+X','Ctrl+A','Ctrl+Z','Ctrl+Y','Ctrl+Shift+Z','Ctrl+Insert','Shift+Insert','Shift+Delete','Alt+Tab','Alt+Shift+Tab','Ctrl+Alt+Tab','Alt+F4','Alt+Esc','Alt+Space','Alt+Enter','Ctrl+Alt+Delete','Ctrl+Esc','Cmd+C','Cmd+V','Cmd+X','Cmd+A','Cmd+Z','Cmd+Shift+Z','Cmd+Q','Cmd+H','Cmd+M','Cmd+Tab','Cmd+Space']);
 /** Returns null when an accelerator may be assigned, otherwise {code,message}. */
 function restriction(accel,platform){
@@ -161,6 +162,10 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
  const supported=command=>Boolean(command)&&(!['tor-window','tor-tab'].includes(command.id)||bundledTorSupported(platform));
  const availableCommands=()=>COMMANDS.filter(supported);
  let custom=new Map(); // command id -> canonical accelerators (empty = deliberately unbound)
+ // Keys the person gave an extension's command stay in the file while that extension is not loaded (turned off, another profile not open yet,
+ // still starting): they are parked here, written back on every save and handed back when the command is registered again. Only removing
+ // the extension (forgetParked) or Reset all drops them.
+ let parked=new Map();
  let recording=null;
  const defaultsOf=command=>(platform==='darwin'&&command.mac||command.defaults).map(accel=>expand(accel,platform)).filter(Boolean);
  const bindingsOf=command=>custom.has(command.id)?custom.get(command.id):defaultsOf(command);
@@ -169,7 +174,7 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
  const list=()=>availableCommands().map(view);
  function save(){
   if(!file)return;
-  const body=JSON.stringify({version:1,bindings:Object.fromEntries(custom)},null,1);
+  const body=JSON.stringify({version:1,bindings:{...Object.fromEntries(custom),...Object.fromEntries([...parked].filter(([id])=>!custom.has(id)))}},null,1);
   fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',body);fs.renameSync(file+'.tmp',file);
  }
  function validateTable(bindings){
@@ -190,10 +195,23 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
   }
   return next;
  }
+ /** Entries of the saved table that belong to an extension command which is not registered now. */
+ function parkedKeys(bindings,known){
+  const out=new Map();
+  if(!bindings||typeof bindings!=='object'||Array.isArray(bindings))return out;
+  for(const [id,value] of Object.entries(bindings)){
+   if(out.size>=PARKED_MAX)break;
+   if(!PARKED_ID.test(id)||id.length>PARKED_ID_MAX||known.has(id)||BY_ID.has(id)||!Array.isArray(value)||value.length>4)continue;
+   const accels=[];
+   for(const raw of value){const accel=canonical(raw,platform);if(accel&&!accels.includes(accel))accels.push(accel);}
+   out.set(id,accels);
+  }
+  return out;
+ }
  function load(){
   if(!file)return;
   // a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile)
-  try{custom=validateTable(require('./atomic-file.cjs').readJsonFile(file,{maxBytes:64*1024}).bindings);}catch{custom=new Map();}
+  try{const bindings=require('./atomic-file.cjs').readJsonFile(file,{maxBytes:64*1024}).bindings;custom=validateTable(bindings);parked=parkedKeys(bindings,custom);}catch{custom=new Map();parked=new Map();}
  }
  function conflictFor(accel,id){const owner=effective().get(accel);return owner&&owner!==id?BY_ID.get(owner):null;}
 
@@ -215,7 +233,15 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
   const mine=new Set(defaultsOf(BY_ID.get(id)));
   for(const [other,accels] of custom)if(other!==id&&accels.some(a=>mine.has(a)))custom.set(other,accels.filter(a=>!mine.has(a)));
   save();onChange();return {ok:true,commands:list()};}
- function resetAll(){custom=new Map();save();onChange();return {ok:true,commands:list()};}
+ function resetAll(){custom=new Map();parked=new Map();save();onChange();return {ok:true,commands:list()};}
+ /** An extension was removed for good: its parked keys (ids starting with prefix) go with it. */
+ function forgetParked(prefix){
+  if(typeof prefix!=='string'||!PARKED_ID.test(prefix))return {ok:false};
+  let dropped=0;
+  for(const id of [...parked.keys()])if(id.startsWith(prefix)){parked.delete(id);dropped++;}
+  if(dropped){save();onChange();}
+  return {ok:true,dropped};
+ }
  const exportJson=()=>JSON.stringify({version:1,app:'acira-browser',bindings:Object.fromEntries(custom)},null,1);
  function importJson(text){
   if(typeof text!=='string'||text.length>64*1024)return {ok:false,code:'invalid',message:tm("shortcutRegistry.shortcutFileIsTooLarge")};
@@ -271,7 +297,7 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
   return base;
  }
  load();
- return {setDynamic(prefix,commands){setDynamicCommands(prefix,commands);load();onChange();},list,set,clear,reset,resetAll,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
+ return {platform,setDynamic(prefix,commands){setDynamicCommands(prefix,commands);load();onChange();},list,set,clear,reset,resetAll,forgetParked,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
   /** A command's first key as menus print it ("Alt+←", "Ctrl+Shift+T"; "⇧⌘T" on macOS), or undefined when it has none. */
   menuKey(id){const command=BY_ID.get(id),first=command&&bindingsOf(command)[0];if(!first)return undefined;if(platform==='darwin')return display(first,platform);const arrows={Left:'←',Right:'→',Up:'↑',Down:'↓',PageUp:'PgUp',PageDown:'PgDn'};return first.split('+').map(key=>arrows[key]||key).join('+');},
   /** Label -> accelerator display for toolbar hints. */

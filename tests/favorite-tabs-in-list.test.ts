@@ -86,7 +86,8 @@ test('the row sits under Favorites in Settings › Tabs › Sidebar, is found by
   const favorites = panel.indexOf('id="sidebar-apps"'), row = panel.indexOf('id="sidebar-apps-tabs"'), next = panel.indexOf('id="sidebar-new-tabs-top"');
   assert.ok(favorites > 0 && favorites < row && row < next, 'right under the Favorites row');
   assert.match(panel, /checked=\{state\.settings\.favoriteTabsInList !== false\} onChange=\{\(next\) => dispatch\(\{ type: 'settings\.update', patch: \{ favoriteTabsInList: next \} \}\)\}/);
-  assert.match(panel, /patch: \{ sidebarWidth: SIDEBAR_WIDTH\.initial, sidebarSide: 'left', favoriteTabsInList: true \}/, 'Reset sidebar layout turns it back on');
+  assert.match(panel, /favoriteTabsInList: to\.settings\.favoriteTabsInList/, 'Reset sidebar layout writes it from the shared reset list');
+  assert.match(readFileSync(new URL('../src/features/settings/changed.ts', import.meta.url), 'utf8'), /favoriteTabsInList: true,/, 'and the list turns it back on');
   assert.match(entries, /\{ id: 'sidebar-apps-tabs', title: t\("sidebar\.favoriteTabsInList"\)/);
   const en = JSON.parse(read('../src/i18n/en.json')) as Record<string, string>;
   assert.equal(en['sidebar.favoriteTabsInList'], 'Favorites’ tabs in the tab list');

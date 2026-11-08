@@ -89,7 +89,8 @@ test('the Left / Right choice is in Settings › Tabs › Sidebar, with a live c
   assert.match(rows, /<SettingRow id="sidebar-side"[^>]*>\s*<Select<SidebarSide>[\s\S]*?options=\{\[\{ value: 'left', label: t\('sidebar\.sideLeft'\) \}, \{ value: 'right', label: t\('sidebar\.sideRight'\) \}\]\}/);
   const panel = readFileSync(new URL('../src/features/settings/panels/sidebar.tsx', import.meta.url), 'utf8');
   assert.match(panel, /<SidebarSideRow state=\{state\} dispatch=\{dispatch\} always \/>/, 'Tabs › Sidebar shows it, next to Show sidebar');
-  assert.match(panel, /sidebarWidth: SIDEBAR_WIDTH\.initial, sidebarSide: 'left'/, 'the reset of the sidebar layout restores the side');
+  assert.match(panel, /sidebarWidth: to\.settings\.sidebarWidth, sidebarSide: to\.settings\.sidebarSide/, 'the reset of the sidebar layout writes the side from the shared list');
+  assert.match(readFileSync(new URL('../src/features/settings/changed.ts', import.meta.url), 'utf8'), /sidebarSide: 'left' as SidebarSide/, 'and the list puts it on the left');
   const layout = readFileSync(new URL('../src/features/BrowserSettings.tsx', import.meta.url), 'utf8');
   assert.match(layout, /<SidebarSideRow state=\{state\} dispatch=\{dispatch\} \/>/, 'Appearance › Layout keeps a live copy');
   const entries = readFileSync(new URL('../src/features/settings/entries/sidebar.ts', import.meta.url), 'utf8');

@@ -19,6 +19,23 @@ test('only plain release versions ship, on the channel that matches them',()=>{
  assert.match(U.versionProblems('beta 7','beta')[0],/not a version/);
  assert.match(U.versionProblems('0.1.0-beta.7','nightly')[0],/beta or stable/);
 });
+test('a fix release such as 0.1.0-beta.13.1 ships on both platforms; a local build of it still never does',()=>{
+ for(const fix of ['0.1.0-beta.13.1','0.1.0-beta.13.12']){
+  assert.deepEqual(U.versionProblems(fix,'beta'),[],fix);assert.equal(U.WINDOWS_VERSION.test(fix),true,fix+' is accepted by the Windows build rule');assert.equal(U.RELEASE_VERSION.test(fix),true);
+  assert.match(U.versionProblems(fix,'stable')[0],/pre-release/);
+ }
+ for(const bad of ['0.1.0-beta.13.local.1','0.1.0-beta.13.1.local.1','0.1.0-beta.13.1.2','0.1.0-beta.13.','0.1.0-beta.']){
+  assert.equal(U.RELEASE_VERSION.test(bad),false,bad);assert.equal(U.WINDOWS_VERSION.test(bad),false,bad);
+ }
+ assert.equal(U.WINDOWS_VERSION.test('0.2.0-beta.1.1'),false,'the Windows build still wants the 0.1 line');
+ // the order people update in: 13 -> 13.1 -> 13.2 -> 14
+ const references=[...U.SHIPPED.map(item=>({label:item.what,version:item.version})),{label:'the live feed',version:'0.1.0-beta.13'}];
+ assert.deepEqual(U.newerProblems('0.1.0-beta.13.1',references),[]);assert.equal(U.newerProblems('0.1.0-beta.13',[{label:'the live feed',version:'0.1.0-beta.13.1'}]).length,1);
+ assert.deepEqual(U.newerProblems('0.1.0-beta.14',[{label:'the live feed',version:'0.1.0-beta.13.2'}]),[]);
+ const commit='b62c4715130a8f17182dced8e94e7fc56425c4c7',mac=U.releaseTag({version:'0.1.0-beta.13.1',platform:'mac',commit});
+ assert.equal(mac,'v0.1.0-beta.13.1-mac-b62c4715');assert.equal(/^v?(.+?)-(?:mac|windows)/i.exec(mac)[1],'0.1.0-beta.13.1','the website still reads the whole version from the tag');
+ assert.equal(U.assetUrl(mac,'AciraBrowser-0.1.0-beta.13.1-mac-arm64-update.zip'),'https://github.com/Acira-dev/AciraBrowserUpdates/releases/download/v0.1.0-beta.13.1-mac-b62c4715/AciraBrowser-0.1.0-beta.13.1-mac-arm64-update.zip');
+});
 test('a release has to beat both shipped builds and the live feed, not just one of them',()=>{
  const references=[...U.SHIPPED.map(item=>({label:item.what,version:item.version})),{label:'the live feed beta-mac.yml',version:'0.1.0-beta.4'}];
  assert.deepEqual(U.newerProblems('0.1.0-beta.7',references),[]);

@@ -6,6 +6,9 @@ function shortcutKey(input) {
  if(code==='NumpadSubtract'||typed==='Subtract')return '-';
  if(code==='Numpad0')return '0';
  if(code==='Equal')return '=';
+ // Shift turns the comma and period keys into < and > (; and : on other layouts): an extension's Ctrl+Shift+Comma and Alt+Shift+Period are these keys with Shift.
+ if(input.shift&&code==='Comma')return ',';
+ if(input.shift&&code==='Period')return '.';
  if(code==='Minus')return '-';
  if(code==='BracketLeft')return '[';
  if(code==='BracketRight')return ']';

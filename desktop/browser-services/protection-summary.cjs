@@ -2,7 +2,7 @@
 // One honest, structured answer to "what protects me and what does not", built from what this process is really running.
 const {t,number}=require('./tx.cjs');
 const date=ms=>ms?new Date(ms).toISOString().slice(0,10):null;
-function protectionSummary({network,filterLists,antiTracking,safeBrowsing,cookieBanners,cookieAnswers,aiContent,metrics}){
+function protectionSummary({network,filterLists,antiTracking,safeBrowsing,cookieBanners,cookieAnswers,aiContent,metrics,widevine=false}){
  const engine=network.engine||{},current=network.current||{},dns=current.dns?.mode==='off'?t('protection.dns.off'):current.dns?.mode==='secure'?t('protection.dns.secure',{servers:(current.dns?.servers||[]).join(', ')}):t('protection.dns.system');
  const refreshed=filterLists.updatedAt?t('protection.ads.refreshed',{date:date(filterLists.updatedAt)}):t('protection.ads.bundled'),updating=filterLists.automatic?t('protection.ads.refreshEvery'):t('protection.ads.refreshOff');
  const rows=[
@@ -16,10 +16,16 @@ function protectionSummary({network,filterLists,antiTracking,safeBrowsing,cookie
   {id:'webrtc',title:t('protection.webrtc.title'),state:'on',detail:t('protection.webrtc.detail')},
   {id:'gpc',title:t('protection.gpc.title'),state:current.gpc?'on':'off',detail:current.gpc?t('protection.gpc.on'):t('protection.gpc.off')},
   {id:'dns',title:t('protection.dns.title'),state:current.dns?.mode==='secure'?'on':'system',detail:t('protection.dns.detail',{dns})},
-  {id:'telemetry',title:t('protection.telemetry.title'),state:'on',detail:metrics?.enabled?(metrics.configured===false?t('usage.notConfigured')+' '+t('protection.telemetry.off'):t('protection.telemetry.on')):t('protection.telemetry.off')},
+  {id:'telemetry',title:t('protection.telemetry.title'),state:'on',detail:telemetryDetail(metrics,widevine)},
   phishingRow(safeBrowsing,antiTracking)
  ];
  return {rows,scope:t('protection.scope')};
+}
+/** What Acira sends (analytics, usage) and every kind of request it makes on its own. The Google line is true only where the Widevine module is downloaded (a Mac build, or the Windows Widevine build);
+ * everywhere else it says "Never from Google". The Pull requests line is about a folder the person adds, so it is always true to say. */
+function telemetryDetail(metrics,widevine){
+ const lead=metrics?.enabled?(metrics.configured===false?t('usage.notConfigured')+' '+t('protection.telemetry.off'):t('protection.telemetry.on')):t('protection.telemetry.off');
+ return [lead,t('protection.telemetry.background'),widevine?t('protection.telemetry.widevine'):t('protection.telemetry.neverGoogle'),t('protection.telemetry.pullRequests')].join(' ');
 }
 /** Honest by construction: on only while a list is really loaded; "preparing" (Getting ready…) while the first lists download; off (and saying why) without a key. */
 function phishingRow(status,antiTracking){

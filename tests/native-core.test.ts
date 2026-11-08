@@ -53,6 +53,14 @@ test('shortcut groups reflect actual assignment, preserve registry identities an
  assert.deepEqual(groupShortcutCommands(commands,item=>item.id==='unset'),[['Unassigned',[unset]]]);assert.deepEqual(groupShortcutCommands(commands,()=>false),[]);
 });
 
+test('extension commands stay together under Extensions, set or not, after Browser and before Unassigned',()=>{
+ const command=(id:string,category:string,bindings:string[]):ShortcutCommand=>({id,label:id,category,bindings,defaults:bindings,defaultsDisplay:bindings,display:bindings,customized:false,unbound:!bindings.length});
+ const bound=command('ext:p:a:go','Extensions',['Ctrl+Shift+Y']),unset=command('ext:p:a:lock','Extensions',[]),browser=command('settings','Browser',['Ctrl+,']),free=command('duplicate-tab','Tabs',[]);
+ const groups=groupShortcutCommands([unset,free,bound,browser]);
+ assert.deepEqual(groups.map(([name,list])=>[name,list.map(item=>item.id)]),[['Browser',['settings']],['Extensions',['ext:p:a:lock','ext:p:a:go']],['Unassigned',['duplicate-tab']]]);
+ assert.deepEqual(groupShortcutCommands([unset],()=>true).map(([name])=>name),['Extensions'],'an extension with no key at all still has its group');
+});
+
 test('profile rename trims, recolours and rejects blank names',()=>{
  let s=run(createInitialState(),{type:'browser.profile.create',name:'Work'});
  const id=s.browserProfiles[1].id;

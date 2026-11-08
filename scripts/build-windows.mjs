@@ -10,7 +10,7 @@ import {createRequire} from 'node:module';
 const root=path.resolve(import.meta.dirname,'..'),require=createRequire(import.meta.url);
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run this command on Windows x64 with Node.js 24; a Mac run cannot qualify the Windows installer.');
 const pkg=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8'));
-if(!/^0\.1\.\d+-beta\.\d+$/.test(pkg.version))throw Error('Use the committed 0.1 Beta source version for this manual build.');
+if(!/^0\.1\.\d+-beta\.\d+(?:\.\d+)?$/.test(pkg.version))throw Error('Use the committed 0.1 Beta source version for this manual build.');
 function run(exe,args,env={}){const result=spawnSync(exe,args,{cwd:root,stdio:'inherit',env:{...process.env,...env},windowsHide:true});if(result.error)throw result.error;if(result.status!==0)throw Error('Stopped at '+path.basename(exe)+' '+args.join(' ')+' (exit '+result.status+'). No installer was published.');}
 const git=spawnSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'});if(git.status!==0||git.stdout.trim())throw Error('Pull committed main and keep the checkout clean before building.');
 const head=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});if(head.status!==0)throw Error('Unable to identify the source commit.');

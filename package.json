@@ -1,6 +1,6 @@
 {
   "name": "acira-browser",
-  "version": "0.1.0-beta.13",
+  "version": "0.1.0-beta.13.1",
   "description": "An independent, calm consumer browser",
   "license": "AGPL-3.0-only",
   "main": "desktop/main.cjs",
@@ -106,6 +106,8 @@
       "tests/release-target.test.cjs",
       "tests/spellcheck-installed-target.test.cjs",
       "tests/app-updater-ux.test.cjs",
+      "tests/update-compat.test.cjs",
+      "tests/app-updater-recovery.test.cjs",
       "tests/mac-update-install.test.cjs",
       "tests/windows-silent-update.test.cjs",
       "tests/mac-build-facts.test.cjs",
@@ -325,6 +327,7 @@
       "tests/secured-workspaces-mac.test.cjs",
       "tests/passwords-mac-authentication.test.cjs",
       "tests/extension-apis.test.cjs",
+      "tests/extension-bookmarks.test.cjs",
       "tests/extension-api-surface.test.cjs",
       "tests/extension-system-storage.test.cjs",
       "tests/ext-api-idle-system.test.cjs",
@@ -386,6 +389,7 @@
       "tests/update-rehearsal-tools.test.mjs",
       "tests/extension-popup-placement.test.cjs",
       "tests/extension-popup-window.test.cjs",
+      "tests/extension-popup-fit.test.cjs",
       "tests/extension-private-switch.test.cjs",
       "tests/private-extension-electron.test.cjs",
       "tests/private-extension-sessions.test.cjs"
@@ -395,12 +399,14 @@
       "tests/page-still.test.cjs",
       "tests/peek-polish.test.cjs",
       "tests/extension-reload.test.cjs",
+      "tests/extension-password-manager.test.cjs",
       "tests/extension-runtime-leaks.test.cjs",
       "tests/native-shortcuts.test.cjs",
       "tests/ext-api-downloads.test.cjs",
       "tests/ext-api-glob-dos.test.cjs"
     ],
     "tsx": [
+      "tests/extension-bookmarks-store.test.ts",
       "tests/mac-traffic-lights.test.ts",
       "tests/sidebar-right-popups.test.ts",
       "tests/sidebar-right-resize-drag.test.ts",
@@ -461,6 +467,7 @@
       "tests/hex-color.test.ts",
       "tests/update-row-button.test.ts",
       "tests/update-pause-ui.test.ts",
+      "tests/update-layout-switch.test.ts",
       "tests/update-notes.test.ts",
       "tests/update-mark.test.ts",
       "tests/mac-option-key-text.test.ts",
@@ -682,7 +689,8 @@
       "tests/workspace-announcer-removed.test.ts",
       "tests/page-focus-pick.test.ts",
       "tests/favorite-add.test.ts",
-      "tests/site-icon-color.test.ts"
+      "tests/site-icon-color.test.ts",
+      "tests/settings-reset-lists.test.ts"
     ]
   }
 }

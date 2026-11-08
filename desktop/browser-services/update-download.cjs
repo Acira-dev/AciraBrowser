@@ -58,6 +58,16 @@ function progressOf(dir,{sha512,size}){
  const have=received(dir,{sha512,size}),plan=validPlan(readJson(path.join(dir,META))?.plan,size)||wholePlan(size);
  return {have,transferred:downloadedBefore(plan,have),total:downloaded(plan)};
 }
+/** null when there is room for the rest of this file (and `margin` beyond it), else {free, need} in bytes. A file system that cannot say, or a missing statfs, is "room". */
+async function shortOfSpace(dir,{sha512,size,margin=0,statfs=fsp.statfs}={}){
+ const ask=statfs||fsp.statfs;
+ if(typeof ask!=='function')return null;
+ try{
+  let at=dir;while(!fs.existsSync(at)&&path.dirname(at)!==at)at=path.dirname(at);
+  const stats=await ask(at),free=Number(stats.bavail)*Number(stats.bsize),need=Math.max(0,size-received(dir,{sha512,size}))+margin;
+  return Number.isFinite(free)&&free<need?{free,need}:null;
+ }catch{return null;}
+}
 /** Removes the partial file, its description and the blockmaps kept for it (and the folder, when that leaves it empty). */
 function discard(dir){
  if(!ownDir(dir))return;
@@ -161,6 +171,8 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
     arm();
     response=await fetch(url,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
     const range=response.status===206?contentRange(response.headers.get('content-range')):null;
+    // a web page where the file should be (a captive portal's sign-in, an error page served with 200): refused before a byte is kept
+    if(response.ok&&/^\s*(?:text\/html|application\/xhtml)/i.test(String(response.headers.get('content-type')||'')))throw new DownloadError('A web page came back instead of the update (a sign-in page on this network?).','ERR_UPDATE_PORTAL');
     if(!whole&&!(range&&range.start===have&&range.end===seg.end-1&&(range.total===null||range.total===size))){
      throw new DownloadError(`The server did not send the changed part of the update (HTTP ${response.status}).`,'ERR_UPDATE_RANGE');
     }
@@ -241,4 +253,4 @@ function handedOver({pendingDir,sha512,size}){
  return Boolean(info&&info.sha512===sha512&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName&&sizeOf(path.join(pendingDir,info.fileName))===size);
 }
 
-module.exports={download,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL};
+module.exports={download,shortOfSpace,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL};

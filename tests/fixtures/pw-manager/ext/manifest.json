@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Acira password manager fixture",
+  "version": "1.0.0",
+  "description": "Does what Bitwarden does with the browser, without an account: the popup unlocks through storage.session, the worker paints a per-tab badge from that state, a content script asks the worker, the popup pops out into a window and switches the browser's own password offer off through privacy.services.",
+  "permissions": ["storage", "tabs", "alarms", "webNavigation"],
+  "optional_permissions": ["privacy"],
+  "host_permissions": ["http://*/*"],
+  "background": {"service_worker": "worker.js"},
+  "action": {"default_popup": "popup.html", "default_title": "PW fixture"},
+  "content_scripts": [{"matches": ["http://*/*"], "js": ["content.js"], "run_at": "document_start", "all_frames": false}]
+}

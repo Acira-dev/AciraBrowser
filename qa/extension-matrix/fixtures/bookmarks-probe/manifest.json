@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Acira bookmarks probe",
+  "version": "1.0",
+  "description": "Test fixture: creates, renames, moves and deletes bookmarks and records every chrome.bookmarks event it hears (service worker and page).",
+  "permissions": ["bookmarks", "storage"],
+  "background": { "service_worker": "sw.js" }
+}

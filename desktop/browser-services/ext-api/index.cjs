@@ -53,7 +53,7 @@ const ACCESS_DENIED='Access to extension API denied.';
 // least 5 of the 258 census extensions, EXTENSION_API_COVERAGE.json; declarativeNetRequest validates its rules itself). Each gets the
 // signature layer (guardLegacy): a call Chromium would reject throws Chromium's exact error; an accepted call reaches the old code unchanged.
 // A package that rebuilds a namespace with acira.build() checks every member anyway.
-const ESSENTIAL_GUARDS=['action.setTitle','action.setIcon','action.setPopup','action.setBadgeText','action.getBadgeText','action.setBadgeBackgroundColor',
+const ESSENTIAL_GUARDS=['bookmarks.create','bookmarks.update','bookmarks.move','bookmarks.remove','bookmarks.removeTree','action.setTitle','action.setIcon','action.setPopup','action.setBadgeText','action.getBadgeText','action.setBadgeBackgroundColor',
  'action.enable','action.disable','action.getUserSettings','action.openPopup','commands.getAll','contextMenus.create','contextMenus.update','contextMenus.remove',
  'contextMenus.removeAll','cookies.get','cookies.getAll','cookies.set','cookies.remove','downloads.download','downloads.search','extension.getViews',
  'extension.isAllowedIncognitoAccess','extension.isAllowedFileSchemeAccess','identity.getAuthToken','identity.getProfileUserInfo','identity.removeCachedAuthToken',

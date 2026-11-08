@@ -4,6 +4,7 @@ import { UpdateMark } from './UpdateMark';
 import { ScrollRegion } from '../../components/ScrollRegion';
 import { NoteList } from './NoteList';
 import { t } from '../../i18n';
+import { runtime } from '../../runtime/client';
 import { downloadLine, pauseUpdate, restartToUpdate, resumeUpdate, useUpdateStatus, type UpdateView } from './useUpdateReady';
 import './update-pill.css';
 
@@ -13,10 +14,10 @@ import './update-pill.css';
  *  The panel opens at the size of its note (popup.ts) and grows to the notes when Read more is chosen; long notes scroll inside. Nothing takes focus when it opens by itself.
  *  While the update downloads, the same pill (the dots) opens the same panel on the download instead (UpdateDownload). */
 export function UpdatePopover({ close, reducedMotion }: { close: () => void; reducedMotion: boolean }) {
-  const update = useUpdateStatus(), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), seen = useRef(false), notesBox = useRef<HTMLDivElement>(null);
+  const update = useUpdateStatus({ fresh: true }), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), seen = useRef(false), notesBox = useRef<HTMLDivElement>(null);
   // The update went away under the panel (installed from the menu, or a failed re-check): nothing left to ask.
   useEffect(() => { if (update) seen.current = true; else if (seen.current) close(); }, [update, close]);
-  if (update && update.phase !== 'ready') return <UpdateDownload update={update} reducedMotion={reducedMotion} />;
+  if (update && update.phase !== 'ready') return <UpdateDownload update={update} reducedMotion={reducedMotion} close={close} />;
   const install = () => { setBusy(true); void restartToUpdate().finally(() => window.setTimeout(() => setBusy(false), 8000)); };
   const version = update?.version ?? '';
   return (
@@ -43,7 +44,7 @@ export function UpdatePopover({ close, reducedMotion }: { close: () => void; red
  *  resumes (play). Under it, how much is here and how long is left (or that it resumes where it stopped), and What's new, which shows this version's
  *  notes in the panel the way Read more does. Paused, the dots dim here and in the toolbar. A download Acira cannot pause (electron-updater
  *  downloading by itself) shows the ring without a control. Nothing takes focus when it opens. */
-export function UpdateDownload({ update, reducedMotion }: { update: UpdateView; reducedMotion: boolean }) {
+export function UpdateDownload({ update, reducedMotion, close }: { update: UpdateView; reducedMotion: boolean; close?: () => void }) {
   const [reading, setReading] = useState(false), [asked, setAsked] = useState<'pause' | 'resume' | null>(null), notesBox = useRef<HTMLDivElement>(null);
   // The press shows at once (main answers in a moment, then every window hears 'update-changed'); the next status settles it. Every status read, not
   // only a new phase: a Resume that cannot connect is paused again before this window reads 'downloading', and the press then stayed on screen.
@@ -70,6 +71,7 @@ export function UpdateDownload({ update, reducedMotion }: { update: UpdateView; 
         : <p className="update-pop-note update-pop-detail" id="update-pop-detail">{downloadLine({ ...update, phase: paused ? 'paused' : 'downloading' })}</p>}
       <div className="update-pop-actions update-pop-links">
         <button type="button" className="acira-button acira-button-quiet" onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.whatsNew')}</button>
+        {update.lastResort && !reading && <button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close?.(); }}>{t('update.lastResort')}</button>}
       </div>
     </div>
   );

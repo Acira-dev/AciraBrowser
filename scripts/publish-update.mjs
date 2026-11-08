@@ -23,6 +23,7 @@ const U=require('../packaging/update-publish.cjs');
 const T=require('../packaging/update-targets.cjs'),HOSTS=require('../desktop/browser-services/update-hosts.cjs');
 const DEFAULT_TARGETS=T.targets(); // legacy: the GitHub raw feed (folder feed/); current: update.acirabrowser.com (folder docs/). Without a target the tool works on legacy, as before beta.11.
 const {writeMacUpdateFeed}=require('../packaging/macos/update-feed.cjs');
+const COMPAT=require('../packaging/update-compat.cjs');
 const BRANCH='main'; // the feed URL in every installed app names this branch (a target says its own: update-targets.cjs)
 const MAC_ZIP=/^AciraBrowser-(.+)-mac-(arm64|x64)-update\.zip$/,MAC_DMG=/^AciraBrowser-(.+)-mac-(arm64|x64)\.dmg$/;
 const WINDOWS_EXE='AciraBrowserSetup.exe',RECEIPT='mac-widevine-package.json';
@@ -393,7 +394,7 @@ export async function planUpdate(options,deps){
    const versions=windows.evidence.filter(item=>item.version);
    if(!versions.length)problems.push('Nothing says which version '+path.basename(exe)+' is. Keep the latest.yml or ACIRA-INSTALLER-PROVENANCE.json that the Windows build wrote next to it.');
    for(const item of versions)if(item.version!==effective)mismatch(item.source+' says the Windows installer is version '+item.version+', not '+effective+'.');
-   if(!U.WINDOWS_VERSION.test(effective))warnings.push(effective+' does not match the Windows build rule ^0.1.N-beta.N$ (scripts/build-windows.mjs); that build would have refused it.');
+   if(!U.WINDOWS_VERSION.test(effective))warnings.push(effective+' does not match the Windows build rule ^0.1.N-beta.N(.M)$ (scripts/build-windows.mjs); that build would have refused it.');
    for(const item of windows.evidence)if(item.sha512&&item.sha512!==described.sha512||item.sha256&&item.sha256!==described.sha256||item.size&&item.size!==described.size)problems.push(item.source+' describes a different file than '+path.basename(exe)+' (SHA-512, SHA-256 or size differs). Was it rebuilt or damaged after the build wrote that record?');
    windowsCommit=windows.evidence.find(item=>item.commit)?.commit||options.commit||null;
    if(!windowsCommit)problems.push('No commit is known for the Windows installer; pass --commit <hex>.');
@@ -714,6 +715,13 @@ async function ensureRelease({gh,slug,release,log,workDir,referenced}){
  if(state.isDraft){await gh(['release','edit',release.tag,'--repo',slug,'--draft=false',...(release.prerelease?['--prerelease']:[])]);log('  published '+release.tag);}
 }
 
+/** Runs the older-versions check (packaging/update-compat.cjs); throws, naming every problem, when one version could not reach the new one. deps.compat replaces it in tests. */
+export async function compatCheck({plan,deps={},fetch=deps.fetch??globalThis.fetch,sleep,delays,assumePlanned=false}){
+ const result=await (deps.compat||COMPAT.preflight)({plan,fetch,sleep,delays,assumePlanned});
+ if(!result.ok)throw Error('Some older versions could not reach '+plan.version+', so nothing was published to the feed:\n  - '+result.problems.join('\n  - ')+(result.warnings?.length?'\n  (also: '+result.warnings.join(' | ')+')':''));
+ return result;
+}
+
 /** Publishes the plan. The feed commit is the last remote write; every earlier failure leaves it untouched. */
 export async function publishPlan({plan,deps,options}){
  const {gh,fetch=globalThis.fetch,log=()=>{},sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),delays}=deps,slug=plan.repo,target=plan.target||DEFAULT_TARGETS.legacy,state={releases:[],feedCommit:null};
@@ -742,6 +750,14 @@ export async function publishPlan({plan,deps,options}){
    log('  verified '+next.name);
   }});
   await Promise.all(workers);
+  // 2b. every older version still in use (beta.8 and later) must be able to reach this one through the documents as they will be live, and no document may name a file
+  //     that is not there (packaging/update-compat.cjs). A failure stops here: the feed is untouched.
+  if(plan.feeds.length&&['release','add-arch'].includes(plan.mode)&&deps.compat!==false){
+   log('\nChecking that every older version can reach '+plan.version+'...');
+   const reach=await compatCheck({plan,deps,fetch,sleep,delays});
+   for(const warning of reach.warnings)log('  ! '+warning);
+   log('  '+reach.paths.length+' paths read the way each version reads them, '+reach.probed+' files asked for.');
+  }
   // 3. only now the channel documents
   if(!plan.feeds.length){log('\nNo channel document to update.');return state;}
   const what={release:plan.releases.map(release=>release.platform).join(' + '),['add-arch']:'add '+plan.releases.flatMap(release=>release.arches||[]).join('+'),widen:'widened, '+U.describeRollout(U.parseFeed(plan.feeds[0].text)),halt:'halted',resume:'resumed, '+U.describeRollout(U.parseFeed(plan.feeds[0].text))}[plan.mode];
@@ -791,6 +807,11 @@ export async function main(argv=process.argv.slice(2),overrides={}){
  const review=await writeReview({plan:result.plan,dir:path.resolve(options['review-dir']||path.join(repo,'release/update-review',options.version+'-'+(options.channel||'beta')+(mode==='release'?'':'-'+mode)))});
  describePlan(result.plan,{log,review});
  for(const warning of result.warnings)log('  ! '+warning);
+ if(['release','add-arch'].includes(mode)&&result.plan.feeds.length&&deps.compat!==false){
+  // the same check the real run makes before it switches the feed; the files this run would upload are taken as there
+  try{const reach=await compatCheck({plan:result.plan,deps,assumePlanned:true});for(const warning of reach.warnings)log('  ! '+warning);log('\nOlder versions: '+reach.paths.length+' update paths read the way each version reads them; every one reaches '+options.version+' (or the frozen feed\'s bridge) and every named file is there.');}
+  catch(error){log('\nREFUSED by the older-versions check. Nothing was uploaded or changed.\n\n  x '+error.message);return 1;}
+ }
  if(!options.publish){log('\nDRY RUN OK. Nothing was uploaded or changed. Run the same command with --publish --yes to '+verb+'.');return 0;}
  if(!options.yes){
   if(!process.stdin.isTTY)throw Error('--publish asks for confirmation; run it in a terminal, or add --yes.');

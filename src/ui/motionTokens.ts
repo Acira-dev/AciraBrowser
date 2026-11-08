@@ -62,10 +62,14 @@ export function springFor(id: MotionTokenId, speed: SpeedName = 'fast'): SpringS
 }
 /** The multiplier of one class at a speed. */
 export const classScale = (speed: SpeedName, cls: MotionClass): number => classScales[speed][cls];
+/** The pace of Fast for motion with a set length: exactly half of Premium (beta.14, item 16: the sidebar's 480 ms glide is 240 in
+ * Fast; at .6 it was only 1.67× quicker than Premium, while the spring tokens already differ 2.8×). desktop/page-motion.cjs carries
+ * a copy for the native page (`FAST_PACE`): a test keeps them equal. */
+export const fastPace = .5;
 /** Motion with a set length that Premium never stretches (the docked sidebar's slide, which the page card and main's native page
- * glide with, the tab forming in the strip, the new tab's entrances, toasts drawn in CSS) still quickens in Fast: its pace is
- * Fast's spatial scale (.6) in Fast and 1 at Premium and Off (Off has these off already). `--motion-pace` in CSS. */
-export const motionPaceOf = (speed: SpeedName): number => speed === 'fast' ? classScales.fast.S : 1;
+ * glide with, the Sidebar mode morph, the tab forming in the strip, the new tab's entrances, toasts drawn in CSS) still quickens in
+ * Fast: its pace is `fastPace` (.5) in Fast and 1 at Premium and Off (Off has these off already). `--motion-pace` in CSS. */
+export const motionPaceOf = (speed: SpeedName): number => speed === 'fast' ? fastPace : 1;
 
 /** Frequent surfaces (suggestions, the command bar, the tab viewer, tab strips, sidebar rows: used a hundred times a day)
  * take only 40% of the Premium stretch, so they never feel slow: `1 + (scale − 1) × .4` above 1 (1.28 for S at Premium,

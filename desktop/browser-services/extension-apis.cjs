@@ -442,12 +442,14 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
   });
  }
 
- // bookmarks, history, sessions (read-only) and search, from this profile's own stores (extension-store-apis.cjs).
+ // bookmarks (read and change, as in Chrome), history and sessions (read-only) and search, from this profile's own stores (extension-store-apis.cjs).
+ // Bookmark events (extension-bookmark-events.cjs) come from main.cjs's shared-state hook, for this profile's bookmarks only.
+ let stopBookmarkEvents=()=>{};
  if(stores){
   const {bookmarksApi,historyApi,sessionsApi}=require('./extension-store-apis.cjs'),safe=read=>()=>{try{const value=read();return Array.isArray(value)?value:[];}catch{return [];}};
-  const bookmarks=bookmarksApi(safe(stores.bookmarks)),history=historyApi(safe(stores.history)),sessions=sessionsApi(safe(stores.closedTabs));
-  for(const name of ['get','getChildren','getRecent','getTree','getSubTree','search'])handle('bookmarks.'+name,guard('bookmarks',(event,...args)=>bookmarks[name](event,...args)));
-  for(const name of ['create','update','move','remove','removeTree'])handle('bookmarks.'+name,guard('bookmarks',()=>bookmarks.write()));
+  const bookmarks=bookmarksApi(safe(stores.bookmarks),{profileId:storeKey,update:typeof stores.updateBookmarks==='function'?compute=>stores.updateBookmarks(compute):null}),history=historyApi(safe(stores.history)),sessions=sessionsApi(safe(stores.closedTabs));
+  for(const name of ['get','getChildren','getRecent','getTree','getSubTree','search','create','update','move','remove','removeTree'])handle('bookmarks.'+name,guard('bookmarks',(event,...args)=>bookmarks[name](event,...args)));
+  try{stopBookmarkEvents=require('./extension-bookmark-events.cjs').watch({profileId:storeKey,initial:typeof stores.bookmarksReady==='function'&&stores.bookmarksReady()?safe(stores.bookmarks)():null,deliver:(name,...args)=>{try{router.broadcastEvent(name,...args);}catch{}}});}catch(error){console.warn('[ext-api] bookmark events not attached',error?.message);}
   for(const name of ['search','getVisits'])handle('history.'+name,guard('history',(event,...args)=>history[name](event,...args)));
   for(const name of ['addUrl','deleteUrl','deleteRange','deleteAll'])handle('history.'+name,guard('history',()=>history.write()));
   for(const name of ['getRecentlyClosed','getDevices','restore'])handle('sessions.'+name,guard('sessions',(event,...args)=>sessions[name](event,...args)));
@@ -517,7 +519,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
   forget(id){offscreen.close(id);sidePanel.forget(id);userScripts.forget(id);dnr?.forget(id);packages.forget(id);permissions.forget(id);activeTabGrants.delete(id);invocations.delete(id);captureTimes.delete(id);},
   /** The profile was removed (extension-manager.cjs disposeProfileRuntime): the idle poll stops, offscreen documents and sign-in windows close,
    * and the work packages let go of the app-wide events they follow (ext-api/idle.cjs lock/unlock, ext-api/system.cjs displays). */
-  dispose(){clearInterval(idleTimer);try{offscreen.closeAll();}catch{}try{identity.closeAll();}catch{}try{packages.dispose();}catch{}api.syncUserScriptPreload(false);if(session)bySession.delete(session);}
+  dispose(){clearInterval(idleTimer);try{stopBookmarkEvents();}catch{}try{offscreen.closeAll();}catch{}try{identity.closeAll();}catch{}try{packages.dispose();}catch{}api.syncUserScriptPreload(false);if(session)bySession.delete(session);}
  };
  if(session)bySession.set(session,api);registerPageChannels();
  return api;

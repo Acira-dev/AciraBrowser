@@ -1,5 +1,5 @@
 /** The tab strip's spring (stiffness 360, damping 38) sampled at 33 even steps over 480ms, the same curve the sidebar's
- * CSS slide uses, so the native page and the sidebar move as one. 480ms at Premium; Fast runs it in 288 (`pace` .6, the interface's
+ * CSS slide uses, so the native page and the sidebar move as one. 480ms at Premium; Fast runs it in 240 (`pace` .5, the interface's
  * --motion-pace), like the sidebar, the page card and a page the interface draws. */
 const SPRING = [0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1];
 const spring = progress => { const at = Math.min(1, Math.max(0, progress)) * (SPRING.length - 1), i = Math.min(SPRING.length - 2, Math.floor(at)); return SPRING[i] + (SPRING[i + 1] - SPRING[i]) * (at - i); };
@@ -20,11 +20,13 @@ function springSettle(spec, tolerance = .004) {
   return last + step;
 }
 const validSpring = spring => spring && Number.isFinite(spring.duration) && Number.isFinite(spring.bounce) && spring.duration > 0;
-/** The pace a set-length glide runs at (the interface's --motion-pace: .6 in Fast, 1 at Premium); anything else is 1. */
+/** The pace a set-length glide runs at (the interface's --motion-pace: .5 in Fast, 1 at Premium); anything else is 1. */
 const paceOf = pace => Number.isFinite(pace) && pace > 0 && pace <= 1 ? pace : 1;
-/** That pace from a layout's `motionSpeed` (the interface sends 1 / --motion-scale: 1/1.7 Premium, 1/.6 Fast, 1 Off): never
- * slower than 1, so Premium keeps its 480ms. */
-const layoutPace = motionSpeed => paceOf(1 / Math.max(1, Number(motionSpeed) || 1));
+/** Fast's pace: half of Premium (beta.14 item 16). A copy of `fastPace` in src/ui/motionTokens.ts; tests/sidebar-slide-speed.test.ts keeps them equal. */
+const FAST_PACE = .5;
+/** That pace from a layout's `motionSpeed` (the interface sends 1 / --motion-scale: 1/1.7 Premium, 1/.6 Fast, 1 Off): Fast is
+ * the only speed above 1; Premium keeps its 480ms. */
+const layoutPace = motionSpeed => Number(motionSpeed) > 1 ? FAST_PACE : 1;
 
 /** The page's corner radius, applied to the native view once per distinct value. A WebContentsView has one radius for all four
  * corners (no per-corner API, and a parent View's radius does not clip it: qa/native-clip-probe.mjs). `entry.radius` is what the view
@@ -192,4 +194,4 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   if (dissolve && early && beginCover({width: Math.max(start.width, target.width), height: Math.max(start.height, target.height)})) sized = false;
   frame();
 }
-module.exports = {placePageBounds, applyRadius, springAt, springSettle, layoutPace};
+module.exports = {placePageBounds, applyRadius, springAt, springSettle, layoutPace, FAST_PACE};

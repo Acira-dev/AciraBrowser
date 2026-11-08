@@ -8,6 +8,7 @@ import { chromiumSuffix, releaseVersion } from '../../../ui/releaseVersion';
 
 import { t } from '../../../i18n';
 import { describe, rowAction } from '../updateRow';
+import { lastResortUrl } from '../../updates/useUpdateReady';
 const chromium = /Chrome\/(\d+)/.exec(typeof navigator === 'undefined' ? '' : navigator.userAgent)?.[1];
 
 const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : t('connection.error.generic'));
@@ -59,7 +60,7 @@ function Updates() {
             ? <button type="button" className="st-button" onClick={() => void act('update.pause')}>{t('updates.pause')}</button>
           : button.action === 'update.download'
             ? <button type="button" className="st-button primary" disabled={button.disabled} onClick={() => void act('update.download')}>{t("updates.download")}</button>
-            : <button type="button" className="st-button" disabled={button.disabled} onClick={() => void act('update.check')}>{t("updates.checkForUpdates")}</button>}
+            : <button type="button" className="st-button" disabled={button.disabled} onClick={() => void act('update.check')}>{button.retry ? t("updates.tryAgain") : t("updates.checkForUpdates")}</button>}
       </SettingRow>
       <SettingRow id="app-updates-auto" title={t("updates.downloadUpdatesAutomatically")} detail={t("updates.autoDetail")}>
         <Switch label={t("updates.downloadUpdatesAutomatically")} checked={status?.autoDownload ?? true} disabled={!status?.supported} onChange={(next) => void auto(next)} />
@@ -69,6 +70,7 @@ function Updates() {
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
       {(status?.status === 'error' || status?.status === 'paused') && status.error && <SettingNote>{t('import.technicalDetails')}: {status.error}</SettingNote>}
+      {lastResortUrl(status) && <SettingNote><button type="button" className="acira-button acira-button-quiet" onClick={() => void runtime.dispatch({ type: 'tab.new', url: lastResortUrl(status)! })}>{t('update.lastResort')}</button></SettingNote>}
       <SettingNote>{t("updates.updatesComeFromGithubReleases")}</SettingNote>
     </SettingGroup>
   );

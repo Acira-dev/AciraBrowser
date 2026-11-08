@@ -12,7 +12,7 @@ import {MenuFormFlyout} from './MenuFormFlyout';
 import { t } from '../i18n';
 const compatWord=(status:string)=>status==='works'?t('extensionmanager.testedWorks'):status==='limited'?t('extensionmanager.testedLimited'):t('extensionmanager.testedUnsupported');
 /** Installed extensions first, a "Get extensions" link to the Chrome Web Store, and local-folder loading tucked under Developer. */
-export function ExtensionManager({profileId,profileName,tab,privateMode=false,onGetExtensions,panel=false}:{profileId:string;profileName:string;tab?:TabSession;privateMode?:boolean;onGetExtensions?:()=>void;panel?:boolean}){
+export function ExtensionManager({profileId,profileName,tab,privateMode=false,onGetExtensions,onKeyboardShortcuts,panel=false}:{profileId:string;profileName:string;tab?:TabSession;privateMode?:boolean;onGetExtensions?:()=>void;onKeyboardShortcuts?:()=>void;panel?:boolean}){
  const [snapshot,setSnapshot]=useState<ExtensionsSnapshot|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [storeInput,setStoreInput]=useState(''),[storeError,setStoreError]=useState(''),target=useExtensionToolbar(tab||null);
  const currentProfile=useRef(profileId);currentProfile.current=profileId;
@@ -55,6 +55,7 @@ export function ExtensionManager({profileId,profileName,tab,privateMode=false,on
      <div className="menu-form-actions"><button type="button" className="acira-button" onClick={close}>{t("dialog.cancel")}</button><button type="submit" className="acira-button acira-button-primary" disabled={busy||!ready||!storeInput.trim()}>{busy?t("extensionmanager.pleaseWait"):t("searchEngines.add")}</button></div>
     </form>}
    </MenuFormFlyout>
+   {onKeyboardShortcuts&&<ActionRow label={t("nativeCore.keyboardShortcuts")} onClick={onKeyboardShortcuts}/>}
    <MenuFormFlyout title={t("extensionmanager.developerToolsLoadAnUnpacked")}>{close=><><p>{t("extensionmanager.loadAnExtensionYouAre")}</p>{error&&<p className="menu-form-error" role="alert">{error}</p>}<div className="menu-form-actions"><button type="button" className="acira-button" onClick={close}>{t("dialog.cancel")}</button><button type="button" className="acira-button acira-button-primary" disabled={busy||!ready} onClick={()=>void request({type:'load',profileId})}>{busy?t("extensionmanager.pleaseWait"):t("extensionmanager.loadFromFolder")}</button></div></>}</MenuFormFlyout>
   </section>;
  }

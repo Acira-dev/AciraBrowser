@@ -28,6 +28,7 @@ const commandName = (id: string, title: string) => {
 
 export default [
   ...defineSettings('Shortcuts', [
+    { id: 'shortcuts-extensions', title: t("shortcutGroup.extensions"), description: t("nativeCore.changeTheKeyCombinationFor"), aliases: ['extension shortcuts', 'extension keys', 'extension commands', 'extension hotkeys', 'bitwarden shortcut', 'extensions keyboard shortcuts'], when: 'desktop' },
     { id: 'shortcuts-editor', title: t("nativeCore.keyboardShortcuts"), description: t("nativeCore.changeClearResetAndExport"), aliases: ['hotkeys', 'key bindings', 'keybindings', 'remap', 'customize shortcuts', 'rebind', 'accelerator'], when: 'desktop' },
     ...[...shortcuts, ...workspaceShortcuts].map(([id, title, aliases = []]) => ({ id: `shortcut-${id}`, title: t("nativeCore.shortcutTitle", { title: commandName(id, title) }), description: t("nativeCore.changeTheKeyCombinationFor"), group: 'Shortcuts', aliases: ['hotkey', 'key', 'shortcut', ...aliases], when: 'desktop' as const })),
   ]),

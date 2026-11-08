@@ -1,11 +1,13 @@
 /* Tab numbers while Ctrl/Cmd is held (ui/tabNumbers.ts, desktop/tab-numbers.cjs). The figure sits where the close button is, a little
-   nearer the title (as in the approved picture), at the row's end, in the New tab count's own figure style (12px, tabular, the quiet ink), and the close button and the pinned row's
-   sound meter give way to it at once for as long as it shows (so the two never overlap): a label, never a second control; they fade back as ever on release. It appears with a short fade and goes at once;
+   nearer the title (as in the approved picture), at the row's end, Inter 12px with tabular figures, and the close button and the pinned row's
+   sound meter give way to it at once for as long as it shows (so the two never overlap): a label, never a second control; they fade back as ever on release.
+   Beta.14 (founder, 8 Nov, option A "fuller ink"): weight 560 and the close button's own ink (--sb-muted, 64% light, 60% dark) instead of 450 and the quiet ink (52%, 44%), so
+   the figures read crisply at 1x; a typed first digit's matches take full ink at 720. It appears with a short fade and goes at once;
    reduced motion (the sidebar's own rule at the end of sidebar.css) takes the fade away. */
-.app.style-acira .acira-sidebar .sb-tab-number{position:absolute;inset-block:0;inset-inline-end:8.5px;width:var(--tab-control,20px);display:grid;place-items:center;pointer-events:none;color:var(--sb-quiet);font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;animation:sb-tab-number-in 100ms var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-tab-number{position:absolute;inset-block:0;inset-inline-end:8.5px;width:var(--tab-control,20px);display:grid;place-items:center;pointer-events:none;color:var(--sb-muted);font:560 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;animation:sb-tab-number-in 100ms var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number{color:var(--sb-fg)}
 .app.style-acira .acira-sidebar .sb-tab:has(>.sb-tab-number)>:is(.sb-tab-close,.sb-tab-sound){opacity:0;pointer-events:none;transition:none}
 /* A first digit waiting for its second (Ctrl/Cmd+1, then 5 = tab 15): the figures it can still lead to (10…19 for 1) take the full ink, the rest step back; at once, like the figures themselves. */
-.app.style-acira .acira-sidebar .sb-tab-number[data-typed=match],.app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number[data-typed=match]{color:var(--sb-fg);font-weight:600}
+.app.style-acira .acira-sidebar .sb-tab-number[data-typed=match],.app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number[data-typed=match]{color:var(--sb-fg);font-weight:720}
 .app.style-acira .acira-sidebar .sb-tab-number[data-typed=other]{opacity:.32}
 @keyframes sb-tab-number-in{from{opacity:0}}

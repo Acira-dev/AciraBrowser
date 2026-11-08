@@ -38,13 +38,9 @@ import { BrandLogo } from "../components/BrandLogo";
 import { ArrowLeft } from "../components/AppIcons";
 import { ContentTransition } from "../components/ContentTransition";
 import { runtime } from "../runtime/client";
-import {
-  palettePreference,
-  defaultAppearancePalette,
-} from "../runtime/appearancePalettes";
 import { ImportPanel, ProfilePrivacy } from "./BrowserData";
 import { useNewTabPreferences, defaultArtwork } from "../ui/newTabPreferences";
-import { newTabChanged } from "./settings/changed";
+import { appearanceLookChanged, appearanceResetPatch, newTabChanged } from "./settings/changed";
 import { SettingsSearch } from "./settings/SettingsSearch";
 import {
   Select,
@@ -303,26 +299,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
     s.showTabOverview === false ||
     Boolean(s.bookmarksBar) ||
     s.bookmarksOnNewTabOnly === false;
-  const defaultLook = palettePreference(defaultAppearancePalette) as Record<
-    string,
-    unknown
-  >;
-  const appearanceChanged =
-    Object.entries(defaultLook).some(
-      ([key, value]) =>
-        (s as unknown as Record<string, unknown>)[key] !== value,
-    ) ||
-    s.interfaceScale !== 100 ||
-    Boolean(s.systemTheme) ||
-    Boolean(s.reducedMotion) ||
-    s.animationSpeed === "fast" ||
-    Boolean(s.reducedTransparency) ||
-    (customColors &&
-      (s.glassOpacity !== 64 ||
-        Boolean(s.surfaceColor) ||
-        Boolean(s.sidebarColor) ||
-        Boolean(s.toolbarColor) ||
-        Boolean(s.tabColor)));
+  const appearanceChanged = appearanceLookChanged(s);
   const newTabIsChanged = newTabChanged(newTabPrefs, defaultArtwork);
   const stockSearch = !sharedProvidersConfigured(state) && ['google','duckduckgo','bing'].includes(currentSearchProviders(state).defaultId);
   const context: SettingsContext = useMemo(
@@ -774,26 +751,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 <button
                   type="button"
                   className="st-button"
-                  onClick={() =>
-                    update({
-                      ...palettePreference(defaultAppearancePalette),
-                      interfaceScale: 100,
-                      ...(s.systemTheme ? { systemTheme: false } : {}),
-                      reducedMotion: false,
-                      animationSpeed: "premium",
-                      reducedTransparency: false,
-                      siteColor: "soft",
-                      ...(customColors
-                        ? {
-                            glassOpacity: 64,
-                            surfaceColor: undefined,
-                            sidebarColor: undefined,
-                            toolbarColor: undefined,
-                            tabColor: undefined,
-                          }
-                        : {}),
-                    })
-                  }
+                  onClick={() => update(appearanceResetPatch(s))}
                 >
                   {tr("browsersettings.reset")}
                 </button>

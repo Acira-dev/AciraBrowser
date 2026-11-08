@@ -11,7 +11,7 @@
   "desktop/browser-services/extension-apis-renderer.cjs": "Acira renderer side (written into the ECE preload): namespace definitions, DNR wrappers, constants, browser mirror, runtime additions.",
   "desktop/browser-services/extension-shims.cjs": "storage.sync -> storage.local shim added to store-package content scripts.",
   "desktop/browser-services/extension-runtime-patch.cjs": "Patches the ECE preload text: lastError for native messaging, drops Object.freeze, hasListener/hasListeners, injects Acira definitions.",
-  "desktop/browser-services/extension-store-apis.cjs": "Read-only bookmarks/history/sessions API answers from Acira stores.",
+  "desktop/browser-services/extension-store-apis.cjs": "Bookmarks (read and change, through Acira's own store; extension-bookmarks.cjs) and read-only history/sessions API answers from Acira stores.",
   "desktop/browser-services/extension-side-panel.cjs": "Native views that dock the chrome.sidePanel page beside the page area.",
   "desktop/browser-services/extension-tab-context.cjs": "Replaces ECE tabs.getCurrent so it returns the caller's tab.",
   "desktop/browser-services/extension-new-tab.cjs": "chrome_url_overrides.newtab shown as an explicit per-extension choice (manifest feature, no chrome.* API).",

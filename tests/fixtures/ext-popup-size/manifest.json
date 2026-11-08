@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Popup Size Fixture",
+  "version": "1.0.0",
+  "description": "A toolbar popup that sizes itself the way Surfshark's does: a fixed-width column that grows after it has loaded. Test fixture, not a real extension.",
+  "action": {"default_title": "Popup size fixture", "default_popup": "popup.html"}
+}

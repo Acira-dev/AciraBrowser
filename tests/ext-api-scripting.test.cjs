@@ -87,6 +87,22 @@ test('main: without a grant the page is out of reach; after a click the extensio
   } finally { fs.rmSync(h.dir, {recursive: true, force: true}); }
 });
 
+test('an extension whose host permissions cover the page gets Chromium\'s own executeScript (content-script world with chrome.runtime), also after a toolbar click', async () => {
+  const covered = new Set(['https://example.com']);
+  const h = scriptingHost({permissions: {has: (extension, name) => (extension.manifest.permissions || []).includes(name), hasOrigin: (extension, url) => covered.has(new URL(url).origin)}});
+  try {
+    const wc = fakeTab(7, 'https://example.com/a');
+    h.tabs.set(7, wc);
+    h.handlers.get('browserAction.activate').callback({type: 'frame', sender: {id: 1}}, {eventType: 'click', extensionId: ID, tabId: 7});
+    const run = (name, details) => h.call(`scripting.activeTab.${name}`, null, details);
+    assert.deepEqual(await run('executeScript', {target: {tabId: 7}, files: ['content.js']}), {unavailable: true}, 'host access: not Acira\'s world without chrome');
+    assert.deepEqual(await run('insertCSS', {target: {tabId: 7}, css: 'a{}'}), {unavailable: true});
+    assert.deepEqual(wc.calls, [], 'nothing ran through the activeTab path');
+    covered.clear();   // no host access: the click\'s grant is what lets it script this tab
+    assert.equal(Array.isArray(await run('executeScript', {target: {tabId: 7}, source: '1'})), true);
+  } finally { fs.rmSync(h.dir, {recursive: true, force: true}); }
+});
+
 test('without the activeTab permission a click grants nothing that can be used', async () => {
   const h = scriptingHost({extensions: [manifestExtension(ID, {manifest_version: 3, name: 'No', version: '1', permissions: ['scripting'], action: {}})],
     permissions: {has: (extension, name) => (extension.manifest.permissions || []).includes(name)}});
@@ -149,13 +165,68 @@ test('extension side: with activeTab the main process is asked first (functions 
   assert.deepEqual(native, [['script', 4], ['css', 4]]);
 });
 
+test('extension side: Chromium\'s own call gets the page id of the tab (a tab restored from sleep has a stable id of its own, 2000000002, that Chromium does not know)', async () => {
+  const seen = [];
+  const w = extensionWorld({manifest_version: 3, name: 'x', version: '1', permissions: ['scripting']}, {
+    packages: extApi.loadPackages({fresh: true}).filter(p => p.name === 'scripting'), worker: false,
+    native: {scripting: {executeScript: async details => { seen.push(['script', details.target.tabId, details.files]); return [{frameId: 0}]; }, insertCSS: async details => { seen.push(['css', details.target.tabId]); }}},
+    answer: (name, args) => (name === 'acira.tabs.pageId' ? (args[0] === 2000000002 ? 55 : args[0] === 2000000003 ? null : args[0]) : undefined)});
+  await w.chrome.scripting.executeScript({target: {tabId: 2000000002, allFrames: true}, files: ['a.js'], world: 'ISOLATED'});
+  await w.chrome.scripting.insertCSS({target: {tabId: 2000000002}, css: 'a{}'});
+  await w.chrome.scripting.executeScript({target: {tabId: 4}, func: () => 1});
+  await w.chrome.scripting.executeScript({target: {tabId: 2000000003}, func: () => 1});
+  assert.deepEqual(seen, [['script', 55, ['a.js']], ['css', 55], ['script', 4, undefined], ['script', 2000000003, undefined]], 'a tab with its own id gets its page, any other id goes through as given');
+});
+
+test('extension side: Chromium\'s executeScript / insertCSS get the page behind the tab id Acira gave out (YouTube Inline Fullscreen\'s popup: "No tab with id: 2000000000"); an id Acira does not know goes on unchanged', async () => {
+  const seen = [];
+  const native = {scripting: {
+    executeScript: async details => { seen.push(['script', details.target.tabId, details.target.allFrames, details.files]); return [{frameId: 0, result: null}]; },
+    insertCSS: async details => { seen.push(['css', details.target.tabId, undefined, details.files]); }
+  }};
+  const pages = new Map([[2000000000, 41]]);
+  const noGrant = extensionWorld({manifest_version: 3, name: 'x', version: '1', permissions: ['scripting'], host_permissions: ['*://www.youtube.com/*']}, {
+    packages: extApi.loadPackages({fresh: true}).filter(p => p.name === 'scripting'), worker: false, native,
+    answer: (name, args) => (name === 'acira.tabs.pageId' ? (pages.get(args[0]) ?? null) : undefined)});
+  const {chrome} = noGrant;
+  const target = {tabId: 2000000000, allFrames: true}, files = ['ytif_content_script.js'];
+  await chrome.scripting.insertCSS({target: {tabId: 2000000000}, files: ['ytif_style.css']});
+  assert.deepEqual(plain(await chrome.scripting.executeScript({target, files})), [{frameId: 0, result: null}]);
+  assert.deepEqual(plain(seen), [['css', 41, null, ['ytif_style.css']], ['script', 41, true, files]], 'both calls reach Chromium with the page\'s id; the rest of the details are untouched');
+  assert.equal(target.tabId, 2000000000, 'the caller\'s object is not changed');
+  seen.length = 0;
+  await chrome.scripting.executeScript({target: {tabId: 77}, func: () => 1});
+  assert.equal(seen[0][1], 77, 'an id Acira does not know (a page id) goes on as it is');
+  const viaCallback = await new Promise(resolve => chrome.scripting.executeScript({target: {tabId: 2000000000}, files}, resolve));
+  assert.equal(plain(viaCallback)[0].frameId, 0);
+  assert.equal(seen.at(-1)[1], 41, 'the callback form too');
+});
+
+test('extension side: a script injected by file gets Acira\'s storage.sync shim first when the package carries it (the world is new, no manifest content script made it)', async () => {
+  const seen = [];
+  const native = {scripting: {executeScript: async details => { seen.push(details.files); return [{frameId: 0, result: null}]; }}};
+  const shimmed = extensionWorld({manifest_version: 3, name: 'x', version: '1', permissions: ['scripting', 'storage'], content_scripts: [{matches: ['*://*.youtube.com/*'], js: ['acira-storage-sync-shim.js', 'cs.js']}]}, {
+    packages: extApi.loadPackages({fresh: true}).filter(p => p.name === 'scripting'), worker: false, native});
+  await shimmed.chrome.scripting.executeScript({target: {tabId: 1}, files: ['cs.js']});
+  await shimmed.chrome.scripting.executeScript({target: {tabId: 1}, files: ['acira-storage-sync-shim.js', 'cs.js']});
+  await shimmed.chrome.scripting.executeScript({target: {tabId: 1}, files: ['cs.js'], world: 'MAIN'});
+  await shimmed.chrome.scripting.executeScript({target: {tabId: 1}, func: () => 1});
+  assert.deepEqual(plain(seen.slice(0, 3)), [['acira-storage-sync-shim.js', 'cs.js'], ['acira-storage-sync-shim.js', 'cs.js'], ['cs.js']], 'added once; never in the page\'s own (MAIN) world');
+  assert.equal(seen[3], undefined, 'a function has no files');
+  seen.length = 0;
+  const plainPackage = extensionWorld({manifest_version: 3, name: 'x', version: '1', permissions: ['scripting', 'storage'], content_scripts: [{matches: ['*://*.youtube.com/*'], js: ['cs.js']}]}, {
+    packages: extApi.loadPackages({fresh: true}).filter(p => p.name === 'scripting'), worker: false, native});
+  await plainPackage.chrome.scripting.executeScript({target: {tabId: 1}, files: ['cs.js']});
+  assert.deepEqual(plain(seen), [['cs.js']], 'a package Acira did not shim (a folder the person chose) is left alone');
+});
+
 test('extension side: an extension without activeTab never asks; Chromium\'s errors pass through; script errors from the main process reach the caller', async () => {
   const calls = [];
   const plainWorld = extensionWorld({manifest_version: 3, name: 'x', version: '1', permissions: ['scripting']}, {
     packages: extApi.loadPackages({fresh: true}).filter(p => p.name === 'scripting'), worker: false,
     native: {scripting: {executeScript: async () => { throw refusal; }}}, answer: name => { calls.push(name); }});
   await assert.rejects(() => plainWorld.chrome.scripting.executeScript({target: {tabId: 1}, func: () => 1}), /Extension manifest must request permission/);
-  assert.deepEqual(calls, [], 'no activeTab: no question to the main process');
+  assert.deepEqual(calls, ['acira.tabs.pageId'], 'no activeTab: no question about the page, only which page the extension\'s tab id is');
   const failing = world({scripting: {executeScript: async () => [{frameId: 0, result: 'native'}]}}, {answer: () => ({__acira_error: 'boom'})});
   await assert.rejects(() => failing.chrome.scripting.executeScript({target: {tabId: 1}, func: () => 1}), /boom/);
   const errors = [];

@@ -73,7 +73,9 @@ const COMMANDS=['site','prepare','go','unhold','widen','halt','resume','pace','r
 function makeDeps(options,overrides){
  const transport=options['stand-in']?standInTransport(options['stand-in']):null;
  const deps={log:console.log,fetch:globalThis.fetch,root:repo,now:()=>new Date(),sleep:sleepFor,targets:TARGETS,...require('../packaging/macos/update-verify.cjs'),inspectWindowsInstaller,inspectLinuxBuild,gh:ghCli(),
-  git:async args=>(await run('git',args,{cwd:repo,maxBuffer:64*1024*1024})).stdout,expectedLogin:'Acira-dev',...(transport||{}),...overrides};
+  git:async args=>(await run('git',args,{cwd:repo,maxBuffer:64*1024*1024})).stdout,expectedLogin:'Acira-dev',
+  compat:false, /* the bridge pipeline writes the new host BEFORE the bridge release reaches the GitHub feed, by design (docs/launch/UPDATE_HOST.md); the older-versions check (packaging/update-compat.cjs) belongs to the single-release flow, node scripts/publish-update.mjs --target current */
+  ...(transport||{}),...overrides};
  if(transport)deps.log('STAND-IN: every GitHub and feed request goes to '+transport.label+'; nothing reaches GitHub and gh is not used.');
  return deps;
 }

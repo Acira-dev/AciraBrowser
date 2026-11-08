@@ -25,8 +25,33 @@ test('the protection summary, in every language, has no raw ids, keeps product n
   assert.match(rows.find(row=>row.id==='dns').detail,/1\.1\.1\.1/);}
  use('en');const english=protectionSummary(summaryInput({metrics:{enabled:false}})).rows;
  assert.equal(english.find(row=>row.id==='ads-trackers').detail,'Blocked in every window, private ones too. Lists: refreshed 2026-10-20; checked for updates every few hours.');
- assert.match(english.find(row=>row.id==='telemetry').detail,/^Nothing is sent\./);
+ assert.match(english.find(row=>row.id==='telemetry').detail,/^No analytics or crash reports are sent\./);
  use('de');assert.equal(protectionSummary(summaryInput()).rows.find(row=>row.id==='ads-trackers').title,'Werbung und Tracker');
+});
+test('the analytics row names every host Acira contacts on its own, and its Google line follows the build',()=>{
+ // What Acira fetches by itself, read from the code: the filter lists, the phishing and malware lists, the update host (updates, reviewed sites, spelling dictionaries) and Tor's.
+ const hostOf=url=>new URL(url).hostname,filters=require('../desktop/browser-services/filter-updates.cjs').SOURCES.map(item=>hostOf(item.url)),threats=require('../desktop/browser-services/threat-lists.cjs').SOURCES.map(item=>hostOf(item.urls[0]));
+ const updates=hostOf(require('../desktop/browser-services/update-hosts.cjs').HOST_URL),github=hostOf(require('../desktop/browser-services/update-hosts.cjs').GITHUB_FEED_URL);
+ const {loadReleaseTarget,dictionaryUrl}=require('../packaging/release-target.cjs'),dictionaries=hostOf(dictionaryUrl(loadReleaseTarget()));
+ assert.equal(dictionaries,updates,'the spelling dictionaries come from the update host, not github.com');
+ use('en');
+ const row=extra=>protectionSummary(summaryInput({metrics:{enabled:false},...extra})).rows.find(item=>item.id==='telemetry').detail;
+ const text=row({});
+ for(const host of new Set([...filters,...threats,updates,github,'Tor Project']))assert.ok(text.includes(host),'the analytics row does not name '+host);
+ assert.match(text,/Pull requests folder, Acira asks github\.com/);
+ assert.match(text,/Never from Google\./);assert.doesNotMatch(text,/Widevine/);
+ const mac=row({widevine:true});assert.match(mac,/Widevine/);assert.doesNotMatch(mac,/Never from Google/);
+ // Anonymous usage on: the sentence describes the real message and no longer says it depends on a configured server
+ const on=protectionSummary(summaryInput({metrics:{enabled:true,configured:true}})).rows.find(item=>item.id==='telemetry').detail;
+ assert.match(on,/^Anonymous usage is on: one small message a day with a random id, the app version, your system, your language and coarse counts\./);assert.doesNotMatch(on,/When configured/);
+ assert.match(on,/Pull requests folder/);
+ // The same hosts in Settings › Privacy › Update lists automatically
+ const lists=catalog('en')['privacy.listsDetail'];for(const host of new Set(filters))assert.ok(lists.includes(host),'Update lists automatically does not name '+host);assert.doesNotMatch(lists,/raw\.githubusercontent\.com/);
+ // The Anonymous usage tooltip no longer says the server is empty
+ assert.doesNotMatch(catalog('en')['help.usage'],/empty|When configured/);
+ // Every language: the new sentences exist, the Pull requests line names github.com, the Google line is in the language and the listed hosts survive translation
+ for(const locale of LOCALES){use(locale);const detail=protectionSummary(summaryInput({metrics:{enabled:false}})).rows.find(item=>item.id==='telemetry').detail;
+  assert.match(detail,/github\.com/,locale);assert.match(detail,/update\.acirabrowser\.com/,locale);assert.match(detail,/pgl\.yoyo\.org/,locale);assert.doesNotMatch(detail,/\bprotection\.telemetry\./,locale);}
 });
 test('page warnings and threat pages follow the language and carry the brand and domain',()=>{
  for(const locale of LOCALES){use(locale);

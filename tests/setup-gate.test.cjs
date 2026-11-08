@@ -79,7 +79,7 @@ test('nothing else in the main process starts a scheduled download by itself: th
  for(const file of files){const text=read(file);
   for(const call of ['updates.startAutomatic(','appUpdater.start(']){const n=(text.match(new RegExp(call.replace(/[().]/g,'\\$&'),'g'))||[]).length;if(n)assert.equal(n,1,file+' '+call);}
  }
- // the manual paths stay open: Settings > Updates "Check", Settings > Privacy "Update lists now" are the person's own actions
- assert.match(read('desktop/main.cjs'),/request\.type==='update\.check'\?appUpdater\.check\(\)/);
+ // the manual paths stay open (the person's own click is check({manual:true}), item 14): Settings > Updates "Check", Settings > Privacy "Update lists now" are the person's own actions
+ assert.match(read('desktop/main.cjs'),/request\.type==='update\.check'\?appUpdater\.check\(\{manual:true\}\)/);
  assert.match(read('desktop/main.cjs'),/contentBlocking\.filterLists\.refresh\(ses\)/);
 });

@@ -1,6 +1,7 @@
 'use strict';
 // What chrome.privacy.network.* and chrome.privacy.services.* really are in Acira (docs/launch/EXTENSION_API_COVERAGE.md has the census).
-// An extension can take control of a setting only where Acira has the setting AND the extension's value does not weaken a default:
+// An extension can take control of a setting only where Acira has the setting AND the extension's value does not weaken a default
+// (the address/card autofill settings are the exception that proves it: Acira has no such feature, so "off" is always true and may be held):
 //   webRTCIPHandlingPolicy        controllable, never looser than Acira's own floor (default_public_interface_only)
 //   passwordSavingEnabled         controllable towards "off" (a password manager extension switches the built-in offer off)
 // Everything else Acira does not have, or fixes, so Chrome's answer is "not_controllable" with the value Acira really has. Nothing is
@@ -18,9 +19,6 @@ function boolean(path){return value=>{if(typeof value!=='boolean')throw new Erro
 const FIXED=[
  ['network.networkPredictionEnabled',false,'Acira has no network prediction: DNS prefetching is off and there is no Chromium address bar to preconnect from.'],
  ['services.alternateErrorPagesEnabled',false,'Acira never sends a failed address to a suggestion service.'],
- ['services.autofillEnabled',false,'Acira has no address or card autofill.'],
- ['services.autofillAddressEnabled',false,'Acira has no address autofill.'],
- ['services.autofillCreditCardEnabled',false,'Acira has no card autofill.'],
  ['services.safeBrowsingEnabled',true,'Acira checks addresses against its own threat lists; an extension cannot turn that off.'],
  ['services.safeBrowsingExtendedReportingEnabled',false,'Acira never reports pages to a Safe Browsing service.'],
  ['services.searchSuggestEnabled',false,'Acira\'s address bar suggests from tabs, bookmarks and history on this computer only.'],
@@ -28,8 +26,18 @@ const FIXED=[
  ['services.translationServiceEnabled',false,'Acira has no translation service.']
 ];
 
+/** Settings whose real value in Acira is "off" because the feature does not exist here (no address or card autofill). An extension may hold the setting at
+ *  false, exactly as it does in Chrome, and then reads back controlled_by_this_extension: password managers check that to know they are the default
+ *  (Bitwarden's browserAutofillSettingsOverridden needs all three of address, card and password saving to say so). True is never used: there is nothing to switch on. */
+const OFF_ONLY=[
+ ['services.autofillEnabled','Acira has no address or card autofill.'],
+ ['services.autofillAddressEnabled','Acira has no address autofill.'],
+ ['services.autofillCreditCardEnabled','Acira has no card autofill.']
+];
+
 function definitions(){
  const out=[];
+ for(const [name] of OFF_ONLY)out.push({path:`privacy.${name}`,key:`privacy.${name}`,validate:boolean(name),accept:value=>value===false,resolve:()=>false});
  for(const [name,value] of FIXED)out.push({path:`privacy.${name}`,key:`privacy.${name}`,validate:boolean(name),fixed:true,resolve:()=>value});
  out.push({
   path:'privacy.network.webRTCIPHandlingPolicy',key:'privacy.network.webRTCIPHandlingPolicy',
@@ -53,4 +61,4 @@ function baseFor(session){
  return choice&&choice.mode==='fixed_servers'?'disable_non_proxied_udp':FLOOR;
 }
 
-module.exports={definitions,FIXED,POLICIES,FLOOR};
+module.exports={definitions,FIXED,OFF_ONLY,POLICIES,FLOOR};

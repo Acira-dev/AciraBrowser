@@ -11,7 +11,7 @@ import './update-pill.css';
  *  strips every tag); they scroll in the popup's own scroll region past 15 lines. One Close; Esc and a click on the page close it too. Without notes
  *  there is no popup at all: main shows a quiet toast instead. */
 export function WhatsNewPopover({ close, reducedMotion }: { close: () => void; reducedMotion: boolean }) {
-  const note = useWhatsNew(), notesBox = useRef<HTMLDivElement>(null);
+  const note = useWhatsNew({ fresh: true }), notesBox = useRef<HTMLDivElement>(null);
   return (
     <div className="update-popover update-whatsnew" role="group" aria-labelledby="whatsnew-title" data-popup-pending={note ? undefined : ''}>
       <div className="acira-menu-row acira-menu-row-identity">

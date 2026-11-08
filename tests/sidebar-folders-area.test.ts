@@ -89,8 +89,11 @@ test('Settings > Sidebar has a "Tab groups" row with three choices, searchable, 
   assert.match(panel, /value=\{rail\.folders \?\? 'mixed'\}/);
   assert.match(panel, /\{ value: 'mixed', label: t\("sidebar\.groupsWithTabs"\) \}, \{ value: 'above', label: t\("sidebar\.groupsAbove"\) \}, \{ value: 'below', label: t\("sidebar\.groupsBelow"\) \}/);
   assert.ok(panel.indexOf('id="sidebar-folders"') > panel.indexOf('id="sidebar-new-tabs-top"') && panel.indexOf('id="sidebar-folders"') < panel.indexOf('id="sidebar-reset"'), 'between New tabs at the top and the reset row, with the other tab-list rows (the Width row is the Sidebar size row now, under Show sidebar)');
-  assert.match(panel, /folders: 'mixed' \}, tab\.browserProfileId, privateMode\)/, 'Reset sidebar layout goes back to today\'s');
-  assert.match(panel, /\(rail\.folders \?\? 'mixed'\) !== 'mixed'/, 'and is enabled when it is not');
+  // The reset and its check share one list (settings/changed.ts SIDEBAR_RESET, sidebarLayoutChanged): the panel writes it, the list puts Tab groups back to With your tabs.
+  const changed = readFileSync(new URL('../src/features/settings/changed.ts', import.meta.url), 'utf8');
+  assert.match(panel, /setRailPrefs\(to\.rail, tab\.browserProfileId, privateMode\)/, 'Reset sidebar layout writes the shared list');
+  assert.match(changed, /folders: 'mixed' as SidebarFolders/, 'Reset sidebar layout goes back to today\'s');
+  assert.match(changed, /\(now\.folders \?\? d\.rail\.folders\) !== d\.rail\.folders/, 'and is enabled when it is not');
   assert.match(entries, /\{ id: 'sidebar-folders', title: t\("sidebar\.tabGroups"\), group: 'Sidebar', description: t\("sidebar\.tabGroupsSearch"\)/);
   assert.match(sidebar, /folders=\{prefs\.folders\?\?'mixed'\}/, 'the tab list reads it from the profile\'s rail prefs');
 });

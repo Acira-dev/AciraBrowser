@@ -118,7 +118,7 @@ say(`signature: installer ${signature.installer}, app ${signature.app}, acira-ve
 // 8. the GitHub draft release
 const upload = [...fs.readdirSync(assetsDir).map(name => path.join(assetsDir, name))];
 if (!REPO) { say(`release target is ${describeTarget(target)} (not GitHub): upload everything in ${assetsDir} there yourself; nothing was uploaded.`); process.exit(0); }
-const ghArgs = ['release', 'create', tag, '--repo', REPO, '--draft', '--title', `Acira Browser ${version.replace(/-beta\.\d+$/, ' Beta')}`, '--notes-file', notes, '--target', commit, ...(channel === 'beta' ? ['--prerelease'] : []), ...upload];
+const ghArgs = ['release', 'create', tag, '--repo', REPO, '--draft', '--title', `Acira Browser ${version.replace(/-beta\.\d+(?:\.\d+)?$/, ' Beta')}`, '--notes-file', notes, '--target', commit, ...(channel === 'beta' ? ['--prerelease'] : []), ...upload];
 if (!publish) {
   say('dry run: nothing uploaded. With --publish this would run:');
   console.log('  gh ' + ghArgs.map(a => (a.startsWith(assetsDir) ? '<assets>/' + path.basename(a) : /\s/.test(a) ? `"${a}"` : a)).join(' '));

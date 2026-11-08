@@ -151,7 +151,13 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
 
   const visible = useMemo(() => {
     const wanted = query.trim().toLowerCase();
-    return groupShortcutCommands(commands,command=>(!onlyChanged||command.customized)&&matches(command,wanted));
+    const groups = groupShortcutCommands(commands,command=>(!onlyChanged||command.customized)&&matches(command,wanted));
+    // The Extensions group is always there to be found (and to be jumped to from Settings › Extensions and the extensions menu): empty, it says so.
+    if (!wanted && !onlyChanged && commands.length && !groups.some(([name]) => name === 'Extensions')) {
+      const at = groups.findIndex(([name]) => name === 'Tab sets' || name === 'Unassigned');
+      groups.splice(at < 0 ? groups.length : at, 0, ['Extensions', []]);
+    }
+    return groups;
   }, [commands, query, onlyChanged]);
   useListMotion(groupsRef, visible.map(([name]) => name).join('|'));
 
@@ -170,7 +176,8 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
       {error && <p className="sk-error" role="alert">{error}</p>}
       <div ref={groupsRef} className="sk-groups">
         {visible.map(([category, list]) => (
-          <ShortcutGroup key={category} title={category} signature={list.map((command) => command.id).join('|')}>
+          <ShortcutGroup key={category} title={category} id={category === 'Extensions' ? 'shortcuts-extensions' : undefined} signature={list.map((command) => command.id).join('|')}>
+            {list.length === 0 && category === 'Extensions' && <div className="st-row"><div className="st-copy"><p>{t("shortcuts.noExtensionShortcuts")}</p></div></div>}
             {list.map((command) => (
               <ShortcutRow key={command.id} command={command} edit={edit?.id === command.id ? edit : null}
                 onBegin={() => { if (current.current?.id !== command.id || current.current.state === 'clash') begin(command.id); }}
@@ -188,12 +195,12 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
 }
 
 /** A category. Its rows move on A's list motion as a search narrows; the groups themselves come and go on the same motion. */
-function ShortcutGroup({ title, signature, children }: { title: string; signature: string; children: ReactNode }) {
+function ShortcutGroup({ title, signature, id, children }: { title: string; signature: string; id?: string; children: ReactNode }) {
   const heading = useId();
   const body = useRef<HTMLDivElement>(null);
   useListMotion(body, signature);
   return (
-    <section className="st-group sk-group" aria-labelledby={heading}>
+    <section className="st-group sk-group" aria-labelledby={heading} data-setting={id}>
       <h2 id={heading}>{commandGroup(title)}</h2>
       <div ref={body} className="st-group-body">{children}</div>
     </section>

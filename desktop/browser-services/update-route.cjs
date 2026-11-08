@@ -24,10 +24,10 @@ function createUpdateRoute({session,getSharedState,getLastProfileId=()=>undefine
   return liveRoute(profile);
  };
  return async()=>{
-  let config;try{config=routeOf();}catch{throw new Error(UNCONFIRMED);}
+  let config;try{config=routeOf();}catch{throw Object.assign(new Error(UNCONFIRMED),{code:'ERR_UPDATE_ROUTE'});}
   if(!config)return;
   const key=JSON.stringify(config);if(key===last)return;
-  try{await session.setProxy(config);await session.closeAllConnections();}catch{throw new Error(UNCONFIRMED);}
+  try{await session.setProxy(config);await session.closeAllConnections();}catch{throw Object.assign(new Error(UNCONFIRMED),{code:'ERR_UPDATE_ROUTE'});}
   last=key;
  };
 }

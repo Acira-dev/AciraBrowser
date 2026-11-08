@@ -56,26 +56,38 @@ module.exports={
   /** A value as the tab sees it: its own, else the global one. */
   const read=(id,tabId,name)=>{const action=actionOf(id),own=tabId===undefined?undefined:action.tabs[tabId]?.[name];return own!==undefined?own:action[name];};
   const detailsOf=value=>(value&&typeof value==='object'?value:{});
+  /** The tab an extension names is the id chrome.tabs gave it, which stays the same for the tab's life; the toolbar and the engine know the tab by its page's id, and
+   *  that is another number once the tab was asleep (it has a number of its own, 2000000002) or has moved to a new page. A badge set for the extension's id never
+   *  showed (Bitwarden's per-tab count and unlocked icon fell back to the lock). The tab's values are kept under its page's id; ids the tabs package does not know stay as given. */
+  const tabKey=(event,value)=>{
+   const id=tabIdOf(value);
+   if(id===undefined)return undefined;
+   try{
+    const ask=api.handler('acira.tabs.pageId'),page=ask?ask({type:'service-worker',sender:null,extension:event.extension},id):null;
+    if(Number.isInteger(page)&&page>=0)return page;
+   }catch{/* the tabs package is not there: the id as given */}
+   return id;
+  };
   const colorOf=value=>{const color=parseColor(value);if(!color)throw new Error('The color specification could not be parsed.');return color;};
 
   const members={
-   setTitle:(event,details)=>{put(event.extension.id,tabIdOf(detailsOf(details).tabId),{title:String(detailsOf(details).title??'')});},
-   getTitle:(event,details)=>{const id=event.extension.id;return String(read(id,tabIdOf(detailsOf(details).tabId),'title')??manifestAction(event.extension).default_title??'');},
-   setPopup:(event,details)=>{put(event.extension.id,tabIdOf(detailsOf(details).tabId),{popup:String(detailsOf(details).popup??'')});},
-   getPopup:(event,details)=>{const url=engine()?.getPopupUrl?.(event.extension.id,tabIdOf(detailsOf(details).tabId));return url||'';},
-   setBadgeText:(event,details)=>{put(event.extension.id,tabIdOf(detailsOf(details).tabId),{text:String(detailsOf(details).text??'')});},
-   getBadgeText:(event,details)=>String(read(event.extension.id,tabIdOf(detailsOf(details).tabId),'text')??''),
-   setBadgeBackgroundColor:(event,details)=>{const color=colorOf(detailsOf(details).color);put(event.extension.id,tabIdOf(detailsOf(details).tabId),{color:toCss(color),colorValue:color});},
-   getBadgeBackgroundColor:(event,details)=>[...(read(event.extension.id,tabIdOf(detailsOf(details).tabId),'colorValue')||DEFAULT_BACKGROUND)],
-   setBadgeTextColor:(event,details)=>{const color=colorOf(detailsOf(details).color);put(event.extension.id,tabIdOf(detailsOf(details).tabId),{textColor:toCss(color),textColorValue:color});},
-   getBadgeTextColor:(event,details)=>[...(read(event.extension.id,tabIdOf(detailsOf(details).tabId),'textColorValue')||DEFAULT_TEXT)],
+   setTitle:(event,details)=>{put(event.extension.id,tabKey(event,detailsOf(details).tabId),{title:String(detailsOf(details).title??'')});},
+   getTitle:(event,details)=>{const id=event.extension.id;return String(read(id,tabKey(event,detailsOf(details).tabId),'title')??manifestAction(event.extension).default_title??'');},
+   setPopup:(event,details)=>{put(event.extension.id,tabKey(event,detailsOf(details).tabId),{popup:String(detailsOf(details).popup??'')});},
+   getPopup:(event,details)=>{const url=engine()?.getPopupUrl?.(event.extension.id,tabKey(event,detailsOf(details).tabId));return url||'';},
+   setBadgeText:(event,details)=>{put(event.extension.id,tabKey(event,detailsOf(details).tabId),{text:String(detailsOf(details).text??'')});},
+   getBadgeText:(event,details)=>String(read(event.extension.id,tabKey(event,detailsOf(details).tabId),'text')??''),
+   setBadgeBackgroundColor:(event,details)=>{const color=colorOf(detailsOf(details).color);put(event.extension.id,tabKey(event,detailsOf(details).tabId),{color:toCss(color),colorValue:color});},
+   getBadgeBackgroundColor:(event,details)=>[...(read(event.extension.id,tabKey(event,detailsOf(details).tabId),'colorValue')||DEFAULT_BACKGROUND)],
+   setBadgeTextColor:(event,details)=>{const color=colorOf(detailsOf(details).color);put(event.extension.id,tabKey(event,detailsOf(details).tabId),{textColor:toCss(color),textColorValue:color});},
+   getBadgeTextColor:(event,details)=>[...(read(event.extension.id,tabKey(event,detailsOf(details).tabId),'textColorValue')||DEFAULT_TEXT)],
    setIcon:(event,details)=>{
     const icon=normalizeIcon(detailsOf(details),{extension:event.extension});
-    put(event.extension.id,tabIdOf(detailsOf(details).tabId),{icon,iconModified:++stamp+Date.now()*1000});
+    put(event.extension.id,tabKey(event,detailsOf(details).tabId),{icon,iconModified:++stamp+Date.now()*1000});
    },
-   enable:(event,tabId)=>{put(event.extension.id,tabIdOf(tabId),{enabled:true});},
-   disable:(event,tabId)=>{put(event.extension.id,tabIdOf(tabId),{enabled:false});},
-   isEnabled:(event,tabId)=>read(event.extension.id,tabIdOf(tabId),'enabled')!==false,
+   enable:(event,tabId)=>{put(event.extension.id,tabKey(event,tabId),{enabled:true});},
+   disable:(event,tabId)=>{put(event.extension.id,tabKey(event,tabId),{enabled:false});},
+   isEnabled:(event,tabId)=>read(event.extension.id,tabKey(event,tabId),'enabled')!==false,
    getUserSettings:event=>({isOnToolbar:bridge.pinned(api.storeKey,event.extension.id)??true}),
    openPopup:(event,options)=>openPopup(event.extension,options)
   };

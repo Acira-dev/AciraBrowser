@@ -164,3 +164,15 @@ test('old files that cannot be removed: exit code 2 for the updater (and a reope
  assert.match(util,/MessageBox MB_OK\|MB_ICONEXCLAMATION "\$\(uninstallFailed\): \$R0"\n/,'the stock box: no /SD, so a silent run sat behind it');
  assert.ok(util.includes('!macro uninstallOldVersion')||util.includes('Function uninstallOldVersion'));
 });
+
+test('beta.14: every install, an update included, writes the uninstall entry\'s DisplayVersion (Settings > Apps showed 0.1.0-beta.6 on a beta.12 install)',()=>{
+ const nsh=fs.readFileSync(path.join(__dirname,'../packaging/acira-installer.nsh'),'utf8'),start=nsh.indexOf('!macro customInstall'),macro=nsh.slice(start,nsh.indexOf('!macroend',start));
+ assert.match(macro,/WriteRegStr SHELL_CONTEXT "\$\{UNINSTALL_REGISTRY_KEY\}" "DisplayVersion" "\$\{VERSION\}"/,'in the key this setup writes');
+ assert.match(macro,/ReadRegStr \$R0 HKCU "\$\{AC_OLD_UNINSTALL_KEY\}" "DisplayName"[\s\S]*WriteRegStr HKCU "\$\{AC_OLD_UNINSTALL_KEY\}" "DisplayVersion" "\$\{VERSION\}"/,'and in the current-user key of an earlier install');
+ assert.ok(macro.indexOf('DisplayVersion')>macro.indexOf('AciraRemove.exe'),'after the removers are written, so nothing later in the macro or the setup can leave an old number');
+ assert.ok(!/!ifdef BUILD_UNINSTALLER[\s\S]*DisplayVersion/.test(macro),'only in the setup, never compiled into the uninstaller');
+ // the key IS the one in the report: electron-builder derives it from the app id
+ const {UUID}=require('builder-util-runtime'),config=require('../packaging/electron-builder.cjs');
+ assert.equal(UUID.v5(config.appId,UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')),'d22525d0-18d8-53f4-9ae4-17967a9ba3f1');
+ assert.ok(!config.nsis?.guid,'no custom guid: the key stays the app id\'s');
+});

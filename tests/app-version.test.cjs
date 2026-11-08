@@ -21,5 +21,5 @@ test('the full build versions people run are accepted by the server\'s own rule,
  const server=require('node:fs').readFileSync(require('node:path').join(__dirname,'../supabase/functions/usage/handler.mjs'),'utf8');
  const client=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/browser-services/app-version.cjs'),'utf8');
  assert.ok(server.includes(String(VERSION))&&client.includes(String(VERSION)),'the same pattern on both sides');
- for(const full of ['0.1.0-beta.6.local.4','0.1.0-beta.7','0.1.0-beta.12.local.15','0.1.0'])assert.ok(full.length<=24&&VERSION.test(full),full);
+ for(const full of ['0.1.0-beta.6.local.4','0.1.0-beta.7','0.1.0-beta.12.local.15','0.1.0','0.1.0-beta.13.1','0.1.0-beta.13.12','0.1.0-beta.13.1.local.2'])assert.ok(full.length<=24&&VERSION.test(full),full);
 });

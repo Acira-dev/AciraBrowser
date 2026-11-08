@@ -71,6 +71,39 @@ for (const platform of ['darwin', 'win32', 'linux']) {
     }
   });
 
+  test(`${label}: a quick chord never draws anything, whatever its second key, up to the delay (beta.14: 140 ms)`, () => {
+    // The figure is drawn 10-15 ms after the timer fires, so a chord whose second key lands inside HOLD_MS never reaches the screen.
+    for (const gap of [0, 30, 60, 90, 120, HOLD_MS - 20, HOLD_MS - 1]) {
+      for (const [name, extra] of [['c', {}], ['t', {}], ['v', {}], ['Shift', { shift: true }], ['Tab', {}], ['F5', {}]]) {
+        const r = rig(platform);
+        r.down(); r.advance(gap); r.press(name, extra); r.release(name); r.advance(1000); r.up();
+        assert.deepEqual(r.log, [], `${name} after ${gap} ms must not show them`);
+      }
+    }
+    assert.ok(HOLD_MS >= 100 && HOLD_MS <= 160, 'short enough to feel at once, long enough for the slowest everyday chord');
+  });
+
+  test(`${label}: a click made while the modifier is down is not a look at the numbers: they do not show for that hold (Ctrl/Cmd+click)`, () => {
+    const r = rig(platform);
+    r.down(); r.advance(HOLD_MS - 30); r.hold.abandon(); r.advance(2000);
+    assert.deepEqual(r.log, [], 'a press before they show spends the hold');
+    assert.equal(r.hold.phase, 'spent');
+    assert.equal(r.timers.size, 0);
+    r.up(); r.down(); r.advance(HOLD_MS);
+    assert.equal(r.log.length, 1, 'the next, separate hold starts afresh');
+    assert.match(r.log[0], /^show@/);
+    // Once they are on screen a press does not take them away: the person chose to hold the key.
+    const shown = rig(platform);
+    shown.down(); shown.advance(HOLD_MS); shown.hold.abandon(); shown.advance(100);
+    assert.deepEqual(shown.log, [`show@${HOLD_MS}`]);
+    assert.equal(shown.hold.shown, true);
+    // A press with nothing held changes nothing.
+    const idle = rig(platform);
+    idle.hold.abandon(); idle.advance(1000);
+    assert.deepEqual(idle.log, []);
+    assert.equal(idle.hold.phase, 'idle');
+  });
+
   test(`${label}: a number pressed before they show is the shortcut being used: they do not appear for that hold`, () => {
     const r = rig(platform);
     r.down(); r.advance(80); r.press('3'); r.release('3'); r.advance(2000);
@@ -196,10 +229,10 @@ for (const platform of ['darwin', 'win32']) test(`${platform === 'darwin' ? 'Cmd
 test('Windows and Linux repeat a held Ctrl: the repeats do not restart the delay', () => {
   const r = rig('win32');
   r.down();
-  for (let i = 0; i < 4; i++) { r.advance(60); r.hold.note({ type: 'keyDown', key: 'Control', control: true, isAutoRepeat: true }); }
-  assert.deepEqual(r.log, [], 'four repeats in, 240 ms');
-  r.advance(10);
-  assert.deepEqual(r.log, [`show@${HOLD_MS}`]);
+  for (let i = 0; i < 4; i++) { r.advance(30); r.hold.note({ type: 'keyDown', key: 'Control', control: true, isAutoRepeat: true }); }
+  assert.deepEqual(r.log, [], 'four repeats in, 120 ms');
+  r.advance(HOLD_MS - 120);
+  assert.deepEqual(r.log, [`show@${HOLD_MS}`], 'a repeat that restarted the timer would push this out');
 });
 
 test('only the platform\'s own key counts: Ctrl does nothing on a Mac (it is the workspace and Ctrl+Tab key there), the Windows key does nothing elsewhere', () => {
@@ -228,8 +261,8 @@ test('a modifier pressed while Shift or Alt is already down does not start them 
   assert.deepEqual(mac.log, []);
 });
 
-test('the delay is 250 ms, and events that are not key presses are ignored', () => {
-  assert.equal(HOLD_MS, 250);
+test('the delay is 140 ms (beta.14, was 250), and events that are not key presses are ignored', () => {
+  assert.equal(HOLD_MS, 140);
   const r = rig('darwin');
   r.hold.note(null); r.hold.note({}); r.hold.note({ type: 'mouseDown' }); r.hold.note({ type: 'keyUp', key: 'a' });
   r.advance(1000);

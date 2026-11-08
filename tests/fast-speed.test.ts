@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classScales, kick, motionTokens, springFor, springForFrequent, type MotionTokenId } from '../src/ui/motionTokens';
+import { classScales, fastPace, kick, motionPaceOf, motionTokens, springFor, springForFrequent, type MotionTokenId } from '../src/ui/motionTokens';
 import { motionScales, stripSeconds } from '../src/ui/sharedMotion';
 import { cascadeDelay, classStretch, riseFor } from '../src/ui/splitMotion';
 
@@ -55,6 +55,12 @@ test('CSS reads the same scale: --motion-pace is published, the tooltip and the 
   assert.match(app, /'--motion-pace': motionPaceOf\(motionSpeedValue\)/);
   assert.match(transient, /--motion-tooltip: calc\(140ms \* min\(var\(--motion-scale, 1\), 1\.3\)\);/, 'the tooltip: 84 ms at Fast');
   assert.match(transient, /view-transition-group\(\*\) \{\n  animation-duration: calc\(240ms \* var\(--motion-scale, 1\)\);/, 'the frame crossfade: 144 ms at Fast');
+});
+
+test('Fast\'s pace for set-length motion is half of Premium (beta.14 item 16); the spring tokens stay at .6', () => {
+  assert.equal(fastPace, .5);
+  assert.deepEqual([motionPaceOf('premium'), motionPaceOf('fast'), motionPaceOf('off')], [1, .5, 1]);
+  assert.equal(classScales.fast.S, .6, 'tokens are not touched');
 });
 
 test('the split surfaces read the same classes: effects .6 at Fast (not 1 − .4 × 4/7), cascades quicken, rows rise 3 px', () => {

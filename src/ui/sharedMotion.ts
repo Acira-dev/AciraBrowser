@@ -46,7 +46,7 @@ export function publishMotionSpeed(speed: SpeedName): void {
   style.setProperty('--motion-l', String(classScale(speed, 'L')));
   // Frequent surfaces (tab strips, sidebar rows, suggestions) take 40% of the stretch: `--motion-f` (1.28 Premium, .6 Fast, 0 Off).
   style.setProperty('--motion-f', String(frequentStretch(classScale(speed, 'S'))));
-  // Motion with a set length that Premium never stretches quickens in Fast: `--motion-pace` (1 Premium, .6 Fast, 1 Off).
+  // Motion with a set length that Premium never stretches quickens in Fast: `--motion-pace` (1 Premium, .5 Fast, 1 Off).
   style.setProperty('--motion-pace', String(motionPaceOf(speed)));
 }
 /** The speed in force right now: Off whenever reduced motion is on (the setting or the OS). Before App has published one,
@@ -63,7 +63,7 @@ export function motionScale(cls: MotionClass = 'S'): number {
 /** The spring-speed multiplier of a frequent surface that still runs a hand-tuned spring (the tab strips): 1/.6 in Fast (the
  * same spring, stiffer), 1/1.28 in Premium (28% slower), 1 when off (those surfaces then run no motion). */
 export const frequentSpeed = (settings: Parameters<typeof animationSpeedOf>[0]): number => { const scale = classScale(animationSpeedOf(settings), 'S'); return scale > 0 ? 1 / frequentStretch(scale) : 1; };
-/** The pace of motion with a set length that Premium never stretches (`motionPaceOf`): .6 in Fast, 1 otherwise. */
+/** The pace of motion with a set length that Premium never stretches (`motionPaceOf`): .5 in Fast, 1 otherwise. */
 export const motionPace = (): number => motionPaceOf(motionSpeed());
 /** Milliseconds for the current speed: `scaled(180)` is 306 in Premium, 108 in Fast, 0 when off. */
 export const scaled = (ms: number, cls: MotionClass = 'S'): number => ms * motionScale(cls);
@@ -314,7 +314,7 @@ export function useSectionMotion(target: RefObject<HTMLElement | null>, key: unk
 }
 
 /** The sidebar's spring (the same curve the sidebar's own slide, the page card and main's native page follow), 480 ms at Premium
- * and 288 in Fast (`--motion-pace`): never stretched by Premium, so the four stay in step at every speed. */
+ * and 240 in Fast (`--motion-pace`): never stretched by Premium, so the four stay in step at every speed. */
 const PAGE_GLIDE_MS = 480;
 const PAGE_SPRING = 'linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)';
 /** R6 (founder: "the way websites respond to dimension changes is too cutty and slow", "remove the blur"): while the sidebar or the

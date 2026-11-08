@@ -166,3 +166,16 @@ test('Tabs and Window view render in Appearance › Layout first, Tabs is mirror
   assert.match(row, /yours\.tabsSide'/);
   assert.match(row, /yours\.tabsSideAddress/, 'the third answer: Sidebar mode, with the address bar in the sidebar');
 });
+
+test('Settings › Extensions and the extensions menu lead to the Extensions group in Shortcuts', () => {
+  const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
+  const link = read('src/features/settings/panels/extensions.tsx').match(/<SettingCrossLink to="([^"]+)" section="([^"]+)"/);
+  assert.ok(link, 'Settings › Extensions has the Keyboard shortcuts row');
+  assert.ok(byId(link![1]), `link target ${link![1]} is registered`);
+  assert.equal(byId(link![1])!.section, link![2]);
+  assert.equal(link![2], 'Shortcuts');
+  assert.match(read('src/features/settings/panels/shortcuts.tsx'), new RegExp(`id=\\{category === 'Extensions' \\? '${link![1]}'`), 'the Extensions group carries the target id');
+  assert.match(read('src/App.tsx'), new RegExp(`onKeyboardShortcuts=\\{\\(\\) => \\{ openSettings\\(state, dispatch, \\{ setting: '${link![1]}' \\}\\)`), 'the extensions menu opens the same target');
+  assert.match(read('src/components/ExtensionManager.tsx'), /onKeyboardShortcuts&&<ActionRow label=\{t\("nativeCore\.keyboardShortcuts"\)\}/);
+  for (const word of ['extension shortcuts', 'extension keys', 'bitwarden shortcut']) assert.ok(found(word).includes(link![1]), `${word} finds it`);
+});

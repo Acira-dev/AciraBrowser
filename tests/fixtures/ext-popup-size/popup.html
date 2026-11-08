@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Popup size fixture</title>
+<style>
+  html, body { margin: 0; padding: 0; font: 13px/1.4 system-ui, sans-serif; background: #fff; color: #17171b; }
+  #app { box-sizing: border-box; width: 360px; display: flex; flex-direction: column; background: #f4f6ff; }
+  header { height: 56px; background: #1d2bff; color: #fff; display: flex; align-items: center; padding: 0 16px; font-weight: 600; flex: none; }
+  .row { height: 44px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #d9ddf5; flex: none; }
+  .row:nth-child(even) { background: #fff; }
+  footer { height: 48px; background: #17171b; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex: none; }
+  /* Markers a rig can look for: the very last row of pixels and the very last column of pixels of the page. */
+  #bottom, #right { background: #ff2d55; flex: none; }
+  #bottom { height: 4px; }
+  #right { position: absolute; top: 0; right: 0; width: 4px; height: 100%; }
+  body.wide #app { width: 900px; }
+  body.tall .row { height: 60px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>Popup size fixture <span id="mode" style="margin-left:auto;font-weight:400"></span></header>
+  <div id="rows"></div>
+  <footer><span>footer</span><span id="size"></span></footer>
+  <div id="bottom"></div>
+</div>
+<div id="right"></div>
+<script src="popup.js"></script>
+</body>
+</html>

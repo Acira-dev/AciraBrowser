@@ -16,6 +16,18 @@ test('a beta is named by its number: 0.1.0-beta.12 is "Beta 12", worked out from
  assert.ok(!/0\.1 Beta/.test(releaseVersion(version)),'no more "0.1 Beta" for every release');
 });
 
+test('a fix release of a beta carries its fix number: 0.1.0-beta.13.1 is "Beta 13.1" (beta.14 is the next big release, beta.13.M the next fix)',()=>{
+ assert.equal(releaseVersion('0.1.0-beta.13'),'Beta 13');
+ assert.equal(releaseVersion('0.1.0-beta.13.1'),'Beta 13.1');
+ assert.equal(releaseVersion('0.1.0-beta.13.12'),'Beta 13.12');
+ assert.equal(releaseVersion('0.1.1-beta.2.3'),'0.1.1 Beta 2.3');
+ assert.equal(releaseVersion('0.2.0-beta.1.1'),'0.2 Beta 1.1');
+ // each fix upgrades the one before and the beta before it; the next beta upgrades the last fix
+ const order=['0.1.0-beta.12','0.1.0-beta.13','0.1.0-beta.13.1','0.1.0-beta.13.2','0.1.0-beta.13.10','0.1.0-beta.14'];
+ for(let i=1;i<order.length;i++)assert(semver.gt(order[i],order[i-1]),order[i-1]+' < '+order[i]);
+ assert.notEqual(releaseVersion('0.1.0-beta.13'),releaseVersion('0.1.0-beta.13.1'),'a fix reads differently from its beta');
+});
+
 test('a beta on another line keeps its line; a plain version drops a patch of 0',()=>{
  assert.equal(releaseVersion('0.1.1-beta.1'),'0.1.1 Beta 1');
  assert.equal(releaseVersion('0.2.0-beta.3'),'0.2 Beta 3');
@@ -27,7 +39,7 @@ test('a beta on another line keeps its line; a plain version drops a patch of 0'
 });
 
 test('a local build or anything unusual is shown exactly as it is',()=>{
- for(const odd of ['0.1.0-beta.12.local.1','0.1.0-beta.6.local.4','0.1.0-rc.1','dev',''])assert.equal(releaseVersion(odd),odd);
+ for(const odd of ['0.1.0-beta.12.local.1','0.1.0-beta.6.local.4','0.1.0-beta.13.1.local.1','0.1.0-beta.13.1.2','0.1.0-rc.1','dev',''])assert.equal(releaseVersion(odd),odd);
 });
 
 test('the display name never changes how updates compare: each beta still upgrades the one before',()=>{

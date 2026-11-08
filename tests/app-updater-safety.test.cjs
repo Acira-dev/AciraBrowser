@@ -496,7 +496,7 @@ test('Windows: quitting with a waiting update whose build was halted since the l
 
 test('Windows: the quit check is capped and only asks when the last answer is old: fresh, offline or no answer in time, it installs as before',async t=>{
  const feed=await releaseFeed(),root=tmp();t.after(feed.close);
- const ready=async()=>{const c=clock(),nsis=realNsis(feed,root),updater=make(root,nsis,{now:c.now});await updater.check();await readyWith(updater,'0.1.0-beta.9');return {c,nsis,updater};};
+ const ready=async()=>{const own=tmp(),c=clock(),nsis=realNsis(feed,own),updater=make(own,nsis,{now:c.now});await updater.check();await readyWith(updater,'0.1.0-beta.9');return {c,nsis,updater};}; // each block is its own install: a quit that started an install records an attempt in updater.json (beta.14), and four in one folder would be four installs that did not take
  {const {nsis,updater}=await ready();feed.staging=0;const asked=feed.looks(); // halted a minute ago, the answer is fresh: not asked
   await updater.atQuit();assert.equal(feed.looks(),asked,'no request');nsis.quitOnce();assert.equal(nsis.started.length,1);feed.staging=undefined;}
  {const {c,nsis,updater}=await ready();feed.hang=true;c.later(STALE);const began=Date.now();

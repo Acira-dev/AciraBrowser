@@ -14,7 +14,7 @@ try {
   const first = (await app.svc({type: 'metrics.status'})).metrics;
   check('starts unset and off, endpoint configured', first.choice === 'unset' && !first.enabled && first.configured, first);
   const protection = (await app.svc({type: 'protection.status'})).protection.rows.find(row => row.id === 'telemetry');
-  check('protection row says nothing is sent while off', /^Nothing is sent/.test(protection.detail), protection.detail);
+  check('protection row says no analytics or crash reports are sent while off', /^No analytics or crash reports are sent/.test(protection.detail), protection.detail);
   const on = (await app.svc({type: 'metrics.set', enabled: true})).metrics;
   check('on makes a real random id', on.enabled && on.payload.installId !== first.payload.installId, on.payload);
   const sent = fs.readFileSync(path.join(app.root, 'metrics.json'), 'utf8');

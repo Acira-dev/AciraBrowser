@@ -3,7 +3,7 @@
 // Checks: chrome.offscreen (create/has/close, one per extension, DOMParser in the document, runtime messaging back), runtime.getContexts,
 // chrome.userScripts behind the Allow user scripts switch (isolated USER_SCRIPT world, MAIN world, messaging answered by the worker),
 // chrome.sidePanel.open (pane docked beside the page; capture saved), chrome.identity.launchWebAuthFlow (ends at the chromiumapp.org
-// redirect without requesting it) and getAuthToken's error, read-only chrome.bookmarks/history/sessions.
+// redirect without requesting it) and getAuthToken's error, chrome.bookmarks (read and change), read-only chrome.history/sessions.
 // Usage (cwd = repo): node qa/extension-matrix/api-fixture.mjs   (D_VISIBLE=1 for a visible window and real-pixel captures)
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -88,7 +88,7 @@ try {
 
   await app.act({type: 'bookmark.add', url: base + '/page', title: 'Fixture bookmark', parentId: null, index: 0}).catch(error => { R.bookmarkAddError = String(error.message || error); });
   const stores = await send({command: 'stores'});
-  check('bookmarks/history/sessions read, writes refused', stores.ok && stores.value.rootChildren.length === 1 && stores.value.write.ok === false, stores);
+  check('bookmarks read and changed, history/sessions read and refused', stores.ok && stores.value.rootChildren.length === 2 && stores.value.write.ok === false && stores.value.bookmarkWrite.created === true && stores.value.bookmarkWrite.removed === true, stores);
 } catch (error) {
   R.fatal = String(error.stack || error);
   console.error(error);

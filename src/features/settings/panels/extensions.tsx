@@ -1,5 +1,5 @@
 import { ExtensionManager } from '../../../components/ExtensionManager';
-import { SettingGroup, SettingNote, SettingRow } from '../controls';
+import { SettingCrossLink, SettingGroup, SettingNote, SettingRow } from '../controls';
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
 
 import { t } from '../../../i18n';
@@ -11,6 +11,7 @@ function Extensions({ state, dispatch }: SettingsPanelProps) {
   const tab = state.tabs.find((item) => item.id === state.activeTabId);
   return (
     <SettingGroup>
+      <SettingCrossLink to="shortcuts-extensions" section="Shortcuts" title={t("nativeCore.keyboardShortcuts")} />
       <SettingRow id="extensions-manager" title={t("privacy.chromeWebStoreExtensions")} detail={t("ext.settingsDetail")} stacked />
       {profile && <ExtensionManager profileId={profile.id} profileName={profile.name} tab={tab} privateMode={Boolean(profile.private)} onGetExtensions={() => dispatch({ type: 'tab.new', url: STORE_URL })} />}
       <SettingNote>{t("extensions.signInToBitwardenInside")}</SettingNote>

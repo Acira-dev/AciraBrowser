@@ -47,8 +47,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const recent = await chrome.bookmarks.getRecent(5);
       const history = await chrome.history.search({text: '', startTime: 0, maxResults: 5});
       const closed = await chrome.sessions.getRecentlyClosed({maxResults: 5});
-      const write = await settle(() => chrome.bookmarks.create({title: 'x', url: 'https://example.com/'}));
-      return {rootChildren: tree[0].children.map(c => c.title), recent: recent.map(b => b.title), history: history.map(h => h.url), closed: closed.length, write};
+      // history stays read-only; bookmarks can be changed (Acira's own store, as in Chrome) - the node made here is removed again
+      const write = await settle(() => chrome.history.deleteAll());
+      const made = await settle(() => chrome.bookmarks.create({parentId: '1', title: 'Fixture write', url: 'https://example.com/fixture-write'}));
+      const removed = made.ok ? await settle(() => chrome.bookmarks.remove(made.value.id)) : null;
+      return {rootChildren: tree[0].children.map(c => c.title), recent: recent.map(b => b.title), history: history.map(h => h.url), closed: closed.length, write, bookmarkWrite: {created: made.ok, removed: !!removed && removed.ok}};
     }
   };
   const run = commands[message && message.command];

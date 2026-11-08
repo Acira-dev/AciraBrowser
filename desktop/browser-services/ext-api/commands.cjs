@@ -41,7 +41,7 @@ module.exports={
 
   function register(extension){
    if(!extension?.manifest?.commands)return;
-   const list=commandsOf(extension.manifest);
+   const list=commandsOf(extension.manifest,{platform:bridge.getShortcuts()?.platform});
    if(!list.length)return;
    byExtension.set(extension.id,list);
    const name=String(extension.name||'Extension').slice(0,60);
@@ -75,7 +75,7 @@ module.exports={
    }catch{return '';}
   }
   api.handle('commands.getAll',event=>{
-   const extension=event.extension,list=byExtension.get(extension.id)||commandsOf(extension.manifest);
+   const extension=event.extension,list=byExtension.get(extension.id)||commandsOf(extension.manifest,{platform:bridge.getShortcuts()?.platform});
    return list.map(command=>({name:command.name,description:command.description||(command.execute?'Activate the extension':''),shortcut:shortcutOf(extension.id,command.name)}));
   });
 
@@ -96,7 +96,11 @@ module.exports={
   const release=bridge.register(api.session,'commands',{profileId,run});
 
   return {
-   forget(id){unregister(id);publish();},
+   /** The extension was removed for good (extension-manager remove): its keys go with it. A turned-off extension only unloads, and its keys wait in the registry's file. */
+   forget(id){
+    unregister(id);publish();
+    try{bridge.getShortcuts()?.forgetParked?.(`${PREFIX}${profileId}:${id}:`);}catch(error){console.warn('[ext-api:commands] keys of a removed extension were not cleared:',error?.message||error);}
+   },
    dispose(){release();groups.delete(api.session);publish();}
   };
  }

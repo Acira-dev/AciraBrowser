@@ -12,8 +12,8 @@ const SHIPPED=Object.freeze([
  Object.freeze({version:'0.1.0-beta.6.local.4',what:'the Mac build people installed on 1 November'}),
  Object.freeze({version:'0.1.0-beta.6',what:'the public Windows build'}),
 ]);
-const RELEASE_VERSION=/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/; // what ships; never a ".local.N" build
-const WINDOWS_VERSION=/^0\.1\.\d+-beta\.\d+$/; // scripts/build-windows.mjs refuses any other version
+const RELEASE_VERSION=/^\d+\.\d+\.\d+(?:-beta\.\d+(?:\.\d+)?)?$/; // what ships (a fix release such as 0.1.0-beta.13.1 included); never a ".local.N" build
+const WINDOWS_VERSION=/^0\.1\.\d+-beta\.\d+(?:\.\d+)?$/; // scripts/build-windows.mjs refuses any other version
 const ASSET_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]*$/; // GitHub rewrites other characters, which would break the URLs written into the feed
 const NOTES_OLD_MAX=1000; // what beta.11 and earlier copies of Acira show of a release's notes
 const NOTES_MAX=6000; // desktop/browser-services/app-updater.cjs keeps at most this many characters of release notes (installed copies up to beta.11 stop at 1000)
@@ -23,7 +23,7 @@ function versionProblems(version,channel){
  if(!CHANNELS.includes(channel))return ['The channel must be beta or stable.'];
  if(!semver.valid(version))return ['"'+version+'" is not a version.'];
  if(!RELEASE_VERSION.test(version))return [version+' is not a release version (a local build such as 0.1.0-beta.6.local.4 never goes to users). Use the plain package.json version, for example 0.1.0-beta.7.'];
- if(channel==='beta'&&!semver.prerelease(version))return ['The beta channel carries pre-release versions (0.1.0-beta.N); '+version+' is a stable version, so use --channel stable.'];
+ if(channel==='beta'&&!semver.prerelease(version))return ['The beta channel carries pre-release versions (0.1.0-beta.N or 0.1.0-beta.N.M); '+version+' is a stable version, so use --channel stable.'];
  if(channel==='stable'&&semver.prerelease(version))return ['The stable channel carries plain versions; '+version+' is a pre-release, so use --channel beta.'];
  return [];
 }

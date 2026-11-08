@@ -2,7 +2,7 @@ import type { SettingsPanel, SettingsPanelProps } from '../panels';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import { setRailPrefs, useRailPrefs, type SidebarFolders } from '../../../ui/railPrefs';
 import { setSidebarAppsHidden, setSidebarAppsPlace, useSidebarApps } from '../../../ui/sidebarApps';
-import { clampSidebarWidth, SIDEBAR_WIDTH } from '../../../ui/sidebarLayout';
+import { clampSidebarWidth } from '../../../ui/sidebarLayout';
 import { sidebarSideOf } from '../../../ui/sidebarSide';
 import { sidebarPatch, workspaceIsOpen } from '../../../runtime/browserChrome';
 import { useRef, useSyncExternalStore } from 'react';
@@ -12,6 +12,7 @@ import { ArrowUp } from '../../../components/AppIcons';
 import { readCtrlTabMode, setCtrlTabMode, subscribeCtrlTabMode, type CtrlTabMode } from '../../../ui/tabMru';
 import { SidebarEdgeRows, SidebarSideRow } from '../SidebarRows';
 import { SidebarSizeRow } from '../SidebarSizeRow';
+import { SIDEBAR_RESET, sidebarLayoutChanged } from '../changed';
 
 import { t, translateText, type MessageId } from '../../../i18n';
 const ctrlTabDetail: Record<CtrlTabMode, MessageId> = {
@@ -34,14 +35,15 @@ export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   const width = clampSidebarWidth(state.settings.sidebarWidth);
   const open = workspaceIsOpen(state.windowUi, tab);
   const side = sidebarSideOf(state.settings);
-  const changed = width !== SIDEBAR_WIDTH.initial || side !== 'left' || apps.hidden || apps.place === 'bottom' || state.settings.favoriteTabsInList === false || rail.tabs || rail.newTabsTop === false || (rail.folders ?? 'mixed') !== 'mixed' || !open;
+  const changed = sidebarLayoutChanged({ width, side, appsHidden: apps.hidden, appsPlace: apps.place === 'bottom' ? 'bottom' : 'top', favoriteTabsInList: state.settings.favoriteTabsInList, tabsInSidebar: Boolean(state.settings.verticalTabs) || rail.tabs, newTabsTop: rail.newTabsTop, folders: rail.folders, open });
   const reset = () => {
-    dispatch({ type: 'settings.update', patch: { sidebarWidth: SIDEBAR_WIDTH.initial, sidebarSide: 'left', favoriteTabsInList: true } });
-    if (!open) dispatch({ type: 'ui.update', patch: sidebarPatch(true) });
-    setSidebarAppsHidden(tab.browserProfileId, privateMode, false);
-    setSidebarAppsPlace(tab.browserProfileId, privateMode, 'top');
-    setRailPrefs({ tabs: false, newTabsTop: true, newTabsTopChosen: false, folders: 'mixed' }, tab.browserProfileId, privateMode);
-    dispatch({ type: 'settings.update', patch: { verticalTabs: false } });
+    const to = SIDEBAR_RESET;
+    dispatch({ type: 'settings.update', patch: { sidebarWidth: to.settings.sidebarWidth, sidebarSide: to.settings.sidebarSide, favoriteTabsInList: to.settings.favoriteTabsInList } });
+    if (!open) dispatch({ type: 'ui.update', patch: sidebarPatch(to.shown) });
+    setSidebarAppsHidden(tab.browserProfileId, privateMode, to.appsHidden);
+    setSidebarAppsPlace(tab.browserProfileId, privateMode, to.appsPlace);
+    setRailPrefs(to.rail, tab.browserProfileId, privateMode);
+    dispatch({ type: 'settings.update', patch: { verticalTabs: to.settings.verticalTabs } });
   };
   const layout = sectionLayout(rail), listed: SectionId[] = ['favorites', 'pinned', ...layout.order];
   const save = (next: typeof layout) => saveSections(next, tab.browserProfileId, privateMode);
