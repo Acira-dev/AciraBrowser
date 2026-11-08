@@ -7,7 +7,8 @@ import { appearancePalettes, palettePreference } from "../../runtime/appearanceP
 import { FinishSwatch } from "../../components/AppearanceControls";
 import { endAppearancePreview } from "../../ui/finishPreview";
 import { windowViewOf, type WindowView } from "../../runtime/windowView";
-import { windowViewDetail } from "../../ui/windowViewText";
+import { setTabsLayout, shownView, tabsLayoutOf, viewsOfLayout } from "../../ui/sidebarMode";
+import { windowViewDetail, windowViewName } from "../../ui/windowViewText";
 import { t, useT, type MessageId } from "../../i18n";
 import "./onboarding.css";
 
@@ -109,7 +110,10 @@ function MakeItYours({ reduced, onClose }: { reduced: boolean; onClose: () => vo
   const update = (patch: Partial<typeof settings>) => dispatch({ type: "settings.update", patch });
   // The same window-view setting as Settings › Window view. Focus is a mode of its own and is not offered here, so it reads as Comfortable.
   const current = windowViewOf(settings);
-  const view: Exclude<WindowView, "focus"> = current === "focus" ? "full" : current;
+  const layout = tabsLayoutOf(settings);
+  // With the address bar in the sidebar Compact and Focus look like Full (ui/sidebarMode.ts), so only the views that differ are listed.
+  const view = shownView(layout, current === "focus" ? "full" : current) as Exclude<WindowView, "focus">;
+  const views = viewsOfLayout(layout, ["full", "compact", "seamless"]) as readonly Exclude<WindowView, "focus">[];
   const choose = (palette: (typeof appearancePalettes)[number]) => update(palettePreference(palette));
   // One row of finishes: arrows and Home/End only move focus; Enter, Space or a click chooses.
   const keys = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -171,9 +175,9 @@ function MakeItYours({ reduced, onClose }: { reduced: boolean; onClose: () => vo
               <span>{t("yours.tabs")}</span>
               <Segmented
                 label={t("yours.tabs")}
-                value={settings.verticalTabs ? "side" : "top"}
-                options={[["top", t("yours.tabsTop")], ["side", t("yours.tabsSide")]] as const}
-                onChange={(value) => update({ verticalTabs: value === "side" })}
+                value={layout}
+                options={[["top", t("yours.tabsTop")], ["sidebar", t("yours.tabsSide")], ["sidebar-address", t("yours.tabsSideAddress")]] as const}
+                onChange={(value) => setTabsLayout(state, dispatch, value)}
               />
             </div>
             <div className="fr-yours-row" data-hint="">
@@ -181,7 +185,7 @@ function MakeItYours({ reduced, onClose }: { reduced: boolean; onClose: () => vo
               <Segmented
                 label={t("yours.view")}
                 value={view}
-                options={[["full", t("windowview.full")], ["compact", t("windowview.compact")], ["seamless", t("windowview.seamless")]] as const}
+                options={views.map((mode) => [mode, windowViewName(mode)] as const)}
                 onChange={(windowView) => update({ windowView })}
               />
               <small className="fr-yours-hint" aria-live="polite">{windowViewDetail(view)}</small>

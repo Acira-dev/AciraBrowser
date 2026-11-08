@@ -11,6 +11,8 @@
   font-size: var(--text-13, 13px); line-height: 18px;
   animation: artwork-toast-in calc(220ms * var(--motion-pace, 1)) var(--ease-out, cubic-bezier(.2, 0, 0, 1)) backwards;
 }
+/* The sidebar on the right: the toast stays at the content's bottom-left, 16px from the window's left edge (--toast-edge still names the room the sidebar takes, for the widths). */
+:root[data-sidebar-side=right] .app.style-acira .toast[data-artwork-toast] { left: 16px; }
 .app.style-acira .toast[data-artwork-toast][data-closing] { animation: artwork-toast-out calc(120ms * var(--motion-pace, 1)) var(--ease-out, cubic-bezier(.2, 0, 0, 1)) forwards; pointer-events: none; }
 .app.style-acira.opaque-glass .toast[data-artwork-toast] { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .app.style-acira .toast[data-artwork-toast] .toast-status { display: grid; place-items: center; flex: none; width: 16px; height: 16px; color: var(--success); }

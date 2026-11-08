@@ -34,8 +34,9 @@ export function ChoiceCards<T extends string>({ label, value, options, onChange,
 
 /** A miniature of the browser window, drawn in the current finish's own colors: the frame, the surface the toolbar and the
  * chosen tab share, the page, ink and the accent. Colors come from custom properties (`--cc-*`), so the same drawing is
- * Light, Dark or the live theme. `tabs` is where the tab list sits. */
-export type MiniLayout = 'toolbar' | 'sidebar';
+ * Light, Dark or the live theme. `layout` is where the tab list and the address bar sit: along the top, in a sidebar (the
+ * toolbar stays over the page), or both in the sidebar (nothing above the page: ui/sidebarMode.ts, Sidebar + address). */
+export type MiniLayout = 'toolbar' | 'sidebar' | 'sidebar-address';
 
 function Window({ layout, ids }: { layout: MiniLayout; ids: { wall: string } }) {
   // Few elements on purpose: bars and dots are stroked lines in one path per kind, so the first paint stays cheap.
@@ -59,6 +60,21 @@ function Window({ layout, ids }: { layout: MiniLayout; ids: { wall: string } }) 
       <path d="M34 65h52" className="cc-bar cc-bar-strong cc-page-ink" />
       <path d="M34 78h88M34 86h74M34 94h82" className="cc-bar cc-page-ink" />
       <rect x="132" y="62" width="34" height="28" rx="5" className="cc-picture" />
+    </> : layout === 'sidebar-address' ? <>
+      {/* The address field, Back/Forward and the selected tab all sit in the sidebar column; the page starts at the window's top. */}
+      <rect x="25" y="47" width="36" height="12" rx="4" className="cc-sheet" />
+      <rect x="70" y="20" width="106" height="87" rx="5.5" className="cc-page" />
+      <rect x="25" y="29" width="40" height="8" rx="4" className="cc-field" />
+      <path d="M29 22.5h.01M37 22.5h.01M45 22.5h.01M62 22.5h.01" className="cc-dot" />
+      <path d="M38 42h14" className="cc-bar" />
+      <path d="M32 53h.01" className="cc-dot cc-dot-accent" />
+      <path d="M32 68h.01M32 80h.01" className="cc-dot" />
+      <path d="M38 53h17" className="cc-bar cc-bar-strong" />
+      <path d="M38 68h16M38 80h19" className="cc-bar" />
+      <path d="M30 96h4M32 94v4" className="cc-stroke" />
+      <path d="M80 34h34" className="cc-bar cc-bar-strong cc-page-ink" />
+      <path d="M80 47h40M80 55h32M80 63h38" className="cc-bar cc-page-ink" />
+      <rect x="130" y="44" width="36" height="26" rx="5" className="cc-picture" />
     </> : <>
       <rect x="25" y="22" width="36" height="12" rx="4" className="cc-sheet" />
       <rect x="70" y="20" width="106" height="87" rx="5.5" className="cc-page" />
@@ -81,7 +97,7 @@ function Window({ layout, ids }: { layout: MiniLayout; ids: { wall: string } }) 
 /** `halves` draws two themes split down the middle (Auto). Otherwise one drawing in `theme` (or the live theme). */
 export function MiniBrowser({ layout, halves }: { layout: MiniLayout; halves?: [CSSProperties, CSSProperties] }) {
   const id = useId().replace(/:/g, ''), ids = { wall: `${id}-wall` };
-  return <svg className="cc-svg" viewBox="0 0 200 125" focusable="false" preserveAspectRatio="xMidYMid slice">
+  return <svg className="cc-svg" data-mini-layout={halves ? undefined : layout} viewBox="0 0 200 125" focusable="false" preserveAspectRatio="xMidYMid slice">
     <defs>
       {/* A fixed sheen over the flat desktop color; a gradient cannot read per-half colors, the flat rect can. */}
       <linearGradient id={ids.wall} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".12" /><stop offset="1" stopColor="#000" stopOpacity=".08" /></linearGradient>
@@ -103,6 +119,6 @@ export function warmMiniBrowser() {
   host.setAttribute('aria-hidden', 'true');
   document.body.appendChild(host);
   const root = createRoot(host);
-  root.render(<div className="cc-art"><MiniBrowser layout="toolbar" /><MiniBrowser layout="sidebar" halves={[{}, {}]} /></div>);
+  root.render(<div className="cc-art"><MiniBrowser layout="toolbar" /><MiniBrowser layout="sidebar" halves={[{}, {}]} /><MiniBrowser layout="sidebar-address" /></div>);
   window.setTimeout(() => { root.unmount(); host.remove(); }, 700);
 }

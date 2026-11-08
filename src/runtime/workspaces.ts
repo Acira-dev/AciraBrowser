@@ -1,5 +1,6 @@
 import enMessages from '../i18n/en.json';
 import { format as formatMessage } from '../i18n/format';
+import { tabListed } from './favoriteTabsRule';
 import { navigationTitle } from './navigation';
 import { settleSpaces } from './profileSpaces';
 import { leaveSplit, normalizeSplitGroups } from './splitGroups';
@@ -97,7 +98,9 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
   const counts: Record<string, { tabs: number; pages: number }> = {};
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
-    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any.
+    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any, unless Settings keep it
+    // only in its tile and the list does not show it (favoriteTabs.ts tabListed).
+    if (state.settings && !tabListed(tab, state.settings)) continue;
     const entry = counts[workspaceIdOf(state, tab)];
     if (entry) { entry.tabs++; if (tab.url !== 'acira://new') entry.pages++; }
   }
@@ -204,6 +207,42 @@ const activate = (s: BrowserSnapshot, tab: TabSession) => {
   s.settings.zoom = tab.zoom;
 };
 const nameTaken = (s: BrowserSnapshot, profile: string, name: string, except?: string) => workspacesFor(s, profile).some(workspace => workspace.id !== except && workspaceName(workspace).toLowerCase() === name.toLowerCase());
+
+/** Private and Tor tabs never change workspace (they are not in the tab menu's Move to workspace either). */
+const movable = (tab: Pick<TabSession, 'privacy'>): boolean => tab.privacy !== 'private' && tab.privacy !== 'tor';
+/** The tabs of a group, in the group's workspace. */
+export const groupMembers = (s: Pick<BrowserSnapshot, 'tabs' | 'workspaces'>, group: Pick<TabGroup, 'name' | 'browserProfileId' | 'workspaceId'>): TabSession[] =>
+  s.tabs.filter(tab => !tab.pinned && tab.group === group.name && tab.browserProfileId === group.browserProfileId && workspaceIdOf(s, tab) === workspaceIdOf(s, group));
+/** Why `tabs` may not go to `target`, the one rule the move actions and the drag feedback share: 'private' (nothing to move: private and Tor tabs stay),
+ *  'locked' (a locked secured workspace takes nothing), 'secured' (a secured tab stays in a secured workspace); null when the move may go ahead. */
+export type MoveBlock = 'private' | 'locked' | 'secured';
+export function moveBlock(s: Pick<BrowserSnapshot, 'tabs' | 'workspaces'>, tabs: readonly Pick<TabSession, 'privacy'>[], target: Pick<Workspace, 'secured' | 'unlocked'>): MoveBlock | null {
+  if (!tabs.some(movable)) return 'private';
+  if (securedLocked(target)) return 'locked';
+  if (tabs.some(tab => tab.privacy === 'secured') && !target.secured) return 'secured';
+  return null;
+}
+/** Moves `asked` tabs (and the whole of any split among them) into `target`; a group's own tabs keep the group (`keepGroup` goes along), any other tab leaves its group. Returns the tabs moved and the workspace they left; null when nothing moves. */
+function relocateTabs(s: BrowserSnapshot, asked: Set<string>, target: Workspace, profile: string, fresh: MakeTab, keepGroup?: TabGroup): { moving: TabSession[]; from: string } | null {
+  // A split moves whole: its panes live in one workspace.
+  // (Linked copies stay in their groups: they leave the split instead of travelling with it.)
+  for (const group of [...(s.windowUi.splitGroups ?? [])]) {
+    const copies = group.linked ?? [], own = group.tabIds.filter(id => !copies.includes(id));
+    if (own.some(id => asked.has(id))) { own.forEach(id => asked.add(id)); copies.filter(id => !asked.has(id)).forEach(id => leaveSplit(s, group.id, id)); }
+    else copies.filter(id => asked.has(id)).forEach(id => leaveSplit(s, group.id, id));
+  }
+  const moving = s.tabs.filter(tab => asked.has(tab.id) && tab.browserProfileId === profile && workspaceIdOf(s, tab) !== target.id && movable(tab));
+  if (!moving.length) return null;
+  const from = workspaceIdOf(s, moving[0]), movedIds = new Set(moving.map(tab => tab.id)), wasActive = movedIds.has(s.activeTabId), order = s.tabs.map(tab => tab.id), anchor = order.indexOf(s.activeTabId);
+  for (const tab of moving) { tab.workspaceId = target.id; if (!keepGroup || tab.group !== keepGroup.name) tab.group = ''; }
+  if (keepGroup) keepGroup.workspaceId = target.id;
+  if (wasActive) {
+    const left = s.tabs.filter(tab => workspaceIdOf(s, tab) === from && !movedIds.has(tab.id) && tab.browserProfileId === profile);
+    const next = left.find(tab => order.indexOf(tab.id) > anchor) ?? left.at(-1);
+    if (next) activate(s, next); else { const tab = fresh(); tab.workspaceId = from; s.tabs.push(tab); activate(s, tab); }
+  }
+  return { moving, from };
+}
 
 /** The workspace actions. Returns true when it handled the action (the reducer then finishes), 'ignore' when nothing changed, false when the action is not a workspace one. */
 export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, fresh: MakeTab): boolean | 'ignore' {
@@ -418,27 +457,38 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
     case 'workspace.move-tabs': {
       const target = mine.find(item => item.id === action.workspaceId);
       if (!target) return 'ignore';
-      if (securedLocked(target)) { say(s, 'workspaces.unlockFirst', { name: workspaceName(target) }, { tone: 'info' }); return true; }
+      const block = moveBlock(s, action.tabIds.flatMap(id => s.tabs.find(tab => tab.id === id) ?? []), target);
+      if (block === 'private') return 'ignore';
+      if (block === 'locked') { say(s, 'workspaces.unlockFirst', { name: workspaceName(target) }, { tone: 'info' }); return true; }
       // A secured workspace's tabs stay in it: their session is its own.
-      if (action.tabIds.some(id => s.tabs.find(tab => tab.id === id)?.privacy === 'secured') && !target.secured) { say(s, 'workspaces.securedStays', undefined, { tone: 'info' }); return true; }
-      const asked = new Set(action.tabIds);
-      // A split moves whole: its panes live in one workspace.
-      // (Linked copies stay in their groups: they leave the split instead of travelling with it.)
-      for (const group of [...(s.windowUi.splitGroups ?? [])]) {
-        const copies = group.linked ?? [], own = group.tabIds.filter(id => !copies.includes(id));
-        if (own.some(id => asked.has(id))) { own.forEach(id => asked.add(id)); copies.filter(id => !asked.has(id)).forEach(id => leaveSplit(s, group.id, id)); }
-        else copies.filter(id => asked.has(id)).forEach(id => leaveSplit(s, group.id, id));
-      }
-      const moving = s.tabs.filter(tab => asked.has(tab.id) && tab.browserProfileId === profile && workspaceIdOf(s, tab) !== target.id);
-      if (!moving.length) return 'ignore';
-      const from = workspaceIdOf(s, moving[0]), movedIds = new Set(moving.map(tab => tab.id)), wasActive = movedIds.has(s.activeTabId), order = s.tabs.map(tab => tab.id), anchor = order.indexOf(s.activeTabId);
-      for (const tab of moving) { tab.workspaceId = target.id; tab.group = ''; }
-      if (wasActive) {
-        const left = s.tabs.filter(tab => workspaceIdOf(s, tab) === from && !movedIds.has(tab.id) && tab.browserProfileId === profile);
-        const next = left.find(tab => order.indexOf(tab.id) > anchor) ?? left.at(-1);
-        if (next) activate(s, next); else { const tab = fresh(); tab.workspaceId = from; s.tabs.push(tab); activate(s, tab); }
-      }
-      say(s, 'runtime.workspaceMoved', { name: workspaceName(target) }, { action: undoAction({ type: 'workspace.move-tabs', tabIds: moving.map(tab => tab.id), workspaceId: from }) });
+      if (block === 'secured') { say(s, 'workspaces.securedStays', undefined, { tone: 'info' }); return true; }
+      const moved = relocateTabs(s, new Set(action.tabIds), target, profile, fresh);
+      if (!moved) return 'ignore';
+      say(s, 'runtime.workspaceMoved', { name: workspaceName(target) }, { action: undoAction({ type: 'workspace.move-tabs', tabIds: moved.moving.map(tab => tab.id), workspaceId: moved.from }) });
+      return true;
+    }
+    case 'workspace.move-group': {
+      // A whole tab group goes to another workspace of this profile: the group itself (its name, colour and fold) and every tab in it.
+      const target = mine.find(item => item.id === action.workspaceId), group = s.tabGroups.find(item => item.id === action.groupId);
+      if (!target || !group || group.browserProfileId !== profile) return 'ignore';
+      const from = workspaceIdOf(s, group);
+      if (from === target.id) return 'ignore';
+      const members = groupMembers(s, group);
+      if (!members.length) return 'ignore';
+      const block = moveBlock(s, members, target);
+      if (block === 'private') return 'ignore';
+      if (block === 'locked') { say(s, 'workspaces.unlockFirst', { name: workspaceName(target) }, { tone: 'info' }); return true; }
+      if (block === 'secured') { say(s, 'workspaces.securedStays', undefined, { tone: 'info' }); return true; }
+      // Groups are unique by name inside a workspace: a group of the same name already there keeps its name and this one comes as "Name 2".
+      const wanted = typeof action.name === 'string' && action.name.trim() ? action.name.trim().slice(0, 64) : group.name, original = group.name;
+      const taken = (name: string) => s.tabGroups.some(item => item.id !== group.id && item.browserProfileId === profile && workspaceIdOf(s, item) === target.id && item.name === name);
+      let name = wanted;
+      for (let n = 2; taken(name); n++) name = `${wanted.slice(0, 64 - String(n).length - 1)} ${n}`;
+      const count = members.length;
+      const moved = relocateTabs(s, new Set(members.map(tab => tab.id)), target, profile, fresh, group);
+      if (!moved) return 'ignore';
+      if (name !== group.name) { for (const tab of s.tabs) if (tab.group === group.name && tab.browserProfileId === profile && moved.moving.includes(tab)) tab.group = name; group.name = name; }
+      say(s, 'runtime.workspaceGroupMoved', { group: name, count, name: workspaceName(target) }, { action: undoAction({ type: 'workspace.move-group', groupId: group.id, workspaceId: moved.from, name: original }) });
       return true;
     }
     default: return false;

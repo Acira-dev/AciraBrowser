@@ -1,70 +1,42 @@
-import type { BrowserAction, BrowserSnapshot } from '../../runtime/types';
+import type { BrowserAction, BrowserSnapshot, SidebarSide } from '../../runtime/types';
 import { effectiveView, seamlessEdgesOf, sidebarPeekOf } from '../../runtime/windowView';
-import { setRailPrefs } from '../../ui/railPrefs';
-import { setSidebarMode, sidebarModeOn } from '../../ui/sidebarMode';
-import { SettingRow, Switch } from './controls';
+import { sidebarModeOn } from '../../ui/sidebarMode';
+import { sidebarEdgeId, sidebarSideOf } from '../../ui/sidebarSide';
+import { Select, SettingRow, Switch } from './controls';
 
 import { t } from '../../i18n';
 /** The sidebar rows that live in two places (Settings › Tabs › Sidebar, and Appearance › Layout beside the Window view they depend on).
- * Each reads and writes the one setting, so the two always agree; the registry names the Tabs one. */
+ * Each reads and writes the one setting, so the two always agree; the registry names the Tabs one. Where the address bar lives is not a row of its own:
+ * it is the third answer of the Tabs choice (TabLayoutRow, ui/sidebarMode.ts). */
 type Props = { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void };
 
-/** Tabs in the sidebar, in this window and in the profile's own sidebar switch (Appearance › Layout and Tabs share this). */
-export function useSidebarTabs({ state, dispatch }: Props) {
-  const tab = state.tabs.find((item) => item.id === state.activeTabId) || state.tabs[0];
-  const profile = state.browserProfiles.find((item) => item.id === tab.browserProfileId);
-  return {
-    inSidebar: Boolean(state.settings.verticalTabs),
-    useSidebar: () => {
-      dispatch({ type: 'settings.update', patch: { verticalTabs: true } });
-      setRailPrefs({ tabs: true }, tab.browserProfileId, profile?.private);
-    },
-  };
-}
-
-/** Address bar in the sidebar. With tabs along the top the row stays, saying what it needs and offering the one tap that gives it. */
-export function AddressInSidebarRow({ state, dispatch, always }: Props & { always?: boolean }) {
-  const { inSidebar, useSidebar } = useSidebarTabs({ state, dispatch });
-  if (!inSidebar && !always) return null;
-  if (!inSidebar)
-    return (
-      <SettingRow id="address-in-sidebar" title={t('windowview.addressInSidebar')} detail={t('sidebar.addressNeedsSidebarTabs')}>
-        <button type="button" className="st-button" onClick={useSidebar}>{t('sidebar.moveTabsToSidebar')}</button>
-      </SettingRow>
-    );
+/** Which side of the window the sidebar stands on: Left or Right (physical in every language). Sidebar tabs only, like the rows around it. */
+export function SidebarSideRow({ state, dispatch, always }: Props & { always?: boolean }) {
+  if (!state.settings.verticalTabs && !always) return null;
   return (
-    <SettingRow id="address-in-sidebar" title={t('windowview.addressInSidebar')} detail={t('windowview.addressInSidebarDetail')}>
-      <Switch label={t('windowview.addressInSidebar')} checked={state.settings.addressInSidebar === true} onChange={(on) => dispatch({ type: 'settings.update', patch: { addressInSidebar: on } })} />
+    <SettingRow id="sidebar-side" title={t('sidebar.side')} detail={t('sidebar.sideDetail')}>
+      <Select<SidebarSide> label={t('sidebar.side')} value={sidebarSideOf(state.settings)} onChange={(next) => dispatch({ type: 'settings.update', patch: { sidebarSide: next } })} options={[{ value: 'left', label: t('sidebar.sideLeft') }, { value: 'right', label: t('sidebar.sideRight') }]} />
     </SettingRow>
   );
 }
 
-/** The left edge reveal for the window view in use: a closed sidebar showing itself (Full, Compact, Focus: one switch each), or the
+/** The edge reveal for the window view in use (the edge the sidebar stands at): a closed sidebar showing itself (Full, Compact, Focus: one switch each), or the
  * sidebar in Seamless (not with the address bar in it: the sidebar then answers to the address's own edge). Sidebar tabs only. */
 export function SidebarEdgeRows({ state, dispatch, describe }: Props & { /** Tabs › Sidebar says what the switch does; Appearance › Layout keeps its bare row. */ describe?: boolean }) {
-  const s = state.settings, windowView = effectiveView(s, state.windowUi);
+  const s = state.settings, windowView = effectiveView(s, state.windowUi), side = sidebarSideOf(s);
   if (!s.verticalTabs) return null;
-  // Sidebar mode has no top bar to fall back to: a closed sidebar always comes back from the left edge, so there is nothing to switch.
+  // Sidebar mode has no top bar to fall back to: a closed sidebar always comes back from its own edge, so there is nothing to switch.
   if (windowView !== 'seamless' && sidebarModeOn(s)) return null;
   if (windowView !== 'seamless')
     return (
-      <SettingRow id="sidebar-peek" title={t('windowview.closedSidebarEdge')} detail={describe ? t('windowview.closedSidebarEdgeDetail') : undefined}>
-        <Switch label={t('windowview.closedSidebarEdge')} checked={sidebarPeekOf(s)[windowView]} onChange={(on) => dispatch({ type: 'settings.update', patch: { sidebarPeek: { ...sidebarPeekOf(s), [windowView]: on } } })} />
+      <SettingRow id="sidebar-peek" title={t(sidebarEdgeId('windowview.closedSidebarEdge', side))} detail={describe ? t(sidebarEdgeId('windowview.closedSidebarEdgeDetail', side)) : undefined}>
+        <Switch label={t(sidebarEdgeId('windowview.closedSidebarEdge', side))} checked={sidebarPeekOf(s)[windowView]} onChange={(on) => dispatch({ type: 'settings.update', patch: { sidebarPeek: { ...sidebarPeekOf(s), [windowView]: on } } })} />
       </SettingRow>
     );
   if (s.addressInSidebar) return null;
   return (
-    <SettingRow id="seamless-edge-side" title={t('windowview.edgeSide')}>
-      <Switch label={t('windowview.edgeSide')} checked={seamlessEdgesOf(s).side} onChange={(side) => dispatch({ type: 'settings.update', patch: { seamlessEdges: { ...seamlessEdgesOf(s), side } } })} />
-    </SettingRow>
-  );
-}
-
-/** Sidebar mode: tabs and the address bar in the sidebar, in one step; off goes back to how it was (ui/sidebarMode.ts). */
-export function SidebarModeRow({ state, dispatch }: Props) {
-  return (
-    <SettingRow id="sidebar-mode" title={t('sidebarmode.title')} detail={t('sidebarmode.detail')}>
-      <Switch label={t('sidebarmode.title')} checked={sidebarModeOn(state.settings)} onChange={(on) => setSidebarMode(state, dispatch, on)} />
+    <SettingRow id="seamless-edge-side" title={t(sidebarEdgeId('windowview.edgeSide', side))}>
+      <Switch label={t(sidebarEdgeId('windowview.edgeSide', side))} checked={seamlessEdgesOf(s).side} onChange={(side) => dispatch({ type: 'settings.update', patch: { seamlessEdges: { ...seamlessEdgesOf(s), side } } })} />
     </SettingRow>
   );
 }

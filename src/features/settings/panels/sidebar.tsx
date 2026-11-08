@@ -1,15 +1,17 @@
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
-import { setRailPrefs, useRailPrefs } from '../../../ui/railPrefs';
-import { setSidebarAppsHidden, useSidebarApps } from '../../../ui/sidebarApps';
+import { setRailPrefs, useRailPrefs, type SidebarFolders } from '../../../ui/railPrefs';
+import { setSidebarAppsHidden, setSidebarAppsPlace, useSidebarApps } from '../../../ui/sidebarApps';
 import { clampSidebarWidth, SIDEBAR_WIDTH } from '../../../ui/sidebarLayout';
+import { sidebarSideOf } from '../../../ui/sidebarSide';
 import { sidebarPatch, workspaceIsOpen } from '../../../runtime/browserChrome';
 import { useRef, useSyncExternalStore } from 'react';
 import { useFlip } from '../../../ui/sharedMotion';
 import { moveSection, openSidebarCustomize, saveSections, sectionLayout, sectionShown, SECTION_NAMES, toggleSection, type SectionId } from '../../../ui/sidebarSections';
 import { ArrowUp } from '../../../components/AppIcons';
 import { readCtrlTabMode, setCtrlTabMode, subscribeCtrlTabMode, type CtrlTabMode } from '../../../ui/tabMru';
-import { AddressInSidebarRow, SidebarEdgeRows, SidebarModeRow } from '../SidebarRows';
+import { SidebarEdgeRows, SidebarSideRow } from '../SidebarRows';
+import { SidebarSizeRow } from '../SidebarSizeRow';
 
 import { t, translateText, type MessageId } from '../../../i18n';
 const ctrlTabDetail: Record<CtrlTabMode, MessageId> = {
@@ -21,8 +23,8 @@ const ctrlTabDetail: Record<CtrlTabMode, MessageId> = {
 const sectionName = (id: SectionId) => translateText(SECTION_NAMES[id]);
 
 /** Settings › Tabs › Sidebar: every sidebar choice in one place, right under the Tabs layout card (BrowserSettings puts it there):
- * show it, the address bar in it, the left edge, Favorites, new tabs, width, a reset, and below it the sections (show, hide, reorder).
- * The Window view's own rows stay in Appearance › Layout; the address bar and the edge rows are the same settings in both places. */
+ * show it, its size (Narrow, Standard or Wide), the side it stands on, the left edge, Favorites, new tabs, a reset, and below it the sections (show, hide, reorder).
+ * The Window view's own rows stay in Appearance › Layout; the edge rows are the same settings in both places. Where the address bar lives is the Tabs card above (the third layout). */
 export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   const tab = state.tabs.find((item) => item.id === state.activeTabId) || state.tabs[0];
   const profile = state.browserProfiles.find((item) => item.id === tab.browserProfileId);
@@ -31,12 +33,14 @@ export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   const rail = useRailPrefs(tab.browserProfileId, privateMode);
   const width = clampSidebarWidth(state.settings.sidebarWidth);
   const open = workspaceIsOpen(state.windowUi, tab);
-  const changed = width !== SIDEBAR_WIDTH.initial || apps.hidden || rail.tabs || rail.newTabsTop === false || !open;
+  const side = sidebarSideOf(state.settings);
+  const changed = width !== SIDEBAR_WIDTH.initial || side !== 'left' || apps.hidden || apps.place === 'bottom' || state.settings.favoriteTabsInList === false || rail.tabs || rail.newTabsTop === false || (rail.folders ?? 'mixed') !== 'mixed' || !open;
   const reset = () => {
-    dispatch({ type: 'settings.update', patch: { sidebarWidth: SIDEBAR_WIDTH.initial } });
+    dispatch({ type: 'settings.update', patch: { sidebarWidth: SIDEBAR_WIDTH.initial, sidebarSide: 'left', favoriteTabsInList: true } });
     if (!open) dispatch({ type: 'ui.update', patch: sidebarPatch(true) });
     setSidebarAppsHidden(tab.browserProfileId, privateMode, false);
-    setRailPrefs({ tabs: false, newTabsTop: true, newTabsTopChosen: false }, tab.browserProfileId, privateMode);
+    setSidebarAppsPlace(tab.browserProfileId, privateMode, 'top');
+    setRailPrefs({ tabs: false, newTabsTop: true, newTabsTopChosen: false, folders: 'mixed' }, tab.browserProfileId, privateMode);
     dispatch({ type: 'settings.update', patch: { verticalTabs: false } });
   };
   const layout = sectionLayout(rail), listed: SectionId[] = ['favorites', 'pinned', ...layout.order];
@@ -46,23 +50,28 @@ export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   useFlip(sections, layout.order.join(','));
   return (<>
     <SettingGroup title={t("acirasidebar.sidebar")} id="sidebar">
-      <SidebarModeRow state={state} dispatch={dispatch} />
       <SettingRow id="sidebar-visible" title={t("sidebar.showSidebar")} detail={t("sidebar.showSidebarDetail")}>
         <Switch label={t("sidebar.showSidebar")} checked={open} onChange={(next) => dispatch({ type: 'ui.update', patch: sidebarPatch(next) })} />
       </SettingRow>
-      <AddressInSidebarRow state={state} dispatch={dispatch} always />
+      <SidebarSizeRow state={state} dispatch={dispatch} />
+      <SidebarSideRow state={state} dispatch={dispatch} always />
       <SidebarEdgeRows state={state} dispatch={dispatch} describe />
       <SettingRow id="sidebar-shortcut" title={t("sidebar.ctrlSTogglesTheSidebar")} detail={t("sidebar.ctrlSDetail")}>
         <Switch label={t("sidebar.ctrlSTogglesTheSidebar")} checked={state.settings.sidebarShortcut !== false} onChange={(next) => dispatch({ type: 'settings.update', patch: { sidebarShortcut: next } })} />
       </SettingRow>
       <SettingRow id="sidebar-apps" title={t("acirasidebar.favorites")} detail={apps.apps.length ? t('sidebar.favoritesCountDetail', { count: apps.apps.length }) : t('sidebar.favoritesDetail')}>
+        <Select<'top' | 'bottom'> label={t("sidebar.favoritesPosition")} value={apps.place === 'bottom' ? 'bottom' : 'top'} disabled={apps.hidden} onChange={(place) => setSidebarAppsPlace(tab.browserProfileId, privateMode, place)} options={[{ value: 'top', label: t("sidebar.favoritesTop") }, { value: 'bottom', label: t("sidebar.favoritesBottom") }]} />
         <Switch label={t("sidebar.showFavoritesInTheSidebar")} checked={!apps.hidden} onChange={(next) => setSidebarAppsHidden(tab.browserProfileId, privateMode, !next)} />
+      </SettingRow>
+      <SettingRow id="sidebar-apps-tabs" title={t("sidebar.favoriteTabsInList")} detail={t("sidebar.favoriteTabsInListDetail")}>
+        <Switch label={t("sidebar.favoriteTabsInList")} checked={state.settings.favoriteTabsInList !== false} onChange={(next) => dispatch({ type: 'settings.update', patch: { favoriteTabsInList: next } })} />
       </SettingRow>
       <SettingRow id="sidebar-new-tabs-top" title={t("sidebar.newTabsAtTheTop")} detail={t("sidebar.newTabsTopDetail")}>
         <Switch label={t("sidebar.newTabsAtTheTop")} checked={rail.newTabsTop !== false} onChange={(next) => setRailPrefs({ newTabsTop: next, newTabsTopChosen: true }, tab.browserProfileId, privateMode)} />
       </SettingRow>
-      <SettingRow id="sidebar-width" title={t("sidebar.width")} detail={t('sidebar.widthDetail', { width, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max })}>
-        <button type="button" className="st-button" disabled={width === SIDEBAR_WIDTH.initial} onClick={() => dispatch({ type: 'settings.update', patch: { sidebarWidth: SIDEBAR_WIDTH.initial } })}>{t("sidebar.resetWidth")}</button>
+      <SettingRow id="sidebar-folders" title={t("sidebar.tabGroups")} detail={t("sidebar.tabGroupsDetail")}>
+        <Select<SidebarFolders> label={t("sidebar.tabGroups")} value={rail.folders ?? 'mixed'} onChange={(next) => setRailPrefs({ folders: next }, tab.browserProfileId, privateMode)}
+          options={[{ value: 'mixed', label: t("sidebar.groupsWithTabs") }, { value: 'above', label: t("sidebar.groupsAbove") }, { value: 'below', label: t("sidebar.groupsBelow") }]} />
       </SettingRow>
       <SettingRow id="sidebar-reset" title={t("sidebar.resetSidebarLayout")} detail={t("sidebar.resetLayoutDetail")}>
         <button type="button" className="st-button" disabled={!changed} onClick={reset}>{t("browsersettings.reset")}</button>

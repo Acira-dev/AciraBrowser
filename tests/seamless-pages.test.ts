@@ -183,7 +183,8 @@ test('Seamless (R4-59): a reveal or hide moves the toolbar as one layer; no cont
   // A sidebar pinned first, the top bar floated in after: the travel an earlier reveal left would cut 234px off the page's left edge (bare glass in the gap), and the frame's veil, whose
   // hole began at the page beside the sidebar, covered the pinned column under the sidebar's own copy (a darker column below the bar).
   assert.match(edgeSource, /if \(edge\.pinned\.side\) root\.style\.setProperty\('--sf-sidebar-travel', '0px'\);/);
-  assert.match(edgeSource, /under = \(h: Hole\) => snapPx\(pageRect!\.left\) < h\.x \|\| \(edge\.pinned\.side && h\.x > 0\)/);
+  // (`pr` is the page's rect on the side the sidebar is on: the mirror image of the window for a sidebar on the right, see paintPageHoles.)
+  assert.match(edgeSource, /under = \(h: Hole\) => snapPx\(pr!\.left\) < h\.x \|\| \(edge\.pinned\.side && h\.x > 0\)/);
   // A sidebar leaving (Compact, Focus or Seamless): the card line's stroke up the sidebar's edge is dropped before the old picture is taken. Its picture is held still while only the clip follows the
   // sidebar, so it stood at the old edge as a second page card (a hairline and a rounded corner through the text) beside the real edge sliding away.
   assert.match(edgeSource, /if \(shownBefore\.side && !shownAfter\.side\) dropRimEdge\(\);\n  const ms = startEdgeTransition\(/);

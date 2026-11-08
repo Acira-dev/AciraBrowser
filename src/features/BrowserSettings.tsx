@@ -5,7 +5,6 @@ import { MenuCustomizer } from "../components/MenuCustomizer";
 import { useState, useRef, useLayoutEffect, useEffect, useMemo } from "react";
 import { NewTabSettings } from "./NewTabSettings";
 import { NewTabPreview } from "./settings/NewTabPreview";
-import { setRailPrefs } from "../ui/railPrefs";
 import { ChoiceCards, MiniBrowser, type MiniLayout } from "./settings/ChoiceCards";
 import { TabLayoutRow } from "./settings/TabLayoutRow";
 import { Segmented } from "../components/Segmented";
@@ -21,7 +20,8 @@ import { resetToolbarItems } from "../ui/toolbarPrefs";
 import { effectiveView, seamlessEdgesOf, windowViews, type WindowView } from "../runtime/windowView";
 import { windowViewDetail, windowViewName } from "../ui/windowViewText";
 import { MiniView } from "./settings/WindowViewCards";
-import { AddressInSidebarRow, SidebarEdgeRows, SidebarModeRow } from "./settings/SidebarRows";
+import { SidebarEdgeRows, SidebarSideRow } from "./settings/SidebarRows";
+import { setTabsLayout, shownView, tabsLayoutOf, viewsOfLayout } from "../ui/sidebarMode";
 import { SidebarGroups } from "./settings/panels/sidebar";
 import type {
   BrowserAction,
@@ -247,7 +247,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       if (node.isConnected && performance.now() >= layoutSettles.current) view.scrollTop = node.scrollTop;
     };
   }, [view]);
-  // A switch that moves the toolbar or the tabs (Sidebar mode, Address bar in the sidebar, the Tabs cards) makes the window lay out again,
+  // A switch that moves the toolbar or the tabs (the Tabs cards, the menu's Tabs row, Sidebar + address) makes the window lay out again,
   // and the page's box changes size for a moment: the browser pulls the scroll in, and nothing puts it back. For a moment after such a
   // change the kept position is not overwritten, and it is put back each time the page's size changes and once more when the moment ends.
   const layoutKey = `${state.settings.verticalTabs}|${state.settings.addressInSidebar}`, layoutSeen = useRef(layoutKey);
@@ -272,18 +272,17 @@ export function BrowserSettings({ state, dispatch }: Props) {
     },
     update = (patch: Partial<Settings>) =>
       dispatch({ type: "settings.update", patch });
-  const tabLayout = s.verticalTabs ? "sidebar" : "toolbar";
+  /** Where tabs and the address bar live: Along the top, In a sidebar, or Sidebar + address (ui/sidebarMode.ts). The miniatures below follow it. */
+  const layoutChoice = tabsLayoutOf(s);
+  const tabLayout: MiniLayout = layoutChoice === "top" ? "toolbar" : layoutChoice;
   const animationSpeed = animationSpeedOf(s);
   const osReducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const profile = state.browserProfiles.find(
     (item) => item.id === tab.browserProfileId,
   )!;
   const windowView = effectiveView(s, state.windowUi);
-  /** Both stores in one step, so the card, the strip and the sidebar always agree (Appearance › Layout and Tabs share this). */
-  const chooseTabLayout = (layout: MiniLayout) => {
-    update({ verticalTabs: layout === "sidebar" });
-    setRailPrefs({ tabs: layout === "sidebar" }, tab.browserProfileId, profile?.private);
-  };
+  /** The settings, the profile's tabs switch and (when the address bar moves) the morph, in one step, so the card, the strip and the sidebar always agree (Appearance › Layout and Tabs share this). */
+  const chooseTabLayout = (layout: MiniLayout) => setTabsLayout(state, dispatch, layout === "toolbar" ? "top" : layout);
   const toolbarItems = toolbarVisibilityItems(s, tab).filter(
     (item) => item.id !== "toolbarLayout" && item.id !== "bookmarksBar",
   );
@@ -462,23 +461,23 @@ export function BrowserSettings({ state, dispatch }: Props) {
         <>
           <SettingGroup title={tr("settings.layoutGroup")} id="layout">
             <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} columns={4} />
-            <SidebarModeRow state={state} dispatch={dispatch} />
-            <AddressInSidebarRow state={state} dispatch={dispatch} />
+            <SidebarSideRow state={state} dispatch={dispatch} />
             <SettingRow
               id="window-view"
               title={tr("windowview.title")}
-              detail={windowViewDetail(windowView) + (windowView === "focus" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("focus-mode", "Ctrl Shift F") ?? formatShortcut("Ctrl Shift F") }) : windowView === "seamless" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("seamless-mode", "Ctrl Shift L") ?? formatShortcut("Ctrl Shift L") }) : "")}
+              detail={windowViewDetail(shownView(layoutChoice, windowView)) + (shownView(layoutChoice, windowView) === "focus" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("focus-mode", "Ctrl Shift F") ?? formatShortcut("Ctrl Shift F") }) : shownView(layoutChoice, windowView) === "seamless" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("seamless-mode", "Ctrl Shift L") ?? formatShortcut("Ctrl Shift L") }) : "")}
               stacked
             >
               <ChoiceCards
                 label={tr("windowview.title")}
-                value={windowView}
+                columns={viewsOfLayout(layoutChoice).length === windowViews.length ? undefined : windowViews.length}
+                value={shownView(layoutChoice, windowView)}
                 onChange={(mode: WindowView) => update({ windowView: mode })}
-                options={windowViews.map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} /> }))}
+                options={viewsOfLayout(layoutChoice).map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} /> }))}
               />
             </SettingRow>
             {windowView !== "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
-            {windowView === "seamless" && !(tabLayout === "sidebar" && s.addressInSidebar) && (
+            {windowView === "seamless" && tabLayout !== "sidebar-address" && (
               <SettingRow id="seamless-edge-top" title={tr("windowview.edgeTop")}>
                 <Switch
                   label={tr("windowview.edgeTop")}
@@ -528,6 +527,18 @@ export function BrowserSettings({ state, dispatch }: Props) {
               stacked
             >
               <GlassFinishPicker settings={s} onChange={update} size={20} />
+            </SettingRow>
+            <SettingRow id="site-color" title={tr("browsersettings.siteColor")} detail={tr("browsersettings.siteColorDetail")}>
+              <Segmented
+                label={tr("browsersettings.siteColor")}
+                value={s.siteColor ?? "soft"}
+                options={[
+                  ["off", tr("browsersettings.siteColorOff")],
+                  ["soft", tr("browsersettings.siteColorSoft")],
+                  ["rich", tr("browsersettings.siteColorRich")],
+                ] as const}
+                onChange={(siteColor) => update({ siteColor })}
+              />
             </SettingRow>
           </SettingGroup>
           {customColors && (
@@ -771,6 +782,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                       reducedMotion: false,
                       animationSpeed: "premium",
                       reducedTransparency: false,
+                      siteColor: "soft",
                       ...(customColors
                         ? {
                             glassOpacity: 64,

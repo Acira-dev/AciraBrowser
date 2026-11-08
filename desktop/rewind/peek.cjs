@@ -16,6 +16,8 @@ const REVEAL_MS=700,EXIT_MS=460;
 // The page view also waits for the page's first document (dom-ready), so the card shows its dot-matrix loader instead of a blank
 // white page; a slow page shows itself after LOAD_CAP_MS anyway. COPIED_MS is how long "Link copied" stays.
 const LOAD_CAP_MS=1600,COPIED_MS=1600;
+// The most a preview's icon may weigh as a data URL on the state event (a tab's icons are cut down to a few KB by tab-icons).
+const MAX_ICON=65536;
 const darkChrome=()=>{try{return Boolean(require('electron').nativeTheme?.shouldUseDarkColors);}catch{return true;}};
 
 /** Everything the frame says in words comes from the catalogs (en.json `peek.*`), in the language of the app. */
@@ -71,11 +73,13 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',copyText=text=>require('electron').clipboard.writeText(text)}){
  let current=null;const adopted=new Map();
+ /** The icon this computer already keeps for the link's site (the favicon store), so a site seen before shows its icon at once; '' when there is none. */
+ const stored=(profileId,url)=>{try{const icon=storedIcon(profileId,url);return typeof icon==='string'&&icon.length<=MAX_ICON?icon:'';}catch{return '';}};
  const accentOf=()=>{const value=accent();return typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value)?value:'#3b6eea';};
  const frameState=p=>({geometry:p.geometry,title:p.wc.isDestroyed()?'':p.wc.getTitle(),url:p.wc.isDestroyed()?p.url:p.wc.getURL(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),notice:p.notice||'',link:cardLink(p.geometry,p.origin),speed:reducedMotion()?'off':motionSpeed(),reducedMotion:reducedMotion(),revealed:Boolean(p.revealed),failure:p.failure||null,download:p.download?{name:p.download.name,url:p.download.url}:null,copied:Boolean(p.copiedAt&&Date.now()-p.copiedAt<COPIED_MS),dark:darkChrome(),accent:accentOf(),labels:labels(),keys:keys()});
- const publish=()=>{const p=current;emit({type:'peek-state',peek:p?{sourceTabId:p.sourceTabId,url:p.wc.isDestroyed()?p.url:p.wc.getURL()||p.url,title:p.wc.isDestroyed()?'':p.wc.getTitle(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),bounds:p.geometry?.view||null}:null});if(p&&!p.frame.webContents.isDestroyed())p.frame.webContents.send('acira:peek-frame-state',frameState(p));};
+ const publish=()=>{const p=current;emit({type:'peek-state',peek:p?{sourceTabId:p.sourceTabId,url:p.wc.isDestroyed()?p.url:p.wc.getURL()||p.url,title:p.wc.isDestroyed()?'':p.wc.getTitle(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),favicon:p.favicon||'',bounds:p.geometry?.view||null}:null});if(p&&!p.frame.webContents.isDestroyed())p.frame.webContents.send('acira:peek-frame-state',frameState(p));};
  /** The page view shows once the frame's card has formed (or the frame took too long). */
  function reveal(p){clearTimeout(p.revealTimer);clearTimeout(p.capTimer);if(current!==p||p.wc.isDestroyed()||p.revealed)return;p.revealed=true;p.view.setVisible?.(!p.failure&&!p.download);publish();}
  /** Formed (the card is open, or the frame is slow) and painted (the page has a document, or it is slow): then the page shows. */
@@ -110,7 +114,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   frame.setBackgroundColor('#00000000');
   const view=new WebContentsView({webPreferences:{...(typeof tabsWebPreferences==='function'?tabsWebPreferences():tabsWebPreferences),partition,contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,preload:pagePreload,disableHtmlFullscreenWindowResize:true}});
   view.setBorderRadius?.(RADIUS);
-  const wc=view.webContents,p={frame,view,wc,url:target,sourceTabId,profileId:source.browserProfileId,geometry:null,notice:'',origin,listeners:[]};current=p;
+  const wc=view.webContents,p={frame,view,wc,url:target,sourceTabId,profileId:source.browserProfileId,geometry:null,notice:'',origin,favicon:stored(source.browserProfileId,target),listeners:[]};current=p;
   const on=(emitter,name,fn)=>{emitter.on(name,fn);p.listeners.push(()=>emitter.removeListener(name,fn));};
   configure(wc.session,source.browserProfileId);
   wc.setWebRTCIPHandlingPolicy?.('default_public_interface_only');
@@ -129,6 +133,13 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   // Keys work from the page and from the frame: Esc closes, Ctrl+Enter keeps it as a tab, Ctrl+Shift+Enter beside this page.
   const keyed=(event,input)=>{const action=peekKey(input);if(!action)return;event.preventDefault();act(p,action);};
   on(wc,'before-input-event',keyed);
+  // The preview's own site icon, for the marker card beside the source's icon in the sidebar (a favorite's tile, a tab's row). It is picked the way a tab's
+  // is (tab-icons: the page's own icon set, the one sharp enough for the card) and cleared when the preview goes to another document.
+  on(wc,'did-navigate',()=>{p.iconSequence=(p.iconSequence||0)+1;p.favicon=stored(p.profileId,wc.getURL());});
+  on(wc,'page-favicon-updated',(_event,favicons)=>{
+   const announced=(Array.isArray(favicons)?favicons:[]).filter(f=>typeof f==='string'&&/^https?:/.test(f)),sequence=p.iconSequence=(p.iconSequence||0)+1;
+   try{resolveIcon(wc,{announced,pageUrl:wc.getURL(),current:()=>current===p&&!wc.isDestroyed()&&p.iconSequence===sequence,deliver:found=>{if(current!==p||p.iconSequence!==sequence)return;p.favicon=found&&typeof found.data==='string'&&found.data.length<=MAX_ICON?found.data:'';publish();}});}catch{/* the card keeps the globe */}
+  });
   for(const name of ['did-navigate','did-navigate-in-page','page-title-updated','did-start-loading','did-stop-loading'])on(wc,name,()=>{if(current===p)publish();});
   frame.webContents.ipc.on('acira:peek-frame',(_event,command)=>{if(command==='gone'){p.gone?.();return;}if(current!==p)return;if(command==='ready')publish();else if(command==='entered'){p.formed=true;maybeReveal(p);}else act(p,command);});
   frame.webContents.on('before-input-event',keyed);
@@ -185,7 +196,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   if(request.type==='peek.close')return {ok:close()};
   if(request.type==='peek.promote')return promote('tab');
   if(request.type==='peek.split')return promote('split');
-  const p=current;return {ok:true,peek:p?{sourceTabId:p.sourceTabId,url:p.wc.getURL()||p.url,title:p.wc.getTitle(),loading:p.wc.isLoading(),bounds:p.geometry?.view||null}:null};
+  const p=current;return {ok:true,peek:p?{sourceTabId:p.sourceTabId,url:p.wc.getURL()||p.url,title:p.wc.getTitle(),loading:p.wc.isLoading(),favicon:p.favicon||'',bounds:p.geometry?.view||null}:null};
  }
  return {open,close,promote,adopt,relayout,onState,fromPage,handle,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
 }

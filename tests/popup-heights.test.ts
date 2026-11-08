@@ -40,7 +40,7 @@ test('every kind trusted over a remembered height has been measured', () => {
 test('the Mac menu estimate includes both supported Tor rows and View/Tabs rows', () => {
   const win = (globalThis as any).window;
   win.acira.platform = 'darwin';
-  try { assert.equal(popupNaturalHeight('menu', snapshot(cases[0].state)), 678); }
+  try { assert.equal(popupNaturalHeight('menu', snapshot(cases[0].state)), 648); }
   finally { win.acira.platform = 'win32'; }
 });
 
@@ -57,14 +57,14 @@ test('menu density and geometry use the supported platform rows at short heights
   try {
     win.acira.platform='darwin';
     assert.equal(menuDenseFor(state,650,anchor),true,'Mac Tor rows require compact density in the558px drop');
-    assert.equal(popupGeometry('menu',state,{width:900,height:650},anchor).contentHeight,594);
+    assert.equal(popupGeometry('menu',state,{width:900,height:650},anchor).contentHeight,568);
     assert.equal(menuDenseFor(state,600,anchor),true);
-    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,594,'compact Mac includes both Tor rows and View/Tabs');
+    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,568,'compact Mac includes both Tor rows and View/Tabs');
     win.acira.platform='win32';
-    assert.equal(menuDenseFor(state,600,anchor),true,'678px Windows menu needs compact rows in508px');
-    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,594);
-    // The menu is 30px taller (Sidebar mode), so the full rows need 770px of window under this anchor (740 before); shorter windows take the compact rows.
-    assert.equal(menuDenseFor(state,760,anchor),true);
-    assert.equal(menuDenseFor(state,790,anchor),false);
+    assert.equal(menuDenseFor(state,600,anchor),true,'648px Windows menu needs compact rows in508px');
+    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,568);
+    // The full rows need 740px of window under this anchor (Sidebar mode is a Tabs answer now, not a row, so the menu is the 30px shorter it was before); shorter windows take the compact rows.
+    assert.equal(menuDenseFor(state,730,anchor),true);
+    assert.equal(menuDenseFor(state,760,anchor),false);
   } finally { win.acira.platform='win32'; }
 });

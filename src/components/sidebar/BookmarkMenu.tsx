@@ -14,6 +14,7 @@ import { bookmarkStep,bookmarkTarget,branchOf,pagesIn,sortedByName } from '../..
 import { folderTitle } from '../../ui/bookmarkFolderName';
 import { SECTION_NAMES,sidebarWindowId,type SectionId } from '../../ui/sidebarSections';
 import { SectionMenu,sectionActions } from './SectionActions';
+import { SizeMenu } from './SizeMenu';
 
 import { t } from '../../i18n';
 type Row=(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string)=>ReactNode;
@@ -32,6 +33,8 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
  const [view,setView]=useState<'menu'|'edit'|'new'>(target?.kind==='new'?'new':'menu');
  const editable=!state.browserProfiles.find(profile=>profile.id===profileId)?.private;
  if(!target)return <p className="bm-menu-note">{t("bookmarkmenu.thisBookmarkWasRemoved")}</p>;
+ // The sidebar edge's menu: the three sizes (components/sidebar/SizeMenu.tsx).
+ if(target.kind==='size')return <SizeMenu state={state} dispatch={dispatch} row={row} close={close}/>;
  // A section's own menu (Downloads, History, Reading list, Favorites): Hide this section and Customize sidebar…
  if(target.kind==='zone'){const section=target.section as SectionId;return section in SECTION_NAMES?<SectionMenu row={row} windowId={sidebarWindowId(state)} section={section} close={close}/>:null;}
  const run=(action:()=>void)=>()=>{action();close();};

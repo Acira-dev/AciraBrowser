@@ -1,5 +1,6 @@
-import type { BrowserSnapshot, TabSession } from './types';
+import type { BrowserSnapshot, Settings, TabSession } from './types';
 import { workspaceTabs } from './workspaces';
+import { favoriteTabsInList, favoriteTabsOnlyInTile, tabListed } from './favoriteTabsRule';
 
 /** A favorite and its tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; founder, 6 Nov: "the tab must not disappear
  *  when it's added to Favorites"). The favorites themselves are the interface's, per profile (ui/sidebarApps.ts). A favorite is a saved address
@@ -28,6 +29,8 @@ export function settleFavoriteTabs(s: BrowserSnapshot, previous?: BrowserSnapsho
   }
 }
 
-/** The tabs Ctrl+1…9, Ctrl+PageDown/PageUp, Ctrl+Shift+PageDown/PageUp and Ctrl+Tab's Next tab walk: the open workspace's, in order. A favorite's
- *  tab is listed like any tab, so the numbers match the list on screen in every layout. */
-export const listedTabs = (state: BrowserSnapshot): TabSession[] => workspaceTabs(state);
+export { favoriteTabsInList, favoriteTabsOnlyInTile, tabListed };
+
+/** The tabs Ctrl+1…9, Ctrl+PageDown/PageUp, Ctrl+Shift+PageDown/PageUp and Ctrl+Tab's Next tab walk: the open workspace's, in order, as the list on
+ *  screen shows them (so a tab that lives only in its tile has no number). */
+export const listedTabs = (state: BrowserSnapshot): TabSession[] => workspaceTabs(state).filter(tab => tabListed(tab, state.settings));

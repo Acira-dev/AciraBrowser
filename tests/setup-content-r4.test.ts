@@ -78,7 +78,8 @@ test('share anonymous usage shows its default on while the first answer is on it
 // R4-13 / R4-15: Make it yours gets Appearance and View on the same settings as Settings.
 test('Make it yours has Appearance and View rows that write the same settings as Settings', () => {
   assert.match(yours, /options=\{\[\["light", t\("setup\.mode\.light"\)\], \["dark", t\("setup\.mode\.dark"\)\], \["system", t\("setup\.mode\.auto"\)\]\] as const\}\s*onChange=\{\(appearance\) => update\(\{ appearance \}\)\}/);
-  assert.match(yours, /\["full", t\("windowview\.full"\)\], \["compact", t\("windowview\.compact"\)\], \["seamless", t\("windowview\.seamless"\)\]/);
+  assert.match(yours, /viewsOfLayout\(layout, \["full", "compact", "seamless"\]\)/, 'Full, Compact and Seamless; with the address bar in the sidebar only the views that differ');
+  assert.match(yours, /options=\{views\.map\(\(mode\) => \[mode, windowViewName\(mode\)\] as const\)\}/);
   assert.match(yours, /onChange=\{\(windowView\) => update\(\{ windowView \}\)\}/);
   assert.doesNotMatch(yours, /yours\.density|toolbarLayout/);
   assert.match(yours, /windowViewDetail\(view\)/, 'each view has its one-line hint');

@@ -2,6 +2,7 @@ import { motionScale, motionSpeed, reducedMotion } from './sharedMotion';
 import { setInstantTransitions } from './motion';
 import { arriving, bowCrossings, BUTTON_IN, MAIN_LATENCY_MS, CHROME_IN, delayRowChange, totalMs, layoutAt, leaving, LEAVE, moverBox, pageGlide, PILL_IN, RAIL_IN, schedule, type Box, type Direction, type LayoutNumbers, type Mover, type Schedule } from './sidebarMorphPlan';
 import type { BrowserLayout } from '../runtime/types';
+import { rootSidebarSide } from './sidebarSide';
 
 /** Sidebar mode's morph (the choreography, and why it is timed as it is, is in ui/sidebarMorphPlan.ts).
  *
@@ -42,6 +43,8 @@ interface Live {
   ghosts: Ghosts | null; railLive: boolean; railWidth: number; addrLeft: number | null; hadBlock: boolean; hasBlock: boolean; touched: Map<HTMLElement, Touched>; frame: number; timer: ReturnType<typeof setTimeout> | undefined;
   app: HTMLElement | null; shell: HTMLElement | null; bar: HTMLElement | null; page: HTMLElement | null; rail: HTMLElement | null; toolbar: HTMLElement | null; railEls: Set<HTMLElement>;
   pinned: BrowserLayout | null;
+  /** +1 with the sidebar on the left, -1 on the right: the sign of every offset that rides with the sidebar's edge (the morph is written for the left and mirrored by this). */
+  dir: 1 | -1;
   /** The clock waits at 0 until main says when its page glide started (or `WAIT_MS` pass): the page and the card then share one clock to the millisecond. */
   aligned: boolean; waitUntil: number;
   /** The translate each piece was last given, so its own place (where the layout would put it with none) is the box measured now minus this. */
@@ -91,10 +94,11 @@ const alphaOf = (shadow: string): number => { const match = /rgba?\(([^)]*)\)/.e
 function readLayout(): LayoutNumbers {
   const app = q(SELECTOR.app), shell = q(SELECTOR.shell), page = q(SELECTOR.page);
   const px = (value: string) => Number.parseFloat(value) || 0;
-  const columns = app ? getComputedStyle(app).gridTemplateColumns.split(' ') : [], style = page ? getComputedStyle(page) : null, shadow = style?.boxShadow ?? 'none';
+  // The sidebar's column is the first one with the sidebar on the left and the second on the right (sidebar-right.css); the card's corner beside it is the matching top corner.
+  const right = rootSidebarSide() === 'right', columns = app ? getComputedStyle(app).gridTemplateColumns.split(' ') : [], style = page ? getComputedStyle(page) : null, shadow = style?.boxShadow ?? 'none';
   const drawnAlpha = shadow && shadow !== 'none' ? alphaOf(shadow) : 0;
   if (!live && drawnAlpha > 0) ringAlphaAtRest = drawnAlpha;
-  return { col: px(columns[0] ?? '0'), hdr: shell ? shell.getBoundingClientRect().height : 0, mt: px(style?.marginTop ?? '0'), mr: px(style?.marginRight ?? '0'), mb: px(style?.marginBottom ?? '0'), ml: px(style?.marginLeft ?? '0'), radius: px(style?.borderTopLeftRadius ?? '0'), ring: live ? Math.min(1, drawnAlpha / ringAlphaAtRest) : shadow && shadow !== 'none' ? 1 : 0 };
+  return { col: px(columns[right ? 1 : 0] ?? '0'), hdr: shell ? shell.getBoundingClientRect().height : 0, mt: px(style?.marginTop ?? '0'), mr: px(style?.marginRight ?? '0'), mb: px(style?.marginBottom ?? '0'), ml: px(style?.marginLeft ?? '0'), radius: px((right ? style?.borderTopRightRadius : style?.borderTopLeftRadius) ?? '0'), ring: live ? Math.min(1, drawnAlpha / ringAlphaAtRest) : shadow && shadow !== 'none' ? 1 : 0 };
 }
 const ringColor = (): string | null => { const page = q(SELECTOR.page); const shadow = page ? getComputedStyle(page).boxShadow : ''; return /rgba?\([^)]*\)/.exec(shadow)?.[0] ?? null; };
 
@@ -104,7 +108,7 @@ function seePieces(column: number): Map<string, Seen> {
     const el = [...document.querySelectorAll<HTMLElement>(piece.sel)].find(drawn);
     if (!el) continue;
     const box = rectOf(el);
-    out.set(piece.id, { id: piece.id, el, box, resizes: piece.resizes, attached: box.x + box.width <= column + 1 });
+    out.set(piece.id, { id: piece.id, el, box, resizes: piece.resizes, attached: rootSidebarSide() === 'right' ? box.x >= window.innerWidth - column - 1 : box.x + box.width <= column + 1 });
   }
   // What the sidebar holds moves as blocks (its own top inset changes when the address block arrives), so only its blocks need a place of their own.
   const rail = q(SELECTOR.rail);
@@ -213,7 +217,7 @@ export function startSidebarMorph(update: () => void, direction: Direction): boo
   // The chrome that comes back when the mode goes off (the tab strip, the bookmarks row, the buttons on the right, Home) arrives; the rest of it travels.
   if (!hasBlock) for (const sel of [`${SELECTOR.shell} > .acira-tab-row`, `${SELECTOR.shell} > .acira-bookmarks-row`, `${SELECTOR.toolbar} .toolbar-actions`, `${NAV}:nth-child(n+4)`, `${SELECTOR.toolbar} .acira-compact-tabs`]) for (const el of document.querySelectorAll<HTMLElement>(sel)) if (!el.closest('[inert]')) arrivals.chrome.push(el);
   // The sidebar blocks that were not there before arrive (the others only move down); the rail itself slides.
-  const m: Live = { startedAt: 0, sch, first: firstLayout, last: lastLayout, movers, moverEls, arrivals, ghosts, railLive, railWidth: rail ? rectOf(rail).width : 0, addrLeft: null, hadBlock, hasBlock, touched: new Map(), frame: 0, timer: undefined, aligned: false, waitUntil: 0, placed: new Map(), app: q(SELECTOR.app), shell: q(SELECTOR.shell), bar: q(`${SELECTOR.shell} > .acira-bookmarks-row`), page: q(SELECTOR.page), rail, toolbar: q(SELECTOR.toolbar), railEls, pinned: null };
+  const m: Live = { startedAt: 0, sch, first: firstLayout, last: lastLayout, movers, moverEls, arrivals, ghosts, railLive, railWidth: rail ? rectOf(rail).width : 0, addrLeft: null, hadBlock, hasBlock, touched: new Map(), frame: 0, timer: undefined, aligned: false, waitUntil: 0, placed: new Map(), dir: rootSidebarSide() === 'right' ? -1 : 1, app: q(SELECTOR.app), shell: q(SELECTOR.shell), bar: q(`${SELECTOR.shell} > .acira-bookmarks-row`), page: q(SELECTOR.page), rail, toolbar: q(SELECTOR.toolbar), railEls, pinned: null };
   const left = m.toolbar ? Number.parseFloat(getComputedStyle(m.toolbar).left) : Number.NaN;
   m.addrLeft = hasBlock && Number.isFinite(left) ? left : null;
   // Nothing visibly changes: no morph.
@@ -257,12 +261,13 @@ function frame(m: Live): void {
   setVar(m, m.app, '--sm-col', `${lay.col}`); setVar(m, m.shell, '--sm-hdr', `${lay.hdr}`); setVar(m, m.bar, '--sm-hdr', `${lay.hdr}`);
   setVar(m, m.page, '--sm-mt', `${lay.mt}`); setVar(m, m.page, '--sm-mr', `${lay.mr}`); setVar(m, m.page, '--sm-mb', `${lay.mb}`); setVar(m, m.page, '--sm-ml', `${lay.ml}`);
   setVar(m, m.page, '--sm-rad', `${lay.radius}`); setVar(m, m.page, '--sm-ring', `${lay.ring}`);
-  if (m.railLive) setVar(m, m.rail, '--sm-rail-x', `${lay.col - m.last.col}`);
-  // The toolbar's block is laid over the sidebar from the window's left edge: its offset in the page column is minus the column's width, which is what moves.
+  // The sidebar's column is the first one on the left: the sidebar (one width, justify-self: start) is pulled out to the column's edge. On the right the column starts at the sidebar's own near edge, so it needs no pull.
+  if (m.railLive) setVar(m, m.rail, '--sm-rail-x', `${m.dir === 1 ? lay.col - m.last.col : 0}`);
+  // The toolbar's block is laid over the sidebar: from the window's left edge (its offset in the page column is minus the column's width), or on the right from the sidebar's near edge, window width minus the column's. Either way it is the final offset plus how far the column still has to go.
   if (m.addrLeft !== null) setVar(m, m.toolbar, '--sm-addr-left', `${m.addrLeft + m.last.col - lay.col}`);
   // The pieces that travel: each is one element, drawn at its box of the moment. Everything that changes layout is written first (the size: where a piece stands depends on how wide it is, the
   // address field being centred in its row), then every piece's own place is read once, then the translates are written: one layout pass a frame.
-  const boxes = m.movers.map(mover => ({ mover, el: m.moverEls.get(mover.id), box: moverBox(mover, m.first, m.last, lay, sch, ms) }));
+  const boxes = m.movers.map(mover => ({ mover, el: m.moverEls.get(mover.id), box: moverBox(mover, m.first, m.last, lay, sch, ms, m.dir) }));
   for (const { mover, el, box } of boxes) { if (!el) continue; touch(m, el); if (mover.resizes) { setVar(m, el, '--sm-aw', `${box.width}`); setVar(m, el, '--sm-ah', `${box.height}`); } }
   const standing = boxes.map(({ mover, el }) => { if (!el) return null; const was = m.placed.get(mover.id) ?? { dx: 0, dy: 0 }, now = el.getBoundingClientRect(); return { x: now.x - was.dx, y: now.y - was.dy }; });
   boxes.forEach(({ mover, el, box }, i) => {
@@ -274,14 +279,14 @@ function frame(m: Live): void {
   const railIn = arriving(RAIL_IN, ms, scale, m.arrivals.carry.rail), chromeIn = arriving(CHROME_IN, ms, scale, m.arrivals.carry.chrome);
   for (const el of m.arrivals.rail) { touch(m, el); el.style.opacity = `${railIn}`; }
   for (const el of m.arrivals.pill) { touch(m, el); el.style.opacity = `${arriving(PILL_IN, ms, scale)}`; }
-  for (const el of m.arrivals.button) { touch(m, el); el.style.opacity = `${arriving(BUTTON_IN, ms, scale)}`; el.style.translate = `${lay.col - m.last.col}px 0px`; }
+  for (const el of m.arrivals.button) { touch(m, el); el.style.opacity = `${arriving(BUTTON_IN, ms, scale)}`; el.style.translate = `${m.dir * (lay.col - m.last.col)}px 0px`; }
   for (const el of m.arrivals.chrome) { touch(m, el); el.style.opacity = `${chromeIn}`; el.style.translate = `0px ${lay.hdr - m.last.hdr}px`; }
   // What leaves: the copy of the old chrome (riding the band's edge, or the sidebar's) and of the old sidebar.
   const g = m.ghosts;
   if (g) {
     const gone = leaving(LEAVE, ms, scale); g.opacity = gone;
-    if (g.root) { g.root.style.opacity = `${gone}`; g.root.style.translate = g.block ? `${lay.col - m.first.col}px 0px` : `0px ${lay.hdr - m.first.hdr}px`; }
-    if (g.rail) { g.rail.style.opacity = `${gone}`; g.rail.style.translate = `${lay.col - m.first.col}px 0px`; }
+    if (g.root) { g.root.style.opacity = `${gone}`; g.root.style.translate = g.block ? `${m.dir * (lay.col - m.first.col)}px 0px` : `0px ${lay.hdr - m.first.hdr}px`; }
+    if (g.rail) { g.rail.style.opacity = `${gone}`; g.rail.style.translate = `${m.dir * (lay.col - m.first.col)}px 0px`; }
   }
   if (ms >= sch.total + 34) { finish(m); return; }
   m.frame = requestAnimationFrame(() => frame(m));

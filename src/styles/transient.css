@@ -315,6 +315,11 @@
   justify-content: center;
   pointer-events: none;
 }
+/* The sidebar on the right: its column is at the window's right, so the slot leaves that room on the right instead (the toast stays centred over the page). */
+:root:root:root[data-sidebar-side=right] .t-solo {
+  left: 0;
+  right: var(--navigation-width, 0px);
+}
 :root:root:root .t-solo > .t-toast {
   height: 44px;
   max-width: calc(100% - 32px);

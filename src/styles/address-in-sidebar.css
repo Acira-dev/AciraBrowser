@@ -43,6 +43,12 @@
    take the row's left corner, 8 px in like the field beneath, and the sidebar button keeps the right end. The window buttons are over the page column's top-right, not here. */
 :root:root:root:not([data-platform=darwin]) .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .navigation-controls { left: 0; transform: translateY(-50%); }
 
+/* The Mac, Narrow (168 px, data-sidebar-size on .app): the three arrows are centred in the row, which at this width starts them at x 42, under the window buttons (x 12 to 64).
+   Here they start 8 px right of the buttons (x 72) and are 20 px wide each (to x 132, 4 px short of the sidebar button at 136), so Back, Reload and Forward all stay and the sidebar button keeps the right end (24 px). Standard and Wide are untouched. */
+:root:root:root[data-platform=darwin] .app[data-sidebar-size=narrow] .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .navigation-controls { left: 64px; transform: translateY(-50%); }
+:root:root:root[data-platform=darwin] .app[data-sidebar-size=narrow] .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .navigation-controls > * { width: 20px; min-width: 20px; flex: 0 0 20px; }
+:root:root:root[data-platform=darwin] .app[data-sidebar-size=narrow] .browser-root.addr-side .acira-persistent-toolbar .expanded-navigation .sidebar-toggle-control { width: 24px; min-width: 24px; flex: 0 0 24px; }
+
 /* row 2: the field, the sidebar's full width */
 :root:root:root .browser-root.addr-side .acira-persistent-toolbar > .address-bar { grid-row: 2; grid-column: 1; width: 100% !important; max-width: none !important; min-width: 0; margin: 2px 0 0 !important; flex: none; }
 
@@ -114,8 +120,8 @@
 :root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side] .sb-apps-region { padding-top: 0; }
 
 /* Sidebar mode, sidebar away ('bare'): nothing above the page. The toolbar stays in the tree (shortcuts and popups still find their buttons)
-   but is not drawn, and the header is only the strip (6 px on the Mac, the toolbar's height on Windows and Linux where the window buttons
-   sit). The page is the same card Seamless rests as: 6 px in from the window's edges, the card's corner and ring. The sidebar comes back from
+   but is not drawn, and the header is only the strip (6 px on every platform: on Windows the caption buttons are a notch over the page's top-right corner that main shows
+   only while the pointer is along the top, desktop/caption-notch.cjs). The page is the same card Seamless rests as: 6 px in from the window's edges, the card's corner and ring. The sidebar comes back from
    the left edge (the existing edge reveal) or with Ctrl/Cmd+Shift+E and Ctrl/Cmd+L. */
 :root:root:root .browser-root .browser-shell[data-sbmode='bare'] { overflow: hidden; -webkit-app-region: drag; }
 :root:root:root .browser-root .browser-shell[data-sbmode='bare'] > .acira-persistent-toolbar { visibility: hidden; }
@@ -131,9 +137,8 @@
    its text was dim until the slide ended), and the layer is painted above the sidebar's (the sidebar's picture was painted over the field and dimmed it). The
    picture is shown at its own size, never cropped to a box that grows from the hidden toolbar's size (`left: 0` pins it to the group's left edge in a right-to-left interface too).
    Seamless is not touched: it has no data-sbmode.
-   One assumption to remember for a sidebar on the RIGHT: the group is not animated, so on a hide it sits at the new state's box, the hidden toolbar's, whose left edge is the window's
-   (the block's own is, with the sidebar on the left). Arriving, the new box is the block's own and is right on either side. A mirrored sidebar needs the hide's picture placed at the
-   block's old box (record it in applyEdge before the update, as setGlide does for the field) or the bare toolbar given the block's box. */
+   With the sidebar on the RIGHT (sidebar-right.css): the group is not animated, so on a hide it sits at the new state's box, the hidden toolbar's, which spans the header from the window's
+   left edge; the old picture (the block) is placed at that box's right end there (`right: 0`). Arriving, the new box is the block's own and is right on either side. */
 :root[data-mode-switch='edge']:has(.browser-shell[data-sbmode]) .app.style-acira:not(:has(> .setup-dialog)) .browser-shell > .browser-toolbar.acira-persistent-toolbar * { view-transition-name: none !important; }
 :root:root[data-mode-switch='edge']:has(.browser-shell[data-sbmode])::view-transition-group(acira-toolbar) { animation: none; z-index: 1; }
 :root:root[data-mode-switch='edge']:has(.browser-shell[data-sbmode])::view-transition-old(acira-toolbar),

@@ -60,6 +60,8 @@ and preserves that same identity when resealing the final Tor manifest. Set
 `ACIRA_MAC_NOTARY_PROFILE` to an existing local `notarytool` credential profile.
 No password, private key or access token belongs in source or command arguments.
 The packager refuses a distribution build without that profile name.
+If the upload to Apple keeps being cut off on your network, set `ACIRA_NOTARY_NO_S3_ACCELERATION=1`: `notarytool submit` then gets `--no-s3-acceleration` and uploads
+through the plain endpoint instead of Apple's S3 transfer acceleration. Nothing else about the call changes.
 
 The distribution sequence notarizes and staples the browser first, then hashes
 that final payload into the installer, notarizes/staples the installer, and signs,

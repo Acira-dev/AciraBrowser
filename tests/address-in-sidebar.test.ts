@@ -6,7 +6,6 @@ import {
   PILL_DWELL_MS, PILL_LEAVE_MS, PILL_LINE, PILL_OPEN_EXTRA, PILL_REST_MS, PILL_REST_RADIUS, addressBlockShown, addressFocusPlan, addressInSidebarWanted, addressStripHeight,
   BLOCK_FIELD, createPillDwell, pillMotion, pointInside, pressKeepsFieldFocus, revealedFieldBox, sidebarModeChrome, sidebarModeHeader, type PillTimers,
 } from '../src/ui/addressInSidebar';
-import { LOCALES } from '../src/i18n/locales';
 
 const require = createRequire(import.meta.url);
 
@@ -47,10 +46,10 @@ test('App draws it: the chrome is the standard one in every view, nothing tucks 
   assert.match(css, /\[data-sbmode='bare'\]\) \.browser-root \.browser-body > \.page-area \{ margin: 0 6px 6px;/, 'the page is Seamless\'s card');
 });
 
-test('the strip above the page: 6 px on the Mac, the toolbar height where the window buttons are over the page', () => {
+test('the strip above the page is the page card\'s own 6 px margin on every platform (Windows: the caption buttons sit in a notch, not in an empty strip)', () => {
   assert.equal(addressStripHeight('darwin', 36), 6);
-  assert.equal(addressStripHeight('win32', 36), 36);
-  assert.equal(addressStripHeight('linux', 36), 36);
+  assert.equal(addressStripHeight('win32', 36), 6, 'Windows: the page goes to the top, the caption buttons sit in the notch');
+  assert.equal(addressStripHeight('linux', 36), 6, 'Linux keeps its system title bar above the window');
 });
 
 test('Ctrl/Cmd+L: focus where the field is, open a closed sidebar, or ask Seamless for its edge', () => {
@@ -178,15 +177,13 @@ test('a press outside or Esc closes at once; stop leaves no timer behind', () =>
   dwell.enter(); dwell.stop(); assert.equal(c.pending, 0);
 });
 
-test('the setting is accepted by the settings validator and has its words in every language', () => {
+test('the setting is accepted by the settings validator', () => {
   const { validateAction } = require('../desktop/validation.cjs');
   const snapshot = { tabs: [], settings: {}, windowUi: {} };
   assert.doesNotThrow(() => validateAction({ type: 'settings.update', patch: { addressInSidebar: true } }, snapshot));
   assert.throws(() => validateAction({ type: 'settings.update', patch: { addressInSidebar: 'yes' } }, snapshot));
-  for (const { code } of LOCALES) {
-    const messages = JSON.parse(readFileSync(new URL(`../src/i18n/${code}.json`, import.meta.url), 'utf8')) as Record<string, string>;
-    for (const id of ['windowview.addressInSidebar', 'windowview.addressInSidebarDetail']) assert.ok(messages[id]?.trim(), `${code}: ${id}`);
-  }
+  assert.doesNotThrow(() => validateAction({ type: 'sidebar.mode', tabs: true, address: true, open: true }, snapshot), 'the layout choice moves both in one action');
+  assert.throws(() => validateAction({ type: 'sidebar.mode', tabs: true, address: 'yes' }, snapshot));
 });
 
 test('the sidebar store: a block that goes takes its open row with it, and listeners hear only real changes', async () => {
@@ -213,13 +210,9 @@ test('wiring: the setting reaches the toolbar, the sidebar, the Settings row and
   assert.match(css, /@property --addr-t/);
   assert.match(css, /\.ed-rail\.acira-sidebar\[data-addr-side\]\[data-addr-open\] \{ padding-top: 108px;/, 'the content makes way for the open row');
   assert.match(css, /--addr-open-dur[^;]*;/, 'the sidebar uses the morph\'s own time');
-  // The row lives in SidebarRows (Appearance › Layout and Tabs › Sidebar share it): offered with tabs in the sidebar; in Tabs › Sidebar it stays with tabs on top and says what it needs.
-  const rows = read('../src/features/settings/SidebarRows.tsx'), panel = read('../src/features/settings/panels/sidebar.tsx');
-  assert.match(rows, /if \(!inSidebar && !always\) return null;/, 'Appearance › Layout offers the row only with tabs in the sidebar');
-  assert.match(rows, /sidebar\.addressNeedsSidebarTabs/, 'with tabs on top the Tabs row says what it needs');
-  assert.match(settings, /<AddressInSidebarRow state=\{state\} dispatch=\{dispatch\} \/>/);
-  assert.match(panel, /<AddressInSidebarRow state=\{state\} dispatch=\{dispatch\} always \/>/, 'Tabs › Sidebar always has the row');
-  assert.match(settings, /!\(tabLayout === "sidebar" && s\.addressInSidebar\)/, 'the Seamless top-edge switch is hidden when there is no top edge');
+  // Where the address bar lives is the third answer of the Tabs choice (tests/sidebar-mode.test.ts), in Appearance › Layout and Tabs alike: it has no row of its own any more.
+  assert.match(settings, /<TabLayoutRow layout=\{tabLayout\} onChange=\{chooseTabLayout\} columns=\{4\} \/>/);
+  assert.match(settings, /tabLayout !== "sidebar-address"/, 'the Seamless top-edge switch is hidden when there is no top edge');
   assert.match(main, /edges:\(\)=>state\.settings\.addressInSidebar&&state\.settings\.verticalTabs\?\{top:false,side:true\}/, 'no top edge in Seamless');
 });
 

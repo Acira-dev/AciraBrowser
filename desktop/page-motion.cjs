@@ -111,7 +111,10 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   const exact = hold && !dissolve && canHoldLayout(entry);
   // The docked sidebar's slide (no spring of its own): the card the interface draws beside the sidebar is round from its first frame, so the page's corners are too, and its far
   // bottom edge rises on the same spring as the interface's card (founder, 5 Nov: the corner started square and then popped round, and the bottom line blinked in at the landing).
-  const docked = hold && !validSpring(pageSpring);
+  // The same slide beside a sidebar on the RIGHT: the card's right edge follows the sidebar and its left edge stays. There is no held glide there (the held view would stand over the
+  // sidebar, and its text would jump when it landed): the page is resized a frame at a time, but its corners are the card's from the first frame all the same.
+  const beside = !hold && !!smooth && slide && resizing && Math.abs(start.x - target.x) <= FAR_EDGE && Math.abs(start.y + start.height - target.y - target.height) <= FAR_EDGE && Math.abs(start.x + start.width - target.x - target.width) >= SIDEWAYS;
+  const docked = (hold || beside) && !validSpring(pageSpring);
   if (docked && hasRadius && Math.round(radius) > fromRadius) fromRadius = Math.round(radius);
   // (Not with a picture of the old layout over the page: that layer, off unless ACIRA_DISSOLVE=1, keeps the old size.)
   const rising = docked && !dissolve && Math.abs(start.y - target.y) < DROP;

@@ -1,10 +1,15 @@
-import { animate,cancelFrame,frame,useMotionValue,type Transition } from 'motion/react';
+import { animate,cancelFrame,frame,useMotionValue,useTransform,type Transition } from 'motion/react';
 import { useCallback,useLayoutEffect,useRef,type RefObject } from 'react';
 import { followFrame } from './tabSelectionFollow';
+import { glowCss,mixGlow,NO_GLOW,pair,parseGlow,type Glow } from './glowBlend';
 
 /** Keep the existing switching spring; structural moves follow the tab's rendered box. */
-export function useTabSelectionMotion(track:RefObject<HTMLDivElement|null>,activeId:string,inventory:string,target:{x:number;width:number;top:number},transition:Transition,layoutKey=inventory,copy=false){
+/** `glow` (item 11) is the selected tab's glow colour (`#rrggbb`) or undefined; `glow` in the result is the colour the pill shows, blended from the previous
+ * tab's on the same transition that moves the pill, so a colour that differs, appears or goes away never snaps while the pill glides. */
+export function useTabSelectionMotion(track:RefObject<HTMLDivElement|null>,activeId:string,inventory:string,target:{x:number;width:number;top:number},transition:Transition,layoutKey=inventory,copy=false,tone?:string){
  const selection=useRef<HTMLSpanElement>(null),x=useMotionValue(target.x),width=useMotionValue(target.width);
+ const mix=useMotionValue(1),ends=useRef<{from:Glow;to:Glow}>({from:NO_GLOW,to:NO_GLOW}),shownTone=useRef<{id:string;tone:string|undefined}|null>(null);
+ const glow=useTransform(mix,t=>glowCss(mixGlow(ends.current.from,ends.current.to,t)));
  const current=useRef({activeId,target});current.current={activeId,target};
  const previous=useRef<{activeId:string;inventory:string;layoutKey:string;key:string}|null>(null),dragging=useRef(false),tracking=useRef(false);
  const settled=useRef(0),since=useRef(0),last=useRef({x:NaN,width:NaN});
@@ -42,6 +47,15 @@ export function useTabSelectionMotion(track:RefObject<HTMLDivElement|null>,activ
    animate(x,target.x,transition);animate(width,target.width,transition);
   }else if(before.activeId!==activeId||before.key!==key)startFollowing();
  },[activeId,inventory,layoutKey,target.x,target.width,transition,follow,startFollowing,x,width]);
+ // The glow follows the same switch: from the colour shown now to the new tab's, on the pill's own transition (zero length when motion is off).
+ useLayoutEffect(()=>{
+  const before=shownTone.current;shownTone.current={id:activeId,tone};
+  const next=parseGlow(tone);
+  if(!before){ends.current=pair(next,next);mix.jump(1);return;}
+  if(before.id===activeId&&before.tone===tone)return;
+  const now=mixGlow(ends.current.from,ends.current.to,mix.get()),shown=now[3]>0?now:null;
+  ends.current=pair(shown,next);mix.jump(0);animate(mix,1,transition);// jump, not set: set would hand the spring the 1-to-0 jump's velocity and the colour would dip and start late
+ },[activeId,tone,transition,mix]);
  useLayoutEffect(()=>()=>{cancelFrame(follow);x.stop();width.stop();},[follow,x,width]);
- return {selection,style:{x,y:target.top,width},startDrag:()=>{dragging.current=true;startFollowing();},endDrag:()=>{dragging.current=false;startFollowing();}};
+ return {selection,glow,style:{x,y:target.top,width},startDrag:()=>{dragging.current=true;startFollowing();},endDrag:()=>{dragging.current=false;startFollowing();}};
 }

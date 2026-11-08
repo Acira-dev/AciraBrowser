@@ -202,7 +202,7 @@ test('main wires every guard (source assertions where no live test runs)', () =>
     ["securedService.lockAll('minimize')","minimising locks"],
     ["securedService?.flush()","quit seals synchronously"],
     ["bridge.handle('acira:secured'","unlock only through main"],
-    ["'workspace.move-tabs','workspace.lock'])actionNames.add(name)","the interface may send workspace.lock (and only that)"],
+    ["'workspace.move-tabs','workspace.move-group','workspace.lock'])actionNames.add(name)","the interface may send workspace.lock (and only that of the secured ones)"],
     ["platformVerifier({packaged:app.isPackaged,systemPreferences:require('electron').systemPreferences})","the real platform gate; test switches only unpackaged"],
   ])assert.ok(main.includes(needle),why);
   assert.ok(fs.readFileSync(path.join(root,'desktop','browser-services','download-engine.cjs'),'utf8').includes("!profileId.startsWith('private-secured-')"),'row 10: a secured download always asks where to save');

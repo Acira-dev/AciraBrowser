@@ -73,6 +73,9 @@
 /* The same chip for drags with no strip pill (a sidebar row): the cloned icon centred on the glass, transform and opacity only. */
 .app .tab-drag-chip{display:grid;place-items:center;border-radius:8px;transform-origin:50% 50%;color:var(--text,currentColor)}
 .app .tab-drag-chip>*{width:16px;height:16px;display:grid;place-items:center}
+/* A group's chip carries how many tabs go with it (sidebar group drag to a workspace). */
+.app .tab-drag-chip>.tab-drag-chip-count{opacity:1;position:absolute;top:-6px;right:-6px;width:auto;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--surface,Canvas);color:var(--text,CanvasText);font:600 10px/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;box-shadow:0 0 0 1.5px var(--chip-count,var(--accent)),0 1px 3px rgb(0 0 0/.18)}
+.app .tab-drag-chip:has(>.tab-drag-chip-count){overflow:visible}
 
 /* R3-26 the morph between split layouts (SplitMorphLayer): boxes move and reshape with transforms only; a page that is still just a tile shows its title on a glass wash. */
 .app .split-morph-layer{z-index:7;background:var(--surface-alt,var(--frame,transparent))}

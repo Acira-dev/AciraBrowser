@@ -1,0 +1,17 @@
+/* ---- Site glow (siteGlow.ts): the New Tab's `.nt-glow` recipe (three soft radial washes of the site's colour) painted from the page
+   inside the sidebar column, the band above the page and the strip below it, at FIXED places (a wash tied to the page's rectangle stood at its final
+   place ahead of a sliding sidebar: the old dark-mode line). Two layers cross-fade by opacity. The native page view is drawn above the
+   interface, so the washes only ever show beside the page. ---- */
+html[data-site-glow] .app.style-acira:not(.native-layer) { isolation: isolate; }
+.st-glow {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
+  background:
+    radial-gradient(ellipse 360px 64% at 150px 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%),
+    radial-gradient(ellipse 50% 170px at 70% 30px, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),
+    radial-gradient(ellipse 55% 140px at 40% 100%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
+}
+html[data-site-glow-tone=dark] .st-glow { mix-blend-mode: screen; }
+/* The sidebar on the right (data-sidebar-side, sidebar-right): the washes mirror with it. */
+html[data-sidebar-side=right] .st-glow { transform: scaleX(-1); }
+/* High contrast and forced colours: no glow (the contrast gate is for the person's own finish). */
+@media (forced-colors: active), (prefers-contrast: more) { .st-glow { display: none; } }

@@ -2,6 +2,8 @@ import { useEffect,useRef,useSyncExternalStore } from 'react';
 import { runtime } from '../runtime/client';
 import { tabCardKind } from '../runtime/tabCard';
 import type { TabSession } from '../runtime/types';
+import { rootSidebarSide } from './sidebarSide';
+import { cardSideFor } from './tabCardSide';
 
 /** The tab hover card (src/runtime/tabCard.ts, desktop/tab-card.cjs). The main process draws it and owns its timing; the
  * interface only says which tab the pointer is on, where that tab is, and when something (a press, a key, a scroll) ends it. */
@@ -29,12 +31,12 @@ export const tabRowOf = (node: EventTarget | null): HTMLElement | null => {
   const row = (node as Element | null)?.closest?.(TAB_ROW) as HTMLElement | null;
   return row && !row.closest('[inert]') && !row.closest('.tab-strip-container[data-dragging=true]') ? row : null;
 };
-/** Where the card goes for a row: under a strip tab, beside a sidebar tab (the page is to its right). */
+/** Where the card goes for a row: under a strip tab, beside a sidebar tab (the page is to its right, or to its left when the sidebar is on the right). */
 export const cardSide = (row: HTMLElement): 'below' | 'right' | 'left' => {
-  if (!row.matches('.sb-tab,.sb-bookmark')) return 'below';
-  // A sidebar on the right opens its cards toward the page, on the left.
+  const sidebarRow = row.matches('.sb-tab,.sb-bookmark');
+  if (!sidebarRow) return 'below';
   const box = row.getBoundingClientRect();
-  return box.left + box.width / 2 > window.innerWidth / 2 ? 'left' : 'right';
+  return cardSideFor(sidebarRow, box.left + box.width / 2, window.innerWidth, rootSidebarSide());
 };
 /** A saved page in the sidebar has no tab: its title and address ride on the row and the card is told them. */
 export const cardLabel = (row: HTMLElement): { title: string; host: string } | null => row.dataset.cardTitle === undefined ? null : { title: row.dataset.cardTitle, host: row.dataset.cardHost ?? '' };

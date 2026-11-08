@@ -1,11 +1,16 @@
 import {useSyncExternalStore} from 'react';
 import type {BrowserAction} from '../runtime/types';
 import {favoriteTabOf} from '../runtime/favoriteTabs';
+import {tabListed} from '../runtime/favoriteTabsRule';
+import type {Settings} from '../runtime/types';
 import { t } from '../i18n';
 /** Profile-scoped sidebar apps (pinned sites above the tab list). Private windows keep them in memory only. */
 export type SidebarApp={id:string;url:string;title:string;icon?:string};
-export type SidebarApps={apps:SidebarApp[];hidden:boolean;seeded:boolean};
+/** `place`: where the tiles sit in the sidebar. Only 'bottom' is written (top is the default and stays absent), so older records and tests read the same. */
+export type SidebarApps={apps:SidebarApp[];hidden:boolean;seeded:boolean;place?:'bottom'};
 export const SIDEBAR_APPS_MAX=24;
+/** Tiles the grid shows before "+N" folds the rest (the last slot is the "+N" tile itself). */
+export const SIDEBAR_APPS_LIMIT=12;
 const KEY='acira-sidebar-apps',EVENT='acira-sidebar-apps',memory=new Map<string,SidebarApps>(),cached=new Map<string,{raw:string|null;value:SidebarApps}>();
 const EMPTY:SidebarApps={apps:[],hidden:false,seeded:false};
 const scope=(profile:string,privateMode:boolean)=>(privateMode?'private:':'normal:')+profile;
@@ -32,7 +37,7 @@ const localIcon=(icon:unknown)=>typeof icon==='string'&&/^data:image\/(png|x-ico
 function clean(raw:unknown):SidebarApps{
  if(!raw||typeof raw!=='object')return EMPTY;const value=raw as Record<string,unknown>,ids=new Set<string>(),apps:SidebarApp[]=[];
  for(const item of Array.isArray(value.apps)?value.apps:[]){if(apps.length>=SIDEBAR_APPS_MAX||!item||typeof item!=='object')continue;const app=item as Record<string,unknown>,url=typeof app.url==='string'?normalizeAppUrl(app.url):null,id=typeof app.id==='string'?app.id:'';if(!url||!id||ids.has(id))continue;ids.add(id);apps.push({id,url,title:(typeof app.title==='string'&&app.title.trim()?app.title.trim():appHost(url)||url).slice(0,80),icon:localIcon(app.icon)});}
- return {apps,hidden:value.hidden===true,seeded:value.seeded===true};
+ return {apps,hidden:value.hidden===true,seeded:value.seeded===true,...(value.place==='bottom'?{place:'bottom' as const}:{})};
 }
 function read(profile='',privateMode=false):SidebarApps{
  const id=scope(profile,privateMode);if(memory.has(id))return memory.get(id)!;
@@ -90,6 +95,8 @@ export function moveSidebarApp(profile:string,privateMode:boolean,id:string,inde
  update(profile,privateMode,value=>{const from=value.apps.findIndex(app=>app.id===id);if(from<0)return value;const apps=[...value.apps],[app]=apps.splice(from,1);apps.splice(Math.max(0,Math.min(apps.length,index)),0,app);return {...value,apps};});
 }
 export const setSidebarAppsHidden=(profile:string,privateMode:boolean,hidden:boolean)=>update(profile,privateMode,value=>({...value,hidden}));
+/** Settings > Tabs > Sidebar > Favorites: the tiles at the top of the sidebar (the default) or at the bottom, above the profile row. */
+export const setSidebarAppsPlace=(profile:string,privateMode:boolean,place:'top'|'bottom')=>update(profile,privateMode,value=>{if((value.place==='bottom')===(place==='bottom'))return value;const{place:_old,...rest}=value;return place==='bottom'?{...rest,place:'bottom'}:rest;});
 /** One-time import of new-tab shortcuts that were already marked for the sidebar. */
 export const seedSidebarApps=(profile:string,privateMode:boolean,seed:{url:string;title:string}[])=>update(profile,privateMode,value=>value.seeded?value:{...value,seeded:true,apps:[...value.apps,...seed.flatMap(item=>{const url=normalizeAppUrl(item.url);return url&&!value.apps.some(app=>app.url===url)?[{id:newId(),url,title:item.title.slice(0,80)||appHost(url)}]:[];})].slice(0,SIDEBAR_APPS_MAX)});
 function subscribe(listener:()=>void){window.addEventListener(EVENT,listener);window.addEventListener('storage',listener);return()=>{window.removeEventListener(EVENT,listener);window.removeEventListener('storage',listener);};}
@@ -97,20 +104,35 @@ export const readSidebarApps=(profile='',privateMode=false)=>read(profile,privat
 export function useSidebarApps(profile='',privateMode=false){return useSyncExternalStore(subscribe,()=>read(profile,privateMode));}
 
 /** What a click on a favorite tile does. A favorite is linked to one tab (runtime/favoriteTabs.ts), an ordinary tab of the list: a plain click opens
- * it the first time, goes to it after that (in its own workspace, its page, scroll, sign-in and media as they were), and on that tab, once you
+ * it the first time (when its address is already open in an ordinary tab, that tab is taken over instead), goes to it after that (in its own workspace, its page, scroll, sign-in and media as they were), and on that tab, once you
  * have browsed away, takes it back to the favorite's address (Arc). On that tab at that address a click does nothing: never a second copy.
  * Middle-click and Ctrl/Cmd+click still open an ordinary background tab at the address, and Shift+click a new window. Pure, so the rule is
  * tested without a window. */
 export interface AppClick{button:number;ctrlKey?:boolean;metaKey?:boolean;shiftKey?:boolean}
-export type AppClickPlan={kind:'none'}|{kind:'open'}|{kind:'select';tabId:string}|{kind:'home';tabId:string}|{kind:'new-tab'}|{kind:'new-window'};
-export function appClickPlan<T extends {id:string;url:string;browserProfileId:string;favoriteId?:string}>(click:AppClick,app:SidebarApp,tabs:readonly T[],activeTabId:string,profile:string):AppClickPlan{
+export type AppClickPlan={kind:'none'}|{kind:'open'}|{kind:'select';tabId:string}|{kind:'home';tabId:string}|{kind:'adopt';tabId:string;select:boolean}|{kind:'new-tab'}|{kind:'new-window'};
+/** A favorite with no tab of its own (made from a typed address, a dropped link, an import, a web-app install) whose address is already open in an
+ * ordinary tab of this profile takes that tab over instead of opening a second copy: exactly the favorite's address, not linked to another favorite,
+ * not a private, Tor or secured tab. The tab on screen wins, then the first in the list. */
+const openTabAt=<T extends {id:string;url:string;browserProfileId:string;favoriteId?:string;privacy?:string}>(app:SidebarApp,tabs:readonly T[],activeTabId:string,profile:string):T|undefined=>{
+ const same=tabs.filter(tab=>tab.browserProfileId===profile&&!tab.favoriteId&&!tab.privacy&&normalizeAppUrl(tab.url)===app.url);
+ return same.find(tab=>tab.id===activeTabId)??same[0];
+};
+export function appClickPlan<T extends {id:string;url:string;browserProfileId:string;favoriteId?:string;privacy?:string}>(click:AppClick,app:SidebarApp,tabs:readonly T[],activeTabId:string,profile:string):AppClickPlan{
  if(click.button!==0&&click.button!==1)return {kind:'none'};
  if(click.button===1||click.ctrlKey||click.metaKey)return {kind:'new-tab'};
  if(click.shiftKey)return {kind:'new-window'};
  const tab=favoriteTabOf(tabs,app.id,profile);
- if(!tab)return {kind:'open'};
+ if(!tab){const open=openTabAt(app,tabs,activeTabId,profile);return open?{kind:'adopt',tabId:open.id,select:open.id!==activeTabId}:{kind:'open'};}
  if(tab.id!==activeTabId)return {kind:'select',tabId:tab.id};
  return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
+/** Whether a tab shows in the sidebar's tab list. A favorite's tab does (the default), unless Settings › Tabs › Sidebar › Favorites keeps it only in its tile
+ * (runtime/favoriteTabsRule.ts). Then it is left out only while its tile is there to show it: with Favorites switched off, or once its favorite is gone
+ * (until the sidebar hands the tab back), or while its tile is folded behind "+N", it is listed like any tab, so no tab is ever out of reach. */
+export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>)=>{
+ if(tabListed(tab,settings)||favorites.hidden)return true;
+ const at=favorites.apps.findIndex(app=>app.id===tab.favoriteId);
+ return at<0||(favorites.apps.length>SIDEBAR_APPS_LIMIT&&at>=SIDEBAR_APPS_LIMIT-1);// its favorite is gone, or its tile is folded behind "+N"
+};
 /** The tab a favorite is linked to in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
 export const appTabFor=<T extends {browserProfileId:string;favoriteId?:string}>(app:SidebarApp,tabs:readonly T[],profile:string):T|undefined=>favoriteTabOf(tabs,app.id,profile);

@@ -20,6 +20,7 @@
  background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
  background-color:var(--sf-base-default,rgb(var(--sidebar-rgb,var(--chrome-rgb))));
 }
+/* (--sf-dir is -1 with the sidebar on the left and 1 on the right: which way the pieces that travel with the sidebar's edge move; sidebar-right.css.) */
 /* Keep the real page's curved cut-out joined to the moving sidebar, including its bottom corner. The pieces sit above the page's own layers (z 4): beneath them a website's top corner stayed square at the sidebar's edge. */
 .sidebar-page-corners { display:none; }
 :root[data-sidebar-overlay] .app.style-acira:has(>.acira-sidebar.is-peek) .sidebar-page-corners {
@@ -73,8 +74,8 @@
    slide left a sliver of bare glass between the sidebar and the page that closed as they met, and the 6px margin strip under the sidebar
    was veiled twice (the frame's and the sidebar's own) and read darker. Docked slides keep sidebar.css's full width. */
 :root[data-mode-switch='edge'][data-sidebar-overlay] { --sb-slide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%))); }
-@keyframes sidebar-corners-in { from { transform:translateX(calc(-1 * var(--sf-sidebar-travel))); } }
-@keyframes sidebar-corners-out { to { transform:translateX(calc(-1 * var(--sf-sidebar-travel))); } }
+@keyframes sidebar-corners-in { from { transform:translateX(calc(var(--sf-dir,-1) * var(--sf-sidebar-travel))); } }
+@keyframes sidebar-corners-out { to { transform:translateX(calc(var(--sf-dir,-1) * var(--sf-sidebar-travel))); } }
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area { visibility:hidden; }
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area .split-label { visibility:visible; }
 /* A split's interface panes (a new tab, Settings) are not cut out for a website: they stay drawn while the float is native. */
@@ -183,13 +184,13 @@
 @keyframes desktop-page-band { from { --desktop-band-right:var(--desktop-band-right-from,0px); --desktop-band-bottom:var(--desktop-band-bottom-from,0px); --desktop-top-now:var(--desktop-clip-top-from,0px); } to { --desktop-band-right:var(--desktop-band-right-to,0px); --desktop-band-bottom:var(--desktop-band-bottom-to,0px); --desktop-top-now:var(--desktop-clip-top-to,0px); } }
 :root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-old(acira-desktop-page) { animation:none;opacity:0; }
 :root[data-desktop-material=ready][data-mode-switch=edge]::view-transition-new(acira-desktop-page) { animation:none;opacity:1; }
-@keyframes desktop-page-window { from { translate:var(--desktop-clip-left-from,0px) var(--desktop-clip-top-from,0px); } to { translate:var(--desktop-clip-left-to,0px) var(--desktop-clip-top-to,0px); } }
+@keyframes desktop-page-window { from { translate:calc(-1 * var(--sf-dir,-1) * var(--desktop-clip-left-from,0px)) var(--desktop-clip-top-from,0px); } to { translate:calc(-1 * var(--sf-dir,-1) * var(--desktop-clip-left-to,0px)) var(--desktop-clip-top-to,0px); } }
 /* The held picture's clip starts at the card's moving top edge (--desktop-top-now, animated with the bands above), so its top-right corner stays
    round while the top bar arrives or leaves: clipped from the picture's resting top, the curve was cut away and the corner showed square until the live page took over.
    It must NOT be animated in desktop-page-hold: a custom property is not compositable, and the hold's translate then ran on the main thread while the
    group's ran on the compositor, so the whole page jumped about 25px at the first frame and eased back. */
 @property --desktop-top-now { syntax:'<length>'; inherits:true; initial-value:0px; }
-@keyframes desktop-page-hold { from { translate:calc(-1 * var(--desktop-clip-left-from,0px)) calc(-1 * var(--desktop-clip-top-from,0px)); } to { translate:calc(-1 * var(--desktop-clip-left-to,0px)) calc(-1 * var(--desktop-clip-top-to,0px)); } }
+@keyframes desktop-page-hold { from { translate:calc(var(--sf-dir,-1) * var(--desktop-clip-left-from,0px)) calc(-1 * var(--desktop-clip-top-from,0px)); } to { translate:calc(var(--sf-dir,-1) * var(--desktop-clip-left-to,0px)) calc(-1 * var(--desktop-clip-top-to,0px)); } }
 /* At rest beside the floating sidebar a pictured page is cut where the sidebar meets it, with the card's rounded left corners (what the slide's group clip
    does while it moves): its square corner at the sidebar's edge showed white page pixels under the corner piece's tint as a grey wedge. */
 :root:not([data-mode-switch])[data-sidebar-overlay=dom] .app.style-acira:has(>.acira-sidebar.is-peek) .page-area>.page-content { clip-path:inset(0 0 0 var(--sf-sidebar-travel,0px) round var(--geometry-pageRadius,8px) 0 0 var(--geometry-pageRadius,8px)); }

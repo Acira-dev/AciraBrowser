@@ -76,8 +76,9 @@ function Seamless() {
 
 export function MiniView({ view, layout }: { view: MiniView; layout: MiniLayout }) {
   const id = useId().replace(/:/g, ''), ids = { wall: `${id}-wall` };
-  if (view === 'full') return <MiniBrowser layout={layout} />;
-  return <svg className="cc-svg" viewBox="0 0 200 125" focusable="false" preserveAspectRatio="xMidYMid slice">
+  // With the address bar in the sidebar there is no top bar to slim or hide: Compact and Focus are Full's picture (the cards list Full and Seamless there).
+  if (view === 'full' || (layout === 'sidebar-address' && view !== 'seamless')) return <MiniBrowser layout={layout} />;
+  return <svg className="cc-svg" data-mini-layout={layout} viewBox="0 0 200 125" focusable="false" preserveAspectRatio="xMidYMid slice">
     <defs><linearGradient id={ids.wall} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".12" /><stop offset="1" stopColor="#000" stopOpacity=".08" /></linearGradient></defs>
     <Frame ids={ids}>
       {view === 'compact' ? <Compact layout={layout} /> : view === 'focus' ? <Focus layout={layout} /> : <Seamless />}

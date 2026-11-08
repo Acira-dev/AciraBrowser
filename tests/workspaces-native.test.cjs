@@ -34,6 +34,20 @@ test('the bridge accepts the workspace actions and refuses malformed ones',()=>{
  ])assert.throws(()=>ok(bad),undefined,JSON.stringify(bad));
 });
 
+test('the bridge accepts moving a whole group to a workspace, and refuses malformed or unknown ones',()=>{
+ let base=run(windowWith(['https://a.test/','https://b.test/']),{type:'workspace.create',name:'Work'});
+ const work=base.workspaces.find(w=>w.name==='Work').id,first=base.workspaces[0].id;
+ base=run(base,{type:'workspace.select',id:first});
+ base=run(base,{type:'tab.group.create',tabId:base.tabs[0].id,name:'Research'});
+ const group=base.tabGroups[0].id,ok=a=>validateAction(a,base);
+ assert.equal(ok({type:'workspace.move-group',groupId:group,workspaceId:work}).groupId,group);
+ assert.equal(ok({type:'workspace.move-group',groupId:group,workspaceId:first,name:'Research 2'}).name,'Research 2','Undo carries the name the group had');
+ for(const bad of [
+  {type:'workspace.move-group',groupId:group},{type:'workspace.move-group',workspaceId:work},{type:'workspace.move-group',groupId:'group-nope',workspaceId:work},{type:'workspace.move-group',groupId:group,workspaceId:'workspace-nope'},
+  {type:'workspace.move-group',groupId:group,workspaceId:work,name:5},{type:'workspace.move-group',groupId:group,workspaceId:work,name:'x'.repeat(65)},{type:'workspace.move-group',groupId:group,workspaceId:work,extra:1},
+ ])assert.throws(()=>ok(bad),undefined,JSON.stringify(bad));
+});
+
 test('Alt+1–8 reach the Nth workspace; Ctrl+1–9 stays go to tab',()=>{
  for(let n=1;n<=8;n++){
   assert.deepEqual(resolveDefaultShortcut(key(String(n),{alt:true}),'win32'),{action:'switch-workspace',index:n-1});
@@ -106,10 +120,10 @@ test('the window wiring: one window per open workspace, scoped shortcuts, other 
  for(const type of ['workspace.create','workspace.select','workspace.update','workspace.delete','workspace.restore','workspace.move-tabs'])assert.ok(main.includes(`'${type}'`),`${type} is in main's actionNames`);
  assert.match(main,/action\.type==='workspace\.select'&&!privateMode/,'picking a workspace another window has open brings that window forward');
  assert.match(main,/c\.state\.activeWorkspaceId===action\.id/);
- // Scoped to the open workspace: listedTabs is workspaceTabs (favoriteTabs.ts).
+ // Scoped to the open workspace: listedTabs is workspaceTabs, less a favorite's tab the list does not show when Settings keep it only in its tile (favoriteTabs.ts).
  assert.match(main,/case 'select-tab':\{const here=listedTabs\(state\)/);
  assert.match(main,/case 'cycle-tab':\{[^}]*const here=listedTabs\(state\)/);
- assert.match(read('src/runtime/favoriteTabs.ts'),/export const listedTabs = \(state: BrowserSnapshot\): TabSession\[\] => workspaceTabs\(state\);/);
+ assert.match(read('src/runtime/favoriteTabs.ts'),/export const listedTabs = \(state: BrowserSnapshot\): TabSession\[\] => workspaceTabs\(state\)\.filter\(tab => tabListed\(tab, state\.settings\)\);/);
  assert.match(main,/case 'switch-workspace':/);
  assert.match(main,/normalizeWorkspaces\(state\)/);
  for(const name of ['workspaceTabs','listedTabs','normalizeWorkspaces','windowWorkspaces','scopeToWorkspace','workspaceIdOf'])assert.equal(typeof runtime[name],'function',name);

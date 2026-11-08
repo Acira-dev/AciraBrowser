@@ -1,11 +1,15 @@
+import type { SidebarSide } from '../runtime/types';
+import { rootSidebarSide } from './sidebarSide';
 export interface TooltipRect { left:number; right:number; top:number; bottom:number }
 export type TooltipSide='below'|'above'|'right'|'left';
 const EDGE=8,GAP=8,HEIGHT=24;
 
-/** A sidebar label must fit the chrome beside a native page, as well as the viewport. */
-export function tooltipWidthLimit(trigger:TooltipRect,page:TooltipRect|null,viewportWidth:number):number{
- const sidebar=page&&trigger.right<=page.left&&trigger.bottom>page.top&&trigger.top<page.bottom;
- return Math.max(0,Math.min(320,viewportWidth-2*EDGE,sidebar?page.left-2*EDGE:Infinity));
+/** A sidebar label must fit the chrome beside a native page, as well as the viewport. The sidebar stands left of the page (its room is up to the page's left
+ * edge) or, on the right, right of it (its room is what the window has past the page's right edge); `side` is the sidebar's, the root's by default. */
+export function tooltipWidthLimit(trigger:TooltipRect,page:TooltipRect|null,viewportWidth:number,side:SidebarSide=rootSidebarSide()):number{
+ const beside=page&&trigger.bottom>page.top&&trigger.top<page.bottom&&(side==='right'?trigger.left>=page.right:trigger.right<=page.left);
+ const room=!page||!beside?Infinity:side==='right'?viewportWidth-page.right-2*EDGE:page.left-2*EDGE;
+ return Math.max(0,Math.min(320,viewportWidth-2*EDGE,room));
 }
 const overlaps=(a:TooltipRect,b:TooltipRect)=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
 

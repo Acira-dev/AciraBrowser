@@ -79,9 +79,10 @@ export function layoutAt(first: LayoutNumbers, last: LayoutNumbers, sch: Schedul
 export interface Mover { id: string; first: Box; last: Box; attach0: boolean; attach1: boolean; bow: number; resizes: boolean; /** ms its horizontal / vertical travel waits (the wide address field changes row: it must not cross under the page's top edge on the way) */ xDelay: number; yDelay: number }
 
 /** Where a mover is drawn `ms` into the morph (its box in window coordinates), given the layout numbers at that moment. */
-export function moverBox(m: Mover, first: LayoutNumbers, last: LayoutNumbers, now: LayoutNumbers, sch: Schedule, ms: number): Box {
+/** `dir`: +1 with the sidebar on the left, -1 on the right (its edge moves the other way as the column opens). */
+export function moverBox(m: Mover, first: LayoutNumbers, last: LayoutNumbers, now: LayoutNumbers, sch: Schedule, ms: number, dir: 1 | -1 = 1): Box {
   const k = progressAt(sch.mover, ms, sch.moveDelay + m.xDelay), j = progressAt(sch.mover, ms, sch.moveDelay + m.yDelay);
-  const from = { ...m.first, x: m.first.x + (m.attach0 ? now.col - first.col : 0) }, to = { ...m.last, x: m.last.x + (m.attach1 ? now.col - last.col : 0) };
+  const from = { ...m.first, x: m.first.x + (m.attach0 ? dir * (now.col - first.col) : 0) }, to = { ...m.last, x: m.last.x + (m.attach1 ? dir * (now.col - last.col) : 0) };
   const mix = (a: number, b: number, t: number) => a + (b - a) * t;
   return { x: mix(from.x, to.x, k), y: mix(from.y, to.y, j) + m.bow * 4 * j * (1 - j), width: m.resizes ? mix(from.width, to.width, k) : to.width, height: m.resizes ? mix(from.height, to.height, j) : to.height };
 }
@@ -92,11 +93,14 @@ export const totalMs = (sch: Schedule, movers: Mover[]): number => Math.max(sch.
 /** The wide address field that changes row passes the page's top edge on the way. Going down (turning the mode on) it travels sideways first, into the sidebar's column where nothing covers it,
  * and drops last. Going up (turning it off) it rises at once, inside the sidebar's column (nothing covers it there either), and only then, as the band has opened, slides out. */
 export const ROW_DELAY_MS = 150;
+/** How long a button that ends lower waits to drop. The native page's edge lags the interface's card edge by up to ~18 px as the column opens, and on Windows with the sidebar on the right the buttons end at the column's left corner (8 px in): they must be clear of it first. Still inside the morph's own length (426 ms at Premium: the wait adds nothing up to 180). */
+export const BUTTON_DROP_MS = 180;
 export function delayRowChange(movers: Mover[], sch: Schedule): Mover[] {
   for (const m of movers) {
-    if (!m.resizes) continue;
-    if (m.last.y > m.first.y + 4) m.yDelay = Math.round(ROW_DELAY_MS * sch.scale);
-    else if (m.last.y < m.first.y - 4) m.yDelay = -sch.moveDelay;
+    // Any piece that ends below where it starts waits to drop (the buttons too: on Windows with the sidebar on the right the block's row sits 40 px lower, under the caption buttons, and
+    // a button dropping while it was still over the page's column was hidden by the page, 100% covered for a few frames in Compact and Focus). Only the wide address field also rises early.
+    if (m.last.y > m.first.y + 4) m.yDelay = Math.round((m.resizes ? ROW_DELAY_MS : BUTTON_DROP_MS) * sch.scale);
+    else if (m.resizes && m.last.y < m.first.y - 4) m.yDelay = -sch.moveDelay;
   }
   return movers;
 }

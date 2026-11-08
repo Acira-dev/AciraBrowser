@@ -3,6 +3,7 @@ import { useCallback,useLayoutEffect,useRef,type RefObject } from 'react';
 import { morphSpring,motionScale } from './splitMotion';
 import { liquidChip,type Liquid,type LiquidTarget } from './liquidSnap';
 import { fillChipIcon } from './chipIcon';
+import type { SidebarSide } from '../runtime/types';
 
 /** The carried tab (R3-23/R3-26): below the strip a dragged tab is not a pill any more but its site icon on a small glass
  *  chip that follows the pointer, so it can be taken anywhere (the split picker, another window) and morphs back to a full
@@ -11,14 +12,19 @@ import { fillChipIcon } from './chipIcon';
 export const CARRIED_SIZE=28;
 /** Hysteresis for leaving the strip: the chip forms 10px below it and the pill returns once back at its bottom edge. */
 export function carriedState(was:boolean,pointerY:number,stripBottom:number){return was?pointerY>stripBottom+2:pointerY>stripBottom+10;}
+/** The same hysteresis for a drag out of the sidebar, along x: `edge` is where the sidebar ends and the page begins (ui/sidebarLayout sidebarEdgeOf),
+ * the chip forms 10px past it, toward the page, and the row returns once back within 2px of it. On the right the page lies at smaller x, so the
+ * hysteresis is the left one seen in a mirror (x and edge negated). */
+export function carriedBeyondEdge(was:boolean,x:number,edge:number,side:SidebarSide='left'){return side==='right'?carriedState(was,-x,-edge):carriedState(was,x,edge);}
 
 /** A carried chip for a drag that has no strip preview (sidebar rows, R3-23): the row's icon on the same glass chip. It grows
- *  out of the icon once the pointer leaves `edge` (hysteresis as `carriedState`), follows the pointer freely in 2D, and goes back
+ *  out of the icon once the pointer leaves `edge`, the sidebar's page-side edge (hysteresis as `carriedState`; see `carriedBeyondEdge` for the right side), follows the pointer freely in 2D, and goes back
  *  into the icon when the pointer returns or the drag ends, on the strip chip's springs. `end(true)` hands over at once (a split
  *  drop: the pane morph flies in from the chip's box). Works the same with one tab or many. */
-export function carryChip(row:HTMLElement,iconSelector:string,{only}:{/** The targets this chip may stick to (all of them when absent). */only?:(target:LiquidTarget)=>boolean}={}){
+export function carryChip(row:HTMLElement,iconSelector:string,{only,side='left',icon:given,badge,color}:{/** The targets this chip may stick to (all of them when absent). */only?:(target:LiquidTarget)=>boolean;/** The side the source sidebar is on: the page, and so the chip, lies beyond `edge` toward larger x on the left and smaller x on the right. */side?:SidebarSide;/** The icon to carry in place of a copy of the row's own (a group's folder: it is drawn from the group's colour, which a copy outside the group loses). */icon?:HTMLElement;/** A count on the chip's corner (a group's tabs). */badge?:string;/** The colour of that count. */color?:string}={}){
  const icon=row.querySelector<HTMLElement>(iconSelector)??row,home=icon.getBoundingClientRect(),chip=document.createElement('div');
- chip.className='tab-drag-preview tab-drag-chip';chip.setAttribute('aria-hidden','true');chip.inert=true;chip.append(icon.cloneNode(true));fillChipIcon(chip,row.dataset.tabId??row.querySelector<HTMLElement>('[data-tab-id]')?.dataset.tabId);
+ chip.className='tab-drag-preview tab-drag-chip';chip.setAttribute('aria-hidden','true');chip.inert=true;if(given)chip.append(given);else{chip.append(icon.cloneNode(true));fillChipIcon(chip,row.dataset.tabId??row.querySelector<HTMLElement>('[data-tab-id]')?.dataset.tabId);}
+ if(badge){const mark=document.createElement('span');mark.className='tab-drag-chip-count';mark.textContent=badge;if(color)mark.style.setProperty('--chip-count',color);chip.append(mark);}
  Object.assign(chip.style,{position:'fixed',left:'0px',top:'0px',width:`${CARRIED_SIZE}px`,height:`${CARRIED_SIZE}px`,margin:'0',zIndex:'1000',pointerEvents:'none',opacity:'0'});
  (row.closest('.app')||document.body).append(chip);
  const state={p:0,target:0 as 0|1,stop:undefined as undefined|(()=>void),pointer:{x:home.left+home.width/2,y:home.top+home.height/2},gone:false,liquid:null as Liquid|null};
@@ -36,8 +42,8 @@ export function carryChip(row:HTMLElement,iconSelector:string,{only}:{/** The ta
  state.liquid=liquidChip(chip,{exclude:row.dataset.tabId??row.querySelector<HTMLElement>('[data-tab-id]')?.dataset.tabId??'',only,onFrame:()=>{if(!state.gone)place();}});
  const remove=()=>{if(state.gone)return;state.gone=true;state.stop?.();state.liquid?.end(true);chip.remove();};
  return {
-  /** The pointer moved; `edge` is where the source list ends (the chip forms 10px past it). */
-  move(point:{x:number;y:number},edge:number){if(state.gone)return;state.pointer=point;const target=carriedState(state.target===1,point.x,edge)?1:0;state.liquid?.point(point,target===1);if(target!==state.target)aim(target);else place();},
+  /** The pointer moved; `edge` is where the source list ends (the chip forms 10px past it, toward the page). */
+  move(point:{x:number;y:number},edge:number){if(state.gone)return;state.pointer=point;const target=carriedBeyondEdge(state.target===1,point.x,edge,side)?1:0;state.liquid?.point(point,target===1);if(target!==state.target)aim(target);else place();},
   end(handOver=false){if(state.gone)return;state.liquid?.end(handOver);if(handOver||state.p<.02){remove();return;}aim(0,remove);setTimeout(remove,1500);},
  };
 }

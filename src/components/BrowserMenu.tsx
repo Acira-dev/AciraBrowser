@@ -12,9 +12,9 @@ import { copyText } from '../ui/pageActions';
 import type { BrowserAction,TabSession } from '../runtime/types';
 
 import '../styles/submenu.css';import './Segmented.css';import '../styles/menu-layout.css';
-import type { WindowView } from '../runtime/windowView';import { windowViewName } from '../ui/windowViewText';import { shortcutFor } from '../ui/shortcutKeys';
+import type { WindowView } from '../runtime/windowView';import { shownView,viewsOfLayout,type TabsLayout } from '../ui/sidebarMode';import { windowViewName } from '../ui/windowViewText';import { shortcutFor } from '../ui/shortcutKeys';
 import { t } from '../i18n';
-import { LockKeyhole, PanelsTopLeft } from './AppIcons';
+import { LockKeyhole } from './AppIcons';
 import { restartToUpdate,useUpdateReady } from '../features/updates/useUpdateReady';
 /** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter.
  * Its glyph says the state with the switch (founder after beta.7: both rows were shields, and on or off should show): the sparkles
@@ -55,9 +55,10 @@ export interface MenuParts {
   torActive?:boolean;torIdentity?:()=>void;
   /** On a website in Tor: "New Tor circuit for this site" follows the identity row (Tor Browser's pair), on the Seamless view key in Tor. */
   torCircuit?:()=>void;torCircuitKey?:string;
-  /** R4-16 + R4-19: the Layout rows (View: Full · Compact · Seamless, Tabs: Top · Sidebar), applied live to the same settings as
-   * Settings › Window view and Make it yours. Absent (tests, the preview) means no rows. */
-  view?:WindowView;setView?:(view:WindowView)=>void;sidebarTabs?:boolean;setSidebarTabs?:(side:boolean)=>void;/** Sidebar mode: tabs and the address bar in the sidebar (ui/sidebarMode.ts). */sidebarMode?:boolean;setSidebarMode?:(on:boolean)=>void;
+  /** R4-16 + R4-19: the Layout rows (View: Full · Compact · Seamless, Tabs: Top · Sidebar · Sidebar + address), applied live to the same settings as
+   * Settings › Window view and Make it yours. Absent (tests, the preview) means no rows. The Tabs choice is one of three layouts (ui/sidebarMode.ts), and
+   * the View row lists only the views that look different in it. */
+  view?:WindowView;setView?:(view:WindowView)=>void;tabsLayout?:TabsLayout;setTabsLayout?:(layout:TabsLayout)=>void;
   /** "Report a problem…" under Settings: the menu turns into the report form (about this site or about Acira). Absent while this build
    * cannot send reports, and in Tor (App.tsx reportSubjects); the menu is then as before. */
   report?:()=>void;
@@ -98,6 +99,8 @@ const glyph=(d:ReactNode)=>({size=16}:{size?:number})=><svg width={size} height=
 const ViewFullGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M2 5.75h12M2 8.25h12"/></>);
 const ViewCompactGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M2 6h12"/></>);
 const TabsTopGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M2 6.25h12M6.5 2.75v3.5"/></>);
+/** The window with its sidebar and the address field drawn inside the sidebar: the third Tabs answer. */
+const TabsSideAddressGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M6.25 2.75v10.5M3.5 5.1h1.4"/></>);
 export const menuLayoutViews=['full','compact','seamless'] as const;
 const viewGlyph:Record<(typeof menuLayoutViews)[number],BrowserMenuIcon>={full:ViewFullGlyph,compact:ViewCompactGlyph,seamless:SeamlessRow};
 const viewShortcut:Record<(typeof menuLayoutViews)[number],[string,string]>={full:['view-full',''],compact:['compact-toolbar',''],seamless:['seamless-mode','Ctrl Shift L']};
@@ -110,13 +113,14 @@ export function MenuSegment<T extends string>({label,value,options}:{label:strin
     {options.map(option=><button key={option.id} type="button" role="radio" aria-checked={option.id===value} aria-label={option.text?undefined:option.tip.split(' · ')[0]} title={option.tip} onClick={option.choose}>{option.Icon&&<option.Icon size={16}/>}{option.text&&<span>{option.text}</span>}</button>)}
   </div>;
 }
-/** R4-16 + R4-19: two short rows in the page group, no divider of their own; the menu stays open so the change is seen. */
-function LayoutRows({view,setView,sidebarTabs,setSidebarTabs,sidebarMode,setSidebarMode}:Required<Pick<MenuParts,'setView'|'setSidebarTabs'>>&{view?:WindowView;sidebarTabs:boolean;sidebarMode:boolean;setSidebarMode?:(on:boolean)=>void}){
+/** R4-16 + R4-19: two short rows in the page group, no divider of their own. View keeps the menu open so the change is seen; a Tabs pick moves the sidebar and the address bar, so
+ * the menu closes with it (App.tsx). With the address bar in the sidebar Compact and Focus are the same window as Full, so the View row lists Full and Seamless only (ui/sidebarMode.ts). */
+function LayoutRows({view,setView,tabsLayout='top',setTabsLayout}:Required<Pick<MenuParts,'setView'|'setTabsLayout'>>&{view?:WindowView;tabsLayout?:TabsLayout}){
   const tip=(mode:(typeof menuLayoutViews)[number])=>{const [id,written]=viewShortcut[mode],key=shortcutFor(id,written||undefined);return key?`${windowViewName(mode)} · ${key}`:windowViewName(mode);};
+  const views=viewsOfLayout(tabsLayout,menuLayoutViews) as readonly (typeof menuLayoutViews)[number][];
   return <div className="menu-layout" role="group" aria-label={`${t("browsermenu.view")} · ${t("yours.tabs")}`}>
-    <div className="menu-layout-row"><span>{t("browsermenu.view")}</span><MenuSegment label={t("browsermenu.view")} value={view} options={menuLayoutViews.map(mode=>({id:mode,tip:tip(mode),Icon:viewGlyph[mode],choose:()=>setView(mode)}))}/></div>
-    <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={sidebarTabs?'side':'top'} options={[{id:'top',text:t("browsermenu.tabsTop"),tip:t("yours.tabsTop"),Icon:TabsTopGlyph,choose:()=>setSidebarTabs(false)},{id:'side',text:t("browsermenu.tabsSidebar"),tip:t("yours.tabsSide"),Icon:PanelLeft,choose:()=>setSidebarTabs(true)}] as const}/></div>
-    {setSidebarMode&&<MenuToggle icon={PanelsTopLeft} label={t("sidebarmode.title")} on={sidebarMode} onToggle={()=>setSidebarMode(!sidebarMode)}/>}
+    <div className="menu-layout-row"><span>{t("browsermenu.view")}</span><MenuSegment label={t("browsermenu.view")} value={view&&shownView(tabsLayout,view)} options={views.map(mode=>({id:mode,tip:tip(mode),Icon:viewGlyph[mode],choose:()=>setView(mode)}))}/></div>
+    <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={tabsLayout} options={[{id:'top',tip:t("yours.tabsTop"),Icon:TabsTopGlyph,choose:()=>setTabsLayout('top')},{id:'sidebar',tip:t("yours.tabsSide"),Icon:PanelLeft,choose:()=>setTabsLayout('sidebar')},{id:'sidebar-address',tip:t("yours.tabsSideAddress"),Icon:TabsSideAddressGlyph,choose:()=>setTabsLayout('sidebar-address')}] as const}/></div>
   </div>;
 }
 /** Where the Layout rows sit: after Split view (or Zoom, or Find) in the person's main list; nowhere when the page group is gone. */
@@ -130,7 +134,7 @@ export function BrowserMenu({layout=defaultMenuLayout,torActive=false,torIdentit
   const nodes=menuNodes(parts),row=parts.row;
   // R3-61: the identity row sits with the new-window group (after New Tor window); with that row moved or hidden it closes the list. Popup height counts it in a Tor context (popup.ts).
   const identity=torActive&&torIdentity&&row(t("tornewtab.newTorIdentity"),TorIdentityGlyph,torIdentity,'Ctrl Shift U'),circuit=identity&&torCircuit&&row(t("tor.circuit.new"),TorCircuitGlyph,torCircuit,torCircuitKey),torRows=identity&&<>{identity}{circuit}</>;
-  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setSidebarTabs?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} sidebarTabs={!!parts.sidebarTabs} setSidebarTabs={parts.setSidebarTabs} sidebarMode={!!parts.sidebarMode} setSidebarMode={parts.setSidebarMode}/>}:undefined;
+  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setTabsLayout?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} tabsLayout={parts.tabsLayout} setTabsLayout={parts.setTabsLayout}/>}:undefined;
   return <>
     {import.meta.env.DEV&&<><div className="menu-preview-label">{t('menu.localPreview')}</div><button type="button" className="menu-row" onClick={()=>{const channel=new BroadcastChannel('acira-live-preview');channel.postMessage('refresh');channel.close();}}><UpdateGlyph size={16}/><span>{t('menu.refreshPreview')}</span></button><hr/></>}
     <UpdateRow row={row}/>

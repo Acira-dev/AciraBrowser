@@ -1,5 +1,5 @@
 'use strict';
-// R3-68 Seamless: when does the toolbar (top edge) or the sidebar (left edge) show, and when does it go away again?
+// R3-68 Seamless: when does the toolbar (top edge) or the sidebar (left edge, or the right one when the sidebar stands there) show, and when does it go away again?
 // The page is a native view stacked above the interface, so the interface never sees the pointer at the window's edge;
 // main watches the cursor instead. All of the rules live here, in one pure state machine with no Electron imports and an
 // injected clock, so every rule has a test (tests/edge-reveal.test.cjs). The poller at the bottom feeds it.
@@ -79,22 +79,27 @@ const distanceOutside = (point, b) => {
  * Input: point (global cursor, DIPs, or null), bounds (the window's content bounds, DIPs), focused, suspended (minimized, HTML
  * fullscreen, setup), view ('seamless' or another), vertical (tabs in the sidebar), docked (the sidebar is open for good),
  * edges {top, side} (the Seamless switches), peek {full, compact, focus} (the closed sidebar's switch per view), keys {top, side} (a key press asked for the edge: Ctrl+L, F10, a new tab), holds {top, side}
- * (what keeps a showing edge open: a popup, a drag, focus in the chrome), size {topHeight, sideWidth} (how big the revealed chrome
+ * (what keeps a showing edge open: a popup, a drag, focus in the chrome), sidebarSide ('left' or 'right': the edge the sidebar comes from;
+ * the right one is the left one seen in a mirror, so the pointer is mirrored across the window before any rule looks at it), size {topHeight, sideWidth} (how big the revealed chrome
  * is, DIPs), pressed (a button held in any frame, an in-page drag, a native menu or dialog: nothing reveals), engaged (the page
  * reports something to use under the pointer: a longer rest is needed, see ENGAGED_DWELL), band (DIPs of screen above the window that the system keeps for itself
  * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere), speed ('premium', 'fast' or 'off': which waits apply, see WAITS).
  * Pins (Ctrl+Shift+E) are set with pin(). */
 function createEdgeController({ now = Date.now } = {}) {
   const zones = { top: fresh(), side: fresh() };
-  let lastBounds = null, prev = null, lastInside = null, exit = null, crossed = null, T = PREMIUM;
+  let lastBounds = null, prev = null, lastInside = null, exit = null, crossed = null, lastSide = null, T = PREMIUM;
 
   const geometryChanged = () => { for (const zone of ZONES) { const z = zones[zone]; if (z.phase === 'dwelling') { z.phase = 'hidden'; z.since = 0; } z.blocked = true; } exit = null; crossed = null; };
 
   function sample(input) {
     T = waitsFor(input.speed);
-    const t = now(), b = input.bounds, point = input.point;
+    const t = now(), b = input.bounds, rawPoint = input.point, side = input.sidebarSide === 'right' ? 'right' : 'left';
+    // The sidebar on the right is the left sidebar in a mirror: across the window's width, so its edge zone, its approach, its push out
+    // across the edge and its keep-open rectangle are the left ones, rule for rule. The caption corner (Windows) stays where it is.
+    const point = side === 'right' && rawPoint && b ? { x: 2 * b.x + b.width - 1 - rawPoint.x, y: rawPoint.y } : rawPoint;
     // The window moved or resized (grabbing its border must not pop the sidebar): block both zones until the pointer leaves them.
     if (lastBounds && b && !same(lastBounds, b)) geometryChanged();
+    if (side !== lastSide) { if (lastSide) { prev = null; lastInside = null; geometryChanged(); } lastSide = side; }
     lastBounds = b ? { ...b } : null;
     // Pointer velocity (px/ms) from the previous sample: arriving fast at an edge is intent; sliding along it is a pass.
     const dt = prev && point ? t - prev.t : 0;
@@ -109,14 +114,15 @@ function createEdgeController({ now = Date.now } = {}) {
     const live = input.focused !== false;
     // Windows: the caption buttons' corner (top right, hidden with the toolbar) shows the top at once, so the buttons are back
     // under the pointer before it can click where they are.
-    const caption = input.caption && rel ? rel.x >= b.width - input.caption.width && rel.y < input.caption.height : false;
+    const caption = input.caption && rawPoint && inside ? rawPoint.x - b.x >= b.width - input.caption.width && rel.y < input.caption.height : false;
     // macOS fullscreen on a notched display: the window sits below the camera housing and the menu bar comes down in the band above it, so
     // the pointer that goes to "the top" ends in that band, outside the window. It is at the top edge of the screen, which is what the zone
     // stands for: it counts as pressing against the window's top edge, and keeps the bar open while it stays there.
     const inBand = !!(point && b && input.band > 0 && point.x >= b.x && point.x < b.x + b.width && point.y < b.y && point.y >= b.y - input.band);
     const trigger = {
       top: !!(live && (rel && (rel.y <= EDGE.top || caption) || inBand)),
-      side: !!(live && rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top),
+      // (The caption buttons' corner belongs to the top: with the sidebar on the right it shares its upper end with the side zone.)
+      side: !!(live && rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top && !caption),
     };
     // A push out across the left or top edge (the founder's two monitors: the window's edge is not the screen's, so the pointer
     // slips past it): remember where it crossed; if it stops close past that edge, that is a reveal, not a trip to the neighbour.
@@ -235,7 +241,20 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       // A fullscreen window is the only thing its display shows: another app holding the keyboard (the other monitor, Spotlight, a notification) must not stop
       // its edges, or the sidebar "would not reveal" until a click gave the window the keyboard back. `live()` is main's word for that (the window's Space is showing).
       const state = item.state, effective = view(state), focused = !!win.isFocused?.() || !!item.live?.(), peek = item.peek?.() || null;
-      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, speed: item.speed?.() || 'premium' };
+      // Windows, Sidebar mode: the caption buttons' notch shows while the pointer is along the top (caption-notch.cjs; its own controller, the same rules as Seamless's top edge).
+      // Nothing is sent to the interface: `item.notchShown(shown)` is main's caption overlay going visible or transparent.
+      const notchInput = item.notch?.() || null;
+      if (notchInput || entry.notchShown) {
+        const notch = entry.notchWatch ??= require('./caption-notch.cjs').createCaptionNotch({ now });
+        const shown = notch.sample({
+          point: focused || notch.active() ? screen.getCursorScreenPoint() : null, bounds: win.getContentBounds(), focused,
+          suspended: !!item.suspended?.() || !!win.isMinimized?.() || !!win.isFullScreen?.(), active: !!notchInput?.active, hidden: !!notchInput?.hidden,
+          speed: item.speed?.() || 'premium', pressed: !!item.pressed?.(),
+        });
+        if (shown !== !!entry.notchShown) { entry.notchShown = shown; item.notchShown?.(shown); }
+        if ((notchInput?.active && focused) || notch.active()) fast = true;
+      }
+      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, speed: item.speed?.() || 'premium' };
       const enabled = enabledEdges(input);
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
       if (TRACE) { const line = JSON.stringify({ ...input, enabled }); if (line !== entry.input) { entry.input = line; console.log('[edge-input]', Date.now(), line); } }

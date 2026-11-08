@@ -3,14 +3,13 @@ import { AciraGlyph } from './AciraGlyphs';
 import { TabPrivacyMark } from './TabPrivacyMark';
 import { pageIcon } from '../ui/internalPageIcon';
 import { useState } from 'react';
-import { siteIdentity } from '../runtime/sites';
+import { iconSourceOf } from '../ui/siteIconColor';
 import { Globe2 } from './AppIcons';
 import './tab-sleeping.css';
 
 /** The parent control supplies its accessible name. Website icons never own hit targets. */
 export function SiteIdentityIcon({ url, favicon, size = 16, className = '', privacy, error = false }: { url: string; favicon?: string; size?: number; className?: string; privacy?: 'private' | 'tor'; error?: boolean }) {
-  const identity = siteIdentity(url);
-  const source = identity.icon || (favicon && /^(https?:|data:image\/|acira-app:)/i.test(favicon) ? favicon : '');
+  const source = iconSourceOf(url, favicon);
   const [failedSource, setFailedSource] = useState('');
   const style = { width: size, height: size, flexShrink: 0, pointerEvents: 'none' as const };
   // Acira's own pages wear an informative glyph (only the New tab keeps the logo); a failed page shows the alert.

@@ -1,0 +1,64 @@
+/* Tab glow (item 11, founder-approved 7 Nov 2026): the selected tab, and a hovered one, take a soft glow in the site's colour, in the
+   sidebar and along the top. The colour is the site icon's hue and chroma (ui/siteIconColor.ts), handed to the row as --site with a
+   data-glow attribute; a row that is private, Tor, asleep, outlined for a risk, or a linked copy never has them.
+
+   Settings › Appearance › Site colour (:root[data-site-color]): Off draws nothing here, Soft (the default, also when the attribute is
+   absent) is the selected-tab glow between the two strengths of the design pictures and a faint hover, Rich is the stronger strength.
+   The corners (8px) are in sidebar.css (--sb-row-radius) and frost-preview.css (--tab-radius) and do not depend on the setting.
+
+   Tokens, as shares of the site colour: ring (1px), glow (blur and spread), wash (a fill inside the row). --tg-* is the selected tab,
+   --tg-h-* a hovered one. The top strip's shell clips at its edge (a 30px tab in a 36px strip), so the glow there is capped at 8px. */
+.app.style-acira {
+  --tab-radius: 8px;
+  --tg-ring: 22%; --tg-glow: 30%; --tg-blur: 16px; --tg-spread: 1px; --tg-wash: 0%;
+  --tg-h-ring: 0%; --tg-h-glow: 12%; --tg-h-blur: 8px; --tg-h-wash: 5%;
+}
+.app.style-acira[data-chrome=dark] { --tg-ring: 36%; --tg-glow: 32%; --tg-wash: 6%; --tg-h-wash: 7%; }
+:root[data-site-color=rich] .app.style-acira {
+  --tg-ring: 30%; --tg-glow: 40%; --tg-blur: 20px; --tg-spread: 2px; --tg-wash: 3%;
+  --tg-h-ring: 18%; --tg-h-glow: 24%; --tg-h-blur: 12px; --tg-h-wash: 8%;
+}
+:root[data-site-color=rich] .app.style-acira[data-chrome=dark] { --tg-ring: 48%; --tg-glow: 42%; --tg-wash: 10%; --tg-h-ring: 26%; --tg-h-glow: 26%; --tg-h-wash: 12%; }
+
+/* The sidebar's raised card glides from the old tab to the new one (useCardGlide). On the way it carries the ring and the glow, with the colour
+   blending from the old tab's to the new one's on the glide's own animation: --glow-c is a registered colour, so it interpolates. */
+@property --glow-c { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
+/* ---- sidebar rows ---- */
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-tab[data-glow] {
+  transition: background-color var(--sb-dur) var(--sb-ease), color var(--sb-dur) var(--sb-ease), box-shadow var(--sb-dur) var(--sb-ease);
+}
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-tab[data-glow]:not([aria-current=true]):hover {
+  background-image: linear-gradient(color-mix(in srgb, var(--site) var(--tg-h-wash), transparent), color-mix(in srgb, var(--site) var(--tg-h-wash), transparent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--site) var(--tg-h-ring), transparent), 0 0 var(--tg-h-blur) 0 color-mix(in srgb, var(--site) var(--tg-h-glow), transparent);
+}
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-tab[data-glow][aria-current=true],
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-tab[data-glow][aria-current=true]:hover {
+  background-image: linear-gradient(color-mix(in srgb, var(--site) var(--tg-wash), transparent), color-mix(in srgb, var(--site) var(--tg-wash), transparent));
+  box-shadow: var(--sb-current-shadow), 0 0 0 1px color-mix(in srgb, var(--site) var(--tg-ring), transparent), 0 0 var(--tg-blur) var(--tg-spread) color-mix(in srgb, var(--site) var(--tg-glow), transparent);
+}
+
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-glide[data-glow] {
+  background-image: linear-gradient(color-mix(in srgb, var(--glow-c) var(--tg-wash), transparent), color-mix(in srgb, var(--glow-c) var(--tg-wash), transparent));
+  box-shadow: var(--sb-current-shadow), 0 0 0 1px color-mix(in srgb, var(--glow-c) var(--tg-ring), transparent), 0 0 var(--tg-blur) var(--tg-spread) color-mix(in srgb, var(--glow-c) var(--tg-glow), transparent);
+}
+
+/* ---- tabs along the top ---- */
+:root:not([data-site-color=off]) .app.style-acira .tab-strip-container:not(.vertical) .browser-tab[data-glow]:not(.selected):not([data-tab-group]):not([data-drag-surface]):hover {
+  background-image: linear-gradient(color-mix(in srgb, var(--site) var(--tg-h-wash), transparent), color-mix(in srgb, var(--site) var(--tg-h-wash), transparent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--site) var(--tg-h-ring), transparent), 0 0 min(var(--tg-h-blur), 8px) 0 color-mix(in srgb, var(--site) var(--tg-h-glow), transparent);
+}
+/* The selection pill slides under the tabs on its own spring, so its glow is a layer of the pill (the pill's own shadow is not touched). Its --site is a motion value (useTabSelectionMotion): blended from the last tab's colour on that spring, alpha 0 when the tab has none. */
+:root:not([data-site-color=off]) .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection[data-glow] {
+  background-image: linear-gradient(color-mix(in srgb, var(--site) var(--tg-wash), transparent), color-mix(in srgb, var(--site) var(--tg-wash), transparent));
+}
+:root:not([data-site-color=off]) .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection[data-glow]::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--site) var(--tg-ring), transparent), 0 0 min(var(--tg-blur), 8px) 0 color-mix(in srgb, var(--site) var(--tg-glow), transparent);
+}
+
+@media (forced-colors: active) {
+  .app .sb-tab[data-glow], .app .browser-tab[data-glow], .app .tab-strip-selection[data-glow] { background-image: none; }
+  .app .sb-tab[data-glow]:hover, .app .browser-tab[data-glow]:hover { box-shadow: none; }
+  .app .tab-strip-selection[data-glow]::after { display: none; }
+}

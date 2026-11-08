@@ -38,7 +38,8 @@ test('single-tab drag (founder 26 Oct): with one tab the carried chip still foll
   assert.match(sidebar, /current\.rowPreview\?\?=carrySidebarRow\(/, 'a sidebar row has a full-row/icon carry surface, whatever the tab count');
   assert.match(sidebar, /current\.chip\?\.end\(Boolean\(split\)\)/, 'a split drop hands the sidebar chip to the pane morph at once');
   assert.match(surface, /export function carryChip\(/);
-  assert.match(surface, /carriedState\(state\.target===1,point\.x,edge\)/, 'the sidebar chip forms 10px past the sidebar edge, with the strip chip\'s hysteresis');
+  assert.match(surface, /carriedBeyondEdge\(state\.target===1,point\.x,edge,side\)/, 'the sidebar chip forms 10px past the sidebar edge, with the strip chip\'s hysteresis');
+  assert.match(surface, /side==='right'\?carriedState\(was,-x,-edge\):carriedState\(was,x,edge\)/, 'on the left it is carriedState itself; on the right the same hysteresis mirrored');
   assert.equal(carriedState(false, 300, 288), true, 'x past the sidebar edge by more than 10px: chip');
   assert.equal(carriedState(true, 289, 288), false, 'back at the edge: home');
 });

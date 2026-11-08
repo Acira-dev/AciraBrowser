@@ -15,8 +15,8 @@
  --sb-tile:rgb(var(--ink) / .04);--sb-tile-current:var(--sb-current);
  --sb-ring:var(--focus-ring-color,var(--chrome-focus-ring));--sb-line:rgb(var(--ink) / .08);--sb-line-strong:var(--chrome-line-strong,rgb(var(--ink) / .14));
  --sb-ease:var(--ease-ui,cubic-bezier(.2,0,0,1));--sb-strong:cubic-bezier(.23,1,.32,1);--sb-spring:linear(0,0.0582,0.1823,0.3238,0.4588,0.5768,0.6749,0.7536,0.8153,0.8628,0.8988,0.9259,0.946,0.9608,0.9717,0.9796,0.9854,0.9895,0.9925,0.9947,0.9962,0.9973,0.9981,0.9987,1);--sb-move:var(--ease-move,cubic-bezier(.645,.045,.355,1));--sb-dur:120ms;
- --sb-row:32px;--sb-radius:var(--radius-control,4px);--sb-danger:#d9474f;--sb-drop:color-mix(in srgb,var(--sb-ring) 12%,transparent);
- --sb-rail:.55;
+ --sb-row:32px;--sb-radius:var(--radius-control,4px);--sb-row-radius:8px;--sb-danger:#d9474f;--sb-drop:color-mix(in srgb,var(--sb-ring) 12%,transparent);
+ --sb-rail:.55;--gf-sheet:#fff;--gf-sheen:rgb(255 255 255 / .72);
  /* Group colors, sidebar only: Chrome's nine, muted OKLCH, lighter in dark (concept). The strip keeps its own. On a light sidebar the
     dot is the group's only mark, so each colour keeps 3:1 on every light finish (Sand over a dark desktop is the darkest glass):
     blue, yellow, green, pink, cyan and orange take a deeper tone of their own hue, kept inside sRGB (beta.10, contrast-2). */
@@ -34,6 +34,7 @@
 @container style(--sidebar-tone: dark){.app.style-acira .ed-rail.acira-sidebar{
  --tab-group-grey:oklch(.7 0 0);--tab-group-blue:oklch(.72 .12 255);--tab-group-red:oklch(.7 .14 25);--tab-group-yellow:oklch(.82 .11 95);--tab-group-green:oklch(.74 .11 150);
  --tab-group-pink:oklch(.74 .12 350);--tab-group-purple:oklch(.72 .12 300);--tab-group-cyan:oklch(.78 .09 210);--tab-group-orange:oklch(.76 .12 60);
+ --gf-sheet:rgb(255 255 255 / .56);--gf-sheen:rgb(255 255 255 / .24);
 }}
 /* A deep finish in light mode: its glass is lighter than in dark mode, so labels, counts and the faint notes (section notes, empty states,
    app slots) on 50% white measured 4.15-4.3:1. 54% is the least that keeps 4.5:1 on all seven deep finishes (Emerald and Alpine are the
@@ -47,6 +48,16 @@
 
 /* Favorites: 3 or 4 across (--sb-cols), 40px tiles, 6px gaps, 4-5% fill, 20px favicon, no outline. */
 .app.style-acira .acira-sidebar .sb-apps-region{flex:none;padding:8px 12px 6px;-webkit-app-region:drag}
+/* Favorites at the bottom (Settings > Tabs > Sidebar > Favorites): the tiles sit above the workspace row and the footer, under a hairline of their own, and the list
+   keeps the top. Same tiles, size, gaps and dot. The band that drags the window stays at the top only; with no favorites the drop zone floats over the end of the list. */
+.app.style-acira .acira-sidebar .sb-favorites-bottom{flex:none;display:flex;flex-direction:column;position:relative}
+.app.style-acira .acira-sidebar .sb-favorites-bottom .sb-caption{-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-favorites-bottom .sb-caption:not([data-filled]){height:0}
+.app.style-acira .acira-sidebar .sb-favorites-bottom .sb-apps-region{padding:2px 12px 8px;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-favorites-bottom .sb-apps-region.sb-apps-float{top:auto;bottom:0;height:44px}
+/* With the address bar in the sidebar (address-in-sidebar.css) the empty top band and the region's top padding go: the bottom region keeps both. */
+:root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side] .sb-favorites-bottom .sb-caption:not([data-filled]){display:block}
+:root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side] .sb-favorites-bottom .sb-apps-region{padding-top:2px}
 .app.style-acira .acira-sidebar .sb-app-editor{-webkit-app-region:no-drag}
 .app.style-acira .acira-sidebar .sb-apps{position:relative;display:grid;grid-template-columns:repeat(var(--sb-cols,3),minmax(0,1fr));gap:6px}
 .app.style-acira .acira-sidebar .sb-app{
@@ -61,7 +72,26 @@
 .app.style-acira .acira-sidebar .sb-app[data-open]::after{content:'';position:absolute;left:50%;bottom:4px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--sb-faint)}
 .app.style-acira .acira-sidebar .sb-app[aria-current=page]::after{display:none}
 .app.style-acira .acira-sidebar .sb-app[data-away]::after{display:block;background:var(--sb-fg)}
+/* Settings keep a favorite's tab only in its tile (Favorites' tabs in the tab list: off): the tile is that tab's one place, so a sleeping tab dims there as a row does. */
+.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>*{opacity:var(--sb-sleeping-icon)}
+.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)::after{opacity:var(--sb-sleeping-icon)}
 .app.style-acira .acira-sidebar .sb-app:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-2px}
+/* The active tile's ring is its site's own colour (item 10, founder-approved 7 Nov): a 2px ring inside the tile's edge, so nothing shifts, and a light tint
+   of the same colour in the tile. Hue and chroma come from the icon (ui/siteIconColor.ts), lightness from the theme (.58 light, .72 dark: 3:1 or more
+   against the tile for every hue, Rich's tint too (20% light, 18% dark), tests/site-icon-color.test.ts), so one cached pair serves both. An icon with no real colour (grey, black, white, none)
+   and Off use the accent. Strength follows Settings > Appearance > Site colour (:root[data-site-color]): Soft is the design and also applies while the
+   attribute is missing; Rich takes a stronger tint and a fine second ring outside; Off is the accent only. Rest and hover are unchanged. Keyboard
+   focus keeps the accent outline, which draws over the ring. */
+@property --sb-site{syntax:'<color>';inherits:false;initial-value:transparent}
+.app.style-acira .ed-rail.acira-sidebar{--sb-site-l:.58;--sb-site-tint:13%;--sb-site-fallback:var(--chrome-accent,var(--sb-ring))}
+.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-site-l:.72;--sb-site-tint:10%}
+:root[data-site-color=rich] .app.style-acira .ed-rail.acira-sidebar{--sb-site-tint:20%}
+:root[data-site-color=rich] .app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-site-tint:18%}
+.app.style-acira .acira-sidebar .sb-app{--sb-site:var(--sb-site-fallback)}
+.app.style-acira .acira-sidebar .sb-app[data-site]{--sb-site:oklch(var(--sb-site-l) var(--site-c) var(--site-h))}
+:root[data-site-color=off] .app.style-acira .acira-sidebar .sb-app[data-site]{--sb-site:var(--sb-site-fallback)}
+.app.style-acira .acira-sidebar :is(.sb-app[aria-current=page],.sb-apps>.sb-glide){background:color-mix(in oklab,var(--sb-site) var(--sb-site-tint),var(--sb-current));box-shadow:inset 0 0 0 2px var(--sb-site)}
+:root[data-site-color=rich] .app.style-acira .acira-sidebar :is(.sb-app[aria-current=page],.sb-apps>.sb-glide){box-shadow:inset 0 0 0 2px var(--sb-site),0 0 0 1px color-mix(in oklab,var(--sb-site) 40%,transparent)}
 .app.style-acira .acira-sidebar .sb-app>:is(img,svg){width:20px;height:20px;object-fit:contain}
 .app.style-acira .acira-sidebar .sb-app-initial{font-size:var(--text-13,13px);font-weight:500;line-height:1;color:var(--sb-muted)}
 .app.style-acira .acira-sidebar .sb-app:is(.sb-app-add,.sb-app-slot){background:transparent;color:var(--sb-faint)}
@@ -82,7 +112,7 @@
 .app.style-acira .acira-sidebar .sb-caption{position:relative;flex:none;height:36px;-webkit-app-region:drag}
 .app.style-acira .acira-sidebar .sb-caption[data-filled]{display:contents}
 /* Empty Favorites: one quiet row where the grid will be; it is the drop target during a drag. */
-.app.style-acira .acira-sidebar .sb-apps.sb-apps-hint{display:flex;align-items:center;height:32px;padding:0 6px 0 24px;border-radius:var(--sb-radius);color:var(--sb-faint);font-size:var(--text-12,12px);font-weight:450;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-apps.sb-apps-hint{display:flex;align-items:center;height:32px;padding:0 6px 0 24px;border-radius:var(--sb-row-radius);color:var(--sb-faint);font-size:var(--text-12,12px);font-weight:450;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-apps.sb-apps-hint[data-dragging]{color:var(--sb-muted);background:var(--sb-hover)}
 .app.style-acira .acira-sidebar .sb-apps.sb-apps-hint[data-dropping]{color:var(--sb-fg);background:var(--sb-drop)}
 
@@ -128,7 +158,7 @@
 .app.style-acira .acira-sidebar .sb-zone[data-stuck]>.sb-zone-head{background:rgb(var(--sidebar-rgb,var(--chrome-rgb,0 0 0)) / max(var(--chrome-veil-top,.9),.97))}
 /* Under a stuck header the rows fade in over 12px, so the header itself stays crisp (concept). */
 .app.style-acira .acira-sidebar .sb-zone[data-stuck]>.sb-zone-head::after{content:'';position:absolute;left:0;right:0;top:100%;height:12px;background:linear-gradient(rgb(var(--sidebar-rgb,var(--chrome-rgb,0 0 0)) / max(var(--chrome-veil-top,.9),.97)),transparent);pointer-events:none}
-.app.style-acira .acira-sidebar .sb-zone-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-radius);background:none;color:var(--sb-label);font:450 var(--text-13,13px)/18px var(--font-ui,inherit);letter-spacing:0;text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-zone-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-row-radius);background:none;color:var(--sb-label);font:450 var(--text-13,13px)/18px var(--font-ui,inherit);letter-spacing:0;text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-zone-toggle:hover{background:var(--sb-hover);color:var(--sb-fg)}
 .app.style-acira .acira-sidebar .sb-zone-toggle:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
 .app.style-acira .acira-sidebar .sb-zone-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -149,7 +179,7 @@
 /* Rows: tabs, the New tab row, bookmarks and folders share one shape. 32px, 4px radius, rows touch; the 16px icon at
    x=12, the title at x=36, children +12 per level. Rest 13/450 at 76% (62% dark), hover 4.5% + full ink, current on
    the raised row at full ink and the same weight (no reflow). One line; the last 24px fade out instead of an ellipsis. */
-.app.style-acira .acira-sidebar :is(.sb-tab,.sb-new-tab,.sb-bookmark,.sb-folder){position:relative;display:flex;align-items:center;flex:none;height:var(--sb-row);border-radius:var(--sb-radius);color:var(--sb-rest);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar :is(.sb-tab,.sb-new-tab,.sb-bookmark,.sb-folder){position:relative;display:flex;align-items:center;flex:none;height:var(--sb-row);border-radius:var(--sb-row-radius);color:var(--sb-rest);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar :is(.sb-tab,.sb-new-tab,.sb-bookmark,.sb-folder):hover{background:var(--sb-hover);color:var(--sb-fg)}
 /* The current card's own ink: the light card is white whatever colour the sidebar is (a dark chosen sidebar colour
    gave it white text on white); the dark card is the tab surface, so the tab's ink. */
@@ -158,7 +188,7 @@
 .app.style-acira[data-appearance=light] .ed-rail.acira-sidebar{--sb-current:#fff;--sb-current-fg:#1c1d21;--sb-current-shadow:var(--shadow-card)}
 .app.style-acira .acira-sidebar .sb-tab[aria-current=true],.app.style-acira .acira-sidebar .sb-tab[aria-current=true]:hover{background:var(--sb-current);color:var(--sb-current-fg,var(--sb-fg));box-shadow:var(--sb-current-shadow)}
 .app.style-acira .acira-sidebar :is(.sb-tab-main,.sb-new-tab,.sb-bookmark,.sb-folder){gap:8px;padding:0 6px;border:0;background:none;font:450 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag}
-.app.style-acira .acira-sidebar .sb-tab-main{flex:1;min-width:0;display:flex;align-items:center;height:100%;border-radius:var(--sb-radius);color:inherit}
+.app.style-acira .acira-sidebar .sb-tab-main{flex:1;min-width:0;display:flex;align-items:center;height:100%;border-radius:var(--sb-row-radius);color:inherit}
 .app.style-acira .acira-sidebar :is(.sb-new-tab,.sb-bookmark,.sb-folder){width:100%}
 /* Rows take an inset ring with 2px of air inside the row (M E05): a row flush with the scroller's edge, as the first one
    is, never has its ring touch or lose to the scroller's clip. */
@@ -187,6 +217,8 @@
 .app.style-acira .acira-sidebar .sb-tab-action[aria-pressed=true]{color:var(--sb-fg)}
 /* Drag: the origin dims; the insertion line is 2px accent with round caps, inset at the title edge. */
 .app.style-acira .acira-sidebar .sb-tab[data-dragging]{opacity:.4}
+/* A group carried to a workspace: its header stays as a faded place while its folder travels as a chip. */
+.app.style-acira .acira-sidebar .sb-group[data-dragging]>.sb-group-header{opacity:.4}
 /* The drop line. A tab joining a split (src/ui/splitDropTarget.ts marks the pane beside the slot with data-split-insert: between two
    panes, or on the card's top or bottom edge) draws the same line at that slot, from the pane's title edge, over a current row's card. */
 .app.style-acira .acira-sidebar .sb-tab:is([data-drop],[data-split-insert])::before{content:'';position:absolute;left:30px;right:8px;height:2px;border-radius:1px;background:var(--sb-ring);pointer-events:none;z-index:1}
@@ -222,16 +254,27 @@
 /* Tab groups: color chip (10px, radius 3) in the icon column, name 13/500 at full ink, count 12 tabular at 44%,
    chevron on hover and while collapsed. Members one step in (+12), beside a 2px rail in the group's color. */
 .app.style-acira .acira-sidebar .sb-group{position:relative;display:flex;flex-direction:column;margin:0}
-.app.style-acira .acira-sidebar .sb-group>.sb-group-header{display:flex;align-items:center;gap:8px;width:100%;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-radius);background:none;color:var(--sb-fg);font:500 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-group>.sb-group-header{display:flex;align-items:center;gap:8px;width:100%;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-row-radius);background:none;color:var(--sb-fg);font:500 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-group>.sb-group-header:hover{background:var(--sb-hover)}
-/* The group's folder (founder, 6 Nov: groups read as folders): Acira's own Folder and FolderOpen glyphs in the icon column, stacked,
-   the closed one while collapsed and the open one otherwise, crossfading on the fold's clock (the speed setting scales it, Off is
-   instant). Stroke in the group's colour with a 22% tint of it as the fill. (Mixing ink into the stroke was tried: --sb-fg is
-   translucent, so in the dark sidebar it only dimmed the colour.) */
+/* The group's folder (founder, 6 Nov: groups read as folders; 7 Nov, item 9: with small sheets for its tabs, glass you can partly see
+   through, opening and closing). GroupFolderGlyph.tsx draws it: a back plate, one to three sheets, a front plate; the group's exact
+   colour is the stroke and the tint (mixing --sb-fg into it only dims it in the dark sidebar, the token is translucent). Closed, the
+   sheets stand square behind the front plate; open, the front plate tilts into the open-folder shape and the sheets lift and fan a
+   little. Every move runs on the chevron's clock (.24s x --motion-scale, the sidebar's spring; Off is instant), and a sheet arriving or
+   leaving is started by the glyph itself. */
 .app.style-acira .acira-sidebar .sb-group-folder{color:var(--group-color)}
-.app.style-acira .acira-sidebar .sb-group-folder>svg{grid-area:1/1;fill:color-mix(in srgb,var(--group-color) 22%,transparent);transition:opacity calc(.12s * var(--motion-scale,1)) var(--sb-ease)}
-.app.style-acira .acira-sidebar .sb-group-folder>svg:first-child,.app.style-acira .acira-sidebar .sb-group[data-collapsed] .sb-group-folder>svg:last-child{opacity:0}
-.app.style-acira .acira-sidebar .sb-group[data-collapsed] .sb-group-folder>svg:first-child{opacity:1}
+.app.style-acira .acira-sidebar .sb-group-folder>.gf{overflow:visible}
+.app.style-acira .acira-sidebar .gf-back{fill:currentColor;fill-opacity:.1;stroke:currentColor;stroke-opacity:.5;stroke-width:.8;stroke-linejoin:round}
+.app.style-acira .acira-sidebar .gf-sheet{fill:var(--gf-sheet);stroke:color-mix(in srgb,currentColor 50%,transparent);stroke-width:.6;transform-box:fill-box;transform-origin:50% 100%;transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
+.app.style-acira .acira-sidebar .gf-sheet[data-leaving]{--gf-out:calc(.2s * var(--motion-scale,1));animation:gf-sheet-out var(--gf-out) var(--sb-ease) both}
+@keyframes gf-sheet-out{to{opacity:0;translate:0 3px}}
+.app.style-acira .acira-sidebar .gf-front{stroke:currentColor;stroke-opacity:.82;stroke-width:.85;stroke-linejoin:round;d:path("M1.2 7.95Q1.2 6.7 2.45 6.7L13.55 6.7Q14.8 6.7 14.8 7.95L14.8 12.35Q14.8 13.6 13.55 13.6L2.45 13.6Q1.2 13.6 1.2 12.35Z");transition:d calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
+.app.style-acira .acira-sidebar .gf-sheen{fill:none;stroke:var(--gf-sheen);stroke-width:.6;stroke-linecap:round;d:path("M2.9 7.75L13.1 7.75");transition:d calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
+.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-front{d:path("M2.21 7.72Q2.5 6.5 3.75 6.5L13.95 6.5Q15.2 6.5 14.93 7.72L13.87 12.38Q13.6 13.6 12.35 13.6L2.05 13.6Q0.8 13.6 1.09 12.38Z")}
+.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheen{d:path("M4.2 7.55L13.5 7.55")}
+.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="0"]{transform:translate(0,-1.1px)}
+.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="1"]{transform:translate(.55px,-1.45px) rotate(3.2deg)}
+.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="2"]{transform:translate(-1.1px,-1.8px) rotate(-6.4deg)}
 .app.style-acira .acira-sidebar .sb-group-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
 .app.style-acira .acira-sidebar .sb-group-header>small{font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-group-header>svg{flex:none;margin-right:4px;color:var(--sb-label);opacity:0;transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring),opacity var(--sb-dur) var(--sb-ease)}
@@ -266,7 +309,7 @@
 .app.style-acira .acira-sidebar .sb-bookmark-more{color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-bookmark-more>.sb-tab-icon{color:var(--sb-quiet)}
 .app.style-acira .acira-sidebar .sb-bookmark-more:is(:hover,:focus-visible)>.sb-tab-icon{color:inherit}
-.app.style-acira .acira-sidebar .sb-bookmarks-empty{display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;border-radius:var(--sb-radius);color:var(--sb-faint);font-size:var(--text-12,12px);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-bookmarks-empty{display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;border-radius:var(--sb-row-radius);color:var(--sb-faint);font-size:var(--text-12,12px);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-bookmarks-empty[data-dropping]{background:var(--sb-drop);color:var(--sb-fg)}
 
 /* Off-screen current tab: a 28px glass pill docked under the list, in flow (M F01): the list ends above it, so it never
@@ -283,7 +326,7 @@
 .app.style-acira .acira-sidebar .sb-active-peek:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
 @keyframes sb-peek{from{opacity:0}to{opacity:1}}
 /* With many tabs the Bookmarks zone falls below the fold: a 28px row above the footer jumps there. */
-.app.style-acira .acira-sidebar .sb-jump{flex:none;display:flex;align-items:center;gap:8px;height:28px;margin:0 8px 2px;padding:0 6px 0 30px;border:0;border-radius:var(--sb-radius);background:none;color:var(--sb-label);font:500 var(--text-12,12px)/16px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-jump{flex:none;display:flex;align-items:center;gap:8px;height:28px;margin:0 8px 2px;padding:0 6px 0 30px;border:0;border-radius:var(--sb-row-radius);background:none;color:var(--sb-label);font:500 var(--text-12,12px)/16px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag}
 .app.style-acira .acira-sidebar .sb-jump>small{flex:1;font:500 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-jump:hover{background:var(--sb-hover);color:var(--sb-fg)}
 .app.style-acira .acira-sidebar .sb-jump:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
@@ -333,7 +376,9 @@ html[data-sidebar-resizing] .app.style-acira:not(.native-layer){transition:none!
  .app.style-acira .acira-sidebar :is(.sb-tab[data-drop],.sb-app[data-drop])::before,.app.style-acira .acira-sidebar .sb-resize::after{background:Highlight}
  .app.style-acira .acira-sidebar .sb-group-members::before{background:CanvasText}
  .app.style-acira .acira-sidebar .sb-group-folder{color:CanvasText}
- .app.style-acira .acira-sidebar .sb-group-folder>svg{fill:none}
+ .app.style-acira .acira-sidebar :is(.gf-back,.gf-front){fill:none;stroke:CanvasText;stroke-opacity:1}
+ .app.style-acira .acira-sidebar .gf-sheet{fill:Canvas;stroke:CanvasText}
+ .app.style-acira .acira-sidebar .gf-sheen{display:none}
  .app.style-acira .acira-sidebar :focus-visible{outline-color:Highlight}
  .app.style-acira .acira-sidebar .sb-zone-head{background:Canvas;backdrop-filter:none}
 }
@@ -518,14 +563,14 @@ html:not([data-material=acrylic]):not([data-edge-float]) .app.style-acira:has(>.
 .app.style-acira .acira-sidebar .sb-split-group{--sb-card-line:var(--sb-line);position:relative;box-sizing:border-box;min-width:0;max-width:100%;margin:3px 0;padding:2px;border-radius:var(--sb-radius)}
 .app.style-acira .acira-sidebar .sb-split-group::after{content:'';position:absolute;inset:0;z-index:2;border:1px solid var(--sb-card-line);border-radius:inherit;pointer-events:none}
 .app.style-acira .acira-sidebar .sb-split-group:has(>.split-group-parent[data-active]){--sb-card-line:var(--sb-line-strong)}
-.app.style-acira .acira-sidebar .split-group-sidebar{gap:8px;width:100%;height:var(--sb-row);margin:0;padding:0 6px;border-radius:var(--sb-radius);background:none;box-shadow:none;color:var(--sb-fg);-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .split-group-sidebar{gap:8px;width:100%;height:var(--sb-row);margin:0;padding:0 6px;border-radius:var(--sb-row-radius);background:none;box-shadow:none;color:var(--sb-fg);-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .split-group-sidebar:hover{background:var(--sb-hover)}
 /* The card's stronger line says its split is on screen; the header takes no fill of its own, so after a click exactly one row
    (the focused pane) reads as current (founder, 28 Oct: "selecting more than one tab"). */
 .app.style-acira .acira-sidebar .split-group-sidebar[data-active]{background:none;box-shadow:none}
 .app.style-acira .acira-sidebar .split-group-sidebar[data-active]:hover{background:var(--sb-hover)}
 .app.style-acira .acira-sidebar .split-group-sidebar[data-drop]{background:var(--sb-drop);box-shadow:none}
-.app.style-acira .acira-sidebar .split-group-sidebar button{height:100%;padding:0;border-radius:var(--sb-radius);background:none;color:inherit;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .split-group-sidebar button{height:100%;padding:0;border-radius:var(--sb-row-radius);background:none;color:inherit;-webkit-app-region:no-drag}
 .app.style-acira .acira-sidebar .split-group-sidebar button:is(:hover,:active){background:none}
 .app.style-acira .acira-sidebar .split-group-sidebar button:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
 .app.style-acira .acira-sidebar .split-group-sidebar .split-group-open{flex:1;gap:8px;min-width:0;justify-content:flex-start;text-align:left}
@@ -596,3 +641,35 @@ html:not([data-material=acrylic]):not([data-edge-float]) .app.style-acira:has(>.
 /* A Tor bookmark (BookmarkNode.tor) ends with the Tor tab's onion, in its mark colour: it opens in a Tor tab. */
 .app.style-acira .acira-sidebar .sb-bookmark[data-tor]{--sb-mark:var(--sb-tor)}
 .app.style-acira .acira-sidebar .sb-bookmark[data-tor]>.sb-tab-mark{margin:0 0 0 auto}
+
+/* Link preview marker (item 17): while a Link preview is open from a favorite's tab or a tab row, a small page card with the preview site's
+   icon slides out beside the source's icon, and slides back when the preview closes (components/PeekMarkerCard.tsx; ui/peekMarker.ts holds
+   the state). The card is a neutral raised surface with no site colour of its own (light: white, a 1px ring and a soft lift; dark: white 17%
+   with a rim), so it sits on a plain current tile or row, a tinted one, or one with a colour ring. It exists only on the current tile or row:
+   a preview closes the moment its tab stops being the active one. Timings are base values (235 ms in, 172 ms out) times the frequent-surface
+   scale `--motion-f` (1.28 Premium = 300 ms and 220 ms, 0.6 Fast, 0 Off), so Premium, Fast and Off follow the setting; reduced motion has no transition at all. */
+.app.style-acira .ed-rail.acira-sidebar{
+ --sb-peek-in:calc(235ms * var(--motion-f,1.28));--sb-peek-out:calc(172ms * var(--motion-f,1.28));
+ --sb-peek-card:#fff;--sb-peek-edge:0 0 0 1px rgb(0 0 0 / .1),0 2px 6px -1px rgb(0 0 0 / .16);
+}
+.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-peek-card:color-mix(in srgb,#fff 17%,transparent);--sb-peek-edge:inset 0 0 0 1px rgb(255 255 255 / .14),0 2px 6px rgb(0 0 0 / .38)}
+.app.style-acira .acira-sidebar .sb-peek-card{pointer-events:none}
+.app.style-acira .acira-sidebar .sb-peek-face{
+ box-sizing:border-box;display:grid;place-items:center;background:var(--sb-peek-card);box-shadow:var(--sb-peek-edge);color:var(--sb-fg);
+ opacity:0;transform:translateX(3px) scale(.5);transform-origin:0 50%;
+ transition:transform var(--sb-peek-out) var(--sb-move),opacity 90ms var(--sb-ease) calc(var(--sb-peek-out) - 90ms);
+}
+.app.style-acira .acira-sidebar .sb-peek-card[data-open] .sb-peek-face{opacity:1;transform:none;transition:transform var(--sb-peek-in) var(--sb-strong),opacity 110ms var(--sb-ease)}
+/* A favorite's tile (40px tall): the icon steps 10px left and the card, 30px wide, comes out from under it to the right; the pair sits centred. */
+.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card)>:is(img,svg,.sb-app-initial){position:relative;z-index:1;transition:transform var(--sb-peek-out) var(--sb-move)}
+.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card[data-open])>:is(img,svg,.sb-app-initial){transform:translateX(-10px);transition-duration:var(--sb-peek-in);transition-timing-function:var(--sb-strong)}
+.app.style-acira .acira-sidebar .sb-app>.sb-peek-card{position:absolute;inset:0;z-index:0}
+.app.style-acira .acira-sidebar .sb-app .sb-peek-face{position:absolute;top:4px;bottom:4px;left:calc(50% - 10px);width:30px;padding-left:10px;border-radius:6px}
+/* A tab row (32px tall): the card slides out to the right of the 16px icon (24px square, from the icon's centre) and the title steps aside by 16px.
+   The card's own box is a zero-size anchor first in the row, level with the icon whatever the row's padding is (a split card's rows pad 22px). */
+.app.style-acira .acira-sidebar .sb-tab-main>.sb-peek-card{order:-1;position:relative;flex:none;width:0;height:0;margin-right:-8px}
+.app.style-acira .acira-sidebar .sb-tab-main:has(>.sb-peek-card) .sb-tab-icon{position:relative;z-index:1}
+.app.style-acira .acira-sidebar .sb-tab-main .sb-peek-face{position:absolute;z-index:0;top:-12px;left:8px;width:24px;height:24px;padding-left:8px;border-radius:5px;transform:translateX(-3px) scale(.5)}
+.app.style-acira .acira-sidebar .sb-tab-main:has(>.sb-peek-card) .sb-tab-title{transition:margin-left var(--sb-peek-out) var(--sb-move)}
+.app.style-acira .acira-sidebar .sb-tab-main:has(>.sb-peek-card[data-open]) .sb-tab-title{margin-left:16px;transition-duration:var(--sb-peek-in);transition-timing-function:var(--sb-strong)}
+@media(forced-colors:active){.app.style-acira .acira-sidebar .sb-peek-face{background:Canvas;color:CanvasText;box-shadow:none;border:1px solid ButtonText}}

@@ -5,6 +5,7 @@
 // "Called off" is told by main.cjs (calledOff): Cancel on the close card, a page that asked to stay, a window that could not close. Clearing the request
 // at the next before-quit would not do: every window holds its first close back while it asks, so the quit that ends a restart comes from the last
 // window closing (main.cjs calls app.quit() there), never from request() itself.
+// `onCalledOff` is told every time too (main.cjs hands it to open-windows.cjs, which lets its list follow the windows again).
 // The relaunch replays no link, file or web-app launch argument: only the app folder (when run from source) and command-line switches, never Acira's own.
 const WINDOW_MS=2*60*1000;
 
@@ -15,14 +16,14 @@ function restartArgs(argv,{defaultApp=false}={}){
  return rest.filter((arg,index)=>index===appAt||(String(arg).startsWith('--')&&!String(arg).startsWith('--acira-')));
 }
 
-function createRestart({app,now=Date.now,argv=process.argv,defaultApp=Boolean(process.defaultApp),execPath=process.execPath,windowMs=WINDOW_MS}){
+function createRestart({app,now=Date.now,argv=process.argv,defaultApp=Boolean(process.defaultApp),execPath=process.execPath,windowMs=WINDOW_MS,onCalledOff=()=>{}}){
  let requestedAt=0;
  app.on('will-quit',()=>{
   if(!requestedAt)return;
   const due=now()-requestedAt<=windowMs;requestedAt=0;
   if(due)try{app.relaunch({execPath,args:restartArgs(argv,{defaultApp})});}catch{}
  });
- return {request(){requestedAt=now()||1;app.quit();},calledOff(){requestedAt=0;}};
+ return {request(){requestedAt=now()||1;app.quit();},calledOff(){requestedAt=0;try{onCalledOff();}catch{}}};
 }
 
 module.exports={createRestart,restartArgs,WINDOW_MS};

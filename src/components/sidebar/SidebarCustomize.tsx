@@ -4,7 +4,7 @@ import { MOVABLE_SECTIONS,SECTION_NAMES,moveSection,sectionShown,toggleSection,t
 import { t } from '../../i18n';
 /** Customize sidebar (Round 2): every section as a card with a switch; the movable ones drag by their card (or move
  * with Alt+Up/Down). Changes apply as you make them; the cards slide with the sidebar's FLIP (data-flip). */
-export function SidebarCustomize({layout,onChange,onDone}:{layout:SectionLayout;onChange:(next:SectionLayout)=>void;onDone:()=>void}){
+export function SidebarCustomize({layout,onChange,onDone,favoritesPlace='top'}:{layout:SectionLayout;onChange:(next:SectionLayout)=>void;onDone:()=>void;/** Where the Favorites tiles sit (Settings > Tabs > Sidebar), for the card's caption. */favoritesPlace?:'top'|'bottom'}){
  const list=useRef<HTMLDivElement>(null),[dragging,setDragging]=useState<SectionId|null>(null);
  const latest=useRef(layout);latest.current=layout;
  const indexAt=(id:SectionId,y:number)=>{
@@ -27,7 +27,7 @@ export function SidebarCustomize({layout,onChange,onDone}:{layout:SectionLayout;
   return <div key={id} className="sb-custom-card" data-flip={'cs:'+id} data-section-move={movable?id:undefined} data-dragging={dragging===id||undefined} data-off={!shown||undefined}
    tabIndex={movable?0:undefined} aria-label={movable?`${SECTION_NAMES[id]}. Alt+Up or Alt+Down to move`:undefined} onPointerDown={movable?event=>grab(event,id):undefined} onKeyDown={movable?event=>keys(event,id):undefined}>
    <span className="sb-custom-grip" aria-hidden="true">{movable&&<svg viewBox="0 0 12 12"><path d="M2 3.5h8M2 6h8M2 8.5h8"/></svg>}</span>
-   <span className="sb-custom-name" id={label}>{SECTION_NAMES[id]}{!movable&&<small>{id==='favorites'?t("sidebarcustomize.alwaysOnTop"):t("sidebarcustomize.withTabs")}</small>}</span>
+   <span className="sb-custom-name" id={label}>{SECTION_NAMES[id]}{!movable&&<small>{id==='favorites'?t(favoritesPlace==='bottom'?"sidebarcustomize.alwaysAtBottom":"sidebarcustomize.alwaysOnTop"):t("sidebarcustomize.withTabs")}</small>}</span>
    <button type="button" role="switch" aria-checked={shown} aria-labelledby={label} className="shields-switch" onClick={()=>onChange(toggleSection(layout,id))}><span aria-hidden="true"/></button>
   </div>;};
  return <div className="sb-custom" role="group" aria-label={t("sidebarcustomize.customizeSidebar")}>

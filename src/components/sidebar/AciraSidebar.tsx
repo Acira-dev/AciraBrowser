@@ -4,16 +4,22 @@ import { ArrowUp,ArrowUpRight,BookOpen,Bookmark,Check,ChevronDown,Clock3,Columns
 import { BrandLogo } from '../BrandLogo';
 import { useAddressSidebar } from '../../ui/addressSidebarStore';
 import { DotMatrix } from '../DotMatrix';
+import { PeekMarkerCard } from '../PeekMarkerCard';
 import { TabSoundMeter } from '../TabSound';
 import { tabSound } from '../../ui/tabSound';
 import { tabShowsLoading } from '../../ui/tabLoading';
 import { EditorGlyph,type EditorIconName } from '../EditorGlyph';
 import { PreviewIcon } from '../PreviewIcon';
 import { SiteIdentityIcon } from '../SiteIdentityIcon';
+import { useSiteIconColor } from '../../ui/siteIconColor';
+import { glideColors } from '../../ui/glowBlend';
 import { GroupNameInput,useGroupRename } from '../TabGroupTray';
 import { SidebarSplit } from './SidebarSplit';
+import { LiveFolder } from './LiveFolder';
 import { SidebarMedia } from './SidebarMedia';
 import { appendedTabs,nameAndNote,newTabInGroupActions } from './sidebarActions';
+import { GroupFolderGlyph } from './GroupFolderGlyph';
+import type { SidebarFolders } from '../../ui/railPrefs';
 import type { SplitGroup } from '../../runtime/splitLayout';
 import { groupKeyboardDrop,tabDropAtPoint } from '../tabGroupDrag';
 import { sidebarPatch,workspaceIsOpen } from '../../runtime/browserChrome';
@@ -30,7 +36,7 @@ import { installRowSelectionGuard } from '../../ui/rowSelectionGuard';
 
 // A press-and-drag on a row never leaves text selected (ui/rowSelectionGuard.ts).
 installRowSelectionGuard();
-import type { BookmarkNode,BrowserAction,BrowserDownload,BrowserSnapshot,HistoryVisit,TabGroup,TabSession } from '../../runtime/types';
+import type { BookmarkNode,BrowserAction,BrowserDownload,BrowserSnapshot,HistoryVisit,SidebarSide,TabGroup,TabSession } from '../../runtime/types';
 import { pageKey } from '../../features/libraryModel';
 import { sidebarNote } from '../../features/downloadText';
 import { useNewTabPreferences } from '../../ui/newTabPreferences';
@@ -38,12 +44,13 @@ import { animateSpring,classScale,frequentStretch,motionSpeed,stripEase,stripMs,
 import { bookmarkContext,openPage,savedPageIdentity } from '../../ui/pageActions';
 import { openRailSection,setRailPrefs,toggleRailSection,useRailPrefs } from '../../ui/railPrefs';
 import { useShownTabsSwitch } from '../../ui/layoutSync';
-import { appClickPlan,appHost,appTabFor,droppedLink,moveSidebarApp,normalizeAppUrl,noteReleasedTab,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
+import { appClickPlan,appHost,appTabFor,droppedLink,listedInSidebar,moveSidebarApp,normalizeAppUrl,noteReleasedTab,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,SIDEBAR_APPS_LIMIT,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
 import { focusSidebarControl } from '../../ui/sidebarFocus';
-import { pointerAnchor } from '../../ui/popup';
+import { pointerAnchor,rowAnchor } from '../../ui/popup';
 import { profileDownloads } from '../../ui/downloadActivity';
 import { DownloadsGlyph } from '../DownloadsGlyph';
 import { useSiteIcons } from '../../ui/siteIcons';
+import { useIconColors } from '../../ui/siteIconColor';
 import { ProfileAvatar } from '../../features/accounts/profileModel';
 import { TabPrivacyMark,isNewTabState,privacyNames } from '../TabPrivacyMark';
 import { bookmarkControl } from '../../ui/bookmarkControl';
@@ -51,18 +58,20 @@ import { layoutOf,setSidebarPeek,useSidebarPeek } from '../../ui/layoutMode';
 import { markSwitcherReleased,mruOrder,nextInCycle,readCtrlTabMode,readStamps,recordActivation,switcherIndex,tabCycleOrder,writeSwitcherStart } from '../../ui/tabMru';
 import { cancelSplitDrag,endSplitDrag,moveSplitDrag,splitDropAction } from '../../ui/splitDrop';import { carryChip } from '../../ui/useTabDragSurface';import { createEdgeScroller } from '../../ui/dragEdgeScroll';
 export { sidebarControl } from '../../ui/layoutMode';
-import { clampSidebarWidth,previewSidebarWidth,rubberBandWidth,SIDEBAR_WIDTH } from '../../ui/sidebarLayout';
+import { clampSidebarWidth,draggedSidebarWidth,favoriteColumns,FAVORITES_LIMIT,overSidebar,previewSidebarWidth,rubberBandWidth,sidebarEdgeOf,sidebarKeyWidth,SIDEBAR_WIDTH,sizeOf,snapSidebarWidth,useSidebarSize } from '../../ui/sidebarLayout';
+import { SIZE_NAME_ID } from '../../ui/sidebarSizeNames';
+import { sidebarSideOf } from '../../ui/sidebarSide';
 import { tabGroupColor } from '../../ui/theme';
 import { openWorkspacePage } from '../../ui/workspaceView';
-import { bookmarkPlace,bookmarkRef,bookmarkStep,isBarFolder,openBookmarkMenu,zoneRef,type DropWhere } from '../../ui/bookmarkMenu';
+import { bookmarkPlace,bookmarkRef,bookmarkStep,isBarFolder,openBookmarkMenu,SIZE_REF,zoneRef,type DropWhere } from '../../ui/bookmarkMenu';
 import { folderTitle } from '../../ui/bookmarkFolderName';
 import { CUSTOMIZE_SIDEBAR_EVENT,hideSection,onSidebarRequest,saveSections,sectionHiddenToast,sectionLayout,sectionShown,sidebarWindowId,type SectionId,type SectionLayout } from '../../ui/sidebarSections';
-import { profilesAsSpaces,windowWorkspaces } from '../../runtime/workspaces';
+import { groupMembers,profilesAsSpaces,windowWorkspaces } from '../../runtime/workspaces';
 import { openWorkspacePopup } from '../../ui/workspaceTarget';
 import { addToReadingList,removeFromReadingList,useReadingList } from '../../ui/readingList';
 import { SidebarCustomize } from './SidebarCustomize';
 import { WorkspaceRow,WorkspaceTitle } from '../../features/workspaces/WorkspaceSwitcher';
-import { markWorkspaceDrop,workspaceDropAt } from '../../ui/workspaceDrop';
+import { markWorkspaceDrop,workspaceDropAt,workspaceDropNote,type WorkspaceDragSubject } from '../../ui/workspaceDrop';
 import { carrySidebarRow,sidebarRowArea } from '../../ui/sidebarTabDrag';
 import { beginBookmarkArrival,useBookmarkArrival } from '../../ui/bookmarkArrival';
 import { holdPointer } from '../../ui/dragPointer';
@@ -72,7 +81,7 @@ import { TabNameInput,useTabRename } from '../TabTitleEditor';
 import { cardAnswers,useTabHoverCardMode } from '../../ui/tabHoverCard';
 import { controlTitle } from '../../ui/shortcutHints';
 import { setFavoriteEditTarget } from '../../ui/favoriteEdit';
-import { favoriteTabOf } from '../../runtime/favoriteTabs';
+import { favoriteTabOf,favoriteTabsOnlyInTile } from '../../runtime/favoriteTabs';
 import { favoritesSeparator,favoritesTop } from './favoritesTop';
 import { addFavorite,favoriteToast,iconsToBackfill,planFavorite,type FavoriteResult } from '../../ui/favoriteAdd';
 import { favoriteMorphing,favoriteSlot,favoriteTile,holdFavoriteTile,releaseFavoriteTile,splitFavoriteFromRow } from '../../ui/favoriteMorph';
@@ -174,6 +183,7 @@ function openApp(event:MouseEvent<HTMLButtonElement>,app:SidebarApp,state:Browse
  if(event.button===1||event.ctrlKey||event.metaKey||event.shiftKey)event.preventDefault();
  if(plan.kind==='open'){dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,favoriteId:app.id});return;}
  if(plan.kind==='select'){dispatch({type:'tab.select',id:plan.tabId});return;}
+ if(plan.kind==='adopt'){dispatch({type:'tab.favorite',id:plan.tabId,favoriteId:app.id});if(plan.select)dispatch({type:'tab.select',id:plan.tabId});return;}
  if(plan.kind==='home'){dispatch({type:'tab.navigate',url:app.url,tabId:plan.tabId});return;}
  if(plan.kind==='new-window'){const id='tab-'+crypto.randomUUID();dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,background:true,id});dispatch({type:'tab.move-window',id});return;}
  dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,background:true});
@@ -182,7 +192,7 @@ function openApp(event:MouseEvent<HTMLButtonElement>,app:SidebarApp,state:Browse
  * "Tab viewer" opens the Alt+T viewer; "Recently used" waits 120ms so a quick tap switches straight to the previous
  * tab, and only a held Ctrl shows the switcher overlay (TabSwitcher). */
 const switcher={steps:0,timer:0 as number,open:false};
-function switcherKey(type:string,direction:number,state:BrowserSnapshot,dispatch:Dispatch){
+function switcherKey(type:string,direction:number,state:BrowserSnapshot,dispatch:Dispatch,listed:(tab:TabSession)=>boolean){
  if(type==='tab-switcher-release'){
   if(switcher.timer&&!switcher.open){window.clearTimeout(switcher.timer);const order=mruOrder(state.tabs.map(tab=>tab.id),state.activeTabId,readStamps()),target=order[switcherIndex(order.length,0,switcher.steps)];if(target&&target!==state.activeTabId)dispatch({type:'tab.select',id:target});}
   else if(switcher.open)markSwitcherReleased();// the switcher was asked for and may not be on screen yet to hear this (tabMru.ts)
@@ -191,8 +201,8 @@ function switcherKey(type:string,direction:number,state:BrowserSnapshot,dispatch
  const mode=readCtrlTabMode();
  if(mode==='viewer'){void runtime.browserCommand({type:'ui',tabId:state.activeTabId,action:'open',kind:'tabs'});return;}
  if(state.tabs.length<2)return;
- // Next tab walks the list on screen (runtime/favoriteTabs.ts listedTabs, as main's Ctrl+PageDown).
- if(mode==='next'){const vertical=layoutOf(state)==='vertical',profile=state.tabs.find(tab=>tab.id===state.activeTabId)?.browserProfileId,cycle=vertical?state.tabs.filter(tab=>tab.browserProfileId===profile):state.tabs;const target=nextInCycle(tabCycleOrder(cycle,state.tabGroups,state.activeTabId,vertical),state.activeTabId,direction>0?1:-1);if(target&&target!==state.activeTabId)dispatch({type:'tab.select',id:target});return;}
+ // Next tab walks the list on screen (runtime/favoriteTabs.ts listedTabs, as main's Ctrl+PageDown): a tab that lives only in its tile is not in it.
+ if(mode==='next'){const vertical=layoutOf(state)==='vertical',profile=state.tabs.find(tab=>tab.id===state.activeTabId)?.browserProfileId,cycle=vertical?state.tabs.filter(tab=>tab.browserProfileId===profile&&listed(tab)):state.tabs;const target=nextInCycle(tabCycleOrder(cycle,state.tabGroups,state.activeTabId,vertical),state.activeTabId,direction>0?1:-1);if(target&&target!==state.activeTabId)dispatch({type:'tab.select',id:target});return;}
  switcher.steps+=direction;writeSwitcherStart(switcher.steps);
  if(!switcher.timer&&!switcher.open)switcher.timer=window.setTimeout(()=>{switcher.open=true;switcher.timer=0;writeSwitcherStart(switcher.steps);void runtime.browserCommand({type:'ui',tabId:state.activeTabId,action:'open',kind:'switcher'});},120);
 }
@@ -203,6 +213,12 @@ let pinHint:{index:number;/** The page would make a new favorite: the tiles open
 function setPinHint(next:{index:number;adding?:boolean}|null){if(pinHint?.index===next?.index&&pinHint?.adding===next?.adding)return;pinHint=next;pinListeners.forEach(listener=>listener());}
 const usePinHint=()=>useSyncExternalStore(listener=>{pinListeners.add(listener);return()=>{pinListeners.delete(listener);};},()=>pinHint);
 /** True while a sidebar tab is being dragged: an empty Favorites area shows its drop target only then. */
+/** The folder a carried group's chip shows: the header's closed folder in the group's own colour, solid (a copy of the header's icon outside its group loses the colour and the open/closed switch; the header's pale 22% fill is too faint on a chip). */
+function groupFolderChip(header:HTMLElement):HTMLElement|undefined{
+ const folder=header.querySelector<SVGElement>('.sb-group-folder>svg:first-child');if(!folder)return undefined;
+ const mark=document.createElement('span'),copy=folder.cloneNode(true) as SVGElement;
+ mark.style.color=getComputedStyle(header.querySelector('.sb-group-folder')??folder).color;copy.style.fill='currentColor';copy.style.opacity='1';mark.append(copy);return mark;
+}
 let tabDragActive=false;
 function setTabDragActive(next:boolean){if(tabDragActive===next)return;tabDragActive=next;pinListeners.forEach(listener=>listener());}
 const useTabDragActive=()=>useSyncExternalStore(listener=>{pinListeners.add(listener);return()=>{pinListeners.delete(listener);};},()=>tabDragActive);
@@ -230,10 +246,10 @@ function appsIndexAt(point:{x:number;y:number}):number|null{
  * it is asked for: a drag, Cmd+Shift+D, the command, the tab menu's Add to Favorites, the "+" form, a dropped link. The tab in hand is linked to the
  * favorite and stays in the list exactly where it is; a copy of it splits off and goes up to the tile (a drag hands over the card it carried). */
 type RowPreview=NonNullable<ReturnType<typeof carrySidebarRow>>;
-function applyFavorite(result:FavoriteResult,dispatch:Dispatch,options:{card?:RowPreview|null;toast?:'all'|'exists';/** The "+" form: it is open above the list while it saves and closes as the tile arrives, so the row is not where a copy could start from. */still?:boolean}={}){
+function applyFavorite(result:FavoriteResult,dispatch:Dispatch,options:{card?:RowPreview|null;toast?:'all'|'exists';/** Settings keep a favorite's tab only in its tile: the row leaves the list, so the carried card is one copy that goes up (nothing goes home to reopen the row). */tileOnly?:boolean;/** The "+" form: it is open above the list while it saves and closes as the tile arrives, so the row is not where a copy could start from. */still?:boolean}={}){
  const {app,adopt}=result;
  if(app&&result.added){
-  if(options.card){holdFavoriteTile(app.id);options.card.favorite(()=>favoriteTile(app.id),()=>releaseFavoriteTile(app.id),{slot:favoriteSlot});}
+  if(options.card){holdFavoriteTile(app.id);options.card.favorite(()=>favoriteTile(app.id),()=>releaseFavoriteTile(app.id),{slot:favoriteSlot,...(options.tileOnly?{stay:true}:{})});}
   else if(adopt&&!options.still)splitFavoriteFromRow(app.id,adopt);
  }
  if(app&&adopt)dispatch({type:'tab.favorite',id:adopt,favoriteId:app.id});
@@ -244,7 +260,7 @@ function applyFavorite(result:FavoriteResult,dispatch:Dispatch,options:{card?:Ro
 function pinTab(tab:TabSession,index:number,state:BrowserSnapshot,privateMode:boolean,dispatch:Dispatch,card?:RowPreview|null){
  if(!isWeb(tab)&&!tab.url.startsWith('acira://')){card?.end();return;}
  const result=addFavorite({profileId:tab.browserProfileId,privateMode,url:tab.url,tab,tabs:favoriteScope(state),index,reveal:true}),splits=Boolean(card&&result.added);
- applyFavorite(result,dispatch,{card:splits?card:null,toast:'exists'});
+ applyFavorite(result,dispatch,{card:splits?card:null,toast:'exists',tileOnly:favoriteTabsOnlyInTile(state.settings)});
  if(card&&!splits)card.end();
 }
 /** Cmd+Shift+D, the command and the tab menu's Add to Favorites: this tab, wherever it is in the window. */
@@ -276,10 +292,11 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const listTabs=useShownTabsSwitch(vertical,prefs.tabs,profileId);
  const width=clampSidebarWidth(state.settings.sidebarWidth);
  const setWidth=(next:number)=>dispatch({type:'settings.update',patch:{sidebarWidth:clampSidebarWidth(next)}});
- // A favorite's tab is an ordinary tab of the list, where it was (runtime/favoriteTabs.ts); its tile only shows and reaches it.
+ // A favorite's tab is an ordinary tab of the list, where it was, unless Settings keep it only in its tile (runtime/favoriteTabsRule.ts, ui/sidebarApps.ts listedInSidebar).
  const favorites=useSidebarApps(profileId,privateMode);
- const groups=state.tabGroups.filter(group=>group.browserProfileId===profileId).map(group=>({group,members:state.tabs.filter(tab=>groupForTab(state,tab)?.id===group.id)})).filter(item=>item.members.length);
- const profileTabs=state.tabs.filter(tab=>tab.browserProfileId===profileId);
+ const listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings);
+ const groups=state.tabGroups.filter(group=>group.browserProfileId===profileId).map(group=>({group,members:state.tabs.filter(tab=>listed(tab)&&groupForTab(state,tab)?.id===group.id)})).filter(item=>item.members.length);
+ const profileTabs=state.tabs.filter(tab=>tab.browserProfileId===profileId),listedProfileTabs=profileTabs.filter(listed);
  const active=profileTabs.find(tab=>tab.id===state.activeTabId);
  // Closed is fully hidden (bible 5.2). Resting on the window's left edge peeks it at full width (App's closed width
  // reads --sidebar-rail); it hides again when the pointer leaves. The toolbar toggle and Ctrl+Shift+E open it for good.
@@ -293,7 +310,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  // adopt what the current page shows so switching between websites and internal pages never flips the sidebar.
  useEffect(()=>{if(state.windowUi.workspaceOpen!==state.windowUi.webWorkspaceOpen)dispatch({type:'ui.update',patch:sidebarPatch(workspaceIsOpen(state.windowUi,current))});},[state.windowUi.workspaceOpen,state.windowUi.webWorkspaceOpen]);// eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>()=>{document.documentElement.style.removeProperty('--sidebar-rail');},[]);
- const peek=useActiveReveal(state.activeTabId,profileTabs,(expanded||peeking)&&listTabs&&!prefs.folded.tabs,reduced,state.activeWorkspaceId);
+ const peek=useActiveReveal(state.activeTabId,listedProfileTabs,(expanded||peeking)&&listTabs&&!prefs.folded.tabs,reduced,state.activeWorkspaceId);
  const bookmarksBelow=useBelowFold(peek.root,'[data-zone=bookmarks]',shown);
  useStuckHeaders(peek.root,shown);
  useFlip(peek.root,reduced,state.activeWorkspaceId);
@@ -313,7 +330,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  useEffect(()=>{const off=runtime.subscribeBrowser?.(raw=>{
   const event=raw as unknown as {type:string;tabId?:string};// sidebar-* events are G's own, outside the shared BrowserEvent union
   const {state,dispatch,expanded}=latest.current;
-  if(event.type==='tab-switcher-open'||event.type==='tab-switcher-release'){switcherKey(event.type,(event as {direction?:number}).direction===-1?-1:1,state,dispatch);return;}
+  if(event.type==='tab-switcher-open'||event.type==='tab-switcher-release'){switcherKey(event.type,(event as {direction?:number}).direction===-1?-1:1,state,dispatch,listed);return;}
   const asked=event.type==='sidebar-pin-app'?event.tabId:event.type==='ui'&&(event as {action?:string}).action==='favorite-tab'?(event as {targetTabId?:string}).targetTabId:undefined;
   if(typeof asked!=='string')return;
   favoriteTab(asked,state,dispatch);
@@ -325,6 +342,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  // the tabs. Right-click on empty sidebar space, or Settings › Sidebar, opens Customize sidebar.
  const saved=sectionLayout(prefs),layout:SectionLayout={...saved,hidden:[...saved.hidden.filter(id=>id!=='favorites'),...(favorites.hidden?['favorites' as const]:[])]};
  const show=(id:SectionId)=>sectionShown(layout,id),[customizing,setCustomizing]=useState(false);
+ const favoritesBottom=show('favorites')&&favorites.place==='bottom';
  useEffect(()=>{const open=()=>setCustomizing(true);window.addEventListener(CUSTOMIZE_SIDEBAR_EVENT,open);return()=>window.removeEventListener(CUSTOMIZE_SIDEBAR_EVENT,open);},[]);
  // Favorites keeps one switch, the Favorites store's (Settings › Sidebar "Show Favorites" reads the same one).
  const changeLayout=(next:SectionLayout)=>{const off=next.hidden.includes('favorites');if(off!==favorites.hidden)setSidebarAppsHidden(profileId,privateMode,off);saveSections({...next,hidden:next.hidden.filter(id=>id!=='favorites')},profileId,privateMode);};
@@ -338,24 +356,26 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const background=(event:MouseEvent<HTMLElement>)=>{const target=event.target as HTMLElement;if(target!==event.currentTarget&&!target.classList.contains('sb-sep')&&!target.classList.contains('sb-foot'))return;event.preventDefault();/* Right-click on empty space: a small menu with New workspace… and Customize sidebar…; a private window has no workspaces, so it goes straight to Customize. */if(windowWorkspaces(state).length||profilesAsSpaces(state))openWorkspacePopup(state,'workspace-context',event,{mode:'sidebar'});else setCustomizing(true);};
  const blocks:{id:SectionId;lead:boolean}[]=[];
  for(const id of layout.order)if(id==='tabs'?listTabs&&(show('tabs')||show('pinned')):show(id))blocks.push({id,lead:blocks.length>0});
- const block=({id,lead}:{id:SectionId;lead:boolean})=>id==='tabs'?<SidebarTabs key={id} state={state} dispatch={dispatch} tabs={profileTabs} groups={groups} newTabsTop={!!prefs.newTabsTop} showPinned={show('pinned')} showList={show('tabs')} lead={lead}/>
+ const block=({id,lead}:{id:SectionId;lead:boolean})=>id==='tabs'?<SidebarTabs key={id} state={state} dispatch={dispatch} tabs={listedProfileTabs} groups={groups} newTabsTop={!!prefs.newTabsTop} folders={prefs.folders??'mixed'} showPinned={show('pinned')} showList={show('tabs')} lead={lead}/>
   :id==='bookmarks'?<SidebarBookmarks key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>
   :id==='downloads'?<SidebarDownloads key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead} navigate={navigate}/>
   :id==='history'?<SidebarHistory key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead} navigate={navigate}/>
   :<SidebarReading key={id} state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>;
  if(!shown)return <aside className="ed-rail acira-sidebar" aria-label={t("acirasidebar.sidebar")} aria-hidden="true" inert data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined}/>;
  return <aside className={`ed-rail acira-sidebar is-expanded${peeking&&!expanded?' is-peek':''}`} aria-label={t("acirasidebar.sidebar")} data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined} data-addr-side={addressSide.block||undefined} data-addr-open={addressSide.open||undefined}>
-  {show('favorites')?<><SidebarTop state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode}/>{favoritesSeparator(favorites.apps.length)&&<div className="sb-sep" role="separator"/>}</>:<div className="sb-top-space" aria-hidden="true"/>}
+  {/* Favorites sit at the top (the default) or at the bottom, above the workspace row and the footer (Settings > Tabs > Sidebar > Favorites). */}
+  {show('favorites')&&!favoritesBottom?<><SidebarTop state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode}/>{favoritesSeparator(favorites.apps.length)&&<div className="sb-sep" role="separator"/>}</>:<div className="sb-top-space" aria-hidden="true"/>}
   <div className="sb-sections-wrap">{!customizing&&<WorkspaceTitle state={state}/>}<div ref={peek.root} className="sb-scroll" onContextMenu={background}>
-   {customizing?<SidebarCustomize layout={layout} onChange={changeLayout} onDone={()=>setCustomizing(false)}/>:blocks.map(block)}
+   {customizing?<SidebarCustomize layout={layout} onChange={changeLayout} onDone={()=>setCustomizing(false)} favoritesPlace={favorites.place==='bottom'?'bottom':'top'}/>:blocks.map(block)}
   </div>
   {peek.edge&&active&&<button type="button" className="sb-active-peek" data-edge={peek.edge} title={t("acirasidebar.showTheCurrentTab")} onClick={peek.reveal}><SiteIdentityIcon url={active.url} favicon={active.favicon} size={16}/><span className="sb-active-peek-title">{title(active)}</span><PreviewIcon icon={peek.edge==='above'?ArrowUp:ChevronDown} size={12}/></button>}
   {bookmarksBelow&&<button type="button" className="sb-jump" onClick={()=>peek.root.current?.querySelector<HTMLElement>('[data-zone=bookmarks]')?.scrollIntoView({block:'start',behavior:reduced?'auto':'smooth'})}><span>{t("browsermenu.bookmarks")}</span><PreviewIcon icon={ChevronDown} size={10}/></button>}
   </div>
   <SidebarMedia state={state} dispatch={dispatch}/>
+  {favoritesBottom&&<div className="sb-favorites-bottom">{favoritesSeparator(favorites.apps.length)&&<div className="sb-sep" role="separator"/>}<SidebarTop state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode}/></div>}
   <WorkspaceRow state={state} dispatch={dispatch} moveFocus={moveFocus}/>
   <SidebarFooter state={state} dispatch={dispatch} current={current} navigate={navigate}/>
-  {<ResizeHandle width={width} onChange={setWidth}/>}
+  {<ResizeHandle width={width} onChange={setWidth} side={sidebarSideOf(state.settings)}/>}
  </aside>;
 }
 
@@ -400,18 +420,23 @@ function SidebarFooter({state,dispatch,current,navigate}:{state:BrowserSnapshot;
  </div>;
 }
 
-/** Drag the sidebar edge; arrows step, Home/End jump, double-click or Enter restores the default. */
-function ResizeHandle({width,onChange}:{width:number;onChange:(width:number)=>void}){
- const drag=useRef<{x:number;width:number;next:number}|null>(null);
- // Release: ease from the rubber-banded edge to the committed width, then hand back to the setting.
- const end=()=>{if(!drag.current)return;const next=drag.current.next;drag.current=null;previewSidebarWidth(next,false);onChange(next);window.setTimeout(()=>{if(!drag.current)previewSidebarWidth(null);},450);};
+/** Drag the sidebar edge: it follows the pointer between Narrow and Wide and, on release, settles on the nearest of the three sizes (the Favorites grid reflows
+ * at the two midpoints, so it shows where it will land). Arrows step to the next size, Home is Narrow, End is Wide, Enter or a double-click is Standard, and a
+ * right-click (or the menu key) lists the three. The grip is on the sidebar's page-side edge, so the drag and the arrows mirror on the right (ui/sidebarLayout
+ * draggedSidebarWidth, sidebarKeyWidth); the rubber band and the clamp do not care which side. */
+function ResizeHandle({width,onChange,side}:{width:number;onChange:(width:number)=>void;side:SidebarSide}){
+ const drag=useRef<{x:number;width:number;raw:number}|null>(null);
+ // Release: ease from the rubber-banded edge to the size it is nearest, then hand back to the setting.
+ const end=()=>{if(!drag.current)return;const target=snapSidebarWidth(drag.current.raw);drag.current=null;previewSidebarWidth(target,false);onChange(target);window.setTimeout(()=>{if(!drag.current)previewSidebarWidth(null);},450);};
  const key=(event:KeyboardEvent<HTMLDivElement>)=>{
-  const next=event.key==='ArrowLeft'?width-SIDEBAR_WIDTH.step:event.key==='ArrowRight'?width+SIDEBAR_WIDTH.step:event.key==='Home'?SIDEBAR_WIDTH.min:event.key==='End'?SIDEBAR_WIDTH.max:event.key==='Enter'?SIDEBAR_WIDTH.initial:undefined;
-  if(next===undefined)return;event.preventDefault();onChange(next);
+  if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const box=event.currentTarget.getBoundingClientRect();openBookmarkMenu(SIZE_REF,{x:box.left+box.width/2,y:box.top+box.height/2,width:2,height:2});return;}
+  const next=sidebarKeyWidth(side,event.key,width);
+  if(next===null)return;event.preventDefault();onChange(next);
  };
- return <div className="sb-resize" role="separator" aria-orientation="vertical" aria-label={t("acirasidebar.resizeSidebar")} aria-valuemin={SIDEBAR_WIDTH.min} aria-valuemax={SIDEBAR_WIDTH.max} aria-valuenow={width} tabIndex={0} title={t("acirasidebar.dragToResizeDoubleClick")}
-  onPointerDown={(event:PointerEvent<HTMLDivElement>)=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);drag.current={x:event.clientX,width,next:width};previewSidebarWidth(width);}}
-  onPointerMove={event=>{if(!drag.current)return;const raw=drag.current.width+event.clientX-drag.current.x;drag.current.next=clampSidebarWidth(raw);previewSidebarWidth(rubberBandWidth(raw));}}
+ return <div className="sb-resize" role="separator" aria-orientation="vertical" aria-label={t("acirasidebar.resizeSidebar")} aria-valuemin={SIDEBAR_WIDTH.min} aria-valuemax={SIDEBAR_WIDTH.max} aria-valuenow={width} aria-valuetext={t(SIZE_NAME_ID[sizeOf(width)])} tabIndex={0} title={t("acirasidebar.dragToResizeDoubleClick")}
+  onPointerDown={(event:PointerEvent<HTMLDivElement>)=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);drag.current={x:event.clientX,width,raw:width};previewSidebarWidth(width);}}
+  onPointerMove={event=>{if(!drag.current)return;const raw=draggedSidebarWidth(side,drag.current.width,drag.current.x,event.clientX);drag.current.raw=raw;previewSidebarWidth(rubberBandWidth(raw));}}
+  onContextMenu={event=>{event.preventDefault();event.stopPropagation();openBookmarkMenu(SIZE_REF,{x:event.clientX,y:event.clientY,width:2,height:2});}}
   onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onDoubleClick={()=>onChange(SIDEBAR_WIDTH.initial)} onKeyDown={key}/>;
 }
 
@@ -424,6 +449,8 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
  // R3-70: favorites tiles glide to their places when one is added, removed or moved (a new one settles in, a removed one fades out).
  useListMotion(grid,apps.map(app=>app.id).join(',')+':'+more+':'+(hint?hint.index:'')+(pin?.adding?'+':''),{frequent:true});
  const siteIcon=useSiteIcons(state);
+ // The active tile's ring takes its site's colour: each tile's own icon, read once on this computer (ui/siteIconColor.ts); a private window keeps the answers in memory.
+ const colours=useIconColors(apps.map(app=>({key:app.id,site:appHost(app.url),src:app.icon||siteIdentity(app.url).icon||siteIcon(app.url)})),!privateMode);
  useEffect(()=>{if(!seeded)seedSidebarApps(profileId,privateMode,newTab.shortcuts.filter(item=>item.sidebar).map(item=>({url:item.url,title:item.title})));},[seeded,profileId,privateMode]);// eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>{if(editing&&editing!=='new'&&!apps.some(app=>app.id===editing))setEditing(null);},[apps,editing]);
  const draggingTab=useTabDragActive(),linkDragging=useLinkDragActive(!hidden&&!apps.length);
@@ -469,9 +496,10 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
  const open=(event:MouseEvent<HTMLButtonElement>,app:SidebarApp)=>{
   openApp(event,app,state,dispatch,profileId);
  };
- // Favorites cap at 12 (Arc, Zen), the rest behind +N; 3 or 4 across, whichever leaves no ragged last row (Zen).
- const limit=12,overflow=!more&&apps.length>limit,shown=overflow?apps.slice(0,limit-1):apps,tiles=shown.length+(overflow?1:0);
- const cols=tiles>=5&&tiles%3!==0&&tiles%4===0||tiles===4?4:3,making=Boolean(pin?.adding)&&!overflow&&!drop;
+ // Favorites cap at 12 (Arc, Zen), the rest behind +N, and never more than four rows: Narrow (2 across) shows 7 and +N. The size sets the columns: 2, 3 or 4 across;
+ // Standard keeps 4 across for the counts where 3 leaves a ragged last row (Zen), as it always has.
+ const size=useSidebarSize(clampSidebarWidth(state.settings.sidebarWidth)),limit=FAVORITES_LIMIT[size],overflow=!more&&apps.length>limit,shown=overflow?apps.slice(0,limit-1):apps,tiles=shown.length+(overflow?1:0);
+ const cols=favoriteColumns(size,tiles),making=Boolean(pin?.adding)&&!overflow&&!drop;
  const focusTile=(id:string)=>requestAnimationFrame(()=>grid.current?.querySelector<HTMLElement>(`[data-app-id="${id}"]`)?.focus());
  // Edit favorite is a popover from the tile (A's panel spec); a private window's favorites live in this renderer only,
  // so there it stays the inline form.
@@ -501,11 +529,11 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
    onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDrop(null);}} onDrop={onDrop}>
    {(()=>{const tiles=shown.map((app,index)=>{const tab=appTabFor(app,favoriteScope(state),profileId),active=tab?.id===state.activeTabId;
     const away=active&&tab.url!==app.url;
-    return <button key={app.id} type="button" className="sb-app" data-app-id={app.id} data-morph={favoriteMorphing(app.id)?'':undefined} data-motion-skip={favoriteMorphing(app.id)?'':undefined} data-open={tab?'':undefined} data-away={away||undefined} data-editing={editing===app.id||undefined} data-drop={making?undefined:hint?.index===index?'before':hint?.index===index+1&&index===shown.length-1?'after':undefined} aria-current={active?'page':undefined} aria-label={app.title} title={away?t("acirasidebar.clickToGoBack",{host:appHost(app.url)||address(app.url)}):`${app.title} · ${address(app.url)}`} draggable
+    return <button key={app.id} type="button" className="sb-app" data-app-id={app.id} data-morph={favoriteMorphing(app.id)?'':undefined} data-motion-skip={favoriteMorphing(app.id)?'':undefined} data-open={tab?'':undefined} data-sleeping={tab?.sleeping&&favoriteTabsOnlyInTile(state.settings)?'':undefined} data-site={colours[app.id]?'':undefined} style={colours[app.id]?{'--site-h':colours[app.id]!.h,'--site-c':colours[app.id]!.c} as CSSProperties:undefined} data-away={away||undefined} data-editing={editing===app.id||undefined} data-drop={making?undefined:hint?.index===index?'before':hint?.index===index+1&&index===shown.length-1?'after':undefined} aria-current={active?'page':undefined} aria-label={app.title} title={away?t("acirasidebar.clickToGoBack",{host:appHost(app.url)||address(app.url)}):`${app.title} · ${address(app.url)}`} draggable
      onClick={event=>open(event,app)} onAuxClick={event=>open(event,app)} onMouseDown={event=>{if(event.button===1)event.preventDefault();}}
      onContextMenu={event=>{event.preventDefault();edit(app,event.currentTarget);}} onKeyDown={event=>key(event,app,index)}
      onDragStart={event=>{event.dataTransfer.setData(APP_TYPE,app.id);event.dataTransfer.effectAllowed='move';}} onDragEnd={()=>setDrop(null)}>
-     <AppIcon app={app} tab={tab} stored={siteIcon(app.url)}/>
+     <AppIcon app={app} tab={tab} stored={siteIcon(app.url)} reduced={state.settings.reducedMotion}/>
     </button>;});
     // A tab over the grid that would make a favorite: the tiles make room, an empty slot opens where the copy will land (the split).
     if(making)tiles.splice(Math.min(pin!.index,shown.length),0,<span key="gap" className="sb-app sb-app-slot sb-app-gap" aria-hidden="true"/>);
@@ -523,10 +551,12 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
 
 /** Local images only: a saved data URL, a bundled site icon, an open tab's live favicon, M's favicon store (kept on
  * this computer while you were on the site), else the initial. */
-function AppIcon({app,tab,stored}:{app:SidebarApp;tab?:TabSession;stored?:string}){
+function AppIcon({app,tab,stored,reduced=false}:{app:SidebarApp;tab?:TabSession;stored?:string;reduced?:boolean}){
  const live=tab&&appHost(tab.url)===appHost(app.url)?tab.favicon:'';
- if(app.icon||siteIdentity(app.url).icon||live||stored||app.url.startsWith('acira://')||isAddressLike(app.url))return <SiteIdentityIcon url={app.url} favicon={app.icon||live||stored} size={16}/>;
- return <span className="sb-app-initial" aria-hidden="true">{(app.title||appHost(app.url)||'?').trim()[0]?.toUpperCase()}</span>;
+ // The Link preview marker (item 17): while a preview is open from this favorite's tab, a card with the preview's site icon slides out beside the icon.
+ const marker=<PeekMarkerCard tabId={tab?.id} size={14} reduced={reduced}/>;
+ if(app.icon||siteIdentity(app.url).icon||live||stored||app.url.startsWith('acira://')||isAddressLike(app.url))return <><SiteIdentityIcon url={app.url} favicon={app.icon||live||stored} size={16}/>{marker}</>;
+ return <><span className="sb-app-initial" aria-hidden="true">{(app.title||appHost(app.url)||'?').trim()[0]?.toUpperCase()}</span>{marker}</>;
 }
 
 /** A private window's inline Add / Edit favorite. `tab`: the favorite's own tab while open, which Close tab unloads (as Cmd+W does) keeping the favorite. */
@@ -557,11 +587,15 @@ function AppEditor({app,tab,tabs,current,profileId,privateMode,reduced,dispatch,
 
 /** Pinned tabs (their own zone, no close), then the Tabs zone: New tab first (last when "New tabs at the top" is off),
  * then groups and loose tabs in tab order (a group sits where its first tab is; groups are not hoisted). */
-function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,showList=true,lead=false}:{state:BrowserSnapshot;dispatch:Dispatch;tabs:TabSession[];groups:{group:TabGroup;members:TabSession[]}[];newTabsTop:boolean;showPinned?:boolean;showList?:boolean;lead?:boolean}){
+function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',showPinned=true,showList=true,lead=false}:{state:BrowserSnapshot;dispatch:Dispatch;tabs:TabSession[];groups:{group:TabGroup;members:TabSession[]}[];newTabsTop:boolean;/** Where the groups sit among the tabs (Settings > Sidebar > Tab groups). */folders?:SidebarFolders;showPinned?:boolean;showList?:boolean;lead?:boolean}){
  // Arc/Dia (founder, 24 Oct): newest tabs first, right under the New tab row. A tab that was just appended is shown
  // at the top at once (the model is reordered a moment later), so it never flashes at the bottom first; a reopened
  // tab keeps its own place.
  const known=useRef<Set<string>|null>(null),closedBefore=useRef<Set<string>>(new Set()),reduced=state.settings.reducedMotion;
+ // Settings keep a favorite's tab only in its tile: dragging the tile onto the tab list takes the tab out of it, into the list. The favorite stays, its tile loses the dot.
+ const tileOnly=favoriteTabsOnlyInTile(state.settings);
+ const tileOver=(event:DragEvent<HTMLElement>)=>{if(tileOnly&&event.dataTransfer.types.includes(APP_TYPE)){event.preventDefault();event.dataTransfer.dropEffect='move';}};
+ const tileDrop=(event:DragEvent<HTMLElement>)=>{const appId=tileOnly?event.dataTransfer.getData(APP_TYPE):'';if(!appId)return;event.preventDefault();const profile=state.tabs.find(tab=>tab.id===state.activeTabId)?.browserProfileId??'',tab=favoriteTabOf(favoriteScope(state),appId,profile);if(tab)dispatch({type:'tab.favorite',id:tab.id,favoriteId:null});};
  // Where each split shows (docs/launch/SPLIT_IN_GROUPS.md): its card, inside its home pane's group when it has one. Its panes
  // show only there (28 Oct: no mirrors); a pinned pane is listed in the card, not among the pinned tabs.
  const {paneOf}=splitPlacements(state.windowUi.splitGroups,state.tabs,state.tabGroups);
@@ -578,18 +612,20 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
  const list=useRef<HTMLDivElement>(null),[dragging,setDragging]=useState<string|null>(null),[hint,setHint]=useState<{id:string;position:'before'|'after'}|{group:string}|null>(null);
  const ordered=[...[...appended].reverse(),...restTabs.filter(tab=>!appended.includes(tab))];
  // Free splits are entries of their own; a split in a group is one of that group's rows (sidebarRows.ts).
- const {entries,groupRows,visibleTabs}=sidebarRows(state,ordered,groups),visible=visibleTabs(pinnedTabs);
+ const {entries,groupRows,visibleTabs,folderCount,looseCount}=sidebarRows(state,ordered,groups,folders),visible=visibleTabs(pinnedTabs);
  // Tab drags are pointer drags with capture: they keep tracking over the native page, which HTML drag-and-drop
  // cannot see. Inside the sidebar they reorder, pin over Favorites or save over Bookmarks; over the right of the page
  // they split view after the strip's 450ms dwell (src/ui/splitDrop.ts). In the sidebar a split can never arm.
  const latest=useRef({state,dispatch});latest.current={state,dispatch};
- const drag=useRef<{id:string;/** Which row: a linked tab has two (its group row, its card row). */key:string;/** Grabbed in a split's card (a pane row), not by a group row of the same tab. */card:boolean;x:number;y:number;pointer:number;moved:boolean;node:HTMLElement;off:()=>void;chip?:ReturnType<typeof carryChip>;rowPreview?:ReturnType<typeof carrySidebarRow>;release?:()=>void;full?:boolean;split?:SplitGroup}|null>(null),suppressClick=useRef(false);
+ const drag=useRef<{id:string;/** Which row: a linked tab has two (its group row, its card row). */key:string;/** Grabbed in a split's card (a pane row), not by a group row of the same tab. */card:boolean;x:number;y:number;pointer:number;moved:boolean;node:HTMLElement;off:()=>void;chip?:ReturnType<typeof carryChip>;rowPreview?:ReturnType<typeof carrySidebarRow>;release?:()=>void;full?:boolean;split?:SplitGroup;/** A whole tab group carried by its header: it only goes to a workspace. */group?:TabGroup}|null>(null),suppressClick=useRef(false);
  const hintFor=(action:BrowserAction|null)=>action?.type==='tab.drop'||action?.type==='split.separate'?action.to&&action.position?{id:action.to,position:action.position}:action.groupId?{group:action.groupId}:null:null;
  const setHintIf=(next:ReturnType<typeof hintFor>)=>setHint(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
  // A sidebar that hides mid-drag (a peeking one closes as soon as the pointer is over the page) unmounts this list, but a drag that has
  // moved is not the list's to end: its window listeners run to the release, the carried icon stays under the pointer and the split
  // picker takes the drop (founder, 31 Oct: the icon vanished and the picker was stuck).
  useEffect(()=>()=>{const current=drag.current;if(!current||current.moved)return;current.off();current.release?.();current.chip?.end(true);current.rowPreview?.end();},[]);
+ /** What the banner above the workspace row says while `subject` is carried over an icon (ui/workspaceDrop.ts). */
+ const dropNote=(subject:WorkspaceDragSubject)=>(id:string)=>workspaceDropNote(latest.current.state,subject,id);
  /** A split row dragged by its header carries all its panes (docs/launch/SPLIT_IN_GROUPS.md): over a group they all join it,
   *  over loose rows they leave their groups. Dropped on its own card or on another split, nothing happens. */
  const splitMoveAt=(point:{x:number;y:number},split:SplitGroup):{drop:BrowserAction;move:BrowserAction}|null=>{
@@ -621,9 +657,12 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
   const members=state.tabs.filter(tab=>split.tabIds.includes(tab.id)),anchor=action.position==='after'?members.at(-1):members[0];
   return anchor?{...action,to:anchor.id}:action;
  };
- const startDrag=(event:PointerEvent<HTMLDivElement>,tab:TabSession,split?:SplitGroup,card=false,rowId=tab.id)=>{
+ const startDrag=(event:PointerEvent<HTMLElement>,tab:TabSession,split?:SplitGroup,card=false,rowId=tab.id,group?:TabGroup)=>{
   if(event.button!==0||(event.target as HTMLElement).closest('.sb-tab-close,.sb-tab-action,.sb-header-add'))return;
-  const sidebarRight=()=>document.querySelector('.acira-sidebar')?.getBoundingClientRect().right??0;
+  // Where the sidebar ends and the page begins: its right edge on the left, its left edge on the right (the sidebar is the region up to the edge, or from it).
+  const side=sidebarSideOf(latest.current.state.settings),sidebarEdge=()=>sidebarEdgeOf(document.querySelector('.acira-sidebar')?.getBoundingClientRect(),side);
+  // Over a workspace's icon a carried chip forms and sticks at once: an edge far off on the sidebar's own side makes the pointer always "beyond" it (toward the page, which is smaller x on the right).
+  const stuck=side==='right'?1e6:-1e6;
   // The active tab's peek pinned just under (or over) the list is the list's visible end, where the edge scroll rests: a drop on it is a drop at
   // that end of the rows the list shows (it read as no drop at all, and the tab went back).
   const listPoint=(point:{x:number;y:number})=>{const scroller=list.current?.closest<HTMLElement>('.sb-scroll'),box=scroller?.getBoundingClientRect(),peek=scroller?.parentElement?.querySelector<HTMLElement>(':scope>.sb-active-peek')?.getBoundingClientRect();
@@ -633,9 +672,17 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
    const current=drag.current;if(!current)return;drag.current=null;current.off();current.release?.();
    if(!current.moved){cancelSplitDrag();return;}
    setTabDragActive(false);
-   const {state,dispatch}=latest.current,inSidebar=!!point&&!!list.current&&point.x<=sidebarRight();
+   const {state,dispatch}=latest.current,inSidebar=!!point&&!!list.current&&overSidebar(point.x,sidebarEdge(),side);
+   // A group dropped on a workspace's icon goes there with all its tabs; anywhere else it stays. The chip hands over to the move, or goes back into the header when the move is refused (a locked workspace) or there is none.
+   if(current.group){
+    const target=commit&&point?workspaceDropAt(point):null,refused=target?workspaceDropNote(state,{kind:'group',id:current.group.id},target)?.refused:false;
+    current.chip?.end(Boolean(target&&!refused));
+    if(target)dispatch({type:'workspace.move-group',groupId:current.group.id,workspaceId:target});
+    markWorkspaceDrop(null);setDragging(null);setHint(null);window.setTimeout(()=>{suppressClick.current=false;},0);return;
+   }
    if(current.split){
-    const moved=commit&&point?inSidebar?splitMoveAt(listPoint(point),current.split)?.move:workspaceDropAt(point)?{type:'workspace.move-tabs' as const,tabIds:current.split.tabIds,workspaceId:workspaceDropAt(point)!}:null:null;
+    // The workspace row is inside the sidebar: a drop on an icon is a move to that workspace before it is anything on the list.
+    const moved=commit&&point?workspaceDropAt(point)?{type:'workspace.move-tabs' as const,tabIds:current.split.tabIds,workspaceId:workspaceDropAt(point)!}:inSidebar?splitMoveAt(listPoint(point),current.split)?.move:null:null;
     current.chip?.end(false);if(moved){skipNextFlip();dispatch(moved);}
     markWorkspaceDrop(null);setDragging(null);setHint(null);window.setTimeout(()=>{suppressClick.current=false;},0);return;
    }
@@ -676,11 +723,13 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
    onStep:()=>{if(lastMove&&drag.current?.moved)move(lastMove);}});
   const move=(next:globalThis.PointerEvent)=>{
    const current=drag.current;if(!current||next.pointerId!==current.pointer)return;
-   if(!current.moved){if(Math.hypot(next.clientX-current.x,next.clientY-current.y)<5)return;current.moved=true;suppressClick.current=true;setTabDragActive(true);current.release=holdPointer(list.current,current.pointer);setDragging(current.split?'split:'+current.split.id:current.key);}
-   const {state}=latest.current,point={x:next.clientX,y:next.clientY},edge=sidebarRight(),inSidebar=!!list.current&&point.x<=edge;
+   if(!current.moved){if(Math.hypot(next.clientX-current.x,next.clientY-current.y)<5)return;current.moved=true;suppressClick.current=true;if(!current.group)setTabDragActive(true);current.release=holdPointer(list.current,current.pointer);setDragging(current.split?'split:'+current.split.id:current.key);}
+   const {state}=latest.current,point={x:next.clientX,y:next.clientY},edge=sidebarEdge(),inSidebar=!!list.current&&overSidebar(point.x,edge,side);
    lastMove=next;if(inSidebar)scrollEdge.update(point.y);else scrollEdge.stop();
+   // A group goes one place: a workspace's icon. Its folder leaves the header as a chip at once (the edge is far off on the sidebar's own side), with its tab count.
+   if(current.group){const group=current.group;current.chip??=carryChip(current.node,'.sb-group-folder',{side,only:item=>!!item.node?.dataset.ws,icon:groupFolderChip(current.node),badge:String(groupMembers(state,group).length),color:getComputedStyle(current.node.querySelector('.sb-group-folder')??current.node).color});current.chip.move(point,stuck);markWorkspaceDrop(point,dropNote({kind:'group',id:group.id}));return;}
    // A split row stays a row: it never splits again over the page, pins or saves; it only moves (or goes to a workspace).
-   if(current.split){current.chip??=carryChip(current.node,'.split-group-open>svg');current.chip.move(point,edge);markWorkspaceDrop(point);setHintIf(inSidebar?hintFor(splitMoveAt(listPoint(point),current.split)?.drop??null):null);return;}
+   if(current.split){current.chip??=carryChip(current.node,'.split-group-open>svg',{side});current.chip.move(point,workspaceDropAt(point)?stuck:edge);/* over a workspace's icon the chip forms and sticks to it, as a tab's does */markWorkspaceDrop(point,dropNote({kind:'tabs',ids:current.split.tabIds}));setHintIf(inSidebar?hintFor(splitMoveAt(listPoint(point),current.split)?.drop??null):null);return;}
    // Out of the sidebar the row travels as its icon chip, free in 2D, with one tab or many (R3-23).
    current.rowPreview??=carrySidebarRow(current.node,list.current!,{x:current.x,y:current.y},state.activeWorkspaceId);
    moveSplitDrag(current.id,point,!inSidebar&&state.tabs.length>1);// B's snap layouts take a 3rd and 4th pane, as from the strip
@@ -688,7 +737,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
    const newBookmark=saving&&owner&&isWeb(owner)&&bookmarkControl(state,owner).available&&!state.bookmarkNodes.some(node=>node.browserProfileId===owner.browserProfileId&&node.url&&pageKey(node.url)===pageKey(owner.url)&&!!node.tor===(owner.privacy==='tor'));
    // Over Favorites with a page that is not a favorite yet: a copy will go up, so the tab stays as it is and the tiles make room (the split).
    const newFavorite=at!==null&&!!owner&&(isWeb(owner)||owner.url.startsWith('acira://'))&&planFavorite({profileId:owner.browserProfileId,privateMode:!!state.browserProfiles.find(item=>item.id===owner.browserProfileId)?.private,url:owner.url,tab:owner,tabs:favoriteScope(state)}).kind==='add';
-   setPinHint(at===null?null:{index:at,adding:newFavorite});setBookmarkHint(Boolean(newBookmark));markWorkspaceDrop(point);
+   setPinHint(at===null?null:{index:at,adding:newFavorite});setBookmarkHint(Boolean(newBookmark));markWorkspaceDrop(point,dropNote({kind:'tabs',ids:[current.id]}));
    const over=inSidebar&&at===null&&!saving?paneDrop(besideCard(tabDropAtPoint(list.current,listPoint(point),current.id,state.tabs,state.tabGroups,true,undefined,current.rowPreview?.bounds)),current.id,current.card):null;
    current.full=saving||sidebarRowArea(point,current.node.closest<HTMLElement>('.acira-sidebar'),current.full??true,current.rowPreview.bounds);
    // A slot opens among the saved pages only for a page not saved yet (a drop there saves it; a saved one stays as it is).
@@ -704,7 +753,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
   const key=(next:globalThis.KeyboardEvent)=>{if(next.key==='Escape'&&drag.current?.moved){next.preventDefault();next.stopPropagation();finish(false);}};
   window.addEventListener('blur',blur);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',cancel);window.addEventListener('keydown',key,true);
   const off=()=>{scrollEdge.stop();window.removeEventListener('blur',blur);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cancel);window.removeEventListener('keydown',key,true);};
-  drag.current?.off();drag.current={id:tab.id,key:rowId,card,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false,node:event.currentTarget,off,...(split?{split}:{})};
+  drag.current?.off();drag.current={id:tab.id,key:rowId,card,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false,node:event.currentTarget,off,...(split?{split}:{}),...(group?{group}:{})};
  };
  // Motion is compositor-only (founder: the sidebar must never lag): rows never animate height. The scroll region's
  // FLIP pass (useFlip) slides rows that moved with transform, fades new rows in and fades a ghost of a closed row out.
@@ -718,14 +767,15 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,showPinned=true,show
  // The open-tab count sits at the row's end (founder, 25 Oct: kept, but not as a header of its own); Ctrl+T takes its
  // place on hover.
  const newTab=<button key="new-tab" className="sb-new-tab" data-flip="new-tab" data-sb-focus onContextMenu={event=>{event.preventDefault();event.stopPropagation();popup(state,'strip-context',event.currentTarget,undefined,event);}} aria-label={t("acirasidebar.newTabCountOpen", { count: tabs.length })} onKeyDown={moveFocus} onClick={()=>dispatch({type:'tab.new'})}><span className="sb-tab-icon"><PreviewIcon icon={Plus} size={14}/></span><span>{t("browsermenu.newTab")}</span><span className="sb-new-end" aria-hidden="true"><small>{tabs.length}</small><kbd>{formatShortcut('Ctrl T')}</kbd></span></button>;
- const body=[...(newTabsTop?[newTab]:[]),
-  ...entries.map(entry=>entry.kind==='tab'?row(entry.tab):entry.kind==='split'?splitBlock(entry.split,entry.members):<SidebarGroup key={entry.group.id} group={entry.group} members={entry.members} state={state} dispatch={dispatch} showMembers joining={!!hint&&'group' in hint&&hint.group===entry.group.id}>{groupChildren(entry.group,entry.members)}</SidebarGroup>),
-  ...(newTabsTop?[]:[newTab])];
+ // Groups in an area of their own (item 14): a line is the area's edge, as it is for the zones (no header, founder 25 Oct).
+ const listed:ReactNode[]=entries.map(entry=>entry.kind==='tab'?row(entry.tab):entry.kind==='split'?splitBlock(entry.split,entry.members):<SidebarGroup key={entry.group.id} group={entry.group} members={entry.members} state={state} dispatch={dispatch} showMembers joining={!!hint&&'group' in hint&&hint.group===entry.group.id} dragging={dragging==='group:'+entry.group.id} onPointerDown={event=>{const lead=entry.members.find(tab=>tab.id===entry.group.lastActiveTabId)||entry.members[0];if(lead)startDrag(event,lead,undefined,false,'group:'+entry.group.id,entry.group);}}>{groupChildren(entry.group,entry.members)}</SidebarGroup>);
+ if(folders!=='mixed'&&folderCount>0&&looseCount>0)listed.splice(folders==='above'?folderCount:looseCount,0,<div key="sep-folders" className="sb-sep" role="separator" data-flip="sep:folders"/>);
+    const body=[...(newTabsTop?[newTab]:[]),<LiveFolder key="live-folder" state={state} dispatch={dispatch} moveFocus={moveFocus}/>,...listed,...(newTabsTop?[]:[newTab])];
  return <>{lead&&<div className="sb-sep" role="separator" data-flip="sep:tabs"/>}<div ref={list} className="sb-tabs" data-dragging={dragging?'':undefined} onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();}}}>
   {/* One flat keyed list per zone, so a close never remounts the rows around it. */}
   {showPinned&&pinnedTabs.length>0&&<><div className="sb-pinned" role="list" aria-label={t("acirasidebar.pinnedTabs")}>{pinnedTabs.map(tab=>row(tab,{pinned:true}))}</div>{showList&&<div className="sb-sep" role="separator" data-flip="sep:pinned"/>}</>}
   {/* No header (founder, 25 Oct): the separator above is the zone's edge and New tab is its first row. */}
-  {showList&&<section className="sb-zone" data-zone="tabs" aria-label={t("acirasidebar.tabs")}><div className="sb-zone-body" role="list">{body}</div></section>}
+  {showList&&<section className="sb-zone" data-zone="tabs" aria-label={t("acirasidebar.tabs")} onDragOver={tileOver} onDrop={tileDrop}><div className="sb-zone-body" role="list">{body}</div></section>}
  </div></>;
 }
 
@@ -880,8 +930,14 @@ function useCardGlide(root:{current:HTMLElement|null},selector:string,reduced:bo
    if(was.y-box.scrollTop+was.h<0||was.y-box.scrollTop>view.height)continue;// the old card was out of sight: nothing to hand off
    const el=now.el,glide=document.createElement('div');glide.className='sb-glide';glide.setAttribute('aria-hidden','true');
    Object.assign(glide.style,{left:now.x+'px',top:now.y+'px',width:now.w+'px',height:now.h+'px',borderRadius:getComputedStyle(el).borderRadius});
+   // A Favorites tile's card carries its site's ring colour (sidebar.css): it flies in the colour of the tile it leaves and arrives in the colour of the tile it lands on.
+   const tile=el.classList.contains('sb-app'),ring=(node:HTMLElement)=>getComputedStyle(node).getPropertyValue('--sb-site').trim();
+   if(tile)glide.style.setProperty('--sb-site',ring(el));
    box.prepend(glide);el.setAttribute('data-glide','');finish(el);if(was.el.isConnected)finish(was.el);
-   const motion=glide.animate([{transform:`translate(${was.x-now.x}px,${was.y-now.y}px) scale(${was.w/now.w},${was.h/now.h})`},{transform:'none'}],{duration:springMs(),easing:SPRING});
+   // Tab glow (item 11): the raised card carries the ring and the glow in the site's colour, blending from the old tab's to the new one's on this same
+   // animation (one curve, one clock); tab-glow.css draws them from --glow-c, a registered colour, so the browser interpolates it.
+   const tones=glideColors(was.el.style.getPropertyValue('--site'),el.style.getPropertyValue('--site'));if(tones)glide.setAttribute('data-glow','');
+   const motion=glide.animate([{transform:`translate(${was.x-now.x}px,${was.y-now.y}px) scale(${was.w/now.w},${was.h/now.h})`,...(tile?{'--sb-site':ring(was.el)}:{}),...(tones?{'--glow-c':tones[0]}:{})},{transform:'none',...(tones?{'--glow-c':tones[1]}:{})}],{duration:springMs(),easing:SPRING});
    const land=()=>{el.style.transition='none';el.removeAttribute('data-glide');glide.remove();if(flying.current.get(role)?.glide===glide)flying.current.delete(role);requestAnimationFrame(()=>{el.style.transition='';});};
    motion.onfinish=land;motion.oncancel=land;flying.current.set(role,{glide,motion});
   }
@@ -924,6 +980,8 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
  // D's private tabs and N's Tor tabs (TabSession.privacy; 'tor' is typed when N's tabs land).
  const active=tab.id===state.activeTabId,sound=tabSound(tab),name=title(tab),raw=tab.privacy as string|undefined,privacy:'private'|'tor'|undefined=raw==='private'||raw==='tor'?raw:undefined,privateTab=privacy==='private',torTab=privacy==='tor',markInIcon=!!privacy&&isNewTabState(tab.url);
  const loading=useLoadingSignal(tabShowsLoading(tab));
+ // Tab glow (item 11): the site icon's colour, for a row that may wear it (not private, Tor, asleep, outlined for a risk, or a linked copy); the stylesheet (tab-glow.css) decides how much, from Settings › Site colour.
+ const siteColor=useSiteIconColor(tab.url,tab.favicon,!privacy&&!tab.sleeping&&!tab.risk&&!copy&&!hidden,!!tab.error);
  // Inline rename (R3 zen-extras): double-click the row, F2, or Rename tab in its menu; the field takes the button's place.
  const rowRef=useRef<HTMLDivElement>(null),[renaming,setRenaming]=useTabRename(rowRef),shown=shownTab(tab),cardMode=useTabHoverCardMode();
  const context=(node:HTMLElement,pointer?:{clientX:number;clientY:number})=>popup(state,'tab-context',node,tab.id,pointer);
@@ -935,7 +993,7 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
  // A linked tab is two rows of one tab: both read as current together. The group row carries the split glyph ("Also in split view"),
  // the card row the group's colour and link glyph ("In group G") and a fainter title; the card row's × removes it from the split.
  const homeGroup=copy?groupForTab(state,tab):undefined,linkTip=copy?t("acirasidebar.linkedInGroup",{group:homeGroup?.name||'Unnamed group'}):link?t("acirasidebar.linkedInSplit"):undefined;
- return <div className="sb-tab" ref={rowRef} role="listitem" data-flip={hidden?undefined:'t:'+tab.id+(copy?'~split':'')} data-tab-id={tab.id} data-link-role={copy?'split':link?'group':undefined} data-split-link={copy?homeGroup?.id||'':undefined} data-in-split={link?.id} style={copy&&homeGroup?{'--group-color':tabGroupColor(homeGroup.color)} as CSSProperties:undefined} data-split-pane={pane?.id} data-solo={solo||undefined} onPointerEnter={event=>startTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} onPointerLeave={event=>stopTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} data-private={privateTab||undefined} data-tor={torTab||undefined} data-pinned={pinned||undefined} data-hidden={hidden||undefined} inert={hidden||undefined} aria-hidden={hidden||undefined} data-sleeping={tab.sleeping||undefined} data-capturing={tab.capturing?.length||undefined} data-risk={tab.risk?.kind} title={tab.risk?`${tab.risk.title}. ${tab.risk.detail}`:undefined} aria-current={active||undefined} data-dragging={dragging||undefined} data-drop={hint} onPointerDown={onPointerDown} onDragStart={event=>event.preventDefault()}
+ return <div className="sb-tab" ref={rowRef} role="listitem" data-flip={hidden?undefined:'t:'+tab.id+(copy?'~split':'')} data-tab-id={tab.id} data-link-role={copy?'split':link?'group':undefined} data-split-link={copy?homeGroup?.id||'':undefined} data-in-split={link?.id} style={copy&&homeGroup?{'--group-color':tabGroupColor(homeGroup.color)} as CSSProperties:siteColor?{'--site':siteColor} as CSSProperties:undefined} data-glow={siteColor?'':undefined} data-split-pane={pane?.id} data-solo={solo||undefined} onPointerEnter={event=>startTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} onPointerLeave={event=>stopTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} data-private={privateTab||undefined} data-tor={torTab||undefined} data-pinned={pinned||undefined} data-hidden={hidden||undefined} inert={hidden||undefined} aria-hidden={hidden||undefined} data-sleeping={tab.sleeping||undefined} data-capturing={tab.capturing?.length||undefined} data-risk={tab.risk?.kind} title={tab.risk?`${tab.risk.title}. ${tab.risk.detail}`:undefined} aria-current={active||undefined} data-dragging={dragging||undefined} data-drop={hint} onPointerDown={onPointerDown} onDragStart={event=>event.preventDefault()}
   onMouseDown={event=>{if(event.button===1)event.preventDefault();}} onAuxClick={event=>{if(event.button===1&&!pinned){event.preventDefault();onClose();}}}
   onContextMenu={event=>{event.preventDefault();event.stopPropagation();context(event.currentTarget,event);}}>
   {renaming?<div className="sb-tab-main sb-tab-editing"><span className="sb-tab-icon" data-loading={loading||undefined}>{loading?<DotMatrix preset="loader" size={14} reducedMotion={state.settings.reducedMotion}/>:markInIcon?<TabPrivacyMark privacy={privacy!} size={16} className="sb-tab-icon-mark"/>:<SiteIdentityIcon url={tab.url} favicon={tab.favicon} size={16} error={!!tab.error}/>}</span><TabNameInput tab={shown} dispatch={dispatch} onDone={()=>{setRenaming(null);requestAnimationFrame(()=>rowRef.current?.querySelector<HTMLElement>('.sb-tab-main')?.focus({preventScroll:true}));}}/></div>:
@@ -948,6 +1006,7 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
     if(event.altKey&&event.shiftKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){event.preventDefault();onMove(event.key==='ArrowUp'?-1:1);const id=tab.id;requestAnimationFrame(()=>document.querySelector<HTMLElement>(`.acira-sidebar [data-tab-id="${id}"] .sb-tab-main`)?.focus());return;}
     moveFocus(event);}}>
    <span className="sb-tab-icon" data-loading={loading||undefined}>{loading?<DotMatrix preset="loader" size={14} reducedMotion={state.settings.reducedMotion}/>:markInIcon?<TabPrivacyMark privacy={privacy!} size={16} className="sb-tab-icon-mark"/>:<SiteIdentityIcon url={tab.url} favicon={tab.favicon} size={16} error={!!tab.error}/>}</span><span className="sb-tab-title" dir="auto"><span className="sb-tab-title-text">{name}</span>{copy&&<span className="sb-tab-leave" aria-hidden="true">{t("acirasidebar.removeFromSplit")}</span>}</span>
+   <PeekMarkerCard tabId={tab.id} size={12} reduced={state.settings.reducedMotion}/>{/* the Link preview marker (item 17): a card with the preview's site icon beside this icon while a preview is open from this tab */}
   </button>}
   {tab.capturing?.length ? <button className="sb-tab-action sb-tab-capture" data-persistent aria-label={t("acirasidebar.stopSharingYourAndWith", { and: tab.capturing.join(' and '), name: name })} title={t("app.usingYourAndClickTo", { and: tab.capturing.join(' and ') })} onClick={()=>void runtime.browserCommand({type:'stop-capture',tabId:tab.id})}><span aria-hidden="true"/></button> : null}
   {/* B's shared mark (the strip draws the same): F's mask for a private tab, N's onion for a Tor tab, in the mark colour;
@@ -965,9 +1024,9 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
  </div>;
 }
 
-/** A tab group, drawn as a folder: Folder (collapsed) or FolderOpen glyph in the group's color in the icon column, name at the text
+/** A tab group, drawn as a folder (GroupFolderGlyph: sheets for its tabs, closed or open) in the group's color in the icon column, name at the text
  * edge, chevron on hover (always when collapsed), members one step in beside a rail in the group's color. Reuses the strip's inline rename. */
-function SidebarGroup({group,members,state,dispatch,showMembers=false,joining=false,children}:{group:TabGroup;members:TabSession[];state:BrowserSnapshot;dispatch:Dispatch;showMembers?:boolean;joining?:boolean;children?:ReactNode}){
+function SidebarGroup({group,members,state,dispatch,showMembers=false,joining=false,dragging=false,onPointerDown,children}:{group:TabGroup;members:TabSession[];state:BrowserSnapshot;dispatch:Dispatch;showMembers?:boolean;joining?:boolean;/** Carried by its header to a workspace. */dragging?:boolean;onPointerDown?:(event:PointerEvent<HTMLButtonElement>)=>void;children?:ReactNode}){
  const root=useRef<HTMLDivElement>(null),editor=useGroupRename(root),activeInside=members.some(tab=>tab.id===state.activeTabId);
  const lead=members.find(tab=>tab.id===group.lastActiveTabId)||members[0];
  const context=(node:HTMLElement,pointer?:{clientX:number;clientY:number})=>popup(state,'group-context',node,lead.id,pointer);
@@ -975,11 +1034,11 @@ function SidebarGroup({group,members,state,dispatch,showMembers=false,joining=fa
  const select=()=>{if(showMembers)dispatch({type:'tab.group.update',id:group.id,keepActive:true,patch:{collapsed:!group.collapsed}});else dispatch({type:'tab.select',id:lead.id});};
  // The hover "+" (R3-49): a new tab right after the group's last tab, joined to the group; a collapsed group opens so it shows.
  const addTab=()=>newTabInGroupActions(group,members.at(-1)?.id,lead.browserProfileId,'tab-'+crypto.randomUUID()).forEach(dispatch);
- return <div ref={root} className="ed-rail-tab-group sb-group" role={showMembers?'listitem':undefined} data-sidebar-group={showMembers?undefined:group.id} data-collapsed={group.collapsed||undefined} data-all-asleep={members.length>0&&members.every(member=>member.sleeping)||undefined} data-holds-active={activeInside||undefined} style={{'--group-color':tabGroupColor(group.color)} as CSSProperties} data-joining={joining||undefined} onContextMenu={event=>{event.preventDefault();event.stopPropagation();context(event.currentTarget,event);}}>
+ return <div ref={root} className="ed-rail-tab-group sb-group" role={showMembers?'listitem':undefined} data-sidebar-group={showMembers?undefined:group.id} data-collapsed={group.collapsed||undefined} data-all-asleep={members.length>0&&members.every(member=>member.sleeping)||undefined} data-holds-active={activeInside||undefined} style={{'--group-color':tabGroupColor(group.color)} as CSSProperties} data-joining={joining||undefined} data-dragging={dragging||undefined} onContextMenu={event=>{event.preventDefault();event.stopPropagation();context(event.currentTarget,event);}}>
   {editor.editing?<GroupNameInput group={group} groups={state.tabGroups} onSave={name=>dispatch({type:'tab.group.update',id:group.id,patch:{name}})} onCancel={()=>{editor.stop();requestAnimationFrame(()=>root.current?.querySelector<HTMLElement>('.sb-group-header')?.focus());}}/>
-   :<button type="button" className="ed-rail-tab-group-name sb-group-header" data-flip={"g:"+group.id} data-sb-focus data-group-header={showMembers?group.id:undefined} data-group-tab={showMembers?lead.id:undefined} aria-label={t("acirasidebar.groupCountTabs", { group: group.name||'Unnamed group', count: members.length })} aria-expanded={showMembers?!group.collapsed:undefined} title={t("acirasidebar.groupDoubleClickToRename", { group: group.name||'Unnamed group' })} onClick={select} onDoubleClick={editor.start}
+   :<button type="button" className="ed-rail-tab-group-name sb-group-header" data-flip={"g:"+group.id} data-sb-focus data-group-header={showMembers?group.id:undefined} data-group-tab={showMembers?lead.id:undefined} aria-label={t("acirasidebar.groupCountTabs", { group: group.name||'Unnamed group', count: members.length })} aria-expanded={showMembers?!group.collapsed:undefined} title={t("acirasidebar.groupDoubleClickToRename", { group: group.name||'Unnamed group' })} onClick={select} onDoubleClick={editor.start} onPointerDown={showMembers?onPointerDown:undefined}
     onKeyDown={event=>{if(event.key==='F2'){event.preventDefault();editor.start();return;}if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();context(event.currentTarget);return;}if(event.altKey&&event.shiftKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){const drop=groupKeyboardDrop(state.tabs,state.tabGroups,group.id,event.key);if(drop){event.preventDefault();dispatch(drop);}return;}moveFocus(event);}}>
-    <span className="sb-tab-icon sb-group-folder" aria-hidden="true"><PreviewIcon icon={Folder} size={16}/><PreviewIcon icon={FolderOpen} size={16}/></span><span className="sb-group-name">{group.name||'Unnamed group'}</span>{showMembers&&<PreviewIcon icon={ChevronDown} size={12}/>}</button>}
+    <span className="sb-tab-icon sb-group-folder" aria-hidden="true"><GroupFolderGlyph count={members.length}/></span><span className="sb-group-name">{group.name||'Unnamed group'}</span>{showMembers&&<PreviewIcon icon={ChevronDown} size={12}/>}</button>}
   {showMembers&&!editor.editing&&<button type="button" className="sb-header-add" aria-label={t("acirasidebar.newTabInGroup")} title={t("acirasidebar.newTabInGroup")} onClick={addTab}><PreviewIcon icon={Plus} size={14}/></button>}
   {showMembers&&<div className="ed-rail-group-members sb-group-members" role="list">{children}</div>}
  </div>;
@@ -1092,7 +1151,7 @@ function SidebarBookmarks({state,dispatch,profileId,privateMode,folded,reduced,l
  };
  const menuAt=(event:MouseEvent<HTMLElement>,ref:string)=>{event.preventDefault();event.stopPropagation();openBookmarkMenu(ref,{x:event.clientX,y:event.clientY,width:2,height:2});};
  const keys=(ref:string,extra?:(event:KeyboardEvent<HTMLButtonElement>)=>boolean)=>(event:KeyboardEvent<HTMLButtonElement>)=>{
-  if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const box=event.currentTarget.getBoundingClientRect();openBookmarkMenu(ref,{x:box.left+36,y:box.bottom-4,width:2,height:2});return;}
+  if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();const box=event.currentTarget.getBoundingClientRect();openBookmarkMenu(ref,sidebarSideOf(state.settings)==='right'?rowAnchor(box,'right'):{x:box.left+36,y:box.bottom-4,width:2,height:2});return;}
   // Alt+Shift+Up/Down moves the row one place, as it does a tab (the menu's Move up / Move down).
   if(event.altKey&&event.shiftKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')&&!privateMode){event.preventDefault();const id=ref.slice(5),place=bookmarkStep(state.bookmarkNodes,profileId,id,event.key==='ArrowUp'?-1:1);if(place){skipNextFlip();dispatch({type:'bookmark.move',id,...place});}return;}
   if(extra?.(event))return;moveFocus(event);

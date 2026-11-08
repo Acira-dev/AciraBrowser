@@ -68,6 +68,7 @@
     "src/components/WorkspaceCoverPicker.tsx",
     "src/components/offline-game/OfflineGame.tsx",
     "src/components/sidebar/AciraSidebar.tsx",
+    "src/components/sidebar/SizeMenu.tsx",
     "src/components/sidebar/BookmarkMenu.tsx",
     "src/components/sidebar/FavoriteEditor.tsx",
     "src/components/sidebar/SectionActions.tsx",
@@ -132,6 +133,7 @@
     "src/features/settings/PasswordManagerLinks.tsx",
     "src/features/settings/PersonalArtworkLibrary.tsx",
     "src/features/settings/SidebarRows.tsx",
+    "src/features/settings/SidebarSizeRow.tsx",
     "src/features/settings/ProfileScope.tsx",
     "src/features/settings/SettingsSearch.tsx",
     "src/features/settings/SiteListEditor.tsx",
@@ -203,7 +205,10 @@
     "src/ui/sidebarApps.ts",
     "src/ui/toolbarMenu.ts",
     "src/ui/webApps.ts",
-    "src/ui/windowViewText.ts"
+    "src/ui/windowViewText.ts",
+    "src/components/sidebar/LiveFolder.tsx",
+    "src/components/sidebar/LiveFolderMenu.tsx",
+    "src/components/sidebar/LiveFolderStripRow.tsx"
   ],
   "exempt": {
     "src/runtime/appearancePalettes.ts": "preset ids and English labels; shown through paletteName() (MakeItYours.tsx) which uses the catalog",

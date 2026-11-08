@@ -54,11 +54,21 @@ export function addressBlockShown(input: { wanted: boolean; sidebarOpen: boolean
 export type SidebarModeHeader = 'block' | 'bare';
 export const sidebarModeHeader = (chrome: boolean, blockShown: boolean): SidebarModeHeader | undefined => (chrome ? (blockShown ? 'block' : 'bare') : undefined);
 
-/** The strip left above the page, to the right of the sidebar, while the block is in the sidebar. On the Mac the window buttons are
- * over the sidebar, so only the page card's own 6 px margin is left. Windows and Linux put the window buttons at the right of the
- * window, over the page column: that strip keeps the toolbar's height (empty, it drags the window) so nothing overlaps them. */
-export function addressStripHeight(platform: string, toolbarHeight: number): number {
-  return platform === 'darwin' ? 6 : toolbarHeight;
+/** The strip left above the page, beside the sidebar, while the block is in the sidebar: only the page card's own 6 px margin, on every platform and with the sidebar on
+ * either side, except one case: the Mac with the sidebar on the right, where the window buttons (they stay at the window's left, on the Mac) are over the page column, so the
+ * strip keeps the toolbar's height (empty, it drags the window) and nothing overlaps them. With the sidebar on the left the Mac's buttons are over the sidebar.
+ * Windows' three caption buttons are not in this strip: with the sidebar on the left (or away) they sit in a small notch at the page's top-right corner that shows only
+ * while the pointer is along the top of the window (desktop/caption-notch.cjs; the window's caption overlay is the notch), so the page goes to the top. With the sidebar
+ * on the right they are over the sidebar's top right, which sidebar-right.css leaves room for (always shown, no notch). Linux keeps its system title bar above the whole window. */
+export const ADDRESS_STRIP = 6;
+/** The caption notch's height: Windows' three 46 px buttons in a 34 px band (the caption overlay's height; desktop/caption-notch.cjs NOTCH has the same number). */
+export const NOTCH_HEIGHT = 34;
+/** Windows, Sidebar mode (the header is the block's, not Seamless's, and the window is not fullscreen) with the corner over the page (the sidebar on the left, or away): the caption buttons are a notch, not an empty strip.
+ * With the sidebar docked on the right the corner is over the sidebar, which has the room for the buttons, so there is no notch. `side` is the side the strip is laid out for (App.tsx passes 'left' while the sidebar is away or floating). */
+export const captionNotchWanted = (platform: string, sidebarMode: boolean, fullscreen: boolean, side: 'left' | 'right' = 'left'): boolean => platform === 'win32' && sidebarMode && !fullscreen && side === 'left';
+export function addressStripHeight(platform: string, toolbarHeight: number, side: 'left' | 'right' = 'left'): number {
+  // With the sidebar on the right the Mac's buttons stay over the page column's top left; every other case is the page card's own margin.
+  return platform === 'darwin' && side === 'right' ? toolbarHeight : ADDRESS_STRIP;
 }
 
 /** A layout switch (the sidebar docking or leaving: Ctrl/Cmd+Shift+E, the sidebar button, Ctrl/Cmd+L with the sidebar away) in Sidebar mode brings the block in or takes it out with the

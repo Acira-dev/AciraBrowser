@@ -1,0 +1,46 @@
+/* Site tint (beta.13 study, item 19 / researcher B). DEV PROTOTYPE: nothing here applies unless the engine sets
+   html[data-site-tint], and the engine only runs behind the dev flag (siteTint.ts). The engine writes --st-* on <html>;
+   these rules re-point the frame's own variables at them with !important, because the finish tokens sit in .app's inline style.
+   Ink roles are NOT touched (tint mode): the tint keeps the finish's lightness band, so its ink keeps its contrast. */
+
+html[data-site-tint]:not([data-site-tint-shape=near]) .app.style-acira:not(.native-layer) {
+  --chrome-rgb: var(--st-frame-rgb) !important;
+  --chrome-hover: var(--st-hover) !important; --chrome-pressed: var(--st-pressed) !important; --chrome-divider: var(--st-divider) !important;
+  --frame: var(--st-frame) !important; --frame-hover: var(--st-hover) !important; --group-tray: var(--st-frame) !important;
+  --chrome-input-fill: var(--st-sheet) !important;
+  --chrome-text-secondary: var(--st-muted) !important; --chrome-icon: var(--st-muted) !important; --frame-muted: var(--st-muted) !important;
+}
+/* The raised row joined to the selected tab (toolbar, bookmarks): Acira's white with a fifth of the frame in it (light); dark keeps its white .10 over the tinted frame. */
+html[data-site-tint]:not([data-site-tint-shape=near]) .app.style-acira:not([data-chrome=dark]):not(.native-layer) { --tab-surface: rgb(var(--st-surface-rgb) / .92) !important; }
+/* The whole frame (default) also tints the sidebar's own surface; "bar" leaves the sidebar Acira's and tints what hugs the page. */
+html[data-site-tint]:not([data-site-tint-shape=near]):not([data-site-tint-scope=bar]) .app.style-acira:not(.native-layer) {
+  --sidebar-rgb: var(--st-frame-rgb) !important;
+  --sidebar-muted: var(--st-muted) !important; --sidebar-hover: var(--st-hover) !important; --sidebar-selection-bg: var(--st-selected) !important; --tab-hover: var(--st-hover) !important;
+}
+html[data-site-tint-mode=tint][data-site-tint]:not([data-site-tint-shape=near]):not([data-site-tint-scope=bar]) .app.style-acira[data-chrome=dark]:not(.native-layer) {
+  --chrome-selection-bg: var(--st-tabsel) !important; --tab-selection-bg: var(--st-tabsel) !important; --frame-selection-bg: var(--st-tabsel) !important;
+}
+
+/* Match mode (comparison only): the ink follows the frame's new tone. */
+html[data-site-tint-mode=match] .app.style-acira:not(.native-layer) {
+  --sidebar-ink: var(--st-ink) !important; --sidebar-ink-rgb: var(--st-ink-rgb) !important; --sidebar-muted: var(--st-muted) !important;
+  --chrome-fg: var(--st-ink) !important; --chrome-ink: var(--st-ink-rgb) !important; --chrome-text-secondary: var(--st-muted) !important; --chrome-icon: var(--st-muted) !important;
+  --frame-text: var(--st-ink) !important; --frame-muted: var(--st-muted) !important; --toolbar-ink: var(--st-ink) !important; --toolbar-muted: var(--st-muted) !important;
+  --ed-ink: var(--st-ink) !important; --ed-muted: var(--st-muted) !important; --ed-icon: var(--st-muted) !important;
+}
+
+/* The veil. Material windows keep the finish's own veil alpha, so the native glass still shows through the tint. */
+html[data-site-tint][data-site-tint-shape=fade] .app.style-acira:not(.native-layer) {
+  background: linear-gradient(180deg, rgb(var(--st-frame-rgb) / var(--chrome-veil-top)) 0%, rgb(var(--st-end-rgb) / var(--chrome-veil-bottom)) 100%) !important;
+}
+html[data-site-tint][data-site-tint-shape=edge] .app.style-acira:not(.native-layer) {
+  background:
+    linear-gradient(180deg, rgb(var(--st-edge-rgb) / 0) 0, rgb(var(--st-edge-rgb) / .62) var(--st-page-top, 84px)) 0 0 / 100% var(--st-page-top, 84px) no-repeat,
+    linear-gradient(180deg, rgb(var(--st-frame-rgb) / var(--chrome-veil-top)), rgb(var(--st-frame-rgb) / var(--chrome-veil-bottom))) !important;
+}
+/* "near": the tint hugs the page card and falls away from it; the rest of the frame stays Acira's. (The card is a box-shadow
+   on the page area itself: its children are clipped, its own shadow is not.) */
+html[data-site-tint][data-site-tint-shape=near] .app.style-acira:not(.native-layer) .browser-body > .page-area {
+  box-shadow: 0 0 0 1px rgb(var(--ink) / .07), 0 0 0 5px rgb(var(--st-halo-rgb) / calc(.5 * var(--st-fade, 1))), 0 0 46px 18px rgb(var(--st-halo-rgb) / calc(.55 * var(--st-fade, 1))) !important;
+  z-index: 1;
+}

@@ -200,8 +200,8 @@ test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk the list on screen: the favorite\
   assert.equal(listedTabs(state).length, 1);
   // Main's keys use it.
   const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(main, /case 'cycle-tab':\{[^}]*const here=listedTabs\(state\),i=here\.findIndex\(t=>t\.id===active\.id\);if\(!here\.length\|\|i<0\)break;/);
-  assert.match(main, /id:here\[\(i\+command\.direction\+here\.length\)%here\.length\]\.id/);
+  assert.match(main, /case 'cycle-tab':\{[^}]*const here=listedTabs\(state\),i=here\.findIndex\(t=>t\.id===active\.id\);if\(!here\.length\|\|i<0&&!active\.favoriteId\)break;/);
+  assert.match(main, /id:\(i<0\?\(command\.direction>0\?here\[0\]:here\.at\(-1\)\):here\[\(i\+command\.direction\+here\.length\)%here\.length\]\)\.id/);
   assert.match(main, /case 'select-tab':\{const here=listedTabs\(state\),target=command\.index<0\?here\.at\(-1\):here\[command\.index\]/);
   assert.match(main, /case 'move-tab':\{const here=listedTabs\(state\),index=here\.findIndex\(t=>t\.id===active\.id\),neighbor=index<0\?undefined:/);
   assert.match(readFileSync(new URL('../src/runtime/core.ts', import.meta.url), 'utf8'), /export \{ listedTabs \} from '\.\/favoriteTabs';/, 'main reads it from the runtime bundle');

@@ -1,5 +1,6 @@
 import {isTorSupported} from './platform';
-import type { BrowserSnapshot,Rectangle,TabSession } from '../runtime/types';
+import type { BrowserSnapshot,Rectangle,Settings,SidebarSide,TabSession } from '../runtime/types';
+import { clampSidebarWidth } from './sidebarLayout';
 import { groupForTab } from '../runtime/tabGroups';
 import { menuHeight,menuRowHeight,readMenuLayout,platformMenuLayout } from './menuPrefs';
 import { profilesAsSpaces,windowWorkspaces } from '../runtime/workspaces';
@@ -34,8 +35,17 @@ export const MENU_WIDTHS:Record<string,Partial<Record<LocaleCode,number>>>={
 export const localeMenuWidth=(kind:string,locale:LocaleCode=currentLocale())=>MENU_WIDTHS[kind]?.[locale]??0;
 
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
+/** The kinds that open with their left edge at the anchor's x (a menu at the pointer, a panel hung from a row or a chip); the rest right-align to the anchor's right edge (the toolbar's own buttons, at the window's right). */
+const leftAlignedKinds=['tabs','page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','favorite-edit','live-folder','context','split','security','tor','toolbar-context','workspace-menu','workspace-context','workspace-edit'];
+/** Whether a popup is opened from a control inside a sidebar standing on the right. The sidebar is then the window's rightmost `sidebarWidth` px (it exists only
+ * with the tabs in the sidebar), and a popup opened from it must hang toward the page, on its left, the way a left sidebar's popups hang to their right:
+ * the kinds that hang from the anchor's left edge hang from its right edge instead (popupGeometry). Decided from the settings, the anchor and the window's
+ * width alone, so the chrome's layout, the measured pass in the overlay and a test all place the same popup in the same place. A left sidebar is never "from the right". */
+export function popupFromRightSidebar(settings:Partial<Pick<Settings,'sidebarSide'|'verticalTabs'|'sidebarWidth'>>|null|undefined,anchor:Rectangle,viewportWidth:number):boolean{
+  return settings?.sidebarSide==='right'&&!!settings.verticalTabs&&anchor.x+anchor.width/2>=viewportWidth-clampSidebarWidth(settings.sidebarWidth as number);
+}
 export interface PopupGeometry {bounds:Rectangle;anchor:Rectangle;origin:{x:number;y:number};contentHeight:number}
-const compactKinds=new Set(['zoom','page-context','tab-context','group-context','split-context','strip-context','bookmark-context','toolbar-context','find','toolbar-overflow','workspace-context']);
+const compactKinds=new Set(['zoom','page-context','tab-context','group-context','split-context','strip-context','live-folder','bookmark-context','toolbar-context','find','toolbar-overflow','workspace-context']);
 // The palette lists at most ~13 rows (bible §5.4) and scrolls past that.
 const paletteMax=514;
 /** The content height a layout carries for a natural height: the clamp popupGeometry applies to estimates and measurements. */
@@ -59,8 +69,8 @@ const panelChrome=12;
 const profileOf=(state:BrowserSnapshot)=>state.tabs?.find(tab=>tab.id===state.activeTabId)?.browserProfileId||'';
 /** The main menu's height: its rows from the person's layout (R3-43) plus, in a Tor tab or window (R3-61), the one extra row (New Tor identity) at the same row height. */
 /** R4-16 + R4-19: the two Layout rows (View, Tabs) join the page group after Split view, Zoom or Find, at the same row height. */
-/** View, Tabs and Sidebar mode. */
-export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].some(id=>main.includes(id))?3:0;
+/** View and Tabs (Sidebar mode is one of the Tabs answers, no row of its own). */
+export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].some(id=>main.includes(id))?2:0;
 /** The Tor rows: New Tor identity, and on a website also New Tor circuit for this site (Tor Browser's pair). */
 const torMenuRows=(state:BrowserSnapshot)=>{if(!inTorContext(state))return 0;const tab=state.tabs.find(item=>item.id===state.activeTabId);return tab?.contentKind==='web'&&/^https?:/i.test(tab.url||'')?2:1;};
 /** "Report a problem…" under Settings, while this build can send reports and outside Tor (App.tsx reportSubjects). */
@@ -157,6 +167,8 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   if(kind==='bookmark-context')return 300;
   if(kind==='bookmark-edit')return 317;
   if(kind==='favorite-edit')return 239;
+  // Live pull requests (item 31): the filter menu (a label, six rows, three dividers, Repositories, Refresh now, Remove) is about 340; the question is shorter. Measured when it opens.
+  if(kind==='live-folder')return 340;
   // Workspaces (R3-57, R4-48 wireframe 3): the container and the two-line scope head, a 44px two-line row per workspace, New workspace… (39, until
   // eight), Rename… and Icon and color…, Delete workspace, and the 44px way to Profiles with their dividers (406 measured with three, qa/b-popup-heights.mjs).
   // R3-38: a workspace other than the first adds its lock rows after a divider: Lock this workspace (two lines, 53 measured), Lock now + Stop locking (87); a locked one shows Unlock (30) in place of Rename…, Icon and color…, the divider and Delete (−69 in all; 397 measured with three, 27 Oct).
@@ -181,8 +193,8 @@ export const measuredPopupKinds=['tabs','workspace-menu','switcher','palette','b
 const lockThisRowShown=(state:BrowserSnapshot)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===state.activeWorkspaceId);return !!own&&list[0]?.id!==own.id&&!own.secured;};
 export const popupEstimateMeasured=(kind:string,state:BrowserSnapshot)=>measuredPopupKinds.includes(kind)&&!(kind==='workspace-menu'&&lockThisRowShown(state));
 
-/** The Acira menu at its 30px rows and at its dense 26px rows: 20 rows (17 + the three Layout rows: View, Tabs, Sidebar mode), four 9px dividers, 12px of container. */
-export const menuFullHeight=678,menuDenseHeight=594;
+/** The Acira menu at its 30px rows and at its dense 26px rows: 19 rows (17 + the two Layout rows: View, Tabs; Sidebar mode is a Tabs answer), four 9px dividers, 12px of container. */
+export const menuFullHeight=648,menuDenseHeight=568;
 /** F02 (M's sweep, 900×600): when the space below the menu button is shorter than the full menu, the menu takes its dense
  * rows and fits without scrolling. The chrome (geometry) and the overlay (rows) decide with this one rule, from the window
  * and the button, never from the content, so nothing oscillates. */
@@ -202,7 +214,7 @@ export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:
   const centered=kind==='tabs'||kind==='switcher'||kind==='whats-new';
   // Menu/panel system (round 9): context menus 260 (the toolbar menu 300: its switch rows carry a shortcut), panels 320; the main menu and More tools 340, so the longest label, shortcut and the switch/chevron column
   // (Search tabs and commands, Ctrl+Shift+K) fit untruncated; search panels (tab viewer, palette) and lists keep theirs.
-  const baseWidth=kind==='switcher'?520:kind==='whats-new'?400:['profile','security','protection','tor','extensions','appearance','downloads','favorite-edit','workspace-edit'].includes(kind)?320:kind==='workspace-menu'?280:kind==='workspace-context'?240:kind==='zoom'?280:kind==='workspace-cover'?480:centered?640:kind==='palette'?640:['context','bookmarks'].includes(kind)?420:kind==='split'?400:kind==='toolbar-context'?300:['page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','bookmark-edit'].includes(kind)?260:kind==='menu'||kind==='more-tools'?340:kind==='customize-toolbar'?320:kind==='toolbar-overflow'?240:360;
+  const baseWidth=kind==='switcher'?520:kind==='whats-new'?400:['profile','security','protection','tor','extensions','appearance','downloads','favorite-edit','workspace-edit'].includes(kind)?320:kind==='workspace-menu'?280:kind==='workspace-context'?240:kind==='zoom'?280:kind==='workspace-cover'?480:centered?640:kind==='palette'?640:['context','bookmarks'].includes(kind)?420:kind==='split'?400:kind==='toolbar-context'?300:['page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','bookmark-edit','live-folder'].includes(kind)?260:kind==='menu'||kind==='more-tools'?340:kind==='customize-toolbar'?320:kind==='toolbar-overflow'?240:360;
   const desiredWidth=Math.max(baseWidth,localeMenuWidth(kind));
   const width=Math.max(240,Math.min(desiredWidth,viewport.width-24));
   const anchor=source||{x:viewport.width-60,y:48,width:36,height:36};
@@ -215,7 +227,8 @@ export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:
   const upwards=kind!=='zoom'&&below<(point?contentHeight:Math.min(contentHeight,280))&&above>below;
   const maxHeight=centered?viewport.height-120:Math.max(100,upwards?above:below);
   const height=Math.min(contentHeight,maxHeight,viewport.height-24);
-  const leftAligned=options.align?options.align==='start':['tabs','page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','favorite-edit','context','split','security','tor','toolbar-context','workspace-menu','workspace-context','workspace-edit'].includes(kind);
+  // From a sidebar on the right the left-hung kinds hang from the anchor's right edge, toward the page (popupFromRightSidebar); the right-aligned ones already do.
+  const leftAligned=options.align?options.align==='start':leftAlignedKinds.includes(kind)&&!popupFromRightSidebar(state?.settings,anchor,viewport.width);
   // R3-40: the zoom control is a floating island centred over the page, just below the toolbar (never touching it), and grows
   // from the chip in the address bar that opened it (the surface morphs from the trigger to these bounds).
   const islandX=clamp((options.page?options.page.x+options.page.width/2:viewport.width/2)-width/2,12,viewport.width-width-12);
@@ -229,8 +242,9 @@ export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:
 /** Where a right-click menu opens (R3-48): at the pointer. popupGeometry treats a 2px anchor as a point, so the menu sits 2px
  * off it, flips above it when it would not fit below, and is clamped inside the window with its 12px margin. */
 export const pointerAnchor=(x:number,y:number):Rectangle=>({x:Math.max(0,Math.round(x)),y:Math.max(0,Math.round(y)),width:2,height:2});
-/** A menu opened from the keyboard (Menu key, Shift+F10) or from a control has no pointer: it hangs under the row's text edge. */
-export const rowAnchor=(box:{left:number;bottom:number;top:number;width:number}):Rectangle=>({x:Math.max(0,Math.round(box.left+36)),y:Math.max(0,Math.round(box.bottom-4)),width:2,height:2});
+/** A menu opened from the keyboard (Menu key, Shift+F10) or from a control has no pointer: it hangs under the row's text edge. For a row in a sidebar on the right the
+ * point is the mirror: its right edge 36px in from the row's right (window-side) edge, so the menu hangs toward the page, to its left, like the left one hangs to its right. */
+export const rowAnchor=(box:{left:number;bottom:number;top:number;width:number},side:SidebarSide='left'):Rectangle=>({x:Math.max(0,Math.round(side==='right'?box.left+box.width-38:box.left+36)),y:Math.max(0,Math.round(box.bottom-4)),width:2,height:2});
 /** Popups that look their trigger up in the page on every layout (the account and extension buttons, a group's chip in the
  * tab strip) instead of using the anchor they were opened with. A group in the sidebar has no chip: its menu keeps the
  * anchor it was opened with, so it appears at the click and not at the toolbar's menu button (the old fallback). */
@@ -243,17 +257,20 @@ export type GroupEditorPlacement={anchor:Rectangle;align:'start'|'end';side:'bel
  * (popupGeometry flips it above when there is no room below). In the sidebar it opens beside the header: on the right,
  * its top on the header's top (slid up only as far as it must to fit), on the left only when the right has no room, and
  * under the header when neither side has room. The beside anchor is a 2px point, so the measured pass in main
- * (desktop/popup-measure.cjs) keeps the same top: a point's popup sits 4px under it. `height` is the menu's content height. */
-export function groupEditorPlacement(header:Rectangle,where:'strip'|'sidebar',viewport:{width:number;height:number},height:number,width=260):GroupEditorPlacement {
+ * (desktop/popup-measure.cjs) keeps the same top: a point's popup sits 4px under it. `height` is the menu's content height.
+ * `sidebar` is the side the sidebar stands on: on the right the sides swap (the page is on the header's left), so the menu opens on the left of the header
+ * first, on the right only when the left has no room, and under the header (hung from its right edge) when neither has. */
+export function groupEditorPlacement(header:Rectangle,where:'strip'|'sidebar',viewport:{width:number;height:number},height:number,width=260,sidebar:SidebarSide='left'):GroupEditorPlacement {
   const rect={x:Math.round(header.x),y:Math.round(header.y),width:Math.round(header.width),height:Math.round(header.height)};
   const below:GroupEditorPlacement={anchor:rect,align:'start',side:'below'};
   if(where==='strip')return below;
   const gap=8,margin=12,fits=width+gap+margin;
   // The top the menu takes beside the header; a point anchor 4px above it. 20 = popupGeometry's room rule under a point (2px point + 18).
   const top=Math.round(clamp(rect.y,margin,Math.max(margin,viewport.height-height-20))),y=Math.max(0,top-4);
-  if(viewport.width-(rect.x+rect.width)>=fits)return {anchor:{x:rect.x+rect.width+gap,y,width:2,height:2},align:'start',side:'right'};
-  if(rect.x>=fits)return {anchor:{x:rect.x-gap-2,y,width:2,height:2},align:'end',side:'left'};
-  return below;
+  const onRight=():GroupEditorPlacement|null=>viewport.width-(rect.x+rect.width)>=fits?{anchor:{x:rect.x+rect.width+gap,y,width:2,height:2},align:'start',side:'right'}:null;
+  const onLeft=():GroupEditorPlacement|null=>rect.x>=fits?{anchor:{x:rect.x-gap-2,y,width:2,height:2},align:'end',side:'left'}:null;
+  if(sidebar==='right')return onLeft()??onRight()??{...below,align:'end'};
+  return onRight()??onLeft()??below;
 }
 
 /** A bounded material reveal. Contents retain their own pixel geometry throughout. */

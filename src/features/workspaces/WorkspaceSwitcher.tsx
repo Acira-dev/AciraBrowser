@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
-import { ChevronDown, MoreHorizontal, Plus } from '../../components/AppIcons';
+import { ChevronDown, LockKeyhole, MoreHorizontal, Plus } from '../../components/AppIcons';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
 import { workspacePlaying } from '../../ui/workspaceAudio';
+import { useWorkspaceDropHover, type WorkspaceDropNote } from '../../ui/workspaceDrop';
 import { WorkspaceGlyph, workspaceIcon } from '../../components/WorkspaceGlyph';
 import { TabSoundMeter } from '../../components/TabSound';
 import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces, workspaceColorOf, workspaceName } from '../../runtime/workspaces';
@@ -45,6 +46,15 @@ export const shownColor = (state: BrowserSnapshot, workspace: Workspace): string
 const colorStyle = (color: string | undefined) => color ? { '--ws-color': color } as CSSProperties : undefined;
 /** The open workspace's pill carries its name while the row has room (four or fewer); from five it is icon-only and the title line keeps the name. */
 const NAMED_PILL_MAX = 4;
+
+/** While a tab, a split or a group is carried over a workspace icon: the sentence above the row says where it would go ("Move to Work"), or why it cannot (muted, with a lock).
+ * The same white pill the sidebar shows over Favorites ("Drop to add to Favorites"); it keeps its last words while it fades. */
+function DropNote() {
+  const hover = useWorkspaceDropHover(), last = useRef<WorkspaceDropNote | null>(null);
+  if (hover) last.current = hover.note;
+  const note = hover?.note ?? last.current;
+  return <div className="sb-ws-drop-anchor" aria-hidden="true"><span className="sb-ws-drop-note" data-shown={hover ? '' : undefined} data-refused={note?.refused || undefined}>{note?.refused && <LockKeyhole size={14} />}<span>{note?.text}</span></span></div>;
+}
 
 /** The switcher in the sidebar (R3-57, R4-23, R4-48). Shown only once there is a second workspace (D1): one workspace has
  * nothing to switch to, so Workspaces is found from the profile panel, the command bar, the tab menu and Settings instead.
@@ -96,7 +106,7 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
     if (workspace && !spaces && event.key === 'F2') { event.preventDefault(); openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'edit', workspaceId: workspace.id, focus: 'name' }); return; }
     moveFocus(event);
   };
-  return <div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}
+  return <><DropNote /><div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}
     onContextMenu={event => { if ((event.target as HTMLElement).closest('.sb-ws:not(.sb-ws-add)')) return; event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event, { mode: 'sidebar' }); }}>
     <span ref={pill} className="sb-ws-pill" aria-hidden="true" />
     {list.map((workspace, index) => {
@@ -116,7 +126,7 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
         onKeyDown={keys} onClick={() => openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' })}><Plus size={16} /></button>
       : list.length < MAX_WORKSPACES && <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.newTitle')} title={t('workspaces.newTitle')}
       onKeyDown={keys} onClick={event => openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'new' })}><Plus size={16} /></button>}
-  </div>;
+  </div></>;
 }
 
 /** The "you are here" line at the top of the sidebar's tab section (R4-48 P0-3, wireframe 2), only with two or more

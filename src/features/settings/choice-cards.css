@@ -39,7 +39,7 @@
 @container (max-width: 560px) { .cc-group { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (max-width: 380px) { .cc-group { grid-template-columns: 1fr; } }
 /* R4-56: a short window (150% interface size in 1280x800 leaves 533px) still shows Tabs and Window view under the page head with no
-   scrolling. Only the Layout group at the top of Appearance changes: the Tabs choice becomes two side-by-side cards (miniature left,
+   scrolling. Only the Layout group at the top of Appearance changes: the Tabs choice (three layouts) becomes three side-by-side cards (miniature left,
    radio and name right) and the page head and card padding tighten (the head rules need the extra .bs-main: settings.css nests its rules under the same four classes). Taller windows keep the big cards. */
 @media (max-height: 600px) {
   .app.style-acira .browser-settings.settings-acira .bs-main .st-toolbar { padding-top: 12px; }
@@ -49,12 +49,12 @@
   [data-group='layout'] .st-row[data-stacked]:has(> .st-control > .cc-group) { padding-bottom: 8px; gap: 6px; }
   [data-group='layout'] .cc-group { gap: 8px; }
   [data-group='layout'] .cc-card { gap: 6px; padding: 6px 8px 8px; }
-  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: row; align-items: center; gap: 12px; padding: 6px 12px 6px 8px; }
-  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: 0 0 88px; width: 88px; border-radius: 7px; }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px 6px 8px; }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: 0 0 72px; width: 72px; border-radius: 7px; }
   [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-label { flex: 1 1 auto; min-width: 0; }
-  /* side-by-side needs about 230px a card (88px miniature + the longest label, in German "In einer Seitenleiste"); in a narrower pane the cards go back to a miniature over its label */
-  @container (max-width: 600px) {
+  /* side-by-side needs about 200px a card (72px miniature + a label that may wrap to two lines, in German "In einer Seitenleiste"); in a narrower pane the cards go back to a miniature over its label */
+  @container (max-width: 620px) {
     [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 8px 8px; }
     [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: none; width: auto; }
   }

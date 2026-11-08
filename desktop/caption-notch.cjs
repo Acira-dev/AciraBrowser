@@ -1,0 +1,48 @@
+'use strict';
+// Windows, Sidebar mode: the page goes to the top of the window and the three caption buttons (minimise, maximise, close) sit in a small notch at its top-right
+// corner. The notch is the window's own caption overlay (platform.cjs titleBarOverlay: native buttons, so dragging, double-click to maximise and Windows' snap
+// layouts on the maximise button keep working), drawn in the frame's colour over the page. It shows ONLY while the pointer is along the top of the window and is
+// transparent the rest of the time (founder, 7 Nov 2026).
+//
+// The page is a native view stacked above the interface, so the interface never sees the pointer at the window's top edge: main watches the cursor, as it does for
+// Seamless's edges. The rules are Seamless's top edge, unchanged (edge-reveal.cjs: rest in the top 8 px for 90 ms, a fast arrival or a push against the edge for 40 ms, a
+// pass along the edge is not a rest, a grace before it goes, a lock-out against flicker, nothing while a button is held, the corner where the buttons are shows at once
+// so they are back under the pointer before a click can land where they were). Only what they act on differs: here the controller's "top" is the caption overlay, not a
+// toolbar, and nothing in the interface changes, so there is no layout move, view transition or repaint to get wrong.
+//
+// A hidden notch is a dead corner (the overlay is native and takes the pointer), which is why the corner itself shows it: a page's own top-right control can never be
+// clicked "through" an invisible button. While it is hidden, minimise and maximise are switched off and close is refused (main.cjs guardCaption).
+
+const { createEdgeController } = require('./edge-reveal.cjs');
+
+/** The notch: three 46 px buttons wide, 34 px tall. The interface's NOTCH_HEIGHT (src/ui/addressInSidebar.ts) is the same number: it is the caption overlay's height. */
+const NOTCH = { width: 138, height: 34 };
+/** The corner that shows a hidden notch at once (a little wider and taller than the buttons: the pointer is never over an invisible button). */
+const CORNER = { width: 144, height: 36 };
+
+/** One per window. `sample()` is called every poll with what main can see and returns whether the notch shows.
+ * Input: point (global cursor, DIPs, or null), bounds (the window's content bounds), focused, suspended (minimised, fullscreen, an HTML-fullscreen page), active (this
+ * window is in Sidebar mode on Windows), hidden (the notch is hidden now: the corner shows it), speed ('premium' | 'fast' | 'off'), pressed (a button is held). */
+function createCaptionNotch({ now = Date.now } = {}) {
+  const edge = createEdgeController({ now });
+  return {
+    sample({ point, bounds, focused, suspended, active, hidden, speed, pressed }) {
+      return edge.sample({
+        point, bounds, band: 0, focused, speed, pressed: !!pressed,
+        suspended: !active || !!suspended,
+        // The controller's Seamless top edge with the side edge off: the notch is the only thing it reveals.
+        view: 'seamless', vertical: true, docked: true, edges: { top: true, side: false }, peek: {},
+        keys: { top: false, side: false }, holds: { top: false, side: false }, engaged: false,
+        // Keeping it open: the pointer anywhere in the band the notch hangs in (plus the controller's own leeway), so the buttons can be reached.
+        size: { topHeight: NOTCH.height, sideWidth: 0 },
+        caption: hidden ? { ...CORNER } : null,
+      }).top;
+    },
+    /** Hide now (Esc is not needed: the pointer leaving does it); it stays hidden until the pointer has left the zone. */
+    dismiss() { edge.dismiss('top'); },
+    /** Is the notch showing or about to (the poller keeps its fast cadence while so). */
+    active: () => edge.active(),
+  };
+}
+
+module.exports = { createCaptionNotch, NOTCH, CORNER };

@@ -1,0 +1,100 @@
+/* The sidebar on the right (Settings › Tabs › Sidebar › Sidebar side; `settings.sidebarSide`, published by App as `data-sidebar-side` on the root).
+   One layout, mirrored: the same sidebar, toolbar and page card, the sidebar's column on the other side of the window. Every rule here is gated on
+   `[data-sidebar-side=right]`, so with the sidebar on the left (the default) nothing in this file applies and the interface is what it was.
+   The side is physical in every language (rtl.css keeps the frame left to right), and the Mac window buttons stay on the left. */
+
+/* ── The grid: the page column first, the sidebar's column second ── */
+:root[data-sidebar-side=right] .app.style-acira:not(.native-layer) { grid-template-columns: minmax(0, 1fr) var(--navigation-width, var(--geometry-rail)); }
+:root[data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail { grid-column: 2; grid-row: 1; }
+:root[data-sidebar-side=right] .app.style-acira:not(.native-layer) > .browser-root { grid-column: 1; grid-row: 1; }
+@media (max-width: 780px) {
+  :root[data-sidebar-side=right][data-native=true][data-platform=win32] .app.style-acira:not(.native-layer):has(> .ed-rail.is-expanded) { grid-template-columns: minmax(0, 1fr) 128px; }
+}
+
+/* ── The docked page card: flush against the sidebar, 6px from the window's left and bottom edges (only the sides swap: the top and bottom margins stay the left side's, Seamless's top margin included) ── */
+html[data-sidebar-side=right]:not([data-edge-float]) .app.style-acira:has(> .ed-rail.is-expanded) > .browser-root .browser-body > .page-area { margin-left: 6px; margin-right: 0; }
+
+/* ── The resize grip sits on the sidebar's page-side edge ── */
+:root[data-sidebar-side=right] .app.style-acira .acira-sidebar .sb-resize { right: auto; left: 0; }
+:root[data-sidebar-side=right] .app.style-acira .acira-sidebar .sb-resize::after { right: auto; left: 0; }
+:root[data-sidebar-side=right] .app.style-acira .acira-sidebar .sb-resize:focus-visible { right: auto; left: 2px; }
+
+/* ── Mac: the window buttons stay on the left, now over the toolbar, so the toolbar keeps their room with the sidebar out ── */
+:root:root:root[data-platform=darwin][data-sidebar-side=right] .app.style-acira:has(> .ed-rail.is-expanded) .side-tabs .browser-shell.acira-shell .acira-persistent-toolbar,
+:root:root:root[data-platform=darwin][data-sidebar-side=right] .app.style-acira:has(> .ed-rail.is-expanded) .browser-shell.acira-shell:is([data-layout=compact], [data-layout=focus]) .acira-persistent-toolbar { padding-left: var(--mac-caption-space, 86px); }
+
+/* ── The docked slide (a layout view transition): the sidebar leaves to, and arrives from, the right edge ── */
+:root[data-sidebar-side=right] { --sb-slide-from: translateX(100%); }
+:root[data-sidebar-side=right][data-mode-switch='edge'][data-sidebar-overlay] { --sb-slide-from: translateX(var(--sf-sidebar-travel, 100%)); }
+@keyframes acira-sidebar-leave-right { from { transform: none; } to { transform: translateX(100%); } }
+@keyframes acira-sidebar-arrive-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes acira-sidebar-leave-follow-right { from { transform: none; outline-offset: 0; } to { transform: translateX(100%); outline-offset: .01px; } }
+@keyframes acira-sidebar-arrive-follow-right { from { transform: translateX(100%); outline-offset: .01px; } to { transform: none; outline-offset: 0; } }
+:root[data-sidebar-side=right][data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child { animation-name: acira-sidebar-leave-right; }
+:root[data-sidebar-side=right][data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child { animation-name: acira-sidebar-arrive-right; }
+:root[data-sidebar-side=right][data-page-follow][data-mode-switch=layout]::view-transition-old(acira-sidebar):only-child { animation-name: acira-sidebar-leave-follow-right; }
+:root[data-sidebar-side=right][data-page-follow][data-mode-switch=layout]::view-transition-new(acira-sidebar):only-child { animation-name: acira-sidebar-arrive-follow-right; }
+/* The page card's outline leaves its two corners beside the sidebar (14px squares) to the native page's own round corners, now the right ones. */
+:root[data-sidebar-side=right][data-mode-switch=layout]:has(.browser-body > .page-area > .page-content[data-native])::view-transition-image-pair(acira-page) { clip-path: polygon(-4px -4px, calc(100% - 14px) -4px, calc(100% - 14px) 14px, calc(100% + 4px) 14px, calc(100% + 4px) calc(100% - 14px), calc(100% - 14px) calc(100% - 14px), calc(100% - 14px) calc(100% + 4px), -4px calc(100% + 4px)); }
+
+/* ── The frame's veil across the sidebar's column (view-morph.css), the column on the right ── */
+html[data-sidebar-side=right]:is([data-material=acrylic], [data-material=vibrancy]):root[data-mode-switch=layout]:not([data-edge-float]) .app.style-acira:not(.native-layer):has(> .ed-rail.is-expanded:not(.is-peek)) { background-position: 0 0; background-size: calc(100% - var(--navigation-width, 0px)) 100%; }
+html[data-sidebar-side=right]:is([data-material=acrylic], [data-material=vibrancy]):root[data-mode-switch=layout][data-desktop-material=ready]:not([data-edge-float]):not([data-sidebar-overlay]) .app.style-acira:not(.native-layer):has(> .ed-rail.is-expanded:not(.is-peek))::before, html[data-sidebar-side=right]:is([data-material=acrylic], [data-material=vibrancy]):root[data-mode-switch=layout][data-desktop-material=ready]:not([data-edge-float]):not([data-sidebar-overlay]) .app.style-acira:not(.native-layer):has(> .ed-rail.is-expanded:not(.is-peek))::after { left: auto; right: 0; }
+html[data-sidebar-side=right]:is([data-material=acrylic], [data-material=vibrancy]):root[data-mode-switch=layout][data-desktop-material=ready]:not([data-edge-float]):not([data-sidebar-overlay])::view-transition-image-pair(root) { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 100% calc(var(--frame-band-top, 0px) + var(--frame-corner, 16px)), calc(100% - var(--frame-rail-width, 0px)) calc(var(--frame-band-top, 0px) + var(--frame-corner, 16px)), calc(100% - var(--frame-rail-width, 0px)) calc(100% - var(--frame-band-bottom, 0px) - var(--frame-corner, 16px)), 100% calc(100% - var(--frame-band-bottom, 0px) - var(--frame-corner, 16px)), 100% calc(var(--frame-band-top, 0px) + var(--frame-corner, 16px))); }
+
+/* ── Seamless and the hover reveal: the sidebar floats in from the right edge ── */
+:root[data-sidebar-side=right] { --sf-dir: 1; }
+:root[data-sidebar-side=right][data-edge-float] .app.style-acira:not(.native-layer) > .browser-root { grid-column: 1; }
+:root[data-sidebar-side=right][data-edge-float] .app .ed-rail.is-peek { left: auto; right: 0; margin: 6px 6px 6px 0; }
+:root[data-sidebar-side=right][data-edge-float] .app:has(> .ed-rail.is-peek) .browser-root > .browser-shell[data-seamless='shown'] { left: 0; right: var(--sidebar-rail, var(--sidebar-width, 240px)); }
+
+/* The window's cut-out frame keeps its pieces beside the page's corners: the corner pieces sit at the sidebar's edge from the right (chromeEdge measures the mirror image; the masks are mirrored when made). */
+:root[data-sidebar-side=right][data-sidebar-overlay] .app.style-acira:has(> .acira-sidebar.is-peek) .sidebar-page-corners { left: auto; right: var(--sf-corner-x); }
+/* The card's frame line is made on the mirror image (chromeEdge paintPageHoles): its holder is mirrored back, clip and picture together. */
+:root[data-sidebar-side=right][data-sidebar-overlay] .app:has(> .acira-sidebar.is-peek) .sidebar-page-rim { transform: scaleX(-1); }
+
+/* A page the interface draws, and a website's picture, are cut where the sidebar meets them, with the card's round corners on that side. */
+:root[data-sidebar-side=right][data-desktop-material=ready][data-mode-switch=edge]::view-transition-group(acira-desktop-page) { clip-path: inset(0 0 round(var(--desktop-band-bottom), var(--px, .5px)) 0 round 0 8px 8px 0); }
+:root[data-sidebar-side=right][data-desktop-material=ready][data-mode-switch=edge]::view-transition-image-pair(acira-desktop-page) { clip-path: inset(var(--desktop-top-now, 0px) 0 round(var(--desktop-band-bottom), var(--px, .5px)) round(var(--desktop-band-right), var(--px, .5px)) round 8px 0 0 8px); }
+:root[data-sidebar-side=right]:not([data-mode-switch])[data-sidebar-overlay=dom] .app.style-acira:has(> .acira-sidebar.is-peek) .page-area > .page-content { clip-path: inset(0 var(--sf-sidebar-travel, 0px) 0 0 round 0 var(--geometry-pageRadius, 8px) var(--geometry-pageRadius, 8px) 0); }
+
+/* ── The sidebar button shows the panel on the right ── */
+:root[data-sidebar-side=right] .sidebar-toggle-control svg { transform: scaleX(-1); }
+
+/* ── Windows: the caption buttons are at the window's top right, now over the sidebar ──
+   The sidebar leaves their room at its top (as on a Mac the left sidebar leaves the window buttons theirs), and the toolbar, which now ends at the sidebar, keeps none. */
+html[data-platform=win32][data-sidebar-side=right] .app.style-acira:not(.native-layer):has(> .ed-rail.is-expanded) { --caption-width: 0px; }
+html[data-platform=win32][data-sidebar-side=right] .app.style-acira > .ed-rail.acira-sidebar.is-expanded::before { content: ''; flex: 0 0 calc(40px / var(--interface-scale, 1)); align-self: stretch; -webkit-app-region: drag; }
+
+/* ── The address bar in the sidebar, the sidebar on the right ──
+   The block is laid over the sidebar's top; on Windows the caption buttons are over that top, so the block starts below their strip and the sidebar's content goes down with it. */
+html[data-platform=win32][data-sidebar-side=right]:root:root:root .app .browser-root.addr-side .browser-shell > .acira-persistent-toolbar { top: calc(40px / var(--interface-scale, 1)); }
+html[data-platform=win32][data-sidebar-side=right]:root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side] { padding-top: calc(80px + 40px / var(--interface-scale, 1)); }
+html[data-platform=win32][data-sidebar-side=right]:root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side][data-addr-open] { padding-top: calc(108px + 40px / var(--interface-scale, 1)); }
+
+/* ── Sidebar mode (tabs and the address block in the sidebar), the sidebar on the right ──
+   The block is part of the sidebar for every slide (address-in-sidebar.css): ONE picture, the toolbar's own, slid with the sidebar over the same distance (--sb-slide-from, set on the root
+   above for the right: translateX(100%), and the overlay's travel). Arriving, the group is the new state's box, the block's own, which is right on either side. On a HIDE the group is not
+   animated and sits at the new state's box, the hidden toolbar's, which spans the header from the window's left edge: the old picture (the block) is placed at the group's RIGHT end
+   there, where the sidebar on the right has it (it was drawn at the window's left edge, a block over the page, sliding out to the right). */
+:root:root[data-sidebar-side=right][data-mode-switch='edge']:has(.browser-shell[data-sbmode='bare'])::view-transition-old(acira-toolbar),
+:root:root[data-sidebar-side=right][data-mode-switch='layout'][data-block-slide='out']::view-transition-old(acira-toolbar) { left: auto; right: 0; object-position: right top; }
+/* A page the interface draws follows the sidebar's slide on the main thread's clock: the block takes the right-hand twins of those keyframes. */
+:root:root[data-sidebar-side=right][data-page-follow][data-mode-switch='layout'][data-block-slide='in']::view-transition-new(acira-toolbar) { animation-name: acira-sidebar-arrive-follow-right; }
+:root:root[data-sidebar-side=right][data-page-follow][data-mode-switch='layout'][data-block-slide='out']::view-transition-old(acira-toolbar) { animation-name: acira-sidebar-leave-follow-right; }
+/* Windows: the sidebar arrives already holding the room for the block and the caption buttons' strip (the fallback in address-in-sidebar.css gives 80px; data-addr-side is published a
+   commit after the sidebar mounts, and the 40px strip it hides is shown until then, so neither may change at that point). :where() keeps the open row's 108px (+40px) winning. */
+html[data-platform=win32][data-sidebar-side=right]:root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode='block'])) > .ed-rail.acira-sidebar { padding-top: calc(80px + 40px / var(--interface-scale, 1)); }
+html[data-platform=win32][data-sidebar-side=right]:root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode='block'])) > .ed-rail.acira-sidebar.is-expanded::before { display: none; }
+
+/* ── The frame's veils, side by side: the sidebar's tone in its column on the right, the chrome's tone in the rest ── */
+html[data-sidebar-side=right]:is([data-material=acrylic], [data-material=vibrancy]) .app.style-acira:not(.native-layer) { background:
+  linear-gradient(180deg, rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-top)), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-bottom))) 100% 0 / var(--navigation-width, 0px) 100% no-repeat,
+  linear-gradient(180deg, rgb(var(--chrome-rgb) / var(--chrome-veil-top)), rgb(var(--chrome-rgb) / var(--chrome-veil-bottom))) 0 0 / calc(100% - var(--navigation-width, 0px)) 100% no-repeat; }
+html[data-sidebar-side=right][data-material=acrylic]:is([data-window-active=false], [data-system-transparency=off]) .app.style-acira:not(.native-layer) { background:
+  linear-gradient(180deg, color-mix(in srgb, rgb(var(--sidebar-rgb, var(--chrome-rgb))) 96%, #fff), rgb(var(--sidebar-rgb, var(--chrome-rgb))) 120px) 100% 0 / var(--navigation-width, 0px) 100% no-repeat,
+  linear-gradient(180deg, color-mix(in srgb, rgb(var(--chrome-rgb)) 96%, #fff), rgb(var(--chrome-rgb)) 120px) 0 0 / calc(100% - var(--navigation-width, 0px)) 100% no-repeat,
+  rgb(var(--chrome-rgb)); }
+
+/* ── The miniatures of the layouts in Settings draw the sidebar on the side it is on (the two-theme Auto card keeps its halves) ── */
+:root[data-sidebar-side=right] .cc-svg:is([data-mini-layout=sidebar], [data-mini-layout=sidebar-address]) { transform: scaleX(-1); }

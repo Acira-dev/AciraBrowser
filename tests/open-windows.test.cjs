@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { createOpenWindows, GRACE_MS } = require('../desktop/open-windows.cjs');
+const { createOpenWindows, HOLD_LIMIT_MS } = require('../desktop/open-windows.cjs');
 
 // Live finding (settings-target-routing, Round 3 source re-run): after a normal quit with three windows open, only the last window
 // came back, because every window that closed during the quit shrank the recorded list before the app knew it was quitting.
@@ -39,10 +39,73 @@ test('windows that close one by one while the app quits all come back', () => {
   assert.deepEqual(r.windows.restorable(), ['main', 'window-b', 'window-c']);
 });
 
-test('a quit that was called off lets the list follow the windows again after a moment', () => {
+test('a quit that was called off lets the list follow the windows again at once', () => {
   const r = rig(); const a = r.open('main'), b = r.open('window-b');
   r.windows.begin(); r.close(b); assert.deepEqual(recorded(r), ['main', 'window-b'], 'frozen while the quit may still go through');
-  r.clock.at += GRACE_MS + 1; r.close(a); r.open('window-d'); assert.deepEqual(recorded(r), ['window-d']);
+  assert.equal(r.windows.calledOff(), true);
+  assert.deepEqual(recorded(r), ['main'], 'the window that is gone is no longer listed, without waiting for the next window event');
+  r.close(a); r.open('window-d'); assert.deepEqual(recorded(r), ['window-d'], 'and it keeps following');
+});
+
+// beta.13: the freeze used to last five seconds from the start of the quit. A quit held by a question (a page that asks "Leave this
+// site?") for longer than that let the windows that closed afterwards shrink the list, so only the last ones came back.
+test('a quit held by a question for longer than five seconds still brings every window back', () => {
+  const r = rig(); const a = r.open('main'), b = r.open('window-b'), c = r.open('window-c');
+  r.windows.begin(); // before-quit
+  r.close(a); // closes at once
+  r.clock.at += 60 * 1000; // window-b asks "Leave this site?" and waits a minute for the answer
+  r.close(b);
+  r.clock.at += 4 * 60 * 1000; // window-c asks too, and the person is away for four more minutes
+  r.close(c);
+  assert.deepEqual(recorded(r), ['main', 'window-b', 'window-c']);
+  assert.deepEqual(r.windows.restorable(), ['main', 'window-b', 'window-c']);
+  assert.equal(r.windows.quitting(), true, 'closing windows are still part of the quit');
+});
+
+test('the freeze lasts until the quit is called off, not for a fixed time', () => {
+  const r = rig(); const a = r.open('main'), b = r.open('window-b');
+  r.windows.begin();
+  r.clock.at += HOLD_LIMIT_MS - 1000;
+  r.close(b); assert.deepEqual(recorded(r), ['main', 'window-b']);
+  assert.equal(r.windows.calledOff(), true, 'Stay was chosen long after the quit began');
+  assert.deepEqual(recorded(r), ['main']);
+  r.close(a);
+});
+
+test('a quit that nobody reports as called off is let go of after the fallback limit', () => {
+  const r = rig(); const a = r.open('main'), b = r.open('window-b');
+  assert.ok(HOLD_LIMIT_MS >= 5 * 60 * 1000, 'far longer than the five seconds it was');
+  r.windows.begin(); r.close(b);
+  r.clock.at += HOLD_LIMIT_MS - 1; r.windows.persist(); assert.deepEqual(recorded(r), ['main', 'window-b'], 'still held just before the limit');
+  r.clock.at += 2; r.close(a); r.open('window-d'); assert.deepEqual(recorded(r), ['window-d']);
+  assert.equal(r.windows.quitting(), false);
+});
+
+test('calling the quit off when none was held writes nothing and says so', () => {
+  const r = rig(); r.open('main'); r.open('window-b');
+  const before = r.meta.get('open-windows');
+  assert.equal(r.windows.calledOff(), false, 'a window close that was only a Stay on one window');
+  assert.equal(r.meta.get('open-windows'), before);
+  r.windows.begin(); assert.equal(r.windows.calledOff(), true);
+  assert.equal(r.windows.calledOff(), false, 'told twice (every window that asked says it): the second is nothing');
+});
+
+test('begin told twice (the quit question, then before-quit) is one quit, and one calledOff ends it', () => {
+  const r = rig(); const a = r.open('main'), b = r.open('window-b');
+  r.windows.begin(); r.windows.begin();
+  r.close(b); assert.deepEqual(recorded(r), ['main', 'window-b']);
+  assert.equal(r.windows.calledOff(), true);
+  assert.deepEqual(recorded(r), ['main']);
+  assert.equal(r.windows.quitting(), false);
+  r.close(a);
+});
+
+test('a quit that goes through leaves the list as it was when the app is quitting', () => {
+  const r = rig(); const a = r.open('main'), b = r.open('window-b');
+  r.windows.begin(); r.close(a); r.setQuitting(true); r.close(b);
+  assert.deepEqual(recorded(r), ['main', 'window-b']);
+  assert.equal(r.windows.calledOff(), true);
+  assert.deepEqual(recorded(r), ['main', 'window-b'], 'too late to follow the windows: the app has quit');
 });
 
 test('nothing is written once the app is already quitting', () => {
@@ -68,4 +131,29 @@ test('main.cjs hands the quit to the module before it saves the windows', () => 
   assert.match(source, /app\.on\('before-quit',beginQuit\);/);
   assert.match(source, /require\('electron'\)\.autoUpdater\.on\('before-quit-for-update',\(\)=>\{[^\n]*beginQuit\(\);\}\);/, 'Install now closes the windows before before-quit; they still come back');
   assert.match(source, /function restorableWindowIds\(\)\{return openWindows\.restorable\(\);\}/);
+});
+
+test('restart.cjs tells the list every time a quit is called off, and a list that throws changes nothing', () => {
+  const { createRestart } = require('../desktop/restart.cjs');
+  const { EventEmitter } = require('node:events');
+  const app = Object.assign(new EventEmitter(), { relaunches: [], quit() { this.emit('before-quit'); }, relaunch(options) { this.relaunches.push(options); } });
+  const r = rig(); const a = r.open('main'), b = r.open('window-b');
+  const restart = createRestart({ app, now: () => 1e12, argv: ['/Apps/Acira'], defaultApp: false, execPath: '/Apps/Acira', onCalledOff: () => r.windows.calledOff() });
+  r.windows.begin(); // Cmd+Q: before-quit
+  r.close(b); // window-b leaves at once; window-a asks "Leave this site?"
+  r.clock.at += 90 * 1000; // ...and waits a minute and a half for the person, who then chooses Stay
+  restart.calledOff();
+  assert.deepEqual(recorded(r), ['main'], 'the list follows the windows again as soon as the quit is called off');
+  assert.equal(r.windows.quitting(), false);
+  r.close(a);
+  const broken = createRestart({ app, argv: ['/Apps/Acira'], defaultApp: false, execPath: '/Apps/Acira', onCalledOff: () => { throw new Error('list'); } });
+  broken.request(); assert.doesNotThrow(() => broken.calledOff());
+  app.quit(); app.emit('will-quit');
+  assert.equal(app.relaunches.length, 0, 'a restart that was called off still restarts nothing');
+  assert.doesNotThrow(() => createRestart({ app, argv: [], defaultApp: false, execPath: '/x' }).calledOff(), 'no list to tell is fine too');
+});
+
+test('main.cjs: the one place that calls a quit off also tells the list of open windows', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
+  assert.match(source, /const restart=require\('\.\/restart\.cjs'\)\.createRestart\(\{app,onCalledOff:\(\)=>openWindows\.calledOff\(\)\}\);/);
 });

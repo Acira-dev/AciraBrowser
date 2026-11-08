@@ -218,3 +218,40 @@ test('the Peek words come from the catalogs, in the app language, and the hint t
   assert.equal(s.labels.openAsTab,tm('peek.openAsTab'));assert.notEqual(s.labels.openAsTab,'Open as tab');assert.equal(s.labels.back,tm('app.back'));assert.equal(s.labels.openAsTab,'Als Tab öffnen');
  }finally{setLanguage('en');}
 });
+
+// Item 17, the Link preview marker: the sidebar draws a card with the preview's site icon beside the source's icon, so the peek-state event carries it.
+test('the preview\'s site icon: the icon kept for its site shows at once, the page\'s own icon replaces it, a new document clears it, a late answer is dropped',()=>{
+ const asked=[],stored={'https://docs.test/a':'data:image/png;base64,KEPT','https://next.test/b':'data:image/png;base64,NEXTKEPT'};
+ const h=harness({storedIcon:(profile,url)=>stored[url]||'',resolveIcon:(wc,options)=>asked.push({wc,...options})}),source=h.state.activeTabId;
+ h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const view=h.children.at(-1).webContents;
+ assert.equal(h.events.at(-1).peek.favicon,'data:image/png;base64,KEPT','a site seen before shows its kept icon from the first event');
+ assert.equal(h.events.at(-1).peek.sourceTabId,source);
+ view.emit('page-favicon-updated',{},['https://docs.test/icon.png','data:image/png;base64,x','javascript:alert(1)']);
+ assert.equal(asked.length,1);assert.deepEqual(asked[0].announced,['https://docs.test/icon.png'],'only web addresses are asked for');
+ assert.equal(asked[0].pageUrl,'https://docs.test/a');assert.equal(asked[0].current(),true);
+ asked[0].deliver({data:'data:image/png;base64,OWN',url:'https://docs.test/icon.png'});
+ assert.equal(h.events.at(-1).peek.favicon,'data:image/png;base64,OWN','the page\'s own icon replaces the kept one');
+ // the same publish carries it again (layout changes), and the frame's own state is not widened by it
+ h.peek.relayout();assert.equal(h.events.at(-1).peek.favicon,'data:image/png;base64,OWN');
+ // a new document: the kept icon of the new site, not the old page's
+ view.url='https://next.test/b';view.emit('did-navigate',{});
+ assert.equal(h.events.at(-1).peek.favicon,'data:image/png;base64,NEXTKEPT','a new document clears the old icon for the new site\'s kept one');
+ view.emit('page-favicon-updated',{},['https://next.test/i.png']);const second=asked.at(-1);
+ view.url='https://third.test/c';view.emit('did-navigate',{});
+ assert.equal(second.current(),false,'an answer for the previous document is no longer wanted');
+ second.deliver({data:'data:image/png;base64,LATE',url:'https://next.test/i.png'});
+ assert.equal(h.events.at(-1).peek.favicon,'','a late answer neither shows nor is kept');
+ // too heavy for an event: dropped
+ view.emit('page-favicon-updated',{},['https://third.test/i.png']);asked.at(-1).deliver({data:'data:image/png;base64,'+'A'.repeat(70000),url:'x'});
+ assert.equal(h.events.at(-1).peek.favicon,'');
+ assert.equal(h.peek.handle({type:'peek.state'}).peek.favicon,'','the state request carries it too');
+ h.peek.close();assert.equal(h.events.at(-1).peek,null,'closing sends peek null: the card slides back');
+});
+
+test('a preview with no icon service or a failing one still opens; the card keeps its globe',()=>{
+ const h=harness({resolveIcon:()=>{throw new Error('boom');},storedIcon:()=>{throw new Error('boom');}}),source=h.state.activeTabId;
+ assert.equal(h.peek.open({url:'https://docs.test/a',sourceTabId:source}).ok,true);
+ const view=h.children.at(-1).webContents;view.emit('page-favicon-updated',{},['https://docs.test/icon.png']);
+ assert.equal(h.events.at(-1).peek.favicon,'');assert.equal(h.events.at(-1).peek.url,'https://docs.test/a');
+});

@@ -123,7 +123,7 @@
  .nt-workspace-title h1 { font-size:22px; }
 }
 .nt-glow {
-  position: absolute; z-index: 0; left: 50%; top: 50%; width: min(1500px, 124%); height: 124%; translate: -50% -50%; /* taller than the page, so the wash never ends in a visible edge above the bottom */ pointer-events: none; opacity: var(--nt-glow-opacity, .12); transition: opacity calc(600ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); animation: nt-glow-in calc(520ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)) calc(380ms * var(--motion-pace, 1)) backwards;
+  position: absolute; z-index: 0; left: 50%; top: 50%; width: max(min(1500px, 124%), calc(100% + 160px)); height: 124%; translate: -50% -50%; /* taller than the page, so the wash never ends in a visible edge above the bottom; and never narrower than the page plus 80px each side: on a page wider than ~1340px the old 1500px cap ended the wash in a hard edge with a hue-less strip between it and the sidebar (item 34) */ pointer-events: none; opacity: var(--nt-glow-opacity, .12); transition: opacity calc(600ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); animation: nt-glow-in calc(520ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)) calc(380ms * var(--motion-pace, 1)) backwards;
   background:
     radial-gradient(40% 54% at 24% 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%),
     radial-gradient(40% 54% at 76% 42%, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),

@@ -1,0 +1,21 @@
+/* Live pull requests popup (item 31): the filter menu and the one plain question. The rows are the group menu's own (.menu-row); this adds the value at a row's end, the note rows and the question's layout. */
+.app .browser-popup .live-menu .menu-row>.live-menu-value{flex:none;margin-left:auto;font-style:normal;font:400 12px/1 var(--font-ui);color:var(--text-3,var(--text-2,var(--muted)))}
+.app .browser-popup .live-menu .menu-row>svg:last-child:not(:first-child){flex:none;margin-left:6px;color:var(--text-3,var(--text-2,var(--muted)))}
+.app .browser-popup .live-menu .menu-row>.live-menu-value+svg{margin-left:6px}
+.app .browser-popup .live-menu .live-menu-note{display:block;height:auto;min-height:0;padding:4px 8px 6px;font:400 12px/16px var(--font-ui);color:var(--text-3,var(--text-2,var(--muted)));white-space:normal}
+.app .browser-popup .live-menu .menu-row[role=menuitemcheckbox]>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .browser-popup .live-consent{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px}
+.app .browser-popup .live-consent>strong{font:600 13px/18px var(--font-ui);color:var(--text,inherit)}
+.app .browser-popup .live-consent>p{margin:0;font:400 13px/19px var(--font-ui);color:var(--text-2,var(--muted))}
+.app .browser-popup .live-consent-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+/* The popup is a context menu of its own kind: no title bar (it is read out as the dialog's name), 5px of padding and the group menu's 24px rows, exactly as TabGroups.css draws tab, group and strip menus. */
+.app .popup-content-live-folder{padding:5px}
+.app .popup-content-live-folder>.popup-header{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0;margin:-1px}
+.app .popup-content-live-folder .menu-row{min-height:24px;height:24px;padding:0 7px;gap:8px;border-radius:6px;font-size:13px}
+.app .popup-content-live-folder .menu-row>:is(svg,.menu-icon):first-child{flex:0 0 16px;width:16px;height:16px}
+.app .popup-content-live-folder .menu-row>span{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .popup-content-live-folder .menu-row:is(:hover,:focus-visible){outline:none;background:var(--hover);color:var(--hover-text)}
+.app .popup-content-live-folder .menu-row:is(:hover,:focus-visible)>svg{color:inherit!important}
+.app .popup-content-live-folder hr{margin:5px 10px}
+.app .popup-content-live-folder .menu-row[data-danger]:not(:disabled),.app .popup-content-live-folder .menu-row[data-danger]:is(:hover,:focus-visible){color:var(--danger)}
+.app .popup-content-live-folder .menu-row[data-info]{height:auto}

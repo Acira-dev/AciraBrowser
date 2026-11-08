@@ -21,10 +21,11 @@ const HOOK_ENV = Object.freeze([
   'ACIRA_KEEP_ELECTRON_UA', // Electron's own user agent, which names Acira's engine to every site
   'ACIRA_BROWSER_TEST_HIDDEN', 'ACIRA_TEST_APP_DIALOG', 'ACIRA_TEST_SHARE_PICKER', // no window on screen; dialogs answered without the person
   'ACIRA_QA_RUN', 'ACIRA_QA_LIVE_GOOGLE', // QA host rules
+  'ACIRA_SITE_COLOR_PROBE', 'ACIRA_SITE_COLOR_PROBE_LOG', // the site-colour research probe (desktop/site-color-probe.cjs): reads page pixels and colours for a research log; a test profile only
   'ACIRA_SIMULATE_SYSTEM_THEME', // a pretend Linux desktop theme ({"dark":true,"accent":"#9141ac"}) for pictures and tests of Match my system theme
   // These already need a test profile where they are read; dropped too, so a later change that forgets that check stays safe.
   'ACIRA_TEST_QUIET_NETWORK', 'ACIRA_TEST_TOR_SIMULATE_BLOCK', 'ACIRA_TEST_PASSKEY_STUB', 'ACIRA_TEST_DATABASE_CHOICE', 'ACIRA_TEST_SERVICES_DELAY_MS',
-  'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT',
+  'ACIRA_TEST_LIVE_PRS', 'ACIRA_TEST_LIVE_PRS_TRACE', 'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT',
   'ACIRA_SITE_ALLOWLIST_ENDPOINT', 'ACIRA_SITE_ALLOWLIST_FILE', 'ACIRA_EXT_NOTIFICATIONS_NATIVE', 'ACIRA_WINDOWS_BUILD',
 ]);
 // The other ACIRA_ names the shipped code reads, and why a real build keeps them (tests/test-hooks-packaged.test.cjs makes every new one
