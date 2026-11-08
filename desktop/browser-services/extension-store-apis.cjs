@@ -18,8 +18,9 @@ const time=value=>{const n=typeof value==='number'?value:Date.parse(value);retur
 const bookmarkTree=nodes=>model.createView(nodes).tree();
 
 /**
- * getNodes(): this profile's bookmark nodes. host.update(compute): runs compute(nodes) on the profile's current nodes and, when it answers
- * {nodes}, makes them the profile's bookmarks (main.cjs, `bookmark.replace`); it answers what compute answered. Without a host the writes fail.
+ * getNodes(): this profile's bookmark nodes. host.update(compute): runs compute(nodes, {owned}) on the profile's current nodes and, when it answers
+ * {nodes}, makes them the profile's bookmarks (extension-bookmark-buffer.cjs, then main.cjs `bookmark.replace`); it answers what compute answered.
+ * Without a host the writes fail.
  */
 function bookmarksApi(getNodes,host={}){
  const view=()=>model.createView(getNodes());
@@ -41,11 +42,11 @@ function bookmarksApi(getNodes,host={}){
    if(typeof query==='string')return all.filter(node=>has(node,words(query))).slice(0,1000);
    const q=query||{};return all.filter(node=>(q.url===undefined||node.url===q.url)&&(q.title===undefined||node.title===q.title)&&(q.query===undefined||has(node,words(q.query)))).slice(0,1000);
   },
-  create:(_event,info)=>changing(nodes=>model.create(nodes,info,{profileId:host.profileId})),
-  update:(_event,id,changes)=>changing(nodes=>model.update(nodes,id,changes)),
-  move:(_event,id,destination)=>changing(nodes=>model.move(nodes,id,destination,{profileId:host.profileId})),
-  remove:(_event,id)=>changing(nodes=>model.remove(nodes,id,{recursive:false})),
-  removeTree:(_event,id)=>changing(nodes=>model.remove(nodes,id,{recursive:true}))
+  create:(_event,info)=>changing((nodes,ctx)=>model.create(nodes,info,{profileId:host.profileId,owned:!!ctx?.owned})),
+  update:(_event,id,changes)=>changing((nodes,ctx)=>model.update(nodes,id,changes,{owned:!!ctx?.owned})),
+  move:(_event,id,destination)=>changing((nodes,ctx)=>model.move(nodes,id,destination,{profileId:host.profileId,owned:!!ctx?.owned})),
+  remove:(_event,id)=>changing((nodes,ctx)=>model.remove(nodes,id,{recursive:false,owned:!!ctx?.owned})),
+  removeTree:(_event,id)=>changing((nodes,ctx)=>model.remove(nodes,id,{recursive:true,owned:!!ctx?.owned}))
  };
 }
 

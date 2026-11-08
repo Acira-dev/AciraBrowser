@@ -5,6 +5,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), { Eve
 const model = require('../desktop/browser-services/extension-bookmarks.cjs');
 const { bookmarksApi } = require('../desktop/browser-services/extension-store-apis.cjs');
 const events = require('../desktop/browser-services/extension-bookmark-events.cjs');
+const bufferModule = require('../desktop/browser-services/extension-bookmark-buffer.cjs');
 const { installExtensionApis } = require('../desktop/browser-services/extension-apis.cjs');
 const { ERRORS } = model;
 const P = 'profile-1';
@@ -12,6 +13,7 @@ let counter = 0;
 const ids = kind => `${kind}-test-${++counter}`;
 const N = (id, parentId, title, position, url, extra = {}) => ({ id, browserProfileId: P, parentId, title, position, createdAt: 1000, ...(url ? { url } : {}), ...extra });
 const ctx = { profileId: P, newId: ids, now: 5000 };
+const clone = list => list.map(n => ({ ...n }));
 const titles = (nodes, id) => { const v = model.createView(nodes); return v.idsUnder(id).map(child => v.record(child).title); };
 /** Invariants every result must keep: sibling positions are 0..n-1, parents exist and are folders, no id twice. */
 function sound(nodes) {
@@ -87,9 +89,11 @@ test('create: defaults to Other bookmarks, honours index, makes a folder when th
   assert.equal(model.create(start(), { parentId: 'work', index: -1 }, ctx).error, ERRORS.invalidIndex);
   assert.equal(model.create(start(), { parentId: 'work', index: 1.5 }, ctx).error, ERRORS.invalidIndex);
   assert.equal(model.create(start(), { url: 'not a url' }, ctx).error, ERRORS.invalidUrl);
-  assert.equal(model.create(start(), { url: 'javascript:alert(1)' }, ctx).error, ERRORS.webOnly, 'Acira keeps web pages only');
-  assert.equal(model.create(start(), { url: 'file:///etc/passwd' }, ctx).error, ERRORS.webOnly);
-  assert.equal(model.create(start(), { url: 'chrome://settings' }, ctx).error, ERRORS.webOnly);
+  // any valid address is kept, as in Chrome (bookmarklets and chrome:// pages must not stop a sync); a bad one is Chrome's "Invalid URL."
+  for (const url of ['javascript:alert(1)', 'javascript:(function(){var a=1;})()', 'file:///etc/passwd', 'chrome://settings', 'about:blank', 'data:text/html,<p>x</p>', 'mailto:me@example.com', 'ftp://files.example.com/a'])
+    assert.equal(model.create(start(), { url, title: 'odd' }, ctx).result.url, url, url);
+  for (const url of ['not a url', '   ', '://x', 'x'.repeat(40000)]) if (url.trim()) assert.equal(model.create(start(), { url }, ctx).error, ERRORS.invalidUrl, url.slice(0, 20));
+  assert.equal(model.create(start(), { url: '  https://padded.test/  ' }, ctx).result.url, 'https://padded.test/', 'trimmed');
   assert.equal(model.create(start(), { parentId: 'tor1' }, ctx).error, ERRORS.noParent, 'a Tor page is not there for an extension');
   assert.equal(model.create(start(), { title: 'x'.repeat(5000), url: 'https://long.test/' }, ctx).result.title.length, 2048);
   assert.equal(model.create([], { title: 'First ever', url: 'https://f.test/', parentId: '1' }, ctx).nodes[0].browserProfileId, P, 'an empty profile still gets nodes of its own profile');
@@ -111,7 +115,7 @@ test('update: title and url, folders keep their (non-)url, the root folders can\
   assert.equal(model.update(start(), 'nope', { title: 'x' }).error, ERRORS.noNode);
   assert.equal(model.update(start(), 'tor1', { title: 'x' }).error, ERRORS.noNode);
   for (const id of ['0', '1', '2']) assert.equal(model.update(start(), id, { title: 'x' }).error, ERRORS.modifySpecial, id);
-  assert.equal(model.update(start(), 'star1', { url: 'ftp://x.test/' }).error, ERRORS.webOnly);
+  assert.equal(model.update(start(), 'star1', { url: 'javascript:void(0)' }).result.url, 'javascript:void(0)', 'a bookmarklet is kept too');
   assert.equal(model.update(start(), 'star1', { url: 'nope' }).error, ERRORS.invalidUrl);
   const before = start(); model.update(before, 'star1', { title: 'changed' }); assert.equal(before[0].title, 'News', 'the nodes given are never changed in place');
 });
@@ -171,17 +175,41 @@ test('remove needs an empty folder, removeTree takes the branch, the root folder
 test('every write keeps the invariants: a random run of creates, moves, updates and removes', () => {
   let seed = 7; const rnd = n => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (((t ^ (t >>> 14)) >>> 0) % n); };
   let nodes = start(); const done = { create: 0, move: 0, update: 0, remove: 0 };
+  let ownedList = clone(nodes), ownedIds = 0; ownedList.normalized = false;   // the same run, worked in place the way the buffer does
+  const idFor = kind => `${kind}-fz-${++ownedIds}`;
   for (let step = 0; step < 1500; step++) {
     const view = model.createView(nodes), all = view.all(), pick = () => all[rnd(all.length)], folders = all.filter(id => view.listOf(id)), folder = () => folders[rnd(folders.length)];
-    const roll = rnd(12); let out, kind;
-    if (roll < 5) { kind = 0; out = model.create(nodes, { parentId: folder(), index: rnd(4), title: 't' + step, ...(rnd(3) ? { url: `https://s${step}.test/` } : {}) }, ctx); }
-    else if (roll < 9) { kind = 1; out = model.move(nodes, pick(), { parentId: folder(), index: rnd(5) }, ctx); }
-    else if (roll < 10) { kind = 4; out = model.move(nodes, pick(), { index: rnd(5) }, ctx); }
-    else if (roll < 11) { kind = 2; out = model.update(nodes, pick(), { title: 'u' + step }); }
-    else { kind = 3; out = model.remove(nodes, pick(), { recursive: !!rnd(2) }); }
-    if (out.error) continue;
+    const roll = rnd(12); let out, kind, again;
+    const run = (list, extra) => {
+      if (roll < 5) { return model.create(list, args.create, { ...ctx, newId: idFor, ...extra }); }
+      if (roll < 9) { return model.move(list, args.id, args.move, { ...ctx, ...extra }); }
+      if (roll < 10) { return model.move(list, args.id, args.same, { ...ctx, ...extra }); }
+      if (roll < 11) { return model.update(list, args.id, { title: 'u' + step }, extra); }
+      return model.remove(list, args.id, { recursive: args.recursive, ...extra });
+    };
+    const args = { create: { parentId: folder(), index: rnd(4), title: 't' + step, ...(rnd(3) ? { url: `https://s${step}.test/` } : {}) }, id: pick(), move: { parentId: folder(), index: rnd(5) }, same: { index: rnd(5) }, recursive: !!rnd(2) };
+    kind = roll < 5 ? 0 : roll < 9 ? 1 : roll < 10 ? 4 : roll < 11 ? 2 : 3;
+    const idsBefore = ownedIds; out = run(nodes, { newId: idFor }); ownedIds = idsBefore;
+    again = run(ownedList, { owned: true, newId: idFor });
+    assert.equal(!!again.error, !!out.error, 'the same call has the same outcome in place: ' + JSON.stringify([again.error, out.error]));
+    if (out.error) { assert.equal(again.error, out.error); continue; }
+    if (again.nodes) ownedList = again.nodes;
+    assert.deepEqual(ownedList.map(n => ({ ...n })), out.nodes.map(n => ({ ...n })), 'working in place gives the same list as copying');
     const previous = nodes;
     nodes = sound(out.nodes);
+    // what the call says happened is what a comparison of before and after finds, and its record is where the node really is
+    const compared = model.diffEvents(previous, nodes);
+    if (kind === 1 || kind === 4) {
+      // a move: both name a move, and applying either one to the old order gives the new order (which of two swapped neighbours "moved" is a matter of taste)
+      assert.deepEqual(out.events.map(e => e.name), compared.map(e => e.name), 'a move is one onMoved, or nothing');
+      for (const list of [out.events, compared]) for (const e of list) {
+        const [id, info] = e.args, was = model.createView(previous), now = model.createView(nodes);
+        const order = was.idsUnder(info.oldParentId).filter(x => x !== id); if (info.oldParentId === info.parentId) order.splice(info.index, 0, id);
+        if (info.oldParentId === info.parentId) assert.deepEqual(order, now.idsUnder(info.parentId), 'the event takes the old order to the new');
+        assert.equal(now.record(id).index, info.index); assert.equal(now.record(id).parentId, info.parentId); assert.equal(was.record(id).parentId, info.oldParentId); assert.equal(was.record(id).index, info.oldIndex);
+      }
+    } else assert.deepEqual(out.events.map(e => [e.name, ...e.args]), compared.map(e => [e.name, ...e.args]), 'the call\'s own events are the comparison\'s');
+    if (out.result && out.result.id) assert.deepEqual(out.result, model.createView(nodes).record(out.result.id), 'the call\'s answer is the node\'s real place');
     done[['create', 'move', 'update', 'remove', 'move'][kind]]++;
     assert.ok(nodes.some(n => n.id === 'tor1'), 'the Tor page is never lost');
     const count = list => model.createView(list).all().length, ev = model.diffEvents(previous, nodes);
@@ -279,30 +307,86 @@ test('chrome.bookmarks API object: reads, writes through the host, errors as __a
   assert.deepEqual(bookmarksApi(() => nodes, { update: () => { throw new Error('Acira has no open window for this profile.'); } }).remove({}, 'star1'), { __acira_error: 'Acira has no open window for this profile.' });
 });
 
-test('wired behind the permission: handlers answer only an extension holding "bookmarks", writes reach the store, events go to the profile\'s router', async () => {
-  events.reset();
+test('wired behind the permission: handlers answer only an extension holding "bookmarks", writes reach the store in one change, events go to the profile\'s router', async () => {
+  events.reset(); bufferModule.reset();
   const ID = 'abcdefghijklmnopabcdefghijklmnop', handlers = new Map(), sent = [];
   const router = { handlers, listeners: new Map(), handle(name, callback) { handlers.set(name, { callback }); }, sendEvent() {}, broadcastEvent(name, ...args) { sent.push([name, ...args]); } };
-  let nodes = start(); const updates = [];
+  let nodes = start(); const commits = [];
   const stores = { bookmarks: () => nodes, bookmarksReady: () => true, history: () => [], closedTabs: () => [], search: async () => {},
-    updateBookmarks(compute) { const out = compute(structuredClone(nodes)); updates.push(out); if (out && out.nodes && !out.unchanged) { nodes = out.nodes; events.noteBookmarks(nodes); } return out; } };
+    commitBookmarks(next) { commits.push(next.length); nodes = next.map(n => ({ ...n })); events.noteBookmarks(nodes); } };
   const userData = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'acira-bookmarks-test-'));
   const apis = installExtensionApis({ ctx: { router } }, { session: { extensions: new EventEmitter() }, userData, storeKey: P, stores });
   const withPerm = permissions => ({ extension: { id: ID, manifest: { manifest_version: 3, permissions } } });
-  const has = withPerm(['bookmarks']), none = withPerm(['tabs']);
+  const has = withPerm(['bookmarks']), none = withPerm(['tabs']), later = () => new Promise(resolve => setTimeout(resolve, 120));
   for (const name of ['create', 'update', 'move', 'remove', 'removeTree']) assert.ok(handlers.has('bookmarks.' + name), name);
   assert.deepEqual(await handlers.get('bookmarks.create').callback(none, { title: 'x' }), { __acira_error: "'bookmarks' permission is required." });
-  assert.equal(updates.length, 0, 'an extension without the permission reaches nothing');
-  const made = await handlers.get('bookmarks.create').callback(has, { parentId: 'work', title: 'Via router', url: 'https://router.test/' });
-  assert.equal(made.title, 'Via router'); assert.ok(nodes.some(n => n.id === made.id));
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(sent.map(e => e[0]), ['bookmarks.onCreated']); assert.equal(sent[0][1], made.id);
+  assert.equal(commits.length, 0, 'an extension without the permission reaches nothing');
+  const made = [];
+  for (let i = 0; i < 25; i++) made.push(await handlers.get('bookmarks.create').callback(has, { parentId: 'work', title: 'Via router ' + i, url: `https://router${i}.test/` }));
+  assert.equal(made[24].title, 'Via router 24');
+  assert.equal((await handlers.get('bookmarks.getChildren').callback(has, 'work')).length, 27, 'the extension reads its own writes at once');
+  assert.equal(commits.length, 0, 'but the store has not been changed yet: a burst is one change');
+  await later();
+  assert.deepEqual(commits, [nodes.length], 'one change for 25 writes'); assert.ok(nodes.some(n => n.id === made[24].id));
+  assert.deepEqual(sent.map(e => e[0]), Array(25).fill('bookmarks.onCreated'), 'every write told its own event, none twice when the store changed');
+  assert.deepEqual(sent.map(e => e[1]), made.map(m => m.id), 'in order');
+  sent.length = 0;
   assert.deepEqual(await handlers.get('bookmarks.remove').callback(has, 'work'), { __acira_error: ERRORS.folderNotEmpty });
   assert.equal(await handlers.get('bookmarks.removeTree').callback(has, 'work'), undefined);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(sent.at(-1)[0], 'bookmarks.onRemoved');
+  await later();
+  assert.deepEqual(sent.map(e => e[0]), ['bookmarks.onRemoved']); assert.equal(commits.length, 2);
+  // the person changes something while a write is waiting: the write goes in first
+  await handlers.get('bookmarks.create').callback(has, { parentId: '1', title: 'Pending', url: 'https://pending.test/' });
+  bufferModule.flushAll(); assert.equal(commits.length, 3); assert.ok(nodes.some(n => n.title === 'Pending'));
   // history stays read-only
   assert.deepEqual(await handlers.get('history.deleteAll').callback(withPerm(['history'])), { __acira_error: 'Acira lets extensions read history but not change it.' });
   assert.ok((await handlers.get('sessions.restore').callback(withPerm(['sessions']))).__acira_error);
-  apis.dispose(); events.reset(); require('node:fs').rmSync(userData, { recursive: true, force: true });
+  apis.dispose(); events.reset(); bufferModule.reset(); require('node:fs').rmSync(userData, { recursive: true, force: true });
+});
+
+test('the write buffer: a burst is one store change; reads see the writes; flushing before the person\'s own change; never more than the cap late', () => {
+  bufferModule.reset();
+  const timers = []; let clock = 0, stored = start(); const commits = [], told = [], adopted = [];
+  const buffer = bufferModule.createBookmarkBuffer({ read: () => stored, commit: nodes => { commits.push(nodes.length); stored = nodes; }, adopt: nodes => adopted.push(nodes.length), deliver: (name, ...args) => told.push([name, args[0]]),
+    now: () => clock, setTimer: (fn, ms) => { const t = { fn, at: clock + ms }; timers.push(t); return t; }, clearTimer: t => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); } });
+  const write = i => buffer.apply((nodes, c) => model.create(nodes, { parentId: 'work', title: 'n' + i, url: `https://n${i}.test/` }, { ...ctx, ...c }));
+  const tick = ms => { clock += ms; for (const t of [...timers]) if (t.at <= clock) { timers.splice(timers.indexOf(t), 1); t.fn(); } };
+  for (let i = 0; i < 200; i++) { assert.ok(write(i).result.id); tick(2); }   // 400 ms of writes, one every 2 ms
+  assert.equal(buffer.nodes().length, start().length + 200, 'reads see every write');
+  assert.ok(commits.length >= 1 && commits.length <= 3, 'a 400 ms burst is at most 3 changes, not 200: ' + commits.join());
+  assert.ok(told.length === 200 && told.every(e => e[0] === 'bookmarks.onCreated'), 'every write told its event, at once');
+  tick(100); assert.equal(buffer.hasPending(), false); assert.equal(stored.length, start().length + 200, 'the store ends with everything');
+  assert.deepEqual(adopted, commits, 'the hub is told each change is already told, before the store changes');
+  // an error changes nothing and schedules nothing
+  const before = commits.length; assert.equal(buffer.apply((nodes, c) => model.create(nodes, { parentId: 'nope' }, { ...ctx, ...c })).error, ERRORS.noParent); tick(500); assert.equal(commits.length, before);
+  // flush on demand: the person's change must not meet a stale list
+  write(900); assert.equal(buffer.hasPending(), true); assert.equal(stored.some(n => n.title === 'n900'), false);
+  bufferModule.flushAll(); assert.equal(stored.some(n => n.title === 'n900'), true); assert.equal(buffer.hasPending(), false);
+  // the cap: writes that never pause still reach the store within 250 ms of the first
+  const n0 = commits.length; for (let i = 0; i < 30; i++) { write(1000 + i); tick(10); } assert.ok(commits.length - n0 >= 1, 'a long burst is cut at the cap'); tick(100);
+  // no window: refused at once, as before; and a change that cannot be made yet is tried again
+  let open = false; const waiting = bufferModule.createBookmarkBuffer({ read: () => stored, ready: () => open, commit: nodes => { stored = nodes; }, now: () => clock, setTimer: (fn, ms) => { const t = { fn, at: clock + ms }; timers.push(t); return t; }, clearTimer: t => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); } });
+  assert.throws(() => waiting.apply((nodes, c) => model.create(nodes, { title: 'x' }, { ...ctx, ...c })), /no open window/);
+  open = true; waiting.apply((nodes, c) => model.create(nodes, { title: 'late', url: 'https://late.test/' }, { ...ctx, ...c })); open = false; tick(300); assert.equal(waiting.hasPending(), true, 'kept while no window can take it');
+  open = true; tick(600); assert.equal(waiting.hasPending(), false); assert.ok(stored.some(n => n.title === 'late'));
+  bufferModule.reset();
+});
+
+test('the hub: a buffered burst is told once; the person\'s change after it is told as theirs; non-web addresses can be put back by Undo', () => {
+  events.reset();
+  const seen = [], later = fn => fn();
+  const stop = events.watch({ profileId: P, initial: start(), deliver: (name, ...args) => seen.push([name, args[0]]), later });
+  const written = model.create(start(), { parentId: 'work', title: 'W', url: 'https://w.test/' }, ctx);
+  stop.emit(written.events[0].name, ...written.events[0].args);   // the buffer tells the write's own event
+  stop.adopt(written.nodes); events.noteBookmarks(written.nodes);   // then the store changes: nothing more is said
+  assert.deepEqual(seen.map(e => e[0]), ['bookmarks.onCreated']);
+  const theirs = model.update(written.nodes, 'star1', { title: 'Theirs' }).nodes; events.noteBookmarks(theirs);
+  assert.deepEqual(seen.map(e => e[0]), ['bookmarks.onCreated', 'bookmarks.onChanged'], 'the person\'s own change is still told');
+  stop(); events.reset();
+  const { validateAction } = require('../desktop/validation.cjs');
+  const restore = url => ({ type: 'bookmark.restore', nodes: [{ id: 'b1', browserProfileId: P, parentId: null, title: 't', url, position: 0, createdAt: 1 }] });
+  for (const url of ['https://a.test/', 'javascript:(function(){})()', 'chrome://settings', 'file:///tmp/x.html', 'about:blank']) assert.doesNotThrow(() => validateAction(restore(url), null), url);
+  for (const url of ['not an address', '']) assert.throws(() => validateAction(restore(url), null), url);
+  assert.throws(() => validateAction({ type: 'bookmark.add', url: 'javascript:alert(1)', title: 'x', parentId: null, index: 0 }, null), /unsupported protocol/, 'a new bookmark from the page stays web only');
+  assert.throws(() => validateAction({ type: 'tab.navigate', url: 'javascript:alert(1)' }, null), /unsupported protocol/, 'opening one is refused, so a bookmarklet never runs');
 });

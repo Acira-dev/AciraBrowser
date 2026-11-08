@@ -6,6 +6,7 @@
 const {commandsOf}=require('./commands/keys.cjs');
 const bridge=require('./surfaces/bridge.cjs');
 const activeTab=require('./surfaces/active-tab.cjs');
+const ownPage=require('./surfaces/own-page.cjs');
 
 const PREFIX='ext:';
 const commandId=(profileId,extensionId,name)=>`${PREFIX}${profileId}:${extensionId}:${encodeURIComponent(name)}`;
@@ -36,8 +37,12 @@ module.exports={
  PREFIX,commandId,publish,
  install(api){
   const mine=new Map(),byExtension=new Map();   // commandId -> {key, entry}; extension id -> [{name, description, key, execute}]
-  groups.set(api.session,mine);
   const profileId=String(api.storeKey||'default');
+  // A private session (Allow in private tabs) loads copies of the extensions of an ordinary profile. Its commands are those profile's commands: no rows of
+  // its own in Settings › Shortcuts, and the keys and the person's changes are the source profile's.
+  const sourceProfileId=String(api.sourceProfileId||'');
+  const rowsProfile=sourceProfileId||profileId;
+  if(!sourceProfileId)groups.set(api.session,mine);
 
   function register(extension){
    if(!extension?.manifest?.commands)return;
@@ -51,7 +56,9 @@ module.exports={
      id:commandId(profileId,extension.id,command.name),
      label:command.execute?api.t('ext.command.activate',{name}):`${name}: ${command.description||command.name}`,
      category:'Extensions',
-     action:{action:'extension-command',profileId,extensionId:extension.id,command:command.name}
+     action:{action:'extension-command',profileId,extensionId:extension.id,command:command.name},
+     // A media key (Play/Pause, Next, Previous, Stop) cannot reach an extension in Acira: the command has no key, and Settings › Shortcuts says why.
+     ...(/^Media/.test(command.key)?{note:'media-key'}:{})
     }});
    }
   }
@@ -70,7 +77,7 @@ module.exports={
   /** The current key of a command in Chrome's notation, '' when it has none. */
   function shortcutOf(extensionId,name){
    try{
-    const found=bridge.getShortcuts()?.list?.().find(command=>command.id===commandId(profileId,extensionId,name));
+    const found=bridge.getShortcuts()?.list?.().find(command=>command.id===commandId(rowsProfile,extensionId,name));
     return found&&found.bindings[0]?String(found.bindings[0]).replace(/\bCmd\b/g,'Command'):'';
    }catch{return '';}
   }
@@ -88,20 +95,23 @@ module.exports={
     return !!bridge.controller(api.session,'action')?.invoke?.(extensionId,webContents);
    }
    let tab;
-   try{tab=api.store()?.tabDetailsCache?.get?.(webContents?.id)||(webContents?api.handler('tabs.get')?.({type:'frame',sender:webContents,extension:null},webContents.id):undefined);}catch{tab=undefined;}
+   // The tab as chrome.tabs says it (the id the extension knows the tab by), before the engine's own cached details (the page's id).
+   try{const asked=webContents?api.handler('tabs.get')?.({type:'frame',sender:webContents,extension:null},webContents.id):undefined;tab=asked&&!asked.__acira_error?asked:api.store()?.tabDetailsCache?.get?.(webContents?.id);}catch{tab=undefined;}
+   // No page in front (one of Acira's own pages: Settings, New tab): the extension is told about that page, as Chrome does for chrome://, and nothing is granted.
+   if(!webContents)tab=ownPage.frontTab(api,extension);
    if(webContents&&!webContents.isDestroyed?.())activeTab.grant(api.session,extensionId,webContents.id,webContents.getURL?.());
    api.emit(extensionId,'commands.onCommand',name,tab);
    return true;
   }
-  const release=bridge.register(api.session,'commands',{profileId,run});
+  const release=bridge.register(api.session,'commands',{profileId,sourceProfileId,run});
 
   return {
    /** The extension was removed for good (extension-manager remove): its keys go with it. A turned-off extension only unloads, and its keys wait in the registry's file. */
    forget(id){
-    unregister(id);publish();
+    unregister(id);if(!sourceProfileId)publish();
     try{bridge.getShortcuts()?.forgetParked?.(`${PREFIX}${profileId}:${id}:`);}catch(error){console.warn('[ext-api:commands] keys of a removed extension were not cleared:',error?.message||error);}
    },
-   dispose(){release();groups.delete(api.session);publish();}
+   dispose(){release();if(groups.delete(api.session))publish();}
   };
  }
 };

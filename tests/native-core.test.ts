@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {createInitialState,reduceBrowser,bulkCloseTargets,restoreSnapshot,persistedSnapshot,settingsFor,snapshotForProfile} from '../src/runtime/core';
 import {scopedSettingAction,profileScopeAction} from '../src/ui/profileScope';
 import {sharedProviderList,sharedProvidersConfigured,currentSearchProviders} from '../src/ui/searchSettings';
-import {groupShortcutCommands} from '../src/ui/shortcutGroups';
+import {groupShortcutCommands,asksForMediaKey} from '../src/ui/shortcutGroups';
 import type {ShortcutCommand} from '../src/runtime/nativeCore';
 import type {BrowserAction,BrowserSnapshot} from '../src/runtime/types';
 const run=(s:BrowserSnapshot,...actions:BrowserAction[])=>actions.reduce(reduceBrowser,s);
@@ -59,6 +59,11 @@ test('extension commands stay together under Extensions, set or not, after Brows
  const groups=groupShortcutCommands([unset,free,bound,browser]);
  assert.deepEqual(groups.map(([name,list])=>[name,list.map(item=>item.id)]),[['Browser',['settings']],['Extensions',['ext:p:a:lock','ext:p:a:go']],['Unassigned',['duplicate-tab']]]);
  assert.deepEqual(groupShortcutCommands([unset],()=>true).map(([name])=>name),['Extensions'],'an extension with no key at all still has its group');
+});
+
+test('an extension that asked for a media key is told apart by its note, nothing else',()=>{
+ assert.equal(asksForMediaKey({note:'media-key'}),true);
+ for(const note of [undefined,'','media','Media-key'])assert.equal(asksForMediaKey({note}),false,String(note));
 });
 
 test('profile rename trims, recolours and rejects blank names',()=>{

@@ -10,13 +10,19 @@
 // falls back to the whole file from the same byte.
 // The partial belongs to exactly one file of the feed: its SHA-512 and size are written beside it, and any other partial is removed first. The whole file
 // is checked against the feed's SHA-512 before anything else sees it; a mismatch deletes it (ERR_CHECKSUM_MISMATCH).
+// MIRRORS (beta.13.2): a feed may list more addresses for the same file (files[].mirrors). The first address is asked first, every time; the next one is tried when
+// this one gives no first byte within FIRST_BYTE (a host that accepts the connection and then says nothing, as GitHub's release downloads did on 8 Nov 2026), goes
+// quiet for `stall`, drops the connection, answers with an error (5xx, 404...) or sends something that does not fit the file. The bytes already here stay: the next
+// address is asked for the rest with a Range request. Every address is fetched with the SAME `fetch` the caller hands in, so a mirror never leaves by another route
+// than the person's chosen one (proxy, VPN, Tor); this module opens no connection of its own. It is still ONE file, checked against the feed's SHA-512 as a whole,
+// whatever addresses it came from; the addresses that supplied its bytes are kept beside the partial (update.part.json "from"), so a mismatch can say whom to skip.
 // handOver() then puts the verified file where electron-updater's DownloadedUpdateHelper looks for "an update already downloaded by an earlier launch"
 // (<cache>/pending/<file> + update-info.json), so electron-updater's own downloadUpdate() finds it, checks the SHA-512 once more and goes on as it
 // always did: Squirrel.Mac on a Mac, the NSIS installer on Windows. Nothing here installs anything, and nothing partial ever reaches that folder.
 const fs=require('node:fs'),fsp=require('node:fs/promises'),path=require('node:path'),zlib=require('node:zlib'),{createHash}=require('node:crypto');
 
 const PART='update.part',META='update.part.json',MAPS='blockmaps.json',DIR_NAME='acira-partial';
-const STALL=60*1000,SPEED_WINDOW=5000,COPY_CHUNK=1024*1024,MAP_MAX=16*1024*1024;
+const STALL=60*1000,FIRST_BYTE=20*1000,MAX_MIRRORS=4,SPEED_WINDOW=5000,COPY_CHUNK=1024*1024,MAP_MAX=16*1024*1024;
 
 /** SHA-512 of a file, base64 (the feed's form). */
 function hashFile(file){
@@ -108,6 +114,31 @@ function loadMaps(dir,{sha512,oldSize}){
 }
 
 class DownloadError extends Error{constructor(message,code){super(message);this.code=code;}}
+/** The other addresses a feed gives for one file (its `mirrors`), as absolute URLs: relative ones are read against the file's own address; only https (and http to this computer, for the
+ *  test rigs) is kept; the file's own address and repeats are dropped; at most MAX_MIRRORS. Anything else in the list is ignored, never an error: a bad mirror must not hide a good file. */
+function mirrorsOf(list,fileUrl){
+ const seen=new Set([String(fileUrl)]),result=[];
+ if(!Array.isArray(list))return result;
+ for(const item of list){
+  if(typeof item!=='string'||!item.trim()||result.length>=MAX_MIRRORS)continue;
+  let url;try{url=new URL(item.trim(),fileUrl);}catch{continue;}
+  const local=/^(?:localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname);
+  if(url.protocol!=='https:'&&!(url.protocol==='http:'&&local))continue;
+  if(url.username||url.password||seen.has(url.href))continue;
+  seen.add(url.href);result.push(url.href);
+ }
+ return result;
+}
+/** The connection itself failed (no answer, reset, refused, DNS, TLS), as opposed to this computer's own files failing (a full disk, no permission): the next address is worth a try. */
+const networkFailure=error=>{
+ if(!error||typeof error!=='object')return false;
+ if(error instanceof DownloadError)return false;
+ const code=String(error.code||error.cause?.code||''),text=String(error.message||'');
+ if(code)return /^(?:ECONN|ETIMEDOUT|ENOTFOUND|EAI_|EHOSTUNREACH|ENETUNREACH|EPIPE|UND_ERR_|ERR_(?:CONNECTION|NETWORK|INTERNET|TIMED_OUT|EMPTY_RESPONSE|NAME|SSL|CERT|TUNNEL|PROXY))/.test(code);
+ return error instanceof TypeError||/net::ERR_|fetch failed|terminated|socket hang up/i.test(text);
+};
+/** Errors after which the next address is tried (the bytes already here stay, except where a wrong file was sent). */
+const FAIL_OVER=new Set(['ERR_UPDATE_FIRST_BYTE','ERR_UPDATE_STALLED','ERR_UPDATE_SHORT','ERR_UPDATE_HTTP','ERR_UPDATE_PORTAL','ERR_UPDATE_SIZE','ERR_UPDATE_RANGE']);
 const contentRange=value=>{const match=/^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(String(value||'').trim());return match?{start:Number(match[1]),end:Number(match[2]),total:match[3]==='*'?null:Number(match[3])}:null;};
 
 /** Downloads `url` into <dir>/update.part, from where the partial stopped. Resolves {file} when the whole file is here and its SHA-512 matches,
@@ -116,7 +147,7 @@ const contentRange=value=>{const match=/^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(S
  *  changed one is fetched with its own Range request; a server that will not send a segment exactly rejects with ERR_UPDATE_RANGE (the bytes stay,
  *  and the caller goes on with the whole file). onProgress gets {transferred, total, bytesPerSecond} in bytes fetched over the network,
  *  bytesPerSecond averaged over the last five seconds. */
-async function download({url,sha512,size,dir,plan:given=null,oldFile=null,headers={},fetch,signal,onProgress=()=>{},now=Date.now,stall=STALL}){
+async function download({url,mirrors=[],first=0,firstByte=FIRST_BYTE,onSource=()=>{},sha512,size,dir,plan:given=null,oldFile=null,headers={},fetch,signal,onProgress=()=>{},now=Date.now,stall=STALL}){
  if(!ownDir(dir))throw new Error('The update download folder is not valid.');
  if(typeof sha512!=='string'||!sha512||!Number.isSafeInteger(size)||size<=0)throw new Error('The update feed does not describe this file.');
  const whole=!given,plan=whole?wholePlan(size):validPlan(given,size,oldFile?sizeOf(oldFile):0);
@@ -126,7 +157,9 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
  if(!old||old.sha512!==sha512||old.size!==size){await fsp.rm(part,{force:true});}
  let have=received(dir,{sha512,size});
  if(have)await fsp.truncate(part,have);
- const meta={sha512,size,url,etag:old?.sha512===sha512?old.etag||null:null,plan:whole?null:plan};
+ const sources=[url,...mirrorsOf(mirrors,url)],same=old?.sha512===sha512&&old.size===size&&have>0;
+ // meta.src: the address the etag belongs to; meta.from: every address that supplied bytes of this partial (a mismatch says whom to skip, see verify)
+ const meta={sha512,size,url,etag:same?old.etag||null:null,src:same?old.src||old.url||null:null,from:same&&Array.isArray(old.from)?old.from.filter(item=>typeof item==='string'):[],plan:whole?null:plan};
  const writeMeta=()=>fsp.writeFile(metaFile,JSON.stringify(meta),{mode:0o600});
  await writeMeta();
  const total=downloaded(plan),fetched=()=>downloadedBefore(plan,have);
@@ -136,9 +169,10 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
   onProgress({transferred:net,total,bytesPerSecond:seconds>=.5?Math.max(0,(net-b0)/seconds):null});
  };
  const verify=async()=>{
-  if(await hashFile(part)===sha512)return {file:part,size};
+  if(await hashFile(part)===sha512)return {file:part,size,source:sources[at],from:[...meta.from]};
+  const from=[...meta.from];
   await fsp.rm(part,{force:true});await fsp.rm(metaFile,{force:true});
-  throw new DownloadError('The downloaded update does not match its SHA-512; it was deleted.','ERR_CHECKSUM_MISMATCH');
+  throw Object.assign(new DownloadError('The downloaded update does not match its SHA-512; it was deleted.','ERR_CHECKSUM_MISMATCH'),{sources:from});
  };
  const paused=()=>({paused:true,transferred:fetched()});
  // An unchanged segment, read from the old file. Anything wrong with the old file is the plan's problem: ERR_UPDATE_RANGE.
@@ -158,18 +192,19 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
   }catch(error){throw error instanceof DownloadError?error:new DownloadError('The old setup could not be read: '+(error?.message||error),'ERR_UPDATE_RANGE');}
   finally{await from?.close().catch(()=>{});}
  }
- // A segment from the network: the whole file (one request, open-ended, from wherever it stopped) or one changed run of a differential plan.
- async function fetchSegment(seg){
+ // A segment from the network, from ONE address: the whole file (one request, open-ended, from wherever it stopped) or one changed run of a differential plan.
+ // tryNext: another address is left, so this one is given FIRST_BYTE (not `stall`) to send its first byte.
+ async function fetchOne(seg,src,tryNext){
   for(let attempt=0;;attempt++){
    if(signal?.aborted)return false;
    const controller=new AbortController(),abort=()=>controller.abort();
    signal?.addEventListener('abort',abort,{once:true});
-   let timer=null,stalled=false,response=null;
-   const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{stalled=true;controller.abort();},stall);timer.unref?.();};
+   let timer=null,stalled=false,response=null,gotByte=false;
+   const arm=(wait=stall)=>{clearTimeout(timer);timer=setTimeout(()=>{stalled=true;controller.abort();},wait);timer.unref?.();};
    try{
-    const asked=!whole||have>0,ifRange=meta.etag&&!/^W\//.test(meta.etag)?{'if-range':meta.etag}:{};
-    arm();
-    response=await fetch(url,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
+    const asked=!whole||have>0,ifRange=meta.etag&&meta.src===src&&!/^W\//.test(meta.etag)?{'if-range':meta.etag}:{}; // (another address has its own etag: no If-Range, the hash decides)
+    arm(tryNext?firstByte:stall);
+    response=await fetch(src,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
     const range=response.status===206?contentRange(response.headers.get('content-range')):null;
     // a web page where the file should be (a captive portal's sign-in, an error page served with 200): refused before a byte is kept
     if(response.ok&&/^\s*(?:text\/html|application\/xhtml)/i.test(String(response.headers.get('content-type')||'')))throw new DownloadError('A web page came back instead of the update (a sign-in page on this network?).','ERR_UPDATE_PORTAL');
@@ -189,14 +224,14 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
      }else throw new DownloadError(`The update download failed (HTTP ${response.status}).`,'ERR_UPDATE_HTTP');
     }
     if(!response.body)throw new DownloadError('The update download sent nothing.','ERR_UPDATE_HTTP');
-    meta.etag=response.headers.get('etag')||meta.etag;await writeMeta();
+    meta.etag=response.headers.get('etag')||(meta.src===src?meta.etag:null);meta.src=src;if(!meta.from.includes(src))meta.from.push(src);await writeMeta();
     const out=await fsp.open(part,have?'a':'w'),reader=response.body.getReader();
     try{
      report();
      for(;;){
       const {done,value}=await reader.read();
       if(done)break;
-      arm();
+      gotByte=true;arm();
       if(have+value.length>seg.end)throw new DownloadError('The server sent more than the update feed describes.',whole?'ERR_UPDATE_SIZE':'ERR_UPDATE_RANGE');
       await out.write(value);have+=value.length;report();
      }
@@ -210,10 +245,37 @@ async function download({url,sha512,size,dir,plan:given=null,oldFile=null,header
     // a refused or broken response is hung up at once, never left streaming into nothing
     controller.abort();await response?.body?.cancel().catch(()=>{});
     if(signal?.aborted)return false;
-    if(stalled)throw new DownloadError('The update download stalled.','ERR_UPDATE_STALLED');
+    if(stalled)throw gotByte||!tryNext?new DownloadError('The update download stalled.','ERR_UPDATE_STALLED'):new DownloadError('The update server did not send a byte in '+Math.round(firstByte/1000)+' s.','ERR_UPDATE_FIRST_BYTE');
     throw error;
    }finally{signal?.removeEventListener('abort',abort);}
   }
+ }
+ // A segment from the network, from the first address that gives it: the one that worked last (`at`, to start with `first`), then the others in order, each once.
+ // An address that gives no first byte, stalls, drops, refuses or sends the wrong thing is left for the next; one that sends a different file or part is out for the rest of
+ // this download. With one address this is fetchOne unchanged. When every address failed the error is the portal's if any was (the most useful sentence), else the last.
+ let at=Math.min(Math.max(0,Number.isInteger(first)?first:0),sources.length-1),told=-1;
+ const dead=new Set();
+ async function fetchSegment(seg){
+  const start=at,failures=[];
+  for(let step=0;step<sources.length;step++){
+   const index=(start+step)%sources.length;
+   if(dead.has(index))continue;
+   let later=0;for(let rest=step+1;rest<sources.length;rest++)if(!dead.has((start+rest)%sources.length))later++;
+   try{
+    const done=await fetchOne(seg,sources[index],later>0);
+    if(done===false)return false;
+    at=index;if(told!==index){told=index;try{onSource(sources[index],index);}catch{/* a listener's problem */}}
+    return true;
+   }catch(error){
+    if(signal?.aborted)return false;
+    if(!(sources.length>1&&(FAIL_OVER.has(error?.code)||networkFailure(error))))throw error;
+    failures.push(error);
+    if(error.code==='ERR_UPDATE_SIZE'){dead.add(index);await fsp.rm(part,{force:true});have=0;meta.from=[];meta.etag=null;meta.src=null;await writeMeta();} // (what is here may be that address's wrong file)
+    else if(error.code==='ERR_UPDATE_RANGE')dead.add(index);
+    if(later===0)break;
+   }
+  }
+  throw Object.assign(failures.find(error=>error.code==='ERR_UPDATE_PORTAL')||failures[failures.length-1]||new DownloadError('No address of the update answered.','ERR_UPDATE_HTTP'),{exhausted:true});
  }
  report();
  try{
@@ -253,4 +315,4 @@ function handedOver({pendingDir,sha512,size}){
  return Boolean(info&&info.sha512===sha512&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName&&sizeOf(path.join(pendingDir,info.fileName))===size);
 }
 
-module.exports={download,shortOfSpace,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL};
+module.exports={download,mirrorsOf,networkFailure,shortOfSpace,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL,FIRST_BYTE,MAX_MIRRORS};

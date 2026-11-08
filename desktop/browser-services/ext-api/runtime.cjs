@@ -13,6 +13,7 @@
 //  - openOptionsPage: Chrome's error when there is no options page, and an options tab that is already open is brought forward.
 const fs = require('node:fs');
 const path = require('node:path');
+const tabIds = require('./surfaces/tab-ids.cjs');
 
 const NO_OPTIONS = 'Could not create an options page.';
 const internals = {
@@ -116,6 +117,20 @@ module.exports = {
       }
       return out;
     };
+    // sender.tab.id of a message is the PAGE's id (Electron); the extension knows the tab by the id chrome.tabs gave it. The two differ for a tab restored from the last
+    // session, so the renderer is also told which page ids belong to which tab ids ({page id: tab id}, only where they differ).
+    const pagesFor = () => {
+      const out = {}, store = api.store();
+      for (const wc of (store && store.tabs) || []) {
+        try {
+          if (wc.isDestroyed() || wc.session !== api.session) continue;
+          const id = tabIds.ofPage(api.session, wc);
+          if (Number.isInteger(id) && id !== wc.id) out[wc.id] = id;
+        } catch { /* a page going away */ }
+      }
+      return out;
+    };
+    const sentPages = new Map();
     let timer = null, offs = [], watching = false;
     const push = () => {
       timer = null;
@@ -130,7 +145,10 @@ module.exports = {
         }
         const removed = [...before.keys()].filter(tabId => !now.has(tabId));
         known.set(id, now);
-        if (changed.length || removed.length) api.emit(id, 'runtime.tabs', {tabs: changed, removed});
+        // The page-id table goes along only when it changed (it is empty for every tab opened in this run).
+        const pages = pagesFor(), text = JSON.stringify(pages), pagesChanged = text !== (sentPages.get(id) || '{}');
+        if (pagesChanged) sentPages.set(id, text);
+        if (changed.length || removed.length || pagesChanged) api.emit(id, 'runtime.tabs', {tabs: changed, removed, ...(pagesChanged ? {pages} : {})});
       }
     };
     const schedule = () => { if (!timer) { timer = setTimeout(push, 60); timer.unref?.(); } };
@@ -141,6 +159,7 @@ module.exports = {
       try { if (hook && typeof hook.onChange === 'function') offs.push(hook.onChange(schedule)); } catch { /* no tab model */ }
       for (const name of ['tab-added', 'tab-removed']) try { if (store && typeof store.on === 'function') { store.on(name, schedule); offs.push(() => (store.off || store.removeListener).call(store, name, schedule)); } } catch { /* no events */ }
     };
+    api.handle('runtime.tabPages', event => { const pages = pagesFor(); sentPages.set(event.extension.id, JSON.stringify(pages)); return pages; });
     api.handle('runtime.tabs', event => {
       watch();
       const list = tabsFor(event.extension);
@@ -220,7 +239,7 @@ module.exports = {
       },
       /** The user removed the extension: Chrome opens its uninstall page in a new tab. */
       forget(extensionId) {
-        known.delete(extensionId);
+        known.delete(extensionId); sentPages.delete(extensionId);
         for (const name of ANNOUNCED) waiting.delete(slot(extensionId, name));
         if (record.state.extensions[extensionId]) { delete record.state.extensions[extensionId]; record.save(); }
         const url = urls.take(extensionId);

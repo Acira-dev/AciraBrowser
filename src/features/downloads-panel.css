@@ -5,8 +5,12 @@
 .download-panel-note { margin: 2px 8px 4px 36px; font-size: 12px; line-height: 16px; color: var(--danger-text, #b3261e); overflow-wrap: anywhere; }
 
 .dl-panel-item { position: relative; --dl-acts: 60px; }
+/* A finished file that is still there has a third button (Delete file): room for it, so the buttons never cover the name. */
+.dl-panel-item[data-deletable] { --dl-acts: 88px; }
 .dl-panel-item > .dl-panel-main { grid-template-columns: 16px minmax(0, 1fr) var(--dl-acts); width: 100%; }
 .dl-panel-item:hover > .acira-menu-row { background: var(--menu-hover); }
+/* A file picked up by its row (dragged out to a page, another program or the desktop) dims for the moment it is held, as a dragged bookmark row does. */
+.dl-panel-item[data-dragging] { opacity: 0.45; }
 .dl-panel-main .lib-name { font: inherit; color: inherit; }
 .dl-panel-main .acira-menu-sub [data-warn] { color: var(--danger-text, #b3261e); }
 .dl-panel-main .dl-file { display: grid; place-items: center; }

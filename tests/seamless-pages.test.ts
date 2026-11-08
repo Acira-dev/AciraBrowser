@@ -212,10 +212,10 @@ test('Seamless: a view switch sends the docked layout at once on the way out and
   assert.match(app, /const floatSide = sideFloating\(\) \|\|/);
   assert.doesNotMatch(app, /const floatSide = isEdgeFloating\(\)/);
   // Out: the first send of the switch is skipped while the header has not started to grow (the measured follow sends the real ones).
-  assert.match(app, /if \(!seamless && lastPageBounds\.current && lastPageBounds\.current\.y <= 8 && headerNode && Math\.abs\(headerNode\.getBoundingClientRect\(\)\.height - headerHeight\) > 1\) return;/);
+  assert.match(app, /if \(!topSeam && lastPageBounds\.current && lastPageBounds\.current\.y <= 8 && headerNode && Math\.abs\(headerNode\.getBoundingClientRect\(\)\.height - headerHeight\) > 1\) return;/);
   // In: the switch notes its entry, and the layout that follows carries the hide spring (a sidebar leaving with it keeps its own curve).
-  assert.match(app, /if \(seamless && !wasSeamless\.current\) noteSeamlessEntry\(\)/);
-  assert.match(app, /entering = spring \? null : seamless \? seamlessEntrySpring\(\) : null/);
+  assert.match(app, /if \(topSeam && !wasSeamless\.current\) noteSeamlessEntry\(\)/);
+  assert.match(app, /entering = spring \? null : seamlessEntrySpring\(\)/);
   assert.match(app, /entering && !slide \? \{ pageSpring: entering \}/);
   const chrome = readFileSync(new URL('../src/ui/chromeEdge.ts', import.meta.url), 'utf8');
   assert.match(chrome, /const spec = springFor\('seamless\.hide', motionSpeed\(\)\);\s+entry = spec \? \{ duration: spec\.duration, bounce: spec\.bounce, until: performance\.now\(\) \+ 400 \} : null;/);

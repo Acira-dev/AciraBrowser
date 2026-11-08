@@ -35,7 +35,7 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const trimmed = query.trim();
-  const result = useMemo(() => (trimmed ? searchSettingsDetailed(settingsRegistry, trimmed, context) : { hits: [] as SettingsHit[], corrected: undefined as string | undefined }), [trimmed, context.customGlassColors, context.privateProfile, context.desktop, context.websiteOpen, context.appearanceChanged, context.toolbarChanged, context.newTabChanged, context.stockSearch, context.verticalTabs]);
+  const result = useMemo(() => (trimmed ? searchSettingsDetailed(settingsRegistry, trimmed, context) : { hits: [] as SettingsHit[], corrected: undefined as string | undefined }), [trimmed, context.customGlassColors, context.privateProfile, context.desktop, context.websiteOpen, context.appearanceChanged, context.toolbarChanged, context.newTabChanged, context.stockSearch, context.verticalTabs, context.hideToolbarRow]);
   const hits: SettingsHit[] = result.hits, corrected = result.corrected, marked = corrected ?? trimmed;
   const showList = open && Boolean(trimmed);
   const status = !trimmed ? '' : hits.length ? `${corrected ? `${t("settingssearch.showingFor", { query: corrected })}. ` : ''}${t('settingssearch.foundStatus', { count: hits.length })}` : t('settingssearch.noneFoundStatus', { query: trimmed });

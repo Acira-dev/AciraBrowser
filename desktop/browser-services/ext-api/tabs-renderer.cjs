@@ -47,7 +47,32 @@ module.exports = {
           });
           functions.getZoomSettings = tabId => pageIdOf(tabId).then(page => previous('getZoomSettings', optional(page === null ? tabId : page)));
           functions.setZoomSettings = (tabId, settings) => pageIdOf(tabId).then(page => previous('setZoomSettings', [...optional(page === null ? tabId : page), settings]));
-          if (base && typeof base.connect === 'function') functions.connect = (tabId, info) => base.connect(tabId, ...optional(info));
+          // tabs.connect hands back its port at once, but the page behind the tab id is known only after one question to the main process: the port the extension holds waits for
+          // the real one (messages posted meanwhile are kept in order), then passes messages and the disconnect on. An id with no page (or a failed connect) disconnects the port
+          // with Chrome's own "Receiving end does not exist" error.
+          if (base && typeof base.connect === 'function') functions.connect = (tabId, info) => {
+            const onMessage = acira.bindings.createEvent('runtime.Port.onMessage'), onDisconnect = acira.bindings.createEvent('runtime.Port.onDisconnect');
+            const waiting = [];
+            let real = null, ended = false;
+            const port = {
+              name: (info && info.name) || '',
+              postMessage(message) {
+                if (ended) throw new Error('Attempting to use a disconnected port object');
+                if (real) real.postMessage(message); else waiting.push(message);
+              },
+              disconnect() { if (ended) return; ended = true; waiting.length = 0; if (real) real.disconnect(); },
+              onMessage, onDisconnect
+            };
+            const refuse = text => { if (ended) return; ended = true; waiting.length = 0; acira.withLastError(text, () => onDisconnect.dispatch(port)); };
+            pageIdOf(tabId).then(page => {
+              if (ended) return;
+              try { real = base.connect(page === null ? tabId : page, ...optional(info)); } catch (error) { refuse(String(error && error.message || error)); return; }
+              if (real && real.onMessage) real.onMessage.addListener(message => onMessage.dispatch(message, port));
+              if (real && real.onDisconnect) real.onDisconnect.addListener(() => { if (ended) return; ended = true; onDisconnect.dispatch(port); });
+              for (const message of waiting.splice(0)) real.postMessage(message);
+            }, error => refuse(String(error && error.message || error)));
+            return port;
+          };
           const events = {};
           for (const name of ['onCreated', 'onUpdated', 'onMoved', 'onActivated', 'onHighlighted', 'onDetached', 'onAttached', 'onRemoved', 'onZoomChange']) {
             events[name] = acira.event('tabs.' + name);

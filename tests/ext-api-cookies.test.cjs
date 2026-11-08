@@ -1,6 +1,7 @@
 'use strict';
 // chrome.cookies (ext-api/cookies*.cjs): the profile's one ordinary store, host permissions on every call, Chrome's shapes and errors.
 const test = require('node:test');
+const tabIds = require('../desktop/browser-services/ext-api/surfaces/tab-ids.cjs');
 const assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events');
 const extApi = require('../desktop/browser-services/ext-api/index.cjs');
@@ -121,6 +122,17 @@ test('getAllCookieStores: the profile\'s one store, with its own tabs only', asy
   const w = world({packages: ['cookies'], extensions: {[A]: example}, session, contents: [tab(3, session), tab(4, fakeSession()), tab(5, session, {isDestroyed: () => true}), tab(6, session, {__aciraTorLocked: true})]});
   try {
     assert.deepEqual(await w.call(A, 'cookies.getAllCookieStores'), [{id: '0', tabIds: [3]}]);
+  } finally { w.dispose(); }
+});
+
+test('getAllCookieStores names a tab by the id the extension knows it by (a restored tab is not its page\'s number)', async () => {
+  const session = fakeSession({cookies: seed()});
+  const tab = (id, owner) => ({id, session: owner, isDestroyed: () => false});
+  const restored = tab(5, session), fresh = tab(6, session);
+  tabIds.register(session, {ofPage: wc => (wc === restored ? 2000000002 : wc.id), pageOf: id => (id === 2000000002 ? 5 : null)});
+  const w = world({packages: ['cookies'], extensions: {[A]: example}, session, contents: [restored, fresh]});
+  try {
+    assert.deepEqual(await w.call(A, 'cookies.getAllCookieStores'), [{id: '0', tabIds: [2000000002, 6]}]);
   } finally { w.dispose(); }
 });
 

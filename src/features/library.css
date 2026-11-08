@@ -10,7 +10,7 @@
   --lib-ring: var(--focus-ring-color, var(--focus-ring, #3b6fd8));
   --lib-ease: var(--nt-ease, cubic-bezier(0.2, 0, 0, 1));
   padding: 40px 40px 80px;
-  transition: padding-bottom 160ms var(--lib-ease);
+  transition: padding-bottom calc(160ms * var(--motion-pace, 1)) var(--lib-ease);
   background: var(--sheet, var(--surface));
   color: var(--lib-text);
   font-family: var(--font-ui, 'Inter', 'Segoe UI', sans-serif);
@@ -18,7 +18,7 @@
 .lib * { box-sizing: border-box; }
 /* A toast rises from the bottom of the page area: while one shows, the list has room under its last row (toast 48px + 24px above the edge). */
 .app.style-acira .lib[data-toast] { padding-bottom: 152px; }
-.lib-inner { padding-top: 56px; width: 100%; max-width: 840px; margin: 0 auto; animation: lib-in 240ms var(--lib-ease) backwards; }
+.lib-inner { padding-top: 56px; width: 100%; max-width: 840px; margin: 0 auto; animation: lib-in calc(240ms * var(--motion-pace, 1)) var(--lib-ease) backwards; }
 @keyframes lib-in { from { opacity: 0; translate: 0 4px; } }
 
 /* ---- header and search ---- */
@@ -159,7 +159,7 @@
 .bm-row-folder .lib-host { flex: none; }
 .lib-error { margin: 0 0 8px; font: 400 12px/16px var(--font-ui); color: var(--danger-text, #b3261e); }
 .lib-undo-slot { position: sticky; bottom: 20px; z-index: 6; display: flex; justify-content: center; pointer-events: none; margin-top: 12px; }
-.lib-undo { pointer-events: auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px; border-radius: 8px; background: var(--sheet-raised, var(--popover, var(--sheet, var(--surface)))); box-shadow: 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)), var(--shadow-popover, 0 8px 24px rgb(0 0 0 / 0.18)); font: 400 13px/20px var(--font-ui); color: var(--lib-text); animation: lib-in 160ms var(--lib-ease) backwards; }
+.lib-undo { pointer-events: auto; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 6px 0 14px; border-radius: 8px; background: var(--sheet-raised, var(--popover, var(--sheet, var(--surface)))); box-shadow: 0 0 0 1px var(--line-strong, rgb(var(--ink) / 0.16)), var(--shadow-popover, 0 8px 24px rgb(0 0 0 / 0.18)); font: 400 13px/20px var(--font-ui); color: var(--lib-text); animation: lib-in calc(160ms * var(--motion-pace, 1)) var(--lib-ease) backwards; }
 .lib-undo .lib-compact { --btn-quiet-ink: var(--lib-text); --btn-quiet-ink-hover: var(--lib-text); font-weight: 600; }
 .bm-hint { margin: 12px 0 0; font: 400 12px/16px var(--font-ui); color: var(--lib-quiet); }
 

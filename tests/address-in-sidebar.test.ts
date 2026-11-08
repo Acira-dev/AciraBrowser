@@ -205,7 +205,7 @@ test('wiring: the setting reaches the toolbar, the sidebar, the Settings row and
   assert.match(app, /addressInSidebarWanted\(s\.addressInSidebar, railPrefs\.tabs\)/, 'only with tabs in the sidebar');
   assert.match(app, /<AddressMore label=/, 'the pill and its row are drawn in the toolbar');
   assert.match(app, /addressFocusPlan\(/, 'Ctrl/Cmd+L follows the plan');
-  assert.match(app, /askTop = seamless && !addrWanted/, 'Seamless asks for the sidebar, not the top bar, with the setting on');
+  assert.match(app, /askTop = topSeam && !addrWanted/, 'Seamless (and the hidden toolbar) asks for the sidebar, not the top bar, with the setting on');
   assert.match(sidebar, /data-addr-side=\{addressSide\.block\|\|undefined\} data-addr-open=\{addressSide\.open\|\|undefined\}/);
   assert.match(css, /@property --addr-t/);
   assert.match(css, /\.ed-rail\.acira-sidebar\[data-addr-side\]\[data-addr-open\] \{ padding-top: 108px;/, 'the content makes way for the open row');

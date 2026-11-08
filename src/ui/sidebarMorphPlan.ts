@@ -28,7 +28,7 @@ export const ARC = 13;
 
 export interface Schedule {
   direction: Direction;
-  /** The speed setting's scale: 1 Premium, .6 Fast. */
+  /** The speed's pace (`--motion-pace`): 1 Premium, .5 Fast (`fastPace`). */
   scale: number;
   /** ms the page's left/right edges and its top/bottom edges wait. */
   lagX: number; lagY: number;

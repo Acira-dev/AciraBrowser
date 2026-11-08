@@ -4,6 +4,7 @@
 // Tab ids stay the page's webContents id (what the rest of the engine addresses). Private, Tor and secured tabs are never listed.
 // Not rebuilt here (the engine / Electron keep answering): sendMessage and connect (given the page's own id), goBack / goForward, insertCSS.
 const {createTabsModel, ERRORS, NONE} = require('./tabs/model.cjs');
+const tabIdBridge = require('./surfaces/tab-ids.cjs');
 const {createTabEvents} = require('./tabs/events.cjs');
 
 const NEW_TAB_URLS = new Set(['chrome://newtab', 'chrome://newtab/', 'chrome-search://local-ntp/local-ntp.html']);
@@ -46,8 +47,31 @@ module.exports = {
     let restoreBroadcast = null;
     if (router && typeof router.broadcastEvent === 'function') {
       const original = router.broadcastEvent;
-      router.broadcastEvent = function (name, ...args) { if (typeof name === 'string' && name.startsWith('tabs.')) return undefined; return original.call(this, name, ...args); };
+      // The engine's webNavigation.onCreatedNavigationTarget (a new tab's first navigation) names the tab by its page's number: say the id the extension knows it by.
+      const extensionIdOf = pageId => { try { for (const wc of store()?.tabs || []) if (wc.id === pageId) return model.idOfPage(wc) ?? pageId; } catch { /* the page's own */ } return pageId; };
+      router.broadcastEvent = function (name, ...args) {
+        if (typeof name === 'string' && name.startsWith('tabs.')) return undefined;
+        if (name === 'webNavigation.onCreatedNavigationTarget' && args[0] && typeof args[0] === 'object') {
+          const details = {...args[0]};
+          for (const key of ['tabId', 'sourceTabId']) if (Number.isInteger(details[key])) details[key] = extensionIdOf(details[key]);
+          args = [details, ...args.slice(1)];
+        }
+        return original.call(this, name, ...args);
+      };
       restoreBroadcast = () => { if (router.broadcastEvent !== original) router.broadcastEvent = original; };
+    }
+    // The toolbar button's click (an action with no popup) tells the extension about the tab with the engine's own details, whose id is the page's. Say it as chrome.tabs does.
+    let restoreSend = null;
+    if (router && typeof router.sendEvent === 'function') {
+      const originalSend = router.sendEvent;
+      const sendEvent = function (target, name, ...args) {
+        if (name === 'browserAction.onClicked' && args[0] && typeof args[0] === 'object' && Number.isInteger(args[0].id)) {
+          try { const record = model.byTabId(args[0].id); if (record) args = [model.chromeTab(record, api.getExtension(target)), ...args.slice(1)]; } catch { /* the engine's details stand */ }
+        }
+        return originalSend.call(this, target, name, ...args);
+      };
+      router.sendEvent = sendEvent;
+      restoreSend = () => { if (router.sendEvent === sendEvent) router.sendEvent = originalSend; };
     }
     const events = createTabEvents({api, model});
 
@@ -66,6 +90,9 @@ module.exports = {
 
     /** The page (webContents) id behind an extension tab id, or null when the tab has no page: what Electron's messaging and zoom address. */
     api.handle('acira.tabs.pageId', (event, tabId) => { const record = model.byTabId(tabId); return record && record.wc ? record.wc.id : null; });
+
+    // The other packages (webNavigation, webRequest, cookies, the toolbar events …) tell an extension which tab a page is, and take a tab id from it: see surfaces/tab-ids.cjs.
+    const releaseIds = tabIdBridge.register(api.session, {ofPage: wc => model.idOfPage(wc), pageOf: tabId => { const record = model.byTabId(tabId); return record && record.wc ? record.wc.id : null; }});
 
     api.handle('tabs.getZoom', (event, tabId) => {
       const record = model.targetRecord(event, tabId);
@@ -230,7 +257,7 @@ module.exports = {
 
     return {
       forget() { /* nothing is kept per extension */ },
-      dispose() { events.dispose(); if (restoreBroadcast) restoreBroadcast(); if (typeof offHandoff === 'function') offHandoff(); if (originalGetTabById) engineStore.getTabById = originalGetTabById; }
+      dispose() { releaseIds(); if (restoreSend) restoreSend(); events.dispose(); if (restoreBroadcast) restoreBroadcast(); if (typeof offHandoff === 'function') offHandoff(); if (originalGetTabById) engineStore.getTabById = originalGetTabById; }
     };
   }
 };

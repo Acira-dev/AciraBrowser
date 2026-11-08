@@ -125,7 +125,8 @@ const loop = (now: number) => {
   if (painters.size) wake(); else running = false;
 };
 const wake = () => { frame = window.setTimeout(() => { frame = requestAnimationFrame(loop); }, EARLY_MS); };
-const join = (paint: (t: number) => boolean | void) => { painters.add(paint); if (!running) { running = true; frame = requestAnimationFrame(loop); } return () => { painters.delete(paint); }; };
+/** Joins the window's one animation loop (about 30 paints a second, none while the window is hidden); returns the way out. The update's line under the sidebar's address field uses it too. */
+export const join = (paint: (t: number) => boolean | void) => { painters.add(paint); if (!running) { running = true; frame = requestAnimationFrame(loop); } return () => { painters.delete(paint); }; };
 
 /** Crisp mode (R4-30/R4-38): square dots of whole device pixels on whole-pixel cells, no unlit grid behind them, so a tiny matrix
  * (the sound equaliser) is sharp at 100%, 150% and 200% instead of soft round dots: [dot, gap] in device pixels per scale. */

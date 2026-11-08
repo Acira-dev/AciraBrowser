@@ -16,6 +16,7 @@
 // The extension's page is never touched: no CSS, no script, its size logic stays in extension-action-sizing.cjs.
 const {EventEmitter} = require('node:events');
 const {placePopup, interfaceScale, anchorOnScreen} = require('./extension-popup-placement.cjs');
+const {trace} = require('./ext-trace.cjs');
 const {fitStep, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
 
 // The library's limits for a popup's size.
@@ -67,6 +68,7 @@ class ExtensionPopup extends EventEmitter {
     this.webContents = this.view.webContents;
     this.webContents.on('preferred-size-changed', this.updatePreferredSize);
     this.webContents.on('devtools-closed', this.maybeClose);
+    this.webContents.on('render-process-gone', this.markGone);
     this.window.on('blur', this.maybeClose);
     this.window.on('closed', this.destroy);
     this.parent.once('closed', this.destroy);
@@ -76,6 +78,15 @@ class ExtensionPopup extends EventEmitter {
   /** The library's name for the window (extension-action-sizing.cjs and the QA rigs read it). */
   get browserWindow() { return this.window; }
 
+  /** The page's process is gone (a crash, or the extension was unloaded under it): the window is an empty shell that must not count as a popup. */
+  markGone = () => { this.gone = true; };
+
+  /** Is there still a page in this window? A popup whose page failed to load, whose process is gone or whose contents were closed is a stale entry. */
+  isLive() {
+    const contents = this.webContents;
+    return !this.destroyed && !this.gone && !this.loadFailed && Boolean(contents) && !contents.isDestroyed();
+  }
+
   updatePreferredSize = (_event, size) => { this.setSize(size); if (this.hidden) this.show(); };
 
   maybeClose = () => {
@@ -83,7 +94,10 @@ class ExtensionPopup extends EventEmitter {
     if (this.webContents && !this.webContents.isDestroyed() && this.webContents.isDevToolsOpened()) return;
     const {BaseWindow, BrowserWindow} = this.electron;
     const windows = [...BaseWindow.getAllWindows(), ...(BrowserWindow ? BrowserWindow.getAllWindows() : [])];
-    if (!windows.some(window => window.isFocused())) return;
+    const focused = windows.find(window => { try { return window.isFocused(); } catch { return false; } });
+    if (!focused) { trace('toolbar popup stays: no window of Acira has focus', this.extensionId); return; }
+    let title = ''; try { title = String(focused.getTitle()).slice(0, 40); } catch { /* gone */ }
+    trace('toolbar popup closes: focus moved to another window of Acira', this.extensionId, {id: focused.id, title});
     this.destroy();
   };
 
@@ -109,7 +123,7 @@ class ExtensionPopup extends EventEmitter {
   }
 
   async load(url) {
-    try { await this.webContents.loadURL(url); } catch (error) { console.error(error); }
+    try { await this.webContents.loadURL(url); } catch (error) { this.loadFailed = true; console.error(error); }
     if (this.destroyed) return;
     this.setSize({width: BOUNDS.minWidth, height: BOUNDS.minHeight});
   }
@@ -200,7 +214,8 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
   function activateClick(details) {
     const {extensionId, tabId, anchorRect, alignment} = details || {};
     if (this.popup) {
-      const toggle = !this.popup.isDestroyed() && this.popup.extensionId === extensionId;
+      // Only a popup with a live page is closed by the click that follows it; a stale one (its page gone) is cleared away and the click opens the popup.
+      const toggle = !this.popup.isDestroyed() && this.popup.extensionId === extensionId && this.popup.isLive();
       this.popup.destroy();
       this.popup = undefined;
       if (toggle) return undefined;
@@ -216,6 +231,16 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
     return undefined;
   }
   activateClick.framedPopups = true;
+  // Reload, update, turn off or remove: the engine closes the extension's popup page but not the window around it (a BaseWindow holds the view), so the
+  // popup is closed here. Left in place it was a stale entry, and the first click after the reload only closed it.
+  try {
+    engine.ctx.session?.extensions?.on?.('extension-unloaded', (_event, extension) => {
+      const popup = engine.popup;
+      if (!popup || popup.isDestroyed() || popup.extensionId !== extension?.id) return;
+      popup.destroy();
+      engine.popup = undefined;
+    });
+  } catch { /* an engine without extension events keeps the click-time check above */ }
   engine.activateClick = activateClick;
   return true;
 }

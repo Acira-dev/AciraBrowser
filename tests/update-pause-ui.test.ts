@@ -40,9 +40,9 @@ test('paused: "Update paused", the ring keeps its fill (muted by CSS) and resume
   assert.match(html, />160 of 382 MB · resumes where it stopped</);
   assert.match(html, /data-preset="progressHeld"/);
   const css = read('src/features/updates/update-pill.css');
-  assert.match(css, /\.update-ring\[data-paused\] \.update-ring-fill \{ stroke: var\(--menu-t3\); \}/, 'muted ink from Acira\'s own tokens');
-  assert.match(css, /\.update-download\[data-phase='paused'\] \.update-pop-mark \{ opacity: 0\.5; \}/);
-  assert.match(css, /\.app \.update-pill\[data-phase='paused'\] \.update-pill-mark \{ opacity: 0\.5; \}/, 'and the toolbar\'s dots dim too');
+  assert.match(css, /\.update-ring\[data-paused\] \.update-ring-fill, \.update-download\[data-phase='error'\] \.update-ring-fill \{ stroke: var\(--menu-t3\); \}/, 'muted ink from Acira\'s own tokens');
+  assert.match(css, /\.update-download:is\(\[data-phase='paused'\], \[data-phase='error'\]\) \.update-pop-mark \{ opacity: 0\.5; \}/);
+  assert.match(css, /\.app \.update-pill:is\(\[data-phase='paused'\], \[data-phase='error'\]\) \.update-pill-mark \{ opacity: 0\.5; \}/, 'and the toolbar\'s dots dim too');
 });
 
 test('a download Acira cannot pause shows the ring without a control', () => {
@@ -77,14 +77,14 @@ test('the toolbar\'s dots are a control in every phase: they open the panel and 
   const pill = read('src/features/updates/UpdatePill.tsx'), css = read('src/features/updates/update-pill.css');
   assert.match(pill, /data-popup-trigger="" data-tip=\{tip\} aria-label=\{label\}\s+aria-haspopup="dialog" aria-expanded=\{active\} onClick=\{onOpen\}/);
   assert.doesNotMatch(pill, /aria-disabled/);
-  assert.match(css, /\.app \.update-pill:is\(\[data-phase='downloading'\], \[data-phase='paused'\]\):is\(:hover, \[aria-expanded='true'\]\) \{ background: var\(--frame-hover/, 'the toolbar\'s own hover, as its icon buttons (the page\'s --hover was near-white in a private window)');
+  assert.match(css, /\.app \.update-pill:is\(\[data-phase='downloading'\], \[data-phase='paused'\], \[data-phase='error'\]\):is\(:hover, \[aria-expanded='true'\]\) \{ background: var\(--frame-hover/, 'the toolbar\'s own hover, as its icon buttons (the page\'s --hover was near-white in a private window)');
   assert.match(css, /button\.update-ring:focus-visible \{ outline: 2px solid var\(--focus-ring-color/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.update-ring-fill \{ transition: none; \}/);
   assert.match(css, /\.app\[data-reduced-motion='true'\] \.update-ring-fill \{ transition: none; \}/, 'Acira\'s own reduced-motion setting too');
   assert.match(css, /@media \(forced-colors: active\) \{ \.update-ring-track/);
   assert.doesNotMatch(css.replace(/var\(--font-ui, 'Inter', sans-serif\)/g, ''), /font-family|'Inter'|Geist|Plex/, 'one typeface: the UI font (Inter) only');
   const app = read('src/App.tsx');
-  assert.match(app, /kind==='update'\?tr\(\(\{ready:'update\.readyTitle',downloading:'update\.downloadingTitle',paused:'update\.pausedTitle'\} as const\)\[updatePanelPhase\(\)\]\)/, 'the panel is named for what it shows');
+  assert.match(app, /kind==='update'\?tr\(\(\{ready:'update\.readyTitle',downloading:'update\.downloadingTitle',paused:'update\.pausedTitle',error:'update\.errorTitle'\} as const\)\[updatePanelPhase\(\)\]\)/, 'the panel is named for what it shows');
   for (const file of ['src/features/updates/UpdatePopover.tsx', 'src/features/updates/UpdatePill.tsx']) assert.doesNotMatch(read(file), /dangerouslySetInnerHTML|innerHTML|autoFocus/);
 });
 

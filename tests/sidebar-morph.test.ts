@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { createInitialState, reduceBrowser } from '../src/runtime/core';
+import { fastPace, motionPaceOf } from '../src/ui/motionTokens';
 import { morphDirection } from '../src/ui/sidebarMode';
 import {
   ARC, LEAVE, LAG_MS, OPEN_MS, RAIL_IN, PILL_IN, arriving, bowCrossings, delayRowChange, layoutAt, leaving, moverBox, occlusion, pageCorner, pageGlide, progressAt, ramp, schedule, totalMs,
@@ -87,8 +88,8 @@ for (const name of Object.keys(scenes) as (keyof typeof scenes)[]) for (const di
   for (let i = 1; i < path.length; i++) assert.ok(rising ? path[i] >= path[i - 1] - .5 : falling ? path[i] <= path[i - 1] + .5 : true, 'x is monotonic at step ' + i);
 });
 
-test('Fast and Premium both keep the pieces clear of the page', () => {
-  for (const scale of [.6, 1]) for (const name of Object.keys(scenes) as (keyof typeof scenes)[]) for (const direction of ['in', 'out'] as const) {
+test('Fast (at its pace, and at its old .6) and Premium all keep the pieces clear of the page', () => {
+  for (const scale of [fastPace, .6, 1]) for (const name of Object.keys(scenes) as (keyof typeof scenes)[]) for (const direction of ['in', 'out'] as const) {
     const { worst } = play(name, direction, scale);
     for (const [id, share] of Object.entries(worst)) assert.ok(share <= .03, `${name} ${direction} x${scale}: ${id} ${(share * 100).toFixed(1)}%`);
   }
@@ -126,6 +127,16 @@ test('main gets the morph\'s spring and the lag of the pair that waits (and only
   assert.deepEqual(pageGlide(schedule('out', 1)).lag, { x: LAG_MS });
   assert.deepEqual(pageGlide(schedule('in', 1, true)).lag, {});
   assert.deepEqual(pageGlide(schedule('in', .6)).spring, { duration: .2 * .6, bounce: 0 });
+});
+
+test('the morph runs at the speed\'s pace like the rest of Fast\'s set-length motion: half of Premium (beta.13.2)', () => {
+  assert.equal(motionPaceOf('fast'), .5);
+  assert.match(readFileSync('src/ui/sidebarMorph.ts', 'utf8'), /schedule\(direction, motionPace\(\), interrupted\)/, 'the morph reads the pace, not a number of its own');
+  const premium = schedule('in', 1), fast = schedule('in', motionPaceOf('fast')), out = schedule('out', motionPaceOf('fast'));
+  assert.deepEqual(pageGlide(fast).spring, { duration: .2 * .5, bounce: 0 }, 'main follows by data: the spring is half of Premium\'s');
+  assert.equal(fast.lagY, Math.round(LAG_MS * .5));
+  assert.equal(out.moveDelay, Math.round(OPEN_MS * .5));
+  assert.ok(fast.total <= Math.ceil(premium.total / 2) + 2, `Fast settles in about half of Premium's ${premium.total} ms: ${fast.total}`);
 });
 
 test('which way the morph plays: Sidebar mode flipping, or whatever layout change arrives while one is playing', () => {
@@ -184,7 +195,7 @@ test('the bare state (sidebar away, nothing above the page) still works: focus w
   assert.match(app, /effectiveMode!=='standard'\|\|topBarHidden\|\|sbHeader==='bare'\)&&<NavigationProgress/, 'a page loading shows its line where the address field is not drawn');
   assert.match(app, /const addrStrip = sbChrome \? windowFullscreen \? 0 : addressStripHeight\(/, 'a fullscreen window has no strip');
   assert.match(client, /const stale=!!optimistic\.current&&next\.revision<optimistic\.current\.base\+optimistic\.current\.count,morph=stale\?null:morphOf\(latest\.current,next\)/, 'a snapshot older than the local switch is never a morph');
-  assert.match(client, /if\(action\.type==='sidebar\.mode'&&direction\)modeSwitch\(settle,'layout'\);else settle\(\);/, 'a morph that cannot play falls back to the view transition, not to a cut');
+  assert.match(client, /if\(\(action\.type==='sidebar\.mode'&&direction\)\|\|\(action\.type==='settings\.update'&&toolbarHidesOrReturns\(base,next\)\)\)modeSwitch\(settle,'layout'\);else settle\(\);/, 'a morph that cannot play falls back to the view transition, not to a cut (and Hide the toolbar turned on or off is a layout switch too)');
   const engine = readFileSync(new URL('../src/ui/sidebarMorph.ts', import.meta.url), 'utf8');
   assert.match(engine, /catch \(error\) \{ abort\(\); throw error; \}/, 'a failed start leaves the plain window');
   assert.match(engine, /setVar\(m, m\.bar, '--sm-hdr'/, 'the bookmarks row reads the header\'s height from its own element');

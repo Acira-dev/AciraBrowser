@@ -34,7 +34,7 @@ export { setWebsiteLanguageSource,websiteLanguageFor } from './searchLanguage';
 export { bulkCloseTargets } from './profileActions';
 export { layoutsFor,minimumSize } from './splitLayout';
 export { HISTORY_LIMIT,shouldPersistSnapshot } from './sessionState';
-export { effectiveView,isWindowView,migrateAutoHide,seamlessEdgesOf,sidebarPeekOf,toggleView,viewForFocus,windowViewOf } from './windowView';
+export { effectiveView,hideToolbarOn,isWindowView,migrateAutoHide,seamlessEdgesOf,sidebarPeekOf,toggleView,viewForFocus,windowViewOf } from './windowView';
 const uid=(_s:BrowserSnapshot,prefix:string)=>prefix+'-'+crypto.randomUUID();
 let enIds:Map<string,string>|null=null;const toast=(s:BrowserSnapshot,text:string,tone?:'error'|'info'|'status',icon?:StatusIcon)=>{enIds??=new Map(Object.entries(enMessages as Record<string,string>).map(([id,message])=>[message,id]));const id=enIds.get(text);s.toast={id:Date.now(),text,...(id?{i18n:{id}}:{}),...(tone?{tone}:{}),...(icon?{icon}:{})};};const toastMsg=(s:BrowserSnapshot,id:keyof typeof enMessages,params?:Record<string,string|number>,tone?:'error'|'info'|'status',icon?:StatusIcon)=>{s.toast={id:Date.now(),text:formatMessage('en',enMessages[id],params),i18n:{id,...(params?{params}:{})},...(tone?{tone}:{}),...(icon?{icon}:{})};};
 /** Main's messages in the language in use (desktop/tm.cjs said): a toast it wrote as text keeps its message id, so the interface shows it again in the next language. */

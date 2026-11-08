@@ -73,7 +73,7 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',copyText=text=>require('electron').clipboard.writeText(text)}){
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
  let current=null;const adopted=new Map();
  /** The icon this computer already keeps for the link's site (the favicon store), so a site seen before shows its icon at once; '' when there is none. */
  const stored=(profileId,url)=>{try{const icon=storedIcon(profileId,url);return typeof icon==='string'&&icon.length<=MAX_ICON?icon:'';}catch{return '';}};
@@ -133,6 +133,8 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   // Keys work from the page and from the frame: Esc closes, Ctrl+Enter keeps it as a tab, Ctrl+Shift+Enter beside this page.
   const keyed=(event,input)=>{const action=peekKey(input);if(!action)return;event.preventDefault();act(p,action);};
   on(wc,'before-input-event',keyed);
+  // Right-click inside the preview: the same page menu a tab has (links, images, text, back/reload, Inspect), for the preview's profile and the tab it came from.
+  on(wc,'context-menu',(_event,params)=>{if(current!==p||wc.isDestroyed()||p.failure||p.download)return;try{contextMenu({wc,params,sourceTabId:p.sourceTabId,bounds:p.view.getBounds()});}catch{/* the menu is an extra: the preview goes on */}});
   // The preview's own site icon, for the marker card beside the source's icon in the sidebar (a favorite's tile, a tab's row). It is picked the way a tab's
   // is (tab-icons: the page's own icon set, the one sharp enough for the card) and cleared when the preview goes to another document.
   on(wc,'did-navigate',()=>{p.iconSequence=(p.iconSequence||0)+1;p.favicon=stored(p.profileId,wc.getURL());});
@@ -198,6 +200,10 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   if(request.type==='peek.split')return promote('split');
   const p=current;return {ok:true,peek:p?{sourceTabId:p.sourceTabId,url:p.wc.getURL()||p.url,title:p.wc.getTitle(),loading:p.wc.isLoading(),favicon:p.favicon||'',bounds:p.geometry?.view||null}:null};
  }
- return {open,close,promote,adopt,relayout,onState,fromPage,handle,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
+ /** The tab a preview page came from, when `wc` is the open preview's own page; null for any other contents (the context menu and the downloads act for that tab). */
+ function sourceOf(wc){return current&&current.wc===wc&&!wc.isDestroyed()?current.sourceTabId:null;}
+ /** The preview's own page while it holds the screen (shown, no error or download card): where the keyboard goes back to when a menu or popup over it closes. */
+ function focusTarget(){const p=current;return p&&p.revealed&&!p.failure&&!p.download&&!p.wc.isDestroyed()?p.wc:null;}
+ return {open,close,promote,adopt,relayout,onState,fromPage,handle,sourceOf,focusTarget,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
 }
 module.exports={createPeek,peekGeometry,cardOrigin,cardLink,peekKey,peekFailure,HEADER};

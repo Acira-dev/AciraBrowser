@@ -1,5 +1,5 @@
 /** Requests for window.acira.native(): everyday-browser services owned by the native core. */
-export interface ShortcutCommand{id:string;label:string;category:string;defaults:string[];defaultsDisplay:string[];bindings:string[];display:string[];customized:boolean;unbound:boolean}
+export interface ShortcutCommand{id:string;label:string;category:string;defaults:string[];defaultsDisplay:string[];bindings:string[];display:string[];customized:boolean;unbound:boolean;note?:string}
 export interface ShortcutProbe{accelerator:string|null;display?:string;valid:boolean;reason:string|null;code?:string|null;conflict:{id:string;label:string}|null}
 export interface ShortcutChange{ok:boolean;code?:'unknown'|'invalid'|'reserved'|'needs-modifier'|'conflict';message?:string;conflict?:{id:string;label:string};binding?:string;display?:string;replaced?:{id:string;label:string}|null;commands?:ShortcutCommand[]}
 export interface SpellcheckChoice{enabled:boolean;languages:string[]}

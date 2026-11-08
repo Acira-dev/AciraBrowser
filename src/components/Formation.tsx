@@ -1,5 +1,6 @@
 import { useLayoutEffect,useRef,type CSSProperties,type ReactNode } from 'react';
 import { designTokens,type FormationVariant } from '../ui/designSystem';
+import { motionPace } from '../ui/sharedMotion';
 
 const ease = `cubic-bezier(${designTokens.motion.formationEase.join(',')})`;
 const exitEase = 'cubic-bezier(.4,0,1,1)';
@@ -84,7 +85,9 @@ export function Formation({ children, variant = 'menu', reduced = false, visible
       const end = setTimeout(() => { if (!cancelled) phase.current = 'hidden'; }, duration);
       return () => { cancelled = true; clearTimeout(end); freeze(); exit.cancel(); };
     }
-    const profile = profiles[variant], duration = lifted && variant !== 'assistant' ? designTokens.motion.vapor : designTokens.motion[variant];
+    // A page section (Settings, Library) has a set length that Premium never stretches: it runs at the speed's pace (`--motion-pace`: .5 in Fast, 1 otherwise), the length and the wait between its rows.
+    const pace = variant === 'content' ? motionPace() : 1;
+    const profile = profiles[variant], duration = (lifted && variant !== 'assistant' ? designTokens.motion.vapor : designTokens.motion[variant]) * pace, stagger = profile.stagger * pace;
     const reversing = phase.current === 'closing'; phase.current = 'opening';
     // A page section is clean: the page itself never fades, the first row starts on the frame of the click.
     const clean = variant === 'content';
@@ -100,9 +103,9 @@ export function Formation({ children, variant = 'menu', reduced = false, visible
     const items = reversing ? [] : formationItems(node, profile.items);
     const staggered = items.map((item, index) => item.animate(
       [{ opacity: 0, transform: `translateY(${profile.itemRise}px) scale(${profile.itemScale})` }, { opacity: 1, transform: 'none' }],
-      { duration, delay: (clean ? 0 : 30) + Math.min(index, profile.steps) * profile.stagger, easing: ease, fill: 'backwards' },
+      { duration, delay: (clean ? 0 : 30) + Math.min(index, profile.steps) * stagger, easing: ease, fill: 'backwards' },
     ));
-    const total = duration + (items.length ? (clean ? 0 : 30) + Math.min(items.length - 1, profile.steps) * profile.stagger : 0);
+    const total = duration + (items.length ? (clean ? 0 : 30) + Math.min(items.length - 1, profile.steps) * stagger : 0);
     // The vapor gathers at once, then thins as the rows resolve through it, in the shell's scale.
     const vapor = reversing ? null : vaporLayer(node, profile.blur);
     const mist = vapor ? [
@@ -121,7 +124,7 @@ export function Formation({ children, variant = 'menu', reduced = false, visible
         for (const record of records) for (const added of record.addedNodes) {
           if (!(added instanceof HTMLElement) || added.dataset.vaporLayer !== undefined) continue;
           if (levels.size ? !levels.has(added.parentElement) : added.parentElement !== node) continue;
-          lateRows.push(added.animate([{ opacity: 0, transform: `translateY(${profile.itemRise}px)` }, { opacity: 1, transform: 'none' }], { duration, delay: Math.min(next++, profile.steps) * profile.stagger, easing: ease, fill: 'backwards' }));
+          lateRows.push(added.animate([{ opacity: 0, transform: `translateY(${profile.itemRise}px)` }, { opacity: 1, transform: 'none' }], { duration, delay: Math.min(next++, profile.steps) * stagger, easing: ease, fill: 'backwards' }));
         }
       });
       late.observe(node, { childList: true, subtree: true });

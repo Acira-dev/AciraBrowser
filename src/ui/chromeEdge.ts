@@ -70,6 +70,12 @@ export function noteSeamlessEntry(): void {
   const spec = springFor('seamless.hide', motionSpeed());
   entry = spec ? { duration: spec.duration, bounce: spec.bounce, until: performance.now() + 400 } : null;
 }
+/** Hide the toolbar turned off (Settings › Appearance › Layout): the toolbar comes back and the page's top edge goes down from the card's rest to under it, on the reveal's spring, glided by main like an
+ * entry's (the header's own height spring under a heavy page re-laid it out about twenty times). */
+export function noteToolbarReturn(): void {
+  const spec = springFor('seamless.reveal', motionSpeed());
+  entry = spec ? { duration: spec.duration, bounce: spec.bounce, until: performance.now() + 400 } : null;
+}
 export function seamlessEntrySpring(): { duration: number; bounce: number } | null {
   return entry && performance.now() < entry.until ? { duration: entry.duration, bounce: entry.bounce } : null;
 }

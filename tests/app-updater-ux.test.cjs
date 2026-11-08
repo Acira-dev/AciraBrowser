@@ -219,10 +219,10 @@ test('the stand-in updater downloads from a local feed for real, so the proof sh
 test('the update popup, the dot and the pill are wired through the one popup system, with no markup from the network', () => {
   const app_ = read('src', 'App.tsx'), validation = read('desktop', 'validation.cjs'), popup = read('src', 'ui', 'popup.ts'), main = read('desktop', 'main.cjs');
   assert.match(app_, /kind === 'update' && <UpdatePopover/); assert.match(app_, /update:'\.update-pill'/, 'the panel opens from the pill in every phase (the download dots too)');
-  assert.match(validation, /'workspace-edit', 'update', 'whats-new'\]/); assert.match(popup, /if\(kind==='update'\)return updatePanelPhase\(\)==='ready'\?\d+:\d+;/);
+  assert.match(validation, /'workspace-edit', 'update', 'whats-new'\]/); assert.match(popup, /if\(kind==='update'\)return \['ready','error'\]\.includes\(updatePanelPhase\(\)\)\?\d+:\d+;/, 'the panel is taller when it shows a ready update or a stopped download (13.2)');
   assert.match(main, /request\.type==='update\.prompt'/); assert.match(main, /case 'update\.status'[^]*case 'update\.prompt'/);
   for (const file of ['UpdatePill.tsx', 'UpdatePopover.tsx', 'useUpdateReady.ts']) assert.doesNotMatch(read('src', 'features', 'updates', file), /dangerouslySetInnerHTML|innerHTML/, `${file} renders text only`);
-  assert.match(read('src', 'features', 'updates', 'UpdatePill.tsx'), /preset=\{ready \? 'check' : paused \? 'progressHeld' : 'progress'\}/, 'the existing dot matrix: progress fill (held still while paused), then the check');
+  assert.match(read('src', 'features', 'updates', 'UpdatePill.tsx'), /preset=\{ready \? 'check' : paused \|\| stopped \? 'progressHeld' : 'progress'\}/, 'the existing dot matrix: progress fill (held still while paused or after a stopped download, 13.2), then the check');
   assert.doesNotMatch(read('src', 'features', 'updates', 'update-pill.css'), /<progress|scaleX\(|width:\s*var\(--/, 'no progress line');
 });
 

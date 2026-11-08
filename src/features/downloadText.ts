@@ -7,3 +7,7 @@ export const sizeOf = (item: BrowserDownload) => item.totalBytes && item.totalBy
 export const statusText = (status: string) => { const id = `dl.status.${status}` as MessageId; const text = t(id); return text === id ? status : text; };
 /** The note on a sidebar download row: how far a running one is, a finished file's size, otherwise its status in the interface language. */
 export const sidebarNote = (item: BrowserDownload) => item.status === 'Downloading' ? (item.totalBytes ? `${Math.min(99, Math.round((item.receivedBytes || 0) / item.totalBytes * 100))}%` : '…') : item.status === 'Ready' ? sizeOf(item) : statusText(item.status);
+/** "Delete file" (to the Trash) is offered for a finished download whose file is still there: the native side says so with `canShow`, which it sets only for a Ready row whose file exists. */
+export const canDeleteFile = (item: Pick<BrowserDownload, 'status' | 'canShow'>) => item.status === 'Ready' && !!item.canShow;
+/** A finished download whose file is still there can be dragged out of its row (into a page's upload box, another program, the desktop): the native side sets `canOpen` only for a Ready row whose file exists. */
+export const canDragFile = (item: Pick<BrowserDownload, 'status' | 'canOpen'>) => item.status === 'Ready' && !!item.canOpen;

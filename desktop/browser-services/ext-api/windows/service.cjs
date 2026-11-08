@@ -109,13 +109,18 @@ function displayMatching(rect, displays) {
 }
 
 /** SetWindowBounds (windows.create): defaults, then the given fields; size without position is moved onto its display; checked against the displays. */
-function createBounds(data, defaults, displays) {
+function createBounds(data, defaults, displays, {fit = false} = {}) {
   const given = key => data[key] !== undefined && data[key] !== null;
   const hasPosition = given('left') || given('top'), hasSize = given('width') || given('height');
   let rect = {x: given('left') ? data.left : defaults.x, y: given('top') ? data.top : defaults.y, width: given('width') ? data.width : defaults.width, height: given('height') ? data.height : defaults.height};
   if (!hasPosition && !hasSize) return null;
   if (!hasPosition && hasSize && displays.length) rect = adjustToFit(rect, displayMatching(rect, displays));
-  if (displays.length && !intersectsDisplays(rect, displays)) throw new Error(ERR.invalidBounds);
+  if (displays.length && !intersectsDisplays(rect, displays)) {
+    // Chrome refuses a window that is mostly off screen. `fit` (an extension's own page, e.g. Bitwarden's pop-out placed from the window that asked, which may hang half off the
+    // screen) moves it onto the display it overlaps most instead of leaving the person with nothing.
+    if (!fit || !Number.isSafeInteger(area(rect)) || area(rect) <= 0) throw new Error(ERR.invalidBounds);
+    rect = adjustToFit(rect, displayMatching(rect, displays));
+  }
   return rect;
 }
 
@@ -240,7 +245,8 @@ function createWindowsService({host = null, store = null, tabsOf = async () => [
       } else moving = null;
       if (!host || typeof host.create !== 'function') throw new Error(ERR.notAllowed);
       const displays = typeof host.displays === 'function' ? host.displays() : [];
-      const bounds = createBounds(data, host.defaultBounds ? host.defaultBounds(kind) : {x: 0, y: 0, width: 900, height: 720}, displays);
+      const ownPages = urls.length > 0 && urls.every(url => url.startsWith(`chrome-extension://${extensionId}/`));
+      const bounds = createBounds(data, host.defaultBounds ? host.defaultBounds(kind) : {x: 0, y: 0, width: 900, height: 720}, displays, {fit: kind === 'popup' && ownPages});
       const focused = data.focused === undefined || data.focused === null ? data.state !== 'minimized' : data.focused;
       const window = await host.create({extensionId, urls, kind, bounds, state: showState(data.state), focused, setSelfAsOpener: data.setSelfAsOpener === true});
       if (!alive(window)) throw new Error(ERR.notAllowed);

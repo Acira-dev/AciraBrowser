@@ -7,7 +7,7 @@ import { noteUpdatePhase } from '../../ui/updatePhase';
 /** What the interface shows of an update: nothing (null) until one is downloading, then its progress (or where it was paused), then the finished
  *  download. Main tells every window when that changes ('update-changed'; during a download about twice a second, only when the percent moved). */
 export interface UpdateView {
-  phase: 'downloading' | 'paused' | 'ready';
+  phase: 'downloading' | 'paused' | 'ready' | 'error';
   version: string;
   /** 0–100. */
   percent: number;
@@ -24,17 +24,30 @@ export interface UpdateView {
   failed?: boolean;
   /** The page to download Acira from by hand, when main offers it after repeated failures (only ever acirabrowser.com). */
   lastResort?: string | null;
+  /** A download that stopped (phase 'error'): when main tries again by itself (epoch ms; null once the quick tries are used up or while one runs), how many tries failed in a row, and why. */
+  retryAt?: number | null;
+  failures?: number;
+  cause?: 'network' | 'file' | 'other';
+  /** Main is looking again right now (a retry, or a press of Try again): the stopped look stays, with "Retrying…", instead of the pill going away for the length of the look. */
+  retrying?: boolean;
 }
 
 /** The last-resort download page main offers after repeated failures, or null. Only a page of acirabrowser.com is ever opened from it. */
 export const lastResortUrl = (update: UpdateStatus | undefined): string | null => { const url = update?.lastResort?.url; return typeof url === 'string' && /^https:\/\/acirabrowser\.com\//.test(url) ? url : null; };
 
 const view = (update: UpdateStatus | undefined): UpdateView | null => {
-  if (!update?.available || (update.status !== 'downloading' && update.status !== 'paused' && update.status !== 'ready')) return null;
-  const ready = update.status === 'ready', phase = update.status;
+  if (!update?.available) return null;
+  // 'error' with an update known: the download stopped (main keeps the version and the bytes) and says so with `interrupted`. A failed look with nothing known stays invisible, as before.
+  // The look that main makes before it tries again ('checking', the version and its bytes still held) is the same stopped download: the pill must not go away for it.
+  const stopped = update.status === 'error' && update.interrupted === true, retrying = update.status === 'checking' && update.total != null; // main reports interrupted:false while it looks, but the version and its bytes are still held
+  if (update.status !== 'downloading' && update.status !== 'paused' && update.status !== 'ready' && !stopped && !retrying) return null;
+  const ready = update.status === 'ready', phase = stopped || retrying ? 'error' : update.status as 'downloading' | 'paused' | 'ready';
   noteUpdatePhase(phase);
-  return { phase, version: update.available, percent: ready ? 100 : Math.max(0, Math.min(100, update.progress ?? 0)), transferred: update.transferred ?? null, total: update.total ?? null, speed: update.speed ?? null, notes: update.notes || '', prompt: ready && update.prompt === true, pausable: !ready && update.pausable === true, failed: phase === 'paused' && Boolean(update.error), lastResort: lastResortUrl(update) };
+  return { phase, version: update.available, percent: ready ? 100 : Math.max(0, Math.min(100, update.progress ?? 0)), transferred: update.transferred ?? null, total: update.total ?? null, speed: update.speed ?? null, notes: update.notes || '', prompt: ready && update.prompt === true, pausable: !ready && update.pausable === true, failed: phase === 'paused' && Boolean(update.error), lastResort: lastResortUrl(update),
+    ...(phase === 'error' ? { retryAt: retrying ? null : update.retry?.at ?? null, failures: update.retry?.failures ?? 0, cause: update.cause ?? 'other', retrying } : {}) };
 };
+
+export { view as updateView };
 
 /** Where the page learns the updater's status from: read it now, and hear when main says it changed ('update-changed'). */
 export interface UpdateSource {
@@ -134,6 +147,8 @@ export const restartToUpdate = () => runtime.service({ type: 'update.install' })
 export const claimUpdatePrompt = () => runtime.service({ type: 'update.prompt' }).then((result) => result.update?.claimed === true).catch(() => false);
 
 /** Pause keeps the bytes already downloaded (and stays paused across a quit); Resume goes on from there. Every window hears 'update-changed'. */
+/** Try again now, after a download stopped: main treats update.check from the interface as a person's own check (it looks again and goes on from the held bytes, or starts afresh). */
+export const tryAgainUpdate = () => runtime.service({ type: 'update.check' }).catch(() => undefined);
 export const pauseUpdate = () => runtime.service({ type: 'update.pause' }).catch(() => undefined);
 export const resumeUpdate = () => runtime.service({ type: 'update.resume' }).catch(() => undefined);
 
@@ -172,4 +187,19 @@ export function downloadLine(update: UpdateView): string {
   const share = formatShare(update.transferred, update.total);
   if (update.phase === 'paused') return `${share} · ${failed ? t('app.connectionFailed') : t('update.resumesWhereStopped')}`;
   return update.speed ? `${share} · ${formatTimeLeft((update.total - update.transferred) / update.speed)}` : share;
+}
+
+/** "Retrying in 2 min": when main tries again by itself (rounded up to whole minutes, like the time left); "Retrying…" when that is under a minute away. */
+export function formatRetryIn(at: number, now = Date.now()): string {
+  const seconds = Math.max(0, (at - now) / 1000);
+  return seconds < 60 ? t('update.retryingSoon') : t('update.retryIn', { time: amount(Math.ceil(seconds / 60), 'minute') });
+}
+/** The panel's lines when a download stopped: why and how much is here ("Connection failed · 9.9 of 24 MB"), and when it tries again ("Retrying in 2 min", "Retrying…" while it
+ *  looks, or that Acira tries again later once the quick tries are used up). A file that failed its check says so in the sentence Settings uses and is not tried again by a press. */
+export function errorLines(update: UpdateView): { what: string; when: string | null } {
+  const share = update.total && update.transferred !== null ? formatShare(update.transferred, update.total) : t('update.downloadDetailShort', { percent: update.percent });
+  if (update.retrying) return { what: share, when: t('update.retryingSoon') };
+  if (update.cause === 'file') return { what: t('updates.notVerified'), when: null };
+  const why = update.cause === 'network' ? t('app.connectionFailed') : t('update.causeOther');
+  return { what: `${why} · ${share}`, when: update.retryAt ? formatRetryIn(update.retryAt) : t('update.retryLater') };
 }

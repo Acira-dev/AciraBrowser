@@ -42,7 +42,8 @@ function runtimeRenderer(acira) {
         // sender.tab of a message or connection from a content script: Electron fills id but windowId 0 and index 0 (Vimium's K / J / t read them).
         // The tabs come from the main process (runtime.cjs: tabs.get's objects) into this table, kept current while a listener exists; a listener is
         // called by the native event itself, in the same turn, with the sender corrected from the table (same return value, same sendResponse).
-        const tabs = new Map();
+        const tabs = new Map(), pages = new Map();   // pages: the page id Electron puts in sender.tab.id -> the tab id chrome.tabs gave the extension (they differ for a restored tab)
+        const learnPages = map => { pages.clear(); for (const key of Object.keys(map && typeof map === 'object' ? map : {})) if (Number.isInteger(map[key])) pages.set(Number(key), map[key]); };
         let feeding = false;
         const feed = () => {
           if (feeding) return;
@@ -50,14 +51,16 @@ function runtimeRenderer(acira) {
           try {
             acira.event('runtime.tabs').addListener(update => {
               if (!update || typeof update !== 'object') return;
+              if (update.pages) learnPages(update.pages);
               for (const id of Array.isArray(update.removed) ? update.removed : []) tabs.delete(id);
               for (const tab of Array.isArray(update.tabs) ? update.tabs : []) if (tab && typeof tab.id === 'number') tabs.set(tab.id, tab);
             });
+            acira.call('runtime.tabPages')().then(learnPages, () => undefined);
             acira.call('runtime.tabs')().then(list => { for (const tab of Array.isArray(list) ? list : []) if (tab && typeof tab.id === 'number' && !tabs.has(tab.id)) tabs.set(tab.id, tab); }, () => undefined);
           } catch (error) { feeding = false; }
         };
         const mend = sender => {
-          const known = sender && sender.tab && typeof sender.tab.id === 'number' ? tabs.get(sender.tab.id) : null;
+          const known = sender && sender.tab && typeof sender.tab.id === 'number' ? (tabs.get(sender.tab.id) || tabs.get(pages.get(sender.tab.id))) : null;
           if (!known) return sender;
           const copy = {};
           for (const key of Object.keys(sender)) copy[key] = sender[key];

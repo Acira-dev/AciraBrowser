@@ -156,6 +156,17 @@ function lazyHost(extra = {}) {
   return {h, wc};
 }
 
+test('a click names the tab as chrome.tabs does (a restored tab has its own id, not its page\'s), the engine\'s details are only the fallback', async () => {
+  const {h, wc} = lazyHost();
+  h.handlers.set('tabs.get', {callback: (event, id) => ({id: 2000000002, url: 'https://example.com/path', active: true}), extensionContext: false});
+  await h.call('contextMenus.create', null, {id: 'search', title: 'Search %s', contexts: ['selection']});
+  h.runtime.getContextMenuItems(wc, {pageURL: 'https://example.com/path', selectionText: 'cats', linkURL: '', frameURL: ''})[0].click();
+  assert.equal(h.sent.at(-1)[3].id, 2000000002);
+  h.handlers.set('tabs.get', {callback: () => ({__acira_error: 'No tab'}), extensionContext: false});
+  h.runtime.getContextMenuItems(wc, {pageURL: 'https://example.com/path', selectionText: 'cats', linkURL: '', frameURL: ''})[0].click();
+  assert.equal(h.sent.at(-1)[3].id, 7, 'no answer from the tabs package: the engine\'s details');
+});
+
 test('package: create/update/remove answer on the router; the engine\'s menu builder is replaced; a click emits onClicked with Chromium\'s info', async () => {
   const {h, wc} = lazyHost();
   assert.deepEqual(h.installed.packages, ['context-menus']);

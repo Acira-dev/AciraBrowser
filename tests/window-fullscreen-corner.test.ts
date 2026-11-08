@@ -69,6 +69,6 @@ test('Fullscreen Seamless: the store follows main and tells a layout once per ch
   applyWindowState(root, { type: 'window-state', fullscreen: false });
   const css = read('src/styles/seamless.css'), app = read('src/App.tsx');
   assert.match(css, /:root\[data-window-fullscreen\]:root:root \.app:has\(\.browser-shell\[data-seamless\]\) \.browser-root \.browser-body > \.page-area \{ margin: 0; border-radius: 0; box-shadow: none; \}/);
-  assert.match(app, /seamless && windowFullscreen \? 0 :/, 'the native page card takes radius 0 too');
+  assert.match(app, /topSeam && windowFullscreen \? 0 :/, 'the native page card takes radius 0 too');
   assert.match(app, /\[profileFrameTint,currentWindowFinish,windowFullscreen,/, 'the layout runs again when fullscreen flips');
 });

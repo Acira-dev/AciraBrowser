@@ -44,6 +44,7 @@ const NOTES_MAX=6000,FLUSH_TIMEOUT=5000,PROGRESS_EVERY=400; /* the most release 
 // once more before a file becomes installable when the feed's last answer is older than FRESH_FOR (a long download, a pause). A check that gets no
 // answer at all is given up after CHECK_WITHIN.
 const READY_RECHECK=30*60*1000,ASK_WITHIN=8*1000,FRESH_FOR=5*60*1000,QUIT_ASK=1200,CHECK_WITHIN=60*1000;
+const LEANS_FOR=30*60*1000; // an address of a file that worked is asked first for this long, for that file
 const RESUMES=2; // a download that goes quiet or whose connection drops goes on at once from the byte it had, this many times, before it counts as failed
 // Recovery (beta.14, item 14): nothing a person clicks, and no failure, may leave them unable to update.
 // STUCK_AFTER: 'checking' or 'downloading' with no sign of life for this long starts again from a clean check; STALE_FOR_MANUAL: the same for a manual "Check for updates";
@@ -56,7 +57,9 @@ const count=value=>Number.isFinite(value)&&value>=0?Math.round(value):null;
 const clean=value=>String(value?.message||value||'Update check failed.').replace(/\s+/g,' ').slice(0,200);
 const {lowerThan}=feedRules;
 /** A connection that went quiet or dropped, not a refusal, a wrong file or a damaged one: worth going on from the same byte at once. */
-const dropped=error=>['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT'].includes(error?.code)||!error?.code&&(error instanceof TypeError&&/fetch failed|terminated|network/i.test(error.message)||/net::ERR_(CONNECTION|NETWORK|INTERNET|TIMED_OUT|EMPTY_RESPONSE)/.test(String(error?.message||'')));
+const dropped=error=>['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT','ERR_UPDATE_FIRST_BYTE'].includes(error?.code)||!error?.code&&(error instanceof TypeError&&/fetch failed|terminated|network/i.test(error.message)||/net::ERR_(CONNECTION|NETWORK|INTERNET|TIMED_OUT|EMPTY_RESPONSE)/.test(String(error?.message||'')));
+/** Worth going on at once from the same byte: dropped, and not already tried on every address of the file (a download with mirrors that failed on all of them goes to the retry ladder). */
+const resumable=error=>!error?.exhausted&&dropped(error);
 /** What kind of trouble an error is. 'offline' (no network, a quiet line), 'feeds' (no address gave a newer document), 'server' (a 5xx) and 'stuck' are expected on a bad day and
  *  count towards the last-resort path only in numbers (ANY_FAILURES); every other kind is a "hard" failure (HARD_FAILURES). */
 const SOFT_KINDS=new Set(['offline','feeds','server','stuck','other']);
@@ -76,7 +79,7 @@ function kindOf(error){
  if(/ERR_PROXY|ERR_TUNNEL|HTTP 407/.test(text))return 'proxy';
  if(code==='ERR_UPDATE_FEEDS_UNAVAILABLE')return 'feeds';
  if(code==='ERR_UPDATE_HTTP'&&/HTTP 4\d\d/.test(text)&&!/HTTP (?:408|429)/.test(text))return 'missing';
- if(['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT','ERR_UPDATE_CHECK_TIMEOUT'].includes(code)||dropped(error)||/ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_TIMED_OUT|ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH/i.test(text))return 'offline';
+ if(['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT','ERR_UPDATE_FIRST_BYTE','ERR_UPDATE_CHECK_TIMEOUT'].includes(code)||dropped(error)||/ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_TIMED_OUT|ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH/i.test(text))return 'offline';
  if(code==='ERR_UPDATE_HTTP'||/HTTP 5\d\d/.test(text))return 'server';
  return 'other';
 }
@@ -197,7 +200,7 @@ function updateFile(updater,{platform,arm64}){
   if(!file?.url||typeof sha512!=='string'||!sha512||!Number.isSafeInteger(size)||size<=0)return null;
   const pathname=decodeURIComponent(file.url.pathname),name=pathname.toLowerCase().endsWith('.'+extension.toLowerCase())?path.basename(pathname):path.basename(String(file.info.url||''));
   if(!name)return null;
-  return {version:String(current.info.version||''),url:file.url.href,sha512,size,name,isAdminRightsRequired:file.info.isAdminRightsRequired===true};
+  return {version:String(current.info.version||''),url:file.url.href,mirrors:fetched.mirrorsOf(file.info.mirrors,file.url.href),sha512,size,name,isAdminRightsRequired:file.info.isAdminRightsRequired===true};
  }catch{return null;}
 }
 /** The network for Acira's own update download: electron-updater's own session (no cache; main points its proxy at the active profile's route before
@@ -216,7 +219,7 @@ function closeUpdaterConnections(){try{const {session}=require('electron');void 
 /** Replacing an AppImage removes it and moves the new one in: both need its folder (and the file) to be writable. null when they are. */
 function appImageProblem(file){try{fs.accessSync(path.dirname(file),fs.constants.W_OK);fs.accessSync(file,fs.constants.W_OK);return null;}catch(error){return error?.code==='ENOENT'?null:'Move the Acira AppImage to a folder you can write to to use automatic updates.';}} // (a path that is not there cannot be judged: left to electron-updater)
 function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null}){
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -281,6 +284,9 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  const refused=new Map();
  // damaged: how often a file (by SHA-512) failed its check in this run; holdOff: a file that failed twice, not fetched again until the time given; handoffFailures: the same file failing at electron-updater / Squirrel
  const holdOff=new Map(),damaged=new Map(),handoffFailures=new Map();
+ // Mirrors (update-download.cjs): the address of a file that worked last (kept for LEANS_FOR, so a pause or a retry does not wait again on one that was silent), and the addresses
+ // that supplied the bytes of a file that failed its SHA-512 (skipped on the next try, unless that leaves none). In memory only: every launch asks the first address first.
+ const leaning=new Map(),suspect=new Map();
  // background: the newer version downloaded quietly while a whole one is 'ready' (which stays offered until the newer one is whole). handing: the newer
  // file is being handed to electron-updater (Install now waits for it). looking: a check is under way (a failed look leaves a whole update offered).
  // asking: the feed is asked whether a version is still offered (ask()); its answer is not acted on the usual way. answeredAt: when the feed last
@@ -525,8 +531,8 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  // GitHub answers with 501, and a cancelled one starts again.
  let wholeFor=null,newMap=null; // the file whose differential could not finish in this run (the whole of it from now on); the new blockmap fetched in this run
  const blockMapUrl=url=>{const file=new URL(url);return new URL(file.pathname+'.blockmap',file).href;};
- async function fetchBlockMap(url){
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);timer.unref?.();
+ async function fetchBlockMap(url,within=30000){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),within);timer.unref?.();
   try{
    net??=updaterFetch();
    const response=await net(url,{headers:requestHeaders(),signal:controller.signal,redirect:'follow'});
@@ -536,12 +542,20 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    fetched.readBlockMap(raw);return raw;
   }finally{clearTimeout(timer);}
  }
+ /** The new setup's blockmap from the first address of the file that has it (its own, then its mirrors'); the mirror that answered is then asked for the file first. */
+ async function newBlockMap(target){
+  const addresses=[target.url,...(target.mirrors||[])];let last=null;
+  for(let index=0;index<addresses.length;index++){
+   try{const raw=await fetchBlockMap(blockMapUrl(addresses[index]),index<addresses.length-1?firstByte:30000);if(index>0)leaning.set(target.sha512,{url:addresses[index],at:now()});return raw;}catch(error){last=error;}
+  }
+  throw last;
+ }
  /** {plan, oldFile, newRaw} for a differential download, {newRaw} for the whole setup (its blockmap still goes into the cache for next time). */
  async function differential(target,where){
   const oldFile=path.join(where.cache,'installer.exe');
   let oldSize=0;try{oldSize=fs.statSync(oldFile).size;}catch{}
   const maps=oldSize?fetched.loadMaps(where.dir,{sha512:target.sha512,oldSize}):null;
-  const newRaw=maps?.newRaw||(newMap?.sha512===target.sha512?newMap.raw:await fetchBlockMap(blockMapUrl(target.url)).catch(()=>null));
+  const newRaw=maps?.newRaw||(newMap?.sha512===target.sha512?newMap.raw:await newBlockMap(target).catch(()=>null));
   if(newRaw)newMap={sha512:target.sha512,raw:newRaw};
   if(!oldSize||!newRaw||wholeFor===target.sha512)return {newRaw};
   let oldRaw=maps?.oldRaw||null;
@@ -613,9 +627,12 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
     if(id!==round)return;
     const controller=new AbortController();job={id,controller};
     net??=updaterFetch();
-    const run=way=>fetched.download({url:target.url,sha512:target.sha512,size:target.size,dir:where.dir,plan:way?.plan||null,oldFile:way?.oldFile||null,headers:requestHeaders(),fetch:net,signal:controller.signal,now,stall,onProgress:progressed});
+    // the file's addresses: its own, then its mirrors (update-download.cjs); those that supplied a file that failed its hash go last of all, and the one that worked last goes first
+    const addresses=[target.url,...(target.mirrors||[])],skip=suspect.get(target.sha512),usable=skip&&addresses.some(address=>!skip.has(address))?addresses.filter(address=>!skip.has(address)):addresses;
+    const lean=leaning.get(target.sha512),first=lean&&now()-lean.at<LEANS_FOR?Math.max(0,usable.indexOf(lean.url)):0;
+    const run=way=>fetched.download({url:usable[0],mirrors:usable.slice(1),first,firstByte,onSource:address=>leaning.set(target.sha512,{url:address,at:now()}),sha512:target.sha512,size:target.size,dir:where.dir,plan:way?.plan||null,oldFile:way?.oldFile||null,headers:requestHeaders(),fetch:net,signal:controller.signal,now,stall,onProgress:progressed});
     // a download that goes quiet (no byte for `stall`) or whose connection drops goes on at once from the byte it had, a few times, before it fails
-    const attempt=async way=>{for(let tries=0;;tries++){try{return await run(way);}catch(error){if(id!==round||tries>=RESUMES||!dropped(error))throw error;}}};
+    const attempt=async way=>{for(let tries=0;;tries++){try{return await run(way);}catch(error){if(id!==round||tries>=RESUMES||!resumable(error))throw error;}}};
     let result;
     try{result=await attempt(diff?.plan?diff:null);}
     catch(error){
@@ -660,8 +677,10 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    // a damaged file was deleted: it starts again at once, once; the second time it is held off for a while (holdOff), counted as trouble, and the retries below do not begin it again
    if(error?.code==='ERR_CHECKSUM_MISMATCH'){
     const times=(damaged.get(target.sha512)||0)+1;damaged.set(target.sha512,times);
+    // (with mirrors: the addresses that supplied its bytes are tried last next time; the second failure is held off whatever the addresses)
+    if(times===1&&target.mirrors?.length&&Array.isArray(error.sources)&&error.sources.length){suspect.set(target.sha512,new Set([...(suspect.get(target.sha512)||[]),...error.sources]));leaning.delete(target.sha512);}
     if(times===1){void startDownload();return;}
-    damaged.delete(target.sha512);holdOff.set(target.sha512,{until:now()+damagedHold,message:'The update was downloaded twice and did not match what the feed says. Acira tries again in a few hours.'});
+    suspect.delete(target.sha512);damaged.delete(target.sha512);holdOff.set(target.sha512,{until:now()+damagedHold,message:'The update was downloaded twice and did not match what the feed says. Acira tries again in a few hours.'});
    }
    // the same file failing again at the hand-over (Squirrel.Mac, electron-updater): the second time its cached copy goes, so the next try fetches a fresh one
    if(stage==='handoff'){const times=(handoffFailures.get(target.sha512)||0)+1;handoffFailures.set(target.sha512,times);if(times>=2){handoffFailures.delete(target.sha512);await where.helper.clear().catch(()=>{});}}

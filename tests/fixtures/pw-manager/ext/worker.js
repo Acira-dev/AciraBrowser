@@ -61,7 +61,7 @@ const senderIsInternal = sender => {
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  PW.messages.push({at: Date.now() - PW.started, command: message && message.command, from: sender && sender.url, tab: !!(sender && sender.tab)});
+  PW.messages.push({at: Date.now() - PW.started, command: message && message.command, from: sender && sender.url, tab: !!(sender && sender.tab), tabId: sender && sender.tab ? sender.tab.id : null, frameId: sender ? sender.frameId : null});
   if (PW.messages.length > 100) PW.messages.shift();
   switch (message && message.command) {
     case 'getAuthStatus': sendResponse({unlocked: PW.unlocked, workerStarted: PW.started}); return false;

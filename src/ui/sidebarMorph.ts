@@ -1,12 +1,8 @@
-import { motionScale, motionSpeed, reducedMotion } from './sharedMotion';
+import { motionPace, motionScale, reducedMotion } from './sharedMotion';
 import { setInstantTransitions } from './motion';
 import { arriving, bowCrossings, BUTTON_IN, MAIN_LATENCY_MS, CHROME_IN, delayRowChange, totalMs, layoutAt, leaving, LEAVE, moverBox, pageGlide, PILL_IN, RAIL_IN, schedule, type Box, type Direction, type LayoutNumbers, type Mover, type Schedule } from './sidebarMorphPlan';
 import type { BrowserLayout } from '../runtime/types';
 import { rootSidebarSide } from './sidebarSide';
-
-/** Fast's scale for this morph. Kept at .6 while the rest of Fast's set-length motion runs at `fastPace` (.5, half of Premium): on the guard's heavy
- * page (qa/regression-guard c2) turning the mode off re-laid the page out a third time in both runs at .5 (3 rows of 8), against one row that passed on retry in the one run at .6. Beta.15. */
-const MORPH_FAST_SCALE = .6;
 
 /** Sidebar mode's morph (the choreography, and why it is timed as it is, is in ui/sidebarMorphPlan.ts).
  *
@@ -192,7 +188,7 @@ export function startSidebarMorph(update: () => void, direction: Direction): boo
   if (live) { if (document.visibilityState !== 'visible' || reducedMotion() || motionScale() <= 0) { finishSidebarMorph(); return false; } }
   else if (!canMorph()) return false;
   lastDirection = direction;
-  const interrupted = live !== null, sch = schedule(direction, motionSpeed() === 'fast' ? MORPH_FAST_SCALE : 1, interrupted), root = document.documentElement;
+  const interrupted = live !== null, sch = schedule(direction, motionPace(), interrupted), root = document.documentElement;
   // --- first: what is drawn now (a morph in flight included)
   const firstLayout = readLayout(), firstSeen = seePieces(firstLayout.col), ghosts = ghostsOfNow(), hadBlock = !!q(SELECTOR.root)?.classList.contains('addr-side');
   const shown = (el: HTMLElement | undefined) => (el ? Number.parseFloat(el.style.opacity || '1') : null);

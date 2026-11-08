@@ -27,6 +27,7 @@ export type SettingsAvailability =
   | 'newtab-changed'
   | 'stock-search'
   | 'custom-search'
+  | 'hide-toolbar-row' // tabs in a sidebar with the toolbar over the page (not Sidebar mode, not Seamless): Appearance › Layout › Hide the toolbar
   | 'vertical-tabs'; // sidebar-tabs layout only // only the three built-in engines exist; custom engines use the Search engines panel
 
 export interface SettingsContext {
@@ -41,6 +42,8 @@ export interface SettingsContext {
   newTabChanged?: boolean;
   stockSearch?: boolean;
   verticalTabs?: boolean;
+  /** Tabs in a sidebar with a toolbar to hide: the "Hide the toolbar" row is shown (the Window view is Full, Compact or Focus, and the address bar is not in the sidebar). */
+  hideToolbarRow?: boolean;
 }
 
 export interface SettingsEntry {
@@ -112,6 +115,8 @@ export function isAvailable(entry: SettingsEntry, context: SettingsContext) {
       return context.stockSearch === false;
     case 'vertical-tabs':
       return Boolean(context.verticalTabs);
+    case 'hide-toolbar-row':
+      return Boolean(context.hideToolbarRow);
     default:
       return true;
   }

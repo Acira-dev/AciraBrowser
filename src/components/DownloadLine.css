@@ -9,7 +9,7 @@
   height: 8px;
   display: block;
   pointer-events: none;
-  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
+  transition: opacity calc(200ms * var(--motion-pace, 1)) cubic-bezier(0.2, 0, 0, 1);
 }
 .download-line[data-active="false"] { visibility: hidden; }
 .download-line[data-paused] { opacity: 0.45; }

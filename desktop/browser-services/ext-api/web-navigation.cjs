@@ -16,6 +16,7 @@
 // Not done (deferred, see the P5 report): onCreatedNavigationTarget keeps the engine's version (first navigation of a tab), onTabReplaced
 // never fires (Acira never swaps a tab's contents), onErrorOccurred for navigations aborted before commit (Electron reports nothing).
 const {documentsFor,frameIdOf,frameFields,read}=require('./web-navigation/frames.cjs');
+const tabIds=require('./surfaces/tab-ids.cjs');
 
 const PREFIX='aciraWebNavigation.';
 const NAMES=['onBeforeNavigate','onCommitted','onDOMContentLoaded','onCompleted','onErrorOccurred','onHistoryStateUpdated','onReferenceFragmentUpdated'];
@@ -36,6 +37,8 @@ function install(api){
  const listening=name=>{try{return api.listening(PREFIX+name).length>0;}catch{return false;}};
  const send=(name,details)=>{try{api.broadcast(PREFIX+name,details);}catch{}};
  const keyOf=frame=>read(()=>frame.frameTreeNodeId,null);
+ /** The tab id the extension knows this page by (chrome.tabs' own: a tab restored from sleep keeps its id, its page has another). */
+ const tabIdOf=wc=>tabIds.ofPage(session,wc);
  const history=wc=>{const nav=read(()=>wc.navigationHistory,null);return {index:read(()=>nav.getActiveIndex(),-1),length:read(()=>nav.length(),-1)};};
 
  function stateOf(wc){
@@ -63,7 +66,7 @@ function install(api){
   return {transitionType:type,transitionQualifiers:QUALIFIER_ORDER.filter(q=>qualifiers.has(q))};
  }
  function base(wc,frame,url,{document=true}={}){
-  return {tabId:wc.id,url,processId:read(()=>frame.processId,-1),...frameFields(docs,frame,{document}),timeStamp:Date.now()};
+  return {tabId:tabIdOf(wc),url,processId:read(()=>frame.processId,-1),...frameFields(docs,frame,{document}),timeStamp:Date.now()};
  }
  function observe(wc){
   if(!wc||observed.has(wc)||read(()=>wc.isDestroyed(),true))return;
@@ -87,7 +90,7 @@ function install(api){
    }
    if(listening('onBeforeNavigate')){
     const parent=read(()=>frame.parent,null);
-    send('onBeforeNavigate',{tabId:wc.id,url,processId:-1,frameId:frameIdOf(frame),parentFrameId:parent?frameIdOf(parent):-1,timeStamp:Date.now(),
+    send('onBeforeNavigate',{tabId:tabIdOf(wc),url,processId:-1,frameId:frameIdOf(frame),parentFrameId:parent?frameIdOf(parent):-1,timeStamp:Date.now(),
      ...(parent?{parentDocumentId:docs.idOf(parent)}:{}),documentLifecycle:'active',frameType:parent?'sub_frame':'outermost_frame'});
    }
   });
@@ -141,7 +144,7 @@ function install(api){
    if(!docs.isDocumentId(d.documentId))throw new Error('Invalid documentId.');
    frame=docs.frameOf(d.documentId);if(!frame)return null;
    wc=tabOfFrame(frame);if(!wc)return null;
-   if((Number.isInteger(d.tabId)&&d.tabId!==wc.id)||(Number.isInteger(d.frameId)&&d.frameId!==frameIdOf(frame)))return null;
+   if((Number.isInteger(d.tabId)&&tabOf(d.tabId)!==wc)||(Number.isInteger(d.frameId)&&d.frameId!==frameIdOf(frame)))return null;
   }else{
    if(!Number.isInteger(d.tabId)||!Number.isInteger(d.frameId))throw new Error('Either documentId or both tabId and frameId must be specified.');
    wc=tabOf(d.tabId);if(!wc)return null;

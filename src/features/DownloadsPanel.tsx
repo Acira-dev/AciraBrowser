@@ -2,12 +2,12 @@ import type { ReactNode } from 'react';
 import type { BrowserDownload, BrowserSnapshot } from '../runtime/types';
 import { runtime } from '../runtime/client';
 import { DownloadMatrix } from '../components/DownloadsGlyph';
-import { Download, FolderOpen, Pause, Play, RotateCw, X } from '../components/AppIcons';
+import { Download, FolderOpen, Pause, Play, RotateCw, Trash2, X } from '../components/AppIcons';
 import { ActionRow } from '../components/PanelParts';
 import { t, useT } from '../i18n';
 import { isLiveDownload, panelDownloads, panelWarnsFirst, PANEL_DOWNLOAD_ROWS } from '../ui/downloadActivity';
 import { TorDownloadNotice } from './tor/TorDownloadNotice';
-import { DownloadLineSlot, downloadMeta, downloadShare, sizeOf, useDownloads, type DownloadCommand } from './Downloads';
+import { DownloadLineSlot, canDeleteFile, downloadMeta, downloadShare, sizeOf, useDownloads, useFileDrag, type DownloadCommand } from './Downloads';
 import { FileGlyph, MiddleName } from './Library';
 import './downloads-panel.css';
 
@@ -20,7 +20,9 @@ function PanelRow({ item, act, reduced, onOpened }: { item: BrowserDownload; act
     <span/>
   </>;
   const button = (label: string, icon: ReactNode, run: () => void, danger = false) => <button type="button" className="dl-panel-act" data-danger={danger || undefined} aria-label={label} title={label} onClick={run}>{icon}</button>;
-  return <div className="dl-panel-item" data-status={item.status} data-live={running || undefined}>
+  const deletable = canDeleteFile(item), drag = useFileDrag(item, act);
+  // A finished file that is still there can be dragged from its row into a page's upload box, another program or the desktop (a native file drag started in main).
+  return <div className="dl-panel-item" data-status={item.status} data-live={running || undefined} data-deletable={deletable || undefined} {...drag}>
     {openable
       ? <button type="button" className="acira-menu-row acira-menu-row-identity dl-panel-main" aria-label={t('dl.openAria', { name: item.name })} onClick={() => { void act(item.id, 'open'); onOpened(); }}>{body}</button>
       : <div className="acira-menu-row acira-menu-row-identity dl-panel-main">{body}</div>}
@@ -29,6 +31,7 @@ function PanelRow({ item, act, reduced, onOpened }: { item: BrowserDownload; act
       {item.status === 'Paused' && item.canResume && button(t('dl.resumeAria', { name: item.name }), <Play size={14}/>, () => void act(item.id, 'resume'))}
       {!running && item.status !== 'Ready' && (item.canResume ? button(t('dl.resume'), <Play size={14}/>, () => void act(item.id, 'resume')) : item.canRetry && button(t('dl.retry'), <RotateCw size={14}/>, () => void act(item.id, 'retry')))}
       {item.status === 'Ready' && item.canShow && button(t('dl.showAria', { name: item.name }), <FolderOpen size={14}/>, () => void act(item.id, 'show'))}
+      {deletable && button(t('dl.deleteAria', { name: item.name }), <Trash2 size={14}/>, () => void act(item.id, 'delete'), true)}
       {item.canCancel ? button(t('dl.cancelAria', { name: item.name }), <X size={14}/>, () => void act(item.id, 'cancel'), true)
         : !running && button(t('dl.removeAria', { name: item.name }), <X size={14}/>, () => void runtime.dispatch({ type: 'downloads.remove', id: item.id }))}
     </span>

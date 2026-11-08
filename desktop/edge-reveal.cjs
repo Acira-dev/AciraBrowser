@@ -60,12 +60,14 @@ const fresh = () => ({ phase: 'hidden', since: 0, shownAt: 0, leaveAt: 0, lockUn
 /** Which edges this window may reveal at all. Seamless: its two switches (the side one only with tabs in the sidebar). Other
  * views: never the top (the toolbar is there); the side is the closed sidebar's, when there is one, it is not open for good,
  * and that view's "Show the closed sidebar at the left edge" switch is on (R5: Full off, Compact and Focus on by default;
- * `peek` is {full, compact, focus} from main, and a view it does not name shows, as before). */
+ * `peek` is {full, compact, focus} from main, and a view it does not name shows, as before).
+ * `topAuto` (Settings > Appearance > Layout > Hide the toolbar: tabs in a sidebar, the toolbar hides like Seamless's in Full, Compact or Focus): the top
+ * edge is always there (the toolbar has no other way back) and so is a closed sidebar's (its button is in the hidden toolbar), whatever those switches say. */
 function enabledEdges(input) {
-  const seamless = input.view === 'seamless', edges = input.edges || { top: true, side: true }, peek = input.peek || {};
+  const seamless = input.view === 'seamless', edges = input.edges || { top: true, side: true }, peek = input.peek || {}, auto = !!input.topAuto && !seamless;
   return {
-    top: !!(seamless && edges.top),
-    side: !!(input.vertical && (seamless ? edges.side : !input.docked && peek[input.view] !== false)),
+    top: !!((seamless && edges.top) || auto),
+    side: !!(input.vertical && (seamless ? edges.side : !input.docked && (auto || peek[input.view] !== false))),
   };
 }
 
@@ -78,7 +80,7 @@ const distanceOutside = (point, b) => {
 /** One controller per window. `sample()` is called every tick with what main can see and returns which edges are shown.
  * Input: point (global cursor, DIPs, or null), bounds (the window's content bounds, DIPs), focused, suspended (minimized, HTML
  * fullscreen, setup), view ('seamless' or another), vertical (tabs in the sidebar), docked (the sidebar is open for good),
- * edges {top, side} (the Seamless switches), peek {full, compact, focus} (the closed sidebar's switch per view), keys {top, side} (a key press asked for the edge: Ctrl+L, F10, a new tab), holds {top, side}
+ * edges {top, side} (the Seamless switches), topAuto (the toolbar is hidden outside Seamless, enabledEdges), peek {full, compact, focus} (the closed sidebar's switch per view), keys {top, side} (a key press asked for the edge: Ctrl+L, F10, a new tab), holds {top, side}
  * (what keeps a showing edge open: a popup, a drag, focus in the chrome), sidebarSide ('left' or 'right': the edge the sidebar comes from;
  * the right one is the left one seen in a mirror, so the pointer is mirrored across the window before any rule looks at it), size {topHeight, sideWidth} (how big the revealed chrome
  * is, DIPs), pressed (a button held in any frame, an in-page drag, a native menu or dialog: nothing reveals), engaged (the page
@@ -153,8 +155,8 @@ function createEdgeController({ now = Date.now } = {}) {
     const pushing = { top: !!(rel && rel.y <= PUSH) || inBand, side: !!(rel && rel.x <= PUSH) };
     const onChrome = {
       top: inBand || !!(inside && rel.y <= size.topHeight + LEEWAY),
-      // Full/Compact/Focus keep one connected frame: crossing into its toolbar is not leaving for the page.
-      side: !!(inside && (rel.x <= size.sideWidth + LEEWAY || input.view !== 'seamless' && rel.y <= size.topHeight + LEEWAY)),
+      // Full/Compact/Focus keep one connected frame: crossing into its toolbar is not leaving for the page (with the toolbar hidden there is no such frame: Seamless's rule).
+      side: !!(inside && (rel.x <= size.sideWidth + LEEWAY || input.view !== 'seamless' && !input.topAuto && rel.y <= size.topHeight + LEEWAY)),
     };
 
     for (const zone of ZONES) {
@@ -230,13 +232,15 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
   let timer = null, stopped = false;
   const seen = new Map();
   const entryOf = item => { let entry = seen.get(item); if (!entry) { entry = { edge: createEdgeController({ now }), last: { top: false, side: false, pinned: { top: false, side: false } }, listening: false }; seen.set(item, entry); } return entry; };
-  const tick = () => {
+  const step = () => {
     timer = null;
     let fast = false;
     for (const item of windows()) {
       const win = item.window;
       if (!win || win.isDestroyed?.()) { seen.delete(item); continue; }
       const entry = entryOf(item);
+      // Windows: main's caption fallback (caption-watch.cjs) looks at the pointer on this tick whoever holds the keyboard; it can never break the poller.
+      try { item.captionTick?.(); } catch {}
       if (!entry.listening) { entry.listening = true; const change = () => entry.edge.geometryChanged(); for (const name of ['resize', 'move']) win.on?.(name, change); }
       // A fullscreen window is the only thing its display shows: another app holding the keyboard (the other monitor, Spotlight, a notification) must not stop
       // its edges, or the sidebar "would not reveal" until a click gave the window the keyboard back. `live()` is main's word for that (the window's Space is showing).
@@ -254,7 +258,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         if (shown !== !!entry.notchShown) { entry.notchShown = shown; item.notchShown?.(shown); }
         if ((notchInput?.active && focused) || notch.active()) fast = true;
       }
-      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, speed: item.speed?.() || 'premium' };
+      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium' };
       const enabled = enabledEdges(input);
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
       if (TRACE) { const line = JSON.stringify({ ...input, enabled }); if (line !== entry.input) { entry.input = line; console.log('[edge-input]', Date.now(), line); } }
@@ -295,6 +299,16 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
     }
     if (!stopped) timer = schedule(tick, fast ? 16 : 250);
     timer?.unref?.();
+  };
+  // One window's trouble (a getter that throws mid-close, a bad cursor read) must never stop the poller for every window: it would end every edge reveal and the Windows
+  // caption's fallback with it, with no sign. The next look comes 250 ms later; the first line of each distinct trouble is written down.
+  let lastTrouble = '';
+  const tick = () => {
+    try { step(); } catch (error) {
+      const text = String(error?.message || error).slice(0, 200);
+      if (text !== lastTrouble) { lastTrouble = text; try { console.warn('The edge poller skipped a look:', text); } catch {} }
+      if (!stopped && !timer) { timer = schedule(tick, 250); timer?.unref?.(); }
+    }
   };
   app.whenReady().then(() => { if (!stopped && !timer) { timer = schedule(tick, 250); timer?.unref?.(); } });
   app.on('will-quit', () => { stopped = true; if (timer) cancel(timer); });

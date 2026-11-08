@@ -124,6 +124,56 @@ test('a key press: a named command fires onCommand with the tab; _execute_action
   });
 });
 
+test('a key on one of Acira\'s own pages (Settings, New tab): the command hears that page as the tab, not the website behind it, and nothing is granted', async () => {
+  const activeTab = require('../desktop/browser-services/ext-api/surfaces/active-tab.cjs');
+  await withRegistry(async () => {
+    const ext = manifestExtension(ID, manifest({go: {suggested_key: {default: 'Ctrl+Alt+J'}, description: 'Go'}, _execute_action: {suggested_key: {default: 'Ctrl+Shift+Y'}}}), 'Tool');
+    const front = {id: 2000000003, windowId: 1, active: true, url: 'chrome://settings/'};
+    const asked = [];
+    let h, bare;
+    try {
+    h = host({packages: ['commands'], extensions: [ext], tabs: {4: {id: 4, url: 'https://a.test/', active: false}}, store: {impl: {tabModel: {}}}});
+    h.handlers.set('tabs.query', {callback: (event, info) => { if (!event.extension) return {__acira_error: 'ACCESS_DENIED'}; asked.push(info); return [front]; }, extensionContext: false});
+    const controller = bridge.all('commands').find(entry => entry.session === h.session).controller;
+    assert.equal(controller.run(ID, 'go', undefined), true);
+    assert.deepEqual(h.sent, [[ID, 'commands.onCommand', 'go', front]], 'the page in front, as chrome.tabs describes it, never the last website tab');
+    assert.deepEqual(asked, [{active: true, lastFocusedWindow: true}]);
+    assert.equal(activeTab.has(h.session, ID, 4, 'https://a.test/'), false);
+    // _execute_action is the action package's: it is told there is no page of its own to use.
+    const invoked = [];
+    const release = bridge.register(h.session, 'action', {invoke: (id, contents) => { invoked.push([id, contents]); return true; }});
+    assert.equal(controller.run(ID, '_execute_action', undefined), true);
+    assert.deepEqual(invoked, [[ID, undefined]]);
+    release();
+    // Without the tab list (a session that has none) the command still fires, with no tab, as before.
+    bare = host({packages: ['commands'], extensions: [ext]});
+    const bareController = bridge.all('commands').find(entry => entry.session === bare.session).controller;
+    assert.equal(bareController.run(ID, 'go', undefined), true);
+    assert.deepEqual(bare.sent, [[ID, 'commands.onCommand', 'go', undefined]]);
+    } finally { h?.dispose(); bare?.dispose(); }
+  });
+});
+
+test('a command that asks for a media key has no key and says why (Settings › Shortcuts); others carry no note', async () => {
+  await withRegistry(async ({registry}) => {
+    const ext = manifestExtension(ID, manifest({
+      play: {suggested_key: {default: 'MediaPlayPause'}, description: 'Play or pause'},
+      next: {suggested_key: {default: 'MediaNextTrack'}, description: 'Next'},
+      go: {suggested_key: {default: 'Ctrl+Alt+J'}, description: 'Go'},
+      plain: {description: 'No key'}
+    }), 'Tool');
+    let h;
+    try {
+      h = host({packages: ['commands'], extensions: [ext]});
+      const byName = Object.fromEntries(registry.list().filter(c => c.id.startsWith('ext:')).map(c => [decodeURIComponent(c.id.split(':').pop()), c]));
+      assert.deepEqual(['play', 'next', 'go', 'plain'].map(name => byName[name].note), ['media-key', 'media-key', undefined, undefined]);
+      assert.deepEqual(byName.play.bindings, [], 'a media key cannot be delivered, so none is shown as set');
+      assert.equal('note' in byName.go, false, 'the shape of every other row is unchanged');
+      assert.equal(byName.go.bindings.length, 1);
+    } finally { h?.dispose(); }
+  });
+});
+
 test('global (system-wide) shortcuts are not registered', async () => {
   await withRegistry(async ({registry}) => {
     const ext = manifestExtension(ID, manifest({everywhere: {suggested_key: {default: 'Ctrl+Shift+H'}, description: 'Global', global: true}}), 'Tool');
@@ -137,6 +187,18 @@ function world(m, options = {}) {
   const packages = extApi.loadPackages({fresh: true}).filter(p => p.name === 'commands');
   return extensionWorld({name: 'x', version: '1', ...m}, {packages, ...options});
 }
+
+test('a key press names the tab as chrome.tabs does (a restored tab has its own id, not its page\'s)', async () => {
+  await withRegistry(async () => {
+    const ext = manifestExtension(ID, manifest({go: {suggested_key: {default: 'Ctrl+Alt+J'}, description: 'Go'}}), 'Tool');
+    const h = host({packages: ['commands'], extensions: [ext], tabs: {4: {id: 4, url: 'https://a.test/', active: true}}});
+    const controller = bridge.all('commands').find(entry => entry.session === h.session).controller;
+    h.handlers.set('tabs.get', {callback: () => ({id: 2000000002, url: 'https://a.test/', active: true}), extensionContext: false});
+    assert.equal(controller.run(ID, 'go', {id: 4, isDestroyed: () => false}), true);
+    assert.equal(h.sent.at(-1)[3].id, 2000000002);
+    h.dispose();
+  });
+});
 
 test('extension side: getAll and onCommand; no chrome.commands without the manifest key', async () => {
   const w = world(manifest({go: {description: 'Go'}}), {worker: true, answer: name => (name === 'commands.getAll' ? [{name: 'go', description: 'Go', shortcut: 'Ctrl+G'}] : undefined)});
@@ -290,4 +352,50 @@ test('Mac: Ctrl in a manifest means Command, MacCtrl the Control key', async () 
     assert.equal(press('I', 'KeyI', {alt: true})?.command, 'c');
     assert.equal(press('Y', 'KeyY', {control: true}), null, 'the Control key is not Command');
   } finally { h?.dispose(); bridge.setShortcuts(null); fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+// ---- beta.13.2: keys in private windows and tabs, for the extensions allowed there
+const glue = require('../desktop/browser-services/ext-api/surfaces/main-glue.cjs');
+
+test('private sessions: no rows of their own in Settings, their getAll answers with the profile\'s keys, and a key pressed in a private page runs in that page\'s private session', async () => {
+  await withRegistry(async ({registry}) => {
+    const ext = manifestExtension(ID, manifest({go: {suggested_key: {default: 'Ctrl+Alt+J'}, description: 'Go'}, _execute_action: {suggested_key: {default: 'Ctrl+Shift+Y'}}}), 'Tool');
+    const ordinary = host({packages: ['commands'], extensions: [ext], tabs: {4: {id: 4, url: 'https://a.test/', active: true}}});
+    const privateOne = host({packages: ['commands'], extensions: [ext], storeKey: 'private-tab-1', sourceProfileId: 'profile-1', tabs: {9: {id: 9, url: 'https://p.test/', active: true, incognito: true}}});
+    assert.deepEqual(registry.list().filter(c => c.id.startsWith('ext:')).map(c => c.id.split(':')[1]), ['profile-1', 'profile-1'], 'one row per command, none for the private session');
+    assert.equal((await privateOne.call('commands.getAll', ext)).find(c => c.name === 'go').shortcut, registry.list().find(c => c.id === extId(ID, 'go')).bindings[0].replace(/\bCmd\b/g, 'Command'), 'the private session reports the profile\'s key');
+    const action = {action: 'extension-command', profileId: 'profile-1', extensionId: ID, command: 'go'};
+    const privatePage = {id: 9, session: privateOne.session, isDestroyed: () => false};
+    assert.equal(glue.runCommand(action, {webContents: privatePage, privateMode: true}), true);
+    assert.deepEqual(privateOne.sent, [[ID, 'commands.onCommand', 'go', {id: 9, url: 'https://p.test/', active: true, incognito: true}]]);
+    assert.deepEqual(ordinary.sent, [], 'the ordinary session did not hear a private key press');
+    // an ordinary page still goes to the ordinary session
+    assert.equal(glue.runCommand(action, {webContents: {id: 4, session: ordinary.session, isDestroyed: () => false}}), true);
+    assert.equal(ordinary.sent.length, 1);
+    assert.equal(privateOne.sent.length, 1);
+    privateOne.dispose();
+    assert.equal(registry.list().filter(c => c.id.startsWith('ext:')).length, 2, 'closing the private session leaves the profile\'s rows');
+    ordinary.dispose();
+  });
+});
+
+test('private keys: never for an extension that is not allowed in private, another profile\'s key, Tor or a private page without an extension session, or an Acira page', async () => {
+  await withRegistry(async () => {
+    const allowed = manifestExtension(ID, manifest({go: {suggested_key: {default: 'Ctrl+Alt+J'}, description: 'Go'}}), 'Allowed');
+    const notAllowed = manifestExtension(ID2, manifest({go: {suggested_key: {default: 'Ctrl+Alt+K'}, description: 'Go'}}), 'Not allowed');
+    const ordinary = host({packages: ['commands'], extensions: [allowed, notAllowed]});
+    const privateOne = host({packages: ['commands'], extensions: [allowed], storeKey: 'private-tab-1', sourceProfileId: 'profile-1', tabs: {9: {id: 9, url: 'https://p.test/', active: true}}});   // only the allowed one is loaded there
+    const page = {id: 9, session: privateOne.session, isDestroyed: () => false};
+    const press = (extensionId, profileId = 'profile-1', contents = page) => glue.runCommand({action: 'extension-command', profileId, extensionId, command: 'go'}, {webContents: contents, privateMode: true});
+    assert.equal(press(ID), true);
+    assert.equal(press(ID2), false, 'the extension that is not allowed in private tabs is not in the private session');
+    assert.equal(press(ID, 'profile-2'), false, 'a key of another profile');
+    assert.equal(press(ID, 'profile-1', {id: 12, session: {extensions: {}}, isDestroyed: () => false}), false, 'a private (or Tor, or secured) page whose session has no extensions');
+    assert.equal(press(ID, 'profile-1', null), false, 'an Acira page has no page of its own');
+    assert.equal(press(ID, 'profile-1', {id: 9, session: privateOne.session, isDestroyed: () => true}), false, 'a page that is gone');
+    assert.equal(glue.runCommand({action: 'extension-command', profileId: 'private-tab-1', extensionId: ID, command: 'go'}, {webContents: page, privateMode: true}), false, 'only the profile\'s own key reaches a private session');
+    assert.equal(privateOne.sent.length, 1, 'one command reached the private session in all');
+    assert.equal(ordinary.sent.length, 0);
+    privateOne.dispose(); ordinary.dispose();
+  });
 });

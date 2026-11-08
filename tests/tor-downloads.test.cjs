@@ -33,7 +33,10 @@ test('a download from a Tor tab is recorded as one; an ordinary one is not', asy
 test('macOS: a download from a Tor tab carries the quarantine mark like any other, with no address', {skip: process.platform !== 'darwin' && 'macOS only'}, async () => {
   const f = setup({tor: true}), record = await f.finish(), read = name => { try { return require('node:child_process').execFileSync('/usr/bin/xattr', ['-p', name, record.path], {stdio: ['ignore', 'pipe', 'ignore']}).toString().trim(); } catch { return null; } };
   assert.equal(record.status, 'Ready');
-  assert.match(read('com.apple.quarantine') || 'none', /^0081;[0-9a-f]{8};Acira Browser;$/);
+  // The mark is written by a child process beside the Ready row (download-engine.cjs: opening a file waits for it), so on a busy Mac it can land a moment after the record: wait for it (5 s at most).
+  let mark = read('com.apple.quarantine');
+  for (let waited = 0; !mark && waited < 5000; waited += 50) { await new Promise(resolve => setTimeout(resolve, 50)); mark = read('com.apple.quarantine'); }
+  assert.match(mark || 'none', /^0081;[0-9a-f]{8};Acira Browser;$/);
   assert.equal(read('com.apple.metadata:kMDItemWhereFroms'), null);
 });
 

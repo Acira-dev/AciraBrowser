@@ -39,7 +39,7 @@ function applyRadius(entry, radius) {
 /** A held glide keeps the page's layout at one size while its view's edges follow the card on every frame: the view is exactly the card's rectangle (all four edges on the spring,
  * so the 6 px frame strip around an inset card is never covered and the landing has nothing to snap), and the page lays out at the larger of its two sizes through the viewport
  * override (`enableDeviceEmulation({viewSize})`: the view shows that layout clipped to the view, never scaled). One layout at the start of a widening, one at the landing of a
- * narrowing, none in between. `entry.layoutHold` is the size in force; it is released the moment the glide lands, or when any other placement takes over. */
+ * narrowing, none in between. `entry.layoutHold` is the size in force; it is released `RELEASE_QUIET` ms after the glide lands (the view's last size has reached the page by then), or at once when any other placement takes over. */
 const canHoldLayout = entry => { const wc = entry.view?.webContents; return !!wc && typeof wc.enableDeviceEmulation === 'function' && typeof wc.disableDeviceEmulation === 'function'; };
 function holdLayout(entry, size) {
   const wc = entry.view.webContents, held = entry.layoutHold;
@@ -47,11 +47,23 @@ function holdLayout(entry, size) {
   wc.enableDeviceEmulation({screenPosition: 'desktop', viewPosition: {x: 0, y: 0}, deviceScaleFactor: 0, viewSize: {width: size.width, height: size.height}, scale: 1});
   entry.layoutHold = {width: size.width, height: size.height};
 }
-function releaseLayout(entry) {
+function releaseLayout(entry, clock) {
+  if (entry.releaseTimer) { (clock?.cancel ?? clearTimeout)(entry.releaseTimer); entry.releaseTimer = null; }
   if (!entry.layoutHold) return;
   entry.layoutHold = null;
   const wc = entry.view?.webContents;
   if (wc && !wc.isDestroyed?.()) wc.disableDeviceEmulation();
+}
+/** How long the view stands on its final rectangle before the page's layout is let go (the landing of a held glide). The view's size travels to the page's renderer
+ * as visual properties, one in flight at a time, while the end of the viewport override goes over its own channel at once: released in the same turn as the last
+ * `setBounds`, the page laid out at the size its renderer last heard (the glide's last pixel short, 1279 wide) and again when the final size arrived 25 to 35 ms later,
+ * a second re-layout of a heavy site (qa/regression-guard c2 `off · heavy page`: 7 of 16 reps of the Sidebar mode morph on the guard's 2500-card page at Fast .6, every run at .5, and a known 1 in 3 at Premium).
+ * Letting the view stand for a few frames first costs nothing the eye can see (the page shows exactly what it showed) and the release then lands on the size that is there. */
+const RELEASE_QUIET = 64;
+function releaseLayoutAfter(entry, clock, quiet = RELEASE_QUIET) {
+  if (entry.releaseTimer) { clock.cancel(entry.releaseTimer); entry.releaseTimer = null; }
+  if (!entry.layoutHold) return;
+  entry.releaseTimer = clock.later(() => { entry.releaseTimer = null; releaseLayout(entry, clock); }, quiet);
 }
 
 /** A slide asks `clock.busy(webContents)` (the share of one core the page's renderer used since the last call, or undefined) every
@@ -98,6 +110,7 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   }
   if (entry.boundsTimer) clock.cancel(entry.boundsTimer);
   entry.boundsTimer = null; entry.slideRun = null;
+  if (entry.releaseTimer) { clock.cancel(entry.releaseTimer); entry.releaseTimer = null; }   // a landed glide still waiting to let go of its layout: this placement decides
   if (entry.cover) { entry.cover.drop(); entry.cover = null; }
   let start = entry.view.getBounds();
   const started = clock.now(), hasRadius = Number.isFinite(radius);
@@ -120,12 +133,12 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   if (docked && hasRadius && Math.round(radius) > fromRadius) fromRadius = Math.round(radius);
   // (Not with a picture of the old layout over the page: that layer, off unless ACIRA_DISSOLVE=1, keeps the old size.)
   const rising = docked && !dissolve && Math.abs(start.y - target.y) < DROP;
-  if (!animated || (resizing && !slide)) { entry.view.setBounds(target); releaseLayout(entry); if (hasRadius) { applyRadius(entry, radius); entry.radiusGoal = undefined; } return; }
+  if (!animated || (resizing && !slide)) { entry.view.setBounds(target); releaseLayout(entry, clock); if (hasRadius) { applyRadius(entry, radius); entry.radiusGoal = undefined; } return; }
   if (exact) {
     // The page keeps the layout it has (or this view's size) and takes the larger of that and the target: a widening lays out once here, at its final size; a narrowing keeps its old one until it lands.
     const lay = entry.layoutHold || {width: start.width, height: start.height};
     holdLayout(entry, {width: Math.max(lay.width, target.width), height: Math.max(lay.height, target.height)});
-  } else releaseLayout(entry);
+  } else releaseLayout(entry, clock);
   // A slide may bring its own spring (Seamless edge reveals: a reveal and a hide each have one, already at the speed); without it, the
   // sidebar's 480ms curve, at the speed's pace.
   const own = slide && validSpring(pageSpring) ? pageSpring : null, settleMs = own ? Math.round(springSettle(own) * 1000) : 0;
@@ -183,7 +196,7 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
     if (cover && landed && held && !cover.dropped) cover.show({x: bounds.x, y: bounds.y, width: held.width, height: held.height}, entry.radius);
     if (cover && early && sized && !cover.dropped) { picture = {x: bounds.x, y: bounds.y, width: Math.max(from.width, to.width), height: rising ? bounds.height : Math.max(from.height, to.height)}; cover.show(picture, entry.radius); }
     if (Object.keys(bounds).some(key => bounds[key] !== last[key])) { if (cover && !watching && (bounds.width !== last.width || bounds.height !== last.height)) watchLayout(); entry.view.setBounds(bounds); last = bounds; }
-    if (exact && progress >= 1) releaseLayout(entry);
+    if (exact && progress >= 1) releaseLayoutAfter(entry, clock);
     if (hasRadius) { const goal = entry.radiusGoal ?? Math.round(radius); applyRadius(entry, progress >= 1 ? goal : fromRadius + (goal - fromRadius) * Math.min(1, Math.max(0, eased))); if (progress >= 1) entry.radiusGoal = undefined; }
     if (progress < 1) {
       if (slide && current.resizing && !current.hold && clock.busy && elapsed - probedAt >= BUSY_EVERY) { probedAt = elapsed; strained = clock.busy(entry.view.webContents) >= BUSY ? strained + 1 : 0; if (strained >= 2) thin = true; }

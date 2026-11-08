@@ -54,3 +54,30 @@ test('page menu rows show the live key of the command they run (and editing rows
  const selection=Object.fromEntries(f.service.menu(f.wc,{frame:f.frame,selectionText:'words',editFlags:{canCopy:true,canSelectAll:true}}).items.filter(i=>i.id).map(i=>[i.id,i.shortcut]));
  assert.equal(selection['selection-copy'],'Ctrl+C');
 });
+
+test('a Link preview\'s page menu: the same items for the tab it came from, Open link beside that tab, downloads start from that tab, no Print or Save page',async()=>{
+ const f=setup({peek:()=>{}}),from=[];
+ f.setOwner({tabId:'source',profileId:'profile-A',private:false,preview:true,searchEngine:'duckduckgo',downloadURL:url=>from.push(url)});
+ const link={frame:f.frame,linkURL:'https://destination.example/file.zip'},ids=items=>items.map(i=>i.id).filter(Boolean);
+ let items=f.service.build(f.wc,link);
+ for(const id of ['link-tab','link-foreground','link-peek','link-window','link-private-tab','link-private','link-save','link-copy'])assert.ok(ids(items).includes(id),'the link menu has '+id);
+ await items.find(i=>i.id==='link-tab').click();
+ assert.deepEqual(f.calls.at(-1),['tab',{url:'https://destination.example/file.zip',background:true,profileId:'profile-A',tabId:'source'}],'Open link in new tab opens beside the source tab, in its profile');
+ await items.find(i=>i.id==='link-save').click();
+ assert.deepEqual(from,['https://destination.example/file.zip'],'Save link as starts the download from the source tab (the preview\'s own page cancels downloads)');
+ assert.equal(f.calls.some(c=>c[0]==='download'),false,'not from the preview page itself');
+ const page=f.service.build(f.wc,{frame:f.frame});
+ assert.equal(ids(page).some(id=>['print','save-page','save-pdf'].includes(id)),false,'Print and Save page would act on the page the preview came from');
+ for(const id of ['back','forward','reload','inspect'])assert.ok(ids(page).includes(id),id+' is still in the page menu');
+ const tabMenu=(f.setOwner({tabId:'tab',profileId:'profile-A',private:false}),ids(f.service.build(f.wc,{frame:f.frame})));
+ for(const id of ['print','save-page','save-pdf'])assert.ok(tabMenu.includes(id),'a tab keeps '+id);
+});
+
+test('a Link preview from a private or Tor tab keeps its links private or Tor',async()=>{
+ const f=setup();
+ f.setOwner({tabId:'source',profileId:'profile-A',private:true,privateTab:true,tor:true,preview:true,downloadURL:()=>{}});
+ const items=f.service.build(f.wc,{frame:f.frame,linkURL:'https://destination.example/'});
+ await items.find(i=>i.id==='link-tab').click();assert.deepEqual(f.calls.at(-1),['tab',{url:'https://destination.example/',background:true,profileId:'profile-A',tabId:'source',privacy:'tor'}]);
+ await items.find(i=>i.id==='link-window').click();assert.deepEqual(f.calls.at(-1),['window',{url:'https://destination.example/',profileId:'profile-A',private:true,tor:true}]);
+ assert.equal(items.some(i=>['link-private-tab','link-private','link-tor-tab','link-peek'].includes(i.id)),false);
+});

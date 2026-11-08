@@ -14,6 +14,24 @@ const PROVIDED = new Set(['electron', ...builtinModules]);
 // Both comment forms are blanked, keeping string contents: a require() inside a comment is not a load.
 const stripComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 
+/**
+ * @electron/asar's createPackage resolves when the last file has been READ from disk, not when the archive has been written: its write stream is never ended or awaited
+ * (lib/disk.js writeFileListToStream pipes with {end: false}). A read right after it can find the last files of the archive (package.json is the last one in a small
+ * tree) as holes: "Unexpected token ' ', "          "..." in checkAsar, in 5 of 60 runs with the CPU busy and in 2 of 5 full node suites. So: make the archive, then wait until
+ * every file of the tree reads back from it exactly as it is on disk (about 25 ms steps, 5 s at most).
+ */
+async function createPackageSettled(tree, out) {
+  const fs = require('node:fs');
+  await asar.createPackage(tree, out);
+  const rels = [], walk = (dir) => { for (const e of fs.readdirSync(path.join(tree, dir), { withFileTypes: true })) { const rel = path.posix.join(dir, e.name); if (e.isDirectory()) walk(rel); else if (e.isFile()) rels.push(rel); } };
+  walk('');
+  const complete = () => { try { return rels.every((rel) => Buffer.compare(asar.extractFile(out, path.normalize(rel)), fs.readFileSync(path.join(tree, rel))) === 0); } catch { return false; } };
+  for (let waited = 0; !complete(); waited += 25) {
+    if (waited >= 5000) throw new Error(`${out} was not completely written 5 s after createPackage resolved`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 /** Opens an asar and returns a small read-only view: has(path), read(path), list. Paths are posix and relative to the asar root. */
 function openAsar(archive) {
   const files = new Set(), dirs = new Set(['']);
@@ -139,9 +157,9 @@ async function selfTest(archive, workDir) {
     }
     if (!victim) return { ok: false, victim: null, detail: 'no direct desktop require found to break' };
     const control = path.join(dir, 'control.asar'), broken = path.join(dir, 'broken.asar');
-    await asar.createPackage(tree, control);
+    await createPackageSettled(tree, control);
     fs.rmSync(path.join(tree, victim.target));
-    await asar.createPackage(tree, broken);
+    await createPackageSettled(tree, broken);
     const names = (r) => r.problems.map((p) => p.request + ' in ' + p.file);
     const before = checkAsar(control), after = checkAsar(broken);
     const flagged = after.problems.filter((p) => p.file === victim.by && path.posix.normalize(path.posix.join(path.posix.dirname(p.file), p.request)) === victim.target);
@@ -152,7 +170,7 @@ async function selfTest(archive, workDir) {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-module.exports = { checkAsar, references, openAsar, selfTest };
+module.exports = { checkAsar, references, openAsar, selfTest, createPackageSettled };
 
 if (require.main === module) {
   const result = checkAsar(path.resolve(process.argv[2] || ''));

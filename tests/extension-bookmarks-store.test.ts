@@ -92,3 +92,18 @@ test('the events for the person\'s own changes are the same ones: star, rename, 
   const sorted = reduceBrowser(reduceBrowser(s0, { type: 'bookmark.add', url: 'https://b.example/', title: 'B', parentId: 'work', index: 1 } as any), { type: 'bookmark.add', url: 'https://a.example/', title: 'A', parentId: 'work', index: 2 } as any);
   assert.deepEqual(kids(sorted, 'work'), ['Docs', 'B', 'A']);
 });
+
+test('an address an extension stored (a bookmarklet, chrome://, file:) lives in the store like any bookmark, is listed, and comes back with Undo', () => {
+  const s0 = fixture();
+  const { s } = write(s0, nodes => model.create(nodes, { parentId: 'work', title: 'Bookmarklet', url: 'javascript:(function(){var a=1;})()' }, ctx));
+  const made = s.bookmarkNodes.find(b => b.title === 'Bookmarklet')!;
+  assert.equal(made.url, 'javascript:(function(){var a=1;})()'); assert.equal(made.parentId, 'work');
+  assert.ok(s.bookmarks.includes(made.url!), 'listed with the other saved addresses');
+  const removed = reduceBrowser(s, { type: 'bookmark.remove', id: 'work' } as any);
+  assert.equal(removed.bookmarkNodes.some(b => b.id === made.id), false);
+  const back = reduceBrowser(removed, { type: 'bookmark.restore', nodes: s.bookmarkNodes.filter(b => b.id === 'work' || b.parentId === 'work') } as any);
+  assert.ok(back.bookmarkNodes.some(b => b.id === made.id && b.url === made.url), 'Undo puts the folder back with the bookmarklet in it');
+  const { validateAction } = require('../desktop/validation.cjs');
+  assert.doesNotThrow(() => validateAction({ type: 'bookmark.restore', nodes: s.bookmarkNodes.filter(b => b.id === 'work' || b.parentId === 'work') }, null), 'the restore passes the same check the interface\'s action does');
+  assert.throws(() => validateAction({ type: 'tab.new', url: made.url }, null), /unsupported protocol/, 'opening it is refused');
+});

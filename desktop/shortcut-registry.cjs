@@ -108,7 +108,7 @@ const COMMANDS=[
 ];
 const BY_ID=new Map(COMMANDS.map(c=>[c.id,c]));
 /** Commands another module owns as a set under one id prefix (one per saved routine). Replaced whole; stock commands are untouchable. */
-function setDynamicCommands(prefix,commands){if(typeof prefix!=='string'||!/^[a-z]+:$/.test(prefix))throw new Error('Dynamic commands need a prefix like "routine:".');for(let i=COMMANDS.length-1;i>=0;i--)if(COMMANDS[i].id.startsWith(prefix)){BY_ID.delete(COMMANDS[i].id);COMMANDS.splice(i,1);}for(const c of commands.slice(0,200)){if(!c.id.startsWith(prefix)||BY_ID.has(c.id))continue;const command={...C(c.id,String(c.label).slice(0,120),c.category,c.action,(c.defaults||[]).slice(0,1)),dynamic:true};COMMANDS.push(command);BY_ID.set(command.id,command);}}
+function setDynamicCommands(prefix,commands){if(typeof prefix!=='string'||!/^[a-z]+:$/.test(prefix))throw new Error('Dynamic commands need a prefix like "routine:".');for(let i=COMMANDS.length-1;i>=0;i--)if(COMMANDS[i].id.startsWith(prefix)){BY_ID.delete(COMMANDS[i].id);COMMANDS.splice(i,1);}for(const c of commands.slice(0,200)){if(!c.id.startsWith(prefix)||BY_ID.has(c.id))continue;const command={...C(c.id,String(c.label).slice(0,120),c.category,c.action,(c.defaults||[]).slice(0,1)),dynamic:true,...(typeof c.note==='string'&&c.note?{note:c.note.slice(0,40)}:{})};COMMANDS.push(command);BY_ID.set(command.id,command);}}
 const actionSignature=action=>JSON.stringify(Object.keys(action).sort().map(k=>[k,action[k]]));
 const ID_BY_ACTION=new Map(COMMANDS.map(c=>[actionSignature(c.action),c.id]));
 /** Command id for an action object produced by the default resolver, or null for actions that are not rebindable. */
@@ -158,8 +158,9 @@ function restriction(accel,platform){
  return null;
 }
 
-function createShortcutRegistry({file,platform=process.platform,now=Date.now,onChange=()=>{},recordingTtlMs=30000}={}){
- const supported=command=>Boolean(command)&&(!['tor-window','tor-tab'].includes(command.id)||bundledTorSupported(platform));
+function createShortcutRegistry({file,platform=process.platform,arch=process.arch,now=Date.now,onChange=()=>{},recordingTtlMs=30000}={}){
+ // The Tor commands exist where Acira ships a Tor (platform.cjs bundledTorSupported: Windows, Mac arm64/x64, Linux x64 only), so a platform alone does not say; `arch` is a seam for tests.
+ const supported=command=>Boolean(command)&&(!['tor-window','tor-tab'].includes(command.id)||bundledTorSupported(platform,arch));
  const availableCommands=()=>COMMANDS.filter(supported);
  let custom=new Map(); // command id -> canonical accelerators (empty = deliberately unbound)
  // Keys the person gave an extension's command stay in the file while that extension is not loaded (turned off, another profile not open yet,
@@ -170,7 +171,7 @@ function createShortcutRegistry({file,platform=process.platform,now=Date.now,onC
  const defaultsOf=command=>(platform==='darwin'&&command.mac||command.defaults).map(accel=>expand(accel,platform)).filter(Boolean);
  const bindingsOf=command=>custom.has(command.id)?custom.get(command.id):defaultsOf(command);
  function effective(){const map=new Map();for(const command of availableCommands())for(const accel of bindingsOf(command))if(!map.has(accel))map.set(accel,command.id);return map;}
- function view(command){const bindings=bindingsOf(command);return {id:command.id,label:command.label,category:command.category,defaults:defaultsOf(command),defaultsDisplay:defaultsOf(command).map(a=>display(a,platform)),bindings,display:bindings.map(a=>display(a,platform)),customized:custom.has(command.id),unbound:bindings.length===0};}
+ function view(command){const bindings=bindingsOf(command);return {id:command.id,label:command.label,category:command.category,defaults:defaultsOf(command),defaultsDisplay:defaultsOf(command).map(a=>display(a,platform)),bindings,display:bindings.map(a=>display(a,platform)),customized:custom.has(command.id),unbound:bindings.length===0,...(command.note?{note:command.note}:{})};}
  const list=()=>availableCommands().map(view);
  function save(){
   if(!file)return;

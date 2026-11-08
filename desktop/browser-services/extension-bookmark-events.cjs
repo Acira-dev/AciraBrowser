@@ -37,9 +37,15 @@ function watch({ profileId, initial = null, deliver, later = fn => setImmediate(
     const events = model.diffEvents(before, now);
     if (events.length) later(() => { for (const event of events) { try { deliver(event.name, ...event.args); } catch { /* delivery never breaks a bookmark change */ } } });
   };
-  const watcher = { profileId, note, signal: name => later(() => { try { deliver(name); } catch { /* ignore */ } }) };
+  const send = (name, args) => later(() => { try { deliver(name, ...args); } catch { /* delivery never breaks a bookmark change */ } });
+  const watcher = { profileId, note, signal: name => send(name, []) };
   watchers.add(watcher);
-  return () => { watchers.delete(watcher); };
+  const stopWatching = () => { watchers.delete(watcher); };
+  /** The profile's nodes are now `nodes` and its extensions have been told (a buffered burst of writes already sent its own events): the next list that equals it says nothing. */
+  stopWatching.adopt = nodes => { last = compact(nodes.filter(node => node && node.browserProfileId === profileId)); };
+  /** One event to this profile's extensions, now (after the current step), in the order given. */
+  stopWatching.emit = (name, ...args) => send(name, args);
+  return stopWatching;
 }
 
 /** For tests: forget every watcher. */

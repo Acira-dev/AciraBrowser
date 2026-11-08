@@ -1,7 +1,7 @@
 'use strict';
 // The folder of Acira's public update feed, as an https address with a trailing slash ('' when the release target is not a plain folder).
 // Small files that belong beside the feed (the reviewed-sites list, site-allowlist.cjs) are read from it, so the app needs no second address
-// and the person sees one host for "updates" (raw.githubusercontent.com). Same sources as spellcheck-dictionaries.cjs: a source checkout reads
+// and the person sees one host for "updates" (update.acirabrowser.com since beta.11). Same sources as spellcheck-dictionaries.cjs: a source checkout reads
 // packaging/release-target.json; the installed app has no packaging/ folder and reads the app-update.yml electron-builder wrote beside it.
 function readUpdateConfig() {
   try { return require('node:fs').readFileSync(require('node:path').join(process.resourcesPath || '', 'app-update.yml'), 'utf8'); } catch { return ''; }

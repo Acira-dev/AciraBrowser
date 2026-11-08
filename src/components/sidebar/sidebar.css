@@ -282,7 +282,8 @@
 /* A group's members (tabs, a split card, a linked pane) are ordinary rows moved one step in: each row's own box (its hover,
    current and split fills) starts right of the group's rail with the same 6px gap as a row's text inset, and keeps the same
    right edge as every other row (founder, 27 Oct: no fill under or left of the rail). */
-.app.style-acira .acira-sidebar .sb-group-members{--sb-rail-x:13px;--sb-group-indent:calc(var(--sb-rail-x) + 2px + 6px);position:relative;display:flex;flex-direction:column}
+.app.style-acira .acira-sidebar .sb-group-members{--sb-rail-x:13px;--sb-group-indent:calc(var(--sb-rail-x) + 2px + 6px);position:relative;display:flex;flex-direction:column;overflow:visible}
+/* overflow:visible (sidebar-controls.css gives the list overflow:hidden): a member's ring and glow (tab-glow.css) reach 16-22px past its row, and the list's box is exactly its rows, so the glow was cut flat at the first row's top, the last row's bottom and the right edge (beta.13, founder 8 Nov). The rows fit by layout (min-width:0, margin-left), nothing spills; the scroller still clips at the sidebar's own edge, as for a tab outside a group. */
 /* Founder (28 Oct): the group line fades out at its two ends; the fade stays within the first and last rows (12 of their 32 px), so it is still clear which tabs belong. */
 .app.style-acira .acira-sidebar .sb-group-members::before{content:'';position:absolute;z-index:1;left:var(--sb-rail-x);top:0;bottom:0;width:2px;border-radius:1px;background:var(--group-color);opacity:var(--sb-rail);pointer-events:none;--sb-rail-fade:12px;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent)}
 .app.style-acira .acira-sidebar .sb-group[data-collapsed]:not([data-holds-active]) .sb-group-members::before{opacity:0}

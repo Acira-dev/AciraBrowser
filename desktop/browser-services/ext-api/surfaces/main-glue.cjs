@@ -46,7 +46,16 @@ function attachWindow(deps){
 
 /** A shortcut of an extension command was pressed (main.cjs shortcut dispatch: action 'extension-command'). */
 function runCommand(command,{webContents,privateMode=false}={}){
- if(privateMode||!command||typeof command.extensionId!=='string'||typeof command.command!=='string')return false;
+ if(!command||typeof command.extensionId!=='string'||typeof command.command!=='string')return false;
+ if(privateMode){
+  // A private window or tab: the command runs in that page's own private session, which holds only the extensions allowed in private tabs (private-extension-
+  // sessions.cjs), and only for the profile whose key was pressed. Tor, secured workspaces, private pages without such a session and Acira's own pages: nothing.
+  let session=null;
+  try{session=webContents&&!webContents.isDestroyed?.()?webContents.session:null;}catch{session=null;}
+  const entry=session&&bridge.all('commands').find(item=>item.session===session);
+  if(!entry||!entry.controller.sourceProfileId||entry.controller.sourceProfileId!==command.profileId)return false;
+  return !!entry.controller.run(command.extensionId,command.command,webContents);
+ }
  for(const {controller} of bridge.all('commands')){
   if(controller.profileId===command.profileId)return !!controller.run(command.extensionId,command.command,webContents);
  }

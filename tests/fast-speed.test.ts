@@ -109,3 +109,25 @@ test('motions with a set length on the named surfaces quicken in Fast with --mot
   assert.match(peek, /root\.style\.setProperty\('--pace',String\(speed==='fast'\?SCALES\.fast\.S:1\)\);/);
   assert.ok(peek.includes('transition:opacity calc(160ms * var(--pace, 1))') && peek.includes('transition:opacity calc(220ms * var(--pace, 1)) var(--strong),transform calc(220ms * var(--pace, 1))'));
 });
+
+test('Library, Settings (its folds, results list, found-row fade and section changes) and the download line follow --motion-pace too (beta.13.2), Premium keeping its lengths', () => {
+  const pace = (css: string, rule: string, durations: string[]) => {
+    const at = css.indexOf(rule); assert.ok(at >= 0, rule);
+    const block = css.slice(at, css.indexOf('}', at));
+    for (const d of durations) assert.ok(block.includes(`calc(${d} * var(--motion-pace, 1))`), `${rule}: ${d} at the pace`);
+  };
+  const lib = read('src/features/library.css');
+  pace(lib, '.lib-inner {', ['240ms']); pace(lib, '.lib-undo {', ['160ms']); assert.ok(lib.includes('transition: padding-bottom calc(160ms * var(--motion-pace, 1))'));
+  const st = read('src/features/settings/settings.css');
+  pace(st, '.st-fold-chevron {', ['0.24s']); pace(st, '.st-fold-details::details-content {', ['0.26s', '0.18s']); pace(st, '.st-row {', ['0.5s']);
+  pace(st, '.st-results {', ['0.18s']); pace(st, '.st-select-list {', ['0.16s']);
+  pace(read('src/components/DownloadLine.css'), '.download-line {', ['200ms']);
+  // What is quick on purpose stays as it was at both speeds: hover and press (latency-bound).
+  assert.ok(lib.includes('transition: background-color 0.1s;') && st.includes('transform 140ms cubic-bezier(.45,.05,.55,.95)'), 'hover and press fades keep their length');
+  // A page section's formation (Settings, Library): the length and the wait between rows run at the pace; the menus' formation does not.
+  const formation = read('src/components/Formation.tsx');
+  assert.match(formation, /const pace = variant === 'content' \? motionPace\(\) : 1;/);
+  assert.match(formation, /\* pace, stagger = profile\.stagger \* pace;/);
+  assert.equal((formation.match(/profile\.stagger/g) ?? []).length, 1, 'the one place the profile\'s stagger is read');
+  assert.equal(motionPaceOf('premium'), 1); assert.equal(motionPaceOf('off'), 1); assert.equal(motionPaceOf('fast'), .5);
+});

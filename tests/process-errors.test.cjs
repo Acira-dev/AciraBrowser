@@ -69,7 +69,9 @@ test('main installs the handlers on its first line, points main.log at the profi
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.match(main.split('\n')[0],/^\/\*[^\n]*\*\/const processErrors=require\('\.\/process-errors\.cjs'\)\.installEarly\(\);$/,'the very first statement, before any other require can fail');
  const setPath=main.indexOf("app.setPath('userData',process.env.ACIRA_BROWSER_TEST_DATA"),install=main.indexOf("processErrors.setFile(path.join(app.getPath('userData'),'main.log'),{profile:app.getPath('userData')});");
- assert.ok(setPath>=0&&install>setPath&&install-setPath<400,'main.log moves to the profile folder straight after it is set');
+ // Between the two, main may start the extension window trace (browser-services/ext-trace.cjs, one guarded statement); anything else long there fails this.
+ const between=main.slice(setPath,install).replace(/try\{require\('\.\/browser-services\/ext-trace\.cjs'\)\.setFile\(path\.join\(app\.getPath\('userData'\),'logs','extension-windows\.log'\)\);\}catch\{\}/,'');
+ assert.ok(setPath>=0&&install>setPath&&between.length<400,'main.log moves to the profile folder straight after it is set');
  assert.equal((main.match(/createProcessErrors\(/g)||[]).length,0,'one set of handlers only');
  assert.match(main,/\}\)\.catch\(error=>\{[^\n]*require\('\.\/process-errors\.cjs'\)\.startupFailed\(error,\{record:processErrors\.record,hasWindow:\(\)=>controllers\.size>0\|\|quitting,/);
 });

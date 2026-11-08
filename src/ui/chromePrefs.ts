@@ -20,3 +20,12 @@ export function seamlessTipSeen(profileId: string): boolean {
 export function rememberSeamlessTip(profileId: string): void {
   try { localStorage.setItem(`${TIP}:${profileId}`, '1'); } catch { /* the tip may show again; harmless */ }
 }
+
+/** The line that follows turning on Settings › Appearance › Layout › Hide the toolbar is shown once per profile, like Seamless's. */
+const HIDE_TIP = 'acira-hide-toolbar-tip';
+export function hideToolbarTipSeen(profileId: string): boolean {
+  try { return localStorage.getItem(`${HIDE_TIP}:${profileId}`) === '1'; } catch { return true; }
+}
+export function rememberHideToolbarTip(profileId: string): void {
+  try { localStorage.setItem(`${HIDE_TIP}:${profileId}`, '1'); } catch { /* the line may show again; harmless */ }
+}

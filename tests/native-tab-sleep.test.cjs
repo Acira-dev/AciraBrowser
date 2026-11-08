@@ -6,12 +6,13 @@ const MIN=60*1000;
 function harness(overrides={}){
  let time=1_000_000;const calls=[],visible=new Set(),tabs=new Map([['a',{id:'a'}],['b',{id:'b'}],['c',{id:'c'}]]);
  visible.add('a');
- const adapter={tabs:()=>[...tabs.values()],isVisible:id=>visible.has(id),protectedReason:(tab)=>overrides.protect?.[tab.id]||null,
+ const contexts=[];
+ const adapter={tabs:()=>[...tabs.values()],isVisible:id=>visible.has(id),protectedReason:(tab,_choice,context)=>{contexts.push([tab.id,context]);return overrides.protect?.[tab.id]||null;},
   sleep:async id=>{calls.push(['sleep',id]);if(overrides.refuse?.has(id))return {slept:false,reason:'unsaved-form'};tabs.delete(id);return {slept:true};},
   freeze:async id=>{calls.push(['freeze',id]);return true;},unfreeze:async id=>{calls.push(['unfreeze',id]);}};
  let choice=overrides.choice||{enabled:true,idleMinutes:15,neverSleep:[]};
- const sleeper=createTabSleep({adapter,settings:()=>choice,now:()=>time,freezeAfterMs:5*MIN,memory:()=>({free:4*1024**3,total:8*1024**3})});
- return {sleeper,calls,tabs,visible,advance:ms=>{time+=ms;},set:value=>{choice=value;}};
+ const sleeper=createTabSleep({adapter,settings:()=>choice,now:()=>time,freezeAfterMs:5*MIN,memory:overrides.memory||(()=>({free:4*1024**3,total:8*1024**3}))});
+ return {sleeper,calls,contexts,tabs,visible,advance:ms=>{time+=ms;},set:value=>{choice=value;}};
 }
 
 test('settings are validated and never-sleep entries normalised to hosts',()=>{
@@ -73,6 +74,16 @@ test('inspectPage (runs in the page) refuses edited fields, credentials, editabl
  assert.equal(run([{tagName:'TEXTAREA',value:'draft',defaultValue:''}]).reason,'edited-form');
  assert.equal(run([],{editable:true}).reason,'editable-or-canvas-content');
  assert.equal(run([],{media:[{paused:false,ended:false}]}).reason,'playing-media-or-live-stream');
+ // A looping video with its sound off is a page's background clip: it does not keep the tab awake. Every other kind of playing media still does.
+ const video=over=>({tagName:'VIDEO',paused:false,ended:false,loop:true,muted:true,volume:1,...over});
+ assert.deepEqual(run([],{media:[video({})]}),{safe:true},'muted looping video');
+ assert.deepEqual(run([],{media:[video({muted:false,volume:0})]}),{safe:true},'volume 0 looping video');
+ assert.equal(run([],{media:[video({muted:false})]}).reason,'playing-media-or-live-stream','loud looping video');
+ assert.equal(run([],{media:[video({loop:false})]}).reason,'playing-media-or-live-stream','muted video that plays once: a person may be watching it');
+ assert.equal(run([],{media:[video({tagName:'AUDIO'})]}).reason,'playing-media-or-live-stream','audio is never ambient');
+ assert.equal(run([],{media:[video({paused:true,loop:false,muted:false})]}).safe,true,'paused video');
+ assert.equal(run([],{media:[video({}),video({loop:false})]}).reason,'playing-media-or-live-stream','one ambient video does not hide another playing one');
+ assert.match(require('node:fs').readFileSync(require.resolve('../desktop/tab-sleep.cjs'),'utf8'),/!\(media\.srcObject instanceof MediaStream\)/,'a live stream (camera, call) is never ambient');
 });
 
 test('under real memory pressure the oldest frozen tabs are discarded early, two per sweep; with enough memory nothing changes',async()=>{
@@ -85,5 +96,29 @@ test('under real memory pressure the oldest frozen tabs are discarded early, two
   await sleeper.sweep();time+=6*MIN;sleeper.touch('c');time+=MIN;await sleeper.sweep();const report=await sleeper.sweep();
   if(Array.isArray(expected)){assert.deepEqual(calls,expected);assert.equal(report.pressure,false);}
   else{assert.equal(calls.length,expected,'one sweep discards two hidden tabs early');assert.ok(!calls.includes('d'),'protected tabs stay');assert.ok(!calls.includes('a'),'the visible tab stays');assert.ok(!calls.includes('c')||calls.indexOf('c')>calls.indexOf('b'),'oldest first: the touched tab goes last');}
+ }
+});
+
+test('the sweep tells the adapter whether the machine is short of memory, so a pinned tab is kept awake only while it is not',async()=>{
+ const roomy=harness();await roomy.sleeper.sweep();roomy.advance(6*MIN);await roomy.sleeper.sweep();
+ assert.ok(roomy.contexts.length>0&&roomy.contexts.every(([,context])=>context&&context.pressure===false),'plenty of free memory: pressure false');
+ const tight=harness({memory:()=>({free:200*1024**2,total:8*1024**3})});await tight.sleeper.sweep();tight.advance(6*MIN);await tight.sleeper.sweep();
+ assert.ok(tight.contexts.length>0&&tight.contexts.every(([,context])=>context&&context.pressure===true),'short of memory: pressure true');
+ // desktop/main.cjs: the pinned protection honours it, and nothing else in protectedReason changed shape
+ const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','desktop','main.cjs'),'utf8');
+ assert.ok(source.includes("async protectedReason(tab,choice,context)")&&source.includes("if(tab.pinned&&!context?.pressure)return 'pinned';"));
+});
+
+test('the Memory Saver text in every language no longer says a pinned tab never sleeps; it says pinned tabs stay awake unless memory is low',()=>{
+ const fs=require('node:fs'),path=require('node:path'),dir=path.join(__dirname,'..','src','i18n'),key='memorySaver.callsChatAndMusicSites';
+ const en=JSON.parse(fs.readFileSync(path.join(dir,'en.json'),'utf8'))[key];
+ assert.match(en,/Pinned tabs stay awake too, unless your computer is running low on memory\./);
+ assert.doesNotMatch(en,/downloading, pinned/);
+ for(const file of fs.readdirSync(dir).filter(name=>/^[a-z]{2}(-[A-Z]{2})?\.json$/.test(name)&&name!=='converted.json')){
+  const text=JSON.parse(fs.readFileSync(path.join(dir,file),'utf8'))[key];
+  assert.ok(text&&text.length>40,file+' has the text');
+  if(file!=='en.json')assert.notEqual(text,en,file+' is translated');
+  // one sentence was added in every language: four sentences now (calls and chat, the tabs that never sleep, pinned tabs, private windows)
+  assert.equal(text.split(/[.。।]\s*/).filter(Boolean).length,4,file+' has four sentences');
  }
 });

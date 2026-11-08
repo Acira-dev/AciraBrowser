@@ -41,6 +41,8 @@ const {correctCurrentTab,currentTabCorrected}=require('./extension-tab-context.c
 const {observeOnce,releaseWindows}=require('./extension-store-events.cjs');
 const {installedExtensionOrigins}=require('./extension-storage-origins.cjs'),compatibility=require('./extension-compat.cjs');
 const registries=new Map(),runtimes=new WeakMap(),extraApis=new WeakMap();
+/* session -> {profile, sourceProfileId}, until detachPrivate. One for the whole app (like the registries): every window has its own manager, and turning "Allow in private tabs" off in one window must reach the private sessions that other windows have open. */
+const privateSessions=new Map();
 /** The engine's router (electron-chrome-extensions 4.9.0) listens to the app's 'web-contents-created' for its session and has no way to stop:
  * what its constructor added is noted per session, so a removed profile's runtime can let go of it. */
 const engineListeners=new WeakMap(),disposedRuntimes=new WeakSet();
@@ -75,7 +77,7 @@ function createExtensionManager({getSession,getProfiles,getWindow,dialog,registr
  const errorKey=(profile,id)=>profile+'|'+id;
  function runtimeFor(session,options={}){if(!session)return null;if(!runtimes.has(session)){try{session.extensions?.setMaxListeners?.(EXTENSION_EVENT_LISTENERS);}catch{}const profile=options.profile||getProfiles().find(p=>getSession(p.partition)===session),implementation=options.implementation||(typeof browser==='function'?browser(profile):browser);const created=appCreatedListeners(),runtime=createRuntime?createRuntime(session):new (require('electron-chrome-extensions').ElectronChromeExtensions)({license:'GPL-3.0',session,...implementation,requestPermissions:async(extension,request)=>{const access=accessLines(t,{permissions:strings(request.permissions),origins:strings(request.origins)});const answer=await dialog.showMessageBox(getWindow(),{type:'question',title:t('ext.accessTitle'),message:t('ext.accessMessage',{name:extension.name}),detail:access.join('\n'),buttons:[t('dialog.cancel'),t('permission.allow')],defaultId:0,cancelId:0});return answer.response===1;}});engineListeners.set(session,appCreatedListeners().filter(listener=>!created.includes(listener)));correctCurrentTab(runtime);observeOnce(runtime);if(!createRuntime)try{const userData=options.runtimeDir||require('electron').app.getPath('userData');if(!options.private)require('./native-messaging.cjs').installNativeMessaging(runtime,{userData,getWindowHandle:()=>{try{return getWindow()?.getNativeWindowHandle().readBigUInt64LE(0).toString();}catch{return 0;}}});
    /* offscreen, sidePanel, identity, userScripts, runtime.getContexts (extension-apis.cjs); user scripts only for extensions whose switch is on */
-   const apis=require('./extension-apis.cjs').installExtensionApis(runtime,{session,userData,storeKey:profile?.id||'default',getWindow,t,sidePanelHost:implementation?.sidePanel||null,stores:implementation?.stores||null,userScriptsAllowed:id=>userScriptIds(profile?.id).includes(id),dialog,refreshPreload:()=>require('./extension-runtime-patch.cjs').installPatchedPreload(session,userData,preloadOptions(session,profile?.id))});if(apis){extraApis.set(session,apis);apis.syncUserScriptPreload(userScriptIds(profile?.id).length>0);}if(!options.private)try{require('./ext-api/management/bridge.cjs').attach(session,managementHooks(profile?.id));}catch{}
+   const apis=require('./extension-apis.cjs').installExtensionApis(runtime,{session,userData,storeKey:profile?.id||'default',sourceProfileId:options.private?String(options.sourceProfileId||''):'',getWindow,t,sidePanelHost:implementation?.sidePanel||null,stores:implementation?.stores||null,userScriptsAllowed:id=>userScriptIds(profile?.id).includes(id),dialog,refreshPreload:()=>require('./extension-runtime-patch.cjs').installPatchedPreload(session,userData,preloadOptions(session,profile?.id))});if(apis){extraApis.set(session,apis);apis.syncUserScriptPreload(userScriptIds(profile?.id).length>0);}if(!options.private)try{require('./ext-api/management/bridge.cjs').attach(session,managementHooks(profile?.id));}catch{}
    require('./extension-runtime-patch.cjs').installPatchedPreload(session,userData,preloadOptions(session,profile?.id));}catch{}runtimes.set(session,runtime);}return runtimes.get(session);}
  /** What the engine preload's text depends on: the extensions allowed to run user scripts, and the optional permissions each was granted. */
  function preloadOptions(session,profileId){let grants={};try{grants=extraApis.get(session)?.permissions?.snapshot?.()||{};}catch{grants={};}return {userScriptsAllowed:userScriptIds(profileId),grants,incognito:privateSessions.has(session)};}
@@ -159,7 +161,6 @@ function createExtensionManager({getSession,getProfiles,getWindow,dialog,registr
   * A private session made for it (a temporary folder, because the engine loads no extension into a memory-only one) gets a runtime of its own and a copy of
   * each allowed extension, loaded from its package folder. What the extensions keep there (their settings copy, runtime files, proxy values) lives in that
   * session's folder and goes with it. Never for Tor or secured workspaces: main.cjs does not ask. */
- const privateSessions=new Map();/* session -> {profile, sourceProfileId}, until detachPrivate */
  const privateEntries=profileId=>registry.saved.filter(e=>e.profileId===profileId&&e.allowPrivate===true&&e.enabled!==false);
  /** True when a new private window or tab of this profile should get a session that can run extensions. */
  function privateWanted(profileId){try{return typeof profileId==='string'&&privateEntries(profileId).length>0;}catch{return false;}}
@@ -172,7 +173,7 @@ function createExtensionManager({getSession,getProfiles,getWindow,dialog,registr
   try{const dir=path.join(runtimeDir,'extension-install-state'),extensions={};fs.mkdirSync(dir,{recursive:true});for(const entry of wanted){let version='';try{version=String(readManifest(entry.path).version||'');}catch{}extensions[entry.id]={version};}fs.writeFileSync(path.join(dir,`${String(profile.id).replace(/[^\w.-]/g,'_')}.json`),JSON.stringify({browser:require('./ext-api/runtime.cjs').internals.browserVersion(),extensions}));}catch{}
   /* What these extensions hold in the profile's settings store (a VPN's proxy) starts in the private session too, one way. */
   try{require('./extension-chrome-settings.cjs').seedPrivateStore({userData:require('electron').app.getPath('userData'),fromKey:sourceProfileId,toUserData:runtimeDir,toKey:profile.id,extensionIds:wanted.map(e=>e.id)});}catch{}
-  runtimeFor(session,{profile,implementation,runtimeDir,private:true});
+  runtimeFor(session,{profile,implementation,runtimeDir,private:true,sourceProfileId});
   const sessionsApi=require('./private-extension-sessions.cjs');
   for(const entry of wanted){
    try{

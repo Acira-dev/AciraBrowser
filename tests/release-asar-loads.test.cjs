@@ -3,7 +3,7 @@
 // these tests pack small real asars and break them, the way r22 broke (a desktop file required a file the package does not ship).
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const asar = require('@electron/asar');
-const { checkAsar, selfTest } = require('../qa/release-asar-loads.cjs');
+const { checkAsar, selfTest, createPackageSettled } = require('../qa/release-asar-loads.cjs');
 
 const APP = {
   'package.json': JSON.stringify({ name: 'mini', main: 'desktop/main.cjs' }),
@@ -32,7 +32,7 @@ async function pack(overrides = {}, removed = []) {
     fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true }); fs.writeFileSync(path.join(tree, rel), body);
   }
   const out = path.join(dir, 'app.asar');
-  await asar.createPackage(tree, out);
+  await createPackageSettled(tree, out);   // createPackage alone can resolve before the archive is completely written (qa/release-asar-loads.cjs)
   return { out, dir };
 }
 const withAsar = async (overrides, removed, body) => { const { out, dir } = await pack(overrides, removed); try { return await body(out); } finally { fs.rmSync(dir, { recursive: true, force: true }); } };

@@ -103,7 +103,7 @@ test('Layout leads Appearance: Tabs and Window view are registered there, in the
   assert.equal(byId('sidebar-only-tabs')?.group, 'Layout');
   assert.equal(byId('window-view')?.group, 'Layout');
   // The group name is not reused for unrelated rows (bookmarks bar, interface size and animation speed used to share it).
-  assert.deepEqual(all.filter((entry) => entry.section === 'Appearance' && entry.group === 'Layout').map((entry) => entry.id), ['sidebar-only-tabs', 'window-view', 'seamless-edge-top']);
+  assert.deepEqual(all.filter((entry) => entry.section === 'Appearance' && entry.group === 'Layout').map((entry) => entry.id), ['sidebar-only-tabs', 'window-view', 'hide-toolbar', 'seamless-edge-top']);
   // The sidebar's own rows moved to Tabs › Sidebar, where the sidebar's other options are (their Appearance rows are live copies of the same settings).
   for (const id of ['sidebar-peek', 'seamless-edge-side']) assert.deepEqual([byId(id)?.section, byId(id)?.group], ['Tabs', 'Sidebar'], id);
   // Sidebar mode and the address bar's place are the Tabs choice's third answer (item 4): no rows of their own, their words go to the Tabs card.
@@ -178,4 +178,5 @@ test('Settings › Extensions and the extensions menu lead to the Extensions gro
   assert.match(read('src/App.tsx'), new RegExp(`onKeyboardShortcuts=\\{\\(\\) => \\{ openSettings\\(state, dispatch, \\{ setting: '${link![1]}' \\}\\)`), 'the extensions menu opens the same target');
   assert.match(read('src/components/ExtensionManager.tsx'), /onKeyboardShortcuts&&<ActionRow label=\{t\("nativeCore\.keyboardShortcuts"\)\}/);
   for (const word of ['extension shortcuts', 'extension keys', 'bitwarden shortcut']) assert.ok(found(word).includes(link![1]), `${word} finds it`);
+  assert.match(read('src/features/settings/panels/shortcuts.tsx'), /category === 'Extensions' && list\.some\(asksForMediaKey\) && .*shortcuts\.mediaKeysNote/, 'the note about media keys is in the Extensions group, only when an extension asked for one');
 });

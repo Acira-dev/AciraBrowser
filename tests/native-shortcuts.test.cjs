@@ -23,7 +23,9 @@ test('Tor commands are available on supported Mac, Windows and Linux builds and 
   assert.equal(r.importJson(JSON.stringify({version:1,bindings:{'tor-window':['Alt+Shift+N']}})).ok,true);
   assert.equal(resolve(r,key('n',['alt','shift'])),null);
  }
- for(const platform of ['darwin','win32','linux']){const supported=createShortcutRegistry({platform});for(const id of ['tor-window','tor-tab'])assert(supported.list().some(command=>command.id===id));}
+ // Tor is bundled for Windows, Mac (arm64 and x64) and Linux x64 only (desktop/platform.cjs bundledTorSupported, tests/tor-linux.test.cjs): the architecture is given, so the test does not depend on the machine it runs on
+ for(const [platform,arch] of [['darwin','arm64'],['darwin','x64'],['win32','x64'],['win32','arm64'],['linux','x64']]){const supported=createShortcutRegistry({platform,arch});for(const id of ['tor-window','tor-tab'])assert(supported.list().some(command=>command.id===id),platform+' '+arch+' '+id);}
+ {const linuxArm=createShortcutRegistry({platform:'linux',arch:'arm64'});for(const id of ['tor-window','tor-tab']){assert.ok(!linuxArm.list().some(command=>command.id===id),'no bundled Tor for Linux arm64: '+id);assert.equal(linuxArm.hints()[id],undefined);assert.equal(linuxArm.set(id,'Ctrl+Shift+Y').ok,false);}}
  const windows=createShortcutRegistry({platform:'win32'});
  for(const id of ['tor-window','tor-tab'])assert.ok(windows.list().some(command=>command.id===id));
  assert.equal(resolve(windows,key('n',['alt','shift'])).action,'tor-window');

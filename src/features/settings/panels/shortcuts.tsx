@@ -13,7 +13,7 @@ import '../shortcuts.css';
 
 import { t } from '../../../i18n';
 import { commandGroup, commandLabel } from '../../../ui/shortcutKeys';
-import {groupShortcutCommands} from '../../../ui/shortcutGroups';
+import {groupShortcutCommands, asksForMediaKey} from '../../../ui/shortcutGroups';
 /** Settings › Shortcuts. Every command is one row; its keys are the control. Click them (or Enter) and the row records in place:
  *  the key caps follow what you hold, Backspace clears, Esc cancels. A key another command uses asks in the row (Replace / Cancel);
  *  reserved keys are explained there and recording carries on. Main captures the keys (desktop/shortcut-registry.cjs), so nothing
@@ -185,6 +185,7 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
                 onReplace={(accelerator) => void assign(command.id, accelerator, true)}
                 onCancel={finish} />
             ))}
+            {category === 'Extensions' && list.some(asksForMediaKey) && <div className="st-row"><div className="st-copy"><p>{t("shortcuts.mediaKeysNote")}</p></div></div>}
           </ShortcutGroup>
         ))}
       </div>

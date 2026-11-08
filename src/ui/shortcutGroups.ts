@@ -13,3 +13,6 @@ export function groupShortcutCommands(commands:readonly ShortcutCommand[],includ
   if(unassigned.length)groups.set('Unassigned',unassigned);
   return [...groups].filter(([,list])=>list.length>0);
 }
+
+/** An extension asked for a media key (Play/Pause, Next, Previous, Stop). It cannot have it: the system keeps those keys for the media session, and a global key would need Accessibility on a Mac. */
+export const asksForMediaKey=(command:Pick<ShortcutCommand,'note'>):boolean=>command.note==='media-key';

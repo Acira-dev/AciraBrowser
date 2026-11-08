@@ -190,3 +190,46 @@ test('the top pill: the colour is blended by the selection motion on the same tr
   assert.match(strip, /const movement=reduced\?\{duration:0\}:\{type:'spring' as const,stiffness:360\*speed\*speed,damping:38\*speed,mass:1\}/, 'None is zero length, Premium and Fast scale the spring');
   assert.match(hook, /return \{selection,glow,/);
 });
+
+// ---- 0.1.0-beta.13.2 (founder, 8 Nov 2026): a selected or hovered tab's ring and glow were cut by a straight line at the strip's two ends ("only the first tab
+// looks cut off on its sides") and, inside a sidebar group, at the group's top, bottom and right edge. Both are boxes that were exactly as big as their rows. ----
+/** The rules of a stylesheet (comments out, one level of braces; @media and friends are walked into): [selector, body] pairs. */
+const cssRules = (file: string) => {
+  const text = src(file).replace(/\/\*[\s\S]*?\*\//g, ''), out: [string, string][] = [];
+  const walk = (chunk: string) => { for (const m of chunk.matchAll(/([^{}]+)\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)) { const sel = m[1].trim(), body = m[2]; if (sel.startsWith('@')) walk(body); else out.push([sel, body]); } };
+  walk(text); return out;
+};
+const rulesFor = (file: string, selector: string) => cssRules(file).filter(([sel]) => sel.split(',').map(part => part.trim()).includes(selector)).map(([, body]) => body);
+
+test('the top strip stops clipping a tab\'s ring and glow sideways when nothing scrolls, and keeps the top and bottom clip as it was', () => {
+  const body = rulesFor('src/components/BrowserTabs.css', '.tab-strip-container[data-scrollable=false]>.tab-strip-viewport').find(text => /clip-path/.test(text)) ?? '';
+  assert.match(body, /overflow:visible/, 'the scroller clip is off while the strip does not scroll (the viewport is exactly as wide as its tabs)');
+  const inset = /clip-path:inset\(0 -(\d+)px\)/.exec(body);
+  assert.ok(inset, 'a clip-path takes over: no top or bottom change (0), and room on both sides');
+  // The room is the 1px ring plus the glow's reach, which the strip caps (tab-glow.css: min(blur, 8px)).
+  const caps = [...src('src/styles/tab-glow.css').matchAll(/min\(var\(--tg-(?:h-)?blur\), (\d+)px\)/g)].map(m => Number(m[1]));
+  assert.equal(caps.length, 2, 'the selected pill and the hover glow are capped in the strip');
+  assert.ok(Number(inset![1]) >= 1 + Math.max(...caps), `${inset![1]}px of room for a 1px ring and a ${Math.max(...caps)}px glow`);
+  // A scrolling strip keeps its scroller and its edge fades.
+  const viewport = rulesFor('src/components/BrowserTabs.css', '.tab-strip-viewport')[0] ?? '';
+  assert.match(viewport, /overflow-x:auto;overflow-y:hidden/);
+  assert.match(viewport, /mask-image:linear-gradient/);
+  const strip = src('src/components/BrowserTabsHorizontal.tsx');
+  assert.match(strip, /style=\{\{width:metrics\.viewport,overflowX:draggingTab&&metrics\.overflow\?'hidden':undefined\}\}/, 'the inline style no longer forces overflow hidden on a strip that does not scroll');
+  assert.doesNotMatch(strip, /overflowX:draggingTab\|\|!metrics\.overflow/);
+});
+
+test('a group\'s member list does not clip its rows\' ring and glow, and nothing else above a row does either', () => {
+  const [members] = rulesFor('src/components/sidebar/sidebar.css', '.app.style-acira .acira-sidebar .sb-group-members');
+  assert.match(members ?? '', /overflow:visible/, 'the list is exactly as big as its rows; the glow reaches 22px past them');
+  // The old rule is still there for the other chromes; the sidebar's rule above it is the more specific one.
+  assert.match(rulesFor('src/styles/sidebar-controls.css', '.ed-rail-group-members')[0] ?? '', /overflow:hidden/);
+  // Every box between a row and the sidebar's scroller (the same list the founder's group tab sits in) leaves the glow alone; the scroller itself clips at the sidebar's edge, for rows in and out of groups alike.
+  for (const file of ['src/components/sidebar/sidebar.css', 'src/components/sidebar/liveFolder.css', 'src/styles/sidebar-controls.css']) {
+    for (const [selector, text] of cssRules(file)) {
+      const last = selector.split(',').map(part => part.trim().split(/[\s>+~]+/).pop() ?? '');
+      if (!last.some(part => /^\.(sb-group|sb-zone|sb-zone-body|sb-tabs|ed-rail-tab-group)(?![-\w])/.test(part))) continue;
+      assert.doesNotMatch(text, /(^|;)\s*(overflow(-x|-y)?\s*:\s*(hidden|clip|auto|scroll)|clip-path\s*:|contain\s*:\s*[^;]*paint|content-visibility\s*:\s*(auto|hidden))/, `${selector} must not clip a row's glow`);
+    }
+  }
+});

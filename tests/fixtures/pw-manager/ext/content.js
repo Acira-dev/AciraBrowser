@@ -23,3 +23,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.command === 'pw-ping') { document.documentElement.dataset.pwPinged = String(Date.now()); sendResponse({pong: true, url: location.href}); }
   return false;
 });
+// A port from the worker (chrome.tabs.connect(tabId)): the page answers every message with an echo.
+chrome.runtime.onConnect.addListener(port => { port.onMessage.addListener(message => port.postMessage({echo: message, from: location.href})); });

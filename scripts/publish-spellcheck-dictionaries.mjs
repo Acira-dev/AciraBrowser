@@ -15,7 +15,7 @@ const args = process.argv.slice(2), flag = name => args.includes(name), value = 
 const dir = path.resolve(flag('--dir') ? value('--dir') : path.join(root, 'dist-dictionaries'));
 const { loadReleaseTarget, repoSlug } = createRequire(import.meta.url)('../packaging/release-target.cjs');
 const repo = repoSlug(loadReleaseTarget()), tag = 'spellcheck-dictionaries';
-if (!repo) { console.error('The release target (packaging/release-target.json) is not a GitHub repository; upload the dictionaries to its spellcheck-dictionaries/ folder yourself.'); process.exit(1); }
+if (!repo) { console.error('The release target (packaging/release-target.json) is not a GitHub repository; the dictionaries are served from its spellcheck-dictionaries/ folder (update.acirabrowser.com is GitHub Pages from docs/ of the update repository): node scripts/prepare-update-host-files.mjs builds that folder.'); process.exit(1); }
 
 const sums = new Map();
 try { for (const line of (await fs.readFile(path.join(dir, 'SHA256SUMS'), 'utf8')).split('\n')) { const m = /^([0-9a-f]{64})\s+\*?(\S+)$/.exec(line.trim()); if (m) sums.set(m[2], m[1]); } }

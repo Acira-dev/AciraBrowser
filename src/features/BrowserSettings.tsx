@@ -35,7 +35,6 @@ import {
 import { EditorGlyph, type EditorIconName } from "../components/EditorGlyph";
 import { AciraGlyph, type AciraGlyphName } from "../components/AciraGlyphs";
 import { BrandLogo } from "../components/BrandLogo";
-import { ArrowLeft } from "../components/AppIcons";
 import { ContentTransition } from "../components/ContentTransition";
 import { runtime } from "../runtime/client";
 import { ImportPanel, ProfilePrivacy } from "./BrowserData";
@@ -277,6 +276,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
     (item) => item.id === tab.browserProfileId,
   )!;
   const windowView = effectiveView(s, state.windowUi);
+  /** "Hide the toolbar" has a row only where there is a toolbar to hide that Seamless does not already hide: tabs in a sidebar (not Sidebar + address), in Full, Compact or Focus. */
+  const hideToolbarRow = layoutChoice === "sidebar" && windowView !== "seamless";
   /** The settings, the profile's tabs switch and (when the address bar moves) the morph, in one step, so the card, the strip and the sidebar always agree (Appearance › Layout and Tabs share this). */
   const chooseTabLayout = (layout: MiniLayout) => setTabsLayout(state, dispatch, layout === "toolbar" ? "top" : layout);
   const toolbarItems = toolbarVisibilityItems(s, tab).filter(
@@ -314,6 +315,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       newTabChanged: newTabIsChanged,
       stockSearch,
       verticalTabs: Boolean(s.verticalTabs),
+      hideToolbarRow: hideToolbarRow,
     }),
     [
       customColors,
@@ -324,6 +326,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       newTabIsChanged,
       stockSearch,
       s.verticalTabs,
+      hideToolbarRow,
       desktopTheme.supported,
     ],
   );
@@ -419,18 +422,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
     return () => { stop(); watch?.disconnect(); };
   }, [tab.id, state.windowId]);
 
-  const nav = useRef<HTMLElement>(null),
-    [navScrolls, setNavScrolls] = useState(false);
-  /** In a short window or at a large interface size the rows scroll inside the column; Back to browser stays pinned below them. */
-  useLayoutEffect(() => {
-    const node = nav.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const measure = () => setNavScrolls(node.scrollHeight > node.clientHeight + 1);
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(node);
-    return () => watch.disconnect();
-  }, []);
+  /* 13.2: "Back to browser" (the column's pinned foot) is gone: it often only went back one Settings section, and the founder chose to remove it. */
+  const nav = useRef<HTMLElement>(null);
 
   const content = (
     <>
@@ -453,6 +446,11 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 options={viewsOfLayout(layoutChoice).map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} /> }))}
               />
             </SettingRow>
+            {hideToolbarRow && (
+              <SettingRow id="hide-toolbar" title={tr("windowview.hideToolbar")} detail={tr("windowview.hideToolbarDetail")}>
+                <Switch label={tr("windowview.hideToolbar")} checked={s.hideToolbar === true} onChange={(on) => update({ hideToolbar: on })} />
+              </SettingRow>
+            )}
             {windowView !== "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
             {windowView === "seamless" && tabLayout !== "sidebar-address" && (
               <SettingRow id="seamless-edge-top" title={tr("windowview.edgeTop")}>
@@ -1125,24 +1123,6 @@ export function BrowserSettings({ state, dispatch }: Props) {
               )),
             ])}
           </nav>
-          <div className="bs-sidebar-foot" data-raised={navScrolls || undefined}>
-            <button
-              type="button"
-              className="bs-back"
-              aria-label={tr("browsersettings.backToBrowser")}
-              onClick={() => {
-                const tab = state.tabs.find((t) => t.id === state.activeTabId);
-                if (tab && tab.historyIndex > 0)
-                  void runtime.browserCommand({ type: "back", tabId: tab.id });
-                else if (tab) dispatch({ type: "tab.close", id: tab.id });
-              }}
-            >
-              <ArrowLeft size={15} />
-              {/* A span like the nav labels: the narrow rail hides `.bs-back > span` (settings.css, frost-preview.css). As a bare text
-                  node it wrapped into the 52px rail as "Zurüc / zum / Brows" between 541 and 620px (200% page zoom, a narrow pane). */}
-              <span>{tr("browsersettings.backToBrowser")}</span>
-            </button>
-          </div>
         </aside>
         <main
           ref={main}

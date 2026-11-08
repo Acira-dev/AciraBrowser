@@ -15,10 +15,12 @@ const held=error=>['EBUSY','EPERM','EACCES'].includes(error?.code),retry=async(s
 async function copyAcross(from,to,tries){const temp=path.join(path.dirname(to),`.${randomUUID().slice(0,8)}.crdownload`);try{await retry(async()=>{await fs.promises.rm(temp,{force:true});await fs.promises.copyFile(from,temp,fs.constants.COPYFILE_EXCL);},tries);await retry(()=>fs.promises.rename(temp,to),tries);}catch(error){await fs.promises.rm(temp,{force:true}).catch(()=>{});throw error;}await fs.promises.unlink(from).catch(()=>{});}
 async function moveFile(from,to,tries=8){await fs.promises.mkdir(path.dirname(to),{recursive:true});let across=false;await retry(()=>fs.promises.rename(from,to).catch(error=>{if(error.code!=='EXDEV')throw error;across=true;}),tries);if(across)await copyAcross(from,to,tries);}
 const modified=file=>{try{return file?fs.statSync(file).mtimeMs:undefined;}catch{return undefined;}};
+/** A long name in a toast or a message: the start and the end, with the middle left out. */
+const clipName=text=>text.length>56?text.slice(0,28)+'…'+text.slice(-24):text;
 const read=(item,method,fallback)=>{try{return item[method]();}catch{return fallback;}};
 
 /** Native-selected paths and engine validators stay in main; private recovery is memory-only. */
-function createDownloads({dialog,shell,app,getOwner,askSite,preferences,torWarning=()=>false,journalPath=path.join(app.getPath('userData'),'download-recovery.json'),now=Date.now}){
+function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=require('./navigation-rescue.cjs').shared,torWarning=()=>false,journalPath=path.join(app.getPath('userData'),'download-recovery.json'),now=Date.now,platform=process.platform}){
  const active=new Map(),attached=new WeakSet(),recoveries=new Map(),pending=new WeakMap(),bursts=new Map(),observers=new Set(),expected=new WeakMap(),dropped=new Set(),seen=new Set(),bornAt=Date.now();let lastPersist=0;
  /* While the Save dialog (or the several-files question) is open, a transfer is parked here, paused, under a short name of its own (its real name is kept beside it: a long name inside this folder can be too long for the file system). */
  const stagingRoot=path.join(path.dirname(journalPath),'download-staging'),stagedIn=file=>typeof file==='string'&&path.dirname(path.dirname(file))===stagingRoot?path.dirname(file):null;
@@ -42,6 +44,8 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,torWarni
  {let changed=false;for(const entry of [...recoveries.values()])if(entry.held||stagedIn(entry.path)&&!canRecover(entry)){if(entry.held)discardHeld(entry);else discardPartial(entry);recoveries.delete(entry.id);changed=true;}if(changed)try{persist(true);}catch{}}
  try{const keep=new Set([...recoveries.values()].map(entry=>stagedIn(entry.path)).filter(Boolean));if(!keep.size)fs.rmSync(stagingRoot,{recursive:true,force:true});else for(const name of fs.readdirSync(stagingRoot)){const folder=path.join(stagingRoot,name);if(!keep.has(folder))fs.rmSync(folder,{recursive:true,force:true});}}catch{}
  function attach(session){if(attached.has(session))return;attached.add(session);session.on('will-download',async(event,item,wc)=>{
+  /* 13.2 safety net (navigation-rescue.cjs): a fresh tab's ordinary page or image that turned into a download nobody asked for is loaded as a page instead, once. */
+  if(wc&&typeof wc.isDestroyed==='function'&&!wc.isDestroyed()){const url=read(item,'getURL','');let tabUrl='';try{tabUrl=wc.getURL();}catch{}if(rescue.shouldRescue({url,mime:read(item,'getMimeType',''),disposition:read(item,'getContentDisposition',''),tabUrl,wcId:wc.id})){event.preventDefault();setImmediate(()=>{try{if(!wc.isDestroyed())void wc.loadURL(url).catch(()=>{});}catch{}});return;}}
   const recovering=!wc&&(pending.get(session)||[]).find(e=>e.path===read(item,'getSavePath',''));
   if(recovering)pending.set(session,(pending.get(session)||[]).filter(e=>e!==recovering));
   const claimed=!recovering&&!wc?takeExpected(session,item):null,owner=recovering?.owner||claimed?.owner||getOwner(wc);if(!owner){event.preventDefault();return;}
@@ -106,6 +110,21 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,torWarni
  function startExtension({session,url,headers,owner,request,timeout=60000}){return new Promise((resolve,reject)=>{let href;try{href=new URL(url).href;}catch{reject(new Error('Invalid URL'));return;}const queue=expected.get(session)||[];expected.set(session,queue);
   const forget=()=>{const at=queue.indexOf(entry);if(at>=0)queue.splice(at,1);},entry={href,owner,request,begin:resolve,destination:details=>require('./ext-api/downloads/destination.cjs').chooseDestination({...details,request}),timer:setTimeout(()=>{forget();reject(new Error('NETWORK_FAILED'));},timeout)};entry.timer.unref?.();queue.push(entry);
   try{session.downloadURL(url,headers&&Object.keys(headers).length?{headers}:undefined);}catch(error){clearTimeout(entry.timer);forget();reject(error);}});}
+ /** Moves one finished download's file to the Trash. Where the system has no Trash to take it (some Linux set-ups) the person is asked before it is erased for good; anywhere else a failure is a plain error and the file stays. */
+ async function deleteFile(record,context){
+  const file=record.path,isFile=()=>{try{return fs.statSync(file).isFile();}catch{return false;}};
+  if(record.status!=='Ready'||!file||!isFile())throw new Error(t('dl.fileUnavailable'));
+  const name=clipName(record.name||path.basename(file));
+  try{await shell.trashItem(file);return {deleted:true,trashed:true,name};}
+  catch{
+   if(!fs.existsSync(file))return {deleted:true,trashed:true,name};
+   if(platform!=='linux')throw new Error(t('dl.deleteFailed',{name}));
+   const response=await dialog.showMessageBox(context.owner?.window,{type:'warning',title:t('dl.delete'),message:t('dl.noTrashMessage',{name}),detail:t('dl.noTrashDetail'),buttons:[t('dialog.cancel'),t('dl.deleteForever')],defaultId:0,cancelId:0});
+   if(response.response!==1)return {cancelled:true};
+   try{await fs.promises.unlink(file);}catch{throw new Error(t('dl.deleteFailed',{name}));}
+   return {deleted:true,trashed:false,name};
+  }
+ }
  async function command(id,action,profileId,records,context={}){
   const record=records.find(r=>r.id===id&&r.browserProfileId===profileId);if(!record)throw new Error(t('dl.otherProfile'));
   if(action==='show'||action==='open'){
@@ -117,13 +136,18 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,torWarni
    if(dangerous(record.path)){const response=await dialog.showMessageBox(context.owner?.window,{type:'warning',title:t('dl.openTitle'),message:t('dl.openMessage'),detail:t('dl.openDetail'),buttons:[t('dialog.cancel'),t('dl.openFile')],defaultId:0,cancelId:0});if(response.response!==1)return {cancelled:true};}
    const error=await shell.openPath(record.path);if(error)throw new Error(error);return {};
   }
-  // A finished download dragged out of the Downloads page (to Explorer, a mail, an upload box): the native drag starts here, from the window that sent the request.
+  /* Delete file: the finished file goes to the Trash (Recycle Bin), where a wrong click can be undone; the caller then takes the row off the list as Remove does. Only this record's own file is ever touched. */
+  if(action==='delete')return deleteFile(record,context);
+  // A finished download dragged out of its row, in the downloads popup or on the Downloads page (to Explorer or Finder, the desktop, a chat or mail, a page's upload box): the native drag starts here, from the window that sent the request.
+  // Only the record's own finished file that is still there; a private or Tor download drags like any other (the same hand-over as Show in folder, which asks nothing either).
   if(action==='drag'){
    if(record.status!=='Ready'||!record.path||!fs.existsSync(record.path))throw new Error(t('dl.fileUnavailable'));
-   await marking.get(record.path);
    const sender=context.sender;if(!sender||sender.isDestroyed?.())return {};
-   let icon=null;try{icon=await app.getFileIcon(record.path,{size:'normal'});}catch{}
-   if(!icon||icon.isEmpty?.())icon=require('electron').nativeImage.createFromBitmap(Buffer.alloc(32*32*4,0xc8),{width:32,height:32});
+   // The quarantine mark and the icon are got together, so the drag begins while the button is still down.
+   const [,shown]=await Promise.all([marking.get(record.path),(async()=>{try{return await app.getFileIcon(record.path,{size:'normal'});}catch{return null;}})()]);
+   if(sender.isDestroyed?.())return {};
+   if(!fs.existsSync(record.path))throw new Error(t('dl.fileUnavailable'));
+   const icon=shown&&!shown.isEmpty?.()?shown:require('electron').nativeImage.createFromBitmap(Buffer.alloc(32*32*4,0xc8),{width:32,height:32});
    sender.startDrag({file:record.path,icon});return {};
   }
   const entry=active.get(id);

@@ -206,7 +206,7 @@ function engineFixture({withPopupUrl = true, withTab = true, withWindow = true} 
   const tab = {id: 7};
   const engine = {
     popup: undefined,
-    ctx: {session: {name: 'session'}, emit: (name, popup) => emitted.push([name, popup]), router: {sendEvent: (...args) => calls.push(['sendEvent', ...args])},
+    ctx: {session: {name: 'session', extensions: new EventEmitter()}, emit: (name, popup) => emitted.push([name, popup]), router: {sendEvent: (...args) => calls.push(['sendEvent', ...args])},
       store: {getTabById: id => (withTab && id === 7 ? tab : undefined), getActiveTabOfCurrentWindow: () => (withTab ? tab : undefined), tabToWindow: new WeakMap(withWindow ? [[tab, f.parent]] : []), tabDetailsCache: new Map([[7, {id: 7}]])}},
     getPopupUrl: (extensionId, tabId) => { calls.push(['getPopupUrl', extensionId, tabId]); return withPopupUrl ? 'chrome-extension://' + extensionId + '/popup.html' : ''; },
     activateClick(details) { calls.push(['library activateClick', details.extensionId]); }
@@ -244,6 +244,46 @@ test('a second click on the same button closes it; another extension\'s button r
   assert.equal(second.isDestroyed(), true);
   assert.equal(e.engine.popup.extensionId, 'bbbb');
   assert.equal(e.emitted.length, 3);
+});
+
+test('reloading an extension closes its open popup: the first click afterwards opens the popup instead of closing a stale one', () => {
+  const e = engineFixture();
+  installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+  click(e, 'aaaa');
+  const first = e.engine.popup;
+  // another extension unloading leaves it alone
+  e.engine.ctx.session.extensions.emit('extension-unloaded', {}, {id: 'bbbb'});
+  assert.equal(first.isDestroyed(), false);
+  assert.equal(e.engine.popup, first);
+  // the reload: unload, then load again
+  e.engine.ctx.session.extensions.emit('extension-unloaded', {}, {id: 'aaaa'});
+  assert.equal(first.isDestroyed(), true, 'the window goes with the page');
+  assert.equal(e.engine.popup, undefined);
+  e.engine.ctx.session.extensions.emit('extension-loaded', {}, {id: 'aaaa'});
+  click(e, 'aaaa');
+  assert.equal(e.emitted.length, 2, 'the first click after the reload opens a popup');
+  assert.notEqual(e.engine.popup, first);
+  assert.equal(e.engine.popup.isDestroyed(), false);
+});
+
+test('a popup whose page is gone is a stale entry: the click clears it and opens the popup, it does not just close it', async () => {
+  for (const make of [
+    popup => popup.webContents.emit('render-process-gone', {}, {reason: 'crashed'}),
+    popup => { popup.webContents.close(); },
+    popup => { popup.loadFailed = true; }
+  ]) {
+    const e = engineFixture();
+    installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+    click(e, 'aaaa');
+    const stale = e.engine.popup;
+    assert.equal(stale.isLive(), true);
+    make(stale);
+    assert.equal(stale.isLive(), false);
+    click(e, 'aaaa');
+    assert.equal(stale.isDestroyed(), true);
+    assert.equal(e.emitted.length, 2, 'a new popup opened');
+    assert.notEqual(e.engine.popup, stale);
+  }
 });
 
 test('an action with no popup page, no tab or no window is the library\'s own answer (onClicked, its errors)', () => {

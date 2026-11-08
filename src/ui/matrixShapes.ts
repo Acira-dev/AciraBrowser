@@ -16,6 +16,29 @@ const CHECKS: Record<number, ReadonlySet<string>> = {
 };
 export const checkLights = (r: number, c: number, R: number, C: number) => (R === C && CHECKS[R]?.has(r + ',' + c) ? 1 : 0);
 
+/** The update check (founder's pick, 8 Nov 2026): the tick drawn as a row of round dots over the faint 6x6 grid. The classic check above stays for the other matrices
+ *  (the rating card, a finished download); this one is free-placed, not a pattern of lit cells, so it has its own geometry.
+ *  The dots are evenly spaced along the stroke (one on the elbow, none snapped to the grid): arm 1 runs down-right and arm 2 up-right, a dot at every `step` css px along
+ *  each axis, so the pitch is step * sqrt(2) on both arms. A 2 px step is the one that stays whole device pixels at 1x, 1.5x and 2x (2, 3 and 4 px), and 2 px dots leave
+ *  a clear 0.83 px gap on the diagonal; finer steps look better at 2x but go soft and uneven at 1x. 7 dots, 12 x 8 px, centred on the mark both ways. */
+export const UPDATE_TICK = { step: 2, dot: 2, arm1: 2, arm2: 4 } as const;
+export function dottedTick(size: number, step: number = UPDATE_TICK.step, arm1: number = UPDATE_TICK.arm1, arm2: number = UPDATE_TICK.arm2): [number, number][] {
+  const width = (arm1 + arm2) * step, top = Math.min(0, (arm1 - arm2) * step), bottom = arm1 * step;
+  const x0 = (size - width) / 2, y0 = (size - (bottom - top)) / 2 - top, dots: [number, number][] = [];
+  for (let i = 0; i <= arm1; i++) dots.push([x0 + i * step, y0 + i * step]);
+  for (let i = 1; i <= arm2; i++) dots.push([x0 + (arm1 + i) * step, y0 + (arm1 - i) * step]);
+  return dots;
+}
+const easeOut = (p: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
+/** The finish at time `p` (0 = the fill just completed, every dot lit; 1 = done): how much of the grid's light is left, how far the tick has been drawn (0 to 1, from its
+ *  first dot to its last), and how much of dot `i` of `count` is there (it grows and fades in as the drawing reaches it). */
+export function updateCheckAt(p: number) {
+  const grid = 1 - easeOut(p), drawn = easeOut((p - .2) / .8);
+  return { grid, drawn, dot: (i: number, count: number) => Math.min(1, Math.max(0, drawn * count - i)) };
+}
+/** Whether a grid dot sits so close to a tick dot that it is left out once the tick is there (so a faint dot never half-hides behind a tick dot). */
+export const gridClearedBy = (x: number, y: number, gridRadius: number, dots: [number, number][], dotRadius: number) => dots.some(([dx, dy]) => Math.hypot(dx - x, dy - y) < dotRadius + gridRadius + .35);
+
 /** Dots cross-fade between states on smootherstep, so a change never cuts. */
 export function blend(from: number, to: number, progress: number) {
   const p = Math.min(1, Math.max(0, progress)), eased = p * p * p * (p * (p * 6 - 15) + 10);

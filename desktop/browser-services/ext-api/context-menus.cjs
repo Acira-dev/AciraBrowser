@@ -95,10 +95,12 @@ module.exports={
   }
   function tabFor(webContents){
    try{
+    // The tab as chrome.tabs says it (the id the extension knows the tab by); the engine's cached details carry the page's own id.
+    const get=api.handler('tabs.get');
+    const asked=get?get({type:'frame',sender:webContents,extension:null},webContents.id):undefined;
+    if(asked&&!asked.__acira_error)return asked;
     const cached=api.store()?.tabDetailsCache?.get?.(webContents.id);
     if(cached)return cached;
-    const get=api.handler('tabs.get');
-    if(get)return get({type:'frame',sender:webContents,extension:null},webContents.id);
    }catch{/* no tab */}
    return undefined;
   }

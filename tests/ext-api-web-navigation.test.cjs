@@ -11,6 +11,7 @@ const frames = new Map();
 require.cache[require.resolve('electron')] = {id: 'electron', filename: 'electron', loaded: true, exports: {webFrameMain: {fromId: (pid, rid) => frames.get(`${pid}:${rid}`) || null}}};
 const webNavigation = require('../desktop/browser-services/ext-api/web-navigation.cjs');
 const extApi = require('../desktop/browser-services/ext-api/index.cjs');
+const tabIds = require('../desktop/browser-services/ext-api/surfaces/tab-ids.cjs');
 const {extensionWorld, plain} = require('./fixtures/ext-api/world.cjs');
 void path;
 
@@ -158,4 +159,24 @@ test('renderer: chrome.webNavigation with URL filters, events from the main proc
   assert.equal(nav.TransitionType.AUTO_SUBFRAME, 'auto_subframe');
   const without = extensionWorld({manifest_version: 3, permissions: ['tabs']}, {packages, worker: true});
   assert.equal(without.chrome.webNavigation, undefined);
+});
+
+test('a tab the extension knows by another id than its page (restored from sleep): events carry the tab\'s id, getFrame / getAllFrames take either', () => {
+  const s = setup();
+  // the first setup() session is {}: register the tabs package's answer on it the way ext-api/tabs.cjs does (the tab is 2000000002, its page 7)
+  const session = {};
+  const sent = [], handlers = new Map();
+  const t = tab();
+  const engine = Object.assign(new EventEmitter(), {tabs: new Set([t.wc]), getTabById: id => (id === 7 || id === 2000000002 ? t.wc : undefined)});
+  tabIds.register(session, {ofPage: wc => (wc === t.wc ? 2000000002 : wc.id), pageOf: id => (id === 2000000002 ? 7 : null)});
+  webNavigation.install({session, store: () => engine, handle: (name, fn) => handlers.set(name, fn), listening: () => ['x'], broadcast: (name, details) => sent.push([name.replace('aciraWebNavigation.', ''), details])});
+  navigate({wc: t.wc, history: t.history}, t.main, 'https://news.example/');
+  assert.deepEqual(sent.map(([, details]) => details.tabId), [2000000002, 2000000002], 'onBeforeNavigate and onCommitted name the tab as chrome.tabs does');
+  const named = handlers.get('webNavigation.getFrame')({}, {tabId: 2000000002, frameId: 0});
+  assert.equal(named.url, 'https://news.example/', 'the extension\'s own id finds the frame');
+  const documentId = sent[1][1].documentId;
+  assert.notEqual(handlers.get('webNavigation.getFrame')({}, {documentId, tabId: 2000000002}), null, 'documentId with the tab\'s id');
+  assert.equal(handlers.get('webNavigation.getFrame')({}, {documentId, tabId: 99}), null, 'another tab id does not match');
+  assert.equal(handlers.get('webNavigation.getAllFrames')({}, {tabId: 2000000002}).length >= 1, true);
+  void s;
 });

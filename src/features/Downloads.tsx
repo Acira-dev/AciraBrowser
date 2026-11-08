@@ -1,21 +1,37 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { BrowserDownload, BrowserSnapshot, ServiceRequest } from '../runtime/types';
 import { runtime } from '../runtime/client';
 import { DownloadLine } from '../components/DownloadLine';
 import { DownloadMatrix } from '../components/DownloadsGlyph';
 import { isLiveDownload, profileDownloads } from '../ui/downloadActivity';
-import { FolderOpen, Pause, Play, RotateCw, X } from '../components/AppIcons';
+import { FolderOpen, Pause, Play, RotateCw, Trash2, X } from '../components/AppIcons';
 import { currentLocale, t, useT } from '../i18n';
 import { TorDownloadNotice } from './tor/TorDownloadNotice';
 import { FileGlyph, LibraryEmpty, LibraryPage, LibrarySection, MiddleName, dayOf } from './Library';
-import { bytes, sizeOf, statusText } from './downloadText';
+import { bytes, canDeleteFile, canDragFile, sizeOf, statusText } from './downloadText';
 
-export { bytes, sizeOf, statusText } from './downloadText';
+export { bytes, canDeleteFile, canDragFile, sizeOf, statusText } from './downloadText';
 export const rate = (value?: number) => value && value > 0 ? `${bytes(value)}/s` : '';
 export const left = (seconds?: number) => !seconds || seconds <= 0 ? '' : seconds < 60 ? t('dl.secLeft', { count: Math.max(1, Math.round(seconds)) }) : seconds < 3600 ? t('dl.minLeft', { count: Math.round(seconds / 60) }) : t('dl.hourLeft', { count: Math.round(seconds / 3600) });
 export type DownloadCommand = Extract<ServiceRequest, { type: 'downloads.command' }>['command'];
 const timeFormat = () => new Intl.DateTimeFormat(currentLocale(), { hour: 'numeric', minute: '2-digit' });
 const live = isLiveDownload;
+
+/** How long a picked-up row stays dimmed at least: on macOS the command answers as soon as the drag has begun, on Windows only when it ends. */
+const LIFT_MS = 400;
+/** A finished file picked up by its row: the browser's own drag is replaced by a native file drag that main starts (the `drag` command), which carries the real file
+ * to a page's upload box, another program or the desktop. `lift` dims the row (the same 45% a dragged bookmark row gets) while the file is held. */
+export function pickUpFile(event: { preventDefault(): void }, id: string, act: (id: string, command: DownloadCommand) => Promise<void>, lift: (on: boolean) => void, now: () => number = Date.now, later: (run: () => void, ms: number) => void = (run, ms) => void window.setTimeout(run, ms)) {
+  event.preventDefault();
+  const since = now(); lift(true);
+  return act(id, 'drag').finally(() => later(() => lift(false), Math.max(0, LIFT_MS - (now() - since))));
+}
+/** The row props that make a finished file draggable (the popup's row and the page's row share them); a row that is running, failed or whose file is gone gets none. */
+export function useFileDrag(item: BrowserDownload, act: (id: string, command: DownloadCommand) => Promise<void>) {
+  const [lifted, setLifted] = useState(false);
+  if (!canDragFile(item)) return {};
+  return { draggable: true as const, 'data-dragging': lifted || undefined, onDragStart: (event: DragEvent<HTMLElement>) => void pickUpFile(event, item.id, act, setLifted) };
+}
 
 /** This profile's downloads (with what the native side knows about each) and the commands that act on them. */
 export function useDownloads(state: BrowserSnapshot, query: string, hideReady: boolean) {
@@ -61,13 +77,13 @@ function DownloadRow({ item, act, reduced }: { item: BrowserDownload; act: (id: 
   const meta = downloadMeta(item);
   const label = item.name;
   // A finished file can be dragged out to Explorer or into a page: the browser's own drag is replaced by a native file drag started in main.
-  const draggable = item.status === 'Ready' && !!item.canOpen;
+  const drag = useFileDrag(item, act);
   // The matrix is the file's icon while it downloads, and shows again when the pointer rests on a finished file's icon or name.
   const [hot, setHot] = useState(false), cooling = useRef(0);
   const warm = () => { window.clearTimeout(cooling.current); setHot(true); }, cool = () => { window.clearTimeout(cooling.current); cooling.current = window.setTimeout(() => setHot(false), 90); };
   useEffect(() => () => window.clearTimeout(cooling.current), []);
   const settled = item.status === 'Ready', matrix = live(item) ? <DownloadMatrix phase={item.status === 'Paused' ? 'held' : 'run'} progress={downloadShare(item)} grid={7} size={24} reducedMotion={reduced} /> : settled && hot ? <DownloadMatrix phase="done" progress={1} grid={7} size={24} reducedMotion={reduced} /> : null;
-  return <div className="lib-row dl" data-status={item.status} data-settled={!live(item) || undefined} draggable={draggable || undefined} onDragStart={draggable ? event => { event.preventDefault(); void act(item.id, 'drag'); } : undefined}>
+  return <div className="lib-row dl" data-status={item.status} data-settled={!live(item) || undefined} {...drag}>
     <span className="dl-lead" data-matrix={matrix ? '' : undefined} onPointerEnter={settled ? warm : undefined} onPointerLeave={settled ? cool : undefined}><FileGlyph name={item.name}>{matrix}</FileGlyph></span>
     <div className="dl-body">
       <span className="dl-name" onPointerEnter={settled ? warm : undefined} onPointerLeave={settled ? cool : undefined}><MiddleName name={item.name} /></span>
@@ -84,6 +100,7 @@ function DownloadRow({ item, act, reduced }: { item: BrowserDownload; act: (id: 
     <span className="lib-actions">
       {item.status === 'Ready' && item.canOpen && <button type="button" className="acira-button acira-button-quiet lib-compact" aria-label={t('dl.openAria', { name: label })} onClick={() => void act(item.id, 'open')}>{t('dl.open')}</button>}
       {item.status === 'Ready' && item.canShow && <button type="button" className="lib-icon" aria-label={t('dl.showAria', { name: label })} title={t('dl.showInFolder')} onClick={() => void act(item.id, 'show')}><FolderOpen size={14} /></button>}
+      {canDeleteFile(item) && <button type="button" className="lib-icon" data-danger aria-label={t('dl.deleteAria', { name: label })} title={t('dl.delete')} onClick={() => void act(item.id, 'delete')}><Trash2 size={14} /></button>}
       {!item.canCancel && !live(item) && <button type="button" className="lib-icon" data-danger aria-label={t('dl.removeAria', { name: label })} title={t('dl.removeFromList')} onClick={() => void runtime.dispatch({ type: 'downloads.remove', id: item.id })}><X size={14} /></button>}
     </span>
     <DownloadLineSlot item={item} reduced={reduced} />

@@ -287,6 +287,49 @@ test('main: the engine\'s store keeps selectTab on its host object (store.impl):
   assert.equal(created.length, 0);
 });
 
+test('sender.tab of a message from a restored tab: the engine says the page\'s id, the extension knows the tab by its own; the table is told which page is which tab', async () => {
+  const {chrome, native, world} = setup({}, {answer: (name) => (name === 'runtime.tabs' ? [aTab(2000000002, {index: 4})] : name === 'runtime.tabPages' ? {5: 2000000002} : undefined)});
+  const heard = [];
+  chrome.runtime.onMessage.addListener((message, sender) => { heard.push(plain(sender)); return false; });
+  await tick();
+  native.seen.listeners.onMessage[0]('m', {id: ID, tab: {id: 5, index: 0, windowId: 0}}, () => {});
+  assert.equal(heard[0].tab.id, 2000000002, 'the tab\'s id, not the page\'s');
+  assert.equal(heard[0].tab.index, 4);
+  world.emit('runtime.tabs', {tabs: [], removed: [], pages: {9: 2000000002}});
+  native.seen.listeners.onMessage[0]('m', {id: ID, tab: {id: 9, index: 0, windowId: 0}}, () => {});
+  native.seen.listeners.onMessage[0]('m', {id: ID, tab: {id: 5, index: 0, windowId: 0}}, () => {});
+  assert.equal(heard[1].tab.id, 2000000002, 'a page that was learned from a push');
+  assert.equal(heard[2].tab.windowId, 0, 'a page the new table no longer names is the engine\'s again');
+});
+
+test('main: the page-id table of runtime.tabPages and the push that carries it only when it changes', async () => {
+  const tabIds = require('../desktop/browser-services/ext-api/surfaces/tab-ids.cjs');
+  const session = {name: 'pages'}, extension = {id: ID, manifest: {}};
+  const restored = {id: 5, session, isDestroyed: () => false}, plainPage = {id: 6, session, isDestroyed: () => false};
+  tabIds.register(session, {ofPage: wc => (wc === restored ? 2000000002 : wc.id), pageOf: id => (id === 2000000002 ? 5 : null)});
+  const model = new Map([[2000000002, aTab(2000000002)], [6, aTab(6)]]);
+  let notify = null;
+  const store = {tabs: new Set([restored, plainPage]), impl: {tabModel: {onChange: fn => { notify = fn; return () => { notify = null; }; }}}, on() {}, off() {}};
+  const sent = [], handlers = new Map();
+  const api = {userData: fs.mkdtempSync(path.join(os.tmpdir(), 'acira-p3-')), storeKey: 'k2', session, handle: (name, fn) => handlers.set(name, fn), handler: name => handlers.get(name) || null, store: () => store, log() {},
+    listening: () => [ID], getExtension: id => (id === ID ? extension : null), emit: (id, name, ...args) => sent.push([id, name, ...args])};
+  handlers.set('tabs.get', (_event, tabId) => { const found = model.get(tabId === 5 ? 2000000002 : tabId); return found || {__acira_error: 'No tab'}; });
+  const result = runtimePackage.install(api);
+  assert.deepEqual(handlers.get('runtime.tabPages')({type: 'service-worker', extension}), {5: 2000000002}, 'only the pages whose tab id differs');
+  assert.deepEqual(handlers.get('runtime.tabs')({type: 'service-worker', extension}).map(tab => tab.id), [2000000002, 6]);
+  model.set(6, aTab(6, {index: 9}));
+  notify();
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][2].pages, undefined, 'the table was not sent: it did not change');
+  restored.id = 5; tabIds.register(session, {ofPage: wc => (wc === restored ? 2000000002 : wc.id === 6 ? 2000000006 : wc.id), pageOf: id => id});
+  model.set(6, aTab(6, {index: 9})); store.tabs.delete(restored);
+  notify();
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.deepEqual(sent.at(-1)[2].pages, {6: 2000000006}, 'the table is sent when it changed');
+  result.dispose();
+});
+
 test('main: runtime.tabs answers the tab list from tabs.get (P1) and then pushes only what changed, to extensions that listen', async () => {
   const session = {name: 's'}, extension = {id: ID, manifest: {}};
   const pages = [{id: 5, session, isDestroyed: () => false}, {id: 6, session, isDestroyed: () => false}, {id: 7, session: {name: 'other'}, isDestroyed: () => false}, {id: 8, session, isDestroyed: () => true}];

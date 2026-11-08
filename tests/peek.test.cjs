@@ -10,7 +10,7 @@ class FakeContents extends EventEmitter{
  isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}focus(){}insertCSS(){return Promise.resolve('css');}removeInsertedCSS(){return Promise.resolve();}send(...args){this.sent.push(args);}setWindowOpenHandler(fn){this.openHandler=fn;}setWebRTCIPHandlingPolicy(){}
 }
 FakeContents.sessions={};
-class FakeView{constructor(options){this.webContents=new FakeContents(options);this.bounds=null;this.radius=0;this.visible=true;}setBounds(b){this.bounds=b;}setBorderRadius(r){this.radius=r;}setBackgroundColor(){}setVisible(v){this.visible=v;}}
+class FakeView{constructor(options){this.webContents=new FakeContents(options);this.bounds=null;this.radius=0;this.visible=true;}setBounds(b){this.bounds=b;}getBounds(){return this.bounds;}setBorderRadius(r){this.radius=r;}setBackgroundColor(){}setVisible(v){this.visible=v;}}
 function harness(extra={}){
  let state=createInitialState();state=reduceBrowser(state,{type:'tab.navigate',tabId:state.activeTabId,url:'https://source.test/'});
  const children=[{page:true}],events=[];
@@ -254,4 +254,47 @@ test('a preview with no icon service or a failing one still opens; the card keep
  assert.equal(h.peek.open({url:'https://docs.test/a',sourceTabId:source}).ok,true);
  const view=h.children.at(-1).webContents;view.emit('page-favicon-updated',{},['https://docs.test/icon.png']);
  assert.equal(h.events.at(-1).peek.favicon,'');assert.equal(h.events.at(-1).peek.url,'https://docs.test/a');
+});
+
+// Right-click inside the preview: the page menu a tab has, for the tab the preview came from.
+test('right-click in the preview asks for the page menu for the source tab, over where the preview page is; nothing after it closes or when it shows an error card',()=>{
+ const asked=[],h=harness({contextMenu:call=>asked.push(call)}),source=h.state.activeTabId;
+ h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const view=h.children.at(-1),params={x:40,y:30,linkURL:'https://x.test/'};
+ assert.equal(h.peek.sourceOf(view.webContents),source,'the preview\'s own page knows its tab');
+ assert.equal(h.peek.sourceOf({isDestroyed:()=>false}),null,'any other contents is not a preview page');
+ view.webContents.emit('context-menu',{},params);
+ assert.equal(asked.length,1);assert.equal(asked[0].wc,view.webContents);assert.equal(asked[0].sourceTabId,source);assert.equal(asked[0].params,params);assert.deepEqual(asked[0].bounds,view.bounds,'the menu opens over the page view');
+ // a page that failed to load shows the card's own error state, a file link its download notice: no page menu behind them
+ view.webContents.emit('did-fail-load',{},-105,'ERR_NAME_NOT_RESOLVED','https://docs.test/a',true);view.webContents.emit('context-menu',{},params);assert.equal(asked.length,1,'not over an error card');
+ h.peek.close();
+ view.webContents.emit('context-menu',{},params);assert.equal(asked.length,1,'a closed preview has no menu');
+ assert.equal(h.peek.sourceOf(view.webContents),null);
+});
+
+test('a menu that cannot be built never breaks the preview',()=>{
+ const h=harness({contextMenu:()=>{throw new Error('boom');}}),source=h.state.activeTabId;h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const view=h.children.at(-1);assert.doesNotThrow(()=>view.webContents.emit('context-menu',{},{x:1,y:1}));assert.equal(h.peek.active,true);
+});
+
+test('main wires one page menu for tabs and the preview: the same function, the source tab as owner, downloads from it, no extension rows',()=>{
+ const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/wc\.on\('context-menu',\(_event,params\)=>\{if\(entry\.securedLocked\)return;showPageContextMenu\(wc,params,tab\.id,entry\.view\.getBounds\(\)\);\}\);/,'a tab\'s page shows the menu through the shared function');
+ assert.match(main,/function showPageContextMenu\(wc,params,tabId,box\)\{const menu=contextCommands\.menu\(wc,params\);if\(!menu\|\|!chromeView\|\|chromeView\.webContents\.isDestroyed\(\)\)return contextCommands\.popup\(wc,params,Menu,mainWindow\);pageContextMenu=\{tabId,/);
+ assert.match(main,/contextMenu:\(\{wc,params,sourceTabId,bounds\}\)=>showPageContextMenu\(wc,params,sourceTabId,bounds\)/,'the preview shows it for the tab it came from');
+ assert.match(main,/getContext:wc=>\{const from=peek\.sourceOf\(wc\),id=pageOwner\(pages,wc\)\|\|from,/,'the preview\'s page is owned by its source tab');
+ assert.match(main,/extensionItems:\(wc,params\)=>peek\.sourceOf\(wc\)\?\[\]:/,'no extension rows for a preview page');
+});
+
+test('after a menu closes over the preview the keyboard goes back to the preview\'s page, not to the page behind it; never to an error card or a closed preview',()=>{
+ const h=harness(),source=h.state.activeTabId;h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const view=h.children.at(-1),frame=h.children.at(-2);
+ assert.equal(h.peek.focusTarget(),null,'not shown yet');
+ view.webContents.emit('dom-ready');frame.webContents.ipc.emit('acira:peek-frame',{},'entered');
+ assert.equal(h.peek.focusTarget(),view.webContents,'shown: its own page');
+ view.webContents.emit('did-fail-load',{},-105,'ERR_NAME_NOT_RESOLVED','https://docs.test/a',true);
+ assert.equal(h.peek.focusTarget(),null,'an error card holds the screen');
+ h.peek.close();assert.equal(h.peek.focusTarget(),null);
+ const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/function restoreVisibleFocus\(\)\{const preview=peek\.focusTarget\(\),entry=pages\.get\(state\.activeTabId\);[^]*?if\(preview\)focusContents\(preview\);else if\(entry&&/);
 });

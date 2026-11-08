@@ -11,7 +11,9 @@
 // toolbar, and nothing in the interface changes, so there is no layout move, view transition or repaint to get wrong.
 //
 // A hidden notch is a dead corner (the overlay is native and takes the pointer), which is why the corner itself shows it: a page's own top-right control can never be
-// clicked "through" an invisible button. While it is hidden, minimise and maximise are switched off and close is refused (main.cjs guardCaption).
+// clicked "through" an invisible button. While it is hidden, minimise and maximise are switched off and close is refused (caption-guard.cjs, main.cjs's 'close'
+// handler). The buttons are switched on or off only while the overlay is transparent and in the same tick as its colours, so the notch appears and goes as ONE
+// piece (a 200 ms delayed switch-on made every reveal a narrow box with two buttons, then a wider one with three: founder's recording of beta.13).
 
 const { createEdgeController } = require('./edge-reveal.cjs');
 

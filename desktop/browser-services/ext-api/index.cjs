@@ -176,6 +176,8 @@ function packageApi(base,pkg){
  const router=base.router;
  const api={
   name:pkg.name,session:base.session,runtime:base.runtime,userData:base.userData,storeKey:base.storeKey,
+  /** The ordinary profile a private session's extensions come from (a private session's storeKey is its own private profile), or '' for an ordinary session. */
+  sourceProfileId:typeof base.sourceProfileId==='string'?base.sourceProfileId:'',
   getWindow:base.getWindow||(()=>null),getExtension:base.getExtension||(()=>null),dialog:base.dialog||null,t:base.t||((id)=>id),
   /** Acira's permission table for this profile (extension-permission-table.cjs): has, hasOrigin, active, granted, grant, revoke, request, onChange. */
   permissions:base.permissions||null,

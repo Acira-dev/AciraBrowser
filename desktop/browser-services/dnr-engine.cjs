@@ -203,9 +203,50 @@ function compileRedirect(r,extensionId,hasRegex){
 // A compiled rule is kept small (300,000 of them for uBlock Origin Lite): fixed-shape objects, the rarer conditions in `cond` only when a rule
 // has one, action details in `act` only for redirect / modifyHeaders, ruleset facts in one shared `set` object, and the original JSON kept
 // only for dynamic and session rules (getDynamicRules / getSessionRules are answered by the engine itself; static rules are not).
+/** One HeaderInfo of a rule's `responseHeaders` / `excludedResponseHeaders` condition (Chrome 128): a header name and, optionally, value patterns.
+ *  A pattern covers the whole value, case-insensitively: `*` is any run of characters, `?` zero or one character, `\\*` and `\\?` the characters themselves. */
+const HEADER_NAME=/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/,MAX_VALUE_WILDCARDS=24;
+function headerValuePattern(source){
+ if(source.length>1024)throw new Error('header value pattern is too long');
+ let out='',wild=0,star=false;
+ for(let i=0;i<source.length;i++){
+  const c=source[i];
+  if(c==='\\'&&(source[i+1]==='*'||source[i+1]==='?')){out+='\\'+source[++i];star=false;continue;}
+  if(c==='*'){if(!star){out+='[^]*';if(++wild>MAX_VALUE_WILDCARDS)throw new Error('header value pattern has too many wildcards');}star=true;continue;}
+  star=false;
+  if(c==='?'){out+='[^]?';if(++wild>MAX_VALUE_WILDCARDS)throw new Error('header value pattern has too many wildcards');continue;}
+  out+=c.replace(/[.+^${}()|[\]\\]/g,'\\$&');
+ }
+ return new RegExp('^'+out+'$','i');
+}
+function headerInfoList(list,field){
+ if(!Array.isArray(list)||!list.length)throw new Error(field+' must be a non-empty list');
+ return list.map(info=>{
+  if(!info||typeof info!=='object'||typeof info.header!=='string'||!HEADER_NAME.test(info.header))throw new Error(field+' needs a header name in every entry');
+  const patterns=key=>{const value=info[key];if(value===undefined)return null;if(!Array.isArray(value)||!value.every(item=>typeof item==='string'))throw new Error(field+' '+key+' must be a list of strings');return value.map(headerValuePattern);};
+  return {name:info.header.toLowerCase(),values:patterns('values'),excluded:patterns('excludedValues')};
+ });
+}
+/** Does the response have a header one of these HeaderInfo entries describes? (the name, and a value that matches `values` and none of `excludedValues`; no values: the header exists) */
+function hasResponseHeader(infos,headers){
+ for(const info of infos)for(const key of Object.keys(headers)){
+  if(key.toLowerCase()!==info.name)continue;
+  for(const value of Array.isArray(headers[key])?headers[key]:[headers[key]]){
+   const text=String(value);
+   if((!info.values||info.values.some(re=>re.test(text)))&&(!info.excluded||!info.excluded.some(re=>re.test(text))))return true;
+  }
+ }
+ return false;
+}
+/** The response side of a rule's condition: some header of `responseHeaders` is there, and none of `excludedResponseHeaders`. */
+function responseMatches(resp,headers){
+ if(!headers||typeof headers!=='object')return false;
+ if(resp.include&&!hasResponseHeader(resp.include,headers))return false;
+ return !(resp.exclude&&hasResponseHeader(resp.exclude,headers));
+}
 class Cond{constructor(){this.requestDomains=null;this.excludedRequestDomains=null;this.initiatorDomains=null;this.excludedInitiatorDomains=null;this.topDomains=null;this.excludedTopDomains=null;this.domainType=null;this.tabIds=null;this.excludedTabIds=null;}}
 class Rule{
- constructor(id,priority,type,set){this.id=id;this.priority=priority;this.type=type;this.key=priority*8+(RANK[type]||0);this.set=set;this.types=0;this.methods=0;this.urlFilter=null;this.hostOnly=null;this.caseSensitive=false;this.regex=null;this.cond=null;this.act=null;this.compiled=null;this.viaDomains=false;this.raw=null;}
+ constructor(id,priority,type,set){this.id=id;this.priority=priority;this.type=type;this.key=priority*8+(RANK[type]||0);this.set=set;this.types=0;this.methods=0;this.urlFilter=null;this.hostOnly=null;this.caseSensitive=false;this.regex=null;this.cond=null;this.act=null;this.compiled=null;this.viaDomains=false;this.raw=null;this.resp=null;}
  get extensionId(){return this.set.extensionId;}
  get rulesetId(){return this.set.rulesetId;}
  get source(){return this.set.source;}
@@ -234,6 +275,8 @@ function compileRule(raw,set,{allowTabIds=set.source==='session'}={}){
   for(const key of ['tabIds','excludedTabIds'])if(cond[key]!==undefined){if(!Array.isArray(cond[key])||!cond[key].every(isInt)||(key==='tabIds'&&!cond[key].length))throw new Error(key+' must be a list of tab ids');more()[key]=new Set(cond[key]);}
  }
  rule.cond=extra;
+ // Response-header conditions (Chrome 128): the rule can only be judged once the response is in (headerRules below), never at request time.
+ if(cond.responseHeaders!==undefined||cond.excludedResponseHeaders!==undefined)rule.resp={include:cond.responseHeaders===undefined?null:headerInfoList(cond.responseHeaders,'responseHeaders'),exclude:cond.excludedResponseHeaders===undefined?null:headerInfoList(cond.excludedResponseHeaders,'excludedResponseHeaders')};
  if(cond.urlFilter!==undefined){
   const f=cond.urlFilter;if(typeof f!=='string'||!f.length)throw new Error('urlFilter must not be empty');if(/[^\x20-\x7e]/.test(f))throw new Error('urlFilter must be ASCII');if(f.startsWith('||*'))throw new Error('urlFilter must not start with ||*');
   rule.hostOnly=pureHostFilter(f);if(!rule.hostOnly)rule.urlFilter=f;
@@ -315,7 +358,9 @@ function urlMatches(rule,req){
  if(rule.regex){if(req.url.length>MAX_REGEX_URL)return false;return rule.regex.test(req.url);}
  return true;
 }
-function ruleMatches(rule,req,viaHost){
+/** At request time: a rule with a response-header condition cannot be judged yet, so it never matches here (it used to match every response). */
+function ruleMatches(rule,req,viaHost){return !rule.resp&&requestMatches(rule,req,viaHost);}
+function requestMatches(rule,req,viaHost){
  if(!(rule.types&req.typeBit))return false;
  if(rule.methods&&!(rule.methods&req.methodBit))return false;
  const set=rule.set;if(!set.enabled||(set.disabled&&set.disabled.size&&set.disabled.has(rule.id)))return false;
@@ -418,9 +463,10 @@ class ExtensionRules{
   for(const group of this.groups){const index=group.before;if(index.size&&(index.types&req.typeBit))index.candidates(req,visit);}
   return top;
  }
- headerRules(req,phase){
+ /** responseHeaders: the response's headers in the 'responseHeaders' phase (rules with a response-header condition are judged against them; in the request phase they never apply). */
+ headerRules(req,phase,responseHeaders=null){
   let out=null;
-  const visit=(rule,viaHost)=>{if(rule.act[phase]&&!(out&&out.includes(rule))&&ruleMatches(rule,req,viaHost))(out||(out=[])).push(rule);};
+  const visit=(rule,viaHost)=>{if(!rule.act[phase]||(out&&out.includes(rule)))return;if(rule.resp?!(phase==='responseHeaders'&&requestMatches(rule,req,viaHost)&&responseMatches(rule.resp,responseHeaders)):!requestMatches(rule,req,viaHost))return;(out||(out=[])).push(rule);};
   for(const group of this.groups){const index=group.headers;if(index.size&&(index.types&req.typeBit))index.candidates(req,visit);}
   return out?out.sort((a,b)=>b.priority-a.priority):[];
  }
@@ -560,7 +606,7 @@ function createDnrEngine({onMatch=null}={}){
   const frameAllows=frameAllowsFor(req);
   const state=new Map();let out=null;
   for(const ext of list){
-   const rules=ext.headerRules(req,phase);if(!rules.length)continue;
+   const rules=ext.headerRules(req,phase,phase==='responseHeaders'?headers:null);if(!rules.length)continue;
    if(!access(ext,req))continue;
    const floor=ext.allowPriority(req,frameAllows);
    for(const rule of rules){

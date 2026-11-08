@@ -24,6 +24,7 @@
 const {observeRequests}=require('../../request-pipeline.cjs');
 const {urlParts,compilePattern,compileList}=require('./web-request/patterns.cjs');
 const {documentsFor,frameIdOf,read}=require('./web-navigation/frames.cjs');
+const tabIds=require('./surfaces/tab-ids.cjs');
 
 const HOST=Symbol.for('acira.web-request-host-v1');
 const CHANNEL='crx-aciraWebRequest.event';
@@ -192,7 +193,7 @@ function install(api){
   let tabId=-1,windowId=-1,fromExtension=null;
   if(wc){
    const engine=store();
-   if(engine&&engine.tabs&&engine.tabs.has(wc)){tabId=wc.id;windowId=read(()=>engine.tabToWindow.get(wc)?.id,-1)??-1;}
+   if(engine&&engine.tabs&&engine.tabs.has(wc)){tabId=tabIds.ofPage(session,wc)??wc.id;windowId=read(()=>engine.tabToWindow.get(wc)?.id,-1)??-1;}
    else{const page=read(()=>wc.getURL(),'');if(INTERNAL_PAGE.test(page))return null;const m=/^chrome-extension:\/\/([a-p]{32})\//.exec(page);if(m)fromExtension=m[1];}
   }else{
    // No page: a web or extension service worker (it has an initiator), or the browser itself (Acira's own downloads: hidden).

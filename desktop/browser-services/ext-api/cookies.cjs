@@ -8,6 +8,7 @@
 // Not supported: partitioned (CHIPS) cookies. A call that names a partitionKey finds nothing (get / getAll), cannot be set, and removes
 // nothing; Electron's cookie API has no partition key to read or write.
 const model=require('./cookies/model.cjs');
+const tabIdBridge=require('./surfaces/tab-ids.cjs');
 
 module.exports={
  namespaces:['cookies'],
@@ -66,7 +67,7 @@ module.exports={
   api.handle('cookies.getAllCookieStores',async()=>{
    const tabs=api.store()?.tabs;
    const tabIds=[];
-   if(tabs)for(const tab of tabs){try{if(tab&&!tab.isDestroyed()&&tab.session===session&&!tab.__aciraTorLocked&&typeof tab.id==='number')tabIds.push(tab.id);}catch{/* closing */}}
+   if(tabs)for(const tab of tabs){try{if(tab&&!tab.isDestroyed()&&tab.session===session&&!tab.__aciraTorLocked&&typeof tab.id==='number')tabIds.push(tabIdBridge.ofPage(session,tab)??tab.id);}catch{/* closing */}}
    return [{id:model.STORE_ID,tabIds}];
   });
 

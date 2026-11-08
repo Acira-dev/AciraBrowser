@@ -29,21 +29,22 @@ const ERRORS = Object.freeze({
   invalidUrl: 'Invalid URL.',
   modifySpecial: "Can't modify the root bookmark folders.",
   cannotSetUrlOfFolder: "Can't set URL of a bookmark folder.",
-  invalidMoveDestination: "Can't move a folder to itself or its descendant.",
-  // Acira's own: its bookmarks are web pages (imports leave other addresses out for the same reason).
-  webOnly: 'Acira keeps web pages (http and https addresses) as bookmarks.'
+  invalidMoveDestination: "Can't move a folder to itself or its descendant."
 });
-const MAX_TITLE = 2048, MAX_URL = 8192, MAX_ID = 160;
+const MAX_TITLE = 2048, MAX_URL = 32768, MAX_ID = 160;
 const failure = message => ({ error: message });
 const time = value => { const n = typeof value === 'number' ? value : Date.parse(value); return Number.isFinite(n) ? n : 0; };
 const isNamed = (node, title) => !node.url && String(node.title || '').trim().toLowerCase() === title.toLowerCase();
 
-/** An address as bookmarks hold it: an http(s) URL (the same text, trimmed), or an error message. */
+/**
+ * An address as bookmarks hold it: the text, trimmed, when it is a valid absolute URL of any scheme (Chrome keeps bookmarklets, chrome://, file:
+ * and the rest; a sync extension has to get back what it stored, or it takes the missing item for a deletion and removes it from its server).
+ * Acira's own screens treat anything but http(s) as inert: it is listed, never opened (validation.cjs refuses to navigate to it).
+ */
 function checkUrl(value) {
   const text = String(value).trim();
   if (!text || text.length > MAX_URL) return { error: ERRORS.invalidUrl };
-  let parsed; try { parsed = new URL(text); } catch { return { error: ERRORS.invalidUrl }; }
-  if (!/^https?:$/.test(parsed.protocol)) return { error: ERRORS.webOnly };
+  try { new URL(text); } catch { return { error: ERRORS.invalidUrl }; }
   return { url: text };
 }
 const isId = value => typeof value === 'string' && value.length > 0 && value.length <= MAX_ID;
@@ -53,20 +54,20 @@ const isIndex = value => Number.isInteger(value);
  * Chrome's view of one profile's bookmark nodes. `skip` leaves some nodes out of the child lists (a node being placed again).
  * Lookups by Chrome id; records are BookmarkTreeNode objects without `children` (tree() and subTree() add them).
  */
-function createView(allNodes, { skip = null } = {}) {
+function createView(allNodes, options = {}) {
+  const hold = { skip: options.skip || null };
   const nodes = allNodes.filter(node => node && !node.tor);
   const byId = new Map(nodes.map(node => [node.id, node]));
-  const order = new Map(nodes.map((node, i) => [node, i]));
   const kids = new Map();   // physical parent id (null: top level) -> children, in position order
   for (const node of nodes) {
     const parent = node.parentId && byId.has(node.parentId) && !byId.get(node.parentId).url ? node.parentId : null;
     if (!kids.has(parent)) kids.set(parent, []);
     kids.get(parent).push(node);
   }
-  for (const list of kids.values()) list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || order.get(a) - order.get(b));
+  for (const list of kids.values()) list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));   // stable: equal positions keep the list's order
   const top = kids.get(null) || [];
   const bar = top.find(node => isNamed(node, BAR_TITLE)) || null, other = top.find(node => isNamed(node, OTHER_TITLE)) || null;
-  const of = parent => (kids.get(parent) || []).filter(node => !skip || !skip.has(node));
+  const of = parent => (kids.get(parent) || []).filter(node => !hold.skip || !hold.skip.has(node));
   const cid = node => node === bar ? BAR : node === other ? OTHER : node.id;
   const zones = {
     [BAR]: { first: () => of(null).filter(node => node.url), folder: bar, accepts: node => !!node.url, title: BAR_TITLE },
@@ -119,20 +120,25 @@ function createView(allNodes, { skip = null } = {}) {
     for (let at = id, steps = 0; at !== null && steps < 10000; at = parentOfId(at), steps++) if (at === ancestor) return true;
     return false;
   }
-  return { nodes, byId, bar, other, zones, of, cid, listOf, nodeOf, exists, parentOfId, record, subTree, idsUnder, all, under, tree: () => subTree(ROOT) };
+  return { nodes, byId, bar, other, zones, of, cid, listOf, nodeOf, exists, parentOfId, record, subTree, idsUnder, all, under, tree: () => subTree(ROOT), skip: set => { hold.skip = set; } };
 }
 
 // ---------------------------------------------------------------------------------------------------------------- writing
+// Every write takes the profile's nodes and a context {profileId, newId, now, owned}. With owned: true the list is the caller's own working copy
+// (extension-bookmark-buffer.cjs keeps one while a burst of writes is coalesced): it is changed in place and every later call skips the clone
+// and the first renumbering. Otherwise the list given is never touched. A result is {nodes, result, events} or {error}; `events` are the
+// chrome.bookmarks events of that one call, in Chrome's form, so a burst needs no before/after comparison to be told to extensions.
 const clone = nodes => nodes.map(node => ({ ...node }));
-/** Sibling positions become 0..n-1 per parent, in the order they sort (a node placed at "position - 0.5" lands before that one). */
-function renumber(draft) {
-  const groups = new Map(), order = new Map(draft.map((node, i) => [node, i]));
-  for (const node of draft) { const key = node.parentId || null; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(node); }
-  for (const list of groups.values()) { list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || order.get(a) - order.get(b)); list.forEach((node, i) => { node.position = i; }); }
+const markNormalized = draft => { Object.defineProperty(draft, 'normalized', { value: true, enumerable: false, configurable: true, writable: true }); return draft; };
+/** Sibling positions become 0..n-1 per parent, in the order they sort (a node placed at "position - 0.5" lands before that one; equal ones keep the list's order). `only`: just these parents (null: the top level). */
+function renumber(draft, only = null) {
+  const groups = new Map();
+  for (const node of draft) { const key = node.parentId || null; if (only && !only.has(key)) continue; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(node); }
+  for (const list of groups.values()) { list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)); list.forEach((node, i) => { node.position = i; }); }
 }
 /** The folder an extension's write into "1" or "2" lands in: Acira's own, made now when it is not there yet (core.ts placeFolder: id, title, end of the top level). */
-function ensureFolder(draft, zoneId, { now, profileId }) {
-  const view = createView(draft), zone = view.zones[zoneId];
+function ensureFolder(draft, view, zoneId, { now, profileId }) {
+  const zone = view.zones[zoneId];
   if (zone.folder) return zone.folder;
   const token = zoneId === BAR ? 'bookmarks-bar' : 'other-bookmarks';
   const folder = { id: draft.some(node => node.id === token) ? `folder-${crypto.randomUUID()}` : token, browserProfileId: profileId || draft[0]?.browserProfileId, parentId: null, title: zone.title, position: Number.MAX_SAFE_INTEGER, createdAt: now };
@@ -140,12 +146,13 @@ function ensureFolder(draft, zoneId, { now, profileId }) {
   return folder;
 }
 /**
- * Puts `node` at Chrome index `index` of the Chrome parent `parentId` (the index counts the children without the node itself).
- * Into "1" and "2" the index lands in the first part (top-level pages, top-level folders) when it is inside it and the node belongs there,
- * or when Acira has no folder of that name; otherwise in Acira's own folder (made now when missing).
+ * Puts `node` at Chrome index `index` of the Chrome parent `parentId` (the index counts the children without the node itself) and answers
+ * the index it really got. Into "1" and "2" the index lands in the first part (top-level pages, top-level folders) when it is inside it and the
+ * node belongs there, or when Acira has no folder of that name; otherwise in Acira's own folder (made now when missing).
+ * `view` is the one the call built; the node being placed is left out of its lists here.
  */
-function place(draft, node, parentId, index, { now, profileId }) {
-  const view = createView(draft, { skip: new Set([node]) });
+function place(draft, view, node, parentId, index, { now, profileId }) {
+  view.skip(new Set([node]));
   const siblingsOf = parent => draft.filter(item => (item.parentId || null) === parent && item !== node);
   const put = (parent, successor) => {
     const siblings = siblingsOf(parent);
@@ -156,22 +163,33 @@ function place(draft, node, parentId, index, { now, profileId }) {
   if (zone) {
     const first = zone.first();
     // Without Acira's own folder an item that belongs in the first part simply goes there (a page on the bar, a folder at the top level): nothing is made.
-    if (zone.accepts(node) && (index < first.length || !zone.folder)) return put(null, first[index] || null);
-    const target = zone.folder || ensureFolder(draft, parentId, { now, profileId }), children = view.of(target.id);
-    return put(target.id, children[Math.max(0, Math.min(index - first.length, children.length))] || null);
+    if (zone.accepts(node) && (index < first.length || !zone.folder)) { const at = Math.min(index, first.length); put(null, first[at] || null); return at; }
+    const target = zone.folder || ensureFolder(draft, view, parentId, { now, profileId }), children = view.of(target.id), at = Math.max(0, Math.min(index - first.length, children.length));
+    put(target.id, children[at] || null);
+    return first.length + at;
   }
-  const folder = view.nodeOf(parentId), children = view.of(folder.id);
-  return put(folder.id, children[Math.max(0, Math.min(index, children.length))] || null);
+  const folder = view.nodeOf(parentId), children = view.of(folder.id), at = Math.max(0, Math.min(index, children.length));
+  put(folder.id, children[at] || null);
+  return at;
+}
+/** The BookmarkTreeNode record of a node at a known place (what createView().record answers, without building the view again). */
+function recordAt(node, parentId, index) {
+  const out = { id: node.id, parentId, index, title: String(node.title || ''), dateAdded: time(node.createdAt) };
+  if (node.url) out.url = String(node.url); else out.dateGroupModified = out.dateAdded;
+  return out;
 }
 
-/** The shared front of write calls: the profile's nodes cloned, and a fresh view. */
-function begin(nodes) { const draft = clone(nodes); renumber(draft); return draft; }
-const finish = draft => { renumber(draft); return draft; };
+/** The working list of a write: the caller's own (owned), or a copy with sibling positions made 0..n-1. */
+function begin(nodes, owned) {
+  if (owned) { if (!nodes.normalized) { renumber(nodes); markNormalized(nodes); } return nodes; }
+  const draft = clone(nodes); renumber(draft); return markNormalized(draft);
+}
+const finish = (draft, only = null) => { renumber(draft, only); return markNormalized(draft); };
 
 function create(nodes, info, context = {}) {
-  const { newId = kind => `${kind}-${crypto.randomUUID()}`, now = Date.now() } = context, profileId = context.profileId || nodes[0]?.browserProfileId;
+  const { newId = kind => `${kind}-${crypto.randomUUID()}`, now = Date.now(), owned = false } = context, profileId = context.profileId || nodes[0]?.browserProfileId;
   const details = info && typeof info === 'object' ? info : {};
-  const draft = begin(nodes), view = createView(draft);
+  const draft = begin(nodes, owned), view = createView(draft);
   const parentId = details.parentId === undefined || details.parentId === null ? OTHER : details.parentId;
   if (!isId(parentId)) return failure(ERRORS.invalidId);
   if (parentId === ROOT) return failure(ERRORS.modifySpecial);
@@ -186,33 +204,37 @@ function create(nodes, info, context = {}) {
   const title = typeof details.title === 'string' ? details.title.slice(0, MAX_TITLE) : '';
   const made = { id: newId(hasUrl ? 'bookmark' : 'folder'), browserProfileId: profileId, parentId: null, title, ...(hasUrl ? { url } : {}), position: 0, createdAt: now };
   draft.push(made);
-  place(draft, made, parentId, index, { now, profileId });
-  finish(draft);
-  return { nodes: draft, result: createView(draft).record(made.id) };
+  const at = place(draft, view, made, parentId, index, { now, profileId });
+  finish(draft, new Set([made.parentId || null, null]));
+  const result = recordAt(made, parentId, at);
+  return { nodes: draft, result, events: [{ name: 'bookmarks.onCreated', args: [made.id, result] }] };
 }
 
-function update(nodes, id, changes) {
+function update(nodes, id, changes, context = {}) {
   const details = changes && typeof changes === 'object' ? changes : {};
   let url; if (typeof details.url === 'string' && details.url !== '') { const checked = checkUrl(details.url); if (checked.error) return failure(checked.error); url = checked.url; }
   if (!isId(id)) return failure(ERRORS.invalidId);
-  const draft = begin(nodes), view = createView(draft);
+  const draft = begin(nodes, !!context.owned), view = createView(draft);
   if (!view.exists(id)) return failure(ERRORS.noNode);
   if (id === ROOT || id === BAR || id === OTHER) return failure(ERRORS.modifySpecial);
-  const node = draft.find(item => item.id === id);
+  const node = view.nodeOf(id);
   if (url !== undefined && !node.url) return failure(ERRORS.cannotSetUrlOfFolder);
+  const was = view.record(id);
   if (typeof details.title === 'string') node.title = details.title.slice(0, MAX_TITLE);
   if (url !== undefined) node.url = url;
-  return { nodes: draft, result: createView(draft).record(id) };
+  const result = recordAt(node, was.parentId, was.index);
+  const changed = result.title !== was.title || result.url !== was.url;
+  return { nodes: draft, result, events: changed ? [{ name: 'bookmarks.onChanged', args: [id, { title: result.title, ...(result.url !== undefined ? { url: result.url } : {}) }] }] : [] };
 }
 
 function move(nodes, id, destination, context = {}) {
-  const { now = Date.now() } = context, profileId = context.profileId || nodes[0]?.browserProfileId;
+  const { now = Date.now(), owned = false } = context, profileId = context.profileId || nodes[0]?.browserProfileId;
   const details = destination && typeof destination === 'object' ? destination : {};
   if (!isId(id)) return failure(ERRORS.invalidId);
-  const draft = begin(nodes), view = createView(draft);
+  const draft = begin(nodes, owned), view = createView(draft);
   if (!view.exists(id)) return failure(ERRORS.noNode);
   if (id === ROOT || id === BAR || id === OTHER) return failure(ERRORS.modifySpecial);
-  const node = draft.find(item => item.id === id), was = view.record(id);
+  const node = view.nodeOf(id), was = view.record(id);
   const parentId = details.parentId === undefined || details.parentId === null ? was.parentId : details.parentId;
   if (!isId(parentId)) return failure(ERRORS.invalidId);
   if (parentId === ROOT) return failure(ERRORS.modifySpecial);
@@ -225,29 +247,33 @@ function move(nodes, id, destination, context = {}) {
   if (!isIndex(index) || index < 0 || index > count) return failure(ERRORS.invalidIndex);
   if (parentId === was.parentId) {
     // Chrome's BookmarkModel::Move: the index counts the node itself; putting it where it is (or just after) changes nothing.
-    if (index === was.index || index === was.index + 1) return { nodes: draft, result: was, unchanged: true };
+    if (index === was.index || index === was.index + 1) return { nodes: draft, result: was, unchanged: true, events: [] };
     if (index > was.index) index--;
   }
-  place(draft, node, parentId, index, { now, profileId });
-  finish(draft);
-  return { nodes: draft, result: createView(draft).record(id) };
+  const oldParent = node.parentId || null;
+  const at = place(draft, view, node, parentId, index, { now, profileId });
+  finish(draft, new Set([oldParent, node.parentId || null, null]));
+  const result = recordAt(node, parentId, at);
+  const moved = result.parentId !== was.parentId || result.index !== was.index;
+  return { nodes: draft, result, events: moved ? [{ name: 'bookmarks.onMoved', args: [id, { parentId: result.parentId, index: result.index, oldParentId: was.parentId, oldIndex: was.index }] }] : [] };
 }
 
-function remove(nodes, id, { recursive = false } = {}) {
+function remove(nodes, id, { recursive = false, owned = false } = {}) {
   if (!isId(id)) return failure(ERRORS.invalidId);
-  const draft = begin(nodes), view = createView(draft);
+  const draft = begin(nodes, owned), view = createView(draft);
   if (!view.exists(id)) return failure(ERRORS.noNode);
   if (id === ROOT || id === BAR || id === OTHER) return failure(ERRORS.modifySpecial);
-  const node = draft.find(item => item.id === id);
+  const node = view.nodeOf(id);
   if (!node.url && view.listOf(id).length && !recursive) return failure(ERRORS.folderNotEmpty);
+  const was = view.record(id), branch = view.subTree(id);
   // The node and everything under it, Tor pages aside (they are not the extension's to remove: they move to the top level).
   const doomed = new Set([id]);
   let grew = true;
   while (grew) { grew = false; for (const item of draft) if (item.parentId && doomed.has(item.parentId) && !doomed.has(item.id) && !item.tor) { doomed.add(item.id); grew = true; } }
-  const kept = draft.filter(item => !doomed.has(item.id));
+  const kept = draft.filter(item => !doomed.has(item.id)), touched = new Set([node.parentId || null, null]);
   for (const item of kept) if (item.parentId && doomed.has(item.parentId)) { item.parentId = null; item.position = Number.MAX_SAFE_INTEGER; }
-  finish(kept);
-  return { nodes: kept, result: undefined };
+  finish(kept, touched);
+  return { nodes: kept, result: undefined, events: [{ name: 'bookmarks.onRemoved', args: [id, { parentId: was.parentId, index: was.index, node: branch }] }] };
 }
 
 // ---------------------------------------------------------------------------------------------------------------- events

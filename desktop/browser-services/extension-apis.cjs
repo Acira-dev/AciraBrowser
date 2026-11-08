@@ -14,6 +14,7 @@ const crypto=require('node:crypto'),fs=require('node:fs'),path=require('node:pat
 const {createUserScriptRegistry,matchesPattern}=require('./user-scripts.cjs');
 const capture=require('./media-capture.cjs');
 const {globMatch}=require('./glob-match.cjs');
+const tabIds=require('./ext-api/surfaces/tab-ids.cjs');
 
 const REASONS=['TESTING','AUDIO_PLAYBACK','IFRAME_SCRIPTING','DOM_SCRAPING','BLOBS','DOM_PARSER','USER_MEDIA','DISPLAY_MEDIA','WEB_RTC','CLIPBOARD','LOCAL_STORAGE','WORKERS','BATTERY_STATUS','MATCH_MEDIA','GEOLOCATION'];
 const CONTEXT_TYPES=['TAB','POPUP','BACKGROUND','OFFSCREEN_DOCUMENT','SIDE_PANEL','DEVELOPER_TOOLS'];
@@ -162,12 +163,12 @@ function createIdentity({session,getWindow=()=>null,createWindow=defaultAuthWind
  };
 }
 
-function createSidePanel({getExtension,host,emit}){
+function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
  const state=new Map();
  const of=id=>{let entry=state.get(id);if(!entry){entry={behavior:{openPanelOnActionClick:false},global:{},tabs:new Map()};state.set(id,entry);}return entry;};
  const manifestPath=id=>getExtension(id)?.manifest?.side_panel?.default_path;
  /** The page and switch for one tab: tab-specific options override the extension-wide ones, which start from the manifest. */
- function options(id,tabId){const entry=of(id),global={path:entry.global.path??manifestPath(id),enabled:entry.global.enabled??true},tab=tabId!==undefined?entry.tabs.get(tabId):undefined;return {path:tab?.path??global.path,enabled:tab?.enabled??global.enabled};}
+ function options(id,tabId){const entry=of(id),global={path:entry.global.path??manifestPath(id),enabled:entry.global.enabled??true},tab=tabId!==undefined?entry.tabs.get(pageOf(tabId)):undefined;return {path:tab?.path??global.path,enabled:tab?.enabled??global.enabled};}
  function urlFor(id,tabId){const found=options(id,tabId);if(!found.enabled||!found.path)return null;return extensionURL(id,found.path);}
  async function open(id,{windowId,tabId,sender}={}){
   if(!host)return failure(MESSAGES.panelHost);const url=urlFor(id,tabId);if(!url)return failure(MESSAGES.panelPath);
@@ -181,9 +182,9 @@ function createSidePanel({getExtension,host,emit}){
    const id=event.extension.id;if(!input||typeof input!=='object')return failure('Invalid options.');
    if(input.path!==undefined&&(typeof input.path!=='string'||!extensionURL(id,input.path)))return failure('Invalid side panel path.');
    if(input.enabled!==undefined&&typeof input.enabled!=='boolean')return failure('Invalid enabled value.');
-   const entry=of(id),target=input.tabId!==undefined?(entry.tabs.get(input.tabId)||{}):entry.global;
+   const entry=of(id),target=input.tabId!==undefined?(entry.tabs.get(pageOf(input.tabId))||{}):entry.global,tabKey=input.tabId!==undefined?pageOf(input.tabId):undefined;
    if(input.path!==undefined)target.path=input.path;if(input.enabled!==undefined)target.enabled=input.enabled;
-   if(input.tabId!==undefined){if(entry.tabs.size>=1000&&!entry.tabs.has(input.tabId))entry.tabs.delete(entry.tabs.keys().next().value);entry.tabs.set(input.tabId,target);}
+   if(input.tabId!==undefined){if(entry.tabs.size>=1000&&!entry.tabs.has(tabKey))entry.tabs.delete(entry.tabs.keys().next().value);entry.tabs.set(tabKey,target);}
    const now=host?.current?.(id);if(now&&!urlFor(id,now.tabId))void host.close({extensionId:id});else if(now&&input.path!==undefined){const url=urlFor(id,now.tabId);if(url&&url!==now.url)host.navigate?.({extensionId:id,url});}
    return undefined;
   },
@@ -204,7 +205,7 @@ function createSidePanel({getExtension,host,emit}){
 }
 
 /** Installs the handlers on one runtime (one ordinary profile session). Returns the pieces other code needs, or null when the router is missing. */
-function installExtensionApis(runtime,{session,userData,storeKey='default',getWindow=()=>null,sidePanelHost=null,stores=null,userScriptsAllowed=()=>false,t,createOffscreenContents,createAuthWindow,captureBroker=null,pickShare=null,dialog=null,refreshPreload=()=>false,promptPermissions=null,extApiDir}={}){
+function installExtensionApis(runtime,{session,userData,storeKey='default',sourceProfileId='',getWindow=()=>null,sidePanelHost=null,stores=null,userScriptsAllowed=()=>false,t,createOffscreenContents,createAuthWindow,captureBroker=null,pickShare=null,dialog=null,refreshPreload=()=>false,promptPermissions=null,extApiDir}={}){
  const router=runtime?.ctx?.router;if(!router||typeof router.handle!=='function'||!(router.handlers instanceof Map))return null;
  const extensions=session?.extensions||session;
  const getExtension=id=>{try{return extensions?.getExtension?.(id)||null;}catch{return null;}};
@@ -245,7 +246,8 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
  const identity=createIdentity({session,getWindow,...(createAuthWindow?{createWindow:createAuthWindow}:{}),...(t?{t}:{})});
  for(const name of ['launchWebAuthFlow','getAuthToken','getProfileUserInfo','removeCachedAuthToken','clearAllCachedAuthTokens','getAccounts'])handle('identity.'+name,guard('identity',(event,...args)=>identity[name](event,...args)));
 
- const sidePanel=createSidePanel({getExtension,host:sidePanelHost,emit});
+ // Per-tab panel options are kept under the tab's page id: the toolbar and the panel host name the tab by its page, the extension by the id chrome.tabs gave it.
+ const sidePanel=createSidePanel({getExtension,host:sidePanelHost,emit,pageOf:tabId=>tabIds.pageOf(session,tabId)});
  for(const name of ['setOptions','getOptions','setPanelBehavior','getPanelBehavior','getLayout','open','close'])handle('sidePanel.'+name,guard('sidePanel',(event,...args)=>sidePanel[name](event,...args)));
  // openPanelOnActionClick: the toolbar click opens the panel. Wraps the engine's own handler; everything else goes through unchanged.
  // The toolbar click is also the user gesture that grants activeTab for that tab (used by tabs.captureVisibleTab below).
@@ -339,6 +341,8 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
  // a tab, the extension was invoked there (its toolbar button clicked on that tab, on the same site); for desktopCapture, the person picked
  // a screen, window or tab in Acira's share picker. The extension's own pages then use it through getUserMedia (extension-apis-renderer.cjs).
  const media=captureBroker||capture.broker(),store=()=>runtime.ctx.store;
+ /** The id an extension knows a page's tab by (media-capture.cjs works with page ids). */
+ const extTabId=pageId=>{try{const wc=require('electron').webContents.fromId(pageId);return wc&&!wc.isDestroyed()?tabIds.ofPage(session,wc)??pageId:pageId;}catch{return pageId;}};
  const tabOf=id=>{try{const tab=Number.isInteger(id)?store()?.getTabById?.(id):null;return tab&&!tab.isDestroyed()&&tab.session===session?tab:null;}catch{return null;}};
  const activeTab=()=>{try{const s=store(),win=s?.getCurrentWindow?.()||s?.getLastFocusedWindow?.(),tab=win?s.getActiveTabFromWindow?.(win):undefined;return tab&&!tab.isDestroyed()&&tab.session===session?tab:null;}catch{return null;}};
  const tabStreamId=(event,tab)=>{
@@ -359,8 +363,8 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
   if(!want?.audio&&!want?.video)return failure(capture.MESSAGES.noAudioOrVideo);
   return tabStreamId(event,activeTab());
  }));
- handle('tabCapture.getCapturedTabs',guard('tabCapture',event=>media.capturedTabs(event.extension.id)));
- media.subscribe((status,item)=>{if(item.owner===router&&item.source.type==='tab')emit(item.extensionId,'tabCapture.onStatusChanged',{tabId:item.source.tabId,status,fullscreen:false});});
+ handle('tabCapture.getCapturedTabs',guard('tabCapture',event=>media.capturedTabs(event.extension.id).map(item=>({...item,tabId:extTabId(item.tabId)}))));
+ media.subscribe((status,item)=>{if(item.owner===router&&item.source.type==='tab')emit(item.extensionId,'tabCapture.onStatusChanged',{tabId:extTabId(item.source.tabId),status,fullscreen:false});});
 
  const choosing=new Map();
  handle('desktopCapture.chooseDesktopMedia',guard('desktopCapture',async(event,requestId,sources,targetTab)=>{
@@ -412,7 +416,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
  handle('userScripts.resetWorldConfiguration',scripted((event,worldId)=>{userScripts.resetWorldConfiguration(event.extension.id,worldId);}));
  handle('userScripts.execute',scripted(async(event,injection)=>{
   const id=event.extension.id,tabId=injection?.target?.tabId;
-  const wc=(()=>{try{return require('electron').webContents.fromId(tabId);}catch{return null;}})();
+  const wc=(()=>{try{return require('electron').webContents.fromId(tabIds.pageOf(session,tabId));}catch{return null;}})();
   if(!wc||wc.isDestroyed()||wc.session!==session)return failure(MESSAGES.noTab+tabId);
   const url=wc.getURL(),hosts=[...(event.extension.manifest.host_permissions||[]),...(event.extension.manifest.permissions||[]).filter(p=>p==='<all_urls>'||/:\/\//.test(p))];
   if(!hosts.some(pattern=>matchesPattern(pattern,url)))return failure(MESSAGES.tabAccess);
@@ -433,7 +437,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
   const listeners=router.listeners?.get?.('runtime.onUserScriptMessage')||[];if(!listeners.some(listener=>listener.extensionId===extensionId))return Promise.resolve(failure(MESSAGES.noReceiver));
   const replyId=crypto.randomUUID();
   let origin='';try{origin=new URL(url).origin;}catch{}
-  const tab=runtime.ctx?.store?.tabDetailsCache?.get?.(sender.id)||{id:sender.id};
+  const tab={...(runtime.ctx?.store?.tabDetailsCache?.get?.(sender.id)||{}),id:tabIds.ofPage(session,sender)??sender.id};
   return new Promise(resolve=>{
    const timer=setTimeout(()=>{pending.delete(replyId);resolve({__acira_value:undefined});},5*60*1000);timer.unref?.();
    pending.set(replyId,{extensionId,resolve,timer});
@@ -444,12 +448,14 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
 
  // bookmarks (read and change, as in Chrome), history and sessions (read-only) and search, from this profile's own stores (extension-store-apis.cjs).
  // Bookmark events (extension-bookmark-events.cjs) come from main.cjs's shared-state hook, for this profile's bookmarks only.
- let stopBookmarkEvents=()=>{};
+ let stopBookmarkEvents=()=>{},bookmarkBuffer=null;
  if(stores){
   const {bookmarksApi,historyApi,sessionsApi}=require('./extension-store-apis.cjs'),safe=read=>()=>{try{const value=read();return Array.isArray(value)?value:[];}catch{return [];}};
-  const bookmarks=bookmarksApi(safe(stores.bookmarks),{profileId:storeKey,update:typeof stores.updateBookmarks==='function'?compute=>stores.updateBookmarks(compute):null}),history=historyApi(safe(stores.history)),sessions=sessionsApi(safe(stores.closedTabs));
-  for(const name of ['get','getChildren','getRecent','getTree','getSubTree','search','create','update','move','remove','removeTree'])handle('bookmarks.'+name,guard('bookmarks',(event,...args)=>bookmarks[name](event,...args)));
+  // A burst of bookmark writes is one store change (extension-bookmark-buffer.cjs); the events of each write are told at once, in order.
   try{stopBookmarkEvents=require('./extension-bookmark-events.cjs').watch({profileId:storeKey,initial:typeof stores.bookmarksReady==='function'&&stores.bookmarksReady()?safe(stores.bookmarks)():null,deliver:(name,...args)=>{try{router.broadcastEvent(name,...args);}catch{}}});}catch(error){console.warn('[ext-api] bookmark events not attached',error?.message);}
+  if(typeof stores.commitBookmarks==='function')bookmarkBuffer=require('./extension-bookmark-buffer.cjs').createBookmarkBuffer({read:safe(stores.bookmarks),ready:typeof stores.bookmarksReady==='function'?()=>!!stores.bookmarksReady():()=>true,commit:nodes=>stores.commitBookmarks(nodes),adopt:nodes=>stopBookmarkEvents.adopt?.(nodes),deliver:(name,...args)=>stopBookmarkEvents.emit?.(name,...args),log:(...args)=>console.warn('[ext-api]',...args)});
+  const bookmarks=bookmarksApi(bookmarkBuffer?()=>bookmarkBuffer.nodes():safe(stores.bookmarks),{profileId:storeKey,update:bookmarkBuffer?compute=>bookmarkBuffer.apply(compute):null}),history=historyApi(safe(stores.history)),sessions=sessionsApi(safe(stores.closedTabs));
+  for(const name of ['get','getChildren','getRecent','getTree','getSubTree','search','create','update','move','remove','removeTree'])handle('bookmarks.'+name,guard('bookmarks',(event,...args)=>bookmarks[name](event,...args)));
   for(const name of ['search','getVisits'])handle('history.'+name,guard('history',(event,...args)=>history[name](event,...args)));
   for(const name of ['addUrl','deleteUrl','deleteRange','deleteAll'])handle('history.'+name,guard('history',()=>history.write()));
   for(const name of ['getRecentlyClosed','getDevices','restore'])handle('sessions.'+name,guard('sessions',(event,...args)=>sessions[name](event,...args)));
@@ -502,7 +508,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
  let dnr=null;try{dnr=require('./dnr-host.cjs').attachDnrHost({session,router,userData,storeKey,emit,getExtension,log:(...args)=>console.warn('[dnr]',...args)});}catch(error){console.warn('[dnr] not attached',error?.message);}
  // Work packages (ext-api/*.cjs, docs/launch/EXTENSION_WORK_PACKAGES.md): installed last, so a package's handler replaces any above.
  let packages={packages:[],forget(){},dispose(){}};
- try{const extApi=require('./ext-api/index.cjs');packages=extApi.installPackages({session,runtime,router,userData,storeKey,getWindow,getExtension,emit,dialog,t,permissions,log:(...args)=>console.warn(...args)},extApiDir?{packages:extApi.loadPackages({dir:extApiDir})}:{});}
+ try{const extApi=require('./ext-api/index.cjs');packages=extApi.installPackages({session,runtime,router,userData,storeKey,sourceProfileId,getWindow,getExtension,emit,dialog,t,permissions,log:(...args)=>console.warn(...args)},extApiDir?{packages:extApi.loadPackages({dir:extApiDir})}:{});}
  catch(error){console.warn('[ext-api] packages not installed',error?.message);}
  // The page preload is only registered while some extension of this profile may run user scripts, so other profiles pay nothing per page.
  let preloadId=null;
@@ -519,7 +525,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',getWi
   forget(id){offscreen.close(id);sidePanel.forget(id);userScripts.forget(id);dnr?.forget(id);packages.forget(id);permissions.forget(id);activeTabGrants.delete(id);invocations.delete(id);captureTimes.delete(id);},
   /** The profile was removed (extension-manager.cjs disposeProfileRuntime): the idle poll stops, offscreen documents and sign-in windows close,
    * and the work packages let go of the app-wide events they follow (ext-api/idle.cjs lock/unlock, ext-api/system.cjs displays). */
-  dispose(){clearInterval(idleTimer);try{stopBookmarkEvents();}catch{}try{offscreen.closeAll();}catch{}try{identity.closeAll();}catch{}try{packages.dispose();}catch{}api.syncUserScriptPreload(false);if(session)bySession.delete(session);}
+  dispose(){clearInterval(idleTimer);try{bookmarkBuffer?.flush();bookmarkBuffer?.dispose();}catch{}try{stopBookmarkEvents();}catch{}try{offscreen.closeAll();}catch{}try{identity.closeAll();}catch{}try{packages.dispose();}catch{}api.syncUserScriptPreload(false);if(session)bySession.delete(session);}
  };
  if(session)bySession.set(session,api);registerPageChannels();
  return api;

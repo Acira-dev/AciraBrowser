@@ -14,6 +14,8 @@
 // createWindow(options) -> a new ordinary controller of the profile (createBrowserWindow); attach(webContents, window) -> hands a page to the
 // engine; sessionOf() -> the profile's Electron session; ordinary(url) -> true for an http(s) address Acira opens; icon, title, hidden().
 
+const {trace} = require('../../ext-trace.cjs');
+
 function createWindowsHost({electron, available, destination, createWindow, attach, sessionOf, ordinary = () => false, icon, title = 'Acira', hidden = () => false}) {
   const alive = window => !!window && !(typeof window.isDestroyed === 'function' && window.isDestroyed());
   const AUX = 'extension-';
@@ -103,7 +105,19 @@ function createWindowsHost({electron, available, destination, createWindow, atta
     try { await window.webContents.loadURL(urls[0] || 'about:blank'); } catch (error) { if (!window.isDestroyed()) window.close(); throw error; }
     if (!alive(window)) throw new Error('Browser windows not allowed.');
     applyState(window, state);
-    if (!hidden()) { if (focused) window.show(); else if (state !== 'minimized') window.showInactive(); }
+    if (!hidden()) {
+      if (focused) {
+        // A window that is shown must also come to the front and have the keyboard: on Windows a new window can open behind the one that was active (its extension popup).
+        if (typeof window.isMinimized === 'function' && window.isMinimized()) window.restore();
+        window.show();
+        try { window.focus(); if (typeof window.moveTop === 'function') window.moveTop(); } catch { /* the window went away */ }
+      } else if (state !== 'minimized') window.showInactive();
+    }
+    // What the person can see a moment later (the state of a pop-out that "opens nothing" is the whole question).
+    const looked = setTimeout(() => {
+      try { if (alive(window)) trace('extension window', extensionId, {id: window.id, visible: window.isVisible(), focused: window.isFocused(), minimized: window.isMinimized(), bounds: window.getBounds(), platform: process.platform}); } catch { /* gone */ }
+    }, 400);
+    if (typeof looked.unref === 'function') looked.unref();
     return window;
   }
 

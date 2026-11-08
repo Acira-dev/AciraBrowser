@@ -258,3 +258,62 @@ test('a prepared request is shared and lazy',()=>{
  assert.equal(req.initiatorHost,'site.org');
  assert.equal(reads,1);
 });
+
+// A rule's `responseHeaders` / `excludedResponseHeaders` conditions (Chrome 128, HeaderInfo: header, values, excludedValues) are matched against the
+// response. Mister Download Manager 0.5.0 sets Content-Disposition: attachment this way for the files "the browser would open itself" (PDF, MP3 ...); the engine
+// ignored the condition, so every main-frame page of a profile with it became a download (a Windows tester's "loading search (1).htm", 8 Nov 2026).
+test('responseHeaders condition: a modifyHeaders rule applies only to a response whose header matches (Mister Download Manager)',()=>{
+ const MDM={id:1,priority:1,action:{type:'modifyHeaders',responseHeaders:[{header:'content-disposition',operation:'set',value:'attachment'}]},
+  condition:{resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*','audio/mpeg*','video/mp4*']}]}};
+ const e=engineWith([MDM]);
+ const page={url:'https://www.google.com/search?q=hello',type:'main_frame'};
+ // the page stays a page: no header change at all
+ assert.equal(e.headersReceived(page,{'Content-Type':['text/html; charset=UTF-8']}),null);
+ assert.equal(e.headersReceived(page,{'content-type':['image/webp']}),null);
+ assert.equal(e.headersReceived(page,{'Content-Length':['10']}),null,'no Content-Type: no match');
+ // the file types it names are made downloads, whatever the header's case or parameters
+ assert.deepEqual(e.headersReceived({url:'https://x.test/a.pdf',type:'main_frame'},{'Content-Type':['application/pdf']}),{'Content-Type':['application/pdf'],'content-disposition':['attachment']});
+ assert.deepEqual(e.headersReceived({url:'https://x.test/a',type:'main_frame'},{'content-type':['Audio/MPEG; x=1']}),{'content-type':['Audio/MPEG; x=1'],'content-disposition':['attachment']});
+ // a condition that names a header the response lacks does not match
+ assert.equal(e.headersReceived({url:'https://x.test/a.mp4',type:'main_frame'},{'Content-Length':['5']}),null);
+});
+
+test('responseHeaders condition: header presence, values wildcards, excludedValues and excludedResponseHeaders',()=>{
+ // every rule sets a header of its own, so which rules matched can be read off the result
+ const modify=(id,condition)=>({id,priority:1,action:{type:'modifyHeaders',responseHeaders:[{header:'x-hit-'+id,operation:'set',value:'1'}]},condition:{resourceTypes:['main_frame'],...condition}});
+ const e=engineWith([
+  modify(1,{responseHeaders:[{header:'X-Marker'}]}),                                                    // present, any value
+  modify(2,{responseHeaders:[{header:'content-type',values:['text/*'],excludedValues:['text/plain*']}]}), // * and excludedValues
+  modify(3,{excludedResponseHeaders:[{header:'content-type',values:['text/html*']}]}),                    // not for HTML
+  modify(4,{responseHeaders:[{header:'content-type',values:['image/???p']}]}),                            // ? is zero or one character
+  modify(5,{responseHeaders:[{header:'x-note',values:['50\\* off*']}]})                                    // \* is a star
+ ]);
+ const req={url:'https://site.test/',type:'main_frame'};
+ const hit=headers=>{const out=e.headersReceived(req,headers)||{};return Object.keys(out).filter(k=>/^x-hit-/.test(k)).map(k=>k.slice(6)).sort().join(',');};
+ assert.equal(hit({'X-Marker':['']}),'1,3','present with any value; no Content-Type, so rule 3 (not HTML) applies too');
+ assert.equal(hit({'Content-Type':['text/css']}),'2,3');
+ assert.equal(hit({'Content-Type':['TEXT/PLAIN; charset=utf-8']}),'3','excludedValues keeps rule 2 off');
+ assert.equal(hit({'Content-Type':['text/html; charset=utf-8']}),'2','excludedResponseHeaders keeps rule 3 off');
+ assert.equal(hit({'Content-Type':['image/webp']}),'3,4','three ? take three characters');
+ assert.equal(hit({'content-type':['image/ebp']}),'3,4','a ? may take none');
+ assert.equal(hit({'content-type':['image/p']}),'3,4');
+ assert.equal(hit({'content-type':['image/xxxxp']}),'3','four characters are too many');
+ assert.equal(hit({'X-Note':['50* off today']}),'3,5','an escaped star is a star');
+ assert.equal(hit({'X-Note':['50 off today']}),'3','and not a wildcard');
+ assert.equal(hit({'content-type':['text/html'],'X-Marker':['x']}),'1,2');
+ assert.equal(hit({'Content-Type':['text/css','text/html']}),'2','a header repeated: one matching instance is enough for rule 2, and the text/html instance keeps rule 3 off');
+});
+
+test('responseHeaders condition: rules that need the response never act before it arrives, and bad conditions are rejected',()=>{
+ const set={extensionId:EXT,source:'dynamic'};
+ // a block rule with a response condition cannot block at request time (it would block every page)
+ const e=engineWith([{id:1,priority:1,action:{type:'block'},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*']}]}}]);
+ assert.equal(!!e.beforeRequest({url:'https://site.test/page.html',type:'main_frame'})?.cancel,false);
+ assert.equal(!!e.beforeRequest({url:'https://site.test/a.pdf',type:'main_frame'})?.cancel,false);
+ // a request-header rule with a response condition has nothing to test yet
+ const f=engineWith([{id:1,priority:1,action:{type:'modifyHeaders',requestHeaders:[{header:'x-a',operation:'set',value:'1'}]},condition:{resourceTypes:['main_frame'],responseHeaders:[{header:'content-type'}]}}]);
+ assert.equal(f.beforeSendHeaders({url:'https://site.test/',type:'main_frame'},{}),null);
+ for(const bad of [[],'content-type',[{}],[{header:''}],[{header:'content-type',values:'x'}],[{header:'content-type',excludedValues:[1]}],[{header:'bad name'}]])
+  assert.throws(()=>compileRule({id:1,action:{type:'modifyHeaders',responseHeaders:[{header:'a',operation:'remove'}]},condition:{responseHeaders:bad}},set),/responseHeaders|header/i,JSON.stringify(bad));
+ assert.throws(()=>compileRule({id:1,action:{type:'modifyHeaders',responseHeaders:[{header:'a',operation:'remove'}]},condition:{excludedResponseHeaders:[{values:['x']}]}},set),/excludedResponseHeaders|header/i);
+});

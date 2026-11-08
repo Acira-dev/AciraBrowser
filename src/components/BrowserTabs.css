@@ -5,6 +5,11 @@
 .tab-strip-container[data-scrollable=true][data-overflow-left=true]>.tab-strip-viewport{--left-fade:var(--standard-edge-fade)}
 .tab-strip-container[data-scrollable=true][data-overflow-right=true]>.tab-strip-viewport{--right-fade:var(--standard-edge-fade)}
 .tab-strip-container[data-scrollable=false]>.tab-strip-viewport{mask-image:none}
+/* Nothing scrolls: the viewport is exactly as wide as its tabs, so the first tab's left edge and the last tab's right edge sit on its clip. A selected or hovered
+   tab's ring and glow (tab-glow.css) were cut there by a straight vertical line (beta.13, founder 8 Nov: "only the first tab looks cut off on its sides").
+   With no scrolling there is nothing to clip but the glow, so the box stops clipping and a clip-path takes over: the same top and bottom as before (the
+   glow stays a hairline there, 3px of air), and 10px more on each side, which is the 1px ring and the 8px glow. Scrolling strips keep the scroller's own clip. */
+.tab-strip-container[data-scrollable=false]>.tab-strip-viewport{overflow:visible;clip-path:inset(0 -10px)}
 .app .tab-strip-viewport>.tabs-strip{position:relative;flex:none;max-width:none;overflow:visible;min-width:0}
 .tab-strip-container:not(.vertical)>.tab-strip-add{flex:0 0 32px;width:32px;margin-left:4px}
 .standard-tabs-scroll{position:relative;flex:0 0 24px;display:grid;place-items:center;width:24px;height:30px;border-radius:7px;background:none;color:var(--frame-text);opacity:0;pointer-events:none;transition:opacity .12s;-webkit-app-region:no-drag}

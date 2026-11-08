@@ -114,7 +114,7 @@ function createRig({manifest = {manifest_version: 3, permissions: ['tabs']}, per
   });
   // Listening: the renderer subscribes through the engine's router in production; the rig lets a test declare who listens.
   const listen = (...names) => { for (const name of names) listeners.set(`tabs.${name}`, [{extensionId: ID}]); };
-  return {extension, popup: (window) => { const wc = makeWc('chrome-extension://' + ID + '/popup.html', 'Popup'); owners.set(wc, window.id); return wc; }, handlers, sent, dispatched, commands, handoff: (acira, url, windowId) => { for (const fn of handoffs) fn(acira, url, windowId); }, windows, store, addWindow, addTab, makeWc, call, event, world, listen, loads, installed, notify, router, base,
+  return {router, extension, popup: (window) => { const wc = makeWc('chrome-extension://' + ID + '/popup.html', 'Popup'); owners.set(wc, window.id); return wc; }, handlers, sent, dispatched, commands, handoff: (acira, url, windowId) => { for (const fn of handoffs) fn(acira, url, windowId); }, windows, store, addWindow, addTab, makeWc, call, event, world, listen, loads, installed, notify, router, base,
     flush: () => new Promise(resolve => setTimeout(resolve, 80)), ID};
 }
 

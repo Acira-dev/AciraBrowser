@@ -149,3 +149,21 @@ test('the toolbar target of a private session lists its extensions that have a b
   assert.equal(f.manager.privateTarget({...wc,session:{}}),null,'a page of any other session has no private target');
  }finally{fs.rmSync(f.dir,{recursive:true,force:true});}
 });
+
+test('turning "Allow in private tabs" off in one window reaches the private session another window has open (one list of private sessions for the whole app)',async()=>{
+ const a=fixture({answer:1});
+ try{
+  await a.manager.command({type:'private',profileId:'p',extensionId:ID,allowed:true});
+  const priv=fakePrivate(a.dir);
+  // window A's manager attaches the private session of a private window
+  await a.manager.attachPrivate({session:priv.session,profile:priv.profile,sourceProfileId:'p',implementation:{},runtimeDir:path.join(priv.folder,'acira-runtime')});
+  assert.deepEqual([...priv.loaded.keys()],[ID]);
+  // window B has a manager of its own on the same extensions file
+  const dialog={showMessageBox:async()=>({response:1})};
+  const b=createExtensionManager({getSession:()=>a.session,getProfiles:()=>[{id:'p',name:'Personal',partition:'persist:p'}],getWindow:()=>null,dialog,registryPath:a.registryPath,createRuntime:()=>({}),downloadPackage:async()=>{throw new Error('no network');}});
+  assert.equal(b.isPrivateSession(priv.session),true,'it knows the private session of the other window');
+  await b.command({type:'private',profileId:'p',extensionId:ID,allowed:false});
+  assert.deepEqual(priv.removed,[ID],'the extension left the private session of the other window');
+  a.manager.detachPrivate(priv.session);
+ }finally{fs.rmSync(a.dir,{recursive:true,force:true});}
+});

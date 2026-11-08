@@ -175,6 +175,50 @@ test('enable and disable: per tab or for the extension; a disabled button ignore
   assert.equal(await call('isEnabled', 8), true);
 });
 
+test('a click while one of Acira\'s own pages is in front (the button reaches the extension through a website tab behind it): a popup opens, anything else hears about that page, the website gets no grant', async () => {
+  const activeTab = require('../desktop/browser-services/ext-api/surfaces/active-tab.cjs');
+  const page = {id: 7, isDestroyed: () => false, getURL: () => 'https://a.test/'};
+  const front = {id: 2000000003, windowId: 1, active: true, url: 'chrome://settings/'};
+  const setup = ({inFront, model = true}) => {
+    const h = actionHost();
+    h.tabs.add(page);
+    if (model) {
+      h.store.impl = {tabModel: {}};
+      // Like the real handlers, these refuse a caller that is no extension.
+      h.handlers.set('tabs.get', {callback: event => !event.extension ? {__acira_error: 'ACCESS_DENIED'} : inFront === undefined ? {__acira_error: 'unknown tab'} : {id: 7, active: inFront}, extensionContext: false});
+      h.handlers.set('tabs.query', {callback: event => !event.extension ? {__acira_error: 'ACCESS_DENIED'} : [front], extensionContext: false});
+    }
+    h.clicks = () => h.sent.filter(entry => entry[1] === 'browserAction.onClicked');
+    h.click = () => h.handlers.get('browserAction.activate').callback({type: 'frame', sender: {id: 99}}, {eventType: 'click', extensionId: ID, tabId: 7});
+    return h;
+  };
+  // A website in front: the engine acts on it, and the click is the grant.
+  let h = setup({inFront: true});
+  assert.equal(h.click(), 'engine');
+  assert.equal(activeTab.has(h.session, ID, 7, 'https://a.test/'), true);
+  assert.equal(h.clicks().length, 0, 'onClicked is the engine\'s to fire');
+  // One of Acira's own pages in front, an action without a popup: onClicked with that page, not the website behind it, and no grant.
+  h = setup({inFront: false});
+  assert.equal(h.click(), undefined);
+  assert.deepEqual(h.clicks(), [[ID, 'browserAction.onClicked', front]]);
+  assert.equal(h.activated.length, 0, 'the engine is not asked: it would fire onClicked for the website');
+  assert.equal(activeTab.has(h.session, ID, 7, 'https://a.test/'), false);
+  // The same with a popup: it opens as ever (a chrome:// page has popups in Chrome), still no grant for the website behind.
+  h = setup({inFront: false});
+  h.engine.getAction(ID).popup = 'popup.html';
+  assert.equal(h.click(), 'engine');
+  assert.equal(h.clicks().length, 0);
+  assert.equal(activeTab.has(h.session, ID, 7, 'https://a.test/'), false);
+  // The tab list cannot say which tab is in front (an unknown tab), or there is none (a private session that runs extensions): as before.
+  h = setup({inFront: undefined});
+  assert.equal(h.click(), 'engine');
+  assert.equal(activeTab.has(h.session, ID, 7, 'https://a.test/'), true);
+  h = setup({inFront: false, model: false});
+  assert.equal(h.click(), 'engine');
+  assert.equal(activeTab.has(h.session, ID, 7, 'https://a.test/'), true);
+  assert.equal(h.clicks().length, 0);
+});
+
 test('the toolbar\'s state: a tab\'s own values win over the global ones, every known tab has its entry', () => {
   const h = actionHost();
   h.tabs.add({id: 5, isDestroyed: () => false, on() {}});

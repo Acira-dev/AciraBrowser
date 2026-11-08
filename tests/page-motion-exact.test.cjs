@@ -94,3 +94,45 @@ test('a view that cannot take the viewport override glides as before (its size h
  for(let i=0;i<200&&queued;i++){now+=1000/60;const fn=queued;queued=null;fn();}
  assert.deepEqual(view.bounds,compactOpen.target);assert.ok(bounds.some(b=>b.width===1268),'the old held glide');
 });
+
+// beta.13.2 (item 16): the heavy page's third re-layout. The end of the viewport override went over its own channel in the turn of the last setBounds while the view's size was still on its way
+// to the renderer, so the page laid out at the size it last heard (a pixel short) and again when the final size arrived. The release now waits for the view to stand (RELEASE_QUIET).
+// Runs the glide to its landing: the frame that reaches the end (the view stands on the target, the layout still held, the release scheduled).
+const landedRig=(c,{spring}={})=>{
+ const r=rig(c.start),delays=[],later=r.clock.later;r.clock.later=(fn,d)=>{delays.push(d);return later(fn,d);};
+ place(r,c.target,{spring});
+ for(let i=0;i<600&&!r.entry.releaseTimer;i++)r.tick(1);
+ return {...r,delays};
+};
+
+test('the layout is not let go in the turn the view lands: it waits for the size to have reached the page, then releases once',()=>{
+ const r=landedRig(open);
+ assert.deepEqual(r.view.bounds,open.target);
+ assert.equal(r.calls.filter(c=>c[0]==='release').length,0,'not released with the last setBounds');
+ assert.ok(r.entry.layoutHold,'still held');
+ assert.ok(r.delays.at(-1)>=48&&r.delays.at(-1)<=100,'a few frames: '+r.delays.at(-1));
+ r.frames();
+ assert.equal(r.calls.filter(c=>c[0]==='release').length,1);assert.equal(r.calls.at(-1)[0],'release');assert.equal(r.entry.layoutHold,null);
+ assert.deepEqual(r.view.bounds,open.target,'the view did not move again');
+});
+
+test('the same on the Sidebar mode morph\'s own spring and lag (the guard\'s heavy page)',()=>{
+ const r=rig({x:240,y:6,width:1034,height:754}),target={x:0,y:72,width:1280,height:694};
+ placePageBounds(r.entry,target,true,r.clock,1000/60,'slide',{duration:.1,bounce:0},undefined,true,.5,{x:90});
+ for(let i=0;i<600&&!r.entry.releaseTimer;i++)r.tick(1);
+ assert.deepEqual(r.view.bounds,target);
+ assert.equal(r.calls.filter(c=>c[0]==='release').length,0);
+ const lastSet=r.calls.findLastIndex(c=>c[0]==='bounds');r.frames();
+ assert.equal(r.calls.findIndex(c=>c[0]==='release'),r.calls.length-1,'one release, last');assert.ok(r.calls.length-1>lastSet);
+});
+
+test('a placement that comes while the release is waiting takes over: no second release, no release of its glide',()=>{
+ const a=landedRig(open);
+ placePageBounds(a.entry,{x:0,y:0,width:900,height:600},false,a.clock,1000/60);
+ assert.equal(a.calls.filter(c=>c[0]==='release').length,1,'released by the placement');
+ a.frames();assert.equal(a.calls.filter(c=>c[0]==='release').length,1,'the waiting release did not fire again');
+ const b=landedRig(open);
+ place(b,{x:6,y:6,width:1268,height:778});b.tick(3);
+ assert.equal(b.calls.filter(c=>c[0]==='release').length,0,'the new glide keeps its hold');assert.ok(b.entry.layoutHold);
+ b.frames();assert.equal(b.calls.filter(c=>c[0]==='release').length,1);assert.equal(b.entry.layoutHold,null);assert.deepEqual(b.view.bounds,{x:6,y:6,width:1268,height:778});
+});

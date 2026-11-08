@@ -65,7 +65,7 @@ async function main(argv) {
   if (text === previous) { console.log(`${out}: unchanged (${hosts.length} host${hosts.length === 1 ? '' : 's'}).`); return; }
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out + '.tmp', text); fs.renameSync(out + '.tmp', out);
-  console.log(`${out}: written, ${hosts.length} host${hosts.length === 1 ? '' : 's'}. Publish it as feed/${FILE_NAME} in the update repository (docs/launch/SITE_ALLOWLIST.md).`);
+  console.log(`${out}: written, ${hosts.length} host${hosts.length === 1 ? '' : 's'}. Publish it as docs/${FILE_NAME} in the update repository, the folder GitHub Pages serves as update.acirabrowser.com (docs/launch/SITE_ALLOWLIST.md).`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

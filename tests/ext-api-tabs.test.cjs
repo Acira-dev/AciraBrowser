@@ -7,6 +7,16 @@ const {plain} = require('./fixtures/ext-api/world.cjs');
 const activeTab = require('../desktop/browser-services/ext-api/surfaces/active-tab.cjs');
 
 /** Two windows: #1 (focused) pinned "Mail", "Docs" (active), grouped "News"; a private tab and a Tor tab sit in the strip too. #2 one tab. */
+/** A native Port as far as the wrapper touches it: name, postMessage, disconnect, onMessage and onDisconnect with listeners. */
+function fakePort(name) {
+  const listeners = {onMessage: [], onDisconnect: []}, port = {name, posted: [], disconnected: false};
+  for (const key of Object.keys(listeners)) port[key] = {addListener: fn => listeners[key].push(fn)};
+  port.postMessage = message => port.posted.push(message);
+  port.disconnect = () => { port.disconnected = true; };
+  port.fire = (key, ...args) => { for (const fn of listeners[key]) fn(...args); };
+  return port;
+}
+
 function scene(options) {
   const rig = createRig(options);
   const one = rig.addWindow({focused: true}), two = rig.addWindow();
@@ -314,11 +324,72 @@ test('sendMessage reports "no receiver" like Chrome: a Manifest V3 page asks the
   assert.deepEqual(forms, ['callback'], 'a Manifest V2 page has no promise form from the engine');
 });
 
+test('the id an extension knows a page by (a tab restored from sleep keeps its own id when its page appears): the other packages ask the tabs package, and the toolbar click names the tab as chrome.tabs does', async () => {
+  const tabIds = require('../desktop/browser-services/ext-api/surfaces/tab-ids.cjs');
+  const {SESSION} = require('./fixtures/ext-api-tabs/rig.cjs');
+  const {rig, one, sleeping, docs, wcOf} = scene();
+  const asleepId = plain(await rig.world.chrome.tabs.query({discarded: true}))[0].id;
+  const woken = rig.makeWc('https://asleep.example/', 'Asleep');
+  one.pages.set(sleeping.id, {view: {webContents: woken}});
+  rig.store.tabs.add(woken);
+  assert.notEqual(woken.id, asleepId, 'a page has its own number');
+  assert.equal(tabIds.ofPage(SESSION, woken), asleepId, 'the extension knows the tab by the id it got when the tab had no page');
+  assert.equal(tabIds.pageOf(SESSION, asleepId), woken.id, 'and the page behind that id is the new one');
+  assert.equal(tabIds.pageOf(SESSION, woken.id), woken.id, 'the page\'s own id maps to itself');
+  const docsPage = wcOf(one, docs);
+  assert.equal(tabIds.ofPage(SESSION, docsPage), docsPage.id, 'a tab that always had its page: the same number');
+  assert.equal(tabIds.ofPage(SESSION, {id: 4242}), 4242, 'a page that is no tab of the strip: its own id');
+  assert.equal(tabIds.pageOf(SESSION, 999999), 999999, 'an id nobody maps goes through');
+  // the engine's toolbar click event carries the page's id: it is told as chrome.tabs would
+  rig.sent.length = 0;
+  rig.router.sendEvent(rig.ID, 'browserAction.onClicked', {id: woken.id, url: 'https://asleep.example/'});
+  const clicked = rig.sent.find(entry => entry.name === 'browserAction.onClicked');
+  assert.equal(clicked.args[0].id, asleepId);
+  // the engine's webNavigation.onCreatedNavigationTarget names the tab (and its source) by the page's number
+  rig.sent.length = 0;
+  rig.router.broadcastEvent('webNavigation.onCreatedNavigationTarget', {sourceTabId: woken.id, tabId: woken.id, url: 'https://asleep.example/x', timeStamp: 1});
+  const target = rig.sent.find(entry => entry.name === 'webNavigation.onCreatedNavigationTarget');
+  assert.deepEqual([target.args[0].tabId, target.args[0].sourceTabId, target.args[0].url], [asleepId, asleepId, 'https://asleep.example/x']);
+});
+
+test('connect: the port waits for the page behind the tab id (a restored tab\'s own id is not its page\'s), keeps early messages in order, and passes both ways', async () => {
+  const ports = [];
+  const native = {tabs: {connect(tabId, info) { const port = fakePort((info && info.name) || ''); port.tabId = tabId; ports.push(port); return port; }}};
+  const {rig, one, sleeping} = scene({native});
+  const tabs = rig.world.chrome.tabs;
+  const asleepId = plain(await tabs.query({discarded: true}))[0].id;
+  const woken = rig.makeWc('https://asleep.example/', 'Asleep');
+  one.pages.set(sleeping.id, {view: {webContents: woken}});
+  rig.store.tabs.add(woken);
+  const port = tabs.connect(asleepId, {name: 'bridge'});
+  const heard = [];
+  port.onMessage.addListener((message, from) => heard.push([message, from === port]));
+  port.postMessage('one'); port.postMessage('two');
+  assert.equal(ports.length, 0, 'the page is looked up first');
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.equal(ports[0].tabId, woken.id, 'Electron got the new page\'s id');
+  assert.deepEqual(ports[0].posted, ['one', 'two'], 'messages posted before the real port existed, in order');
+  port.postMessage('three');
+  assert.deepEqual(ports[0].posted, ['one', 'two', 'three']);
+  ports[0].fire('onMessage', {reply: 1});
+  assert.deepEqual(heard, [[{reply: 1}, true]], 'what the page says reaches the extension\'s port');
+  const gone = [];
+  port.onDisconnect.addListener(p => gone.push(p === port));
+  ports[0].fire('onDisconnect');
+  assert.deepEqual(gone, [true]);
+  assert.throws(() => port.postMessage('late'), /disconnected port/);
+  // the extension disconnects before the real port exists: nothing is connected afterwards, and queued messages are dropped
+  const early = tabs.connect(asleepId, {name: 'early'});
+  early.postMessage('x'); early.disconnect();
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.equal(ports.length, 1, 'no second connection');
+});
+
 test('sendMessage and connect go to Electron unchanged (given the page\'s own id): promise and callback forms, Chromium\'s argument checks, a tab with no page', async () => {
   const seen = [];
   const native = {tabs: {
     sendMessage(tabId, message, ...rest) { const callback = typeof rest[rest.length - 1] === 'function' ? rest.pop() : null; seen.push(['sendMessage', tabId, message, ...rest]); if (callback) { callback({echo: message}); return undefined; } return Promise.resolve({echo: message}); },
-    connect(tabId, info) { seen.push(['connect', tabId, info]); return {name: (info && info.name) || ''}; }
+    connect(tabId, info) { seen.push(['connect', tabId, info]); return fakePort((info && info.name) || ''); }
   }};
   const {rig, one, docs, sleeping, wcOf} = scene({native});
   const tabs = rig.world.chrome.tabs, id = wcOf(one, docs).id;
@@ -327,7 +398,10 @@ test('sendMessage and connect go to Electron unchanged (given the page\'s own id
   assert.equal(seen[0].length, 3, 'an omitted options object is not passed on');
   assert.deepEqual(plain(seen[1][3]), {frameId: 0}, 'options are');
   assert.equal(await new Promise(resolve => tabs.sendMessage(id, 'cb', response => resolve(response && response.echo))), 'cb', 'callback form');
-  assert.deepEqual(plain(tabs.connect(id, {name: 'port'})), {name: 'port'});
+  const port = tabs.connect(id, {name: 'port'});
+  assert.equal(port.name, 'port', 'the port is there at once');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(plain(seen.at(-1)), ['connect', id, {name: 'port'}], 'Electron gets the page\'s own id');
   assert.throws(() => tabs.sendMessage('x', {}), /Error in invocation of tabs.sendMessage\(integer tabId, any message, optional object options, optional function callback\)/);
   // a tab with no page cannot be messaged; one whose page was replaced is reached through its new page
   const asleepId = plain(await tabs.query({discarded: true}))[0].id;

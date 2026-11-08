@@ -11,6 +11,11 @@
 @property --addr-t { syntax: '<number>'; inherits: true; initial-value: 0; }
 @property --addr-w0 { syntax: '<length>'; inherits: true; initial-value: 96px; }
 @property --addr-a0 { syntax: '<number>'; inherits: true; initial-value: .24; }
+/* The update on the line (beta.13.3; ui/updateLine.ts): --pl-dots (1 while the update shows as dots), --pl-held (.55 when they are held) and --pl-ready (1 when the line is the accent) fade between the
+   looks; the dots' canvas and the accent fill read them, so a change of look is one cross-fade and the row opening still takes the line over (--pl-fade, gone by a fifth of the morph). */
+@property --pl-dots { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --pl-held { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --pl-ready { syntax: '<number>'; inherits: true; initial-value: 0; }
 
 /* overflow: visible takes the root's "hidden" away, and with it the grid item's zero minimum height: the window's one grid row then grew to
    the full height of an Acira page (Settings is 2400 px), the page was cut off at the window and nothing scrolled. Zero it again. */
@@ -71,12 +76,30 @@
    the ink alone, 5% over whatever was there, and the founder saw the favorites and the page through it). The line itself (t = 0) is the same as before. */
 :root:root:root .browser-root.addr-side .sb-addr-shape {
   --addr-ink: calc(var(--addr-a0) + (.05 - var(--addr-a0)) * min(1, var(--addr-t) * 1.8));
+  --pl-fade: clamp(0, calc(1 - var(--addr-t) * 5), 1);
   position: absolute; left: 50%; top: 3px; overflow: hidden; transform: translateX(-50%);
   width: min(100cqw, calc(var(--addr-w0) + (100cqw - var(--addr-w0)) * var(--addr-t)));
   height: calc(4px + 28px * var(--addr-t)); border-radius: calc(2px + 5px * var(--addr-t));
-  background: linear-gradient(rgb(var(--ink) / var(--addr-ink)), rgb(var(--ink) / var(--addr-ink))), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / clamp(0, calc(var(--addr-t) * 5), 1));
-  transition: opacity .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1));
+  /* the grey capsule steps aside for the update's dots or its accent (--pl-* are 0 when there is no update: the line is what it was) */
+  background: linear-gradient(rgb(var(--ink) / calc(var(--addr-ink) * (1 - max(var(--pl-dots), var(--pl-ready)) * var(--pl-fade)))), rgb(var(--ink) / calc(var(--addr-ink) * (1 - max(var(--pl-dots), var(--pl-ready)) * var(--pl-fade))))), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / clamp(0, calc(var(--addr-t) * 5), 1));
+  transition: opacity .12s var(--ease-ui, cubic-bezier(.2, 0, 0, 1)), --pl-dots calc(.3s * var(--motion-scale, 1)) var(--ease-ui, cubic-bezier(.2, 0, 0, 1)), --pl-held calc(.3s * var(--motion-scale, 1)) var(--ease-ui, cubic-bezier(.2, 0, 0, 1)), --pl-ready calc(.4s * var(--motion-scale, 1)) var(--ease-ui, cubic-bezier(.2, 0, 0, 1));
 }
+/* The update on the line. Downloading: the dots (UpdateLine's canvas, 4 px high like the line, under the row, never taking the pointer); paused or stopped: held and dimmed; ready: the accent,
+   a quiet notification (62% of the chrome's accent, 80% under the pointer, as the grey line goes from .24 to .42; on a sidebar colour of the person's own, the Update pill's own ink for it: the accent where it reads there, else the colour's text colour). No height, width, margin or hit area changes anywhere here. */
+:root:root:root .browser-root.addr-side .sb-addr-shape[data-update='run'] { --pl-dots: 1; }
+:root:root:root .browser-root.addr-side .sb-addr-shape[data-update='held'] { --pl-dots: 1; --pl-held: .55; }
+:root:root:root .browser-root.addr-side .sb-addr-shape[data-update='ready'] { --pl-ready: 1; }
+:root:root:root .browser-root.addr-side .sb-addr-line {
+  position: absolute; left: 0; right: 0; top: 0; height: 4px; pointer-events: none;
+  opacity: calc(var(--pl-dots) * var(--pl-held) * var(--pl-fade) * (.8 + (var(--addr-a0) - .24) * 1.1));
+}
+:root:root:root .browser-root.addr-side .sb-addr-line-dots { display: block; width: 100%; height: 100%; }
+:root:root:root .browser-root.addr-side .sb-addr-shape::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  opacity: calc(var(--pl-ready) * var(--pl-fade));
+  background: color-mix(in srgb, var(--sidebar-pill-ink, var(--ed-blue, var(--accent, #3b6eea))) calc(62% + (var(--addr-a0) - .24) * 100%), transparent);
+}
+@media (forced-colors: active) { :root:root:root .browser-root.addr-side .sb-addr-shape[data-update='ready']::before { background: Highlight; } }
 :root:root:root .browser-root.addr-side .sb-addr-more-in {
   position: absolute; left: 50%; top: 50%; width: 100cqw; height: 32px; display: flex; align-items: center; padding: 0;
   transform: translate(-50%, -50%) scale(calc(.92 + .08 * min(1, var(--addr-t))));

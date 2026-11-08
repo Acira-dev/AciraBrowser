@@ -36,9 +36,19 @@ const withoutWindowsKey = [
   ['、Esc 以及带 Windows 键的组合键由系统保留', '和 Esc 由系统保留'],
 ] as const;
 
+/** The toast after Delete file, in the thirteen catalogs: written with the Windows word for the Recycle Bin, which a Mac calls the Trash (in
+ * the Mac's own word for each language; German, French, Italian, Korean, Portuguese and Russian use the same word on both). Linux says
+ * "Trash" in English and keeps the catalog's word in the others. */
+const trashToast = 'dl.trashed';
+const macTrash = [
+  ['Recycle Bin', 'Trash'], ['سلة المحذوفات', 'سلة المهملات'], ['Papelera de reciclaje', 'Papelera'], ['रीसायकल बिन', 'ट्रैश'],
+  ['ごみ箱', 'ゴミ箱'], ['Geri Dönüşüm Kutusu’na', 'Çöp Sepeti’ne'], ['回收站', '废纸篓'],
+] as const;
+
 /** Native security names in the shared secured-workspace copy. Translate the catalog
  * before substituting parameters, so a workspace's own name is never rewritten. */
 export function platformCatalogText(id: string, text: string, platform: string): string {
+  if (id === trashToast) return platform === 'darwin' ? replaceAll(text, macTrash) : platform === 'linux' ? text.replaceAll('Recycle Bin', 'Trash') : text;
   if (platform !== 'darwin') return text;
   if (macWording.has(id)) text = text.replace(/\bPC\b/g, 'Mac').replaceAll('Recycle Bin', 'Trash');
   // A Tor window opens with Option+Cmd+N on a Mac (Option+Shift+N types a character), in every language: Alt+Shift+N, Alt+Umschalt+N, Alt+Maj+N.

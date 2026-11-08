@@ -31,6 +31,12 @@ export const sidebarPeekOf = (settings: { sidebarPeek?: Partial<SidebarPeek> } |
   return { full: typeof saved.full === 'boolean' ? saved.full : sidebarPeekDefaults.full, compact: typeof saved.compact === 'boolean' ? saved.compact : sidebarPeekDefaults.compact, focus: typeof saved.focus === 'boolean' ? saved.focus : sidebarPeekDefaults.focus };
 };
 
+/** "Hide the toolbar" (Settings › Appearance › Layout, 13.3): with tabs in a sidebar (but not Sidebar mode, which has no toolbar to hide) the Full, Compact and Focus toolbar goes the way
+ * Seamless's does: nothing over the page until the pointer rests at the top edge. The view stays what it is and the sidebar behaves as it does there; only the toolbar's hiding and its reveal are
+ * Seamless's. Seamless itself never needs it (it hides the toolbar already). Pure and shared with main, which watches the top edge for it. */
+export const hideToolbarOn = (settings: { hideToolbar?: boolean; verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, view: WindowView): boolean =>
+  settings?.hideToolbar === true && settings.verticalTabs === true && settings.addressInSidebar !== true && view !== 'seamless';
+
 type Legacy = Partial<Settings> & { automaticCompact?: boolean; pinExpanded?: boolean };
 
 /** The default view for every window. Settings written before the dial existed carry only the Toolbar choice: its

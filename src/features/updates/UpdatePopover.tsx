@@ -5,7 +5,7 @@ import { ScrollRegion } from '../../components/ScrollRegion';
 import { NoteList } from './NoteList';
 import { t } from '../../i18n';
 import { runtime } from '../../runtime/client';
-import { downloadLine, pauseUpdate, restartToUpdate, resumeUpdate, useUpdateStatus, type UpdateView } from './useUpdateReady';
+import { downloadLine, errorLines, pauseUpdate, restartToUpdate, resumeUpdate, tryAgainUpdate, useUpdateStatus, type UpdateView } from './useUpdateReady';
 import './update-pill.css';
 
 /** What the toolbar's Update pill opens (and what opens by itself, once, when a download finishes): one question in the glass panel. Install now
@@ -29,6 +29,8 @@ export function UpdatePopover({ close, reducedMotion }: { close: () => void; red
       {reading
         ? <div className="update-pop-scroll"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}>{<NoteList notes={update?.notes || t('update.noNotes')} />}</div></ScrollRegion></div>
         : <p className="update-pop-note">{t('update.readyBody')}</p>}
+      {/* Two installs of this version did not take (main sets lastResort): the same quiet way out as in the download panel. */}
+      {update?.lastResort && !reading && <div className="update-pop-actions update-pop-links"><button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close(); }}>{t('update.lastResort')}</button></div>}
       <div className="update-pop-actions">
         <button type="button" className="acira-button acira-button-quiet" disabled={!update} onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.readMore')}</button>
         <span className="update-pop-gap" />
@@ -49,7 +51,7 @@ export function UpdateDownload({ update, reducedMotion, close }: { update: Updat
   // The press shows at once (main answers in a moment, then every window hears 'update-changed'); the next status settles it. Every status read, not
   // only a new phase: a Resume that cannot connect is paused again before this window reads 'downloading', and the press then stayed on screen.
   useEffect(() => setAsked(null), [update]);
-  const paused = asked ? asked === 'pause' : update.phase === 'paused', percent = Math.max(0, Math.min(100, update.percent));
+  const stopped = update.phase === 'error', paused = stopped ? false : asked ? asked === 'pause' : update.phase === 'paused', percent = Math.max(0, Math.min(100, update.percent));
   const toggle = () => { const next = paused ? 'resume' : 'pause'; setAsked(next); void (next === 'pause' ? pauseUpdate() : resumeUpdate()); };
   const ring = (
     <svg className="update-ring-dial" viewBox="0 0 26 26" aria-hidden="true">
@@ -58,21 +60,27 @@ export function UpdateDownload({ update, reducedMotion, close }: { update: Updat
     </svg>
   );
   return (
-    <div className="update-popover update-download" role="group" aria-labelledby="update-pop-title" data-view={reading ? 'notes' : 'download'} data-phase={paused ? 'paused' : 'downloading'}>
+    <div className="update-popover update-download" role="group" aria-labelledby="update-pop-title" data-view={reading ? 'notes' : 'download'} data-phase={stopped ? 'error' : paused ? 'paused' : 'downloading'}>
       <div className="acira-menu-row acira-menu-row-identity">
-        <span className="acira-menu-icon update-pop-mark" aria-hidden="true"><UpdateMark panel preset={paused ? 'progressHeld' : 'progress'} progress={percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
-        <span className="acira-menu-title" id="update-pop-title">{reading ? t('update.whatsNew') : paused ? t('update.pausedTitle') : t('update.downloadingTitle')}<span className="acira-menu-sub">{t('update.version', { version: update.version })}</span></span>
-        {update.pausable
+        <span className="acira-menu-icon update-pop-mark" aria-hidden="true"><UpdateMark panel preset={paused || stopped ? 'progressHeld' : 'progress'} progress={percent / 100} tone="ink" reducedMotion={reducedMotion} /></span>
+        <span className="acira-menu-title" id="update-pop-title">{reading ? t('update.whatsNew') : stopped ? t('update.errorTitle') : paused ? t('update.pausedTitle') : t('update.downloadingTitle')}<span className="acira-menu-sub">{t('update.version', { version: update.version })}</span></span>
+        {stopped ? <span className="update-ring" aria-hidden="true">{ring}</span> : update.pausable
           ? <button type="button" className="update-ring" data-paused={paused || undefined} aria-label={paused ? t('update.resumeDownload') : t('update.pauseDownload')} aria-describedby="update-pop-detail" onClick={toggle}>{ring}<span className="update-ring-glyph">{paused ? <Play size={10} /> : <Pause size={10} />}</span></button>
           : <span className="update-ring" aria-hidden="true">{ring}</span>}
       </div>
       {reading
         ? <div className="update-pop-scroll"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}>{<NoteList notes={update.notes || t('update.noNotes')} />}</div></ScrollRegion></div>
-        : <p className="update-pop-note update-pop-detail" id="update-pop-detail">{downloadLine({ ...update, phase: paused ? 'paused' : 'downloading' })}</p>}
-      <div className="update-pop-actions update-pop-links">
-        <button type="button" className="acira-button acira-button-quiet" onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.whatsNew')}</button>
-        {update.lastResort && !reading && <button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close?.(); }}>{t('update.lastResort')}</button>}
-      </div>
+        : <p className="update-pop-note update-pop-detail" id="update-pop-detail">{stopped ? <>{errorLines(update).what}{errorLines(update).when && <span className="update-pop-retry">{errorLines(update).when}</span>}</> : downloadLine({ ...update, phase: paused ? 'paused' : 'downloading' })}</p>}
+      {stopped && !reading
+        ? <div className={update.cause === 'file' ? 'update-pop-actions update-pop-links' : 'update-pop-actions'}>
+            {update.lastResort && <button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close?.(); }}>{t('update.lastResort')}</button>}
+            <span className="update-pop-gap" />
+            {update.cause !== 'file' && <button type="button" className="acira-button acira-button-primary" disabled={update.retrying} onClick={() => void tryAgainUpdate()}>{t('updates.tryAgain')}</button>}
+          </div>
+        : <div className="update-pop-actions update-pop-links">
+            <button type="button" className="acira-button acira-button-quiet" onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.whatsNew')}</button>
+            {update.lastResort && !reading && <button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close?.(); }}>{t('update.lastResort')}</button>}
+          </div>}
     </div>
   );
 }

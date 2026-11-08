@@ -142,7 +142,7 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   if(kind==='tor')return 251;
   // Update ready (Install now, Later, Read more): 124 measured in English (31 Oct, rig qa/r6-updates-proof.mjs): the identity row, the two-line note, one row of buttons. A longer language wraps the note to three lines and is measured on open; Read more swaps the note for the release notes, up to 11 lines.
   // The download (option B, the dots in the toolbar open it; updatePanelPhase): the identity row with its ring, the line under it and What's new, 102 measured in English (3 Nov, the update-pause rig); a language that wraps the line is measured on open.
-  if(kind==='update')return updatePanelPhase()==='ready'?124:102;
+  if(kind==='update')return ['ready','error'].includes(updatePanelPhase())?124:102;
   // What's new after a restart (centred): the identity row, the notes (measured on open: they depend on the feed, and the popup waits for them, data-popup-pending) and the Close row. 222 is the case in tests/popup-heights.json (eight lines of notes, qa/r6-whatsnew-proof.mjs).
   if(kind==='whats-new')return 222;
   // A website's tab has more to offer (copy link, reload, site actions) than an Acira page's.

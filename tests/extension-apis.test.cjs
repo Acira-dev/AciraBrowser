@@ -186,6 +186,21 @@ test('chrome.sidePanel: manifest path, per-tab options, behaviour and the toolba
  assert.deepEqual(await createSidePanel({getExtension:()=>({manifest:{}}),host:null,emit(){}}).open(e,{windowId:1}),{__acira_error:MESSAGES.panelHost});
 });
 
+test('chrome.sidePanel: per-tab options belong to the tab\'s page, however the caller names the tab (restored tab: its own id 2000000002, page 5)',async()=>{
+ const opened=[];let current=null;
+ const host={open:async details=>{opened.push(details);current={url:details.url,tabId:details.tabId};return {windowId:7};},close:async()=>{current=null;},current:()=>current,navigate:()=>{}};
+ const panel=createSidePanel({getExtension:()=>({name:'Test',manifest:{side_panel:{default_path:'panel.html'}}}),host,emit(){},pageOf:id=>(id===2000000002?5:id)});
+ const e=ev(ID,['sidePanel']);
+ panel.setOptions(e,{tabId:2000000002,path:'tab.html'});
+ assert.equal(panel.getOptions(e,{tabId:2000000002}).path,'tab.html','the extension reads back what it set, under its own id in the answer');
+ assert.equal(panel.getOptions(e,{tabId:2000000002}).tabId,2000000002);
+ assert.equal(panel.getOptions(e,{tabId:5}).path,'tab.html','the toolbar button of that tab (page 5) finds the same options');
+ panel.setPanelBehavior(e,{openPanelOnActionClick:true});
+ assert.equal(panel.actionClick(ID,{tabId:5}),true);await new Promise(r=>setImmediate(r));
+ assert.equal(opened[0].url,`chrome-extension://${ID}/tab.html`,'a click on the page 5 button shows the options set for tab 2000000002');
+ assert.equal(panel.getOptions(e,{tabId:6}).path,'panel.html','another tab keeps the extension-wide options');
+});
+
 test('installExtensionApis adds handlers on the engine router, checks permissions and wraps the toolbar click',async()=>{
  const handlers=new Map();let popupOpened=0;
  handlers.set('browserAction.activate',{callback:()=>{popupOpened++;},extensionContext:true});

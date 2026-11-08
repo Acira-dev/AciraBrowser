@@ -1,5 +1,5 @@
 import type { BrowserAction, BrowserSnapshot, SidebarSide } from '../../runtime/types';
-import { effectiveView, seamlessEdgesOf, sidebarPeekOf } from '../../runtime/windowView';
+import { effectiveView, hideToolbarOn, seamlessEdgesOf, sidebarPeekOf } from '../../runtime/windowView';
 import { sidebarModeOn } from '../../ui/sidebarMode';
 import { sidebarEdgeId, sidebarSideOf } from '../../ui/sidebarSide';
 import { Select, SettingRow, Switch } from './controls';
@@ -26,7 +26,8 @@ export function SidebarEdgeRows({ state, dispatch, describe }: Props & { /** Tab
   const s = state.settings, windowView = effectiveView(s, state.windowUi), side = sidebarSideOf(s);
   if (!s.verticalTabs) return null;
   // Sidebar mode has no top bar to fall back to: a closed sidebar always comes back from its own edge, so there is nothing to switch.
-  if (windowView !== 'seamless' && sidebarModeOn(s)) return null;
+  // Also with the toolbar hidden (its sidebar button is away): a closed sidebar always comes back from its edge.
+  if (windowView !== 'seamless' && (sidebarModeOn(s) || hideToolbarOn(s, windowView))) return null;
   if (windowView !== 'seamless')
     return (
       <SettingRow id="sidebar-peek" title={t(sidebarEdgeId('windowview.closedSidebarEdge', side))} detail={describe ? t(sidebarEdgeId('windowview.closedSidebarEdgeDetail', side)) : undefined}>

@@ -222,6 +222,7 @@ test('host.create: the extension\'s own page opens in a standalone window for po
     const window = await host.create({extensionId: ID, urls: [own], kind, bounds: null, state: 'default', focused: true});
     assert.equal(window.webContents.loadedUrl, own, `${kind}: the page is loaded`);
     assert.equal(window.shown, 'show', `${kind}: focused: true shows and focuses`);
+    assert.equal(window.focusedNow, true, `${kind}: and the window has the keyboard (on Windows a shown window can stay behind the one that was active)`);
     assert.equal(window.menu, null, 'no menu bar');
     assert.equal(window.options.webPreferences.session, session);
     assert.equal(window.options.webPreferences.sandbox, true);
@@ -293,6 +294,48 @@ test('create: type, state, focus, bounds validation with Chromium\'s exact error
   await make({left: -300, top: 0, width: 600, height: 400});
   assert.deepEqual(ctx.created[5].spec.bounds, {x: -300, y: 0, width: 600, height: 400}, 'exactly half on a display is allowed');
   await assert.rejects(make({left: -301, top: 0, width: 600, height: 400}), {message: /Invalid value for bounds/});
+});
+
+test('Bitwarden\'s pop-out (its own page, type popup, placed from the window that asked) is accepted for the geometries Windows produces, and fitted onto the display when the asking window hangs off it', async () => {
+  const own = `chrome-extension://${ID}/popup/index.html?uilocation=popout#/lock`;
+  const popout = sender => ({url: own, type: 'popup', focused: true, width: 380, height: 630, left: sender.x + sender.width - 380 - 15, top: sender.y + 90});
+  const first = {x: 0, y: 0, width: 1920, height: 1080};
+  const cases = [
+    ['a maximized window (Windows reports the invisible borders: x and y are -8)', {x: -8, y: -8, width: 1936, height: 1056}, [first], {x: 1533, y: 82}],
+    ['a second monitor to the right', {x: 2100, y: 60, width: 1200, height: 800}, [first, {x: 1920, y: 0, width: 2560, height: 1440}], {x: 2905, y: 150}],
+    ['a monitor to the left of the main one', {x: -1800, y: 100, width: 1500, height: 900}, [{x: -1920, y: 0, width: 1920, height: 1080}, first], {x: -695, y: 190}],
+    ['a laptop at 125% (1536 x 864 DIP)', {x: 0, y: 0, width: 1536, height: 824}, [{x: 0, y: 0, width: 1536, height: 864}], {x: 1141, y: 90}],
+    ['a window that hangs half off the right edge: Chrome would refuse, the pop-out is moved onto the display', {x: 1200, y: 50, width: 1400, height: 800}, [first], {x: 1540, y: 140}]
+  ];
+  for (const [label, sender, displays, expected] of cases) {
+    const ctx = setup({windows: [new FakeWindow(1, sender)]});
+    ctx.host.displays = () => displays;
+    await call(ctx, 'windows.create', popout(sender));
+    assert.deepEqual([ctx.created[0].spec.bounds.x, ctx.created[0].spec.bounds.y, ctx.created[0].spec.bounds.width, ctx.created[0].spec.bounds.height], [expected.x, expected.y, 380, 630], label);
+    assert.deepEqual([ctx.created[0].spec.kind, ctx.created[0].spec.focused], ['popup', true], label);
+  }
+  // the same request for a web address, or from a window placed so that nothing of it would be on a display, is refused as Chrome does (the leniency is for an extension's own page only)
+  const ctx = setup({windows: [new FakeWindow(1, {x: 1200, y: 50, width: 1400, height: 800})]});
+  await assert.rejects(call(ctx, 'windows.create', {...popout({x: 1200, y: 50, width: 1400, height: 800}), url: 'https://example.com/'}), {message: /Invalid value for bounds/});
+  await assert.rejects(call(ctx, 'windows.create', {...popout({x: 1200, y: 50, width: 1400, height: 800}), type: 'normal'}), {message: /Invalid value for bounds/});
+  assert.equal(ctx.created.length, 0);
+});
+
+test('the window trace says what an extension asked for, what it got, and nothing that identifies a page', async () => {
+  const os = require('node:os'), fs = require('node:fs'), path = require('node:path');
+  const extTrace = require('../desktop/browser-services/ext-trace.cjs');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'acira-trace-')), 'logs', 'extension-windows.log');
+  extTrace.setFile(file);
+  try {
+    const ctx = setup({windows: [new FakeWindow(1)]});
+    await call(ctx, 'windows.create', {url: `chrome-extension://${ID}/popup/index.html?uilocation=popout&secret=1#/vault`, type: 'popup', left: 10, top: 20, width: 380, height: 630, focused: true});
+    await assert.rejects(call(ctx, 'windows.create', {url: 'https://example.com/private?token=abc', left: 5000, top: 5000, width: 400, height: 300}), /Invalid value for bounds/);
+    const text = fs.readFileSync(file, 'utf8');
+    assert.match(text, /windows\.create \S+ \{"type":"popup","focused":true,"left":10,"top":20,"width":380,"height":630\}/);
+    assert.match(text, /windows\.create ok \S+ \{"id":100,"type":"popup"/);
+    assert.match(text, /windows\.create refused \S+ Invalid value for bounds/);
+    assert.doesNotMatch(text, /secret=1|token=abc|uilocation/, 'no query, no fragment');
+  } finally { extTrace.setFile(null); fs.rmSync(path.dirname(path.dirname(file)), {recursive: true, force: true}); }
 });
 
 test('create answers the new window with its tabs, and tells listeners once (windows.onCreated), before the call returns', async () => {

@@ -1,6 +1,6 @@
 import { useEffect,useRef,useState } from 'react';
 import { flushSync } from 'react-dom';
-import { createInitialState,persistedSnapshot,reduceBrowser,restoreSnapshot,viewForFocus } from './core';
+import { createInitialState,effectiveView,hideToolbarOn,persistedSnapshot,reduceBrowser,restoreSnapshot,viewForFocus } from './core';
 import { scopeToWorkspace,workspaceHasTabs } from './workspaces';
 import { isGroupFold } from './tabGroups';
 import { startWorkspaceTransition,workspaceSwitched } from '../ui/workspaceMotion';
@@ -56,6 +56,8 @@ const modeSwitch=(update:()=>void,kind?:'appearance'|'layout'|'workspace',slideH
  startSwitch(update,kind,slideHint);
 };
 /** Sidebar mode on or off, from one snapshot to the next: 'in' (tabs and the address bar in the sidebar), 'out', or (a morph already running takes any layout change) its own direction. */
+/** Settings › Appearance › Layout › Hide the toolbar turned on or off (or something that changes whether it applies): the toolbar leaves or returns as a layout switch (one page layout, like Seamless's entry), not as the header's own spring under a heavy page. */
+const toolbarHidesOrReturns=(previous:BrowserSnapshot,next:BrowserSnapshot)=>hideToolbarOn(previous.settings,effectiveView(previous.settings,previous.windowUi))!==hideToolbarOn(next.settings,effectiveView(next.settings,next.windowUi));
 const morphOf=(previous:BrowserSnapshot,next:BrowserSnapshot)=>morphDirection(previous,next,sidebarMorphRunning(),sidebarLayoutChanged(previous,next)||chromeLayoutChanged(previous,next),sidebarMorphDirection());
 /** The profile's own tabs switch is drawn from the setting a round trip later; in a morph it goes in the same render, or the strip would be taken down before the sidebar is there. */
 const syncRail=(next:BrowserSnapshot)=>{const tab=next.tabs.find(item=>item.id===next.activeTabId)||next.tabs[0];if(!tab)return;setRailPrefs({tabs:!!next.settings.verticalTabs},tab.browserProfileId,!!next.browserProfiles.find(profile=>profile.id===tab.browserProfileId)?.private);};
@@ -108,7 +110,7 @@ export function useBrowser(){
    // Its answer is a later task, so it can never arrive before the optimistic state below is in place.
    void runtime.dispatch(sent).catch(error=>console.error('Browser action failed',error));dispatched=true;
    try{const base=latest.current,started=performance.now(),next=reduceBrowser(base,sent),reduced=performance.now();
-    if(next!==base){const wait=optimistic.current;if(wait)clearTimeout(wait.timer);const count=(wait?.count??0)+1,baseRevision=wait?.base??base.revision,timer=setTimeout(()=>{optimistic.current=null;void runtime.getSnapshot().then(real=>real&&setState(complete(real)));},900);optimistic.current={base:baseRevision,count,timer};const shown={...next,revision:base.revision};latest.current=shown;if(workspaceSwitched(base,next))modeSwitch(()=>flushSync(()=>setState(shown)),'workspace');else{/* Sidebar mode plays on the press frame as its morph; main's snapshot, a moment later, finds nothing left to change */const direction=action.type==='sidebar.mode'?morphOf(base,next):null;if(!(direction&&startSidebarMorph(()=>flushSync(()=>{setState(shown);syncRail(next);}),direction))){const settle=()=>flushSync(()=>{setState(shown);if(action.type==='sidebar.mode')syncRail(next);});if(action.type==='sidebar.mode'&&direction)modeSwitch(settle,'layout');else settle();}}const rendered=performance.now();(window as unknown as {__optimistic?:object}).__optimistic={action:action.type,reduceMs:+(reduced-started).toFixed(2),renderMs:+(rendered-reduced).toFixed(2)};}
+    if(next!==base){const wait=optimistic.current;if(wait)clearTimeout(wait.timer);const count=(wait?.count??0)+1,baseRevision=wait?.base??base.revision,timer=setTimeout(()=>{optimistic.current=null;void runtime.getSnapshot().then(real=>real&&setState(complete(real)));},900);optimistic.current={base:baseRevision,count,timer};const shown={...next,revision:base.revision};latest.current=shown;if(workspaceSwitched(base,next))modeSwitch(()=>flushSync(()=>setState(shown)),'workspace');else{/* Sidebar mode plays on the press frame as its morph; main's snapshot, a moment later, finds nothing left to change */const direction=action.type==='sidebar.mode'?morphOf(base,next):null;if(!(direction&&startSidebarMorph(()=>flushSync(()=>{setState(shown);syncRail(next);}),direction))){const settle=()=>flushSync(()=>{setState(shown);if(action.type==='sidebar.mode')syncRail(next);});if((action.type==='sidebar.mode'&&direction)||(action.type==='settings.update'&&toolbarHidesOrReturns(base,next)))modeSwitch(settle,'layout');else settle();}}const rendered=performance.now();(window as unknown as {__optimistic?:object}).__optimistic={action:action.type,reduceMs:+(reduced-started).toFixed(2),renderMs:+(rendered-reduced).toFixed(2)};}
    }catch(error){console.warn('Optimistic update skipped',error);}
   }
   if(!dispatched)void runtime.dispatch(sent).catch(error=>console.error('Browser action failed',error));};

@@ -9,6 +9,7 @@ const {RequestPipeline, observeRequests} = require('../desktop/request-pipeline.
 const extApi = require('../desktop/browser-services/ext-api/index.cjs');
 const webRequest = require('../desktop/browser-services/ext-api/web-request.cjs');
 const {compilePattern, urlParts} = require('../desktop/browser-services/ext-api/web-request/patterns.cjs');
+const tabIds = require('../desktop/browser-services/ext-api/surfaces/tab-ids.cjs');
 const {extensionWorld, plain, ID} = require('./fixtures/ext-api/world.cjs');
 
 const OTHER = 'bcdefghijklmnopabcdefghijklmnopa';
@@ -249,4 +250,15 @@ test('renderer: asyncBlocking onAuthRequired answers once per context; a namespa
   assert.deepEqual(replies, [['a1', 'w', {authCredentials: {username: 'u', password: 'p'}}]]);
   const without = extensionWorld({manifest_version: 3, permissions: ['storage']}, {packages, worker: true});
   assert.equal(without.chrome.webRequest, undefined);
+});
+
+test('a request of a tab the extension knows by another id than its page (restored from sleep) carries the tab\'s id, and the tabId filter takes that id', async () => {
+  const {session, hooks, add, worker, tab} = setup();
+  tabIds.register(session, {ofPage: wc => (wc === tab ? 2000000002 : wc.id), pageOf: id => (id === 2000000002 ? 7 : null)});
+  add('onBeforeRequest', 'w:0', {urls: ['<all_urls>'], tabId: 2000000002});
+  add('onBeforeRequest', 'w:1', {urls: ['<all_urls>'], tabId: 7});
+  const frame = {frameTreeNodeId: 12, parent: null, url: 'https://page.example/'};
+  await run(hooks, 'onBeforeRequest', request({webContents: tab, frame}));
+  assert.equal(worker.sent.length, 1, 'only the listener that named the extension\'s id hears it');
+  assert.equal(worker.sent[0][1].d.tabId, 2000000002);
 });

@@ -62,12 +62,16 @@ export const HELP=`Usage (each command is a dry run that changes nothing until y
   --rehearsal                dry run only, never with --publish: tolerate artifacts built as another version than --version (to try the tool on an old build)
   --commit <hex>             tag suffix when the artifacts carry no commit
   --no-wait                  do not wait for the feed CDN after publishing
+  --mirror-base <url>        a second host for the files (an https folder address that is not GitHub or the update host): every file the feed hands out also gets
+                             files[].mirrors = <url>/<release tag>/<file name>, so a copy of Acira whose first address is down or silent (the 8 Nov 2026 GitHub incident) fetches
+                             it from there (beta.13.2 and later). The files must already be on that host, byte for byte: the dry run lists what to put where, and refuses if a copy
+                             differs; --publish also refuses a copy that is not there. Only with a new version or --add-arch.
   --stand-in <url>           testing: a local stand-in for GitHub and the feed (http://127.0.0.1:<port>, qa/publish-stand-in.mjs); never gh, never github.com
 `;
 
 export function parseArguments(argv){
  const flags=new Set(['no-dmg','hold','publish','rehearsal','yes','no-notes','allow-single-arch','windows-download-only','windows-assume-updater','no-wait','help','halt','resume-rollout','add-arch','allow-missing-blockmaps']);
- const values=new Set(['pace','version','channel','notes','notes-file','mac-dir','mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg','windows-dir','windows-exe','windows-blockmap','windows-latest-yml','linux-dir','target','review-dir','commit','rollout','widen','platform','stand-in']);
+ const values=new Set(['pace','version','channel','notes','notes-file','mac-dir','mac-arm64-zip','mac-x64-zip','mac-arm64-dmg','mac-x64-dmg','windows-dir','windows-exe','windows-blockmap','windows-latest-yml','linux-dir','target','review-dir','commit','rollout','widen','platform','mirror-base','stand-in']);
  const options={};
  for(let index=0;index<argv.length;index++){
   const argument=argv[index];if(!argument.startsWith('--'))throw Error('Unexpected argument '+argument+'.\n\n'+HELP);
@@ -77,6 +81,11 @@ export function parseArguments(argv){
   else throw Error('Unknown option '+argument+'.\n\n'+HELP);
  }
  if(options.target!==undefined&&!['legacy','current'].includes(options.target))throw Error('--target is legacy or current.');
+ if(options['mirror-base']!==undefined){
+  const other=MODES.find(name=>name!=='add-arch'&&options[name]!==undefined);
+  if(other)throw Error('--mirror-base names the mirror copies of the files of a new version (or of --add-arch); --'+other+' changes the live documents only.');
+  options['mirror-base']=checkMirrorBase(options['mirror-base']);
+ }
  // combinations that would mean two different things
  const modes=MODES.filter(name=>options[name]!==undefined);
  if(modes.length>1)throw Error('Choose one of --'+modes.join(', --')+'.');
@@ -98,6 +107,17 @@ export function parseArguments(argv){
  return options;
 }
 
+/** --mirror-base: a folder address on a host that is NOT GitHub (the point of a mirror is to survive its outage; the update host is GitHub Pages) and that a copy of Acira can fetch
+ *  with no login: https (http only to this computer, for tests), no credentials, query or fragment. Resolves to the address with its trailing slash. */
+export function checkMirrorBase(value){
+ let url;try{url=new URL(String(value));}catch{throw Error('--mirror-base must be an address, like https://downloads.example.com/acira/ .');}
+ const local=/^(?:localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname);
+ if(url.protocol!=='https:'&&!(url.protocol==='http:'&&local))throw Error('--mirror-base must be an https address (http only on this computer, for tests).');
+ if(url.username||url.password||url.search||url.hash)throw Error('--mirror-base is a plain folder address: no credentials, query or fragment.');
+ const host=url.hostname.toLowerCase();
+ if(/(^|\.)(?:github\.com|githubusercontent\.com|github\.io)$/.test(host)||host===new URL(HOSTS.HOST_URL).hostname)throw Error('--mirror-base is on GitHub (the update host is GitHub Pages): a mirror there goes down in the same outage as the first address. Use another host.');
+ return url.href.endsWith('/')?url.href:url.href+'/';
+}
 const exists=file=>fs.access(file).then(()=>true,()=>false);
 const readJSON=async file=>JSON.parse(await fs.readFile(file,'utf8'));
 const mb=bytes=>bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':Math.max(1,Math.round(bytes/1024))+' KB';
@@ -521,10 +541,45 @@ export async function planUpdate(options,deps){
    for(const generated of [sums,info]){generated.size=Buffer.byteLength(generated.content);generated.sha256=createHash('sha256').update(generated.content).digest('hex');generated.sha512=createHash('sha512').update(generated.content).digest('base64');generated.url=assetUrl(release.tag,generated.name);release.assets.push(generated);}
   }
   // Read every planned feed document back the way an installed app does, and check it points at the assets it should (or, --add-arch, at the live files it keeps).
+  if(options['mirror-base']){if(plan.feeds.length)withMirrors({plan,base:options['mirror-base']});else warnings.push('--mirror-base was given, but no channel document hands out a file in this run, so no mirror is named.');}
   for(const feed of plan.feeds)checkPlannedFeed(feed,plan);
  }finally{await fs.rm(staging,{recursive:true,force:true});}
  return finish(true);
 }
+/** Names the mirror copy of every file the planned documents hand out that this run puts on its releases: files[].mirrors = [<base><release tag>/<file name>]. Files a document keeps
+ *  from before (--add-arch) are left as they are. A Windows setup's blockmap is listed too (the app asks for <setup>.blockmap beside whichever copy it fetches), as optional.
+ *  Sets plan.mirror = {base, files:[{name, tag, url, path, sha512, size, optional}]}: what must be on the mirror. */
+export function withMirrors({plan,base}){
+ const mirror={base,files:[]},assets=new Map(plan.releases.flatMap(release=>release.assets.map(asset=>[asset.url,{release,asset}])));
+ const mirrorUrl=(release,asset)=>base+encodeURIComponent(release.tag)+'/'+encodeURIComponent(asset.name);
+ const add=(release,asset,optional=false)=>{const url=mirrorUrl(release,asset);if(!mirror.files.some(item=>item.url===url))mirror.files.push({name:asset.name,tag:release.tag,url,path:asset.path||null,sha512:asset.sha512,size:asset.size,optional});return url;};
+ for(const feed of plan.feeds){
+  const doc=U.parseFeed(feed.text);let changed=false;
+  doc.files=(doc.files||[]).map(file=>{
+   const hit=assets.get(file.url);if(!hit)return file;
+   const url=add(hit.release,hit.asset),map=hit.release.assets.find(asset=>asset.name===hit.asset.name+'.blockmap');
+   if(map)add(hit.release,map,true);
+   changed=true;return {...file,mirrors:[...new Set([...(file.mirrors||[]),url])]};
+  });
+  if(changed)feed.text=U.serializeFeed(doc);
+ }
+ plan.mirror=mirror;return mirror;
+}
+/** Asks the mirror for every file it must hold and compares SHA-512 and size with the file this run publishes. Resolves {same, missing, differs} (lists of mirror files).
+ *  strict (a real publish): a missing copy is as much a refusal as a different one, because the feed would name a file that is not there. */
+export async function mirrorCheck({plan,fetch=globalThis.fetch,sleep,delays=[],strict=false,log=()=>{}}){
+ const result={same:[],missing:[],differs:[]};
+ if(!plan.mirror)return result;
+ for(const file of plan.mirror.files){
+  try{await verifyDownload({fetch,url:file.url,sha512:file.sha512,size:file.size,sleep,delays});result.same.push(file);log('  mirror has '+file.name+' (identical)');}
+  catch(error){(error.mismatch?result.differs:result.missing).push({...file,why:String(error.message||error)});}
+ }
+ const refused=[...result.differs.map(file=>file.url+' is NOT the file this release publishes ('+file.why.replace(/^Anonymous download of \S+ failed: /,'')+'). Replace it on the mirror, then run again.'),
+  ...result.missing.filter(file=>strict&&!file.optional).map(file=>file.url+' is not on the mirror ('+file.why.replace(/^Anonymous download of \S+ failed: /,'')+'). Put '+(file.path?path.basename(file.path):file.name)+' there first, then run again.')];
+ if(refused.length)throw Object.assign(Error('The mirror does not hold the files this release names, so nothing was published to the feed:\n  - '+refused.join('\n  - ')),{mirror:result});
+ return result;
+}
+
 /** A planned channel document, read back with electron-updater's own parser: the right version, every file a planned asset (or a file the live document
  *  already named, when one is added), and on a Mac each architecture handed its own archive. */
 function checkPlannedFeed(feed,plan){
@@ -608,6 +663,7 @@ export async function writeReview({plan,dir}){
   await fs.writeFile(path.join(folder,'NOTES.md'),release.body);
   for(const asset of release.assets)if(asset.content!==undefined)await fs.writeFile(path.join(folder,asset.name),asset.content);
  }
+if(plan.mirror)await fs.writeFile(path.join(dir,'MIRROR-FILES.txt'),'Put each file at its address (the same bytes; --publish checks every one of them by downloading it):\n\n'+plan.mirror.files.map(file=>(file.path||file.name)+'\n  -> '+file.url+(file.optional?'   (optional)':'')).join('\n')+'\n');
  const slim={...plan,releases:plan.releases.map(release=>({...release,assets:release.assets.map(({name,size,sha256,sha512,url,role,arch})=>({name,size,sha256,sha512,url,role,arch}))})),feeds:plan.feeds.map(({platform,file,version,before})=>({platform,file,version,before:before?{version:before.version,rollout:U.describeRollout(before)}:null}))};
  await fs.writeFile(path.join(dir,'PLAN.json'),JSON.stringify(slim,null,2)+'\n');
  return dir;
@@ -641,6 +697,10 @@ export function describePlan(plan,{log,review}){
   for(const line of U.foldDiff(U.lineDiff(feed.beforeText,feed.text)))log('      '+line);
  }
  if(!plan.feeds.length)log('    (none)');
+ if(plan.mirror){
+  log('\n  mirror '+plan.mirror.base+' - these files must be there, byte for byte (the feed names them as files[].mirrors):');
+  for(const file of plan.mirror.files)log('    '+(file.path?path.basename(file.path):file.name).padEnd(54)+' -> '+file.url+(file.optional?'  (optional: lets the setup download only what changed)':''));
+ }
  for(const line of plan.untouched)log('    '+line);
  if(plan.mode==='halt')for(const line of haltEffects({version:plan.version,percentage:plan.feeds.map(feed=>U.rolloutOf(feed.before).percentage).find(Boolean)}))log('  '+line);
  if(review)log('\n  Review the planned feed files in '+review);
@@ -734,6 +794,8 @@ export async function publishPlan({plan,deps,options}){
   // The authoritative feed (not the CDN copy): checked before anything is uploaded, and again on the commit the feed commit builds on.
   const current={};for(const file of [...new Set([...FEED_FILES,...plan.feeds.map(feed=>feed.file)])])current[file]=await readFeedAt({gh,slug,file,ref:target.branch,dir:target.dir});
   checkCurrent(plan,current);
+  // the mirror holds exactly the files this release names (they are local files, so this needs nothing from GitHub): before anything is uploaded or committed
+  if(plan.mirror){log('\nChecking the mirror '+plan.mirror.base+'...');await mirrorCheck({plan,fetch,sleep,delays,strict:true,log});}
   // every file a live document names (its setups and ZIPs, and the blockmaps its previousBlockMaps point at): never replaced
   const referenced=new Set(Object.values(current).flatMap(doc=>[...(doc?.files||[]),...(doc?.previousBlockMaps||[])]).map(entry=>entry?.url).filter(Boolean));
   state.referenced=referenced;
@@ -807,6 +869,14 @@ export async function main(argv=process.argv.slice(2),overrides={}){
  const review=await writeReview({plan:result.plan,dir:path.resolve(options['review-dir']||path.join(repo,'release/update-review',options.version+'-'+(options.channel||'beta')+(mode==='release'?'':'-'+mode)))});
  describePlan(result.plan,{log,review});
  for(const warning of result.warnings)log('  ! '+warning);
+ if(result.plan.mirror){
+  // the same check --publish makes, except that a file that is not there yet is only said (it is put there before --publish); a different one refuses
+  try{
+   const found=await mirrorCheck({plan:result.plan,fetch:deps.fetch,sleep:deps.sleep,delays:deps.mirrorDelays??[],strict:false,log});
+   log('\nMirror '+result.plan.mirror.base+': '+found.same.length+' of '+result.plan.mirror.files.length+' files are there and identical.');
+   for(const file of found.missing)log('  ! '+(file.optional?'(optional) ':'')+'not on the mirror yet: '+file.url+' ('+(file.path?path.basename(file.path):file.name)+'); put it there before --publish.');
+  }catch(error){log('\nREFUSED by the mirror check. Nothing was uploaded or changed.\n\n  x '+error.message);return 1;}
+ }
  if(['release','add-arch'].includes(mode)&&result.plan.feeds.length&&deps.compat!==false){
   // the same check the real run makes before it switches the feed; the files this run would upload are taken as there
   try{const reach=await compatCheck({plan:result.plan,deps,assumePlanned:true});for(const warning of reach.warnings)log('  ! '+warning);log('\nOlder versions: '+reach.paths.length+' update paths read the way each version reads them; every one reaches '+options.version+' (or the frozen feed\'s bridge) and every named file is there.');}

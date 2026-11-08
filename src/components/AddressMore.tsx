@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PILL_LINE, createPillDwell, pillMotion, pointInside, pressKeepsFieldFocus, type PillSample } from '../ui/addressInSidebar';
 import { publishAddressSidebar } from '../ui/addressSidebarStore';
+import { lineLookOf } from '../ui/updateLine';
+import { UpdateLine } from '../features/updates/UpdateLine';
+import { useUpdateStatus } from '../features/updates/useUpdateReady';
 
 /** The thin pill under the address field, and the row of the toolbar's other buttons it opens into (address bar in the sidebar).
  * The pill is a 4 px line; it opens when the pointer RESTS on it (a short rest, or a slow pointer: ui/addressInSidebar.ts `createPillDwell`; a pointer just
@@ -10,8 +13,13 @@ import { publishAddressSidebar } from '../ui/addressSidebarStore';
  *
  * The address field can be in use meanwhile (beta.12, item 30): the pill stays where it is, and the row opens over it with the field's focus and selection
  * untouched. A press on the pill or the row never takes the focus from the field (mousedown is not default-handled; the click still goes through). Only the
- * open suggestion list, which hangs over this place, hides the pill and keeps the row shut (`suggesting`). */
+ * open suggestion list, which hangs over this place, hides the pill and keeps the row shut (`suggesting`).
+ *
+ * The update shows on the line (beta.13.3): while it downloads a row of dots in the update's own look fills along the line with the real progress under a travelling shine;
+ * paused or stopped, the same fill held still and dimmed; ready, the line takes the accent; otherwise the line is as it always was. Speed Off and reduced motion get the
+ * dotted progress without the shine. Nothing of the layout or the hit area changes (ui/updateLine.ts, features/updates/UpdateLine.tsx, address-in-sidebar.css). */
 export function AddressMore({ label, held, suggesting, scale, children }: { label: string; /** A menu from the row is open. */ held: boolean; /** The address suggestions are open: their list hangs over the pill's place. */ suggesting: boolean; /** The animation-speed multiplier. */ scale: number; children: ReactNode }) {
+  const update = useUpdateStatus(), look = lineLookOf(update?.phase), calm = scale === 0;
   const [open, setOpen] = useState(false), openRef = useRef(false), heldRef = useRef(held), suggestingRef = useRef(suggesting), inside = useRef(false), wrap = useRef<HTMLDivElement>(null);
   openRef.current = open; heldRef.current = held; suggestingRef.current = suggesting;
   const dwell = useMemo(() => createPillDwell({ isOpen: () => openRef.current, setOpen: next => { openRef.current = next; setOpen(next); }, held: () => heldRef.current }), []);
@@ -47,7 +55,10 @@ export function AddressMore({ label, held, suggesting, scale, children }: { labe
       onMouseDown={event => { if (pressKeepsFieldFocus(event.target as Element)) event.preventDefault(); }}
       onFocus={event => { if (!openRef.current && !suggestingRef.current && event.target instanceof Element && event.target.matches(':focus-visible')) dwell.toggle(); }}
       onBlur={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) dwell.leave(inside.current); }}>
-      <div className="sb-addr-shape"><div className="sb-addr-more-in" inert={!open || undefined}>{children}</div></div>
+      <div className="sb-addr-shape" data-update={look ?? undefined}>
+        {look && <UpdateLine look={look} progress={(update?.percent ?? 0) / 100} running={look === 'run' && !calm && !open && !suggesting} still={calm}/>}
+        <div className="sb-addr-more-in" inert={!open || undefined}>{children}</div>
+      </div>
       <button type="button" className="sb-addr-pill" aria-expanded={open} aria-label={label} onClick={() => dwell.toggle()}/>
     </div>
   );

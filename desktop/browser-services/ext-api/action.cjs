@@ -6,6 +6,7 @@ const {parseColor,toCss}=require('./action/color.cjs');
 const {normalizeIcon}=require('./action/icon.cjs');
 const bridge=require('./surfaces/bridge.cjs');
 const activeTab=require('./surfaces/active-tab.cjs');
+const ownPage=require('./surfaces/own-page.cjs');
 
 const DEFAULT_BACKGROUND=[0,0,0,0],DEFAULT_TEXT=[255,255,255,255];
 const FIELDS=['title','text','color','colorValue','textColor','textColorValue','enabled'];   // what a tab's own entry may hold on top of the global value
@@ -108,7 +109,19 @@ module.exports={
    if(details&&typeof details==='object'&&typeof details.extensionId==='string'){
     if(details.eventType==='click'&&!enabledFor(details.extensionId,details.tabId))return undefined;
     // The click is the person using the extension on this tab: activeTab (Chrome grants it the same way).
-    if(details.eventType==='click'){try{const wc=api.store()?.getTabById?.(details.tabId);if(wc&&!wc.isDestroyed?.())activeTab.grant(api.session,details.extensionId,wc.id,wc.getURL());}catch{/* no tab */}}
+    if(details.eventType==='click'){
+     try{
+      const wc=api.store()?.getTabById?.(details.tabId),extension=api.getExtension(details.extensionId);
+      if(wc&&!wc.isDestroyed?.()){
+       if(ownPage.pageInFront(api,extension,wc)===false){
+        // Another tab is in front: one of Acira's own pages (Settings, New tab), reached through this website tab behind it. As in Chrome on a chrome:// page, the popup opens and
+        // anything else is told about that page; the website behind gets no grant and no onClicked.
+        const front=ownPage.frontTab(api,extension);
+        if(front&&!engine()?.getPopupUrl?.(details.extensionId,wc.id)){api.emit(details.extensionId,'browserAction.onClicked',front);return undefined;}
+       }else activeTab.grant(api.session,details.extensionId,wc.id,wc.getURL());
+      }
+     }catch{/* no tab */}
+    }
     if(details.eventType==='contextmenu'&&showMenu(event,details))return undefined;
    }
    return original?original(event,details):undefined;

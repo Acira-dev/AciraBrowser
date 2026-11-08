@@ -11,7 +11,7 @@ function manifestExtension(id, manifest, name = 'Test extension', extra = {}) {
   return {id, name, manifest, path: extra.path || '', version: manifest.version || '1.0', ...extra};
 }
 
-function host({packages = [], extensions, userData = null, storeKey = 'profile-1', tabs = {}, permissions = null, getWindow = () => null, runtimeExtras = {}, seed = null, store = {}} = {}) {
+function host({packages = [], extensions, userData = null, storeKey = 'profile-1', sourceProfileId = '', tabs = {}, permissions = null, getWindow = () => null, runtimeExtras = {}, seed = null, store = {}} = {}) {
   const handlers = new Map(), sent = [], broadcast = [];
   const loaded = new Map((extensions || [manifestExtension(ID, {manifest_version: 3, name: 'Test', version: '1', permissions: ['contextMenus', 'notifications'], action: {}, background: {service_worker: 'sw.js'}})]).map(e => [e.id, e]));
   const listeners = new Map();
@@ -33,7 +33,7 @@ function host({packages = [], extensions, userData = null, storeKey = 'profile-1
   const session = {extensions: sessionExtensions};
   if (seed) seed({router, runtime, session, handlers});
   const table = permissions || {has: () => true};
-  const base = {session, runtime, router, userData, storeKey, getExtension: id => loaded.get(id) || null, permissions: table, getWindow, log: () => {}, t: id => id};
+  const base = {session, runtime, router, userData, storeKey, sourceProfileId, getExtension: id => loaded.get(id) || null, permissions: table, getWindow, log: () => {}, t: id => id};
   const chosen = extApi.loadPackages({fresh: true}).filter(p => packages.includes(p.name));
   const installed = extApi.installPackages(base, {packages: chosen, log: (...args) => { throw new Error(args.join(' ')); }});
   const ext = (id = ID) => loaded.get(id);

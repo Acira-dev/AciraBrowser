@@ -202,6 +202,29 @@ function createTabsModel(api) {
     return list.find(record => record.id === id) || list.find(record => record.id === aliases.get(id)) || null;
   }
 
+  /**
+   * The id an extension knows the tab by, for a page (webContents): what chrome.tabs gave it, not the page's own number (they differ for a tab that was asleep or got a
+   * new page). Every event or payload that names a tab for an extension must carry this id. Cheap enough for per-request use: no records are built, and the answer is
+   * kept for a few seconds per page. A page that is no tab of Acira's strip (an extension window) is known by its own id.
+   */
+  const idCache = new WeakMap();
+  function idOfPage(wc) {
+    if (!wc || typeof wc.id !== 'number') return undefined;
+    const now = Date.now(), cached = idCache.get(wc);
+    if (cached && now - cached.at < 3000) return cached.id;
+    let id = wc.id, found = false;
+    for (const w of windows()) {
+      for (const tab of w.state.tabs || []) {
+        if (w.pages && w.pages.get(tab.id)?.view?.webContents !== wc) continue;
+        const known = ids.get(keyOf(w, tab));
+        if (known !== undefined) { id = known; found = true; }
+        break;
+      }
+    }
+    if (found) idCache.set(wc, {id, at: now});   // an id nobody assigned yet is looked for again (the first records() after a wake assigns it)
+    return id;
+  }
+
   /** The window id a call means: a given id (WINDOW_ID_CURRENT = the caller's), else the caller's window. Throws Chromium's errors. */
   function resolveWindow(event, windowId) {
     const ws = windows();
@@ -405,7 +428,7 @@ function createTabsModel(api) {
   };
 
   return {
-    windows, records, byTabId, handoff, aliases, resolveWindow, currentWindow, chromeTab, canSee, query, targetRecord, compilePattern, windowObject,
+    windows, records, byTabId, idOfPage, handoff, aliases, resolveWindow, currentWindow, chromeTab, canSee, query, targetRecord, compilePattern, windowObject,
     autoDiscardable, mutedBy, accessed, groupNumber, ordinary
   };
 }

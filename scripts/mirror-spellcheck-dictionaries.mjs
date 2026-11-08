@@ -11,9 +11,11 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const electron = path.join(root, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
+// The package's own answer for the binary's path (Electron.app/Contents/MacOS/Electron on a Mac; dist/electron only exists on Linux).
+const electron = createRequire(import.meta.url)(path.join(root, 'node_modules', 'electron'));
 const chrome = execFileSync(electron, ['-p', 'process.versions.chrome'], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8' }).trim();
 if (!/^\d+\.\d+\.\d+\.\d+$/.test(chrome)) throw new Error('Unexpected Chromium version: ' + chrome);
 
@@ -32,16 +34,17 @@ const names = regions.map(region => (region + (special.get(region) || versioned)
 console.log(`Chromium ${chrome}: ${names.length} dictionaries`);
 if (process.argv.includes('--fetch')) {
   const out = path.join(root, 'dist-dictionaries'); await fs.mkdir(out, { recursive: true });
-  const sums = [];
+  const sums = [], skipped = [];
   for (const name of names) {
     const file = await fetch('https://redirector.gvt1.com/edgedl/chrome/dict/' + name);
-    if (!file.ok) { console.log(`  skipped ${name} (${file.status})`); continue; }
+    if (!file.ok) { console.log(`  skipped ${name} (${file.status})`); skipped.push(name); continue; }
     const bytes = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(path.join(out, name), bytes);
     sums.push(`${createHash('sha256').update(bytes).digest('hex')}  ${name}`);
     console.log(`  ${name}  ${(bytes.length / 1024).toFixed(0)} KB`);
   }
   await fs.writeFile(path.join(out, 'SHA256SUMS'), sums.join('\n') + '\n');
-  console.log(`Wrote ${sums.length} files to ${out}. Upload them to the 'spellcheck-dictionaries' release.`);
+  console.log(`Wrote ${sums.length} files to ${out}. Next: node scripts/prepare-update-host-files.mjs (they are served from update.acirabrowser.com/spellcheck-dictionaries/).`);
+  if (skipped.length) { console.error(`${skipped.length} dictionaries could not be fetched (${skipped.join(', ')}): a language without its file gets no spell checking. Run again.`); process.exitCode = 1; }
 } else console.log(names.join('\n'));
 // (No process.exit: on Windows it can trip a libuv assertion while fetch's sockets are still closing.)

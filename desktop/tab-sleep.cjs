@@ -55,7 +55,8 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
    // A frozen page cannot run the safety check; nothing to do for it until it is old enough to discard (or the machine is short of memory).
    if(item.frozen&&idle<limit)continue;
    if(item.frozen){item.frozen=false;try{await adapter.unfreeze(tab.id);}catch{}}
-   const reason=await adapter.protectedReason(tab,choice);
+   // The adapter is told whether the machine is short of memory: a pinned tab is kept awake only while it is not (desktop/main.cjs protectedReason).
+   const reason=await adapter.protectedReason(tab,choice,{pressure});
    if(reason){report.protected[tab.id]=reason;continue;}
    if(idle>=limit&&time>=item.retryAfter){
     const result=await adapter.sleep(tab.id);
@@ -112,7 +113,9 @@ function inspectPage(){
   else if(element.tagName==='TEXTAREA'&&element.value!==element.defaultValue)return {safe:false,reason:'edited-form'};
   else if(element.tagName==='SELECT'){const options=[...element.options],selected=options.filter(option=>option.selected).map(option=>option.index),defaults=options.filter(option=>option.defaultSelected).map(option=>option.index);if(!element.multiple&&!defaults.length&&options.length)defaults.push(0);if(JSON.stringify(selected)!==JSON.stringify(defaults))return {safe:false,reason:'edited-form'};}
  }
- for(const media of document.querySelectorAll('audio,video'))if(!media.paused&&!media.ended||media.srcObject instanceof MediaStream&&media.srcObject.getTracks().some(track=>track.readyState==='live'))return {safe:false,reason:'playing-media-or-live-stream'};
+ // A looping video with its sound off (a page's background or hero clip) has no place to lose and nothing to hear: it starts again when the page wakes. Anything else that plays, and any live stream, keeps the tab awake.
+ const ambient=media=>media.tagName==='VIDEO'&&media.loop===true&&(media.muted===true||media.volume===0)&&!(media.srcObject instanceof MediaStream);
+ for(const media of document.querySelectorAll('audio,video'))if(!media.paused&&!media.ended&&!ambient(media)||media.srcObject instanceof MediaStream&&media.srcObject.getTracks().some(track=>track.readyState==='live'))return {safe:false,reason:'playing-media-or-live-stream'};
  return {safe:true};
 }
 module.exports={underPressure,inspectPage,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};

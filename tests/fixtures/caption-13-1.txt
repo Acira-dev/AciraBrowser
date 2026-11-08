@@ -1,0 +1,23 @@
+// beta.13.1's caption code (v0.1.0-beta.13.1-final, desktop/main.cjs: the state line, guardCaption with its 200 ms setTimeout release, captionBacking and setCaption),
+// copied verbatim. tests/caption-main-vm.cjs runs it next to the current code so a test can show what 13.1 did and that the fix does not. Do not edit.
+let captionKey='',captionHiddenNow=false,captionShownAt=0,captionGuard=null,captionGuardTimer=null,captionNotchShown=false;
+/** Windows: while the caption is hidden (and for 200ms after it shows) minimise and maximise are switched off, so a click on the hidden buttons does nothing; close is refused in the close handler. */
+function guardCaption(hidden){if(process.platform!=='win32'||!mainWindow||mainWindow.isDestroyed())return;clearTimeout(captionGuardTimer);captionGuardTimer=null;const release=()=>{if(!captionGuard||mainWindow.isDestroyed())return;mainWindow.setMinimizable(captionGuard.min);if(captionGuard.max!==null)mainWindow.setMaximizable(captionGuard.max);captionGuard=null;};if(hidden){if(captionGuard)return;captionGuard={min:mainWindow.isMinimizable(),max:mainWindow.isMaximized()?null:mainWindow.isMaximizable()};mainWindow.setMinimizable(false);if(captionGuard.max!==null)mainWindow.setMaximizable(false);}else if(captionGuard)captionGuardTimer=setTimeout(release,200);}
+function nativeTokens()
+const captionBacking=(hex,alpha)=>{const m=/^#([\da-f]{3}|[\da-f]{6})$/i.exec(hex||'');if(!m)return hex;const h=m[1].length===3?m[1].replace(/./g,'$&$&'):m[1];return `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},${alpha})`;};
+function setCaption(){
+ if(!mainWindow||mainWindow.isDestroyed())return;
+ const dark=layout.appearance==='dark',tone=layout.captionColor||(dark?'#27282b':'#eef0f2');
+ const color=currentMaterial()!=='none'?'#00000000':process.platform==='darwin'?nativeTokens()['--frame']:tone;
+ /* Windows, Sidebar mode: the caption overlay is a notch over the page's top-right corner, shown only while the pointer is along the top of the window (caption-notch.cjs, edge-reveal.cjs's poller). */
+ const notch=process.platform==='win32'&&layout.captionNotch===true;if(!notch&&captionNotchShown)captionNotchShown=false;
+ const floating=layout.captionFloat===true||notch,hidden=process.platform==='win32'&&(notch?!captionNotchShown:layout.captionHidden===true);
+ if(captionHiddenNow&&!hidden)captionShownAt=Date.now();
+ if(captionHiddenNow!==hidden)guardCaption(hidden);
+ captionHiddenNow=hidden;
+ const height=Math.round(layout.captionHeight||40);
+ const caption=hidden?{color:'#00000000',symbolColor:'#00000000',height,background:color}:{color:floating?captionBacking(tone,notch?1:.88):color,symbolColor:layout.captionForeground||(dark?'#f3f4f5':'#26282b'),height,...(floating?{background:color}:{})};
+ const key=JSON.stringify([caption,layout.captionHidden===true]);
+ if(key!==captionKey){updateCaption(mainWindow,{...caption,hidden:layout.captionHidden===true});captionKey=key;}
+}
+const uiCrashTimes=[];

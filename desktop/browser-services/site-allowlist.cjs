@@ -3,8 +3,8 @@
 // dashboard, table site_allowlist). A host on it is never blocked as a whole host by the threat lists (threat-lists.cjs matchEntry, the same place
 // as the top-sites guard) nor by the look-alike address check; a listed path on it still is. Fetched once a day with the threat lists: a plain GET with no
 // cookie, no query and no identifier. A failed or odd answer changes nothing: the last good copy (or none) stays in use, so blocking stays as it was.
-// beta.11: the list is a static file beside the update feed (`site-allowlist.json`, FILE_NAME; the same raw.githubusercontent.com host the update check
-// already uses), so asking for it tells no Acira-run server anything. Until that file is published (the feed answers 404 or 410) the client still asks
+// beta.11: the list is a static file beside the update feed (`site-allowlist.json`, FILE_NAME; the same update.acirabrowser.com host the update check
+// asks first), so asking for it tells no Acira-run server anything. Until that file is published (the feed answers 404 or 410) the client still asks
 // the old read-only Supabase function (supabase/functions/allowlist), and only then: a network failure or a 5xx keeps the last copy and asks nobody
 // else. Once the file exists the Supabase request never happens; the fallback can then be deleted (docs/launch/SITE_ALLOWLIST.md).
 const fs = require('node:fs'), path = require('node:path'), { randomUUID } = require('node:crypto');

@@ -65,7 +65,7 @@ test('Settings: the row is in Tabs › Sidebar and, for Full, Compact and Focus,
   const settings = readFileSync(new URL('../src/features/BrowserSettings.tsx', import.meta.url), 'utf8');
   const row = rows.indexOf('id="sidebar-peek"');
   assert.ok(row > 0, 'the shared sidebar rows draw it');
-  assert.match(rows.slice(row - 500, row), /if \(!s\.verticalTabs\) return null;[\s\S]*if \(windowView !== 'seamless' && sidebarModeOn\(s\)\) return null;\s*if \(windowView !== 'seamless'\)/, 'only with tabs in the sidebar, not in Seamless, and not in Sidebar mode (a closed sidebar always comes back from the edge there)');
+  assert.match(rows.slice(row - 500, row), /if \(!s\.verticalTabs\) return null;[\s\S]*if \(windowView !== 'seamless' && \(sidebarModeOn\(s\) \|\| hideToolbarOn\(s, windowView\)\)\) return null;\s*if \(windowView !== 'seamless'\)/, 'only with tabs in the sidebar, not in Seamless, not in Sidebar mode and not with the toolbar hidden (a closed sidebar always comes back from the edge there)');
   assert.match(rows.slice(row, row + 400), /sidebarPeekOf\(s\)\[windowView\]/, 'it reads and writes the selected view\'s switch');
   const view = settings.indexOf('id="window-view"'), edge = settings.indexOf('{windowView !== "seamless" && <SidebarEdgeRows');
   assert.ok(view > 0 && edge > view, 'Appearance › Layout keeps it right after the Window view cards');
