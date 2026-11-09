@@ -179,6 +179,7 @@ module.exports = {
     // Electron dispatches neither this nor onInstalled; both wait the same way for the listener the worker registers in its first run.
     const startedAt = Date.now(), unloadedAt = new Map(), everUnloaded = new Set(), seenThisRun = new Set(), registeredAt = new Map(), waiting = new Map();
     const ANNOUNCED = new Set(['runtime.onInstalled', 'runtime.onStartup']);
+    const lastUpdate = new Map(), RELOAD_UPDATE_GAP = 5000;   // extension id -> when onInstalled 'update' was last announced
     const slot = (id, name) => `${name}|${id}`;
     const flush = (id, name) => {
       const timeout = setTimeout(() => {   // the listener's own side has to be ready for the event too
@@ -217,9 +218,13 @@ module.exports = {
       let details = null;
       if (!before) details = {reason: 'install'};
       else if (before.version && before.version !== version) details = {reason: 'update', previousVersion: before.version};
-      else if (since && Date.now() - since < 30000) details = {reason: 'update', previousVersion: before.version || version};   // a reload
+      // A reload is an update, but not again within 5 s of the last one: an extension that calls chrome.runtime.reload() inside its onInstalled('update')
+      // handler (Surfshark does, to apply an update) is reloaded by that call, which is not an update in Chrome for a packed extension: announcing it again
+      // made every reload of Surfshark an endless loop (unload and load about 12 times a second, forever).
+      else if (since && Date.now() - since < 30000 && Date.now() - (lastUpdate.get(id) || 0) > RELOAD_UPDATE_GAP) details = {reason: 'update', previousVersion: before.version || version};   // a reload
       else if (record.changedBrowser && first) details = {reason: 'chrome_update'};
       const startup = !!before && first && !everUnloaded.has(id) && Date.now() - startedAt < 120000;
+      if (details && details.reason === 'update') lastUpdate.set(id, Date.now());
       seenThisRun.add(id);
       record.state.extensions[id] = {version};
       record.save();

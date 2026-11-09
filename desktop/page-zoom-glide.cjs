@@ -15,6 +15,7 @@
 // The zoom LEVEL is never touched by the glide: the saved level, the chip and the bubble change on the press (main.cjs browserCommand);
 // only the picture catches up. Anything the glide cannot do (no motion, a hidden page, a debugger already attached by DevTools or an
 // extension, a command that fails, a jump of more than 1.6x) lands at once, which is exactly the old cut.
+const pageDebugger = require('./page-debugger.cjs');
 const MAX_RATIO = 1.6, TICK_MS = 5, SETTLE_SCALE = .001, SETTLE_SPEED = .06, DEADLINE_FACTOR = 3, DEADLINE_MIN_MS = 700;
 const EPS = 1e-6;
 
@@ -65,8 +66,8 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
   const isGliding = wc => active.has(wc);
 
   function detach(g) {
-    const done = () => { try { if (!g.wc.isDestroyed() && g.wc.debugger.isAttached()) g.wc.debugger.detach(); } catch { /* already gone */ } };
-    try { g.wc.debugger.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: 1 }).then(done, done); } catch { done(); }
+    const done = () => { try { g.lease.release(); } catch { /* already gone */ } };
+    try { g.lease.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: 1 }).then(done, done); } catch { done(); }
   }
   /** The glide is over: the page is laid out at its target at scale 1 and the debugger is let go. */
   function land(g, apply = true) {
@@ -79,7 +80,7 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
   function send(g, scale) {
     if (g.busy) return;
     g.busy = true;
-    try { g.wc.debugger.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: Math.max(1, scale) }).then(() => { g.busy = false; }, () => { g.busy = false; land(g); }); } catch { g.busy = false; land(g); }
+    try { g.lease.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: Math.max(1, scale) }).then(() => { g.busy = false; }, () => { g.busy = false; land(g); }); } catch { g.busy = false; land(g); }
   }
   function tick(g) {
     if (g.over || g.waiting) return;
@@ -109,7 +110,7 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
       if (g.over || !g.waiting) return;
       g.waiting = false; cancelLater(g.timer); g.at = now(); g.sent = g.x; g.deadline = g.at + Math.max(DEADLINE_MIN_MS, g.seconds * 1000 * DEADLINE_FACTOR); tick(g);
     };
-    try { g.wc.debugger.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: Math.max(1, g.x) }).then(answered, () => land(g)); } catch { land(g); }
+    try { g.lease.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: Math.max(1, g.x) }).then(answered, () => land(g)); } catch { land(g); }
   }
 
   /** The zoom of `wc` is asked to become `target` (a fraction). Returns true when the glide has it (the caller sets nothing), false when
@@ -129,17 +130,18 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
       return true;
     }
     if (!usable) return false;
-    try { if (wc.debugger.isAttached()) return false; } catch { return false; }
     const layout = wc.getZoomFactor(), first = planGlide({ layout, scale: 1 }, target, cap);
     if (first.kind !== 'glide') return false;
-    try { wc.debugger.attach('1.3'); } catch { return false; }
-    g = { wc, target, layout, seconds, visible, x: 1, from: 1, goal: 1, v: 0, speed: 0, at: now(), sent: NaN, busy: false, started: false, over: false, timer: null, deadline: Infinity };
+    // The page's debugger is shared (page-debugger.cjs): a tab that is told a colour scheme keeps it attached, and the glide rides on that session. Null: somebody else's debugger is attached.
+    const lease = pageDebugger.acquire(wc, 'zoom-glide');
+    if (!lease) return false;
+    g = { wc, lease, target, layout, seconds, visible, x: 1, from: 1, goal: 1, v: 0, speed: 0, at: now(), sent: NaN, busy: false, started: false, over: false, timer: null, deadline: Infinity };
     active.set(wc, g);
     wc.once?.('destroyed', () => { g.over = true; active.delete(wc); });
     // The instant path first clears any pinch magnification the person left (visual zoom limits 1..1, then 1..5 again). The glide does too, but
     // only when the page is magnified: the toggle costs a page-wide layout (45 ms on a heavy page) and the glide must not wait for it when there
     // is nothing to clear. It starts once that is answered, so the first scale is not clamped away.
-    const magnified = () => { try { return Promise.resolve(wc.debugger.sendCommand('Page.getLayoutMetrics')).then(m => { const scale = m?.cssVisualViewport?.scale ?? m?.visualViewport?.scale; return !(Number.isFinite(scale) && scale < 1 + 1e-3); }, () => true); } catch { return Promise.resolve(true); } };
+    const magnified = () => { try { return Promise.resolve(g.lease.sendCommand('Page.getLayoutMetrics')).then(m => { const scale = m?.cssVisualViewport?.scale ?? m?.visualViewport?.scale; return !(Number.isFinite(scale) && scale < 1 + 1e-3); }, () => true); } catch { return Promise.resolve(true); } };
     magnified().then(pinched => pinched ? Promise.resolve(wc.setVisualZoomLevelLimits(1, 1)).then(() => wc.setVisualZoomLevelLimits(1, 5)) : null).catch(() => {}).then(() => {
       if (g.over) return;
       const plan = planGlide({ layout: g.layout, scale: 1 }, g.target, cap);

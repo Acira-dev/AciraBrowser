@@ -25,6 +25,16 @@ function copyShared(from, to) {
   }
 }
 
+/** Removes the private copy. On Windows a virus scanner often still holds a freshly written copy of a big database (EBUSY/EPERM): it is tried again a few times, and then once
+ *  more a little later; whatever happens it never throws, so a good read is not turned into "couldn't read" by the clean-up after it. */
+function removeCopy(directory) {
+  const attempt = () => fs.rmSync(directory, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
+  try { attempt(); } catch {
+    const later = setTimeout(() => { try { attempt(); } catch { /* left in the temporary folder, which Windows empties itself */ } }, 5000);
+    later.unref?.();
+  }
+}
+
 /** Copies `name` (required) plus `name-wal` / `name-journal` (when present) from `location` into a new private folder. */
 function snapshot(location, name) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-import-'));
@@ -35,7 +45,7 @@ function snapshot(location, name) {
     }
     return directory;
   } catch (error) {
-    fs.rmSync(directory, { recursive: true, force: true });
+    removeCopy(directory);
     throw error;
   }
 }
@@ -55,7 +65,7 @@ function readDatabase(location, name, use) {
       failure = error;
     } finally {
       try { input?.close(); } catch {}
-      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+      if (directory) removeCopy(directory);
     }
   }
   let direct = null;
@@ -69,4 +79,4 @@ function readDatabase(location, name, use) {
   }
 }
 
-module.exports = { copyShared, snapshot, readDatabase };
+module.exports = { copyShared, snapshot, readDatabase, removeCopy };

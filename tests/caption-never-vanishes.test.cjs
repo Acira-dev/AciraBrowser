@@ -321,6 +321,43 @@ test('the watcher on its own: a fake clock, a pointer, no main', () => {
   assert.ok(!calls.includes('mac') && !calls.includes('mac refresh'));
 });
 
+test('a notch is not left hidden under a pointer resting at the top when main reset its own state between two looks (a layout that left the mode for a moment); comparing with the poller\'s memory left it so', async () => {
+  const { watchChromeEdges } = require('../desktop/edge-reveal.cjs');
+  for (const [name, withIs] of [['the poller\'s memory (13.1)', false], ['main\'s real state (fix)', true]]) {
+    const ctx = realMainCaption({ layout: notch });
+    ctx.api.setCaption();
+    let timeout = null;
+    const item = { window: ctx.window, state: { settings: { verticalTabs: true } }, emit() {}, size: () => ({ topHeight: 6, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: false, side: true }), docked: () => true, suspended: () => false,
+      notch: () => ({ active: ctx.layout.captionNotch === true, hidden: ctx.api.hiddenNow() }), notchShown: ctx.api.notchShown, ...(withIs ? { notchIsShown: ctx.api.notchIsShown } : {}) };
+    watchChromeEdges({ app: { whenReady: () => Promise.resolve(), on() {} }, windows: () => [item], screen: ctx.screen, view: () => 'full', now: () => ctx.clock.t, schedule: fn => { timeout = fn; return { unref() {} }; }, cancel() {} });
+    await Promise.resolve();
+    const run = ms => { for (let i = 0; i < ms / 16; i++) { ctx.advance(16); const fn = timeout; timeout = null; fn(); } };
+    ctx.screen.point = { x: ctx.state.bounds.x + 400, y: ctx.state.bounds.y + 2 };
+    timeout(); run(400);
+    assert.equal(ctx.api.hiddenNow(), false, name + ': the pointer rests at the top, the notch shows');
+    // the layout leaves the mode and comes back between two looks (a docked right sidebar, a view switch): main resets its own state
+    ctx.layout.captionNotch = false; ctx.api.setCaption();
+    ctx.layout.captionNotch = true; ctx.api.setCaption();
+    assert.equal(ctx.api.hiddenNow(), true, name + ': hidden by the reset');
+    run(400);
+    assert.equal(ctx.api.hiddenNow(), !withIs, name + (withIs ? ': shown again at the next look, the pointer never moved' : ': still hidden, the poller believes it is shown and never says so again'));
+  }
+});
+
+test('an overlay that could not be set is not "already sent" and does not take the layout with it: it is tried again after the next event, three times at most', () => {
+  const ctx = realMainCaption({ layout: plain });
+  ctx.state.failOverlay = 1;
+  assert.doesNotThrow(() => ctx.api.setCaption(), 'the layout call survives');
+  assert.equal(ctx.state.drawn, null, 'nothing was drawn');
+  assert.match(ctx.logged[0], /^Caption overlay: Error: the overlay could not be set/, 'written down');
+  ctx.advance(SETTLE_MS + 5);
+  assert.deepEqual(onScreen(ctx), { buttons: 3 }, 'sent again by the retry');
+  const stuck = realMainCaption({ layout: plain });
+  stuck.state.failOverlay = 99;
+  stuck.api.setCaption(); stuck.advance(10 * (SETTLE_MS + 5));
+  assert.equal(99 - stuck.state.failOverlay, 4, 'one try and three retries, then it stops (the next layout change tries again)');
+});
+
 test('the edge poller keeps looking when one window\'s getter throws (it used to stop for every window, and with it every reveal and the corner fallback)', () => {
   const { watchChromeEdges } = require('../desktop/edge-reveal.cjs');
   const clock = { t: 5000 }, ticks = [];

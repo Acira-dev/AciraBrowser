@@ -296,14 +296,18 @@ async function download({url,mirrors=[],first=0,firstByte=FIRST_BYTE,onSource=()
  *  file, so the next update can be differential (its old blockmap is then on this computer). `helper` is electron-updater's DownloadedUpdateHelper:
  *  its clear() also forgets the update it took earlier in this run, which would otherwise hide this one when the file name is the same (every
  *  Windows setup is AciraBrowserSetup.exe), and electron-updater would download it all again by itself. */
-async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null,helper=null}){
+/** Windows: a virus scanner holds a file it has just seen (the 150 MB setup that was just written and checked, or an older one) for a moment, and a rename or removal then fails
+ *  with EPERM, EBUSY or EACCES. electron-updater tries a busy file again for 30 s; so does the hand-over (about 1.5 s here), instead of failing the whole update into its retry ladder. */
+const HELD=new Set(['EPERM','EBUSY','EACCES']);
+async function untilFree(step,{tries=8,wait=250}={}){for(let attempt=1;;attempt++){try{return await step();}catch(error){if(!HELD.has(error?.code)||attempt>=tries)throw error;await new Promise(resolve=>setTimeout(resolve,wait));}}}
+async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null,helper=null,retry={}}){
  if(path.basename(name)!==name||!name)throw new Error('The update file name is not valid.');
  if(helper)await helper.clear();
  await fsp.mkdir(pendingDir,{recursive:true});
  // whatever else is in the folder is a stale download (electron-updater empties it the same way when it starts a new one)
- for(const entry of await fsp.readdir(pendingDir))await fsp.rm(path.join(pendingDir,entry),{recursive:true,force:true});
+ for(const entry of await fsp.readdir(pendingDir))await untilFree(()=>fsp.rm(path.join(pendingDir,entry),{recursive:true,force:true}),retry);
  const target=path.join(pendingDir,name);
- try{await fsp.rename(file,target);}catch(error){if(error.code!=='EXDEV')throw error;await fsp.copyFile(file,target);await fsp.rm(file,{force:true});}
+ try{await untilFree(()=>fsp.rename(file,target),retry);}catch(error){if(error.code!=='EXDEV')throw error;await untilFree(()=>fsp.copyFile(file,target),retry);await fsp.rm(file,{force:true}).catch(()=>{});}
  await fsp.writeFile(path.join(pendingDir,'update-info.json'),JSON.stringify({fileName:name,sha512,isAdminRightsRequired:isAdminRightsRequired===true}));
  if(blockMap)await fsp.writeFile(path.join(pendingDir,'current.blockmap'),blockMap);
  discard(path.dirname(file));

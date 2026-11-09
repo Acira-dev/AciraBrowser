@@ -50,7 +50,8 @@ function resolveDefaultShortcut(input, platform = process.platform) {
   // Option+arrows move by word and Option+letters type characters on macOS.
   if(mac)return null;
   // Alt+1–8: the Nth workspace (R3-57). Ctrl+1–9 is go to tab, Ctrl+Shift+1–6 the split layouts, so Alt is the free one.
-  if(!shift&&/^[1-8]$/.test(key))return input.isAutoRepeat?null:{action:'switch-workspace',index:Number(key)-1};
+  // Not the numeric keypad: Alt held while typing digits there is how Windows types a character by its code (Alt+0233 = é); those keys belong to the system, as in Chrome.
+  if(!shift&&!/^Numpad\d$/.test(input.code||'')&&/^[1-8]$/.test(key))return input.isAutoRepeat?null:{action:'switch-workspace',index:Number(key)-1};
   if(key==='n'&&shift)return {action:'tor-window'}; // N · New Tor window (Brave's Alt+Shift+N)
   if(key==='arrowleft')return {action:'back'};if(key==='arrowright')return {action:'forward'};if(key==='home')return {action:'home'};if(key==='d')return {action:'address'};if(key==='f'||key==='e')return {action:'menu'};}
  if(mod&&!input.alt){

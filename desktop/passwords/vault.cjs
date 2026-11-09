@@ -10,6 +10,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {normalizeOrigin,classify,displayHost,RANK}=require('./origin-match.cjs');
 const {tr}=require('./text.cjs');
+const {writeFileAtomic}=require('../atomic-file.cjs');
 
 const VERSION=1,MAX_RECORDS=10000,LIMITS={origin:2048,username:512,password:1024,note:4096};
 const SAFE_PROFILE=/^[A-Za-z0-9_.:-]{1,120}$/,SAFE_RECORD=/^[0-9a-f]{32}$/;
@@ -37,7 +38,7 @@ function createVault({dir,keys,now=Date.now,randomBytes=crypto.randomBytes}){
   if(vaultFiles().length)fail('key-missing',tr('pw.vault.keyMissing','The password vault’s key is missing. Your saved passwords can’t be opened.'));
   const fresh=randomBytes(32);
   fs.mkdirSync(dir,{recursive:true});
-  const tmp=`${file}.${process.pid}.tmp`;fs.writeFileSync(tmp,JSON.stringify({v:VERSION,wrapped:keys.wrap(fresh).toString('base64')}),{mode:0o600});fs.renameSync(tmp,file);
+  writeFileAtomic(file,JSON.stringify({v:VERSION,wrapped:keys.wrap(fresh).toString('base64')}),{mode:0o600}); // Windows: a scanner can refuse the rename for a moment (atomic-file.cjs retries)
   master=fresh;return master;
  }
  const profileKey=profileId=>Buffer.from(crypto.hkdfSync('sha256',loadMaster(true),Buffer.from(profileId,'utf8'),Buffer.from('acira-passwords/v1'),32));
@@ -71,10 +72,10 @@ function createVault({dir,keys,now=Date.now,randomBytes=crypto.randomBytes}){
  }
  function persist(profileId,state){
   fs.mkdirSync(dir,{recursive:true});
-  const file=fileOf(profileId),tmp=`${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp,JSON.stringify({v:VERSION,profileId,records:[...state.records.values()]}),{mode:0o600});
+  const file=fileOf(profileId);
   try{if(fs.existsSync(file))fs.copyFileSync(file,`${file}.bak`);}catch{}
-  fs.renameSync(tmp,file);
+  // Written beside the file, flushed and renamed over it; on Windows a virus scanner or the indexer can refuse the rename for a moment (EPERM/EBUSY), which atomic-file.cjs tries again.
+  writeFileAtomic(file,JSON.stringify({v:VERSION,profileId,records:[...state.records.values()]}),{mode:0o600});
  }
  /** Decrypts every record once per change (metadata only is kept); a record that fails authentication is counted, not removed. */
  function indexOf(profileId){

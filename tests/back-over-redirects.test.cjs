@@ -40,5 +40,6 @@ test('Back from the button, the keys and the app command uses it; Forward is unc
  assert.ok(block.includes("dispatch({type:'tab.history',direction:-1,steps:skip})"));
  assert.ok(block.includes("wc.navigationHistory[c.type==='back'?'goBack':'goForward']()"),'otherwise the page\'s own Back and Forward, as before');
  assert.ok(main.includes("case 'back':case 'forward':if(active.contentKind==='web')browserCommand({type:command.action,tabId:active.id})"),'Cmd+[, Cmd+Left, the mouse back button and the menu come through browserCommand');
- assert.ok(app.includes("disabled={tab.contentKind === 'web' ? !tab.canGoBack && !tab.history.slice(0, tab.historyIndex).some(url => url.startsWith('acira://')) :"));
+ assert.ok(app.includes("disabled={tab.contentKind === 'web' ? webBackDisabled(tab) :"));
+ assert.ok(fs.readFileSync(path.join(__dirname,'../src/ui/backButton.ts'),'utf8').includes("tab.history.slice(0, tab.historyIndex).some(url => url.startsWith('acira://'))"),'the rule is unchanged (src/ui/backButton.ts): off unless the page can go back or an app page is behind; an error page with a page behind it also counts');
 });

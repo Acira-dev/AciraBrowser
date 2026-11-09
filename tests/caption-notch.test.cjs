@@ -137,7 +137,7 @@ test('main\'s caption overlay is the notch: floating over the page, opaque in th
   assert.match(main, /const notch=process\.platform==='win32'&&layout\.captionNotch===true;if\(!notch&&captionNotchShown\)captionNotchShown=false;/);
   assert.match(main, /floating=layout\.captionFloat===true\|\|notch,hidden=process\.platform==='win32'&&\(notch\?!captionNotchShown:layout\.captionHidden===true\)/, 'hidden unless the watcher shows it; Seamless\'s own hidden state is untouched');
   assert.match(main, /captionBacking\(tone,notch\?1:\.88\)/, 'the notch is opaque, Seamless\'s floating caption keeps its .88');
-  assert.match(main, /notch:\(\)=>process\.platform==='win32'\?\{active:layout\.captionNotch===true,hidden:captionHiddenNow\}:null,notchShown:/);
+  assert.match(main, /notch:\(\)=>process\.platform==='win32'\?\{active:layout\.captionNotch===true,hidden:captionHiddenNow\}:null,notchIsShown:\(\)=>captionNotchShown,notchShown:/);
   assert.match(validation, /'captionHidden','captionNotch','pageDragging'/);
   assert.match(validation, /boolean\(value\.captionNotch,'Caption notch'\)/);
   assert.match(app, /captionNotchWanted\(document\.documentElement\.dataset\.platform \|\| 'darwin', sbChrome, windowFullscreen, addrSide\)/);

@@ -1,5 +1,6 @@
 'use strict';
 const {spawn}=require('node:child_process'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {repairPath}=require('../windows-registry-text.cjs');
 
 // Native messaging that behaves like Chrome (replaces the handlers electron-chrome-extensions registers):
 //  - a missing, forbidden or dying host ends the call: sendNativeMessage gets its callback with chrome.runtime.lastError, a connectNative
@@ -30,21 +31,25 @@ class FrameReader{
  }
 }
 
-function regQuery(key){
+function regQuery(key,view){
  return new Promise(resolve=>{
   if(process.platform!=='win32')return resolve(null);
-  let output='';const child=spawn('reg',['query',key,'/ve'],{windowsHide:true});
-  child.stdout.on('data',d=>{output+=d;});child.on('error',()=>resolve(null));
+  let output='';const child=spawn('reg',['query',key,'/ve',...(view==='32'||view==='64'?['/reg:'+view]:[])],{windowsHide:true});
+  child.stdout.setEncoding('utf8');child.stdout.on('data',d=>{output+=d;});child.on('error',()=>resolve(null));
   child.on('close',code=>{if(code!==0)return resolve(null);const line=output.split(/\r?\n/).find(l=>/REG_SZ/i.test(l));if(!line)return resolve(null);resolve(line.split(/REG_SZ/i).pop().trim()||null);});
  });
 }
+/** reg.exe prints a non-ASCII letter of the user's folder (C:\Users\José\AppData\Roaming\...) in the console's code page, which reads back as garbage and names no file: the folders Acira knows put the real name back (windows-registry-text.cjs). */
+const knownFolders=(env=process.env,home=os.homedir())=>[env.APPDATA,env.LOCALAPPDATA,env.USERPROFILE,env.ProgramData,env.ProgramFiles,env['ProgramFiles(x86)'],home];
 
 /** Every place Chrome-compatible host manifests live for this name, in lookup order. */
-async function manifestPaths(name,userData,{platform=process.platform,home=os.homedir(),libraryRoot='/Library'}={}){
+async function manifestPaths(name,userData,{platform=process.platform,home=os.homedir(),libraryRoot='/Library',query=regQuery,env=process.env}={}){
  const paths=[];
  if(platform==='win32'){
-  const keys=[];for(const hive of ['HKCU','HKLM'])for(const vendor of VENDORS)keys.push(`${hive}\\Software\\${vendor}\\NativeMessagingHosts\\${name}`);
-  for(const value of await Promise.all(keys.map(regQuery)))if(value)paths.push(value);
+  // Chrome reads the 32-bit view of the registry (KEY_WOW64_32KEY): a host that a 32-bit installer registered under HKLM sits in Wow6432Node, which a plain `reg query` from this 64-bit program does not see.
+  // HKCU is shared by both views. Per machine: the 32-bit view first (Chrome's), then the 64-bit one (a 64-bit installer's), so every host Chrome finds is found here too.
+  const keys=[];for(const hive of ['HKCU','HKLM'])for(const vendor of VENDORS)for(const view of hive==='HKLM'?['32',undefined]:[undefined])keys.push([`${hive}\\Software\\${vendor}\\NativeMessagingHosts\\${name}`,view]);
+  for(const value of await Promise.all(keys.map(([key,view])=>query(key,view))))if(value)paths.push(repairPath(value,knownFolders(env,home)));
  }else if(platform==='darwin'){
   for(const vendor of ['Google/Chrome','Google/ChromeForTesting','Chromium','Microsoft Edge','BraveSoftware/Brave-Browser'])paths.push(path.join(home,'Library','Application Support',vendor,'NativeMessagingHosts',name+'.json'));
   for(const vendor of ['Google/Chrome','Google/ChromeForTesting','Application Support/Chromium','Microsoft/Edge','Application Support/BraveSoftware/Brave-Browser'])paths.push(path.join(libraryRoot,vendor,'NativeMessagingHosts',name+'.json'));

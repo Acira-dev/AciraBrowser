@@ -132,7 +132,9 @@ test('the edge: it opens the menu on a right-click and with the menu key, snaps 
   assert.match(handle, /const target=snapSidebarWidth\(drag\.current\.raw\)/, 'a release lands on the nearest size');
   assert.match(handle, /draggedSidebarWidth\(side,/, 'the drag is the side-aware one');
   assert.match(handle, /sidebarKeyWidth\(side,/);
-  assert.match(sidebar, /const size=useSidebarSize\(clampSidebarWidth\(state\.settings\.sidebarWidth\)\),limit=FAVORITES_LIMIT\[size\]/, 'the Favorites grid follows the size, live while the edge is dragged');
+  // the hook runs before SidebarApps' early returns (React error #310 otherwise: tests/hooks-order.test.ts); the limit follows it
+  assert.match(sidebar, /const size=useSidebarSize\(clampSidebarWidth\(state\.settings\.sidebarWidth\)\);/, 'the Favorites grid follows the size, live while the edge is dragged');
+  assert.match(sidebar, /const limit=FAVORITES_LIMIT\[size\],overflow=/);
   assert.match(sidebar, /const cols=favoriteColumns\(size,tiles\)/);
   assert.doesNotMatch(sidebar, /tiles%3!==0&&tiles%4===0\|\|tiles===4\?4:3/, 'the column rule lives in runtime/sidebarSizes.ts only');
   const layout = read('src/ui/sidebarLayout.ts');

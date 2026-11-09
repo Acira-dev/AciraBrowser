@@ -4,6 +4,7 @@ const { tm } = require('./tm.cjs');
 // conflict and reserved-key checks, safe recording, and the native dispatch layer in front of desktop/shortcuts.cjs.
 const fs=require('node:fs'),path=require('node:path');
 const {bundledTorSupported}=require('./platform.cjs');
+const {writeFileAtomic}=require('./atomic-file.cjs');
 
 const CATEGORIES=['Tabs','Windows','Navigation','Page','Library','Browser'];
 // Labels and categories are the English source: this module loads before the language is known, so the interface shows them
@@ -176,7 +177,7 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
  function save(){
   if(!file)return;
   const body=JSON.stringify({version:1,bindings:{...Object.fromEntries(custom),...Object.fromEntries([...parked].filter(([id])=>!custom.has(id)))}},null,1);
-  fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',body);fs.renameSync(file+'.tmp',file);
+  fs.mkdirSync(path.dirname(file),{recursive:true});writeFileAtomic(file,body); // Windows: a scanner can refuse the rename for a moment (atomic-file.cjs retries)
  }
  function validateTable(bindings){
   if(!bindings||typeof bindings!=='object'||Array.isArray(bindings))throw new Error('Shortcut file has no bindings.');
@@ -188,6 +189,9 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
    if(!supported(BY_ID.get(id))||!Array.isArray(value)||value.length>4)continue;
    const accels=[];
    for(const raw of value){const accel=canonical(raw,platform);if(!accel||restriction(accel,platform))continue;if(seen.has(accel))continue;seen.set(accel,id);accels.push(accel);}
+   // A list the person wrote but none of whose keys can be used (a key this platform or this version refuses, or one another command already has) leaves the command on
+   // its default: only an empty list in the file clears it.
+   if(value.length&&!accels.length)continue;
    next.set(id,accels);
   }
   // A custom accelerator that collides with an untouched default of another command is dropped (defaults stay stable).

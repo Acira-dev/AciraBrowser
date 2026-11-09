@@ -73,7 +73,7 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},pageCreated=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
  let current=null;const adopted=new Map();
  /** The icon this computer already keeps for the link's site (the favicon store), so a site seen before shows its icon at once; '' when there is none. */
  const stored=(profileId,url)=>{try{const icon=storedIcon(profileId,url);return typeof icon==='string'&&icon.length<=MAX_ICON?icon:'';}catch{return '';}};
@@ -117,6 +117,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   const wc=view.webContents,p={frame,view,wc,url:target,sourceTabId,profileId:source.browserProfileId,geometry:null,notice:'',origin,favicon:stored(source.browserProfileId,target),listeners:[]};current=p;
   const on=(emitter,name,fn)=>{emitter.on(name,fn);p.listeners.push(()=>emitter.removeListener(name,fn));};
   configure(wc.session,source.browserProfileId);
+  try{pageCreated(wc,source);}catch{/* a preview opens even when its appearance could not be set */}
   wc.setWebRTCIPHandlingPolicy?.('default_public_interface_only');
   // A link that asks for a new tab stays in the peek; real popups are refused (nothing escapes).
   // Thin scrollbars have no end buttons, so nothing is cut at the rounded corner (QA M33). Kept for removal on promotion.

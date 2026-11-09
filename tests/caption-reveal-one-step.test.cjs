@@ -239,7 +239,7 @@ test('main.cjs wires it: the guard module, one apply per setCaption with the pai
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(main, /const captionGuard=require\('\.\/caption-guard\.cjs'\)\.createCaptionGuard\(\{platform:process\.platform,window:\(\)=>mainWindow\}\);/);
   assert.match(main, /if\(captionHiddenNow&&!hidden\)captionShownAt=Date\.now\(\);\n captionHiddenNow=hidden;/, 'the flag is set before anything is painted, as the close handler reads it');
-  assert.match(main, /captionGuard\.apply\(\{hidden,paint:again=>\{if\(again\|\|options\.force===true\|\|key!==captionKey\)\{updateCaption\(mainWindow,\{\.\.\.caption,hidden:layout\.captionHidden===true\}\);captionKey=key;\}\}\}\);\n\}/);
+  assert.match(main, /captionGuard\.apply\(\{hidden,paint:again=>\{if\(again\|\|options\.force===true\|\|key!==captionKey\)\{try\{updateCaption\(mainWindow,\{\.\.\.caption,hidden:layout\.captionHidden===true\}\);captionKey=key;captionFails=0;\}catch\(error\)/);
   assert.doesNotMatch(main, /guardCaption|captionGuardTimer|setTimeout\(release/, 'the 200 ms switch-on timer is gone');
   assert.match(main, /\(captionHiddenNow\|\|Date\.now\(\)-captionShownAt<200\)/, 'close keeps its own 200 ms rule: it changes nothing about how the box looks');
   assert.match(main, /if\(captionHiddenNow&&!hidden\)captionShownAt=Date\.now\(\);/);

@@ -1,4 +1,4 @@
-import { navigationTitle,resolveNavigation } from '../runtime/navigation';
+import { carriesHttpsFirst,navigationTitle,resolveNavigation } from '../runtime/navigation';
 import { siteIdentity } from '../runtime/sites';
 import { effectiveProviders,resolveSearch } from '../runtime/searchProviders';
 import type { BrowserAction,BrowserSnapshot,SearchEngine } from '../runtime/types';
@@ -103,9 +103,10 @@ function knownSite(query:string,local:AddressSuggestion[]):AddressSuggestion|und
 }
 
 /** Opening a suggestion navigates the current tab. Reusing another tab is an explicit action. */
-export function addressSuggestionAction(suggestion:AddressSuggestion,switchToTab=false,tabId?:string):BrowserAction {
+export function addressSuggestionAction(suggestion:AddressSuggestion,switchToTab=false,tabId?:string,typed?:string):BrowserAction {
  if(switchToTab&&suggestion.kind==='tab'&&suggestion.tabId)return {type:'tab.select',id:suggestion.tabId};
- return {type:'tab.navigate',url:suggestion.url,...tabId?{tabId}:{}};
+ // `typed` is the text in the field: a row that is its default https address carries that to the reducer (carriesHttpsFirst), so a failed secure connection may offer http.
+ return {type:'tab.navigate',url:suggestion.url,...tabId?{tabId}:{},...typed!==undefined&&carriesHttpsFirst(resolveNavigation(typed),suggestion.url)?{httpsFirst:true}:{}};
 }
 
 /** Tab accepts a local completion without visiting it; Enter performs navigation. */

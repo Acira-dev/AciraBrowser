@@ -48,7 +48,7 @@ function menuData(template,{keyFor=()=>undefined,platform=process.platform}={}){
 // Rows that run a registry command show that command's live key (keyFor reads desktop/shortcut-registry.cjs); editing rows show the system keys.
 const KEYED={back:'back',forward:'forward',reload:'reload',print:'print','save-page':'save-page','save-pdf':'save-pdf'};
 const EDITING={'selection-copy':'C','select-all':'A'};
-function createContextCommands({getContext,clipboard,openTab,openWindow,peek,command,notify=()=>{},extensionItems=()=>[],resolveSelectionSearch,keyFor=()=>undefined,platform=process.platform,arch=process.arch}){
+function createContextCommands({getContext,clipboard,openTab,openWindow,peek,command,notify=()=>{},extensionItems=()=>[],resolveSelectionSearch,keyFor=()=>undefined,dark=null,platform=process.platform,arch=process.arch}){
  function build(wc,params){
   let owner,identity,childToken;try{owner=getContext(wc);if(!owner||wc.isDestroyed()||typeof owner.profileId!=='string'||!owner.profileId||typeof owner.tabId!=='string'||!owner.tabId)return [];identity=getNativeDocumentIdentity(wc);childToken=childLifetime(wc);}catch{return [];}
   const frame=params.frame||wc.mainFrame,pageURL=wc.getURL(),frameURL=frame?.url,profileId=owner.profileId,tabId=owner.tabId,privateMode=owner.private,session=wc.session;
@@ -86,7 +86,10 @@ function createContextCommands({getContext,clipboard,openTab,openWindow,peek,com
   }
   if(!params.isEditable&&!link&&!selection&&!['image','audio','video','canvas'].includes(params.mediaType)){const cleaned=cleanLink(pageURL);items.push(item('back',tr('app.back'),()=>wc.navigationHistory.goBack(),wc.navigationHistory.canGoBack()),item('forward',tr('app.forward'),()=>wc.navigationHistory.goForward(),wc.navigationHistory.canGoForward()),item('reload',tr('shortcutCmd.reload'),()=>wc.reload()),cleaned.changed&&item('page-copy-clean',tr('pagemenu.copyCleanPageLink'),()=>clipboard.writeText(cleaned.url)),sep);}
   // Print and Save page act on a tab's page (browserCommand), so a Link preview's own page does not offer them: they would print or save the page it came from.
-  if(!owner.preview)items.push(item('print',tr('app.print'),()=>command({type:'print',tabId})),item('save-page',tr('browsermenu.savePageAs'),()=>command({type:'save-page',tabId})),item('save-pdf',tr('pagemenu.saveAsPdf'),()=>command({type:'save-pdf',tabId})),sep);
+  if(!owner.preview)items.push(item('print',tr('app.print'),()=>command({type:'print',tabId})),item('save-page',tr('browsermenu.savePageAs'),()=>command({type:'save-page',tabId})),item('save-pdf',tr('pagemenu.saveAsPdf'),()=>command({type:'save-pdf',tabId})));
+  /* Website appearance (13.3): the row is offered only in Always dark, on a website outside Tor. */
+  {let darkState=null;try{darkState=dark?.status?.(wc)||null;}catch{}if(darkState?.supported&&darkState.enabled)items.push(item('dark-site',darkState.excluded?tr('pagemenu.darkInclude'):tr('pagemenu.darkExclude'),()=>dark.setExcluded(wc,!darkState.excluded)));}
+  if(!owner.preview)items.push(sep);
   const extra=extensionItems(wc,params)||[];if(extra.length)items.push(...extra,sep);
   items.push(item('inspect',tr('pagemenu.inspect'),()=>{if(!wc.isDevToolsOpened())wc.openDevTools({mode:'detach'});wc.inspectElement(params.x,params.y);}));
   return compact(items);

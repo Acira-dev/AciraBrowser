@@ -60,6 +60,14 @@ test('the sidebar lists a hidden tab again whenever its tile is not there to sho
   assert.equal(listedInSidebar({ favoriteId: 'app-3' }, { apps: many, hidden: false }, settings), false, 'a tile in the first eleven shows');
   assert.equal(listedInSidebar({ favoriteId: 'app-13' }, { apps: many, hidden: false }, settings), true, 'a tile folded behind +N');
   assert.equal(listedInSidebar({ favoriteId: 'app-12' }, { apps: many.slice(0, 12), hidden: false }, settings), false, 'twelve fit with no +N');
+  // The grid folds at the sidebar size's limit (Narrow 8: seven tiles and +N), so a tab whose tile is behind +N is listed at that size too.
+  const ten = Array.from({ length: 10 }, (_, i) => app('app-' + (i + 1)));
+  assert.equal(listedInSidebar({ favoriteId: 'app-7' }, { apps: ten, hidden: false }, settings, 8), false, 'Narrow: the seventh tile shows');
+  assert.equal(listedInSidebar({ favoriteId: 'app-8' }, { apps: ten, hidden: false }, settings, 8), true, 'Narrow: the eighth is behind +3');
+  assert.equal(listedInSidebar({ favoriteId: 'app-10' }, { apps: ten, hidden: false }, settings, 8), true, 'Narrow: so is the tenth');
+  assert.equal(listedInSidebar({ favoriteId: 'app-10' }, { apps: ten, hidden: false }, settings, 12), false, 'Standard and Wide show all ten');
+  assert.equal(listedInSidebar({ favoriteId: 'app-8' }, { apps: ten.slice(0, 8), hidden: false }, settings, 8), false, 'eight fit with no +N');
+  assert.match(readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx', import.meta.url), 'utf8'), /listedInSidebar\(tab,favorites,state\.settings,folded\)/, 'the sidebar passes its size\'s limit');
   assert.equal(listedInSidebar(tab, { apps: [app('app-1')], hidden: false }, { verticalTabs: true }), true, 'on (the default): always listed');
   assert.equal(listedInSidebar({}, { apps: [], hidden: false }, settings), true, 'an ordinary tab is always listed');
 });
@@ -99,7 +107,7 @@ test('the row sits under Favorites in Settings › Tabs › Sidebar, is found by
 
 test('the sidebar draws the list through listedInSidebar, its groups too, and Next tab walks the same list', () => {
   const source = read('../src/components/sidebar/AciraSidebar.tsx');
-  assert.match(source, /const listed=\(tab:TabSession\)=>listedInSidebar\(tab,favorites,state\.settings\);/);
+  assert.match(source, /listed=\(tab:TabSession\)=>listedInSidebar\(tab,favorites,state\.settings,folded\);/);
   assert.match(source, /members:state\.tabs\.filter\(tab=>listed\(tab\)&&groupForTab\(state,tab\)\?\.id===group\.id\)/);
   assert.match(source, /listedProfileTabs=profileTabs\.filter\(listed\)/);
   assert.match(source, /tabs=\{listedProfileTabs\} groups=\{groups\}/);

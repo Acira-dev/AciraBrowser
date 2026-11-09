@@ -72,7 +72,7 @@ test('Ctrl or Cmd click and middle-click open an ordinary background tab; Shift+
 
 test('a favorite\'s tab is an ordinary row of the tab list unless Settings keep it only in its tile: the one filter is listedInSidebar (tests/favorite-tabs-in-list.test.ts)',()=>{
   const source=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
-  assert.match(source,/listedInSidebar\(tab,favorites,state\.settings\)/,'the sidebar filters through the one rule');
+  assert.match(source,/listedInSidebar\(tab,favorites,state\.settings(?:,folded)?\)/,'the sidebar filters through the one rule');
   assert.match(readFileSync(new URL('../src/ui/sidebarApps.ts',import.meta.url),'utf8'),/export const listedInSidebar=/);
 });
 

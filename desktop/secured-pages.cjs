@@ -2,6 +2,7 @@
 // Locked pages leave the window's routable pages map. Only this main-process owner retains their live documents.
 // They are detached and muted with media paused; Chromium lifecycle freezing is requested as well.
 // No snapshot, renderer IPC, tab search or extension can address the retained documents.
+const pageDebugger = require('./page-debugger.cjs');
 const MEDIA_WORLD = 'acira-secured-media';
 const PAUSE_MEDIA = `(() => {
   const playing = Array.from(document.querySelectorAll('video,audio')).filter(m => !m.paused && !m.ended).map(element => ({element, time: element.currentTime}));
@@ -33,13 +34,13 @@ async function mediaInFrames(debug, expression) {
 async function suspendSecuredPage(entry) {
   const wc = entry.view.webContents;
   if (!wc || wc.isDestroyed() || entry.securedLifecycle) return;
-  const debug = wc.debugger;
-  entry.securedLifecycle = {own: false, muted: entry.securedMuted ?? wc.isAudioMuted(), backgroundThrottling: wc.getBackgroundThrottling()};
+  // The page's debugger is shared (page-debugger.cjs); one somebody else attached (Tor) is used as it is and left attached.
+  const lease = pageDebugger.acquire(wc, 'secured'), debug = lease || wc.debugger;
+  entry.securedLifecycle = {own: Boolean(lease), lease, muted: entry.securedMuted ?? wc.isAudioMuted(), backgroundThrottling: wc.getBackgroundThrottling()};
   // Enable background lifecycle handling even if a development profile disabled it. Chromium decides whether freezing can take effect.
   wc.setBackgroundThrottling(true);
   wc.setAudioMuted(true);
   try {
-    if (!debug.isAttached()) { debug.attach('1.3'); entry.securedLifecycle.own = true; }
     await mediaInFrames(debug, PAUSE_MEDIA);
     await debug.sendCommand('Page.setWebLifecycleState', {state: 'frozen'});entry.securedLifecycle.freezeRequested=true;
   } catch (error) { console.warn('Secured page suspension:', error.message); }
@@ -48,14 +49,14 @@ async function suspendSecuredPage(entry) {
 async function resumeSecuredPage(entry) {
   const wc = entry.view.webContents, saved = entry.securedLifecycle;
   if (!wc || wc.isDestroyed() || !saved) return;
-  const debug = wc.debugger;
+  const debug = saved.lease || wc.debugger;
   try {
-    if (debug.isAttached()) {
+    if (saved.lease ? !saved.lease.over : debug.isAttached()) {
       await debug.sendCommand('Page.setWebLifecycleState', {state: 'active'});
       await mediaInFrames(debug, RESUME_MEDIA);
     }
   } finally {
-    if (saved.own) try { debug.detach(); } catch {}
+    if (saved.lease) saved.lease.release();
     wc.setAudioMuted(saved.muted);wc.setBackgroundThrottling(saved.backgroundThrottling);
     entry.securedLifecycle = null;
   }

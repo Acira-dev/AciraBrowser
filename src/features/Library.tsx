@@ -1,4 +1,5 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { holdsCommandKey } from '../ui/commandKeys';
 import { useListMotion } from '../ui/sharedMotion';
 import { useT } from '../i18n';
 import { useToastActive } from '../ui/toastActive';
@@ -30,7 +31,7 @@ export function LibraryPage({ title, description, count, search, actions, wide, 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key !== '/' || holdsCommandKey(event)) return;
       if (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)) return;
       if (!root.current?.offsetParent || !field.current) return;
       event.preventDefault();
@@ -183,7 +184,12 @@ export function ConfirmAction({ label, confirmLabel, onConfirm, ariaLabel, class
 export function MiddleName({ name }: { name: string }) {
   if (name.length <= 16) return <span className="lib-name"><span className="lib-name-head">{name}</span></span>;
   const dot = name.lastIndexOf('.'), tail = dot > 0 && name.length - dot <= 8 ? 10 : 7;
-  return <span className="lib-name" title={name}><span className="lib-name-head">{name.slice(0, -tail)}</span><span className="lib-name-tail">{name.slice(-tail)}</span></span>;
+  // never between the two halves of an emoji (or any character outside the BMP): each half alone is drawn as "�"
+  let cut = name.length - tail;
+  if (cut > 0 && (name.charCodeAt(cut) & 0xFC00) === 0xDC00 && (name.charCodeAt(cut - 1) & 0xFC00) === 0xD800) cut -= 1;
+  // The pair follows the NAME's direction (dir="auto"), the row keeps the interface's: in a right-to-left interface an English name read "report.pdfQuarterly " (tail left of head). The
+  // wrapper is packed at the interface's start edge as the single piece was, so nothing moves in either direction.
+  return <span className="lib-name" title={name}><span className="lib-name-pair" dir="auto"><span className="lib-name-head">{name.slice(0, cut)}</span><span className="lib-name-tail">{name.slice(cut)}</span></span></span>;
 }
 
 const ImageGlyph = ({ size = 16 }: { size?: number }) => <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" /><circle cx="5.6" cy="6.1" r="1.1" /><path d="M2.4 12l3.6-3.4 2.6 2.4 2-1.8 3 2.8" /></svg>;

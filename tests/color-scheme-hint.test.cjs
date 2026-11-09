@@ -162,11 +162,12 @@ test('every session is guarded by content-blocking.cjs before the startup cleanu
 test('main.cjs attaches it to every browsing session after the identity hints, remembering on disk for ordinary profiles only', () => {
   const main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
   const at = main.indexOf('function configureSession('), body = main.slice(at, main.indexOf('\nfunction ', at + 10));
-  assert.ok(at > 0 && body.includes("require('./browser-services/color-scheme-hint.cjs').attach(ses,pipeline,{remember:!profileId.startsWith('private-')&&!(languageOptions.tor||torMode)})"));
+  assert.ok(at > 0 && body.includes("require('./browser-services/color-scheme-hint.cjs').attach(ses,pipeline,{remember:!profileId.startsWith('private-')&&!(languageOptions.tor||torMode),dark:details=>{"));
+  assert.ok(body.includes('siteAppearance.darkFor(details?.webContents') && body.includes('nativeTheme.shouldUseDarkColors'), 'a tab told Light or Dark by Website appearance sends that scheme; every other tab follows Acira');
   assert.ok(body.indexOf('applyWebsiteLanguages(ses,pipeline') < body.indexOf('color-scheme-hint.cjs'), 'after the Sec-CH-UA participant');
   const source = fs.readFileSync(path.join(__dirname, '../desktop/browser-services/color-scheme-hint.cjs'), 'utf8');
   assert.equal((source.match(/requestHeaders: \{/g) || []).length, 1, 'one header is ever added');
-  assert.match(source, /\[HINT\]: state\.dark\(\) \? 'dark' : 'light'/);
+  assert.match(source, /\[HINT\]: state\.dark\(details\) \? 'dark' : 'light'/);
 });
 
 // The Electron runs: real sessions, the real pipeline and identity participant, two local servers (four origins), every hint asked for.
@@ -262,4 +263,14 @@ test('a start after a crash with clear-on-quit: the startup cleanup clears the s
   assert.deepEqual(step('crash', 'c-cleared').origins, [B], 'only the site whose cookies are kept');
   assert.equal(schemeOf(seen('crash', 'c1')[0]), null, 'google-like A cannot tell it was visited before');
   assert.equal(schemeOf(seen('crash', 'c2')[0]), 'dark', 'the kept site still gets it');
+});
+
+test('the hint asks the colour source per request (Website appearance can tell one tab Light or Dark while Acira shows the other)', () => {
+  const asked = []; const session = fakeSession(null), pipeline = fakePipeline();
+  hint.attach(session, pipeline, { dark: details => { asked.push(details.webContents); return details.webContents === 'dark-tab'; } });
+  const [send] = pipeline.sending, [received] = pipeline.headers, url = 'https://www.bing.com/search?q=a';
+  received({ ...page(url), responseHeaders: { 'accept-ch': ['Sec-CH-Prefers-Color-Scheme'] } });
+  assert.equal(send({ ...page(url), webContents: 'dark-tab', requestHeaders: {} }).requestHeaders['Sec-CH-Prefers-Color-Scheme'], 'dark');
+  assert.equal(send({ ...page(url), webContents: 'other-tab', requestHeaders: {} }).requestHeaders['Sec-CH-Prefers-Color-Scheme'], 'light');
+  assert.deepEqual(asked, ['dark-tab', 'other-tab']);
 });

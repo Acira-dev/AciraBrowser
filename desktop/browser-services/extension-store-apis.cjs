@@ -10,6 +10,7 @@ const model = require('./extension-bookmarks.cjs');
 const READ_ONLY_HISTORY='Acira lets extensions read history but not change it.';
 const NO_RESTORE='Acira does not let extensions reopen tabs. Use Reopen closed tab (Ctrl+Shift+T).';
 const NO_BOOKMARK_STORE='Acira cannot change bookmarks right now.';
+const NO_BOOKMARK_READ='Acira cannot read bookmarks right now.';
 const ROOT=model.ROOT,BAR=model.BAR;
 const failure=message=>({__acira_error:message});
 const time=value=>{const n=typeof value==='number'?value:Date.parse(value);return Number.isFinite(n)?n:0;};
@@ -20,10 +21,13 @@ const bookmarkTree=nodes=>model.createView(nodes).tree();
 /**
  * getNodes(): this profile's bookmark nodes. host.update(compute): runs compute(nodes, {owned}) on the profile's current nodes and, when it answers
  * {nodes}, makes them the profile's bookmarks (extension-bookmark-buffer.cjs, then main.cjs `bookmark.replace`); it answers what compute answered.
- * Without a host the writes fail.
+ * Without a host the writes fail. host.ready(): false while no window of the profile is open (macOS keeps Acira running with no window): the bookmarks
+ * are then not known, and a read fails instead of answering an empty tree, which a sync extension would take for "the person deleted everything".
  */
 function bookmarksApi(getNodes,host={}){
  const view=()=>model.createView(getNodes());
+ const unreadable=()=>typeof host.ready==='function'&&!host.ready();
+ const reading=read=>(event,...args)=>unreadable()?failure(NO_BOOKMARK_READ):read(event,...args);
  const words=query=>String(query).toLowerCase().split(/\s+/).filter(Boolean);
  const has=(node,list)=>list.every(word=>(node.title+' '+(node.url||'')).toLowerCase().includes(word));
  const changing=run=>{
@@ -32,16 +36,16 @@ function bookmarksApi(getNodes,host={}){
   return done&&done.error?failure(done.error):done?.result;
  };
  return {
-  getTree:()=>[view().tree()],
-  getSubTree:(_event,id)=>{const v=view();return typeof id==='string'&&v.exists(id)?[v.subTree(id)]:failure(model.ERRORS.noNode);},
-  get:(_event,ids)=>{const v=view(),list=(Array.isArray(ids)?ids:[ids]).map(id=>typeof id==='string'&&v.exists(id)?v.record(id):null);return list.every(Boolean)?list:failure(model.ERRORS.noNode);},
-  getChildren:(_event,id)=>{const v=view();return typeof id==='string'&&v.exists(id)&&v.listOf(id)?v.idsUnder(id).map(child=>v.record(child)):failure(model.ERRORS.noNode);},
-  getRecent:(_event,count)=>{const v=view();return v.all().map(id=>v.record(id)).filter(node=>node&&node.url).sort((a,b)=>b.dateAdded-a.dateAdded).slice(0,Math.max(1,Math.min(Number(count)||1,1000)));},
-  search:(_event,query)=>{
+  getTree:reading(()=>[view().tree()]),
+  getSubTree:reading((_event,id)=>{const v=view();return typeof id==='string'&&v.exists(id)?[v.subTree(id)]:failure(model.ERRORS.noNode);}),
+  get:reading((_event,ids)=>{const v=view(),list=(Array.isArray(ids)?ids:[ids]).map(id=>typeof id==='string'&&v.exists(id)?v.record(id):null);return list.every(Boolean)?list:failure(model.ERRORS.noNode);}),
+  getChildren:reading((_event,id)=>{const v=view();return typeof id==='string'&&v.exists(id)&&v.listOf(id)?v.idsUnder(id).map(child=>v.record(child)):failure(model.ERRORS.noNode);}),
+  getRecent:reading((_event,count)=>{const v=view();return v.all().map(id=>v.record(id)).filter(node=>node&&node.url).sort((a,b)=>b.dateAdded-a.dateAdded).slice(0,Math.max(1,Math.min(Number(count)||1,1000)));}),
+  search:reading((_event,query)=>{
    const v=view(),all=v.all().filter(id=>id!==ROOT&&id!==BAR&&id!==model.OTHER).map(id=>v.record(id));
    if(typeof query==='string')return all.filter(node=>has(node,words(query))).slice(0,1000);
    const q=query||{};return all.filter(node=>(q.url===undefined||node.url===q.url)&&(q.title===undefined||node.title===q.title)&&(q.query===undefined||has(node,words(q.query)))).slice(0,1000);
-  },
+  }),
   create:(_event,info)=>changing((nodes,ctx)=>model.create(nodes,info,{profileId:host.profileId,owned:!!ctx?.owned})),
   update:(_event,id,changes)=>changing((nodes,ctx)=>model.update(nodes,id,changes,{owned:!!ctx?.owned})),
   move:(_event,id,destination)=>changing((nodes,ctx)=>model.move(nodes,id,destination,{profileId:host.profileId,owned:!!ctx?.owned})),
@@ -79,4 +83,4 @@ function sessionsApi(getClosed){
  };
 }
 
-module.exports={bookmarkTree,bookmarksApi,historyApi,sessionsApi,READ_ONLY_HISTORY,NO_RESTORE,NO_BOOKMARK_STORE};
+module.exports={bookmarkTree,bookmarksApi,historyApi,sessionsApi,READ_ONLY_HISTORY,NO_RESTORE,NO_BOOKMARK_STORE,NO_BOOKMARK_READ};

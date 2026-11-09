@@ -4,6 +4,7 @@ const { execFile, execFileSync } = require("node:child_process");
 // "Acira Browser", or "Acira Browser QA" in a QA build (its own registration: desktop/build-identity.cjs).
 const REGISTERED_APPLICATION = require("../build-identity.cjs").registeredApplication;
 const { tm } = require("../tm.cjs");
+const { sameAsGarbled } = require("../windows-registry-text.cjs");
 
 // Where other browsers install their executables (and the icon lookup built on it) lives in browser-icons.cjs.
 const { browserExecutables, createBrowserIcons } = require("../browser-services/browser-icons.cjs");
@@ -55,8 +56,8 @@ function commandMatches(command, executable, env) {
   return (
     !!match &&
     /%[1L](?:["\s]|$)/i.test(match[2]) &&
-    normalizedExecutable(match[1], env) ===
-      normalizedExecutable(executable, env)
+    // reg.exe prints a non-ASCII letter of the user's folder (C:\Users\José) in the console's code page, which reads back as garbage: windows-registry-text.cjs
+    sameAsGarbled(normalizedExecutable(match[1], env), normalizedExecutable(executable, env))
   );
 }
 function findWindowsRegistration({

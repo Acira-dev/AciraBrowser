@@ -390,3 +390,6 @@ textarea, .st-textarea { width: 100%; min-height: 72px; padding: 6px 10px; resiz
 .profile-cleanup__fold > summary::after { content: ''; width: 5px; height: 5px; margin-left: 8px; border-right: 1.5px solid var(--st-muted); border-bottom: 1.5px solid var(--st-muted); transform: rotate(-45deg); transition: transform .12s; }
 .profile-cleanup__fold[open] > summary::after { transform: rotate(45deg); }
 .profile-cleanup__fold-summary { margin-left: auto; font-size: 12px; color: var(--st-muted, var(--text-2)); }
+
+/* Windows High Contrast (forced colors): the fields' focus is a border colour and an inset shadow, both forced away; give them a system-colour outline. Normal look unchanged. */
+@media (forced-colors: active) { .app.style-acira .browser-settings.settings-acira :is(.st-input, textarea, .st-textarea):focus-visible { outline: 2px solid Highlight !important; outline-offset: 1px; } }

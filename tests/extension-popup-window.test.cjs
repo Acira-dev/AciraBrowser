@@ -5,7 +5,7 @@
 // logic, the same lifecycle. These tests pin the frame per platform, the lifecycle the library's PopupView had, and the engine hook.
 const test = require('node:test'), assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events'), fs = require('node:fs'), path = require('node:path');
-const {ExtensionPopup, popupFrame, installPopupFrames, BOUNDS, MATERIAL_RADIUS} = require('../desktop/browser-services/extension-popup-window.cjs');
+const {ExtensionPopup, popupFrame, installPopupFrames, ownPage, popupOf, BOUNDS, MATERIAL_RADIUS} = require('../desktop/browser-services/extension-popup-window.cjs');
 const {GAP} = require('../desktop/browser-services/extension-popup-placement.cjs');
 
 const rect = (x, y, width, height) => ({x, y, width, height});
@@ -19,6 +19,8 @@ class FakeContents extends EventEmitter {
   closeDevTools() { this.devtools = false; this.devtoolsClosed++; }
   close() { this.closed = true; }
   getURL() { return this.urls[this.urls.length - 1] || ''; }
+  setWindowOpenHandler(handler) { this.openHandler = handler; }
+  focus() { this.focusCalls = (this.focusCalls || 0) + 1; }
 }
 class FakeView {
   constructor(options) { this.options = options; this.webContents = new FakeContents(options); this.calls = []; }
@@ -44,6 +46,7 @@ class FakeWindow extends EventEmitter {
 }
 FakeWindow.all = [];
 FakeWindow.getAllWindows = () => FakeWindow.all.filter(window => !window.destroyed);
+FakeWindow.fromId = id => FakeWindow.all.find(window => window.id === id && !window.destroyed) || null;
 
 function fixture({platform = 'darwin', zoom = 1, content = rect(260, 69, 1088, 700), area = rect(0, 29, 1352, 795), anchorRect = rect(845, 39, 30, 30)} = {}) {
   FakeWindow.all = [];
@@ -111,6 +114,19 @@ test('the page loads, shows the window at its first preferred size and keeps its
     assert.deepEqual(f.view.bounds, {x: 0, y: 0, width, height});
   }
   assert.deepEqual(f.displays.slice(-1)[0], {x: 1105, y: 108, width: 30, height: 30});
+});
+
+test('the page of the popup gets the keyboard when the window shows (a WebContentsView in a BaseWindow does not: typing went nowhere until the person clicked into Bitwarden\'s password field)', async () => {
+  const f = fixture();
+  await f.popup.whenReady();
+  assert.equal(f.contents.focusCalls || 0, 0, 'nothing is focused while the window is hidden');
+  f.contents.emit('preferred-size-changed', {}, {width: 480, height: 600});
+  assert.equal(f.window.visible, true);
+  assert.equal(f.contents.focusCalls, 1, 'the page is focused with the window');
+  f.contents.emit('preferred-size-changed', {}, {width: 300, height: 260});
+  assert.equal(f.contents.focusCalls, 1, 'a later size does not take the keyboard again');
+  f.contents.close();
+  assert.doesNotThrow(() => f.popup.show(), 'a page that is gone is not focused');
 });
 
 test('sizes are the library\'s: whole, never under 25, never over 800 x 600; the page announces will-resize / resized and the window will-move / moved', () => {
@@ -186,6 +202,32 @@ test('losing focus closes the popup when another window of Acira has it; not whi
   assert.equal(closedDevtools.popup.isDestroyed(), true);
 });
 
+test('the page closing itself (window.close()) closes the popup window with it, instead of leaving an empty box holding the keyboard', async () => {
+  const f = fixture();
+  await f.popup.whenReady();
+  f.contents.emit('preferred-size-changed', {}, {width: 273, height: 375});
+  assert.equal(f.window.visible, true);
+  f.contents.closed = true;
+  f.contents.emit('destroyed');
+  assert.equal(f.popup.isDestroyed(), true);
+  assert.equal(f.window.destroyed, true, 'the window went with its page');
+  assert.doesNotThrow(() => f.popup.destroy(), 'closing twice is fine');
+});
+
+test('popupOf finds the popup whose page has the keyboard, so the menu\'s Close Tab / Reload act on the popup and not on the tab behind it', () => {
+  const f = fixture();
+  assert.equal(popupOf(f.contents), f.popup);
+  assert.equal(popupOf({}), null, 'a page that is no popup\'s');
+  assert.equal(popupOf(null), null);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
+  const run = main.slice(main.indexOf('function runMenu('), main.indexOf('function runMenu(') + 1800);
+  assert.match(run, /extensionPopup=contents&&require\('\.\/browser-services\/extension-popup-window\.cjs'\)\.popupOf\(contents\)/);
+  assert.match(run, /if\(extensionPopup\)\{if\(command\.action==='close-tab'\|\|command\.action==='close-window'\)\{extensionPopup\.destroy\(\);return;\}/);
+  assert.ok(run.indexOf('popupOf(contents)') < run.indexOf('showMain()'), 'asked before the main window is shown and the shortcut runs on its tab');
+  f.popup.destroy();
+  assert.equal(popupOf(f.contents), null, 'a closed popup is none');
+});
+
 test('a page that fails to load is logged, not thrown, and the popup still sizes', async () => {
   FakeWindow.all = [];
   const f = fixture();
@@ -200,14 +242,15 @@ test('a page that fails to load is logged, not thrown, and the popup still sizes
 
 // ---- the engine hook (BrowserActionAPI.activateClick)
 
-function engineFixture({withPopupUrl = true, withTab = true, withWindow = true} = {}) {
+function engineFixture({withPopupUrl = true, withTab = true, withWindow = true, currentWindow = false} = {}) {
   const f = fixture();
   const calls = [], emitted = [];
   const tab = {id: 7};
   const engine = {
     popup: undefined,
     ctx: {session: {name: 'session', extensions: new EventEmitter()}, emit: (name, popup) => emitted.push([name, popup]), router: {sendEvent: (...args) => calls.push(['sendEvent', ...args])},
-      store: {getTabById: id => (withTab && id === 7 ? tab : undefined), getActiveTabOfCurrentWindow: () => (withTab ? tab : undefined), tabToWindow: new WeakMap(withWindow ? [[tab, f.parent]] : []), tabDetailsCache: new Map([[7, {id: 7}]])}},
+      store: {getTabById: id => (withTab && id === 7 ? tab : undefined), getActiveTabOfCurrentWindow: () => (withTab ? tab : undefined), tabToWindow: new WeakMap(withWindow ? [[tab, f.parent]] : []), tabDetailsCache: new Map([[7, {id: 7}]]),
+      ...(currentWindow ? {lastFocusedWindowId: f.parent.id = 2} : {})}},
     getPopupUrl: (extensionId, tabId) => { calls.push(['getPopupUrl', extensionId, tabId]); return withPopupUrl ? 'chrome-extension://' + extensionId + '/popup.html' : ''; },
     activateClick(details) { calls.push(['library activateClick', details.extensionId]); }
   };
@@ -294,6 +337,68 @@ test('an action with no popup page, no tab or no window is the library\'s own an
     assert.deepEqual(e.calls.filter(call => call[0] === 'library activateClick'), [['library activateClick', 'aaaa']], JSON.stringify(options));
     assert.equal(e.emitted.length, 0);
   }
+});
+
+test('with no website tab (only the New Tab page or Settings is open) the button opens the popup in the window that was in use (Acira\'s own window is not in the engine\'s list: its last-focused id is), from the extension\'s default popup', () => {
+  // tab id -1 is what the toolbar sends there; a stale id (the website tab closed while the New Tab page stayed) finds no tab either
+  for (const tabId of [-1, 7]) {
+    const e = engineFixture({withTab: false, currentWindow: true});
+    installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+    click(e, 'aaaa', tabId);
+    assert.equal(e.emitted.length, 1, 'tab ' + tabId + ': a popup opened');
+    assert.ok(e.emitted[0][1] instanceof ExtensionPopup);
+    assert.equal(e.emitted[0][1].parent, e.parent, 'it belongs to the current window');
+    assert.deepEqual(e.calls.find(call => call[0] === 'getPopupUrl'), ['getPopupUrl', 'aaaa', -1], 'the default popup, not a tab\'s');
+    assert.ok(!e.calls.some(call => call[0] === 'library activateClick'));
+    click(e, 'aaaa', tabId);
+    assert.equal(e.engine.popup, undefined, 'a second click closes it');
+  }
+  // an action with no popup page still gets the library's answer (onClicked needs a tab), and so does a profile with no window at all
+  for (const options of [{withTab: false, currentWindow: true, withPopupUrl: false}, {withTab: false}]) {
+    const e = engineFixture(options);
+    installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+    click(e, 'aaaa', -1);
+    assert.deepEqual(e.calls.filter(call => call[0] === 'library activateClick'), [['library activateClick', 'aaaa']], JSON.stringify(options));
+    assert.equal(e.emitted.length, 0);
+  }
+});
+
+test('a link or window.open from the popup to a website or to the extension\'s own page opens it through the store (Floccus\' "Add profile", MDM\'s "How to fix it"), anything else keeps the default', async () => {
+  const f = fixture(), opened = [], id = 'fnaicdffflnofjppbagibeoednhnbjhg';
+  const popup = new ExtensionPopup({extensionId: id, session: {name: 'session'}, parent: f.parent, url: 'chrome-extension://' + id + '/dist/html/options.html#/', anchorRect: rect(845, 39, 30, 30), alignment: 'bottom right', openPage: url => { opened.push(url); return Promise.resolve(); }}, {electron: f.electron, platform: 'darwin'});
+  const handler = popup.webContents.openHandler;
+  assert.equal(typeof handler, 'function');
+  assert.deepEqual(handler({url: 'chrome-extension://' + id + '/dist/html/options.html#/new'}), {action: 'deny'}, 'no stray window that closes with the popup');
+  assert.deepEqual(opened, ['chrome-extension://' + id + '/dist/html/options.html#/new']);
+  assert.deepEqual(handler({url: 'https://misterdownloadmanager.com/help/browser-help.html#not-installed'}), {action: 'deny'}, 'a website opens as a tab (MDM\'s "How to fix it" did nothing)');
+  assert.deepEqual(opened.slice(1), ['https://misterdownloadmanager.com/help/browser-help.html#not-installed']);
+  assert.deepEqual(handler({url: 'http://127.0.0.1:9933/'}), {action: 'deny'});
+  assert.deepEqual(handler({url: 'https://user:secret@example.com/'}), {action: 'allow'}, 'an address with credentials in it keeps the default');
+  assert.deepEqual(handler({url: 'javascript:alert(1)'}), {action: 'allow'}, 'anything that is neither a website nor its own page keeps the default');
+  assert.deepEqual(handler({url: 'about:blank'}), {action: 'allow'});
+  assert.deepEqual(handler({url: 'chrome-extension://' + 'a'.repeat(32) + '/page.html'}), {action: 'allow'}, 'another extension\'s page keeps the default');
+  assert.equal(opened.length, 3);
+  assert.equal(ownPage('chrome-extension://' + id + '/x', id), true);
+  assert.equal(ownPage('chrome-extension://' + id + '.evil.example/x', id), false);
+  assert.equal(ownPage('https://' + id + '/x', id), false);
+  assert.equal(ownPage('not a url', id), false);
+  // a popup that was given no way to open pages leaves everything to the default
+  const plain = new ExtensionPopup({extensionId: id, session: {name: 'session'}, parent: f.parent, url: 'chrome-extension://' + id + '/popup.html', anchorRect: rect(845, 39, 30, 30)}, {electron: f.electron, platform: 'darwin'});
+  assert.deepEqual(plain.webContents.openHandler({url: 'chrome-extension://' + id + '/x'}), {action: 'allow'});
+  // a refused open does not throw out of the handler
+  const failing = new ExtensionPopup({extensionId: id, session: {name: 'session'}, parent: f.parent, url: 'chrome-extension://' + id + '/popup.html', anchorRect: rect(845, 39, 30, 30), openPage: () => { throw new Error('no'); }}, {electron: f.electron, platform: 'darwin'});
+  const quiet = console.error; console.error = () => {};
+  try { assert.deepEqual(failing.webContents.openHandler({url: 'chrome-extension://' + id + '/x'}), {action: 'deny'}); } finally { console.error = quiet; }
+});
+
+test('installPopupFrames gives the popup the store\'s createTab for pages the popup opens', () => {
+  const e = engineFixture();
+  const made = [];
+  e.engine.ctx.store.createTab = async details => { made.push(details); };
+  installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+  click(e);
+  e.engine.popup.webContents.openHandler({url: 'chrome-extension://aaaa/options.html#/new'});
+  assert.deepEqual(made, [{url: 'chrome-extension://aaaa/options.html#/new', active: true}], 'opened in front, through the store (the fixture\'s extension is \'aaaa\')');
 });
 
 test('installPopupFrames leaves an engine it was not written for alone, and installs once', () => {

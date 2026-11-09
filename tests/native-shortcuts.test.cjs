@@ -217,3 +217,15 @@ test('on macOS every default key the editor shows reaches its command, and Rewin
  assert.equal(resolveDefaultShortcut({type:'keyDown',key:'h',code:'KeyH',meta:true,shift:false,control:false,alt:false},'darwin'),null,'Cmd+H stays Hide');
  assert.equal(mac.list().find(command=>command.id==='history').bindings[0],'Cmd+Y');
 });
+
+test('a shortcut file whose keys for a command are all unusable leaves that command on its default; only an empty list clears it',()=>{
+ const r=make(null);
+ assert.equal(resolve(r,key('t',['ctrl'])).action,'new-tab');
+ assert.equal(r.importJson(JSON.stringify({version:1,bindings:{'new-tab':['Ctrl+Banana','nonsense'],reload:[],home:['Ctrl+Shift+Y','Ctrl+Shift+Y']}})).ok,true);
+ assert.equal(resolve(r,key('t',['ctrl'])).action,'new-tab','nothing usable in the list: the default stays');
+ assert.equal(r.list().find(command=>command.id==='new-tab').customized,false);
+ assert.equal(r.list().find(command=>command.id==='reload').unbound,true,'an empty list is the person clearing it');
+ assert.deepEqual(r.list().find(command=>command.id==='home').bindings,['Ctrl+Shift+Y'],'a repeated key counts once');
+ const file=path.join(tmp(),'shortcuts.json');fs.writeFileSync(file,JSON.stringify({version:1,bindings:{'close-tab':['Ctrl+Banana']}}));
+ assert.equal(resolve(make(file),key('w',['ctrl'])).action,'close-tab','a saved file with an unreadable key does not unbind the command either');
+});

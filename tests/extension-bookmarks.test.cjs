@@ -44,11 +44,13 @@ test('the tree is Chrome\'s: root 0 with Bookmarks bar 1 (top-level pages) and O
   assert.equal(model.createView([]).tree().children.length, 2, 'both folders exist for an empty profile');
 });
 
-test('Acira\'s own "Bookmarks bar" and "Other bookmarks" folders are 1 and 2; their children follow the top-level ones', () => {
+test('Acira\'s own "Bookmarks bar" and "Other bookmarks" folders are 1 and 2; the bar is the pages above its folder, the folder\'s children, then the pages below it', () => {
   const nodes = [N('bar', null, 'Bookmarks bar', 0), N('b1', 'bar', 'In bar', 0, 'https://b1.test/'), N('b2', 'bar', 'Sub', 1),
     N('oth', null, 'other bookmarks', 1), N('o1', 'oth', 'In other', 0, 'https://o1.test/'), N('star', null, 'Starred', 2, 'https://s.test/'), N('fold', null, 'Loose folder', 3)];
   const v = model.createView(nodes), tree = v.tree();
-  assert.deepEqual(tree.children[0].children.map(c => [c.id, c.index]), [['star', 0], ['b1', 1], ['b2', 2]], 'top-level pages first, then the bar folder\'s children');
+  assert.deepEqual(tree.children[0].children.map(c => [c.id, c.index]), [['b1', 0], ['b2', 1], ['star', 2]], 'the page below the bar folder comes after the folder\'s children, as the sidebar lists them');
+  const above = [N('s0', null, 'Above', 0, 'https://above.test/'), ...nodes.map(n => ({ ...n, position: n.position + 1 }))];
+  assert.deepEqual(model.createView(above).idsUnder('1'), ['s0', 'b1', 'b2', 'star'], 'a page above the folder comes first');
   assert.deepEqual(tree.children[1].children.map(c => [c.id, c.index]), [['fold', 0], ['o1', 1]]);
   assert.equal(v.record('b1').parentId, '1'); assert.equal(v.record('o1').parentId, '2');
   assert.equal(v.exists('bar'), false, 'the physical id of the bar folder is not a Chrome id');
@@ -137,7 +139,8 @@ test('move: to another folder, within one (Chrome\'s index counts the node itsel
   // a folder to Other bookmarks' end, to the bar, into the real folders
   out = model.move(nodes, 'f', { parentId: '1', index: 0 }); sound(out.nodes);
   assert.equal(out.nodes.filter(n => n.title === 'Bookmarks bar').length, 1, 'a folder on the bar needs Acira\'s bar folder');
-  assert.deepEqual(titles(out.nodes, '1').slice(0, 5), ['A', 'B', 'C', 'D', 'F']); assert.equal(out.result.parentId, '1');
+  assert.deepEqual(titles(out.nodes, '1').slice(0, 5), ['F', 'A', 'B', 'C', 'D'], 'a folder asked for index 0 is first; the pages below the new bar folder keep their order and stay on Acira\'s bar'); assert.equal(out.result.parentId, '1'); assert.equal(out.result.index, 0);
+  assert.deepEqual(out.nodes.filter(n => !n.parentId && n.url).sort((a, b) => a.position - b.position).map(n => n.title), ['A', 'B', 'C', 'D']);
   out = model.move(nodes, 'b', { parentId: '2' }); sound(out.nodes);
   assert.equal(out.result.parentId, '2'); assert.equal(out.nodes.find(n => n.title === 'Other bookmarks').parentId, null);
   assert.deepEqual(titles(out.nodes, '2'), ['F', 'B'], 'a page in Other bookmarks lives in Acira\'s folder of that name');
@@ -202,7 +205,8 @@ test('every write keeps the invariants: a random run of creates, moves, updates 
     if (kind === 1 || kind === 4) {
       // a move: both name a move, and applying either one to the old order gives the new order (which of two swapped neighbours "moved" is a matter of taste)
       assert.deepEqual(out.events.map(e => e.name), compared.map(e => e.name), 'a move is one onMoved, or nothing');
-      for (const list of [out.events, compared]) for (const e of list) {
+      if (out.events.length > 1) assert.deepEqual(out.events.map(e => [e.name, ...e.args]), compared.map(e => [e.name, ...e.args]), 'when pages had to move below the bar folder, the call tells what a comparison finds');
+      else for (const list of [out.events, compared]) for (const e of list) {
         const [id, info] = e.args, was = model.createView(previous), now = model.createView(nodes);
         const order = was.idsUnder(info.oldParentId).filter(x => x !== id); if (info.oldParentId === info.parentId) order.splice(info.index, 0, id);
         if (info.oldParentId === info.parentId) assert.deepEqual(order, now.idsUnder(info.parentId), 'the event takes the old order to the new');
@@ -389,4 +393,97 @@ test('the hub: a buffered burst is told once; the person\'s change after it is t
   for (const url of ['not an address', '']) assert.throws(() => validateAction(restore(url), null), url);
   assert.throws(() => validateAction({ type: 'bookmark.add', url: 'javascript:alert(1)', title: 'x', parentId: null, index: 0 }, null), /unsupported protocol/, 'a new bookmark from the page stays web only');
   assert.throws(() => validateAction({ type: 'tab.navigate', url: 'javascript:alert(1)' }, null), /unsupported protocol/, 'opening one is refused, so a bookmarklet never runs');
+});
+
+test('no window of the profile is open: reads fail instead of answering an empty tree (a sync extension would take it for "everything was deleted")', () => {
+  let open = false, nodes = start(); const pending = { on: false };
+  const api = bookmarksApi(() => open ? nodes : [], { profileId: P, ready: () => open || pending.on, update: compute => compute(structuredClone(nodes)) });
+  const refused = { __acira_error: 'Acira cannot read bookmarks right now.' };
+  assert.deepEqual(api.getTree({}), refused); assert.deepEqual(api.getSubTree({}, '1'), refused); assert.deepEqual(api.get({}, '1'), refused);
+  assert.deepEqual(api.getChildren({}, '1'), refused); assert.deepEqual(api.getRecent({}, 5), refused); assert.deepEqual(api.search({}, 'news'), refused);
+  open = true; assert.equal(api.getTree({})[0].children.length, 2); assert.ok(api.search({}, 'docs').length);
+  // writes already waiting in the buffer can still be read back, window or not
+  open = false; pending.on = true; assert.ok(Array.isArray(api.getTree({})));
+});
+
+test('Floccus synced to the Bookmarks bar folder only: creates under "1" without an index, then orders every item; nothing fails, the second pass changes nothing', () => {
+  // The calls Floccus 5.12 makes (BrowserTree.ts): getSubTree('1'), create({parentId, title, url}) with no index, move(id, {parentId, index}) per item of the server's order.
+  const server = [{ f: 'A', c: [{ u: 'https://a1.test/' }, { u: 'https://a2.test/' }] }, { u: 'https://page1.test/' }, { f: 'B', c: [{ u: 'https://b1.test/' }, { f: 'B-in', c: [{ u: 'https://deep.test/' }] }] }, { u: 'https://page2.test/' }];
+  const pull = (startNodes, tree) => {
+    let list = startNodes; const made = new Map(); let counter2 = 0; const c2 = { profileId: P, newId: kind => `${kind}-fl-${++counter2}`, now: 7000 };
+    const step = (what, run) => { const out = run(); assert.ok(!out.error, `${what}: ${out.error}`); if (out.nodes) list = out.nodes; return out; };
+    const build = (parent, items) => { for (const item of items) { const out = step('create', () => model.create(list, item.f ? { parentId: parent, title: item.f } : { parentId: parent, title: item.u, url: item.u }, c2)); made.set(item, out.result.id); if (item.f) build(out.result.id, item.c); } };
+    const order = (parent, items) => { items.forEach((item, index) => { const out = step('move', () => model.move(list, made.get(item), { parentId: parent, index }, c2)); if (item.f) order(made.get(item), item.c); }); return list; };
+    build('1', tree); order('1', tree);
+    return { list, made };
+  };
+  const shape = (nodes, id) => { const v = model.createView(nodes); return v.idsUnder(id).map(child => { const r = v.record(child); return r.url ? r.url : { [r.title]: shape(nodes, child) }; }); };
+  const wanted = items => items.map(item => item.f ? { [item.f]: wanted(item.c) } : item.u);
+  // an empty Acira: the whole server order is kept, folders and pages interleaved
+  const first = pull([], server);
+  assert.deepEqual(shape(first.list, '1'), wanted(server), 'the bar folder holds the server\'s items in the server\'s order');
+  assert.deepEqual(shape(first.list, '2'), [], 'Other bookmarks is not touched');
+  assert.ok(sound(first.list), 'the list stays sound');
+  // the person already has starred pages on the bar: Floccus' order cannot always be kept, but nothing fails and nothing is lost or doubled
+  const mine = [N('t1', null, 'T1', 0, 'https://t1.test/'), N('t2', null, 'T2', 1, 'https://t2.test/'), N('mine', null, 'Mine', 2)];
+  const mixed = pull(mine, server);
+  const flat = (nodes, id) => { const v = model.createView(nodes); return v.idsUnder(id).flatMap(child => { const r = v.record(child); return [r.title, ...(r.url ? [] : flat(nodes, child))]; }); };
+  for (const title of ['T1', 'T2', 'A', 'B', 'B-in', 'https://a1.test/', 'https://deep.test/', 'https://page1.test/', 'https://page2.test/']) assert.equal(flat(mixed.list, '1').filter(t => t === title).length, 1, title + ' once in the bar');
+  assert.deepEqual(shape(mixed.list, '2').map(x => Object.keys(x)[0]), ['Mine'], 'the person\'s own folder is not part of the bar and stays where it is');
+  assert.ok(sound(mixed.list));
+  // a second pass with the same order changes nothing: no store change, no event (Floccus' next sync is quiet)
+  const again = model.move(mixed.list, mixed.made.get(server[1]), { parentId: '1', index: model.createView(mixed.list).idsUnder('1').indexOf(mixed.made.get(server[1])) }, ctx);
+  assert.equal(again.unchanged, true); assert.deepEqual(again.events || [], []);
+});
+
+test('Floccus pulling a bar that mixes pages and folders: its loose pages are made first, then the folders are ordered between them; the order asked for is the order kept, with or without the person\'s own starred pages', () => {
+  // what Floccus 5.12 really did against Acira (traced): create every loose page of the root first, then the folders with their items, then move each root item to its place in the server's order
+  const order = ['L0', 'L1', 'L2', 'F0', 'F1', 'B1', 'F2', 'F3', 'B3', 'F4'];
+  const isFolder = name => name.startsWith('F');
+  const run = (startNodes, wanted) => {
+    let list = startNodes, counter3 = 0; const c3 = { profileId: P, newId: kind => `${kind}-x-${++counter3}`, now: 8000 }, made = new Map();
+    const step = (what, run2) => { const out = run2(); assert.ok(!out.error, `${what}: ${out.error}`); if (out.nodes) list = out.nodes; return out; };
+    for (const n of startNodes) if (n.url) made.set(n.title, n.id);
+    for (const name of wanted.filter(n => !isFolder(n) && !made.has(n))) made.set(name, step('page ' + name, () => model.create(list, { parentId: '1', title: name, url: `https://${name.toLowerCase()}.test/` }, c3)).result.id);
+    for (const name of wanted.filter(isFolder)) { made.set(name, step('folder ' + name, () => model.create(list, { parentId: '1', title: name }, c3)).result.id); step('child', () => model.create(list, { parentId: made.get(name), title: name + ' child', url: `https://${name.toLowerCase()}-child.test/` }, c3)); }
+    wanted.forEach((name, index) => step('move ' + name, () => model.move(list, made.get(name), { parentId: '1', index }, c3)));
+    return list;
+  };
+  const names = nodes => { const v = model.createView(nodes); return v.idsUnder('1').map(id => v.record(id).title); };
+  const topPages = nodes => nodes.filter(n => !n.parentId && n.url).sort((a, b) => a.position - b.position).map(n => n.title);
+  const empty = run([], order);
+  assert.deepEqual(names(empty), order, 'exactly the order the server has');
+  assert.deepEqual(topPages(empty), ['L0', 'L1', 'L2'], 'the pages before the first folder stay on Acira\'s bar; the ones between folders live in the bar folder');
+  assert.ok(sound(empty));
+  // the person already starred T1 T2 T3 (first merge: the pages that exist only here come last in Floccus' order): the server\'s items keep their order, and the starred pages stay on the bar
+  const mine = [N('t1', null, 'T1', 0, 'https://t1.test/'), N('t2', null, 'T2', 1, 'https://t2.test/'), N('t3', null, 'T3', 2, 'https://t3.test/')];
+  const merged = run(mine, [...order, 'T1', 'T2', 'T3']);
+  assert.deepEqual(names(merged), [...order, 'T1', 'T2', 'T3'], 'the server\'s order and the local pages at the end, exactly as asked');
+  assert.deepEqual(topPages(merged), ['L0', 'L1', 'L2', 'T1', 'T2', 'T3'], 'T1 T2 T3 are still on Acira\'s bar, in order');
+  assert.ok(sound(merged));
+  // a second pass changes nothing
+  const again = model.move(merged, merged.find(n => n.title === 'B1').id, { parentId: '1', index: names(merged).indexOf('B1') }, ctx);
+  assert.equal(again.unchanged, true); assert.deepEqual(again.events, []);
+});
+
+test('the bar is one list: a page lands in the part the index falls in, a folder asked before pages takes them below its folder, and every call tells exactly what changed', () => {
+  const c5 = { profileId: P, newId: kind => `${kind}-z-${++counter}`, now: 9500 };
+  let list = [N('a', null, 'A', 0, 'https://a.test/'), N('b', null, 'B', 1, 'https://b.test/'), N('bar', null, 'Bookmarks bar', 2), N('f1', 'bar', 'F1', 0), N('f2', 'bar', 'F2', 1), N('c', null, 'C', 3, 'https://c.test/')];
+  const view = () => model.createView(list), order = () => view().idsUnder('1').map(id => view().record(id).title);
+  const run = out => { assert.ok(!out.error, out.error); if (out.nodes) list = out.nodes; return out; };
+  const check = (before, out) => assert.deepEqual(out.events.map(e => [e.name, e.args[0]]), model.diffEvents(before, list).map(e => [e.name, e.args[0]]), 'the call\'s events are what a comparison finds');
+  assert.deepEqual(order(), ['A', 'B', 'F1', 'F2', 'C']);
+  let before = list, out = run(model.move(list, 'c', { parentId: '1', index: 0 }, c5));
+  assert.deepEqual(order(), ['C', 'A', 'B', 'F1', 'F2'], 'index 0: the top of the bar'); assert.equal(list.find(n => n.id === 'c').parentId, null); check(before, out);
+  before = list; out = run(model.create(list, { parentId: '1', title: 'Mid', url: 'https://mid.test/', index: 4 }, c5));
+  assert.deepEqual(order(), ['C', 'A', 'B', 'F1', 'Mid', 'F2'], 'between two folders: it is one of the folder\'s items'); assert.equal(list.find(n => n.title === 'Mid').parentId, 'bar'); assert.equal(out.result.index, 4);
+  before = list; out = run(model.create(list, { parentId: '1', title: 'Last', url: 'https://last.test/' }, c5));
+  assert.equal(order().at(-1), 'Last'); assert.equal(list.find(n => n.title === 'Last').parentId, null, 'appended: the end of the bar, below the folder, on Acira\'s bar'); check(before, out);
+  before = list; out = run(model.create(list, { parentId: '1', title: 'F0' }, c5));
+  assert.deepEqual(order().slice(-2), ['F0', 'Last'], 'a folder appended is the folder\'s last item, before the pages below it'); assert.equal(out.result.index, order().length - 2); check(before, out);
+  before = list; out = run(model.move(list, list.find(n => n.title === 'F0').id, { parentId: '1', index: 1 }, c5));
+  assert.deepEqual(order().slice(0, 2), ['C', 'F0'], 'a folder asked to stand before A and B gets that place...');
+  assert.deepEqual(list.filter(n => !n.parentId && n.url).sort((x, y) => x.position - y.position).map(n => n.title), ['C', 'A', 'B', 'Last'], '...A and B move below the bar folder; Acira\'s bar shows the same pages in the same order');
+  assert.equal(out.result.index, 1); check(before, out);
+  assert.ok(sound(list));
 });

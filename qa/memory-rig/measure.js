@@ -19,8 +19,9 @@ const r = await app.evaluate(async ({app, webContents}) => {
   let rss = {};
   try { for (const line of cp.execFileSync('/bin/ps', ['-o', 'pid=,rss=', '-p', pids.join(',')], {encoding: 'utf8'}).trim().split('\n')) { const [p, k] = line.trim().split(/\s+/); rss[p] = Number(k) / 1024; } } catch {}
   const mu = process.memoryUsage();
+  const v8 = process.mainModule.require('node:v8'), hc = v8.getHeapCodeStatistics(), hs = v8.getHeapStatistics();
   return {
-    main: {rss: mu.rss / 1048576, heapUsed: mu.heapUsed / 1048576, heapTotal: mu.heapTotal / 1048576, external: mu.external / 1048576, arrayBuffers: mu.arrayBuffers / 1048576},
+    main: {scriptSource: hc.external_script_source_size / 1048576, bytecode: hc.bytecode_and_metadata_size / 1048576, heapUsedV8: hs.used_heap_size / 1048576, heapSizeV8: hs.total_heap_size / 1048576, mallocedV8: hs.malloced_memory / 1048576, rss: mu.rss / 1048576, heapUsed: mu.heapUsed / 1048576, heapTotal: mu.heapTotal / 1048576, external: mu.external / 1048576, arrayBuffers: mu.arrayBuffers / 1048576},
     rows: metrics.map(m => ({pid: m.pid, type: m.type, name: m.name || m.serviceName || '', ws: Math.round(m.memory.workingSetSize / 1024 * 10) / 10, privKB: Math.round((m.memory.privateBytes || 0) / 1024), footprint: Math.round((foot[m.pid] || 0) * 10) / 10, rss: Math.round((rss[m.pid] || 0) * 10) / 10, hosts: hosts[m.pid] || []})),
     foot_error: foot._error, errors: globalThis.__rigErrors,
   };

@@ -3,6 +3,7 @@ import { createSetupClient } from '../../services/accounts/setup-client';
 import type { DefaultBrowserStatus } from '../../services/accounts/setup-types';
 import { SettingRow } from './controls';
 import { isMac } from '../../ui/platform';
+import { refreshedStatus } from './defaultBrowserStatus';
 
 import { t } from '../../i18n';
 /** Default-browser status and a real request button. Hidden when the native API is not available. */
@@ -15,14 +16,19 @@ export function DefaultBrowserRow() {
   useEffect(() => {
     let live = true;
     if (!window.acira?.setup) return;
-    void client
-      .request({ type: 'status' })
-      .then((result) => {
-        if (live) setStatus(result.defaults || result.defaultResult);
-      })
-      .catch(() => {});
+    const ask = () =>
+      void client
+        .request({ type: 'status' })
+        .then((result) => {
+          if (live) setStatus((previous) => refreshedStatus(previous, result.defaults || result.defaultResult));
+        })
+        .catch(() => {});
+    ask();
+    // "Make default" sends the person to Windows' Default apps; the answer is read again when they come back, not only when this row opens.
+    window.addEventListener('focus', ask);
     return () => {
       live = false;
+      window.removeEventListener('focus', ask);
     };
   }, []);
   if (!window.acira?.setup || !status) return null;

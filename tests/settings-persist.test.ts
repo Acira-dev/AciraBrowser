@@ -17,6 +17,7 @@ const different: Record<string, (value: any) => unknown> = {
   animationSpeed: v => (v === 'fast' ? 'premium' : 'fast'),
   glassOpacity: () => 61,
   siteColor: () => 'rich',
+  websiteAppearance: v => (v === 'system' ? 'always-dark' : 'system'),
   surfaceColor: () => '#112233',
   sidebarColor: () => '#223344',
   tabColor: () => '#334455',

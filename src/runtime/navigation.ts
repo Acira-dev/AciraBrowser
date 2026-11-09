@@ -87,4 +87,16 @@ export function resolveNavigation(input: string, engine: SearchEngine = 'google'
   search.searchParams.set('q', value);
   return { url: googleSearchUrl(search.toString()), contentKind: 'web', query: value };
 }
+/** The interface hands the reducer the address it already resolved, so a typed "example.com" arrives as "https://example.com/" and the reducer cannot
+ *  tell it from a pasted https link. It says so with `httpsFirst: true`; only an https web address can carry it. */
+export const httpsFirstHint = (hint: unknown, target: NavigationTarget): boolean => hint === true && !target.error && target.contentKind === 'web' && /^https:\/\//i.test(target.url);
+/** True when `url` (the address a chosen row or a submit opens) is exactly what the typed text resolved to by default: the https the browser picked,
+ *  so a failed secure connection may offer http. A row for another address, or text typed with https://, never carries it. */
+export const carriesHttpsFirst = (typed: NavigationTarget, url: string): boolean => typed.httpsFirst === true && !typed.error && typed.url === url;
+/** The address of a page as the tab keeps and shows it: any user name and password in an http(s) address removed (Chrome never shows them in the address
+ *  bar, and they must not reach history or a bookmark). An address without them comes back as the very same string; anything else is returned as it is. */
+export function withoutCredentials<T>(url: T): T {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return url;
+  try { const parsed = new URL(url); if (!parsed.username && !parsed.password) return url; parsed.username = ''; parsed.password = ''; return parsed.href as T; } catch { return url; }
+}
 export function navigationTitle(url:string):string{if(url.startsWith('acira://'))return ({locked:'Locked',new:'New tab',home:'Home',history:'History',settings:'Settings',downloads:'Downloads',bookmarks:'Bookmarks',rewind:'Rewind',routines:'Tab sets'} as Record<string,string>)[url.slice(8)]||'Acira';try{return new URL(url).hostname;}catch{return 'New tab';}}

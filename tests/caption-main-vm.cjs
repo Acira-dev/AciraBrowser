@@ -17,7 +17,7 @@ const alpha = color => {
 /** A BrowserWindow that remembers every call that matters to the caption, in order, and the state each call left behind. `dropOverlay()` is what Windows does when it
  * loses what the overlay drew: the buttons are gone from the screen, and nothing tells the app. */
 function fakeWindow({ minimizable = true, maximizable = true, maximized = false } = {}) {
-  const state = { minimizable, maximizable, maximized, overlay: null, drawn: null, overlays: [], calls: [], states: [], visible: true, minimized: false, fullscreen: false, bounds: { x: 100, y: 50, width: 1200, height: 800 } };
+  const state = { minimizable, maximizable, maximized, overlay: null, drawn: null, overlays: [], calls: [], states: [], failOverlay: 0, visible: true, minimized: false, fullscreen: false, bounds: { x: 100, y: 50, width: 1200, height: 800 } };
   const note = call => { state.calls.push(call); state.states.push({ call, minimizable: state.minimizable, maximizable: state.maximizable, overlay: state.drawn && { ...state.drawn } }); };
   const window = {
     isDestroyed: () => false, isVisible: () => state.visible, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen, isFocused: () => true,
@@ -25,7 +25,7 @@ function fakeWindow({ minimizable = true, maximizable = true, maximized = false 
     isMinimizable: () => state.minimizable, isMaximizable: () => state.maximizable, isMaximized: () => state.maximized,
     setMinimizable(on) { state.minimizable = on; note('setMinimizable(' + on + ')'); },
     setMaximizable(on) { state.maximizable = on; note('setMaximizable(' + on + ')'); },
-    setTitleBarOverlay(overlay) { state.overlay = { ...overlay }; state.drawn = { ...overlay }; state.overlays.push({ ...overlay }); note(alpha(overlay.symbolColor) === 0 ? 'overlay(transparent)' : 'overlay(visible)'); },
+    setTitleBarOverlay(overlay) { if (state.failOverlay > 0) { state.failOverlay--; throw new Error('the overlay could not be set'); } state.overlay = { ...overlay }; state.drawn = { ...overlay }; state.overlays.push({ ...overlay }); note(alpha(overlay.symbolColor) === 0 ? 'overlay(transparent)' : 'overlay(visible)'); },
     setBackgroundColor(color) { note('background(' + color + ')'); },
   };
   /** Windows drops what the overlay drew: the person sees no buttons until the overlay is sent again. main's own bookkeeping is untouched. */
@@ -45,6 +45,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false } =
   const setCaptionSource = between('const captionBacking=', 'const uiCrashTimes=[];');
   const handler = /notchShown:(shown=>\{if\(captionNotchShown===shown\)return;captionNotchShown=shown;setCaption\(\);\})/.exec(text)?.[1] || 'shown=>{if(captionNotchShown===shown)return;captionNotchShown=shown;setCaption();}';
 
+  const isShown = /notchIsShown:(\(\)=>captionNotchShown)/.exec(text)?.[1] || '()=>captionNotchShown';
   const { window, state } = fakeWindow(flags);
   const layout = { appearance: 'light', viewport: { width: 1200, height: 800 }, captionHeight: NOTCH_HEIGHT, captionNotch: true, ...layoutInit };
   const clock = { t: 100000, timers: [] };
@@ -64,7 +65,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false } =
     },
   };
   vm.createContext(sandbox);
-  const expose = `;globalThis.__caption={setCaption,notchShown:${handler},hiddenNow:()=>captionHiddenNow,shownAt:()=>captionShownAt,forcedNow:()=>typeof captionForced==='undefined'?false:captionForced,watch:typeof captionWatch==='undefined'?null:captionWatch,setInterfaceDown:value=>{if(typeof interfaceDown!=='undefined')interfaceDown=value;},guard:typeof captionGuard==='undefined'?null:captionGuard};`;
+  const expose = `;globalThis.__caption={setCaption,notchShown:${handler},hiddenNow:()=>captionHiddenNow,notchIsShown:${isShown},shownAt:()=>captionShownAt,forcedNow:()=>typeof captionForced==='undefined'?false:captionForced,watch:typeof captionWatch==='undefined'?null:captionWatch,setInterfaceDown:value=>{if(typeof interfaceDown!=='undefined')interfaceDown=value;},guard:typeof captionGuard==='undefined'?null:captionGuard};`;
   vm.runInContext(decls + guardSource + watchSource + setCaptionSource + expose, sandbox);
   /** Run the fake clock forward, firing timers in order (the legacy 200 ms release, the watcher's 50 ms look, the refresh, a settle). */
   const advance = ms => {

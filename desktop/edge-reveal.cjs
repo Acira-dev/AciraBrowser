@@ -255,7 +255,11 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
           suspended: !!item.suspended?.() || !!win.isMinimized?.() || !!win.isFullScreen?.(), active: !!notchInput?.active, hidden: !!notchInput?.hidden,
           speed: item.speed?.() || 'premium', pressed: !!item.pressed?.(),
         });
-        if (shown !== !!entry.notchShown) { entry.notchShown = shown; item.notchShown?.(shown); }
+        // Compared with what main's caption actually is, not with what this poller told it last: main resets its own state when the layout leaves the mode (a docked right sidebar,
+        // full screen, a view switch), and a poller that remembers "shown" would never say so again, leaving the notch hidden under a pointer resting at the top.
+        const current = item.notchIsShown ? !!item.notchIsShown() : !!entry.notchShown;
+        if (shown !== current) item.notchShown?.(shown);
+        entry.notchShown = shown;
         if ((notchInput?.active && focused) || notch.active()) fast = true;
       }
       const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium' };

@@ -194,8 +194,12 @@ export function closedSplitOf(state:BrowserSnapshot,tabId:string):ClosedSplit|un
 /** Undo of a closed split pane (the toast, Ctrl+Shift+T, a batch): the tab is back in the strip; this puts it back into its split at its slot,
  *  re-linked when it was a linked copy, with the split's old layout when the panes are the same again. A split that ended when this pane
  *  closed (two panes) is made again with the panes that are still open. A split that was on screen is on screen again. */
+/** The workspace a tab is shown in (its own, else its profile's first), with its profile: the panes of one split always share it (a split never spans workspaces). */
+const homeOf=(state:Pick<BrowserSnapshot,'workspaces'>,tab:Pick<TabSession,'browserProfileId'|'workspaceId'>)=>{const own=(state.workspaces??[]).filter(workspace=>workspace.browserProfileId===tab.browserProfileId);return tab.browserProfileId+'|'+((tab.workspaceId&&own.some(workspace=>workspace.id===tab.workspaceId)?tab.workspaceId:own[0]?.id)??'');};
 export function rejoinSplit(state:BrowserSnapshot,tabId:string,memory:ClosedSplit):void {
   const open=state.tabs.map(tab=>tab.id);if(!open.includes(tabId))return;
+  /* The tab may come back in another workspace than its split partners now are (they moved while it was closed, or Reopen closed tab brought it back where it was): then it is no part of that split any more. */
+  const mine=homeOf(state,state.tabs.find(tab=>tab.id===tabId)!),sameHome=(id:string)=>{const tab=state.tabs.find(item=>item.id===id);return !!tab&&homeOf(state,tab)===mine;};
   const groups=state.windowUi.splitGroups??(state.windowUi.splitGroups=[]);
   const saved=groups.find(group=>group.id===memory.split.id);
   const original=memory.split;
@@ -205,11 +209,11 @@ export function rejoinSplit(state:BrowserSnapshot,tabId:string,memory:ClosedSpli
   };
   let group=saved;
   if(saved){
-    if(saved.tabIds.includes(tabId)||saved.tabIds.length>=MAX_PANES)return;
+    if(saved.tabIds.includes(tabId)||saved.tabIds.length>=MAX_PANES||!saved.tabIds.every(sameHome))return;
     saved.tabIds.splice(Math.min(memory.slot,saved.tabIds.length),0,tabId);retile(saved);
   }else{
     const taken=new Set(groups.flatMap(item=>item.tabIds));
-    const ids=original.tabIds.filter(id=>id===tabId||open.includes(id)&&!taken.has(id));
+    const ids=original.tabIds.filter(id=>id===tabId||open.includes(id)&&!taken.has(id)&&sameHome(id));
     if(ids.length<2)return;
     group={...structuredClone(original),tabIds:ids};group.collapsed=false;retile(group);groups.push(group);
   }
@@ -231,7 +235,7 @@ export function rejoinSplit(state:BrowserSnapshot,tabId:string,memory:ClosedSpli
  *  are left alone. It does not take the split on screen (a reopen is a background action) unless that split already is. */
 function rejoinReopened(state:BrowserSnapshot,action:Extract<BrowserAction,{type:'split.rejoin'}>):void {
   const open=new Set(state.tabs.map(tab=>tab.id)),groups=state.windowUi.splitGroups??[];
-  const partners=[...new Set(action.partners)].filter(id=>id!==action.tabId&&open.has(id));
+  const mine=state.tabs.find(tab=>tab.id===action.tabId),partners=[...new Set(action.partners)].filter(id=>id!==action.tabId&&open.has(id)&&!!mine&&homeOf(state,state.tabs.find(tab=>tab.id===id)!)===homeOf(state,mine));
   if(!open.has(action.tabId)||!partners.length||groups.some(group=>group.tabIds.includes(action.tabId)))return;
   const saved=groups.find(group=>group.tabIds.length===partners.length&&partners.every(id=>group.tabIds.includes(id)));
   if(!saved&&partners.some(id=>groups.some(group=>group.tabIds.includes(id))))return;

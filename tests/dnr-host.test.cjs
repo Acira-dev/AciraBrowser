@@ -2,7 +2,7 @@
 // declarativeNetRequest host (dnr-host.cjs) and the extension-side forwarding (extension-apis-renderer.cjs).
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{EventEmitter}=require('node:events');
-const {attachDnrHost,dnrHostFor,hostAccessFor}=require('../desktop/browser-services/dnr-host.cjs');
+const {attachDnrHost,dnrHostFor,hostAccessFor,redirectResponse}=require('../desktop/browser-services/dnr-host.cjs');
 const {aciraExtraApis}=require('../desktop/browser-services/extension-apis-renderer.cjs');
 
 const ID='c'.repeat(32);
@@ -118,4 +118,43 @@ test('the extension-side API forwards accepted updates and keeps Chrome\'s callb
  assert.deepEqual(await api.getMatchedRules({}),{rulesMatchedInfo:[]});
  assert.equal(typeof api.getDynamicRules,'function');
  assert.equal(definitions.declarativeNetRequest.shouldInject(),true);
+});
+
+// Electron's onHeadersReceived takes {cancel}, {responseHeaders} and {statusLine}; it ignores `redirectURL` there (probed on Electron 44.9.3), so a redirect
+// decided from the response is the way Chromium makes it: a 302 Found with a Location header (web_request_api_helpers.cc RedirectRequestAfterHeadersReceived).
+test('response phase: the host answers onHeadersReceived with cancel, a 302 Location rewrite, or rewritten headers',async()=>{
+ const f=fixture();
+ try{
+  fs.writeFileSync(path.join(f.ext,'late.json'),JSON.stringify([
+   {id:1,priority:1,action:{type:'block'},condition:{urlFilter:'||blocked.example^',resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*']}]}},
+   {id:2,priority:1,action:{type:'redirect',redirect:{url:'https://viewer.example/open'}},condition:{urlFilter:'||moved.example^',resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*']}]}},
+   {id:3,priority:1,action:{type:'modifyHeaders',responseHeaders:[{header:'content-disposition',operation:'set',value:'attachment'}]},condition:{urlFilter:'||files.example^',resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*']}]}}
+  ]));
+  f.manifest.declarative_net_request.rule_resources.push({id:'late',enabled:true,path:'late.json'});
+  const host=attachDnrHost({session:f.session,router:f.router,userData:f.userData,storeKey:'p1',getExtension:()=>f.extension});
+  await host.whenLoaded();
+  const page=(url,headers)=>({url,method:'GET',resourceType:'mainFrame',referrer:'',id:9,responseHeaders:headers});
+  const pdf={'Content-Type':['application/pdf'],Location:['https://stale.example/'],location:['https://stale2.example/']},html={'Content-Type':['text/html']};
+  assert.equal(host.before(page('https://blocked.example/a.pdf'),{tabId:3}),null,'nothing at the request phase');
+  assert.deepEqual(host.headers(page('https://blocked.example/a.pdf',pdf),{tabId:3}),{cancel:true});
+  assert.equal(host.headers(page('https://blocked.example/a.html',html),{tabId:3}),null);
+  const moved=host.headers(page('https://moved.example/a.pdf',pdf),{tabId:3});
+  assert.equal(moved.statusLine,'HTTP/1.1 302 Found');
+  assert.deepEqual(moved.responseHeaders,{'Content-Type':['application/pdf'],Location:['https://viewer.example/open']},'every earlier Location is replaced');
+  assert.equal(moved.redirectURL,undefined);
+  assert.deepEqual(host.headers(page('https://files.example/a.pdf',{'Content-Type':['application/pdf']}),{tabId:3}),{responseHeaders:{'Content-Type':['application/pdf'],'content-disposition':['attachment']}});
+  assert.equal(host.headers({...page('https://files.example/a.pdf',pdf),url:'chrome-extension://x/a.pdf'},{tabId:3}),null,'non-web schemes are never matched');
+  assert.equal(host.headers({...page('https://files.example/a.pdf'),responseHeaders:undefined},{tabId:3}),null);
+  assert.deepEqual(redirectResponse({Location:['a'],LOCATION:['b'],Age:['1']},'https://x.example/'),{responseHeaders:{Age:['1'],Location:['https://x.example/']},statusLine:'HTTP/1.1 302 Found'});
+ }finally{f.cleanup();}
+});
+
+test('response phase: with no response-phase rule the host does nothing',async()=>{
+ const f=fixture();
+ try{
+  const host=attachDnrHost({session:f.session,router:f.router,userData:f.userData,storeKey:'p1',getExtension:()=>f.extension});
+  await host.whenLoaded();
+  assert.equal(host.engine.hasResponseRules,false);
+  assert.equal(host.headers({url:'https://ads.example/a.pdf',method:'GET',resourceType:'mainFrame',id:1,responseHeaders:{'Content-Type':['application/pdf']}},{tabId:3}),null);
+ }finally{f.cleanup();}
 });

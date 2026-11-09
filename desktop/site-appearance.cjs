@@ -1,0 +1,175 @@
+'use strict';
+// Website appearance (13.3): System · Light · Dark · Always dark. One setting for the colours websites are shown in, apart from Acira's own appearance.
+//  - System: nothing is done; sites follow Acira's appearance through the window's colour scheme (today's behaviour, and no debugger is touched).
+//  - Light / Dark: each website tab is told prefers-color-scheme light or dark (CDP Emulation.setEmulatedMedia). A site with a dark theme of its own switches; a site without one stays as it is.
+//    A tab that is told what it would follow anyway (Dark while Acira is dark, Light while Acira is light) is not touched at all.
+//  - Always dark: Dark, plus Chromium's own Auto Dark Mode (CDP Emulation.setAutoDarkModeOverride, the DevTools "Emulate auto dark mode" switch) for the sites that have no dark theme.
+//    Colours are changed when Chromium paints: the page's DOM, styles and scripts are never touched, images / canvas / video are left as they are (Chromium classifies them), and a site
+//    that already has a dark theme is not darkened a second time (the tab is told dark, so Auto Dark Mode leaves `color-scheme: light dark` and `only light` alone).
+//  - Both overrides belong to the debugger session: they end when it detaches. The session is a lease on the page's one debugger (page-debugger.cjs), shared with tab sleep, the
+//    camera check, the zoom glide and secured pages, so none of them gives up because a tab is dark. Leaving a mode clears the overrides first, because the session may stay.
+//  - A cross-origin frame lives in its own process and is not reached by the page's session: Target.setAutoAttach hands us each frame's session, which gets the same commands.
+// Only in Always dark: a site is left out by its registrable domain (script-rules.cjs siteOfUrl), saved as a row `dark:<site>` = {dark:'exclude'} in the profile's policies table, and the
+// page menu offers "Exclude this site from dark mode" / "Include this site again". A left-out site is shown as System shows it. A private tab keeps its choices in memory. A Tor tab is never touched.
+const {siteOfUrl} = require('./browser-services/script-rules.cjs');
+const pageDebugger = require('./page-debugger.cjs');
+const KEY = 'dark:', LIMIT = 500;
+const MODES = ['system', 'light', 'dark', 'always-dark'];
+const AUTO = {autoAttach: true, waitForDebuggerOnStart: false, flatten: true};
+
+const withTimeout = (promise, ms) => { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The page did not answer.')), ms); timer.unref?.(); })]).finally(() => clearTimeout(timer)); };
+
+/**
+ * mode(): the setting. nativeDark(): whether pages follow a dark Acira on their own (the window's colour scheme). isTor(entry), profileOf(entry): as in script-rules.cjs.
+ * acquire: the page-debugger lease (a stand-in in tests). retryMs: how long to wait when another debugger holds the page.
+ */
+function createSiteAppearance({database, mode, nativeDark = () => false, isTor = () => false, profileOf, acquire = pageDebugger.acquire, commandMs = 4000, retryMs = 1500, retries = 5}) {
+  const pages = new Map(); // webContents -> {tabId, profileId, privacy, lease, want, frames:Set, listener, busy, again, tries, timer}
+  const memory = new Map(); // private profile id -> Map(site -> excluded)
+  const isPrivate = profileId => String(profileId || '').startsWith('private-');
+  const modeNow = () => { const value = mode(); return MODES.includes(value) ? value : 'system'; };
+  const excludedOn = (profileId, site) => {
+    if (isPrivate(profileId)) return memory.get(profileId)?.get(site) === true;
+    try { return database.policy(profileId, KEY + site)?.dark === 'exclude'; } catch { return false; }
+  };
+  const eligible = (wc, url) => {
+    const entry = pages.get(wc);
+    if (!entry || wc.isDestroyed() || isTor(entry)) return {supported: false, site: ''};
+    const site = siteOfUrl(url);
+    return {supported: Boolean(site), site};
+  };
+  /** The state of one page for the menu: supported (a website, not Tor), whether Always dark is chosen (the only mode with the row), whether this site is left out. */
+  function status(wc) {
+    const entry = pages.get(wc), {supported, site} = eligible(wc, wc.getURL());
+    if (!entry || !supported) return {supported: false, enabled: false, site: '', excluded: false};
+    return {supported: true, enabled: modeNow() === 'always-dark', site, excluded: excludedOn(profileOf(entry), site)};
+  }
+  /** What one page should be told: {scheme: 'light'|'dark', auto} or null for nothing. */
+  const wanted = (wc, url) => {
+    const entry = pages.get(wc), {supported, site} = eligible(wc, url), current = modeNow();
+    if (!entry || !supported || current === 'system') return null;
+    if (current === 'light') return {scheme: 'light', auto: false};
+    if (current === 'dark') return {scheme: 'dark', auto: false};
+    return excludedOn(profileOf(entry), site) ? null : {scheme: 'dark', auto: true};
+  };
+  /** What the page needs a session for: Auto Dark Mode always, a colour scheme only when it differs from what the page follows anyway. */
+  const needsSession = want => Boolean(want) && (want.auto || want.scheme !== (nativeDark() ? 'dark' : 'light'));
+  /** For the Sec-CH-Prefers-Color-Scheme header: true or false when this tab is told a scheme, undefined when it follows Acira. */
+  function darkFor(wc, url) {
+    if (!wc || !pages.has(wc)) return undefined;
+    try { const want = wanted(wc, url || wc.getURL()); return want ? want.scheme === 'dark' : undefined; } catch { return undefined; }
+  }
+  const send = (lease, method, params, sessionId) => withTimeout(lease.sendCommand(method, params, sessionId), commandMs);
+  /** The commands that make one page (or one frame's process) light, dark or auto-dark. */
+  async function tell(lease, want, sessionId) {
+    await send(lease, 'Emulation.setAutoDarkModeOverride', {enabled: want.auto}, sessionId);
+    await send(lease, 'Emulation.setEmulatedMedia', {features: [{name: 'prefers-color-scheme', value: want.scheme}]}, sessionId);
+  }
+  /** Takes back both overrides (the session may stay for another feature, so letting go is not enough). */
+  async function clear(lease, sessionId) {
+    await send(lease, 'Emulation.setAutoDarkModeOverride', {}, sessionId);
+    await send(lease, 'Emulation.setEmulatedMedia', {features: []}, sessionId);
+  }
+  async function enable(wc, entry, want) {
+    const lease = acquire(wc, 'appearance');
+    if (!lease) { retryLater(wc, entry); return; } // another debugger (Tor, a hidden cookie page) holds the page
+    entry.lease = lease; entry.want = want; entry.frames = new Set(); entry.tries = 0;
+    lease.onDetach(() => { if (entry.lease === lease) { entry.lease = null; entry.want = null; entry.frames = new Set(); retryLater(wc, entry, Math.min(300, retryMs)); } });
+    entry.listener = (_event, method, params) => {
+      if (method === 'Target.detachedFromTarget' && params?.sessionId) { entry.frames.delete(params.sessionId); return; }
+      if (method !== 'Target.attachedToTarget' || !params?.sessionId || entry.lease !== lease) return;
+      if (params.targetInfo?.type === 'iframe') {
+        entry.frames.add(params.sessionId);
+        tell(lease, entry.want, params.sessionId).catch(() => {});
+        lease.sendCommand('Target.setAutoAttach', AUTO, params.sessionId).catch(() => {}); // frames inside that frame
+      } else lease.sendCommand('Target.detachFromTarget', {sessionId: params.sessionId}).catch(() => {}); // workers: nothing to do
+    };
+    lease.on('message', entry.listener);
+    try {
+      await send(lease, 'Target.setAutoAttach', AUTO);
+      await tell(lease, want);
+    } catch (error) { await disable(wc, entry); throw error; }
+  }
+  /** A page that is already ours changes what it is told, in place (no gap in between). */
+  async function change(entry, want) {
+    const lease = entry.lease;
+    await tell(lease, want);
+    entry.want = want; // only once the page has it: a call that failed halfway is made again
+    for (const sessionId of entry.frames) tell(lease, want, sessionId).catch(() => {});
+  }
+  /** System, or a tab that follows Acira anyway: the overrides are taken back and the session let go. */
+  async function disable(wc, entry) {
+    const lease = entry.lease;
+    entry.lease = null; entry.want = null;
+    if (!lease) return;
+    const frames = [...entry.frames]; entry.frames = new Set();
+    try { if (entry.listener) lease.removeListener('message', entry.listener); } catch { /* gone */ }
+    entry.listener = null;
+    if (!lease.over) {
+      try {
+        for (const sessionId of frames) await clear(lease, sessionId).catch(() => {});
+        await clear(lease);
+        await send(lease, 'Target.setAutoAttach', {autoAttach: false, waitForDebuggerOnStart: false, flatten: true}).catch(() => {});
+      } catch { /* the page did not answer: letting go ends the session's own overrides if it was the only holder */ }
+    }
+    lease.release();
+  }
+  /** Another debugger holds the page, or it did not answer: look again shortly, a few times, then wait for the next navigation or setting change. */
+  function retryLater(wc, entry, ms = retryMs) {
+    if (entry.timer || entry.tries >= retries || wc.isDestroyed()) return;
+    entry.tries += 1;
+    entry.timer = setTimeout(() => { entry.timer = null; void apply(wc); }, ms);
+    entry.timer.unref?.();
+  }
+  /** Brings one page to what it should be showing. Calls for the same page never overlap: a call that arrives meanwhile runs once more at the end. */
+  async function apply(wc, url, fresh = false) {
+    const entry = pages.get(wc);
+    if (!entry || wc.isDestroyed()) return;
+    if (fresh) entry.tries = 0;
+    if (entry.busy) { entry.again = url || true; return; }
+    entry.busy = true;
+    try {
+      const want = wanted(wc, url || wc.getURL()), session = needsSession(want) ? want : null;
+      if (session && !entry.lease) await enable(wc, entry, session);
+      else if (session && (entry.want.scheme !== session.scheme || entry.want.auto !== session.auto)) await change(entry, session);
+      else if (!session && entry.lease) await disable(wc, entry);
+    } catch (error) {
+      void error; // a page that did not answer is looked at again below
+      retryLater(wc, entry);
+    } finally {
+      entry.busy = false;
+      if (entry.again) { const next = entry.again === true ? undefined : entry.again; entry.again = false; void apply(wc, next); }
+    }
+  }
+  /** Follows one website page for its life. */
+  function attach(wc, tab) {
+    if (pages.has(wc)) return;
+    const entry = {tabId: tab.id, profileId: tab.browserProfileId, privacy: tab.privacy, lease: null, want: null, frames: new Set(), listener: null, busy: false, again: false, tries: 0, timer: null};
+    pages.set(wc, entry);
+    try { wc.setMaxListeners(Math.max(wc.getMaxListeners?.() || 10, 20)); } catch { /* a stand-in */ } // a link preview's page has Node's default of 10 and this adds three
+    // At the commit, not at the start: the old page keeps its look until the new one is there. A tab that stays as it is keeps its session, so only a change costs anything.
+    wc.on('did-navigate', (_event, url) => { void apply(wc, url, true); });
+    wc.on('dom-ready', () => { void apply(wc, undefined, true); });
+    wc.once('destroyed', () => { clearTimeout(entry.timer); try { entry.lease?.release(); } catch { /* gone */ } entry.lease = null; pages.delete(wc); });
+    void apply(wc);
+  }
+  function setExcluded(wc, excluded) {
+    const entry = pages.get(wc), {supported, site} = eligible(wc, wc.getURL());
+    if (!entry || !supported) throw new Error('Open a website first.');
+    const profileId = profileOf(entry);
+    if (isPrivate(profileId)) { if (!memory.has(profileId)) memory.set(profileId, new Map()); memory.get(profileId).set(site, Boolean(excluded)); }
+    else if (excluded) {
+      let count = 0; try { count = database.policies(profileId).filter(row => row.site.startsWith(KEY)).length; } catch { /* the table is read again below */ }
+      if (count >= LIMIT && excludedOn(profileId, site) !== true) throw new Error('The list is full.');
+      database.setPolicy(profileId, KEY + site, {dark: 'exclude'});
+    } else database.deletePolicy(profileId, KEY + site);
+    for (const other of pages.keys()) { if (siteOfUrl(other.getURL()) === site) void apply(other, undefined, true); }
+    return status(wc);
+  }
+  /** The setting changed, or Acira's own appearance did (what a tab follows anyway). */
+  function refreshAll() { for (const wc of [...pages.keys()]) void apply(wc, undefined, true); }
+  /** For tests and the menu: the settled state of one page. */
+  const stateOf = wc => { const entry = pages.get(wc); return entry ? {session: Boolean(entry.lease), want: entry.want, frames: entry.frames.size} : null; };
+  return {attach, status, setExcluded, refreshAll, wanted, darkFor, stateOf, whenIdle: async wc => { for (let i = 0; i < 200 && pages.get(wc)?.busy; i += 1) await new Promise(resolve => setTimeout(resolve, 5)); }};
+}
+module.exports = {createSiteAppearance, KEY, MODES, LIMIT};

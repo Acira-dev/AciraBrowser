@@ -1,4 +1,5 @@
 import { NativeNetworkSettings } from "./NativeNetworkSettings";
+import { holdsCommandKey } from '../ui/commandKeys';
 import "../styles/native-network.css";
 import { PageZoomControls } from "../components/PageZoomControls";
 import { MenuCustomizer } from "../components/MenuCustomizer";
@@ -342,9 +343,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       const slash =
         event.key === "/" &&
         !editing &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey;
+        !holdsCommandKey(event);
       const find =
         (event.ctrlKey || event.metaKey) &&
         !event.altKey &&
@@ -513,6 +512,19 @@ export function BrowserSettings({ state, dispatch }: Props) {
                   ["rich", tr("browsersettings.siteColorRich")],
                 ] as const}
                 onChange={(siteColor) => update({ siteColor })}
+              />
+            </SettingRow>
+            <SettingRow id="website-appearance" title={tr("browsersettings.websiteAppearance")} detail={tr("browsersettings.websiteAppearanceDetail")}>
+              <Segmented
+                label={tr("browsersettings.websiteAppearance")}
+                value={s.websiteAppearance ?? "system"}
+                options={[
+                  ["system", tr("browsersettings.websiteSystem")],
+                  ["light", tr("appearancecontrols.light")],
+                  ["dark", tr("appearancecontrols.dark")],
+                  ["always-dark", tr("browsersettings.websiteAlwaysDark")],
+                ] as const}
+                onChange={(websiteAppearance) => update({ websiteAppearance })}
               />
             </SettingRow>
           </SettingGroup>

@@ -4,13 +4,26 @@ import { installDesignVariables } from './ui/designSystem';
 import { installDisclosureMotion } from './ui/disclosureMotion';
 import { initLocale, applyLanguageSetting, t } from './i18n';
 import { installWindowFullscreen } from './ui/windowFullscreen';
+import { planRecovery, readReloads, type RecoveryLog } from './ui/viewRecovery';
 installDesignVariables();installDisclosureMotion();
-class AppErrorBoundary extends Component<{children:ReactNode},{message:string}>{
- state={message:''};
+// Only the window's own interface view (not the popup layer) speaks for the window: main takes the page views off it while its error screen is up.
+const isWindowView=!new URLSearchParams(location.search).get('view');
+const tellMain=(on:boolean)=>{if(!isWindowView)return;try{void import('./runtime/client').then(({runtime})=>runtime.browserCommand({type:'interface-error',tabId:'interface',on})).catch(()=>{});}catch{/* no window to tell */}};
+const RELOADS_KEY='acira-ui-recovery';
+let recoveryLog:RecoveryLog={retries:[],reloads:[]};
+class AppErrorBoundary extends Component<{children:ReactNode},{message:string;attempt:number}>{
+ state={message:'',attempt:0};
  static getDerivedStateFromError(error:Error){return {message:error.message};}
- // The browser's state lives in the main process, so reloading the view loses nothing. Twice a minute at most, so a view that cannot start does not loop.
- componentDidCatch(){try{const key='acira-ui-recovery',now=Date.now(),seen=(JSON.parse(sessionStorage.getItem(key)||'[]') as number[]).filter(time=>now-time<60000);if(seen.length<2){seen.push(now);sessionStorage.setItem(key,JSON.stringify(seen));setTimeout(()=>location.reload(),150);}}catch{/* storage unavailable: the Reload view button remains */}}
- render(){return this.state.message?<div style={{height:'100%',display:'grid',placeItems:'center',background:'#f2f3f5',color:'#30343b',padding:40}}><div style={{maxWidth:480}}><img src="./acira-logo.svg" alt={t("browsersettings.acira")} width="150"/><h1 style={{fontSize:24,marginTop:28}}>{t("main.errorTitle")}</h1><p style={{margin:'16px 0',lineHeight:1.7}}>{t("main.errorBody")}</p><button className="btn" onClick={()=>location.reload()}>{t("main.reloadView")}</button> <details style={{marginTop:24,fontSize:12}}><summary>{t("main.errorDetails")}</summary><p>{this.state.message}</p></details></div></div>:this.props.children;}
+ // The browser's state lives in the main process, so nothing is lost by trying again. First the tree is mounted afresh in place (before anything is painted: no reload, no blank
+ // view); a view that fails again reloads, twice a minute at most so one that cannot start does not loop; after that the error screen stays and main hides the pages over it.
+ componentDidCatch(){
+  let reloads:number[]=[];try{reloads=readReloads(sessionStorage.getItem(RELOADS_KEY));}catch{/* storage unavailable: the Reload view button remains */}
+  const plan=planRecovery({retries:recoveryLog.retries,reloads},Date.now());recoveryLog={retries:plan.log.retries,reloads:plan.log.reloads};
+  if(plan.step==='retry'){this.setState(state=>({message:'',attempt:state.attempt+1}));return;}
+  if(plan.step==='stay')tellMain(true);
+  if(plan.step==='reload'){try{sessionStorage.setItem(RELOADS_KEY,JSON.stringify(plan.log.reloads));}catch{/* storage unavailable */}setTimeout(()=>location.reload(),150);}
+ }
+ render(){return this.state.message?<div style={{height:'100%',display:'grid',placeItems:'center',background:'#f2f3f5',color:'#30343b',padding:40}}><div style={{maxWidth:480}}><img src="./acira-logo.svg" alt={t("browsersettings.acira")} width="150"/><h1 style={{fontSize:24,marginTop:28}}>{t("main.errorTitle")}</h1><p style={{margin:'16px 0',lineHeight:1.7}}>{t("main.errorBody")}</p><button className="btn" onClick={()=>location.reload()}>{t("main.reloadView")}</button> <details style={{marginTop:24,fontSize:12}}><summary>{t("main.errorDetails")}</summary><p>{this.state.message}</p></details></div></div>:<React.Fragment key={this.state.attempt}>{this.props.children}</React.Fragment>;}
 }
 document.documentElement.dataset.native=window.acira?'true':'false';
 document.documentElement.dataset.platform=window.acira?.platform||(/Mac/.test(navigator.platform)?'darwin':'win32');

@@ -32,9 +32,11 @@ test('the renderer cannot ask for a file tab: it is not one of the actions the b
 
 test('which files may be opened, and only by a drop the browser started',()=>{
   const main=read('desktop/main.cjs');
-  const kinds=main.match(/const droppedFileKinds=new Set\(\[([^\]]*)\]\)/)?.[1]||'';
-  for(const kind of ['.pdf','.png','.jpg','.txt','.html','.mp3','.mp4','.webm'])assert.ok(kinds.includes("'"+kind+"'"),kind+' is allowed');
-  for(const kind of ['.exe','.bat','.cmd','.ps1','.js','.vbs','.msi','.lnk','.scr','.dll','.jar','.reg','.url'])assert.ok(!kinds.includes("'"+kind+"'"),kind+' is not allowed');
+  // the one list of kinds lives in accounts/open-files.cjs (the drop, Open a file, and a file named in a Windows or Linux command line all use it)
+  assert.match(main,/const droppedFileKinds=require\('\.\/accounts\/open-files\.cjs'\)\.FILE_KINDS;/);
+  const kinds=read('desktop/accounts/open-files.cjs').match(/const FILE_KINDS = new Set\(\[([^\]]*)\]\)/)?.[1]||'';
+  for(const kind of ['.pdf','.png','.jpg','.txt','.html','.mp3','.mp4','.webm'])assert.ok(kinds.includes('"'+kind+'"'),kind+' is allowed');
+  for(const kind of ['.exe','.bat','.cmd','.ps1','.js','.vbs','.msi','.lnk','.scr','.dll','.jar','.reg','.url'])assert.ok(!kinds.includes('"'+kind+'"'),kind+' is not allowed');
   const open=main.slice(main.indexOf('function openDroppedFile(address)'),main.indexOf('function openDroppedFile(address)')+900);
   assert.match(open,/url\.protocol!=='file:'\|\|url\.hostname\|\|url\.username\|\|url\.password/,'no network shares, no credentials');
   assert.match(open,/realpathSync/);

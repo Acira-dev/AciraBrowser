@@ -45,7 +45,7 @@ import { bookmarkContext,openPage,savedPageIdentity } from '../../ui/pageActions
 import { openRailSection,setRailPrefs,toggleRailSection,useRailPrefs } from '../../ui/railPrefs';
 import { useShownTabsSwitch } from '../../ui/layoutSync';
 import { appClickPlan,appHost,appTabFor,droppedLink,listedInSidebar,moveSidebarApp,normalizeAppUrl,noteReleasedTab,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,SIDEBAR_APPS_LIMIT,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
-import { focusSidebarControl } from '../../ui/sidebarFocus';
+import { focusSidebarControl,keepTabFocus,listedTabIds,neighbourTabId,tabFocusEnvironment } from '../../ui/sidebarFocus';
 import { pointerAnchor,rowAnchor } from '../../ui/popup';
 import { profileDownloads } from '../../ui/downloadActivity';
 import { DownloadsGlyph } from '../DownloadsGlyph';
@@ -294,7 +294,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const setWidth=(next:number)=>dispatch({type:'settings.update',patch:{sidebarWidth:clampSidebarWidth(next)}});
  // A favorite's tab is an ordinary tab of the list, where it was, unless Settings keep it only in its tile (runtime/favoriteTabsRule.ts, ui/sidebarApps.ts listedInSidebar).
  const favorites=useSidebarApps(profileId,privateMode);
- const listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings);
+ const folded=FAVORITES_LIMIT[sizeOf(clampSidebarWidth(state.settings.sidebarWidth))],listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings,folded);
  const groups=state.tabGroups.filter(group=>group.browserProfileId===profileId).map(group=>({group,members:state.tabs.filter(tab=>listed(tab)&&groupForTab(state,tab)?.id===group.id)})).filter(item=>item.members.length);
  const profileTabs=state.tabs.filter(tab=>tab.browserProfileId===profileId),listedProfileTabs=profileTabs.filter(listed);
  const active=profileTabs.find(tab=>tab.id===state.activeTabId);
@@ -449,6 +449,9 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
  // R3-70: favorites tiles glide to their places when one is added, removed or moved (a new one settles in, a removed one fades out).
  useListMotion(grid,apps.map(app=>app.id).join(',')+':'+more+':'+(hint?hint.index:'')+(pin?.adding?'+':''),{frequent:true});
  const siteIcon=useSiteIcons(state);
+ // Called before the early returns below (hidden, no favorites, the drop target): a hook after them makes the first favorite, the last one removed and Hide
+ // favorites change the number of hooks between renders (React error #310/#300, the interface reloads itself).
+ const size=useSidebarSize(clampSidebarWidth(state.settings.sidebarWidth));
  // The active tile's ring takes its site's colour: each tile's own icon, read once on this computer (ui/siteIconColor.ts); a private window keeps the answers in memory.
  const colours=useIconColors(apps.map(app=>({key:app.id,site:appHost(app.url),src:app.icon||siteIdentity(app.url).icon||siteIcon(app.url)})),!privateMode);
  useEffect(()=>{if(!seeded)seedSidebarApps(profileId,privateMode,newTab.shortcuts.filter(item=>item.sidebar).map(item=>({url:item.url,title:item.title})));},[seeded,profileId,privateMode]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -498,7 +501,7 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
  };
  // Favorites cap at 12 (Arc, Zen), the rest behind +N, and never more than four rows: Narrow (2 across) shows 7 and +N. The size sets the columns: 2, 3 or 4 across;
  // Standard keeps 4 across for the counts where 3 leaves a ragged last row (Zen), as it always has.
- const size=useSidebarSize(clampSidebarWidth(state.settings.sidebarWidth)),limit=FAVORITES_LIMIT[size],overflow=!more&&apps.length>limit,shown=overflow?apps.slice(0,limit-1):apps,tiles=shown.length+(overflow?1:0);
+ const limit=FAVORITES_LIMIT[size],overflow=!more&&apps.length>limit,shown=overflow?apps.slice(0,limit-1):apps,tiles=shown.length+(overflow?1:0);
  const cols=favoriteColumns(size,tiles),making=Boolean(pin?.adding)&&!overflow&&!drop;
  const focusTile=(id:string)=>requestAnimationFrame(()=>grid.current?.querySelector<HTMLElement>(`[data-app-id="${id}"]`)?.focus());
  // Edit favorite is a popover from the tile (A's panel spec); a private window's favorites live in this renderer only,
@@ -1000,10 +1003,10 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
   <button className="sb-tab-main" data-sb-focus onDoubleClick={event=>{event.preventDefault();setRenaming('inline');}} aria-current={active?'page':undefined} aria-label={privacy||sound==='playing'||linkTip?`${name}${privacy?`, ${privacyNames[privacy].label}`:''}${sound==='playing'?`, ${t("tabsound.playing")}`:''}${linkTip?`, ${linkTip}`:''}`:undefined} title={cardAnswers(cardMode,tab)?undefined:`${name}${tab.customTitle?' · '+t("tabrename.renamedTip"):''}${privacy?' · '+privacyNames[privacy].tip:''}${tab.sleeping?' · sleeping':''}${isWeb(tab)?'\n'+address(tab.url):''}`} onClick={()=>{if(pane)selectStripTab(state,dispatch,tab.id,pane);else if(!active)dispatch({type:'tab.select',id:tab.id});}}
    onKeyDown={event=>{
     if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();context(event.currentTarget);return;}
-    if(event.key==='Delete'&&!pinned){event.preventDefault();onClose();return;}
+    if(event.key==='Delete'&&!pinned){event.preventDefault();const root=event.currentTarget.closest('.acira-sidebar'),next=root?neighbourTabId(listedTabIds(root),tab.id):undefined;onClose();if(next)keepTabFocus(next,tabFocusEnvironment());return;}
     if(pane&&event.key==='Enter'&&event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){event.preventDefault();toggle();return;}
     if(event.key==='F2'&&!event.altKey&&!event.ctrlKey&&!event.shiftKey){event.preventDefault();setRenaming('inline');return;}
-    if(event.altKey&&event.shiftKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){event.preventDefault();onMove(event.key==='ArrowUp'?-1:1);const id=tab.id;requestAnimationFrame(()=>document.querySelector<HTMLElement>(`.acira-sidebar [data-tab-id="${id}"] .sb-tab-main`)?.focus());return;}
+    if(event.altKey&&event.shiftKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){event.preventDefault();onMove(event.key==='ArrowUp'?-1:1);keepTabFocus(tab.id,tabFocusEnvironment());return;}
     moveFocus(event);}}>
    <span className="sb-tab-icon" data-loading={loading||undefined}>{loading?<DotMatrix preset="loader" size={14} reducedMotion={state.settings.reducedMotion}/>:markInIcon?<TabPrivacyMark privacy={privacy!} size={16} className="sb-tab-icon-mark"/>:<SiteIdentityIcon url={tab.url} favicon={tab.favicon} size={16} error={!!tab.error}/>}</span><span className="sb-tab-title" dir="auto"><span className="sb-tab-title-text">{name}</span>{copy&&<span className="sb-tab-leave" aria-hidden="true">{t("acirasidebar.removeFromSplit")}</span>}</span>
    <PeekMarkerCard tabId={tab.id} size={12} reduced={state.settings.reducedMotion}/>{/* the Link preview marker (item 17): a card with the preview's site icon beside this icon while a preview is open from this tab */}

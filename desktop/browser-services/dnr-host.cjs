@@ -32,6 +32,15 @@ function hostAccessFor(manifest){
  return (url,initiator)=>covers(url)&&(!initiator||covers(initiator));
 }
 
+/** Electron's onHeadersReceived ignores `redirectURL` (probed on Electron 44), so a redirect decided from the response is made the way Chromium makes it
+ *  (web_request_api_helpers.cc RedirectRequestAfterHeadersReceived): the response is rewritten to `302 Found` with a Location header. */
+function redirectResponse(responseHeaders,url){
+ const headers={};
+ for(const key of Object.keys(responseHeaders))if(key.toLowerCase()!=='location')headers[key]=responseHeaders[key];
+ headers.Location=[url];
+ return {responseHeaders:headers,statusLine:'HTTP/1.1 302 Found'};
+}
+
 function attachDnrHost({session,router,userData,storeKey='default',emit=()=>{},getExtension=()=>null,log=()=>{}}){
  if(!session)return null;
  if(session[HOST])return session[HOST];
@@ -197,11 +206,19 @@ function attachDnrHost({session,router,userData,storeKey='default',emit=()=>{},g
   badgeText(id,tabId){try{const handler=router?.handlers?.get?.('browserAction.getBadgeText'),extension=getExtension(id);return handler&&extension?handler.callback({extension},{tabId}):null;}catch{return null;}},
   requestCost(){const n=Math.min(sampleAt,samples.length),s=Array.from(samples.subarray(0,n)).sort((a,b)=>a-b),q=p=>n?Math.round(s[Math.min(n-1,Math.floor(p*n))]*10000)/10000:0;return {count:sampleAt,p50:q(0.5),p99:q(0.99),max:q(1)};},
   sendHeaders(details,context){if(!engine.hasHeaderRules||!eligible(details)||!details.requestHeaders)return null;return engine.beforeSendHeaders(requestOf(details,context),details.requestHeaders);},
-  headers(details,context){if(!engine.hasHeaderRules||!eligible(details)||!details.responseHeaders)return null;return engine.headersReceived(requestOf(details,context),details.responseHeaders);}
+  /** The response phase, answered the way Electron's onHeadersReceived takes it: {cancel:true} | {responseHeaders, statusLine?} | null. */
+  headers(details,context){
+   if(!engine.hasResponseRules||!eligible(details)||!details.responseHeaders)return null;
+   const out=engine.responseReceived(requestOf(details,context),details.responseHeaders);
+   if(!out)return null;
+   if(out.cancel)return {cancel:true};
+   if(out.redirectURL)return redirectResponse(details.responseHeaders,out.redirectURL);
+   return {responseHeaders:out.responseHeaders};
+  }
  };
  Object.defineProperty(session,HOST,{value:host,configurable:true});
  return host;
 }
 const dnrHostFor=session=>session?.[HOST]||null;
 
-module.exports={attachDnrHost,dnrHostFor,hostAccessFor,declaresDnr};
+module.exports={attachDnrHost,dnrHostFor,hostAccessFor,declaresDnr,redirectResponse};

@@ -9,7 +9,7 @@ import { BrandLogo } from '../../components/BrandLogo';
 import { EditorGlyph } from '../../components/EditorGlyph';
 import { PreviewIcon } from '../../components/PreviewIcon';
 import { SiteIdentityIcon } from '../../components/SiteIdentityIcon';
-import { resolveNavigation } from '../../runtime/navigation';
+import { carriesHttpsFirst, resolveNavigation } from '../../runtime/navigation';
 import { effectiveProviders } from '../../runtime/searchProviders';
 import { useArtColors } from '../../ui/artColors';
 import { useSiteIcons } from '../../ui/siteIcons';
@@ -192,7 +192,7 @@ export function NewTabPage({ state, tab, dispatch, onNavigate }: Props) {
       {modules.search && <form className="nt-search nt-vapor" style={step(0)} onSubmit={submit} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
         <EditorGlyph name="search" />
         <AddressField centerWithin=".nt-search" inputRef={input} label={t('nt.searchLabel')} value={draft.value} onChange={draft.edit} onFocus={draft.onFocus} onBlur={() => draft.onBlur()} style="acira" reducedMotion={reduced} speed={1} searchEngine={state.settings.searchEngine} placeholder={t('nt.placeholder')} onModifiedEnter={(value, newTab) => {
-          if (newTab) { const target = resolveNavigation(value, state.settings.searchEngine, state.settings.searchProviders ?? undefined, state.websiteLanguage); if (!target.error) dispatch({ type: 'tab.new', url: target.url }); } else onNavigate(value);
+          if (newTab) { const target = resolveNavigation(value, state.settings.searchEngine, state.settings.searchProviders ?? undefined, state.websiteLanguage); if (!target.error) dispatch({ type: 'tab.new', url: target.url, ...(carriesHttpsFirst(target, target.url) ? { httpsFirst: true } : {}) }); } else onNavigate(value);
         }} />
         {draft.value.trim()
           ? <button className="nt-submit" type="submit" aria-label={t('nt.submit')}><PreviewIcon icon={ArrowRight} size={14} /></button>

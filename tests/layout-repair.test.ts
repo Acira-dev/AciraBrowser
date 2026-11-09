@@ -28,7 +28,9 @@ test('a view that throws reloads itself, a crashed browser view is reloaded by t
   const boundary=read('src/main.tsx');
   assert.match(boundary,/componentDidCatch/);
   assert.match(boundary,/acira-ui-recovery/);
-  assert.match(boundary,/seen\.length<2/);
+  // the planner (src/ui/viewRecovery.ts, tests/view-recovery.test.ts): a failure is tried again in place twice, then reloads twice a minute at most
+  assert.match(boundary,/planRecovery\(/);
+  assert.match(read('src/ui/viewRecovery.ts'),/MAX_RELOADS = 2/);
   const main=read('desktop/main.cjs');
   assert.match(main,/contents\.on\('render-process-gone'/);
   assert.match(main,/uiCrashTimes\.length>=3/);

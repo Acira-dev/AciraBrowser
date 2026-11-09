@@ -310,10 +310,314 @@ test('responseHeaders condition: rules that need the response never act before i
  const e=engineWith([{id:1,priority:1,action:{type:'block'},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:['application/pdf*']}]}}]);
  assert.equal(!!e.beforeRequest({url:'https://site.test/page.html',type:'main_frame'})?.cancel,false);
  assert.equal(!!e.beforeRequest({url:'https://site.test/a.pdf',type:'main_frame'})?.cancel,false);
- // a request-header rule with a response condition has nothing to test yet
+ // a request-header rule with a response condition has nothing to test yet: Chromium refuses it (the request is long gone when the response comes)
  const f=engineWith([{id:1,priority:1,action:{type:'modifyHeaders',requestHeaders:[{header:'x-a',operation:'set',value:'1'}]},condition:{resourceTypes:['main_frame'],responseHeaders:[{header:'content-type'}]}}]);
  assert.equal(f.beforeSendHeaders({url:'https://site.test/',type:'main_frame'},{}),null);
+ assert.match(f.errors(EXT).join('\n'),/request headers/);
  for(const bad of [[],'content-type',[{}],[{header:''}],[{header:'content-type',values:'x'}],[{header:'content-type',excludedValues:[1]}],[{header:'bad name'}]])
   assert.throws(()=>compileRule({id:1,action:{type:'modifyHeaders',responseHeaders:[{header:'a',operation:'remove'}]},condition:{responseHeaders:bad}},set),/responseHeaders|header/i,JSON.stringify(bad));
  assert.throws(()=>compileRule({id:1,action:{type:'modifyHeaders',responseHeaders:[{header:'a',operation:'remove'}]},condition:{excludedResponseHeaders:[{values:['x']}]}},set),/excludedResponseHeaders|header/i);
+});
+
+// ---- 13.3: rules with response-header conditions, every action (Chromium: a rule with responseHeaders / excludedResponseHeaders is filed in the
+// headers_received index and judged in onHeadersReceived — flat_ruleset_indexer.cc IsBeforeRequestRule, ruleset_manager.cc EvaluateRequestWithHeaders;
+// the request phase's allow carries over, composite_matcher.cc GetAction lines 172-203). 13.2 only honoured the condition for modifyHeaders.
+const PDF=[{header:'content-type',values:['application/pdf*']}],HTML=[{header:'content-type',values:['text/html*']}];
+const late=(id,priority,action,more={})=>({id,priority,action,condition:{resourceTypes:['main_frame'],responseHeaders:PDF,...more}});
+const PDF_HEADERS={'Content-Type':['application/pdf']},HTML_HEADERS={'Content-Type':['text/html; charset=utf-8']};
+const nav=(url,more={})=>({url,type:'main_frame',...more});
+
+test('response phase, block: a rule with a response-header condition blocks the response, never the request',()=>{
+ const e=engineWith([late(1,1,{type:'block'},{urlFilter:'||site.test^'})]);
+ const page=nav('https://site.test/a.pdf');
+ assert.equal(e.beforeRequest(page),null,'nothing to judge before the response');
+ assert.deepEqual(e.responseReceived(page,PDF_HEADERS),{cancel:true});
+ assert.equal(e.responseReceived(page,HTML_HEADERS),null,'the header does not match: the response is let through');
+ assert.equal(e.responseReceived(page,{}),null,'a response without the header does not match');
+ assert.equal(e.responseReceived(nav('https://other.test/a.pdf'),PDF_HEADERS),null,'the URL condition still applies');
+ assert.equal(e.responseReceived({url:'https://site.test/a.pdf',type:'script'},PDF_HEADERS),null,'and the resource types');
+ assert.deepEqual(e.getMatchedRules(EXT).map(m=>m.rule.ruleId),[1],'the block is recorded as a matched rule');
+ assert.equal(e.headersReceived(page,PDF_HEADERS),null,'headersReceived stays the header-rewriting entry point');
+ assert.equal(e.hasResponseRules,true);assert.equal(e.hasHeaderRules,false);
+ // a blocked response changes nothing else (ruleset_manager.cc: "If the request is blocked/redirected, no further modifications can happen")
+ const both=engineWith([late(1,1,{type:'block'},{urlFilter:'||site.test^'}),{id:2,priority:9,action:{type:'modifyHeaders',responseHeaders:[{header:'x-m',operation:'set',value:'1'}]},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame']}}]);
+ assert.deepEqual(both.responseReceived(page,PDF_HEADERS),{cancel:true});
+ assert.deepEqual(Object.keys(both.responseReceived(page,HTML_HEADERS).responseHeaders),['Content-Type','x-m'],'and where it does not match, the header rule applies');
+});
+
+test('response phase, redirect and upgradeScheme: the response is sent to another URL',()=>{
+ const e=engineWith([
+  late(1,1,{type:'redirect',redirect:{url:'https://viewer.example/open'}},{urlFilter:'||site.test/doc'}),
+  late(2,1,{type:'redirect',redirect:{transform:{host:'mirror.test',queryTransform:{addOrReplaceParams:[{key:'via',value:'dnr'}]}}}},{urlFilter:'||site.test/move'}),
+  late(3,1,{type:'redirect',redirect:{url:'https://site.test/same'}},{urlFilter:'||site.test/same'}),
+  late(4,1,{type:'upgradeScheme'},{urlFilter:'||plain.test^',responseHeaders:HTML})
+ ]);
+ assert.deepEqual(e.responseReceived(nav('https://site.test/doc.pdf'),PDF_HEADERS),{redirectURL:'https://viewer.example/open'});
+ assert.deepEqual(e.responseReceived(nav('https://site.test/move?x=1'),PDF_HEADERS),{redirectURL:'https://mirror.test/move?x=1&via=dnr'});
+ assert.equal(e.responseReceived(nav('https://site.test/same'),PDF_HEADERS),null,'a redirect to the URL it came from is not a redirect');
+ assert.deepEqual(e.responseReceived(nav('http://plain.test/a'),HTML_HEADERS),{redirectURL:'https://plain.test/a'});
+ assert.equal(e.responseReceived(nav('https://plain.test/a'),HTML_HEADERS),null,'upgradeScheme only upgrades http');
+ assert.equal(e.responseReceived(nav('http://plain.test/a'),PDF_HEADERS),null);
+ assert.equal(e.beforeRequest(nav('http://plain.test/a')),null,'neither acts before the response');
+ // Chrome never redirects a WebSocket handshake (ruleset_matcher_base.cc CreateRedirectAction)
+ const ws=engineWith([late(1,1,{type:'redirect',redirect:{url:'https://x.example/'}},{resourceTypes:['websocket'],responseHeaders:[{header:'upgrade'}]})]);
+ assert.equal(ws.responseReceived({url:'wss://site.test/socket',type:'websocket'},{Upgrade:['websocket']}),null);
+});
+
+test('response phase, allow: it lifts lower response-phase rules, and modifyHeaders rules at or below its priority',()=>{
+ const e=engineWith([
+  late(1,2,{type:'allow'},{urlFilter:'||site.test/keep'}),
+  late(2,1,{type:'block'},{urlFilter:'||site.test^'}),
+  late(3,2,{type:'block'},{urlFilter:'||tie.test^'}),
+  late(4,2,{type:'allow'},{urlFilter:'||tie.test^'}),
+  late(5,3,{type:'block'},{urlFilter:'||loud.test^'}),
+  late(6,2,{type:'allow'},{urlFilter:'||loud.test^'})
+ ]);
+ assert.deepEqual(e.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{cancel:true});
+ assert.equal(e.responseReceived(nav('https://site.test/keep/a.pdf'),PDF_HEADERS),null,'a higher allow beats the block');
+ assert.equal(e.responseReceived(nav('https://tie.test/a.pdf'),PDF_HEADERS),null,'at equal priority allow beats block');
+ assert.deepEqual(e.responseReceived(nav('https://loud.test/a.pdf'),PDF_HEADERS),{cancel:true},'a higher block beats the allow');
+ assert.deepEqual(e.getMatchedRules(EXT).map(m=>m.rule.ruleId),[2,1,4,5],'each winning action is recorded, the losing ones are not');
+ // the allow also removes the modifyHeaders rules of the request phase that it outranks (web_request_api: EraseOutprioritizedDNRActions)
+ const m=(id,priority,more={})=>({id,priority,action:{type:'modifyHeaders',responseHeaders:[{header:'x-m'+id,operation:'set',value:'1'}]},condition:{resourceTypes:['main_frame'],urlFilter:'||m.test^',...more}});
+ const f=engineWith([m(1,1),m(2,2),m(3,3),late(4,2,{type:'allow'},{urlFilter:'||m.test^'})]);
+ assert.deepEqual(Object.keys(f.headersReceived(nav('https://m.test/a.pdf'),PDF_HEADERS)).sort(),['Content-Type','x-m3'],'priorities 1 and 2 are lifted, 3 stays');
+ assert.deepEqual(Object.keys(f.headersReceived(nav('https://m.test/a.html'),HTML_HEADERS)).sort(),['Content-Type','x-m1','x-m2','x-m3'],'on a response the allow does not match, all three apply');
+});
+
+test('response phase, allowAllRequests: an allowed navigation response allowlists its document, up to its priority',()=>{
+ const e=engineWith([
+  late(1,2,{type:'allowAllRequests'},{urlFilter:'||trusted.test^',responseHeaders:HTML}),
+  {id:2,priority:1,action:{type:'block'},condition:{urlFilter:'||ads.net^'}},
+  {id:3,priority:5,action:{type:'block'},condition:{urlFilter:'||malware.net^'}}
+ ]);
+ const page=nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}),sub=url=>e.beforeRequest({url,type:'script',tabId:1,frameKeys:['wc:1']});
+ assert.equal(e.beforeRequest(page),null);
+ assert.deepEqual(sub('https://ads.net/a.js'),{cancel:true},'before the response nothing is allowed yet');
+ assert.equal(e.responseReceived(page,HTML_HEADERS),null);
+ assert.equal(sub('https://ads.net/a.js'),null,'after the matching response the document is allowed');
+ assert.deepEqual(sub('https://malware.net/a.js'),{cancel:true},'a higher-priority block still applies');
+ e.beforeRequest(nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}));
+ e.responseReceived(nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}),PDF_HEADERS);
+ assert.deepEqual(sub('https://ads.net/a.js'),{cancel:true},'a response without the header allows nothing');
+ e.beforeRequest(nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}));e.responseReceived(nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}),HTML_HEADERS);
+ e.beforeRequest(nav('https://elsewhere.test/',{tabId:1,frameKey:'wc:1'}));
+ assert.deepEqual(sub('https://ads.net/a.js'),{cancel:true},'the next document starts fresh');
+});
+
+test('priority across the phases: a request-phase allow against a response-phase block, and the reverse',()=>{
+ // Chrome: the request phase's allow stays in force and a response-phase action must have a HIGHER priority to count; a block in the request phase
+ // ends the request before the response is ever judged, so a response-phase allow cannot rescue it.
+ const e=engineWith([
+  {id:1,priority:2,action:{type:'allow'},condition:{urlFilter:'||site.test/ok',resourceTypes:['main_frame']}},
+  late(2,1,{type:'block'},{urlFilter:'||site.test^'}),
+  late(3,3,{type:'block'},{urlFilter:'||site.test/loud'}),
+  {id:4,priority:2,action:{type:'allow'},condition:{urlFilter:'||site.test/loud',resourceTypes:['main_frame']}},
+  {id:5,priority:2,action:{type:'allow'},condition:{urlFilter:'||site.test/tie',resourceTypes:['main_frame']}},
+  late(6,2,{type:'block'},{urlFilter:'||site.test/tie'})
+ ]);
+ const ruling=(path,headers=PDF_HEADERS)=>{const r=nav('https://site.test'+path);return e.beforeRequest(r)||e.responseReceived(r,headers);};
+ assert.deepEqual(ruling('/a.pdf'),{cancel:true},'no allow: the response is blocked');
+ assert.equal(ruling('/ok/a.pdf'),null,'request allow (2) beats response block (1)');
+ assert.equal(ruling('/tie/a.pdf'),null,'at equal priority the request allow wins');
+ assert.deepEqual(ruling('/loud/a.pdf'),{cancel:true},'a response block above the allow (3 > 2) wins');
+ // the reverse: request-phase block against a response-phase allow
+ const r=engineWith([
+  {id:1,priority:1,action:{type:'block'},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame']}},
+  late(2,5,{type:'allow'},{urlFilter:'||site.test^'}),
+  {id:3,priority:3,action:{type:'block'},condition:{urlFilter:'||x.test^',resourceTypes:['main_frame']}},
+  late(4,3,{type:'allow'},{urlFilter:'||x.test^'})
+ ]);
+ assert.deepEqual(r.beforeRequest(nav('https://site.test/a.pdf')),{cancel:true},'the request is already blocked; the response never arrives');
+ assert.deepEqual(r.beforeRequest(nav('https://x.test/a.pdf')),{cancel:true},'also at equal priority');
+ // a response-phase redirect against a request-phase allow
+ const t=engineWith([
+  {id:1,priority:2,action:{type:'allow'},condition:{urlFilter:'||site.test/ok',resourceTypes:['main_frame']}},
+  late(2,2,{type:'redirect',redirect:{url:'https://viewer.example/'}},{urlFilter:'||site.test^'}),
+  late(3,3,{type:'redirect',redirect:{url:'https://viewer.example/hot'}},{urlFilter:'||site.test/ok/hot'})
+ ]);
+ assert.deepEqual(t.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{redirectURL:'https://viewer.example/'});
+ assert.equal(t.responseReceived(nav('https://site.test/ok/a.pdf'),PDF_HEADERS),null,'the request-phase allow holds against the redirect');
+ assert.deepEqual(t.responseReceived(nav('https://site.test/ok/hot.pdf'),PDF_HEADERS),{redirectURL:'https://viewer.example/hot'},'unless the redirect outranks it');
+});
+
+test('priority across the phases: a document allowAllRequests set at the request phase also covers response-phase rules of its subresources',()=>{
+ const e=engineWith([
+  {id:1,priority:4,action:{type:'allowAllRequests'},condition:{urlFilter:'||trusted.test^',resourceTypes:['main_frame']}},
+  {id:2,priority:2,action:{type:'block'},condition:{urlFilter:'||files.test^',resourceTypes:['xmlhttprequest'],responseHeaders:PDF}},
+  {id:3,priority:5,action:{type:'block'},condition:{urlFilter:'||strict.test^',resourceTypes:['xmlhttprequest'],responseHeaders:PDF}}
+ ]);
+ e.beforeRequest(nav('https://trusted.test/',{tabId:1,frameKey:'wc:1'}));
+ const xhr=url=>({url,type:'xmlhttprequest',tabId:1,frameKeys:['wc:1']});
+ assert.equal(e.responseReceived(xhr('https://files.test/a.pdf'),PDF_HEADERS),null,'allowAllRequests (4) outranks the response block (2)');
+ assert.deepEqual(e.responseReceived(xhr('https://strict.test/a.pdf'),PDF_HEADERS),{cancel:true},'a response block at 5 outranks it');
+ e.beforeRequest(nav('https://other.test/',{tabId:1,frameKey:'wc:1'}));
+ assert.deepEqual(e.responseReceived(xhr('https://files.test/a.pdf'),PDF_HEADERS),{cancel:true},'another document is not covered');
+});
+
+test('priority across the phases: a response-phase allow outranks a request-phase modifyHeaders rule, whose request-header half was already sent',()=>{
+ const mod=(priority)=>({id:priority,priority,action:{type:'modifyHeaders',requestHeaders:[{header:'x-asked-'+priority,operation:'set',value:'1'}],responseHeaders:[{header:'x-answer-'+priority,operation:'set',value:'1'}]},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame']}});
+ const e=engineWith([mod(1),mod(2),mod(3),late(10,2,{type:'allow'},{urlFilter:'||site.test^'})]);
+ const r=nav('https://site.test/a.pdf');
+ assert.deepEqual(Object.keys(e.beforeSendHeaders(r,{})).sort(),['x-asked-1','x-asked-2','x-asked-3'],'the request goes out before the response can say anything');
+ assert.deepEqual(Object.keys(e.headersReceived(r,PDF_HEADERS)).sort(),['Content-Type','x-answer-3']);
+ assert.deepEqual(Object.keys(e.headersReceived(r,HTML_HEADERS)).sort(),['Content-Type','x-answer-1','x-answer-2','x-answer-3'],'a response the allow does not match is modified by all');
+});
+
+test('response phase, allow: an allow that only repeats the request phase\'s is not recorded as a match (web_request: ShouldRecordMatchedAllowRuleInOnHeadersReceived)',()=>{
+ const e=engineWith([{id:1,priority:2,action:{type:'allow'},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame']}},late(2,2,{type:'allow'},{urlFilter:'||site.test^'}),late(3,3,{type:'allow'},{urlFilter:'||site.test/more'})]);
+ const page=nav('https://site.test/a.pdf');
+ assert.equal(e.beforeRequest(page),null);assert.equal(e.responseReceived(page,PDF_HEADERS),null);
+ assert.deepEqual(e.getMatchedRules(EXT).map(m=>m.rule.ruleId),[1],'the response-phase allow at the same priority adds nothing');
+ const more=nav('https://site.test/more/a.pdf');e.beforeRequest(more);e.responseReceived(more,PDF_HEADERS);
+ assert.deepEqual(e.getMatchedRules(EXT).map(m=>m.rule.ruleId),[1,1,3],'one at a higher priority does');
+});
+
+test('response phase across extensions: block beats redirect beats allow, the newest extension wins a tie, an allow stays inside its own extension',()=>{
+ const url='https://site.test/a.pdf',rule=(id,priority,action)=>({id,priority,action,condition:{urlFilter:'||site.test^',resourceTypes:['main_frame'],responseHeaders:PDF}});
+ const build=(a,b)=>{const e=createDnrEngine();e.setExtension(EXT,{dynamicRules:a});e.setExtension(EXT2,{dynamicRules:b});return e;};
+ assert.deepEqual(build([rule(1,9,{type:'allow'})],[rule(1,1,{type:'block'})]).responseReceived(nav(url),PDF_HEADERS),{cancel:true},'another extension\'s allow cannot lift a block');
+ assert.deepEqual(build([rule(1,1,{type:'block'})],[rule(1,9,{type:'redirect',redirect:{url:'https://r.example/'}})]).responseReceived(nav(url),PDF_HEADERS),{cancel:true},'block beats redirect whatever the priorities');
+ assert.deepEqual(build([rule(1,1,{type:'redirect',redirect:{url:'https://one.example/'}})],[rule(1,1,{type:'redirect',redirect:{url:'https://two.example/'}})]).responseReceived(nav(url),PDF_HEADERS),{redirectURL:'https://two.example/'},'the most recently installed extension wins');
+ assert.deepEqual(build([rule(1,1,{type:'redirect',redirect:{url:'https://one.example/'}})],[rule(1,9,{type:'allow'})]).responseReceived(nav(url),PDF_HEADERS),{redirectURL:'https://one.example/'},'an allow in the newer extension does not stop the older one\'s redirect');
+ // a modifyHeaders rule is lifted only by an allow of its own extension
+ const modify={id:2,priority:1,action:{type:'modifyHeaders',responseHeaders:[{header:'x-m',operation:'set',value:'1'}]},condition:{urlFilter:'||site.test^',resourceTypes:['main_frame']}};
+ const own=createDnrEngine();own.setExtension(EXT,{dynamicRules:[modify,rule(1,5,{type:'allow'})]});
+ assert.equal(own.headersReceived(nav(url),PDF_HEADERS),null);
+ const other=createDnrEngine();other.setExtension(EXT,{dynamicRules:[modify]});other.setExtension(EXT2,{dynamicRules:[rule(1,5,{type:'allow'})]});
+ assert.deepEqual(Object.keys(other.headersReceived(nav(url),PDF_HEADERS)),['Content-Type','x-m']);
+});
+
+test('response phase: static, dynamic and session rules all take part, and updates take effect at once',()=>{
+ const rule=(id,priority,action,more={})=>late(id,priority,action,{urlFilter:'||site.test^',...more});
+ const via={
+  static:r=>{const e=createDnrEngine();e.setExtension(EXT,{rulesets:[{id:'r',enabled:true,rules:r}]});return e;},
+  dynamic:r=>{const e=createDnrEngine();e.setExtension(EXT,{dynamicRules:r});return e;},
+  session:r=>{const e=createDnrEngine();e.setExtension(EXT,{sessionRules:r});return e;}
+ };
+ for(const [name,make] of Object.entries(via)){
+  assert.deepEqual(make([rule(1,1,{type:'block'})]).responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{cancel:true},name+' block');
+  assert.deepEqual(make([rule(1,1,{type:'redirect',redirect:{url:'https://r.example/'}})]).responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{redirectURL:'https://r.example/'},name+' redirect');
+  assert.equal(make([rule(1,1,{type:'block'})]).beforeRequest(nav('https://site.test/a.pdf')),null,name+': nothing at the request phase');
+ }
+ // the three kinds are one rule set for the priorities: a static allow and a session block, and the reverse
+ const mixed=createDnrEngine();
+ mixed.setExtension(EXT,{rulesets:[{id:'r',enabled:true,rules:[rule(1,2,{type:'allow'},{urlFilter:'||site.test/ok'}),rule(2,5,{type:'block'},{urlFilter:'||site.test/loud'})]}],
+  dynamicRules:[rule(1,1,{type:'block'})],sessionRules:[rule(2,3,{type:'allow'},{urlFilter:'||site.test/session'})]});
+ const ruling=path=>mixed.responseReceived(nav('https://site.test'+path),PDF_HEADERS);
+ assert.deepEqual(ruling('/a.pdf'),{cancel:true},'dynamic block');
+ assert.equal(ruling('/ok/a.pdf'),null,'static allow (2) beats dynamic block (1)');
+ assert.equal(ruling('/session/a.pdf'),null,'session allow (3) beats dynamic block (1)');
+ assert.deepEqual(ruling('/loud/a.pdf'),{cancel:true},'static block (5)');
+ // updateRules (the extension calls chrome.declarativeNetRequest.updateSessionRules while the browser runs)
+ const live=createDnrEngine();live.setExtension(EXT,{});
+ assert.equal(live.hasResponseRules,false);assert.equal(live.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),null);
+ live.updateRules(EXT,'session',{addRules:[rule(7,1,{type:'block'})]});
+ assert.equal(live.hasResponseRules,true);assert.deepEqual(live.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{cancel:true});
+ live.updateRules(EXT,'session',{removeRuleIds:[7]});
+ assert.equal(live.hasResponseRules,false);assert.equal(live.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),null);
+ // a static rule switched off by updateStaticRules, and a whole ruleset switched off
+ const st=createDnrEngine();st.setExtension(EXT,{rulesets:[{id:'r',enabled:true,rules:[rule(1,1,{type:'block'})]}]});
+ st.updateStaticRules(EXT,{rulesetId:'r',disableRuleIds:[1]});assert.equal(st.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),null);
+ st.updateStaticRules(EXT,{rulesetId:'r',enableRuleIds:[1]});assert.deepEqual(st.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),{cancel:true});
+ st.updateEnabledRulesets(EXT,{disableRulesetIds:['r']});assert.equal(st.responseReceived(nav('https://site.test/a.pdf'),PDF_HEADERS),null);
+});
+
+test('response phase and host access: value conditions on private headers need it, safelisted ones and presence do not; a redirect always does',()=>{
+ const rule=(id,priority,action,responseHeaders)=>({id,priority,action,condition:{urlFilter:'||site.test^',resourceTypes:['main_frame'],responseHeaders}});
+ const none={hostAccess:()=>false},all={hostAccess:()=>true};
+ const csp=[{header:'x-frame-options',values:['deny']}],ctype=[{header:'content-type',values:['text/html*']}],present=[{header:'x-frame-options'}],gone=[{header:'content-type'}];
+ const headers={'X-Frame-Options':['DENY'],'Content-Type':['text/html']};
+ const verdict=(rules,access)=>{const e=engineWith(rules,access);return e.responseReceived(nav('https://site.test/a'),headers);};
+ assert.equal(verdict([rule(1,1,{type:'block'},csp)],none),null,'the value of X-Frame-Options is private to an extension without host access');
+ assert.deepEqual(verdict([rule(1,1,{type:'block'},csp)],all),{cancel:true});
+ assert.deepEqual(verdict([rule(1,1,{type:'block'},ctype)],none),{cancel:true},'Content-Type values are CORS-safelisted');
+ assert.deepEqual(verdict([rule(1,1,{type:'block'},present)],none),{cancel:true},'that a header exists is not private');
+ assert.deepEqual(verdict([rule(1,1,{type:'block'},[{header:'content-encoding',values:['gzip']}])],none),null,'no Content-Encoding on this response');
+ assert.deepEqual(verdict([rule(1,1,{type:'block'},[{header:'x-frame-options',excludedValues:['sameorigin']}])],none),null,'excludedValues is a value condition too');
+ // a rule that cannot match is skipped, it does not mask the rules below it
+ assert.deepEqual(verdict([rule(1,9,{type:'allow'},csp),rule(2,1,{type:'block'},ctype)],none),{cancel:true},'the unmatched allow (9) lifts nothing');
+ assert.equal(verdict([rule(1,9,{type:'allow'},csp),rule(2,1,{type:'block'},ctype)],all),null,'with access it does');
+ // a redirect needs host access to act; chosen without it, it is dropped and still masks the rules below it (CompositeMatcher::GetAction)
+ const redirect=rule(1,5,{type:'redirect',redirect:{url:'https://r.example/'}},ctype),lower=rule(2,1,{type:'block'},ctype);
+ assert.deepEqual(verdict([redirect,lower],all),{redirectURL:'https://r.example/'});
+ assert.equal(verdict([redirect,lower],none),null);
+ assert.deepEqual(verdict([rule(1,5,{type:'upgradeScheme'},ctype)],none),null,'(this response is https: nothing to upgrade)');
+ const upgrade=engineWith([rule(1,5,{type:'upgradeScheme'},ctype)],none);
+ assert.deepEqual(upgrade.responseReceived(nav('http://site.test/a'),headers),{redirectURL:'https://site.test/a'},'upgradeScheme needs no host access');
+ // declarativeNetRequestWithHostAccess: every action needs it
+ const strict=(access)=>{const e=engineWith([rule(1,1,{type:'block'},ctype)],{withHostAccess:true,hostAccess:()=>access});return e.responseReceived(nav('https://site.test/a'),headers);};
+ assert.equal(strict(false),null);assert.deepEqual(strict(true),{cancel:true});
+});
+
+test('response header conditions follow Chromium: every value of a header counts, an empty value list is a presence test, bad rules are refused',()=>{
+ const hit=(condition,headers)=>!!engineWith([{id:1,priority:1,action:{type:'block'},condition:{resourceTypes:['main_frame'],...condition}}]).responseReceived(nav('https://site.test/'),headers);
+ // MatchesHeaderConditions (request_params.cc:98-146): one excluded value fails the entry whatever the other values say
+ const both={'Set-Test':['a','b']};
+ assert.equal(hit({responseHeaders:[{header:'set-test',values:['a']}]},both),true);
+ assert.equal(hit({responseHeaders:[{header:'set-test',values:['a'],excludedValues:['b']}]},both),false,'b is excluded, so a header that carries b never matches');
+ assert.equal(hit({responseHeaders:[{header:'set-test',excludedValues:['b']}]},both),false);
+ assert.equal(hit({responseHeaders:[{header:'set-test',excludedValues:['c']}]},both),true,'only excludedValues given: any header without those values');
+ assert.equal(hit({responseHeaders:[{header:'set-test',values:['c']},{header:'set-test',values:['b']}]},both),true,'the entries are alternatives');
+ assert.equal(hit({responseHeaders:[{header:'set-test',values:[]}]},both),true,'an empty values list is not stored by Chromium: presence only');
+ assert.equal(hit({responseHeaders:[{header:'set-test',values:[]}]},{}),false);
+ assert.equal(hit({excludedResponseHeaders:[{header:'set-test'}]},both),false);
+ assert.equal(hit({excludedResponseHeaders:[{header:'set-test',values:['c']}]},both),true);
+ assert.equal(hit({responseHeaders:[{header:'x-a'}],excludedResponseHeaders:[{header:'x-b'}]},{'X-A':['1'],'X-B':['1']}),false,'excludedResponseHeaders takes precedence');
+ const set={extensionId:EXT,source:'dynamic'},block={type:'block'};
+ // indexed_rule.cc ValidateResponseHeadersForMatching
+ assert.throws(()=>compileRule({id:1,action:block,condition:{responseHeaders:[{header:'x-a'}],excludedResponseHeaders:[{header:'x-a'}]}},set),/excludedResponseHeaders/,'required and excluded by name');
+ assert.throws(()=>compileRule({id:1,action:block,condition:{responseHeaders:[{header:'x-a',values:['1']}],excludedResponseHeaders:[{header:'x-a'}]}},set),/excludedResponseHeaders/,'Chromium records every required name, with or without values');
+ assert.doesNotThrow(()=>compileRule({id:1,action:block,condition:{responseHeaders:[{header:'x-a'}],excludedResponseHeaders:[{header:'x-a',values:['2']}]}},set),'an exclusion with values is a different condition');
+ assert.throws(()=>compileRule({id:1,action:block,condition:{responseHeaders:[{header:'x-a',values:['a\nb']}]}},set),/header value/);
+ // indexed_rule.cc:914-919 ERROR_RESPONSE_HEADER_RULE_CANNOT_MODIFY_REQUEST_HEADERS
+ assert.throws(()=>compileRule({id:1,action:{type:'modifyHeaders',requestHeaders:[{header:'x-a',operation:'set',value:'1'}]},condition:{responseHeaders:[{header:'x-a'}]}},set),/request headers/);
+ assert.doesNotThrow(()=>compileRule({id:1,action:{type:'modifyHeaders',responseHeaders:[{header:'x-a',operation:'set',value:'1'}]},condition:{responseHeaders:[{header:'x-a'}]}},set));
+});
+
+// Mister Download Manager 0.5.0 (background.js syncOpenedRule), as it installs it: session rules, declarativeNetRequestWithHostAccess + <all_urls>.
+// Rule 1 makes the listed file types attachments; ids 2.. are `allow` rules (priority 2) for the sites the user excluded; `*.example.com` entries
+// become excludedRequestDomains. 13.2 fixed the rule hitting every page; 13.3 moved the response-header rules into their own index, so it must not change.
+const MDM_TYPES=['application/pdf','audio/mpeg','audio/mp3','video/mp4','audio/mp4','audio/x-m4a','video/x-m4v','audio/ogg','video/ogg','audio/wav','audio/x-wav','audio/wave','audio/aac','video/quicktime','image/tiff','audio/x-ms-wma','video/x-ms-wmv','video/x-msvideo','video/avi','video/x-matroska'];
+const mdmRules=({wide=[],exact=[]}={})=>[
+ {id:1,priority:1,action:{type:'modifyHeaders',responseHeaders:[{header:'content-disposition',operation:'set',value:'attachment'}]},
+  condition:{resourceTypes:['main_frame'],responseHeaders:[{header:'content-type',values:MDM_TYPES.map(m=>m+'*')}],...(wide.length?{excludedRequestDomains:wide}:{})}},
+ ...exact.map((host,i)=>({id:2+i,priority:2,action:{type:'allow'},condition:{resourceTypes:['main_frame'],regexFilter:'^[a-z]+://'+host.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(:[0-9]+)?/'}}))
+];
+const mdmEngine=(opts)=>{const e=createDnrEngine();e.setExtension(EXT,{sessionRules:mdmRules(opts),withHostAccess:true,hostAccess:()=>true});return e;};
+
+test('regression guard: Mister Download Manager\'s real rule set only ever touches the files it names',()=>{
+ const e=mdmEngine({wide:['cdn.example.org'],exact:['docs.example.com']});
+ assert.deepEqual(e.getRules(EXT,'session').map(r=>r.id),[1,2],'both session rules compiled');
+ assert.deepEqual(e.errors(EXT),[]);
+ const page=url=>nav(url);
+ // every page a browser opens stays a page, at both phases
+ for(const [url,headers] of [['https://www.google.com/search?q=hello',{'content-type':['text/html; charset=UTF-8']}],['https://x.test/logo.webp',{'content-type':['image/webp']}],['https://x.test/app',{'content-type':['application/json']}],['https://x.test/empty',{}],['https://x.test/a.svg',{'Content-Type':['image/svg+xml']}]]){
+  assert.equal(e.beforeRequest(page(url)),null,url);
+  assert.equal(e.responseReceived(page(url),headers),null,url);
+  assert.equal(e.beforeSendHeaders(page(url),{Accept:'*/*'}),null,url);
+ }
+ // the listed types become attachments, whatever the case or parameters, and nothing else changes
+ for(const type of MDM_TYPES){
+  const out=e.responseReceived(page('https://files.example.net/f'),{'Content-Type':[type.toUpperCase()+'; x=1'],Server:['s']});
+  assert.deepEqual(out,{responseHeaders:{'Content-Type':[type.toUpperCase()+'; x=1'],Server:['s'],'content-disposition':['attachment']}},type);
+ }
+ // a main-frame rule: the same PDF as a script or image is not touched
+ assert.equal(e.responseReceived({url:'https://files.example.net/f.pdf',type:'image'},PDF_HEADERS),null);
+ // the user's excluded sites keep opening in the browser: a wide entry through excludedRequestDomains, an exact one through the priority-2 allow
+ assert.equal(e.responseReceived(page('https://cdn.example.org/f.pdf'),PDF_HEADERS),null,'excluded domain');
+ assert.equal(e.responseReceived(page('https://eu.cdn.example.org/f.pdf'),PDF_HEADERS),null,'and its subdomains');
+ assert.equal(e.responseReceived(page('https://docs.example.com/f.pdf'),PDF_HEADERS),null,'excluded host (allow beats modifyHeaders)');
+ assert.equal(e.responseReceived(page('https://docs.example.com:8443/f.pdf'),PDF_HEADERS),null,'with a port');
+ assert.deepEqual(Object.keys(e.responseReceived(page('https://www.example.com/f.pdf'),PDF_HEADERS).responseHeaders),['Content-Type','content-disposition'],'another host on the same domain is not excluded');
+ // never a block, a redirect or a cancel
+ for(const url of ['https://files.example.net/f','https://docs.example.com/f','https://cdn.example.org/f'])for(const headers of [PDF_HEADERS,HTML_HEADERS,{}])
+  assert.ok(!('cancel' in (e.responseReceived(page(url),headers)||{}))&&!('redirectURL' in (e.responseReceived(page(url),headers)||{})));
+ // without host access the extension changes nothing (declarativeNetRequestWithHostAccess)
+ const locked=createDnrEngine();locked.setExtension(EXT,{sessionRules:mdmRules(),withHostAccess:true,hostAccess:()=>false});
+ assert.equal(locked.responseReceived(page('https://files.example.net/f'),PDF_HEADERS),null);
+ // the rule set it removes when the user pauses it (updateSessionRules with an empty list) stops acting at once
+ e.updateRules(EXT,'session',{removeRuleIds:[1,2]});
+ assert.equal(e.responseReceived(page('https://files.example.net/f'),PDF_HEADERS),null);
+ assert.equal(e.hasResponseRules,false);
 });

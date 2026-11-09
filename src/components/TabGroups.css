@@ -70,3 +70,6 @@
 .app [data-drag-preview-source]{opacity:0!important}
 .app :is(.tabs-strip,.acira-compact-tabs-track):has(>.selected[data-drag-preview-source])>:is(.tab-strip-selection,.acira-compact-selection){visibility:hidden}
 .app .tab-drag-preview{box-shadow:0 4px 12px #00000014;contain:layout style;overflow:hidden;will-change:transform}
+
+/* Windows High Contrast (forced colors): the group label's focus ring is an inset shadow, which is forced away. Normal look unchanged. */
+@media (forced-colors: active) { .tab-group-label:focus-visible { outline: 2px solid Highlight !important; outline-offset: -2px; } }

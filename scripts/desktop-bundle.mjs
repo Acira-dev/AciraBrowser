@@ -2,7 +2,9 @@
 // Fewer files to find, read and compile at start, and one copy of each dependency. Both release builds use this.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import {build as esbuild} from 'esbuild';
+import {oneByteSource} from './one-byte-source.mjs';
 
 /** Never bundled: Electron itself, and packages the product loads by path or ships as their own file. */
 export const EXTERNAL = ['electron', 'electron-chrome-extensions'];
@@ -106,14 +108,33 @@ export function workingTreeSource(root) {
   }};
 }
 
+/** Memory: the catalogs of the twelve other languages are 5.9 MB of text in the bundle, kept by V8 for as long as the process lives although a person uses at most one
+ *  (src/i18n/main.ts builds a catalog the first time its language is in use). Here each is stored brotli-compressed (about 1 MB together) and unpacked at that moment:
+ *  the same object comes out (tests/release-desktop-bundle.test.mjs). English stays plain: it is built at start and is the fallback. */
+export const PACKED_CATALOG = /[\\/]src[\\/]i18n[\\/](?:es|fr|de|pt-BR|it|ja|zh-CN|ar|tr|ru|ko|hi)\.json$/;
+export function packedCatalogs() {
+  return {name: 'packed-catalogs', setup(build) {
+    build.onLoad({filter: PACKED_CATALOG}, async args => {
+      const json = JSON.stringify(JSON.parse(await fs.readFile(args.path, 'utf8')));
+      const packed = zlib.brotliCompressSync(Buffer.from(json, 'utf8'), {params: {[zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_LGWIN]: 24, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: json.length}});
+      return {contents: `module.exports = JSON.parse(require('node:zlib').brotliDecompressSync(Buffer.from(${JSON.stringify(packed.toString('base64'))}, 'base64')).toString('utf8'));`, loader: 'js'};
+    });
+  }};
+}
+
 /** Builds output/desktop/main.cjs; the source map goes to output/sourcemaps/ (outside the product, kept with the release for crash stacks). */
 export async function bundleDesktop({root, output, plugins}) {
   const result = await esbuild({
     absWorkingDir: root, entryPoints: [path.join(root, 'desktop/main.cjs')], outfile: path.join(output, 'desktop/main.cjs'),
-    bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: EXTERNAL, sourcemap: 'external', sourcesContent: true, metafile: true, logLevel: 'silent', plugins: [ghosteryPreloadPathStub(), ...(plugins || [])],
+    bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: EXTERNAL, sourcemap: 'external', sourcesContent: true, metafile: true, logLevel: 'silent', plugins: [ghosteryPreloadPathStub(), packedCatalogs(), ...(plugins || [])],
   });
+  // Memory: plain ASCII only, so the main process holds the bundle's text as one byte per character instead of two (scripts/one-byte-source.mjs).
+  const mainFile = path.join(output, 'desktop/main.cjs');
+  await fs.writeFile(mainFile, oneByteSource(await fs.readFile(mainFile, 'utf8')));
   // The filter engine is compiled on a worker thread (desktop/browser-services/filter-updates.cjs); the worker is its own small bundle so it finds the engine library without node_modules.
   await esbuild({absWorkingDir: root, entryPoints: [path.join(root, WORKER_ENTRY)], outfile: path.join(output, WORKER_ENTRY), bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: EXTERNAL, logLevel: 'silent'});
+  const workerFile = path.join(output, WORKER_ENTRY);
+  await fs.writeFile(workerFile, oneByteSource(await fs.readFile(workerFile, 'utf8')));
   await fs.mkdir(path.join(output, 'sourcemaps'), {recursive: true});
   await fs.rename(path.join(output, 'desktop/main.cjs.map'), path.join(output, 'sourcemaps/main.cjs.map'));
   return result;

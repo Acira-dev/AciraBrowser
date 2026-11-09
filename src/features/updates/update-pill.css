@@ -61,16 +61,19 @@
    release notes, which stop growing at 11 lines and scroll inside. The note and the notes start on the title's text edge (the identity row's 8px
    inset + 16px mark + 12px gap). */
 .update-popover { display: flex; flex-direction: column; }
+/* panels.css sets text-align: left on every menu row; the title and detail lines of these panels start at the interface's start edge (the right in Arabic), next to the mark. */
+.update-popover .acira-menu-row { text-align: start; }
 .update-pop-mark { display: grid; place-items: center; }
 .update-pop-mark > .dot-matrix { display: block; }
 .update-pop-note,
 .update-pop-notes {
   min-height: 0;
   margin: 0;
-  padding: 2px 12px 8px 36px;
+  padding: 2px 12px 8px;
+  padding-inline-start: 36px; /* the title's text edge: past the mark, which is on the right in a right-to-left interface */
   font: 400 12px/16px var(--font-ui, 'Inter', sans-serif);
   color: var(--menu-t2, var(--menu-t3, inherit));
-  text-align: left;
+  text-align: start;
   text-wrap: pretty;
   overflow-wrap: anywhere;
 }

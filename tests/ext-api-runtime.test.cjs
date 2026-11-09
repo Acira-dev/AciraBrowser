@@ -463,6 +463,29 @@ test('onInstalled: a restart of the app does not announce an install; a new vers
   third.result.dispose();
 });
 
+test('onInstalled: an extension that reloads itself inside its onInstalled(update) handler is not sent update again and again (Surfshark: an endless reload loop)', async () => {
+  const rig = installedRig({dir: tmp()});
+  rig.load(A, '1.0'); rig.listen(A);
+  await wait(120);
+  rig.sent.length = 0;
+  rig.unload(A, '1.0'); rig.load(A, '1.0'); rig.listen(A);       // the person's Reload
+  await wait(120);
+  assert.deepEqual(rig.sent, [[A, 'runtime.onInstalled', {reason: 'update', previousVersion: '1.0'}]]);
+  for (let round = 0; round < 6; round++) {                       // the extension's own chrome.runtime.reload() in that handler, every time it is called
+    rig.unload(A, '1.0'); rig.load(A, '1.0'); rig.listen(A);
+    await wait(60);
+  }
+  assert.equal(rig.sent.length, 1, 'the self-reloads are not updates');
+  // a new version still announces, and so does its own self-reload only once
+  rig.unload(A, '1.0'); rig.load(A, '1.1'); rig.listen(A);
+  await wait(120);
+  assert.deepEqual(rig.sent[1], [A, 'runtime.onInstalled', {reason: 'update', previousVersion: '1.0'}]);
+  rig.unload(A, '1.1'); rig.load(A, '1.1'); rig.listen(A);
+  await wait(120);
+  assert.equal(rig.sent.length, 2, 'the reload right after an update is not announced again');
+  rig.result.dispose();
+});
+
 test('onInstalled: chrome_update once per extension on the first run of a new Acira version; removing the extension makes the next load an install', async () => {
   const dir = tmp();
   const old = installedRig({dir, browser: '1.0.0'});

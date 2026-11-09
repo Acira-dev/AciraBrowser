@@ -8,6 +8,7 @@
 // `--acira-app=<id> <start url>`; main (cold start and second instance) opens that app's own window instead of a tab.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {app,shell,nativeImage}=require('electron');
+const {deviceSafe}=require('./download-preferences.cjs'); // Windows device names (Aux, Con, Nul...) cannot name a shortcut file
 
 const DISPLAY=new Set(['standalone','fullscreen','minimal-ui','window-controls-overlay','tabbed']);
 const MIN_ICON=144,MAX_MANIFEST=128*1024,MAX_ICON=1024*1024,ICON=256;
@@ -79,9 +80,11 @@ function createWebApps({dataDir=app.getPath('userData'),testMode=!!process.env.A
  const fileName=name=>(name.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'').replace(/[. ]+$/,'').trim()||'Acira app').slice(0,60);
  // Unpacked runs name the main script: getAppPath() is its folder (desktop/), which has no package.json to start from.
  function launchArgs(item){const quoted=value=>'"'+String(value).replace(/"/g,'')+'"';return [app.isPackaged?'':quoted(path.join(__dirname,'main.cjs')),ARG+item.id,quoted(item.startUrl)].filter(Boolean).join(' ');}
+ /** The first shortcut name in the folder that nothing uses: "Mail.lnk", then "Mail (Acira).lnk", "Mail (Acira 2).lnk"... A file there already is another app's (two apps called Mail: two accounts, a generic page title) or the person's own: never written over. An earlier install of this same app was removed before this runs. */
+ function freeShortcut(dir,name){const base=deviceSafe(fileName(name),'win32');let target=path.join(dir,base+'.lnk');for(let n=0;fs.existsSync(target)&&n<100;n++)target=path.join(dir,base+(n?` (Acira ${n+1})`:' (Acira)')+'.lnk');return target;}
  function writeShortcuts(item){
   if(process.platform==='darwin'){try{return [require('./browser-services/mac-web-apps.cjs').writeShortcut({root:macApps(),item,executable:process.execPath,packaged:app.isPackaged,mainFile:path.join(__dirname,'main.cjs'),testProfile:testMode?dataDir:null})];}catch{fail('The Mac app could not be created. Check that your Applications folder is writable.');}}
-  const written=[];for(const dir of shortcutDirs()){try{fs.mkdirSync(dir,{recursive:true});let target=path.join(dir,fileName(item.name)+'.lnk');if(fs.existsSync(target)&&!read().some(other=>other.id!==item.id&&(other.shortcuts||[]).includes(target)))target=path.join(dir,fileName(item.name)+' (Acira).lnk');
+  const written=[];for(const dir of shortcutDirs()){try{fs.mkdirSync(dir,{recursive:true});const target=freeShortcut(dir,item.name);
    if(process.platform==='win32'&&shell.writeShortcutLink(target,'create',{target:process.execPath,args:launchArgs(item),description:`${item.name} — Acira app`,icon:item.iconIco,iconIndex:0,appUserModelId:'Acira.WebApp.'+item.id}))written.push(target);}catch{/* a missing folder or policy block leaves that shortcut out */}}
   return written;
  }
@@ -125,6 +128,6 @@ function createWebApps({dataDir=app.getPath('userData'),testMode=!!process.env.A
    default:fail('Unknown app request.');
   }
  }
- return {inspect,install,uninstall,list:()=>read().map(view),fromArgv,windowDetails,handle,launchArgs};
+ return {inspect,install,uninstall,list:()=>read().map(view),fromArgv,windowDetails,handle,launchArgs,writeShortcuts};
 }
 module.exports={createWebApps,appIdFromArgv,WEB_APP_ARG:ARG};

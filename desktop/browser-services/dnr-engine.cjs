@@ -19,6 +19,11 @@
 //  - modifyHeaders rules with a priority above the extension's matching allow / allowAllRequests rule apply, highest priority first,
 //    most recently installed extension first; once a header was set or removed it is not changed again, once appended only appended to.
 //  - With no resourceTypes / excludedResourceTypes, a rule matches every type except main_frame.
+//  - A rule with a responseHeaders / excludedResponseHeaders condition (Chrome 128) is judged only once the response is in (onHeadersReceived), in
+//    its own index, as Chromium files it (flat_ruleset_indexer.cc IsBeforeRequestRule / GetBuilders). There it can block, redirect / upgrade, allow,
+//    allowAllRequests or modify response headers. The request phase's allow carries over: a response-phase action must beat that allow's priority
+//    (composite_matcher.cc CompositeMatcher::GetAction). Rules whose condition matches header VALUES (other than the CORS-safelisted ones and
+//    content-encoding) need host access to the request, or they do not match at all (request_params.cc DoEmbedderConditionsMatch).
 const {getDomain}=require('tldts');
 
 const RESOURCE_TYPES=['main_frame','sub_frame','stylesheet','script','image','font','object','xmlhttprequest','ping','csp_report','media','websocket','webtransport','webbundle','other'];
@@ -204,10 +209,15 @@ function compileRedirect(r,extensionId,hasRegex){
 // has one, action details in `act` only for redirect / modifyHeaders, ruleset facts in one shared `set` object, and the original JSON kept
 // only for dynamic and session rules (getDynamicRules / getSessionRules are answered by the engine itself; static rules are not).
 /** One HeaderInfo of a rule's `responseHeaders` / `excludedResponseHeaders` condition (Chrome 128): a header name and, optionally, value patterns.
- *  A pattern covers the whole value, case-insensitively: `*` is any run of characters, `?` zero or one character, `\\*` and `\\?` the characters themselves. */
+ *  A pattern covers the whole value, case-insensitively: `*` is any run of characters, `?` zero or one character, `\\*` and `\\?` the characters themselves.
+ *  Chromium keeps no empty value list (flat_ruleset_indexer.cc BuildVectorOfSharedStringsImpl), so `values: []` is a presence-only condition. */
 const HEADER_NAME=/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/,MAX_VALUE_WILDCARDS=24;
+// Response header values a rule may match without host access (request_params / utils.cc CanMatchResponseHeaderValuesWithoutHostPermissions:
+// the CORS-safelisted response headers and content-encoding).
+const OPEN_RESPONSE_HEADERS=new Set(['cache-control','content-language','content-length','content-type','expires','last-modified','pragma','content-encoding']);
 function headerValuePattern(source){
  if(source.length>1024)throw new Error('header value pattern is too long');
+ if(/[\r\n\0]/.test(source))throw new Error('header value pattern is not a valid header value');
  let out='',wild=0,star=false;
  for(let i=0;i<source.length;i++){
   const c=source[i];
@@ -223,26 +233,41 @@ function headerInfoList(list,field){
  if(!Array.isArray(list)||!list.length)throw new Error(field+' must be a non-empty list');
  return list.map(info=>{
   if(!info||typeof info!=='object'||typeof info.header!=='string'||!HEADER_NAME.test(info.header))throw new Error(field+' needs a header name in every entry');
-  const patterns=key=>{const value=info[key];if(value===undefined)return null;if(!Array.isArray(value)||!value.every(item=>typeof item==='string'))throw new Error(field+' '+key+' must be a list of strings');return value.map(headerValuePattern);};
-  return {name:info.header.toLowerCase(),values:patterns('values'),excluded:patterns('excludedValues')};
+  const patterns=key=>{const value=info[key];if(value===undefined)return null;if(!Array.isArray(value)||!value.every(item=>typeof item==='string'))throw new Error(field+' '+key+' must be a list of strings');return value.length?value.map(headerValuePattern):null;};
+  return {raw:info.header,name:info.header.toLowerCase(),values:patterns('values'),excluded:patterns('excludedValues')};
  });
 }
-/** Does the response have a header one of these HeaderInfo entries describes? (the name, and a value that matches `values` and none of `excludedValues`; no values: the header exists) */
+/** The compiled response side of a rule's condition: {include, exclude, needsHost}. A header may not be required by `responseHeaders` and, by name only,
+ *  excluded by `excludedResponseHeaders` (indexed_rule.cc ValidateResponseHeadersForMatching). needsHost: some entry matches on values of a header that is
+ *  not CORS-safelisted, so the rule only matches where the extension has host access (flat_ruleset_indexer.cc HasConditionRequiringHostPermissions). */
+function responseCondition(cond){
+ const include=cond.responseHeaders===undefined?null:headerInfoList(cond.responseHeaders,'responseHeaders'),exclude=cond.excludedResponseHeaders===undefined?null:headerInfoList(cond.excludedResponseHeaders,'excludedResponseHeaders');
+ if(include&&exclude){const named=new Set(include.map(info=>info.raw));for(const info of exclude)if(!info.values&&!info.excluded&&named.has(info.raw))throw new Error('excludedResponseHeaders names a header that responseHeaders requires');}
+ const needsHost=info=>(info.values||info.excluded)&&!OPEN_RESPONSE_HEADERS.has(info.name);
+ return {include,exclude,needsHost:!!((include&&include.some(needsHost))||(exclude&&exclude.some(needsHost)))};
+}
+/** Does the response have a header one of these HeaderInfo entries describes? Chromium's MatchesHeaderConditions (request_params.cc): the header is there
+ *  (any case); with no value conditions that is enough; a value that matches `excludedValues` fails the whole entry (also when another value of the same
+ *  header matches `values`); otherwise some value must match `values`. */
 function hasResponseHeader(infos,headers){
- for(const info of infos)for(const key of Object.keys(headers)){
-  if(key.toLowerCase()!==info.name)continue;
-  for(const value of Array.isArray(headers[key])?headers[key]:[headers[key]]){
-   const text=String(value);
-   if((!info.values||info.values.some(re=>re.test(text)))&&(!info.excluded||!info.excluded.some(re=>re.test(text))))return true;
+ for(const info of infos){
+  let values=null;
+  for(const key of Object.keys(headers)){
+   if(key.toLowerCase()!==info.name)continue;
+   const raw=headers[key];(values||(values=[])).push(...(Array.isArray(raw)?raw:[raw]).map(String));
   }
+  if(!values)continue;
+  if(!info.values&&!info.excluded)return true;
+  if(info.excluded&&values.some(text=>info.excluded.some(re=>re.test(text))))continue;
+  if(!info.values||values.some(text=>info.values.some(re=>re.test(text))))return true;
  }
  return false;
 }
 /** The response side of a rule's condition: some header of `responseHeaders` is there, and none of `excludedResponseHeaders`. */
 function responseMatches(resp,headers){
  if(!headers||typeof headers!=='object')return false;
- if(resp.include&&!hasResponseHeader(resp.include,headers))return false;
- return !(resp.exclude&&hasResponseHeader(resp.exclude,headers));
+ if(resp.exclude&&hasResponseHeader(resp.exclude,headers))return false;
+ return !(resp.include&&!hasResponseHeader(resp.include,headers));
 }
 class Cond{constructor(){this.requestDomains=null;this.excludedRequestDomains=null;this.initiatorDomains=null;this.excludedInitiatorDomains=null;this.topDomains=null;this.excludedTopDomains=null;this.domainType=null;this.tabIds=null;this.excludedTabIds=null;}}
 class Rule{
@@ -276,7 +301,7 @@ function compileRule(raw,set,{allowTabIds=set.source==='session'}={}){
  }
  rule.cond=extra;
  // Response-header conditions (Chrome 128): the rule can only be judged once the response is in (headerRules below), never at request time.
- if(cond.responseHeaders!==undefined||cond.excludedResponseHeaders!==undefined)rule.resp={include:cond.responseHeaders===undefined?null:headerInfoList(cond.responseHeaders,'responseHeaders'),exclude:cond.excludedResponseHeaders===undefined?null:headerInfoList(cond.excludedResponseHeaders,'excludedResponseHeaders')};
+ if(cond.responseHeaders!==undefined||cond.excludedResponseHeaders!==undefined)rule.resp=responseCondition(cond);
  if(cond.urlFilter!==undefined){
   const f=cond.urlFilter;if(typeof f!=='string'||!f.length)throw new Error('urlFilter must not be empty');if(/[^\x20-\x7e]/.test(f))throw new Error('urlFilter must be ASCII');if(f.startsWith('||*'))throw new Error('urlFilter must not start with ||*');
   rule.hostOnly=pureHostFilter(f);if(!rule.hostOnly)rule.urlFilter=f;
@@ -286,6 +311,7 @@ function compileRule(raw,set,{allowTabIds=set.source==='session'}={}){
  if(action.type==='modifyHeaders'){
   const requestHeaders=headerOps(action.requestHeaders,'requestHeaders',name=>APPENDABLE_REQUEST_HEADERS.has(name)),responseHeaders=headerOps(action.responseHeaders,'responseHeaders',()=>true);
   if(!requestHeaders&&!responseHeaders)throw new Error('modifyHeaders needs requestHeaders or responseHeaders');
+  if(requestHeaders&&rule.resp)throw new Error('a rule with a response header condition cannot modify request headers');
   rule.act={redirect:null,requestHeaders,responseHeaders};
  }
  return rule;
@@ -437,16 +463,21 @@ function redirectTarget(rule,req){
 // ---------- one extension ----------
 // Static rulesets share one append-only index per extension (a ruleset switched off is skipped by a flag, never re-indexed; switched on for
 // the first time, its rules are added). Dynamic and session rules have their own small index, rebuilt on each update.
-const newGroup=()=>({before:new RuleIndex(),headers:new RuleIndex()});
+// before: block / allow / allowAllRequests / redirect / upgradeScheme rules judged from the request alone; headers: modifyHeaders rules; late: the
+// same actions as `before` but with a response-header condition, judged only when the response is in (Chromium's headers_received index).
+const newGroup=()=>({before:new RuleIndex(),headers:new RuleIndex(),late:new RuleIndex()});
+const slotOf=(group,rule)=>rule.type==='modifyHeaders'?group.headers:rule.resp?group.late:group.before;
 class ExtensionRules{
  constructor(id,order){
   this.id=id;this.order=order;this.rulesets=new Map();this.dynamic=[];this.session=[];this.hostAccess=()=>true;this.needsHostAccessForAll=false;this.errors=[];this.matched=[];
   this.staticGroup=newGroup();this.liveGroup=newGroup();this.groups=[this.liveGroup,this.staticGroup];
   this.dynamicSet={extensionId:id,source:'dynamic',rulesetId:null,enabled:true,disabled:null};this.sessionSet={extensionId:id,source:'session',rulesetId:null,enabled:true,disabled:null};
  }
- get size(){return this.staticGroup.before.size+this.staticGroup.headers.size+this.liveGroup.before.size+this.liveGroup.headers.size;}
- addStatic(rules){for(const rule of rules)(rule.type==='modifyHeaders'?this.staticGroup.headers:this.staticGroup.before).add(rule,true);}
- rebuildLive(){const group=newGroup();for(const rule of [...this.session,...this.dynamic])(rule.type==='modifyHeaders'?group.headers:group.before).add(rule);this.liveGroup=group;this.groups=[group,this.staticGroup];}
+ get size(){return this.staticGroup.before.size+this.staticGroup.headers.size+this.staticGroup.late.size+this.liveGroup.before.size+this.liveGroup.headers.size+this.liveGroup.late.size;}
+ /** Some rule here (block / redirect / allow ...) waits for the response headers. */
+ get hasLate(){return this.staticGroup.late.size>0||this.liveGroup.late.size>0;}
+ addStatic(rules){for(const rule of rules)slotOf(this.staticGroup,rule).add(rule,true);}
+ rebuildLive(){const group=newGroup();for(const rule of [...this.session,...this.dynamic])slotOf(group,rule).add(rule);this.liveGroup=group;this.groups=[group,this.staticGroup];}
  /** Best before-request action of this extension (with any allowAllRequests inherited from the request's frames). */
  bestAction(req,frameAllows){
   let best=null,bestKey=0;
@@ -463,6 +494,23 @@ class ExtensionRules{
   for(const group of this.groups){const index=group.before;if(index.size&&(index.types&req.typeBit))index.candidates(req,visit);}
   return top;
  }
+ /** Response phase, rules with a response-header condition. The request phase's top action stays in force when it was an allow / allowAllRequests
+  *  (Chromium seeds its final action with it, composite_matcher.cc:172-183), so a response-phase action must have a higher priority key to count
+  *  (:191). Returns {seed, late}: seed is that allow (or null), late the response-phase action that beats it (or null).
+  *  hostOk(): does the extension have host access to the request (asked only when a rule needs it). */
+ lateAction(req,frameAllows,headers,hostOk){
+  const first=this.bestAction(req,frameAllows),seed=first&&(first.type==='allow'||first.type==='allowAllRequests')?first:null;
+  let late=null,bestKey=seed?seed.rule.key:0;
+  const visit=(rule,viaHost)=>{
+   if(rule.key<=bestKey||!requestMatches(rule,req,viaHost))return;
+   if(rule.resp.needsHost&&!hostOk())return;
+   if(!responseMatches(rule.resp,headers))return;
+   if(rule.type==='redirect'&&(req.type==='websocket'||req.type==='webtransport'||!redirectTarget(rule,req)))return;
+   late={type:rule.type,rule};bestKey=rule.key;
+  };
+  for(const group of this.groups){const index=group.late;if(index.size&&(index.types&req.typeBit))index.candidates(req,visit);}
+  return {seed,late};
+ }
  /** responseHeaders: the response's headers in the 'responseHeaders' phase (rules with a response-header condition are judged against them; in the request phase they never apply). */
  headerRules(req,phase,responseHeaders=null){
   let out=null;
@@ -478,8 +526,8 @@ function createDnrEngine({onMatch=null}={}){
  const extensions=new Map();let order=0,list=[];
  // allowAllRequests decided for a frame: frameKey ('wc:<id>' for a tab's main frame, 'f:<frameTreeNodeId>' for a subframe) → Map(extId → {rule}).
  const frames=new Map();
- let headerRules=false;
- const refresh=()=>{list=[...extensions.values()].filter(e=>e.size>0).sort((a,b)=>b.order-a.order);headerRules=list.some(e=>e.staticGroup.headers.size||e.liveGroup.headers.size);};
+ let headerRules=false,lateRules=false;
+ const refresh=()=>{list=[...extensions.values()].filter(e=>e.size>0).sort((a,b)=>b.order-a.order);headerRules=list.some(e=>e.staticGroup.headers.size||e.liveGroup.headers.size);lateRules=list.some(e=>e.hasLate);};
  const compileList=(rules,ext,set,{strict,limit,unsafeLimit})=>{
   if(!Array.isArray(rules))throw new Error('Rules must be a list');
   const out=[],ids=new Set();let regex=0,unsafe=0;
@@ -506,6 +554,8 @@ function createDnrEngine({onMatch=null}={}){
   get frameCount(){return frames.size;},
   /** Some extension has modifyHeaders rules (the header phases return at once otherwise). */
   get hasHeaderRules(){return headerRules;},
+  /** Some extension has a rule that is judged on the response (modifyHeaders, or a rule with a response-header condition): onHeadersReceived has work. */
+  get hasResponseRules(){return headerRules||lateRules;},
   /** Loads (or replaces) an extension's rules. rulesets: [{id, enabled, rules}]; disabledRules: {rulesetId: [ruleIds]}. */
   setExtension(id,{rulesets=[],dynamicRules=[],sessionRules=[],disabledRules={},hostAccess=null,withHostAccess=false}={}){
    extensions.delete(id);const ext=extension(id);
@@ -582,8 +632,11 @@ function createDnrEngine({onMatch=null}={}){
   },
   /** Outgoing request headers ({name: value}); returns the changed object or null. */
   beforeSendHeaders(input,headers){return modify(input,headers,'requestHeaders');},
-  /** Response headers ({name: [values]}); returns the changed object or null. */
-  headersReceived(input,headers){return modify(input,headers,'responseHeaders');},
+  /** Response headers ({name: [values]}); returns the changed object or null (modifyHeaders only; responseReceived has the whole response phase). */
+  headersReceived(input,headers){const out=responseReceived(input,headers);return out&&out.responseHeaders||null;},
+  /** The response phase (onHeadersReceived): rules with a response-header condition may block, redirect / upgrade or allow, then modifyHeaders rules
+   *  change the headers. Returns {cancel:true} | {redirectURL} | {responseHeaders} | null. */
+  responseReceived,
   /** The frame (main frame of tab `wc:<id>`, or subframe `f:<frameTreeNodeId>`) went away. */
   forgetFrame(key){frames.delete(key);}
  };
@@ -600,7 +653,46 @@ function createDnrEngine({onMatch=null}={}){
   if(allowAll&&allowAll.size){frames.delete(key);frames.set(key,allowAll);if(frames.size>4096)frames.delete(frames.keys().next().value);}
   else frames.delete(key);
  }
- function modify(input,headers,phase){
+ /** The response phase of one request (see lateAction / headersReceived above). */
+ function responseReceived(input,headers){
+  if(!list.length||!headers)return null;
+  const req=input.lower?input:prepareRequest(input);
+  let block=null,redirect=null,floors=null;
+  if(lateRules){
+   const frameAllows=frameAllowsFor(req);
+   for(const ext of list){
+    if(!ext.hasLate)continue;
+    let granted;const hostOk=()=>granted===undefined?(granted=access(ext,req)):granted;
+    const {late}=ext.lateAction(req,frameAllows,headers,hostOk);
+    if(!late)continue;
+    // As in the request phase (and Chromium's CompositeMatcher::GetAction): the chosen action is dropped, masking the rules below it, when the extension
+    // lacks the host access it needs (every action with declarativeNetRequestWithHostAccess; a redirect always).
+    if((ext.needsHostAccessForAll||late.type==='redirect')&&!hostOk())continue;
+    ext.record(late.rule,req);if(onMatch)onMatch(ext.id,late.rule,req,late.type);
+    if(late.type==='block'){if(!block)block=late;}
+    else if(late.type==='redirect'||late.type==='upgradeScheme'){if(!redirect)redirect={...late,ext};}
+    else{
+     // allow / allowAllRequests: modifyHeaders rules at or below this priority no longer apply; an allowAllRequests also covers the document's subresources.
+     (floors||(floors=new Map())).set(ext.id,late.rule.priority);
+     if(late.type==='allowAllRequests'&&(req.type==='main_frame'||req.type==='sub_frame'))keepFrame(req,ext,late.rule);
+    }
+   }
+  }
+  // Across extensions block beats redirect / upgrade beats allow (RulesetManager::GetAction); a blocked or redirected response changes nothing else.
+  if(block)return {cancel:true};
+  if(redirect){const url=redirect.type==='upgradeScheme'?req.url.replace(/^http:/i,'https:').replace(/^ws:/i,'wss:'):redirectTarget(redirect.rule,req);if(url&&url!==req.url)return {redirectURL:url};}
+  const responseHeaders=modify(req,headers,'responseHeaders',floors);
+  return responseHeaders?{responseHeaders}:null;
+ }
+ /** An allowAllRequests rule that matched the navigation's response also allowlists the frame (ruleset_matcher_base.cc OnDidFinishNavigation:305-325 takes the
+  *  highest allowAllRequests action of both stages). */
+ function keepFrame(req,ext,rule){
+  const key=req.frameKey;if(!key)return;
+  const map=frames.get(key)||new Map(),have=map.get(ext.id);
+  if(!have||rule.priority>have.rule.priority)map.set(ext.id,{rule});
+  frames.delete(key);frames.set(key,map);if(frames.size>4096)frames.delete(frames.keys().next().value);
+ }
+ function modify(input,headers,phase,floors=null){
   if(!list.length||!headers)return null;
   const req=input.lower?input:prepareRequest(input);
   const frameAllows=frameAllowsFor(req);
@@ -608,7 +700,7 @@ function createDnrEngine({onMatch=null}={}){
   for(const ext of list){
    const rules=ext.headerRules(req,phase,phase==='responseHeaders'?headers:null);if(!rules.length)continue;
    if(!access(ext,req))continue;
-   const floor=ext.allowPriority(req,frameAllows);
+   const floor=Math.max(ext.allowPriority(req,frameAllows),floors&&floors.get(ext.id)||0);
    for(const rule of rules){
     if(rule.priority<=floor)break;
     let used=false;

@@ -1,6 +1,7 @@
 'use strict';
 // Pop-up policy: a page may open a window only right after a real click or key press on it (transient activation),
 // so OAuth and payment pop-ups keep working while load-time and timer-driven pop-ups are refused.
+const TAPS=new Set(['gestureTap','touchEnd']);
 const MODIFIER_KEYS=new Set(['Control','Shift','Alt','Meta','AltGraph','CapsLock','OS']);
 
 function createPopupGate({now=Date.now,windowMs=5000,noticeMs=4000,onBlocked=()=>{}}={}){
@@ -10,6 +11,8 @@ function createPopupGate({now=Date.now,windowMs=5000,noticeMs=4000,onBlocked=()=
   gestures.set(wc,0);
   wc.on('before-mouse-event',(_event,input)=>{if(input?.type==='mouseDown'||input?.type==='mouseUp')gestures.set(wc,now());});
   wc.on('before-input-event',(_event,input)=>{if(input?.type==='keyDown'&&!MODIFIER_KEYS.has(input.key))gestures.set(wc,now());});
+  // A tap on a touch screen (Windows laptops) reaches the page as touch and gesture events; the page makes the click itself, so no mouse event passes here.
+  wc.on('input-event',(_event,input)=>{if(TAPS.has(input?.type))gestures.set(wc,now());});
  }
  /** True when the window request follows a recent user gesture on this page. */
  function allow(wc,details){

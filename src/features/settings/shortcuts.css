@@ -67,3 +67,6 @@
   @media (prefers-reduced-motion: reduce) { & .sk-caret { animation: none; } }
 }
 .app[data-reduced-motion='true'] .sk-caret { animation: none; }
+
+/* Windows High Contrast (forced colors) drops box-shadows and forces every border to one colour: the key field's focus would not show. Normal look unchanged. */
+@media (forced-colors: active) { .sk-keys:focus-visible { outline: 2px solid Highlight !important; outline-offset: 1px; } }

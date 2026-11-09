@@ -7,7 +7,8 @@
 // THE TREE. Chrome has a root "0" holding "Bookmarks bar" ("1") and "Other bookmarks" ("2"); Acira has a forest whose top level holds starred
 // pages, the person's own folders and, once used, two folders named "Bookmarks bar" and "Other bookmarks" (core.ts placeFolder, imports). The
 // extension sees:
-//   "1"  the top-level pages (they show on Acira's bar), then the children of the folder named "Bookmarks bar"
+//   "1"  the top-level pages above the folder named "Bookmarks bar" (they show on Acira's bar), then that folder's children, then the top-level pages below it
+//        (the order Acira's own sidebar lists them in; without that folder, all top-level pages)
 //   "2"  the top-level folders other than those two, then the children of the folder named "Other bookmarks"
 //   a folder           its own children
 // "1" and "2" are always there, even before Acira has made either folder; a write into one makes it (placeFolder's id and title). The person
@@ -69,15 +70,17 @@ function createView(allNodes, options = {}) {
   const bar = top.find(node => isNamed(node, BAR_TITLE)) || null, other = top.find(node => isNamed(node, OTHER_TITLE)) || null;
   const of = parent => (kids.get(parent) || []).filter(node => !hold.skip || !hold.skip.has(node));
   const cid = node => node === bar ? BAR : node === other ? OTHER : node.id;
+  // "1": the top-level pages above the folder, its children, the top-level pages below it. "2": the top-level folders, then the children of its folder.
+  const pagesAround = side => { const top = of(null), at = bar ? top.indexOf(bar) : -1; return top.filter((node, i) => node.url && (side === 'before' ? at < 0 || i < at : at >= 0 && i > at)); };
   const zones = {
-    [BAR]: { first: () => of(null).filter(node => node.url), folder: bar, accepts: node => !!node.url, title: BAR_TITLE },
+    [BAR]: { before: () => pagesAround('before'), after: () => pagesAround('after'), folder: bar, accepts: node => !!node.url, title: BAR_TITLE },
     [OTHER]: { first: () => of(null).filter(node => !node.url && node !== bar && node !== other), folder: other, accepts: node => !node.url, title: OTHER_TITLE }
   };
   /** The Chrome children of a Chrome id (Acira nodes; for "0" the two virtual folders are null placeholders), or null for an unknown id or a page. */
   function listOf(id) {
     if (id === ROOT) return [BAR, OTHER];
     const zone = zones[id];
-    if (zone) return [...zone.first(), ...(zone.folder ? of(zone.folder.id) : [])];
+    if (zone) { const inside = zone.folder ? of(zone.folder.id) : []; return id === BAR ? [...zone.before(), ...inside, ...zone.after()] : [...zone.first(), ...inside]; }
     const node = byId.get(id);
     return node && !node.url && node !== bar && node !== other ? of(node.id) : null;
   }
@@ -141,7 +144,8 @@ function ensureFolder(draft, view, zoneId, { now, profileId }) {
   const zone = view.zones[zoneId];
   if (zone.folder) return zone.folder;
   const token = zoneId === BAR ? 'bookmarks-bar' : 'other-bookmarks';
-  const folder = { id: draft.some(node => node.id === token) ? `folder-${crypto.randomUUID()}` : token, browserProfileId: profileId || draft[0]?.browserProfileId, parentId: null, title: zone.title, position: Number.MAX_SAFE_INTEGER, createdAt: now };
+  const tops = draft.filter(node => !node.parentId);
+  const folder = { id: draft.some(node => node.id === token) ? `folder-${crypto.randomUUID()}` : token, browserProfileId: profileId || draft[0]?.browserProfileId, parentId: null, title: zone.title, position: tops.length ? Math.max(...tops.map(node => node.position ?? 0)) + 1 : 0, createdAt: now };
   draft.push(folder);
   return folder;
 }
@@ -151,7 +155,7 @@ function ensureFolder(draft, view, zoneId, { now, profileId }) {
  * node belongs there, or when Acira has no folder of that name; otherwise in Acira's own folder (made now when missing).
  * `view` is the one the call built; the node being placed is left out of its lists here.
  */
-function place(draft, view, node, parentId, index, { now, profileId }) {
+function place(draft, view, node, parentId, index, { now, profileId, fresh = false }) {
   view.skip(new Set([node]));
   const siblingsOf = parent => draft.filter(item => (item.parentId || null) === parent && item !== node);
   const put = (parent, successor) => {
@@ -160,6 +164,31 @@ function place(draft, view, node, parentId, index, { now, profileId }) {
     node.position = successor ? (successor.position ?? 0) - 0.5 : (siblings.length ? Math.max(...siblings.map(item => item.position ?? 0)) : -1) + 1;
   };
   const zone = view.zones[parentId];
+  if (zone && parentId === BAR) {
+    // One list: the pages above Acira's bar folder, the folder's items, the pages below it. A page lands in the part the index falls in (the ends are
+    // Acira's bar; between the folder's items it is one of them); a folder always lives in the folder, and a folder asked to stand before pages above
+    // the bar folder takes them to below it (their order, and Acira's bar, do not change), so the order an extension asks for is the order it gets.
+    const before = zone.before(), after = zone.after(), count = before.length + (zone.folder ? view.of(zone.folder.id).length : 0) + after.length;
+    const at = Math.max(0, Math.min(index, count));
+    if (node.url) {
+      if (!zone.folder || at <= before.length) { if (zone.folder) put(null, before[at] || zone.folder); else put(null, before[at] || null); return Math.min(at, before.length); }
+      const inside = view.of(zone.folder.id);
+      if (at < before.length + inside.length) { put(zone.folder.id, inside[at - before.length] || null); return at; }
+      const j = at - before.length - inside.length; put(null, after[j] || null); return before.length + inside.length + Math.min(j, after.length);
+    }
+    const target = zone.folder || ensureFolder(draft, view, parentId, { now, profileId }), inside = view.of(target.id);
+    if (at < before.length) {
+      const moved = before.slice(at);
+      // the order of the pages among themselves, and Acira's bar, stay as they are; the list an extension sees changes more than it asked, so the call's events come from a comparison
+      view.reshuffled = clone(fresh ? draft.filter(item => item !== node) : draft);
+      moved.forEach((page, k) => { page.position = (target.position ?? 0) + (k + 1) / (moved.length + 1) * 0.5; });
+      put(target.id, inside[0] || null);
+      return at;
+    }
+    const slot = Math.min(at - before.length, inside.length);
+    put(target.id, inside[slot] || null);
+    return before.length + slot;
+  }
   if (zone) {
     const first = zone.first();
     // Without Acira's own folder an item that belongs in the first part simply goes there (a page on the bar, a folder at the top level): nothing is made.
@@ -204,10 +233,10 @@ function create(nodes, info, context = {}) {
   const title = typeof details.title === 'string' ? details.title.slice(0, MAX_TITLE) : '';
   const made = { id: newId(hasUrl ? 'bookmark' : 'folder'), browserProfileId: profileId, parentId: null, title, ...(hasUrl ? { url } : {}), position: 0, createdAt: now };
   draft.push(made);
-  const at = place(draft, view, made, parentId, index, { now, profileId });
+  const at = place(draft, view, made, parentId, index, { now, profileId, fresh: true });
   finish(draft, new Set([made.parentId || null, null]));
   const result = recordAt(made, parentId, at);
-  return { nodes: draft, result, events: [{ name: 'bookmarks.onCreated', args: [made.id, result] }] };
+  return { nodes: draft, result, events: view.reshuffled ? diffEvents(view.reshuffled, draft) : [{ name: 'bookmarks.onCreated', args: [made.id, result] }] };
 }
 
 function update(nodes, id, changes, context = {}) {
@@ -255,7 +284,7 @@ function move(nodes, id, destination, context = {}) {
   finish(draft, new Set([oldParent, node.parentId || null, null]));
   const result = recordAt(node, parentId, at);
   const moved = result.parentId !== was.parentId || result.index !== was.index;
-  return { nodes: draft, result, events: moved ? [{ name: 'bookmarks.onMoved', args: [id, { parentId: result.parentId, index: result.index, oldParentId: was.parentId, oldIndex: was.index }] }] : [] };
+  return { nodes: draft, result, events: view.reshuffled ? diffEvents(view.reshuffled, draft) : moved ? [{ name: 'bookmarks.onMoved', args: [id, { parentId: result.parentId, index: result.index, oldParentId: was.parentId, oldIndex: was.index }] }] : [] };
 }
 
 function remove(nodes, id, { recursive = false, owned = false } = {}) {

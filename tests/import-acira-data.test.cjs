@@ -74,3 +74,12 @@ test('the Import & export row and setup name the new file and count only bookmar
  assert.match(fs.readFileSync(path.join(__dirname,'../src/features/onboarding/steps.tsx'),'utf8'),/item\.status === "imported" && item\.category === "bookmarks"/);
  assert.match(fs.readFileSync(path.join(__dirname,'../src/features/import-export/ImportPanel.tsx'),'utf8'),/const fromFile = \(browser: string\) => browser === 'HTML' \|\| browser === 'Acira';/);
 });
+
+test('an Acira export re-saved with a byte-order mark (Notepad, a script) still imports',async()=>{
+ const f=setup('﻿'+exported(),{state:Object.assign(createInitialState(),{bookmarkNodes:[],browsingHistory:[]})});
+ try{
+  const {batch}=await f.importer.importHTML();
+  assert.equal(batch.browser,'Acira');
+  assert.equal(batch.results[0].count,3);
+ }finally{f.done();}
+});

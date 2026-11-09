@@ -31,6 +31,9 @@ export const defaultSearchProviders=():SearchProviders=>({defaultId:'google',eng
 /** Ids of every engine in the stock list: Settings treats a list with other ids as customised. */
 export const stockEngineIds=():string[]=>defaultSearchProviders().engines.map(engine=>engine.id);
 
+/** Text with every lone surrogate half replaced by U+FFFD (what String.prototype.toWellFormed does): encodeURIComponent throws "URI malformed" on one, and a
+ *  throw while the address list renders emptied the whole list (a long paste cut inside an emoji by the 4096-character limit leaves one). */
+const wellFormed=(text:string)=>text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g,'\ufffd');
 const encode=(query:string)=>encodeURIComponent(query).replace(/[!'()*]/g,char=>'%'+char.charCodeAt(0).toString(16).toUpperCase());
 
 /** Providers to search with: the saved list, or the stock list with the legacy default engine selected. */
@@ -41,7 +44,7 @@ export function effectiveProviders(saved:SearchProviders|undefined,engine:Search
 
 /** Returns null when the text is not a usable search (empty after the shortcut or a bare "."/".." path segment). */
 export function resolveSearch(input:string,providers:SearchProviders):SearchResolution|null {
-  let query=input.trim().replace(/\s+/gu,' '),engine=providers.engines.find(item=>item.id===providers.defaultId)||providers.engines[0],bangUsed=false;
+  let query=wellFormed(input).trim().replace(/\s+/gu,' '),engine=providers.engines.find(item=>item.id===providers.defaultId)||providers.engines[0],bangUsed=false;
   const match=/^!([a-z0-9][a-z0-9_-]{0,23})(?:\s+(.*))?$/i.exec(query),selected=match&&providers.engines.find(item=>item.keyword&&item.keyword===match[1].toLowerCase());
   if(selected){engine=selected;query=match![2]||'';bangUsed=true;}
   if(!query||!engine)return null;

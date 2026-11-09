@@ -9,7 +9,8 @@
 //  - Critical-CH: a first page loaded without the hint by an origin that has just asked for it is loaded once more with it (GET only), as Chrome restarts it.
 //  - Ordinary profiles remember which origins asked (a small file in the profile's own folder), so the first page after a restart is right too. Private and
 //    Tor sessions keep the list in memory only. Clearing a session's cookies clears the list for the same sites, as Chrome ties it to cookies (guard below).
-// The value is what every page's prefers-color-scheme follows: nativeTheme (Acira's appearance, or the system's when it follows the system). It is a bare token, dark
+// The value is what every page's prefers-color-scheme follows: nativeTheme (Acira's appearance, or the system's when it follows the system), or what the tab is told
+// when Website appearance (site-appearance.cjs) says Light or Dark for it (dark(details) answers per request). It is a bare token, dark
 // or light, as Chrome sends it: Google draws its light page for a quoted "dark" (checked live, 4 Nov 2026).
 const fs = require('node:fs'), path = require('node:path');
 const HINT = 'Sec-CH-Prefers-Color-Scheme', NAME = HINT.toLowerCase(), FILE = 'Color Scheme Hint.json', LIMIT = 500;
@@ -77,7 +78,7 @@ function sendHeaders(state, details) {
     if (secureOrigin(page) !== origin) return {};
     const site = valuesOf(headers, 'sec-fetch-site')[0]; if (site && site.toLowerCase() !== 'same-origin') return {};
   }
-  return { requestHeaders: { ...headers, [HINT]: state.dark() ? 'dark' : 'light' } };
+  return { requestHeaders: { ...headers, [HINT]: state.dark(details) ? 'dark' : 'light' } };
 }
 /** Response-header participant: reads Accept-CH / Critical-CH on top-level pages; returns the one-time restart when Critical-CH needs it. */
 function headersReceived(state, details) {

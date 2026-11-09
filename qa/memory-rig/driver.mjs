@@ -24,7 +24,10 @@ const SITES = {
 // 'fixture' run (13.2): five pinned tabs and one plain active tab on local pages (no live sites, nothing audible) so the sleep rules can be checked in the real app:
 // /tall (scroll to restore), /ambient (muted looping video), /loud (unmuted looping video), /form (a typed draft), /plain.
 const FIX_PORT = Number(process.env.RAM_FIX || 9834), FIX = 'http://127.0.0.1:' + FIX_PORT;
-if (RUN === 'fixture') {
+const LOCAL = process.env.RAM_LOCAL === '1';
+// RAM_LOCAL=1 (13.3): the seven-tab run (5 pinned + 2 Favorites) on seven local pages instead of the live sites, so a measurement uses no network.
+if (LOCAL) { SITES.pin = [1, 2, 3, 4, 5].map(i => FIX + '/site' + i); SITES.fav = [6, 7].map(i => FIX + '/site' + i); }
+if (RUN === 'fixture' || LOCAL) {
   const clip = (muted) => `<video id=v ${muted ? 'muted' : ''} loop playsinline width=160 height=90></video><script>(async()=>{const c=document.createElement('canvas');c.width=160;c.height=90;const x=c.getContext('2d');let n=0;const t=setInterval(()=>{x.fillStyle='hsl('+(n++*20%360)+',70%,50%)';x.fillRect(0,0,160,90);},50);const r=new MediaRecorder(c.captureStream(15),{mimeType:'video/webm'});const parts=[];r.ondataavailable=e=>parts.push(e.data);r.onstop=()=>{clearInterval(t);const v=document.getElementById('v');v.src=URL.createObjectURL(new Blob(parts,{type:'video/webm'}));v.play().then(()=>{window.__playing=true;});};r.start();setTimeout(()=>r.stop(),1500);})()</script>`;
   const pages = {
     '/tall': '<h1>Tall page</h1><div style="height:6000px;background:linear-gradient(#fff,#bcd)">tall</div><p id=end>end</p>',
@@ -32,6 +35,7 @@ if (RUN === 'fixture') {
     '/form': '<textarea id=t></textarea><script>document.getElementById("t").value="a draft the person typed"</script>',
     '/plain': '<h1>Plain page</h1><p>nothing here</p>',
   };
+  for (let i = 1; i <= 7; i++) pages['/site' + i] = '<h1>Local site ' + i + '</h1>' + ('<p>Plain text for a page that is shown, left and slept: ' + 'words '.repeat(60) + '</p>').repeat(150);
   http.createServer((req, res) => { const u = new URL(req.url, FIX).pathname; res.setHeader('content-type', 'text/html; charset=utf-8'); res.statusCode = pages[u] ? 200 : 404; res.end('<!doctype html><meta charset=utf-8><title>' + u + '</title><body style="margin:0;font:16px sans-serif">' + (pages[u] || 'no')); }).listen(FIX_PORT, '127.0.0.1');
 }
 async function prepare() {
@@ -61,6 +65,7 @@ if (fresh) {
     s0.activeTabId = 'pin0';
   }
   Object.assign(s0.settings, {onboardingComplete: true, askBeforeClosing: false, appearance: 'light', reducedMotion: true});
+  if (process.env.RAM_LANG) s0.settings.language = process.env.RAM_LANG;   // 13.3: a language other than English, to see the packed catalogs unpack in the real app
   Object.assign(s0.windowUi, {view: 'full', workspaceOpen: true, webWorkspaceOpen: true});
   const db = new BrowserDatabase(path.join(ROOT, 'browser.sqlite')); db.saveWindow('main', s0); db.close();
   env = await prepare();

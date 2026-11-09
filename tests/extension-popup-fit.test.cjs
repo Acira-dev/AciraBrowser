@@ -187,3 +187,26 @@ test('the page loads in a window and a view as large as a popup may be, not 25 x
   assert.equal(popup.window.visible, false);
   popup.destroy();
 });
+
+test('window: a measurement taken in a window the page has since left is not used, or the popup stays larger than its page (Dark Reader, uBlock Origin Lite)', async () => {
+  // The page lays out wide in the tiny 25 x 25 window it starts in (527 x 600 of overflow), then asks for its real size, 276 x 580. The measurement of
+  // the tiny window arrives after that: growing the window by it left the popup 527 x 600 (or 778 x 600) around a 276 x 580 page, for good.
+  const content = {width: 276, height: 580};
+  const page = win => (win.width <= 25 ? metrics(25, 25, 25, 25, 527, 600) : windowsPage(content, {bar: 0})(win));
+  const popup = popupWith(page);
+  await popup.whenReady();
+  const asked = popup.webContents.executeJavaScript;
+  const arrived = [];
+  popup.webContents.executeJavaScript = () => new Promise(resolve => { const seen = page(popup.window.getBounds()); arrived.push(() => resolve(seen)); });
+  clearTimeout(popup.fitTimer);
+  const fitting = popup.fit(6);
+  popup.updatePreferredSize({}, {width: 276, height: 580});
+  clearTimeout(popup.fitTimer);
+  popup.webContents.executeJavaScript = asked;
+  arrived.shift()();
+  await fitting;
+  await settle();
+  assert.deepEqual(popup.extra, {width: 0, height: 0}, 'nothing was added for overflow of a window that is gone');
+  assert.deepEqual([popup.window.bounds.width, popup.window.bounds.height], [276, 580]);
+  popup.destroy();
+});

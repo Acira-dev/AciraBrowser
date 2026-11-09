@@ -6,6 +6,7 @@
 //     attach and Runtime.queryObjects over MediaStream.prototype), so nothing is injected into the site, a site cannot
 //     hide a stream from it, and Stop can end every capture track whatever code created it.
 // Remote tracks of a call have no device behind them and are ignored: only tracks with a device id or a display surface count.
+const pageDebugger = require('./page-debugger.cjs');
 const KINDS = ['camera', 'microphone', 'screen'];
 
 // Runs inside the page on the array of every MediaStream (a track's JS object only exists once the page has touched it, so the
@@ -30,11 +31,10 @@ const FUNCTION = `function (stop) {
 /** Live capture kinds on a page, or null when they could not be read (another debugger is attached, page gone). With stop, ends them first. */
 async function liveCapture(wc, { stop = false, timeoutMs = 2000 } = {}) {
   if (!wc || wc.isDestroyed()) return null;
-  const debug = wc.debugger;
-  if (debug.isAttached()) return null;
+  const debug = pageDebugger.acquire(wc, 'capture');
+  if (!debug) return null;
   let timer;
   try {
-    debug.attach('1.3');
     const work = (async () => {
       const prototype = await debug.sendCommand('Runtime.evaluate', { expression: 'MediaStream.prototype' });
       const objects = await debug.sendCommand('Runtime.queryObjects', { prototypeObjectId: prototype.result.objectId });
@@ -44,7 +44,7 @@ async function liveCapture(wc, { stop = false, timeoutMs = 2000 } = {}) {
     const found = await Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('slow')), timeoutMs); })]);
     return found ? kindsOf(found) : null;
   } catch (error) { if (process.env.ACIRA_CAPTURE_DEBUG) console.log('[capture] failed', String(error.message || error)); return null; }
-  finally { clearTimeout(timer); try { debug.detach(); } catch {} }
+  finally { clearTimeout(timer); debug.release(); }
 }
 const kindsOf = found => KINDS.filter(kind => found.some(([trackKind, surface]) => kind === 'screen' ? surface === 'screen' : kind === 'camera' ? trackKind === 'video' && surface !== 'screen' : trackKind === 'audio' && surface !== 'screen'));
 

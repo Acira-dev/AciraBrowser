@@ -22,3 +22,10 @@ Footprint of the GPU process swings by hundreds of MB with compositor surfaces: 
 13.2 additions: `launch.sh fixture` starts five pinned tabs and a plain active tab on local pages served by the driver (port `RAM_FIX`, default 9834): /tall (scroll restore), /ambient (muted looping video, generated in the page), /loud (unmuted loop), /form (typed draft), /plain; nothing audible, no live sites.
 `ev.sh -f qa/memory-rig/tab-churn.js` (fixture run) opens and closes 40 tabs and reports processes, web contents and main heap before and after.
 Before/after builds: `git checkout <base> -- desktop/main.cjs desktop/tab-sleep.cjs`, run, `git checkout HEAD -- ...`, run again; same timers (`ACIRA_MEMORY_SAVER_FREEZE_MS=120000 ..._IDLE_MS=900000 ..._TICK_MS=5000 ..._DEBUG=1`).
+
+13.3 additions (the main process's own text):
+`RAM_LOCAL=1 qa/memory-rig/launch.sh seven` runs the 5 pinned + 2 Favorites setup on seven local pages (no network); `RAM_LANG=es` seeds another interface language.
+`measure.js` / `table.py` also print the main process's script source (`v8.getHeapCodeStatistics().external_script_source_size`, the exact figure: V8 keeps every script's text for the life of the process), bytecode and V8 heap.
+The packaged app runs ONE main bundle, so compare bundles, not the dev layout: `git checkout -- desktop/main.cjs; node qa/memory-rig/bundle-main.mjs . /tmp/acira-qa/<name>/new` (and the same on the base commit), then
+`qa/memory-rig/main-footprint.sh <label> <bundle main.cjs>` launches it with NO inspector and prints main's footprint at 75 s and 90 s (it overwrites desktop/main.cjs: `git checkout -- desktop/main.cjs` after). Footprint moves about 10 MB between launches; alternate the two builds three times and compare medians.
+Look inside the main process's heap with `app.evaluate` + `v8.writeHeapSnapshot('/tmp/...')` and a small script that sums string nodes by size (a string twice the size of its file is two-byte). Delete the snapshot afterwards (38 MB).
