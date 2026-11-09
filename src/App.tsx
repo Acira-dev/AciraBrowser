@@ -155,7 +155,7 @@ import { addressCompletion,addressSuggestionAction,nextAddressSuggestion,opensSu
 import { runAddressRow,useAddressCommands } from './ui/addressRows';
 import { browserGeometry } from './ui/browserGeometry';
 import { designTokens } from './ui/designSystem';
-import { activatePopupTriggerAt,nextOverlayId,overlayOutlivesTabChange,overlayOutlivesLayoutChange,overlayPointerDismiss,sameOverlayId,takesTypedText } from './ui/interactionPolicy';
+import { activatePopupTriggerAt,nextOverlayId,overlayTiedToTab,overlayOutlivesTabChange,overlayOutlivesLayoutChange,overlayPointerDismiss,sameOverlayId,takesTypedText } from './ui/interactionPolicy';
 import { browserTransition } from './ui/motion';
 import { createNavigationRepeat,tabCursorIndex } from './ui/navigationRepeat';
 import { bookmarkMenuEvent,copyText,type BookmarkMenuRequest } from './ui/pageActions';
@@ -449,9 +449,11 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
     const storedIcon = useSiteIcons(state);
     // Chips made outside React (a dragged tab or pane) find the tab's favicon and stored icon here, so a loading tab's chip is never blank (ui/chipIcon.ts).
     setChipIconLookup({ tab: id => state.tabs.find(item => item.id === id), stored: storedIcon });
+    // Every popup request renders again and so sends its new id to main, even when the kind in state is the same (ui/popupTransition.ts).
+    const [popupSerial, setPopupSerial] = useState(0);
     const popupTransition = useRef<ReturnType<typeof createPopupTransition> | null>(null);
     if (!popupTransition.current)
-        popupTransition.current = createPopupTransition(publishOverlay);
+        popupTransition.current = createPopupTransition(publishOverlay, () => setPopupSerial(count => count + 1));
     const overlayId = useRef<number | undefined>(undefined), popupLockedTop = useRef<number | undefined>(undefined), popupParent = useRef<'menu' | undefined>(undefined), popupLevel = useRef<'back' | undefined>(undefined);
     // A popup's id leaves with its kind, never before: dropping the id first left one commit that still held the kind (the layout effect
     // then published a popup with no id, which main takes for a new popup, and its layout echo undid the close) and made the overlay
@@ -550,7 +552,7 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
         setOverlay(null);
         popupAnchorRef.current = null;
     } }, [tab.id, tab.url, addressEditTab, addressFocused]);
-    useLayoutEffect(() => { if (!['group-preview', 'group-context', 'split-context', 'tab-context'].includes(overlay || ''))
+    useLayoutEffect(() => { if (!overlayTiedToTab(overlay))
         return; const owner = state.tabs.find(item => item.id === contextId); if (!owner || overlay === 'group-preview' && !groupForTab(state, owner)?.collapsed)
         setOverlay(null); }, [overlay, contextId, state.tabs, state.tabGroups]);
     useEffect(()=>retainSettingsViews(state.tabs),[state.tabs]);
@@ -1259,7 +1261,7 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
         if (!topSeam && lastPageBounds.current && lastPageBounds.current.y <= 8 && headerNode && Math.abs(headerNode.getBoundingClientRect().height - headerHeight) > 1) return;
         const physical = physicalLayout(layout);
         sendWhenLayoutSwitchReady(() => { if (samePageRef(unsentSlide.current?.page, physical.pageBounds)) unsentSlide.current = null; runtime.setBrowserLayout(physical); }, slidesOnSidebarCurve(physical));
-    }, [profileFrameTint,currentWindowFinish,windowFullscreen,captionNotch,reader?.tabId,setupVisible,tab.id, tab.url, tab.error, tab.contentKind, split?.id, split?.error, native, overlay, contextId, address, addressAnchor, activeSuggestionIndex, suggestions.length, sidebarSpace, workspaceOpen, sidebarSideOf(s), edge.side, edge.pinned.side, dragging, effectiveMode, headerHeight, fullHeaderHeight, seamless, topSeam, size.width, size.height, style, dark, s.reducedMotion, s.animationSpeed, s.reducedTransparency, s.browserTint, s.accentColor, s.colorPreset, s.glassOpacity, s.surfaceColor, s.sidebarColor, s.tabColor,s.toolbarColor, state.tabs.length, state.tabGroups.length, state.bookmarks.length, splitPair ? `${splitPair.layout}:${splitPair.tabIds.join(',')}:${splitPair.cols.join(',')}:${splitPair.rows.join(',')}` : '', splitPreview, immediateLayout, presentationChanged, toasts.map(row => row.id).join(','), toastOverChrome, toastState.status?.key, toastState.boundsStatus, toastState.boundsToasts.map(row => row.key).join(','), toastState.expanded, toastState.boundsExpanded, rating?.feature, rating?.phase, rating?.leaving, ratingHidden, menuAnchorMoved]);
+    }, [profileFrameTint,currentWindowFinish,windowFullscreen,captionNotch,reader?.tabId,setupVisible,tab.id, tab.url, tab.error, tab.contentKind, split?.id, split?.error, native, overlay, popupSerial, contextId, address, addressAnchor, activeSuggestionIndex, suggestions.length, sidebarSpace, workspaceOpen, sidebarSideOf(s), edge.side, edge.pinned.side, dragging, effectiveMode, headerHeight, fullHeaderHeight, seamless, topSeam, size.width, size.height, style, dark, s.reducedMotion, s.animationSpeed, s.reducedTransparency, s.browserTint, s.accentColor, s.colorPreset, s.glassOpacity, s.surfaceColor, s.sidebarColor, s.tabColor,s.toolbarColor, state.tabs.length, state.tabGroups.length, state.bookmarks.length, splitPair ? `${splitPair.layout}:${splitPair.tabIds.join(',')}:${splitPair.cols.join(',')}:${splitPair.rows.join(',')}` : '', splitPreview, immediateLayout, presentationChanged, toasts.map(row => row.id).join(','), toastOverChrome, toastState.status?.key, toastState.boundsStatus, toastState.boundsToasts.map(row => row.key).join(','), toastState.expanded, toastState.boundsExpanded, rating?.feature, rating?.phase, rating?.leaving, ratingHidden, menuAnchorMoved]);
     const tabs = <TabStrip state={{ ...state, settings: { ...s, verticalTabs: false } }} dispatch={dispatch} onContext={(id, anchor, isGroup) => open(isGroup === 'split' ? 'split-context' : isGroup ? 'group-context' : 'tab-context', id, anchor)} onBlankContext={anchor => open('strip-context', undefined, anchor)} onPreview={previewGroup}/>;
     const navGlyph = (name: 'back' | 'forward' | 'reload' | 'home' | 'tune' | 'star' | 'starFilled' | 'menu' | 'close') => <ToolbarIcon name={name}/>;
     // Bible §5.2: the one sidebar toggle lives at the toolbar's top-left in every mode, open or closed.

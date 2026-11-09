@@ -143,7 +143,7 @@ function validateAction(input, snapshot) {
     case 'workspace.move-group':shape(['groupId','workspaceId','name'],['groupId','workspaceId']);id(value.groupId,'Tab group');reference(snapshot,'tabGroups',value.groupId,'Tab group');id(value.workspaceId,'Workspace');reference(snapshot,'workspaces',value.workspaceId,'Workspace');if(has(value,'name'))text(value.name,64,'Group name',true);break;
     case 'tab.mute':shape(['id','muted'],['id','muted']);checkId('tabs');boolean(value.muted,'Muted');break;
     case 'tab.rename':shape(['id','title'],['id','title']);checkId('tabs');text(value.title,400,'Tab name');break;
-    case 'tab.select':shape(['id','individual'],['id']);checkId('tabs');if(has(value,'individual'))boolean(value.individual,'Individual tab');break;
+    case 'tab.select':shape(['id','individual','here'],['id']);checkId('tabs');if(has(value,'individual'))boolean(value.individual,'Individual tab');if(has(value,'here'))boolean(value.here,'Bring the tab here');break;
       case 'tab.favorite':shape(['id','favoriteId'],['id','favoriteId']);checkId('tabs');if(value.favoriteId!==null)favoriteId(value.favoriteId);break;
     case 'tab.duplicate':case 'tab.pin':shape(['id'],['id']);checkId('tabs');break;
     case 'tab.restore':shape([]);break;

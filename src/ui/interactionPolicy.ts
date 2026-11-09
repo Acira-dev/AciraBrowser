@@ -12,6 +12,9 @@ export const overlayOutlivesLayoutChange=(kind:string|null):boolean=>kind==='men
 export function overlayPointerDismiss(input:{popup:boolean;trigger:boolean;address:boolean;suggestions:boolean}){return !input.popup&&!input.trigger&&!(input.address&&input.suggestions);}
 let overlaySequence=Date.now()*1000;
 export const nextOverlayId=()=>++overlaySequence;
+/** The popups that belong to one tab (their `contextId` is its id): they close when that tab is gone from the window, whichever tab is current.
+ *  A page menu is one of them: a tab closed from outside (a page closing itself, an extension) or a preview's source tab leaves no page for it to act on. */
+export const overlayTiedToTab=(kind:string|null):boolean=>kind==='group-preview'||kind==='group-context'||kind==='split-context'||kind==='tab-context'||kind==='page-context';
 /** Two popup layouts are the same popup only when both carry an id and it is the same one. A popup without an id is the leftover of a
  *  close (its id was cleared while its kind was still in state): `undefined===undefined` must never count as a match, or the echo of that
  *  stale layout is written back into the live layout, which then re-sends the closed popup (the New workspace form stayed open). */

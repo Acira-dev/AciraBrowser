@@ -9,13 +9,18 @@
 //  - Both overrides belong to the debugger session: they end when it detaches. The session is a lease on the page's one debugger (page-debugger.cjs), shared with tab sleep, the
 //    camera check, the zoom glide and secured pages, so none of them gives up because a tab is dark. Leaving a mode clears the overrides first, because the session may stay.
 //  - A cross-origin frame lives in its own process and is not reached by the page's session: Target.setAutoAttach hands us each frame's session, which gets the same commands.
+//    Only frames are followed (AUTO's filter). A page's workers are never attached and never detached: asking Chromium to attach us to every Web Worker and then sending Target.detachFromTarget
+//    for each one killed the whole browser process (SIGSEGV in Electron's native layer, a few seconds after opening sites that start workers). The same holds for every session this module
+//    opens: Always dark, and Light / Dark whenever they differ from Acira's own appearance, the page's session and the nested session of every frame.
+//  - Nothing here may take the app down: every entry point (attach, refreshAll, the debugger's messages, the timers) swallows its own failure, a page that cannot be told stays as it is, and a page
+//    whose renderer crashed is left alone until it navigates again.
 // Only in Always dark: a site is left out by its registrable domain (script-rules.cjs siteOfUrl), saved as a row `dark:<site>` = {dark:'exclude'} in the profile's policies table, and the
 // page menu offers "Exclude this site from dark mode" / "Include this site again". A left-out site is shown as System shows it. A private tab keeps its choices in memory. A Tor tab is never touched.
 const {siteOfUrl} = require('./browser-services/script-rules.cjs');
 const pageDebugger = require('./page-debugger.cjs');
 const KEY = 'dark:', LIMIT = 500;
 const MODES = ['system', 'light', 'dark', 'always-dark'];
-const AUTO = {autoAttach: true, waitForDebuggerOnStart: false, flatten: true};
+const AUTO = {autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{type: 'iframe'}, {exclude: true}]}; // only cross-process frames: no worker is ever attached (see above)
 
 const withTimeout = (promise, ms) => { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The page did not answer.')), ms); timer.unref?.(); })]).finally(() => clearTimeout(timer)); };
 
@@ -59,7 +64,7 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     if (!wc || !pages.has(wc)) return undefined;
     try { const want = wanted(wc, url || wc.getURL()); return want ? want.scheme === 'dark' : undefined; } catch { return undefined; }
   }
-  const send = (lease, method, params, sessionId) => withTimeout(lease.sendCommand(method, params, sessionId), commandMs);
+  const send = (lease, method, params, sessionId) => { try { return withTimeout(lease.sendCommand(method, params, sessionId), commandMs); } catch (error) { return Promise.reject(error); } }; // every command ends: answered, refused, or after commandMs; a throw is a refusal
   /** The commands that make one page (or one frame's process) light, dark or auto-dark. */
   async function tell(lease, want, sessionId) {
     await send(lease, 'Emulation.setAutoDarkModeOverride', {enabled: want.auto}, sessionId);
@@ -76,13 +81,14 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     entry.lease = lease; entry.want = want; entry.frames = new Set(); entry.tries = 0;
     lease.onDetach(() => { if (entry.lease === lease) { entry.lease = null; entry.want = null; entry.frames = new Set(); retryLater(wc, entry, Math.min(300, retryMs)); } });
     entry.listener = (_event, method, params) => {
-      if (method === 'Target.detachedFromTarget' && params?.sessionId) { entry.frames.delete(params.sessionId); return; }
-      if (method !== 'Target.attachedToTarget' || !params?.sessionId || entry.lease !== lease) return;
-      if (params.targetInfo?.type === 'iframe') {
+      try {
+        if (method === 'Target.detachedFromTarget' && params?.sessionId) { entry.frames.delete(params.sessionId); return; }
+        if (method !== 'Target.attachedToTarget' || !params?.sessionId || entry.lease !== lease) return;
+        if (params.targetInfo?.type !== 'iframe') return; // anything else (a worker the filter should have kept out): not ours, no command, above all no detach
         entry.frames.add(params.sessionId);
         tell(lease, entry.want, params.sessionId).catch(() => {});
-        lease.sendCommand('Target.setAutoAttach', AUTO, params.sessionId).catch(() => {}); // frames inside that frame
-      } else lease.sendCommand('Target.detachFromTarget', {sessionId: params.sessionId}).catch(() => {}); // workers: nothing to do
+        send(lease, 'Target.setAutoAttach', AUTO, params.sessionId).catch(() => {}); // frames inside that frame
+      } catch { /* a message handler must never throw into Electron */ }
     };
     lease.on('message', entry.listener);
     try {
@@ -121,11 +127,16 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     entry.timer = setTimeout(() => { entry.timer = null; void apply(wc); }, ms);
     entry.timer.unref?.();
   }
-  /** Brings one page to what it should be showing. Calls for the same page never overlap: a call that arrives meanwhile runs once more at the end. */
+  /** Brings one page to what it should be showing. Never rejects: a page that cannot be told stays as it is (callers fire it and forget it, so nothing may escape). */
   async function apply(wc, url, fresh = false) {
+    try { await bring(wc, url, fresh); } catch { /* the page is looked at again at its next navigation or setting change */ }
+  }
+  /** Calls for the same page never overlap: a call that arrives meanwhile runs once more at the end. */
+  async function bring(wc, url, fresh) {
     const entry = pages.get(wc);
     if (!entry || wc.isDestroyed()) return;
     if (fresh) entry.tries = 0;
+    if (entry.gone || wc.isCrashed?.()) return; // its renderer crashed: no session on a dead page, no attach loop; the next navigation looks again
     if (entry.busy) { entry.again = url || true; return; }
     entry.busy = true;
     try {
@@ -143,15 +154,18 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
   }
   /** Follows one website page for its life. */
   function attach(wc, tab) {
-    if (pages.has(wc)) return;
-    const entry = {tabId: tab.id, profileId: tab.browserProfileId, privacy: tab.privacy, lease: null, want: null, frames: new Set(), listener: null, busy: false, again: false, tries: 0, timer: null};
-    pages.set(wc, entry);
-    try { wc.setMaxListeners(Math.max(wc.getMaxListeners?.() || 10, 20)); } catch { /* a stand-in */ } // a link preview's page has Node's default of 10 and this adds three
-    // At the commit, not at the start: the old page keeps its look until the new one is there. A tab that stays as it is keeps its session, so only a change costs anything.
-    wc.on('did-navigate', (_event, url) => { void apply(wc, url, true); });
-    wc.on('dom-ready', () => { void apply(wc, undefined, true); });
-    wc.once('destroyed', () => { clearTimeout(entry.timer); try { entry.lease?.release(); } catch { /* gone */ } entry.lease = null; pages.delete(wc); });
-    void apply(wc);
+    try {
+      if (pages.has(wc)) return;
+      const entry = {tabId: tab.id, profileId: tab.browserProfileId, privacy: tab.privacy, lease: null, want: null, frames: new Set(), listener: null, busy: false, again: false, tries: 0, timer: null, gone: false};
+      pages.set(wc, entry);
+      try { wc.setMaxListeners(Math.max(wc.getMaxListeners?.() || 10, 20)); } catch { /* a stand-in */ } // a link preview's page has Node's default of 10 and this adds four
+      // At the commit, not at the start: the old page keeps its look until the new one is there. A tab that stays as it is keeps its session, so only a change costs anything.
+      wc.on('did-navigate', (_event, url) => { entry.gone = false; void apply(wc, url, true); });
+      wc.on('dom-ready', () => { entry.gone = false; void apply(wc, undefined, true); });
+      wc.on('render-process-gone', (_event, details) => { if (details?.reason !== 'clean-exit') entry.gone = true; });
+      wc.once('destroyed', () => { clearTimeout(entry.timer); try { entry.lease?.release(); } catch { /* gone */ } entry.lease = null; pages.delete(wc); });
+      void apply(wc);
+    } catch { /* a page's creation never fails because of its colours: it is simply not followed */ pages.delete(wc); }
   }
   function setExcluded(wc, excluded) {
     const entry = pages.get(wc), {supported, site} = eligible(wc, wc.getURL());

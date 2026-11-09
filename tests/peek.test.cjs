@@ -277,11 +277,57 @@ test('a menu that cannot be built never breaks the preview',()=>{
  const view=h.children.at(-1);assert.doesNotThrow(()=>view.webContents.emit('context-menu',{},{x:1,y:1}));assert.equal(h.peek.active,true);
 });
 
+// Reported in 13.3 (Windows): the preview's menu stayed open, and a second right-click did nothing. A tab's page closes the open menu on every
+// press (main.cjs ensurePage, before-mouse-event); the preview's page and frame did not.
+test('a press in the preview or in its frame closes the preview\'s page menu; so does closing or opening it as a tab; moving or letting go does not',()=>{
+ let gone=0;const h=harness({dismissMenu:()=>{gone++;}}),source=h.state.activeTabId;
+ h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const frame=h.children.at(-2),view=h.children.at(-1);
+ view.webContents.emit('before-mouse-event',{},{type:'mouseMove'});view.webContents.emit('before-mouse-event',{},{type:'mouseUp',button:'left'});frame.webContents.emit('before-mouse-event',{},{type:'mouseMove'});
+ assert.equal(gone,0,'moving over the preview or letting go leaves the menu');
+ view.webContents.emit('before-mouse-event',{},{type:'mouseDown',button:'left'});assert.equal(gone,1,'a click elsewhere in the preview closes it');
+ view.webContents.emit('before-mouse-event',{},{type:'mouseDown',button:'right'});assert.equal(gone,2,'a right-click closes the old menu first, so the new one opens at the new place');
+ frame.webContents.emit('before-mouse-event',{},{type:'mouseDown',button:'left'});assert.equal(gone,3,'a click on the card\'s header or the backdrop around it');
+ h.peek.close();assert.equal(gone,4,'closing the preview takes its menu with it');
+ frame.webContents.emit('before-mouse-event',{},{type:'mouseDown',button:'left'});assert.equal(gone,4,'the frame lingers a moment to shrink the card away: a press on it then is no press in a preview');
+ h.peek.open({url:'https://docs.test/b',sourceTabId:source});assert.equal(h.peek.promote('tab').ok,true);assert.equal(gone,5,'opening it as a tab takes its menu with it');
+ assert.equal(h.peek.close(),false);assert.equal(gone,5,'nothing is open: nothing to close');
+});
+
+test('the preview\'s page loading another document or crashing closes the preview\'s page menu; a frame inside it or a move within the page does not',()=>{
+ let gone=0;const h=harness({dismissMenu:()=>{gone++;}}),source=h.state.activeTabId;
+ h.peek.open({url:'https://docs.test/a',sourceTabId:source});const view=h.children.at(-1);
+ view.webContents.emit('did-start-navigation',{isMainFrame:false,isSameDocument:false});assert.equal(gone,0,'a frame inside the page');
+ view.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:true});assert.equal(gone,0,'a move within the same document (an anchor, pushState)');
+ view.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:false});assert.equal(gone,1,'another document in the page');
+ view.webContents.emit('did-start-navigation',{},'https://docs.test/b',false,true);assert.equal(gone,2,'the older positional form of the same event');
+ view.webContents.emit('render-process-gone',{},{reason:'crashed'});assert.equal(gone,3,'the page\'s process ended');
+ h.peek.close();view.webContents.emit('did-start-navigation',{isMainFrame:true,isSameDocument:false});view.webContents.emit('render-process-gone',{},{reason:'crashed'});assert.equal(gone,4,'only the close itself after that: the closed preview\'s page is not listened to');
+});
+
+test('a menu that cannot be closed never breaks the preview',()=>{
+ const h=harness({dismissMenu:()=>{throw new Error('boom');}}),source=h.state.activeTabId;h.peek.open({url:'https://docs.test/a',sourceTabId:source});
+ const view=h.children.at(-1);assert.doesNotThrow(()=>view.webContents.emit('before-mouse-event',{},{type:'mouseDown',button:'left'}));
+ assert.equal(h.peek.active,true);assert.equal(h.peek.close(),true);assert.equal(h.peek.active,false);
+});
+
+test('main closes only the preview\'s own page menu when the preview asks (a press in it, or it going away), never another open popup',()=>{
+ const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/dismissMenu:\(\)=>\{if\(previewMenuUp\(layout\.overlay,pageContextMenu\)\)closeOverlay\(\);\}/,'only a page-context overlay that was opened from the preview');
+ assert.match(main,/wc\.on\('before-mouse-event',\(_event,input\)=>\{[^]*?if\(input\.type==='mouseDown'\)\{closeOverlay\(\);/,'a tab\'s page keeps closing any open menu on a press');
+ // 13.4: a menu belongs to the page it was opened over (the tab's page or the preview's page)
+ assert.match(main,/pageContextMenu=\{tabId,run:menu\.run,at:Date\.now\(\),owner:wc\.id,/,'the menu knows its page');
+ assert.match(main,/function closePageMenuOf\(wc\)\{try\{if\(pageMenuOf\(layout\.overlay,pageContextMenu,wc\.id\)\)closeOverlay\(\);\}catch\{[^}]*\}\}/,'only a page-context overlay opened over that very page');
+ assert.match(main,/wc\.on\('did-start-navigation',event=>\{if\(event\.isMainFrame&&!event\.isSameDocument\)\{closePageMenuOf\(wc\);/,'a tab page loading another document');
+ assert.match(main,/wc\.on\('render-process-gone',\(_e,details\)=>\{closePageMenuOf\(wc\);/,'a tab page crashing');
+ assert.match(main,/wc\.on\('destroyed',\(\)=>\{closePageMenuOf\(wc\);pageFullscreen\.leave\(entry\);\}\);/,'a tab page going away');
+});
+
 test('main wires one page menu for tabs and the preview: the same function, the source tab as owner, downloads from it, no extension rows',()=>{
  const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.match(main,/wc\.on\('context-menu',\(_event,params\)=>\{if\(entry\.securedLocked\)return;showPageContextMenu\(wc,params,tab\.id,entry\.view\.getBounds\(\)\);\}\);/,'a tab\'s page shows the menu through the shared function');
- assert.match(main,/function showPageContextMenu\(wc,params,tabId,box\)\{const menu=contextCommands\.menu\(wc,params\);if\(!menu\|\|!chromeView\|\|chromeView\.webContents\.isDestroyed\(\)\)return contextCommands\.popup\(wc,params,Menu,mainWindow\);pageContextMenu=\{tabId,/);
- assert.match(main,/contextMenu:\(\{wc,params,sourceTabId,bounds\}\)=>showPageContextMenu\(wc,params,sourceTabId,bounds\)/,'the preview shows it for the tab it came from');
+ assert.match(main,/function showPageContextMenu\(wc,params,tabId,box,preview=false\)\{const menu=contextCommands\.menu\(wc,params\);if\(!menu\|\|!chromeView\|\|chromeView\.webContents\.isDestroyed\(\)\)return contextCommands\.popup\(wc,params,Menu,mainWindow\);pageContextMenu=\{tabId,run:menu\.run,at:Date\.now\(\),owner:wc\.id,\.\.\.\(preview\?\{preview:true\}:\{\}\),/);
+ assert.match(main,/contextMenu:\(\{wc,params,sourceTabId,bounds\}\)=>showPageContextMenu\(wc,params,sourceTabId,bounds,true\)/,'the preview shows it for the tab it came from, marked as the preview\'s own menu');
  assert.match(main,/getContext:wc=>\{const from=peek\.sourceOf\(wc\),id=pageOwner\(pages,wc\)\|\|from,/,'the preview\'s page is owned by its source tab');
  assert.match(main,/extensionItems:\(wc,params\)=>peek\.sourceOf\(wc\)\?\[\]:/,'no extension rows for a preview page');
 });

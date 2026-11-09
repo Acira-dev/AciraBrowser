@@ -176,14 +176,15 @@ function useStuckHeaders(root:{current:HTMLDivElement|null},enabled:boolean){
 
 /** Every tab of this window a favorite can own: the workspace on screen and the others (a favorite's tab follows you). */
 const favoriteScope=(state:BrowserSnapshot)=>state.otherWorkspaceTabs?.length?[...state.tabs,...state.otherWorkspaceTabs]:state.tabs;
-/** A favorite tile's click (sidebarApps.ts appClickPlan): the favorite's own tab opens, comes back, or returns to its address. */
+/** A favorite tile's click (sidebarApps.ts appClickPlan): the favorite's own tab opens, comes back, or returns to its address. It never changes the Space you are in:
+ * a tab from another Space comes to this one (`here`, workspaces.ts bringTabHere). */
 function openApp(event:MouseEvent<HTMLButtonElement>,app:SidebarApp,state:BrowserSnapshot,dispatch:Dispatch,profileId:string){
  const plan=appClickPlan(event,app,favoriteScope(state),state.activeTabId,profileId);
  if(plan.kind==='none')return;
  if(event.button===1||event.ctrlKey||event.metaKey||event.shiftKey)event.preventDefault();
  if(plan.kind==='open'){dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,favoriteId:app.id});return;}
- if(plan.kind==='select'){dispatch({type:'tab.select',id:plan.tabId});return;}
- if(plan.kind==='adopt'){dispatch({type:'tab.favorite',id:plan.tabId,favoriteId:app.id});if(plan.select)dispatch({type:'tab.select',id:plan.tabId});return;}
+ if(plan.kind==='select'){dispatch({type:'tab.select',id:plan.tabId,here:true});return;}
+ if(plan.kind==='adopt'){dispatch({type:'tab.favorite',id:plan.tabId,favoriteId:app.id});if(plan.select)dispatch({type:'tab.select',id:plan.tabId,here:true});return;}
  if(plan.kind==='home'){dispatch({type:'tab.navigate',url:app.url,tabId:plan.tabId});return;}
  if(plan.kind==='new-window'){const id='tab-'+crypto.randomUUID();dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,background:true,id});dispatch({type:'tab.move-window',id});return;}
  dispatch({type:'tab.new',url:app.url,browserProfileId:profileId,background:true});

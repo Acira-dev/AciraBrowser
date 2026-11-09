@@ -244,6 +244,21 @@ function relocateTabs(s: BrowserSnapshot, asked: Set<string>, target: Workspace,
   return { moving, from };
 }
 
+/** A favorite's tile never changes the Space you are in (13.4: favorites work like global tabs). The tile's click selects the
+ *  favorite's one tab with `here`; when that tab lives in another Space of this window it comes to the Space on screen first, the way Move to workspace
+ *  takes a tab (same tab id, so the same page, history and scroll; a split comes whole, a group's tab leaves its group). It stays where it is when that would
+ *  cross into a secured Space (its pages live in their own session, and it would turn the tab secured), for a private, Tor or secured tab, or for another profile
+ *  (profiles as Spaces); selecting it then opens its own Space, as selecting any tab does. True when it moved. No toast: the click is the whole interaction. */
+export function bringTabHere(s: BrowserSnapshot, id: string, fresh: MakeTab): boolean {
+  const tab = s.tabs.find(item => item.id === id);
+  if (!tab) return false;
+  // Only among the tab's own profile's Spaces: another profile's tab (profiles as Spaces) finds no target here and stays.
+  const target = workspacesFor(s, tab.browserProfileId).find(item => item.id === s.activeWorkspaceId);
+  // A secured Space turns every tab it takes into a secured one: an explicit Move to workspace may do that, a tile's click never does.
+  if (!target || target.secured || tab.privacy || workspaceIdOf(s, tab) === target.id || moveBlock(s, [tab], target)) return false;
+  return !!relocateTabs(s, new Set([id]), target, tab.browserProfileId, fresh);
+}
+
 /** The workspace actions. Returns true when it handled the action (the reducer then finishes), 'ignore' when nothing changed, false when the action is not a workspace one. */
 export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, fresh: MakeTab): boolean | 'ignore' {
   const profile = s.activeBrowserProfileId, owner = s.browserProfiles.find(item => item.id === profile);

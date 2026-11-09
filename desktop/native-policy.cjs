@@ -7,6 +7,11 @@ function createOverlayGuard(){let dismissed=0;return{get dismissed(){return dism
  * the interface places it on the page's bottom edge again after the change, and it is there when the person comes back. A click in
  * the page still dismisses it, an error still waits to be read. */
 function closesOnWindowChange(overlay){return Boolean(overlay)&&overlay.kind!=='toast';}
+/** The page menu on screen that was opened over this very page (`menu.owner` is the page's webContents id): what that page loading another document, crashing or going away closes.
+ * Not another page's menu, not any other popup. Pure. */
+function pageMenuOf(overlay,menu,owner){return Boolean(overlay&&overlay.kind==='page-context'&&menu&&owner!==undefined&&menu.owner===owner);}
+/** The page menu on screen when it was opened over a Link preview's page: what a press in the preview, or the preview going away, closes. Pure. */
+function previewMenuUp(overlay,menu){return Boolean(overlay&&overlay.kind==='page-context'&&menu&&menu.preview===true);}
 function viewSet(layout){return layout.visible===false?'':layout.views.map(view=>view.tabId).join('|');}
 function unionBounds(rectangles){if(!rectangles.length)return null;const left=Math.min(...rectangles.map(r=>r.x)),top=Math.min(...rectangles.map(r=>r.y)),right=Math.max(...rectangles.map(r=>r.x+r.width)),bottom=Math.max(...rectangles.map(r=>r.y+r.height));return{x:left,y:top,width:right-left,height:bottom-top};}
 /** The overlay a live resize keeps (closesOnWindowChange): the toast stack, which rests centred on the page's bottom edge, so it moves with
@@ -24,4 +29,4 @@ function resizeLayout(layout,previous,size){
 }
 function clampWindowBounds(saved,workArea,minWidth=900,minHeight=600){const width=Math.max(Math.min(minWidth,workArea.width),Math.min(workArea.width,Number(saved?.width)||1440)),height=Math.max(Math.min(minHeight,workArea.height),Math.min(workArea.height,Number(saved?.height)||960)),x=Math.max(workArea.x,Math.min(workArea.x+workArea.width-width,Number.isFinite(saved?.x)?saved.x:workArea.x+(workArea.width-width)/2)),y=Math.max(workArea.y,Math.min(workArea.y+workArea.height-height,Number.isFinite(saved?.y)?saved.y:workArea.y+(workArea.height-height)/2));return{x:Math.round(x),y:Math.round(y),width:Math.round(width),height:Math.round(height)};}
 function tolerateClosedPipe(stream){stream?.on('error',error=>{if(error?.code!=='EPIPE')throw error;});}
-module.exports={pageOwner,overlayId,createOverlayGuard,closesOnWindowChange,keptThroughResize,viewSet,unionBounds,resizeLayout,clampWindowBounds,tolerateClosedPipe};
+module.exports={pageOwner,overlayId,createOverlayGuard,closesOnWindowChange,pageMenuOf,previewMenuUp,keptThroughResize,viewSet,unionBounds,resizeLayout,clampWindowBounds,tolerateClosedPipe};

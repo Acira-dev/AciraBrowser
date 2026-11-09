@@ -58,7 +58,7 @@ test('Always dark = dark scheme + Auto Dark Mode, even when Acira is dark; Tor a
   for (const nativeDark of [false, true]) {
     const f = await open({mode: 'always-dark', nativeDark});
     assert.equal(lastScheme(f.wc), 'dark'); assert.equal(lastAuto(f.wc).enabled, true, `nativeDark ${nativeDark}`);
-    assert.deepEqual(sent(f.wc, 'Target.setAutoAttach')[0][1], {autoAttach: true, waitForDebuggerOnStart: false, flatten: true});
+    assert.deepEqual(sent(f.wc, 'Target.setAutoAttach')[0][1], {autoAttach: true, waitForDebuggerOnStart: false, flatten: true, filter: [{type: 'iframe'}, {exclude: true}]}, 'frames only: a worker is never attached');
   }
   const tor = await open({mode: 'always-dark', tor: true}, 'https://www.example.com/', {privacy: 'tor'});
   assert.deepEqual(tor.wc.log, [], 'Tor is never touched'); assert.equal(tor.appearance.status(tor.wc).supported, false);
@@ -117,14 +117,14 @@ test('a private tab keeps its choices in memory and writes nothing', async () =>
   assert.equal(f.appearance.stateOf(f.wc).session, false);
 });
 
-test('a cross-site frame gets the same commands, nested frames are followed, workers are let go, and a change reaches the frames', async () => {
+test('a cross-site frame gets the same commands, nested frames are followed, workers are left completely alone, and a change reaches the frames', async () => {
   const f = await open({mode: 'always-dark', nativeDark: true});
   f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-1', targetInfo: {type: 'iframe'}}, '');
   f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'worker-1', targetInfo: {type: 'service_worker'}}, '');
   await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(lastAuto(f.wc, 'frame-1').enabled, true); assert.equal(lastScheme(f.wc, 'frame-1'), 'dark');
   assert.equal(sent(f.wc, 'Target.setAutoAttach').some(entry => entry[2] === 'frame-1'), true, 'frames inside that frame');
-  assert.deepEqual(sent(f.wc, 'Target.detachFromTarget')[0][1], {sessionId: 'worker-1'});
+  assert.deepEqual(f.wc.log.filter(entry => Array.isArray(entry) && (entry[2] === 'worker-1' || entry[1]?.sessionId === 'worker-1')), [], 'no command at all for a worker, and no detach');
   f.box.mode = 'light'; f.appearance.refreshAll(); await f.settle();
   assert.equal(lastScheme(f.wc, 'frame-1'), 'light'); assert.equal(lastAuto(f.wc, 'frame-1').enabled, false);
 });
@@ -217,4 +217,88 @@ test('a frame that goes away is forgotten, and a change that failed halfway is m
   assert.equal(quick.appearance.stateOf(wc).want.scheme, 'dark', 'still recorded as dark: the light command never got through');
   silent = false; quick.appearance.refreshAll(); await settle(quick.appearance, wc);
   assert.equal(quick.appearance.stateOf(wc).want.scheme, 'light'); assert.equal(lastScheme(wc), 'light');
+});
+
+// 13.4: "Always dark" crashed the whole browser. Asking Chromium to attach the page's debugger session to every Web Worker (Target.setAutoAttach) and then sending
+// Target.detachFromTarget for each one made Electron's main process die with a SIGSEGV a few seconds after opening sites that start workers (tests/site-appearance-workers.test.cjs
+// reproduces it in a real Electron). Workers are now kept out by the auto-attach filter and are never touched.
+// Every session the module opens runs the same auto-attach: Always dark, and Light / Dark whenever they differ from Acira's own appearance (a tab that follows Acira anyway holds none).
+const SESSIONS = [['always-dark', false], ['always-dark', true], ['light', true], ['dark', false]];
+for (const [mode, nativeDark] of SESSIONS) test(`13.4: ${mode} on ${nativeDark ? 'a dark' : 'a light'} Acira: Target.detachFromTarget is never sent, whatever attaches (workers, shared and service workers, worklets, popups), and every auto-attach asks for frames only`, async () => {
+  const f = await open({mode, nativeDark});
+  assert.equal(f.appearance.stateOf(f.wc).session, true, 'this configuration holds a session');
+  const types = ['worker', 'service_worker', 'shared_worker', 'worklet', 'page', 'other', 'auction_worklet', 'webview', 'browser', 'tab'];
+  types.forEach((type, index) => f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'x-' + index, targetInfo: {type}}, ''));
+  f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-1', targetInfo: {type: 'iframe'}}, '');
+  f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'nested-under-frame', targetInfo: {type: 'worker'}}, 'frame-1');
+  f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-2', targetInfo: {type: 'iframe'}}, 'frame-1');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(sent(f.wc, 'Target.detachFromTarget'), [], 'a detach from an auto-attached target killed the browser process');
+  assert.deepEqual(f.wc.log.filter(entry => Array.isArray(entry) && /^x-|nested-under-frame/.test(String(entry[2]) + JSON.stringify(entry[1] || ''))), [], 'nothing at all is sent to a target that is not a frame');
+  const attaches = sent(f.wc, 'Target.setAutoAttach');
+  assert.deepEqual(attaches.map(entry => entry[2] || 'page').sort(), ['frame-1', 'frame-2', 'page'], 'the page, the frame, and the frame inside that frame');
+  for (const entry of attaches) assert.deepEqual(entry[1].filter, [{type: 'iframe'}, {exclude: true}], `session ${entry[2] || 'page'}: frames only`);
+  assert.equal(f.appearance.stateOf(f.wc).frames, 2, 'only the two frames are followed');
+  for (const id of ['frame-1', 'frame-2']) assert.equal(lastScheme(f.wc, id), mode === 'light' ? 'light' : 'dark', `${id} is told what the page is told`);
+});
+
+test('13.4: every command ends: a page that never answers, a page destroyed in the middle of a command, a debugger that answers late', async () => {
+  const f = make({mode: 'always-dark', commandMs: 25, retries: 0}), wc = fakePage('https://www.example.com/', {silent: true});
+  wc.silent = true; // nothing is ever answered
+  f.appearance.attach(wc, tab()); await new Promise(resolve => setTimeout(resolve, 120)); await f.appearance.whenIdle(wc);
+  assert.equal(f.appearance.stateOf(wc).session, false, 'the call ended and the session was let go');
+  assert.equal(wc.debugger.attached, false);
+  // a frame message arrives, its nested auto-attach never answers: nothing waits on it
+  const live = make({mode: 'always-dark', commandMs: 25}), page = fakePage('https://www.example.com/');
+  live.appearance.attach(page, tab()); await settle(live.appearance, page);
+  const answer = page.debugger.sendCommand; page.debugger.sendCommand = (method, params, sessionId) => sessionId === 'frame-1' ? new Promise(() => {}) : answer(method, params, sessionId);
+  page.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-1', targetInfo: {type: 'iframe'}}, '');
+  await new Promise(resolve => setTimeout(resolve, 80)); await live.appearance.whenIdle(page);
+  assert.equal(live.appearance.stateOf(page).session, true, 'the page keeps its session, the silent frame costs nothing');
+  // destroyed while a command is on its way
+  const dying = make({mode: 'always-dark', commandMs: 200}), gone = fakePage('https://www.example.com/');
+  let destroyed = false; gone.isDestroyed = () => destroyed;
+  gone.debugger.sendCommand = () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Object has been destroyed')), 10));
+  dying.appearance.attach(gone, tab()); await new Promise(resolve => setTimeout(resolve, 5));
+  destroyed = true; gone.debugger.attached = false; gone.emit('destroyed');
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(dying.appearance.stateOf(gone), null, 'a destroyed page is forgotten, nothing is retried on it');
+  assert.equal(gone.log.filter(entry => entry === 'attach').length, 1, 'no attach after it was destroyed');
+});
+
+test('13.4: nothing in the feature can throw into the app: a debugger that throws, a page that cannot be read, a handler fed rubbish', async () => {
+  const f = make({mode: 'always-dark'}), wc = fakePage('https://www.example.com/');
+  wc.debugger.attach = () => { throw new Error('Debugger is already attached to this WebContents.'); };
+  assert.doesNotThrow(() => f.appearance.attach(wc, tab())); await settle(f.appearance, wc);
+  assert.equal(f.appearance.stateOf(wc).session, false, 'the tab stays as it is');
+  const sync = fakePage('https://www.example.com/');
+  sync.debugger.sendCommand = () => { throw new TypeError('Cannot read properties of null'); };
+  assert.doesNotThrow(() => f.appearance.attach(sync, tab({id: 't2'}))); await new Promise(resolve => setTimeout(resolve, 60)); await f.appearance.whenIdle(sync);
+  assert.equal(f.appearance.stateOf(sync).session, false); assert.equal(sync.debugger.attached, false, 'the session is let go again');
+  const broken = fakePage('https://www.example.com/'); broken.getURL = () => { throw new Error('Object has been destroyed'); };
+  assert.doesNotThrow(() => f.appearance.attach(broken, tab({id: 't3'}))); assert.doesNotThrow(() => f.appearance.refreshAll()); await new Promise(resolve => setTimeout(resolve, 60));
+  assert.doesNotThrow(() => f.appearance.attach(null, tab({id: 't4'})), 'not even a missing page throws');
+  const live = await open({mode: 'always-dark'});
+  for (const rubbish of [[undefined, undefined], ['Target.attachedToTarget', null], ['Target.attachedToTarget', {sessionId: 'a', targetInfo: null}], ['Target.detachedFromTarget', {}], [42, 'x']])
+    assert.doesNotThrow(() => live.wc.debugger.emit('message', {}, ...rubbish, ''));
+  live.wc.debugger.sendCommand = () => { throw new Error('Debugger is not attached to the target page.'); };
+  assert.doesNotThrow(() => live.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-3', targetInfo: {type: 'iframe'}}, ''));
+  await new Promise(resolve => setTimeout(resolve, 20));
+});
+
+test('13.4: a page whose renderer crashed is not attached again until it navigates (no attach loop on a dead page)', async () => {
+  const f = await open({mode: 'always-dark'});
+  f.wc.crashed = true; f.wc.isCrashed = () => true;
+  f.wc.debugger.attached = false; f.wc.emit('render-process-gone', {}, {reason: 'crashed', exitCode: 11}); f.wc.debugger.emit('detach', {}, 'target crashed');
+  await new Promise(resolve => setTimeout(resolve, 80)); await f.settle();
+  assert.equal(f.wc.log.filter(entry => entry === 'attach').length, 1, 'no second attach on a crashed page');
+  assert.equal(f.appearance.stateOf(f.wc).session, false);
+  f.wc.isCrashed = () => false; f.wc.emit('did-navigate', {}, 'https://www.example.com/');
+  await f.settle();
+  assert.equal(f.wc.log.filter(entry => entry === 'attach').length, 2, 'the page is told again once it loads');
+  assert.equal(f.appearance.stateOf(f.wc).session, true);
+  // a renderer that left cleanly (a process swap) does not count as a crash
+  const clean = await open({mode: 'always-dark'});
+  clean.wc.emit('render-process-gone', {}, {reason: 'clean-exit', exitCode: 0}); clean.wc.emit('dom-ready'); await clean.settle();
+  assert.equal(clean.appearance.stateOf(clean.wc).session, true);
 });

@@ -73,8 +73,10 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},pageCreated=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},dismissMenu=()=>{},pageCreated=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
  let current=null;const adopted=new Map();
+ /** The page menu the preview opened goes away (main closes it only when it is the preview's own menu); never throws, the menu is an extra. */
+ const menuGone=()=>{try{dismissMenu();}catch{/* the preview goes on */}};
  /** The icon this computer already keeps for the link's site (the favicon store), so a site seen before shows its icon at once; '' when there is none. */
  const stored=(profileId,url)=>{try{const icon=storedIcon(profileId,url);return typeof icon==='string'&&icon.length<=MAX_ICON?icon:'';}catch{return '';}};
  const accentOf=()=>{const value=accent();return typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value)?value:'#3b6eea';};
@@ -136,6 +138,12 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   on(wc,'before-input-event',keyed);
   // Right-click inside the preview: the same page menu a tab has (links, images, text, back/reload, Inspect), for the preview's profile and the tab it came from.
   on(wc,'context-menu',(_event,params)=>{if(current!==p||wc.isDestroyed()||p.failure||p.download)return;try{contextMenu({wc,params,sourceTabId:p.sourceTabId,bounds:p.view.getBounds()});}catch{/* the menu is an extra: the preview goes on */}});
+  // A press in the preview (its page, or the card and backdrop of its frame) closes that menu, as a press in a tab's page closes the tab's (main.cjs ensurePage): a right-click while a menu is up closes it first, so the new menu opens at the new place.
+  const pressed=(_event,input)=>{if(current===p&&input?.type==='mouseDown')menuGone();};
+  on(wc,'before-mouse-event',pressed);
+  // The preview's page loads another document, or crashes: a menu opened over it has nothing left to act on (a tab's page does the same, main.cjs closePageMenuOf).
+  on(wc,'did-start-navigation',(event,_url,inPlace,isMainFrame)=>{const main=event?.isMainFrame??isMainFrame,same=event?.isSameDocument??inPlace;if(main&&!same&&current===p)menuGone();});
+  on(wc,'render-process-gone',()=>{if(current===p)menuGone();});
   // The preview's own site icon, for the marker card beside the source's icon in the sidebar (a favorite's tile, a tab's row). It is picked the way a tab's
   // is (tab-icons: the page's own icon set, the one sharp enough for the card) and cleared when the preview goes to another document.
   on(wc,'did-navigate',()=>{p.iconSequence=(p.iconSequence||0)+1;p.favicon=stored(p.profileId,wc.getURL());});
@@ -145,7 +153,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   });
   for(const name of ['did-navigate','did-navigate-in-page','page-title-updated','did-start-loading','did-stop-loading'])on(wc,name,()=>{if(current===p)publish();});
   frame.webContents.ipc.on('acira:peek-frame',(_event,command)=>{if(command==='gone'){p.gone?.();return;}if(current!==p)return;if(command==='ready')publish();else if(command==='entered'){p.formed=true;maybeReveal(p);}else act(p,command);});
-  frame.webContents.on('before-input-event',keyed);
+  frame.webContents.on('before-input-event',keyed);frame.webContents.on('before-mouse-event',pressed);
   win.contentView.addChildView(frame);win.contentView.addChildView(view);
   view.setVisible?.(false);p.revealTimer=setTimeout(()=>{p.formed=true;maybeReveal(p);},reducedMotion()?0:REVEAL_MS);
   frame.webContents.loadFile(FRAME).catch(()=>{});
@@ -154,6 +162,8 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
  }
  function detach(p){for(const off of p.listeners.splice(0))try{off();}catch{}const win=getWindow();try{win?.contentView.removeChildView(p.frame);}catch{}if(!p.frame.webContents.isDestroyed())p.frame.webContents.close();}
  function close(){const p=current;if(!p)return false;current=null;clearTimeout(p.revealTimer);clearTimeout(p.capTimer);clearTimeout(p.copiedTimer);
+  // Its page menu goes with it (a menu left over the page would act for a preview that is gone).
+  menuGone();
   // Keyboard focus goes back to the page the peek came from (it was inside the views being removed).
   const hadFocus=[p.wc,p.frame.webContents].some(wc=>wc&&!wc.isDestroyed?.()&&wc.isFocused?.());
   // The page goes at once; the frame shrinks its card back into the link (exit ~⅔ of enter) and is removed when it says so.
@@ -165,7 +175,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
  function promote(mode){
   const p=current;if(!p||p.wc.isDestroyed())return {ok:false,code:'closed'};
   const url=webURL(p.wc.getURL())||p.url,title=p.wc.getTitle();
-  current=null;clearTimeout(p.revealTimer);clearTimeout(p.capTimer);clearTimeout(p.copiedTimer);detach(p);if(p.thinKey)p.wc.removeInsertedCSS(p.thinKey).catch(()=>{});p.view.setVisible?.(true);p.wc.setWindowOpenHandler(()=>({action:'deny'}));p.view.setBorderRadius?.(0);
+  current=null;clearTimeout(p.revealTimer);clearTimeout(p.capTimer);clearTimeout(p.copiedTimer);menuGone();detach(p);if(p.thinKey)p.wc.removeInsertedCSS(p.thinKey).catch(()=>{});p.view.setVisible?.(true);p.wc.setWindowOpenHandler(()=>({action:'deny'}));p.view.setBorderRadius?.(0);
   const before=new Set(getState().tabs.map(t=>t.id));
   // ensurePage takes this view instead of creating one; the reducer only learns the address.
   const claim={view:p.view,url};adopted.set('next',claim);

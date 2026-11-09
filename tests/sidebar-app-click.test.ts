@@ -80,8 +80,8 @@ test('the sidebar runs the plan, lists favorites\' tabs like any tab, links drop
   const source=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
   assert.match(source,/const plan=appClickPlan\(event,app,favoriteScope\(state\),state\.activeTabId,profileId\)/,'it looks in every workspace of the window');
   assert.match(source,/plan\.kind==='open'\)\{dispatch\(\{type:'tab\.new',url:app\.url,browserProfileId:profileId,favoriteId:app\.id\}\)/);
-  assert.match(source,/plan\.kind==='select'\)\{dispatch\(\{type:'tab\.select',id:plan\.tabId\}\)/,'it goes to the tab where it is: its own workspace opens, nothing moves');
-  assert.match(source,/plan\.kind==='adopt'\)\{dispatch\(\{type:'tab\.favorite',id:plan\.tabId,favoriteId:app\.id\}\);if\(plan\.select\)dispatch\(\{type:'tab\.select',id:plan\.tabId\}\)/,'an open tab at the favorite address is linked and selected');
+  assert.match(source,/plan\.kind==='select'\)\{dispatch\(\{type:'tab\.select',id:plan\.tabId,here:true\}\)/,'it goes to the favorite\'s tab and never changes the Space: a tab of another Space comes here (13.4)');
+  assert.match(source,/plan\.kind==='adopt'\)\{dispatch\(\{type:'tab\.favorite',id:plan\.tabId,favoriteId:app\.id\}\);if\(plan\.select\)dispatch\(\{type:'tab\.select',id:plan\.tabId,here:true\}\)/,'an open tab at the favorite address is linked and selected, here too (13.4)');
   assert.match(source,/plan\.kind==='home'\)\{dispatch\(\{type:'tab\.navigate',url:app\.url,tabId:plan\.tabId\}\)/);
   assert.match(source,/const profileTabs=state\.tabs\.filter\(tab=>tab\.browserProfileId===profileId\),listedProfileTabs=profileTabs\.filter\(listed\)/);
   assert.match(source,/members:state\.tabs\.filter\(tab=>listed\(tab\)&&groupForTab\(state,tab\)\?\.id===group\.id\)/);
