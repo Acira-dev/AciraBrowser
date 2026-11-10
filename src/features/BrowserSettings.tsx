@@ -301,6 +301,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
   const toolbarChanged =
     s.showHome === false ||
     s.showTabOverview === false ||
+    s.showZoomIcon === false ||
+    s.showBookmarkStar === false ||
     Boolean(s.bookmarksBar) ||
     s.bookmarksOnNewTabOnly === false;
   const appearanceChanged = appearanceLookChanged(s);
@@ -425,7 +427,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
     return () => { stop(); watch?.disconnect(); };
   }, [tab.id, state.windowId]);
 
-  /* 13.2: "Back to browser" (the column's pinned foot) is gone: it often only went back one Settings section, and the founder chose to remove it. */
+  /* 13.2: "Back to browser" (the column's pinned foot) is gone: it often only went back one Settings section, and we chose to remove it. */
   const nav = useRef<HTMLElement>(null);
 
   const content = (
@@ -700,6 +702,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
                     update({
                       showHome: true,
                       showTabOverview: true,
+                      showZoomIcon: true,
+                      showBookmarkStar: true,
                       bookmarksBar: false,
                       bookmarksOnNewTabOnly: true,
                     });

@@ -148,6 +148,8 @@
 /* The pinned extensions: one row of the toolbar's buttons above the tab list (SidebarExtensions.tsx). Wraps rather than scrolls; 30 px buttons as the toolbar's, 14 px in like the rows below. */
 .app.style-acira .acira-sidebar .sb-ext-row{flex:none;display:flex;align-items:center;padding:2px 14px 8px;min-width:0}
 .app.style-acira .acira-sidebar .sb-ext-row[hidden]{display:none}
+/* A tab switch gives the page a new id, so the toolbar's buttons are rebuilt and arrive a moment later: the row keeps its height meanwhile, or the whole tab list jumps up 30 px and back for a frame or two (13.6 final run: 25 of 310 samples in a fast burst). */
+.app.style-acira .acira-sidebar .sb-ext-row:not([hidden]){box-sizing:border-box;min-height:40px}
 .app.style-acira .acira-sidebar .sb-ext-row .native-extension-actions{max-width:100%;min-width:0;gap:2px}
 .app.style-acira .acira-sidebar .sb-ext-row browser-action-list{max-width:100%;flex-wrap:wrap}
 .app.style-acira .acira-sidebar .sb-scroll{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 8px 10px;overflow-x:hidden;overflow-y:auto;scrollbar-width:none;scrollbar-color:rgb(var(--ink) / .24) transparent;-webkit-mask-image:linear-gradient(#000 calc(100% - 16px),transparent)}

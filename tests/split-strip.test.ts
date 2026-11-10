@@ -140,7 +140,7 @@ test('R3-33: Focus mode on and off leaves a split exactly as it was, and the com
 test('R3-28: the tab bar and split menus are title-less context menus like the tab and group menus (no header on the top edge)', () => {
   const app = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8'), css = fs.readFileSync(path.resolve('src/components/TabGroups.css'), 'utf8');
   // The live pull requests popup (item 31) is a title-less context menu too: its header is out of the keyboard's way like theirs.
-  assert.match(app, /inert=\{\['tab-context','group-context','split-context','page-context','strip-context','live-folder'\]\.includes\(kind\)\|\|undefined\}/);
+  assert.match(app, /inert=\{\['tab-context','group-context','split-context','page-context','strip-context','live-folder'\]\.includes\(kind\)\|\|(?:!!addressItem\|\|)?undefined\}/); // 13.6: the one-row Hide menu of the star and the zoom icon (kind toolbar-context) is title-less too
   assert.match(css, /\.popup-content-strip-context,\.popup-content-split-context\)>\.popup-header\{position:absolute/);
   assert.match(fs.readFileSync(path.resolve('desktop/validation.cjs'), 'utf8'), /'split-context'[^\]]*'strip-context'/, 'the native boundary knows the popup kind');
 });

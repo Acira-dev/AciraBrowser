@@ -49,6 +49,7 @@ function holdLayout(entry, size) {
 }
 function releaseLayout(entry, clock) {
   if (entry.releaseTimer) { (clock?.cancel ?? clearTimeout)(entry.releaseTimer); entry.releaseTimer = null; }
+  entry.liveHold = false;
   if (!entry.layoutHold) return;
   entry.layoutHold = null;
   const wc = entry.view?.webContents;
@@ -118,7 +119,7 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   if (hasRadius) entry.radiusGoal = Math.round(radius);
   // A native view cannot scale its composited contents independently of its viewport, so a page whose size follows the chrome is
   // resized on every frame of the chrome's spring: the site lays out live at the display's frame rate and its far edge never moves.
-  // (A frosted matte used to hide one atomic resize; the founder asked for the frame rate instead, R6.)
+  // (A frosted matte used to hide one atomic resize; we asked for the frame rate instead, R6.)
   const resizing = start.width !== target.width || start.height !== target.height, slide = motion === 'slide';
   const hold = !!smooth && slide && resizing && Math.abs(start.x + start.width - target.x - target.width) <= FAR_EDGE && Math.abs(start.y + start.height - target.y - target.height) <= FAR_EDGE && (Math.abs(start.x - target.x) >= SIDEWAYS || Math.abs(start.y - target.y) >= DROP);
   const dissolve = hold ? clock.dissolve : null, early = hold && target.width >= start.width && target.height >= start.height;
@@ -207,4 +208,34 @@ function placePageBounds(entry, target, animated, clock = {now: () => performanc
   if (dissolve && early && beginCover({width: Math.max(start.width, target.width), height: Math.max(start.height, target.height)})) sized = false;
   frame();
 }
-module.exports = {placePageBounds, applyRadius, springAt, springSettle, layoutPace, FAST_PACE};
+/** A page whose box the interface moves itself, a frame at a time, and sends each frame's rectangle "at once" (`pageImmediate`): a split's panes following the card through a
+ * layout switch (src/ui/sharedMotion.ts followPage: the docked sidebar opening or closing, a view switch, Sidebar mode) and the page under the toolbar easing back in as the view
+ * leaves Seamless (the header's height animation, followed by the ResizeObserver). Each of those rectangles resized the view and the site laid out again, 13 to 20 times per
+ * pane per slide on a heavy site (reported 10 Nov 2026, Windows: "split view with 3 tabs, everything is laggy"; three panes cost 2.2 CPU-seconds of page work for one
+ * sidebar open, one page 0.36). The interface now also sends the size the page is going to (`hold`): the view still takes every rectangle exactly as sent, on the interface's
+ * own clock, and the page lays out once at the larger of the size it had when the movement began and the size it ends at (the held layout of a glide, holdLayout above).
+ * Let go RELEASE_QUIET ms after the first layout that no longer carries the hold, or LIVE_QUIET ms after the last rectangle that did (the movement stopped without a word). */
+const LIVE_QUIET = 250;
+const validSize = size => !!size && Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0;
+function placeLive(entry, target, hold, clock, radius) {
+  if (entry.boundsTimer) { clock.cancel(entry.boundsTimer); entry.boundsTimer = null; }
+  entry.slideRun = null;
+  if (entry.cover) { entry.cover.drop(); entry.cover = null; }
+  if (entry.releaseTimer) { clock.cancel(entry.releaseTimer); entry.releaseTimer = null; }
+  if (validSize(hold) && canHoldLayout(entry)) {
+    // The size in force when the movement began (a held layout still standing from a glide that just landed counts), the size it goes to, and this frame's: never smaller than the view.
+    const now = entry.view.getBounds(), lay = entry.layoutHold || {width: now.width, height: now.height};
+    holdLayout(entry, {width: Math.max(lay.width, Math.round(hold.width), target.width), height: Math.max(lay.height, Math.round(hold.height), target.height)});
+    entry.liveHold = true;
+    entry.releaseTimer = clock.later(() => { entry.releaseTimer = null; entry.liveHold = false; releaseLayout(entry, clock); }, LIVE_QUIET);
+  } else { entry.liveHold = false; releaseLayout(entry, clock); }
+  entry.view.setBounds(target);
+  if (Number.isFinite(radius)) { applyRadius(entry, radius); entry.radiusGoal = undefined; }
+}
+/** The interface's movement has ended (a layout without the hold reached this page): its layout is let go once the last rectangle has reached the page. */
+function endLive(entry, clock) {
+  if (!entry.liveHold) return;
+  entry.liveHold = false;
+  if (entry.layoutHold) releaseLayoutAfter(entry, clock); else if (entry.releaseTimer) { clock.cancel(entry.releaseTimer); entry.releaseTimer = null; }
+}
+module.exports = {placePageBounds, placeLive, endLive, applyRadius, springAt, springSettle, layoutPace, FAST_PACE, LIVE_QUIET, RELEASE_QUIET};

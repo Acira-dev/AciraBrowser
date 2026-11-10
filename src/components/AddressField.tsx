@@ -80,7 +80,9 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
   useLayoutEffect(() => {
     const field = fieldRef.current, ruler = rulerRef.current, input = inputRef.current;
     if (!glide || !field || !ruler || !input) return;
+    let sized = '';
     const measure = () => {
+      sized = field.clientWidth + 'x' + field.clientHeight;
       const shown = displayRef.current; let textWidth: number;
       if (shown) { const range = document.createRange(); range.selectNodeContents(shown); textWidth = range.getBoundingClientRect().width; }
       else if (!aligned) { ruler.textContent = value || placeholder; textWidth = ruler.getBoundingClientRect().width; }
@@ -92,7 +94,8 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
       field.toggleAttribute('data-glidable', layout.glides); // no text to move: it swaps at once
     };
     measure();
-    const watch = new ResizeObserver(measure); watch.observe(field);
+    // A ResizeObserver reports once when it starts watching, with the size measure() has just read: measuring again then repeated the same reads and writes (and a second style flush) on every tab switch.
+    const watch = new ResizeObserver(() => { if (field.clientWidth + 'x' + field.clientHeight !== sized) measure(); }); watch.observe(field);
     document.fonts?.addEventListener('loadingdone', measure); // the first measure may come before Inter has loaded
     return () => { watch.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
   }, [!!glide, value, placeholder, aligned, shownKey]);

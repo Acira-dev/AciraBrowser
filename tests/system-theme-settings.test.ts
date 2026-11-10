@@ -96,7 +96,7 @@ test('the wiring is in place: one IPC answer, one change event, the link preview
   const main=fs.readFileSync(new URL('../desktop/main.cjs',import.meta.url),'utf8'),preload=fs.readFileSync(new URL('../desktop/preload.cjs',import.meta.url),'utf8');
   assert.match(main,/bridge\.on\('acira:system-theme',e=>\{e\.returnValue=trustedContents\.has\(e\.sender\)&&e\.senderFrame===e\.sender\.mainFrame\?systemTheme\.current\(\):null;\}\)/);
   assert.match(main,/contents\.send\('acira:system-theme-changed',info\)/);
-  assert.match(main,/accent:\(\)=>require\('\.\/linux-theme\.cjs'\)\.activeAccent\(settingsFor\(state\),systemTheme\.current\(\)\)\|\|state\.settings\.accentColor/);
+  assert.match(main,/accent:\(\)=>require\('\.\/linux-theme\.cjs'\)\.activeAccent\(settingsFor\(state\),systemTheme\.current\(\)\)\|\|settingsFor\(state\)\.accentColor/);
   assert.match(main,/own\.systemTheme&&own\.appearance==='system'/);
   assert.match(preload,/systemTheme:\(\)=>ipcRenderer\.sendSync\('acira:system-theme'\)/);assert.match(preload,/subscribeSystemTheme:subscription\('acira:system-theme-changed'\)/);
   assert.doesNotMatch(main.slice(main.indexOf('let systemThemeService')),/process\.platform==='linux'.*systemTheme/s,'the platform decision lives in linux-theme.cjs only');

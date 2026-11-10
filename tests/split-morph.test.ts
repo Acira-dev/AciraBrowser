@@ -88,10 +88,20 @@ test('R3-26: App holds the native pages off in the same commit as the pane chang
   const app = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8'), layer = fs.readFileSync(path.resolve('src/components/SplitMorphLayer.tsx'), 'utf8'), css = fs.readFileSync(path.resolve('src/styles/split-picker.css'), 'utf8');
   assert.match(app, /const morphPending = lastPane\.current\.key !== paneKey && morphWanted\(lastPane\.current\.ids(?:, lastPane\.current\.layout !== splitPair\?\.layout)?\)/, 'decided while rendering, so views step aside with the new layout');
   assert.match(app, /splitPreview = Boolean\(splitPicker\) \|\| morphPending \|\| Boolean\(morphRun && !morphRun\.done\)/);
-  assert.match(app, /motionScale\(\) > 0/, 'Off cuts, by the user\'s choice');
+  assert.match(app, /motionScaleOf\(s\) > 0/, 'Off cuts, by the user\'s choice (the speed is read from the settings, the value App writes into --motion-scale, not from the document)');
   assert.match(app, /takeDropPoint\(\)/, 'the dropped tab flies in from its release point');
   assert.match(layer, /scaleX: sx, scaleY: sy/, 'boxes move and reshape with transforms');
   assert.match(layer, /morphSpring\(item\.kind === 'exit' && !item\.home \? 'menu\.fade' : morphToken\(intent\), scale\)/);
   assert.match(css, /\.split-morph-box\{[^}]*will-change:transform,opacity/);
   assert.doesNotMatch(css, /\.split-morph-[a-z]+\{[^}]*(transition:[^;}]*(width|height|left|top)|backdrop-filter)/, 'no layout or blur animation in the morph');
+});
+
+// 13.5 tab switch: two style flushes less per switch (a computed-style read in morphWanted, and the address field measuring twice because its ResizeObserver reports once at start).
+test('13.5: a tab switch no longer reads the document for the morph speed, and the address field does not measure again for the observer\'s first report', () => {
+  const app = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8'), field = fs.readFileSync(path.resolve('src/components/AddressField.tsx'), 'utf8');
+  const line = app.split('\n').find(row => row.includes('const morphWanted')) || '';
+  assert.doesNotMatch(line, /motionScale\(\)/, 'morphWanted must not call motionScale() (getComputedStyle)');
+  assert.match(line, /motionScaleOf\(s\) > 0/);
+  assert.match(field, /new ResizeObserver\(\(\) => \{ if \(field\.clientWidth \+ 'x' \+ field\.clientHeight !== sized\) measure\(\); \}\)/);
+  assert.match(field, /sized = field\.clientWidth \+ 'x' \+ field\.clientHeight;/);
 });

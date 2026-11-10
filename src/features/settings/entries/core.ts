@@ -21,6 +21,8 @@ const appearance = defineSettings('Appearance', [
   { id: 'toolbar-reset', title: t("browsersettings.resetToolbarControls"), group: 'Toolbar', description: t("core.restoreDefaultToolbarButtons"), aliases: ['customize toolbar', 'default toolbar', 'restore toolbar'], when: 'toolbar-changed' },
 
   { id: 'page-zoom', title: t("app.pageZoom"), group: 'Page zoom', description: t("core.makeOneWebsiteLargerOr"), aliases: ['zoom', 'magnify', 'text size', 'bigger', 'smaller', 'percentage', 'ctrl plus', 'ctrl minus'], when: 'website-open' },
+  { id: 'toolbar-showZoomIcon', title: t("core.showZoomIcon"), group: 'Toolbar', description: t("core.zoomIconInTheAddress"), aliases: ['magnifier', 'percent'] },
+  { id: 'toolbar-showBookmarkStar', title: t("core.showBookmarkStar"), group: 'Toolbar', description: t("core.bookmarkStarInTheAddress"), aliases: ['star', 'bookmark button', 'favorite'] },
   { id: 'page-zoom-site', title: t("browsersettings.websiteToZoom"), group: 'Page zoom', description: t("core.chooseWhichOpenWebsiteTo"), aliases: ['zoom site', 'zoom target'], when: 'website-open' },
 
   { id: 'glass-opacity', title: t("appearancecontrols.windowOpacity"), group: 'Colors', description: t("core.higherIsMoreSolid100"), aliases: ['opacity', 'transparency', 'translucent', 'see-through', 'blur', 'frosted', 'solid'], when: 'custom-glass-colors' },

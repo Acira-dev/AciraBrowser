@@ -23,6 +23,9 @@
 /* R3-60: the pane ribbon is about 25px: the site icon and the title are one left-aligned unit, the close button sits on the same centre line, and the whole ribbon is the pane's drag handle. */
 .app .split-label{height:26px;gap:6px;padding:0 6px 0 10px;cursor:grab;user-select:none;touch-action:none;color:color-mix(in srgb,var(--ed-ink,currentColor) 68%,transparent);font:500 12px/16px var(--font-ui,inherit)}
 .app .split-label[data-active]{color:var(--ed-ink,currentColor)}
+/* Windows, Sidebar mode: the window's caption buttons sit over the window's top-right corner (138 px of buttons, a 144 px corner); the pane whose title row reaches it keeps its
+   reload and close left of them (captionCorner.ts; reported 10 Nov 2026). 150 window px at any interface scale: 138 + the corner's margin + a little air. */
+.app .page-pane[data-caption-corner]>.split-label{padding-right:calc(150px / var(--interface-scale, 1))}
 .app .split-label:active{cursor:grabbing}
 /* R3-26: while the pages glide into a new layout their ribbons wait, then ease in. */
 .app .split-label{transition:opacity calc(160ms*var(--motion-scale,1)) ease-out}

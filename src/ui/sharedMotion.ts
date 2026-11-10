@@ -322,6 +322,13 @@ const PAGE_SPRING = 'linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66
  * grows or shrinks to the new one on the sidebar's spring, so a page the interface draws (a new tab, Settings, a split's
  * panes and titles) lays out live, frame by frame, beside the sliding sidebar. The named page layer in the view transition follows
  * the live element (sidebar.css), so nothing shows around it. A website's own view is placed by main on the same curve. */
+/** The size each website pane of a split ends at while the page follows (measured on the new layout, before the old box is applied): the layouts sent meanwhile carry it, and main
+ * holds the pane's layout there while the interface moves the pane a frame at a time, so its site lays out once instead of on every frame (desktop/page-motion.cjs placeLive;
+ * reported 10 Nov 2026: split view "really laggy", 13 to 20 layouts per pane per slide). */
+let followSizes = new Map<string, { width: number; height: number }>();
+export const pageFollowSize = (tabId: string): { width: number; height: number } | undefined => document.documentElement.dataset.pageLive !== undefined ? followSizes.get(tabId) : undefined;
+/** Fired when a follow ends: the layout is sent once more, without the held size, so main lets the panes lay out at their final size at once. */
+export const PAGE_FOLLOW_END = 'acira-page-follow-end';
 function followPage(before: DOMRect | null | undefined): { start: () => void; stop: () => void } | null {
   const content = document.querySelector<HTMLElement>('.page-area > .page-content:not([data-native])');
   if (!content || !before) return null;
@@ -329,10 +336,13 @@ function followPage(before: DOMRect | null | undefined): { start: () => void; st
   const px = (n: number) => `${n}px`, from = { marginLeft: px(before.left - after.left), marginTop: px(before.top - after.top), width: px(before.width), height: px(before.height) };
   if ([before.left - after.left, before.top - after.top, before.width - after.width, before.height - after.height].every(delta => Math.abs(delta) < 1)) return null;
   const to = { marginLeft: '0px', marginTop: '0px', width: px(after.width), height: px(after.height) };
+  // Measured the way App's physicalLayout measures a pane (its title row is not the website's), on the layout it lands on.
+  followSizes = new Map([...(content.querySelectorAll?.<HTMLElement>('.page-pane[data-pane][data-web]') ?? [])].flatMap(pane => { const r = pane.getBoundingClientRect(), label = pane.querySelector<HTMLElement>('.split-label')?.offsetHeight || 0, width = Math.round(r.right) - Math.round(r.left), height = Math.round(r.bottom) - Math.round(r.top + label); return pane.dataset.pane && width > 0 && height > 0 ? [[pane.dataset.pane, { width, height }] as const] : []; }));
+  const sizes = followSizes;
   // Applied with the update itself, so the first frame of the transition already shows the old box.
   Object.assign(style, from); root.dataset.pageLive = '';
-  let animation: Animation | null = null;
-  const stop = () => { animation?.cancel(); animation = null; Object.assign(style, { marginLeft: '', marginTop: '', width: '', height: '' }); delete root.dataset.pageLive; };
+  let animation: Animation | null = null, stopped = false;
+  const stop = () => { animation?.cancel(); animation = null; Object.assign(style, { marginLeft: '', marginTop: '', width: '', height: '' }); delete root.dataset.pageLive; if (followSizes === sizes) followSizes = new Map(); if (!stopped) { stopped = true; try { window.dispatchEvent(new Event(PAGE_FOLLOW_END)); } catch { /* no window (tests): nothing listens */ } } };
   const start = () => { animation = content.animate([from, to], { duration: PAGE_GLIDE_MS * motionPace(), easing: PAGE_SPRING, fill: 'both' }); animation.finished.then(stop, () => {}); };
   return { start, stop };
 }

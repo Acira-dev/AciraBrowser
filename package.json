@@ -1,6 +1,6 @@
 {
   "name": "acira-browser",
-  "version": "0.1.0-beta.13.5",
+  "version": "0.1.0-beta.13.6",
   "description": "An independent, calm consumer browser",
   "license": "AGPL-3.0-only",
   "main": "desktop/main.cjs",
@@ -64,6 +64,7 @@
     "node": [
       "tests/favicons-overlay.test.cjs",
       "tests/frame-boot.test.cjs",
+      "tests/fast-switch.test.cjs",
       "tests/notary-no-s3-acceleration.test.cjs",
       "tests/edge-reveal-right.test.cjs",
       "tests/page-motion-right.test.cjs",
@@ -261,6 +262,7 @@
       "tests/icon-image.test.cjs",
       "tests/icon-pick.test.cjs",
       "tests/web-apps-launch.test.cjs",
+      "tests/os-new-window.test.cjs",
       "tests/web-apps-shortcut-names.test.cjs",
       "tests/web-apps-mac-icon.test.cjs",
       "tests/extension-store-bar.test.cjs",
@@ -311,6 +313,7 @@
       "tests/page-motion-radius.test.cjs",
       "tests/page-motion-exact.test.cjs",
       "tests/page-motion-lag.test.cjs",
+      "tests/page-live-hold.test.cjs",
       "tests/lightweight.test.cjs",
       "tests/lightweight-policy.test.mjs",
       "tests/state-sharing.test.cjs",
@@ -465,6 +468,7 @@
       "tests/ext-api-glob-dos.test.cjs"
     ],
     "tsx": [
+      "tests/split-caption-corner.test.ts",
       "tests/sidebar-extension-row.test.ts",
       "tests/library-name-space.test.ts",
       "tests/download-size-unknown.test.ts",
@@ -621,6 +625,7 @@
       "tests/library-windowing.test.ts",
       "tests/chrome-row.test.ts",
       "tests/address-in-sidebar.test.ts",
+      "tests/address-room.test.ts",
       "tests/address-glide.test.ts",
       "tests/overlay-dismiss.test.ts",
       "tests/popup-republish.test.ts",

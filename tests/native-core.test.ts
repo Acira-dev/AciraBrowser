@@ -301,3 +301,38 @@ test('downloads that cannot have survived a restart come back as Cancelled (neve
  const status=(id:string)=>restored.downloads.find(d=>d.id===id)!.status;
  assert.equal(status('waiting'),'Cancelled');assert.equal(status('partial'),'Interrupted');assert.equal(status('done'),'Ready');assert.equal(status('old'),'Cancelled');
 });
+
+test('Applies to is one switch for the profile\'s look: This profile keeps the colours it shows, All profiles drops them (13.6)',()=>{
+ let state=run(createInitialState(),{type:'settings.update',patch:{colorPreset:'Ocean Blue',accentColor:'#266a98',browserTint:'#99c9e8',sidebarColor:'#112233'}},{type:'browser.profile.create',name:'Work'});
+ const work=state.browserProfiles[1].id,seen=(id:string)=>snapshotForProfile({...state,activeBrowserProfileId:id});
+ // the Settings page of the Work window: the snapshot it is sent shows the shared colours; it switches Work to This profile
+ const own=profileScopeAction(seen(work),'appearance',true);assert(own);state=run(state,own);
+ assert.deepEqual(state.browserProfiles[1].settings?.look,{colorPreset:'Ocean Blue',accentColor:'#266a98',browserTint:'#99c9e8',sidebarColor:'#112233'});
+ assert.equal(seen(work).settings.colorPreset,'Ocean Blue','nothing moves when the switch is turned on');
+ // a Finish and a custom colour picked in Work stay in Work
+ state=run({...state,activeBrowserProfileId:work},{type:'settings.update',patch:{colorPreset:'Burgundy',accentColor:'#4d1821',browserTint:'#4d1821',toolbarColor:'#445566'}});
+ assert.equal(seen(work).settings.colorPreset,'Burgundy');assert.equal(seen(work).settings.toolbarColor,'#445566');assert.equal(seen(work).settings.sidebarColor,'#112233');
+ assert.equal(seen('profile-personal').settings.colorPreset,'Ocean Blue');assert.equal(seen('profile-personal').settings.toolbarColor,undefined);
+ // the Appearance card writes Dark through the same switch, and the scoped action still finds its owner
+ const dark=scopedSettingAction(seen(work),'appearance','dark');assert(dark);state=run(state,dark);assert.equal(seen(work).settings.appearance,'dark');
+ assert.equal(state.browserProfiles[1].settings?.look?.colorPreset,'Burgundy','the Light/Dark choice does not touch the look');
+ // restart keeps it
+ const restarted=restoreSnapshot(persistedSnapshot(state));assert.equal(snapshotForProfile({...restarted,activeBrowserProfileId:work}).settings.colorPreset,'Burgundy');
+ // All profiles: the profile follows the shared colours again
+ const all=profileScopeAction(seen(work),'appearance',false);assert(all);state=run(state,all);
+ assert.equal(state.browserProfiles[1].settings,undefined);assert.equal(seen(work).settings.colorPreset,'Ocean Blue');assert.equal(seen(work).settings.toolbarColor,undefined);
+ assert.equal(scopedSettingAction(seen(work),'appearance','dark'),null);
+});
+
+test('a profile switch between different Finishes counts as an appearance change, so the frame crossfades (13.6)',async()=>{
+ const {appearanceChanged}=await import('../src/ui/sharedMotion');
+ let state=run(createInitialState(),{type:'browser.profile.create',name:'Work'});const work=state.browserProfiles[1].id;
+ state=run(state,{type:'browser.profile.settings',id:work,patch:{appearance:'dark',look:{colorPreset:'Burgundy',accentColor:'#4d1821',browserTint:'#4d1821'}}});
+ const personal=snapshotForProfile(state),inWork=snapshotForProfile({...state,activeBrowserProfileId:work});
+ assert.equal(appearanceChanged(personal,inWork),true);
+ const plain=run(createInitialState(),{type:'browser.profile.create',name:'Work'});
+ assert.equal(appearanceChanged(snapshotForProfile(plain),snapshotForProfile({...plain,activeBrowserProfileId:plain.browserProfiles[1].id})),false,'two profiles on the shared look: no repaint');
+ // a custom colour alone is enough
+ const tinted=run(state,{type:'settings.update',patch:{colorPreset:'Burgundy',accentColor:'#4d1821',browserTint:'#4d1821'}},{type:'browser.profile.settings',id:work,patch:{look:{colorPreset:'Burgundy',accentColor:'#4d1821',browserTint:'#4d1821',sidebarColor:'#224466'}}});
+ assert.equal(appearanceChanged(snapshotForProfile(tinted),snapshotForProfile({...tinted,activeBrowserProfileId:work})),true);
+});

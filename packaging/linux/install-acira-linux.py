@@ -40,7 +40,17 @@ temporary=prefix/(exe+'.AppImage.new')
 if temporary.exists() or temporary.is_symlink() or target.is_symlink():raise SystemExit('An install file is redirected or a previous incomplete install needs review.')
 shutil.copyfile(image,temporary);temporary.chmod(0o755);temporary.replace(target);shutil.copyfile(source_icon,icon)
 def desktop_quote(value):return '"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$').replace('%','%%')+'"'
-desktop.write_text('[Desktop Entry]\nType=Application\nName='+name+'\nComment=An independent browser\nExec='+desktop_quote(target)+' %U\nIcon='+slug+'\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\nStartupWMClass='+slug+'.desktop\n')
+# 13.6: launcher actions (right-click on the launcher or the dock icon): New window, New private window. Each one starts Acira with a flag (--acira-new-window,
+# --acira-new-private-window; desktop/os-new-window.cjs): a running Acira opens the window, a closed one starts as usual. The names are the app's own
+# translations (src/i18n/<language>.json browsermenu.newWindow and browsermenu.newPrivateWindow; tests/os-new-window.test.cjs keeps them equal).
+NEW_WINDOW={'en':'New window','es':'Nueva ventana','fr':'Nouvelle fenêtre','de':'Neues Fenster','pt_BR':'Nova janela','it':'Nuova finestra','ja':'新しいウィンドウ','zh_CN':'新建窗口','ar':'نافذة جديدة','tr':'Yeni pencere','ru':'Новое окно','ko':'새 창','hi':'नई विंडो'}
+NEW_PRIVATE_WINDOW={'en':'New private window','es':'Nueva ventana privada','fr':'Nouvelle fenêtre privée','de':'Neues privates Fenster','pt_BR':'Nova janela privada','it':'Nuova finestra privata','ja':'新しいプライベートウィンドウ','zh_CN':'新建无痕窗口','ar':'نافذة خاصة جديدة','tr':'Yeni gizli pencere','ru':'Новое приватное окно','ko':'새 비공개 창','hi':'नई निजी विंडो'}
+DESKTOP_ACTIONS=[('NewWindow','--acira-new-window',NEW_WINDOW),('NewPrivateWindow','--acira-new-private-window',NEW_PRIVATE_WINDOW)]
+def desktop_names(names):return ''.join('Name'+('' if code=='en' else '['+code+']')+'='+text+'\n' for code,text in names.items())
+def desktop_entry(name,slug,target):
+ head='[Desktop Entry]\nType=Application\nName='+name+'\nComment=An independent browser\nExec='+desktop_quote(target)+' %U\nIcon='+slug+'\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\nStartupWMClass='+slug+'.desktop\nActions='+''.join(action+';' for action,_,_ in DESKTOP_ACTIONS)+'\n'
+ return head+''.join('\n[Desktop Action '+action+']\n'+desktop_names(names)+'Exec='+desktop_quote(target)+' '+flag+'\nIcon='+slug+'\n' for action,flag,names in DESKTOP_ACTIONS)
+desktop.write_text(desktop_entry(name,slug,target),encoding='utf-8')  # the launcher actions' names are Japanese, Arabic, Hindi...: never the locale's encoding (a Latin-1 locale raised UnicodeEncodeError after the AppImage was copied)
 receipt.write_text(json.dumps({'schema':1,'product':name,'sha256':image_hash,'updatableFile':str(target),'profilePreserved':True},indent=2)+'\n')
 if shutil.which('update-desktop-database'):subprocess.run(['update-desktop-database',str(desktop.parent)],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 print(name+' installed: '+str(target));print('Launch it from your application menu. Future AppImage updates replace this user-owned file. Your default browser was not changed.')

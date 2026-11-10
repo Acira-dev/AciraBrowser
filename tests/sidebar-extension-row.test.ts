@@ -69,3 +69,12 @@ test('while the toolbar\'s hook asks again (it answers null at every tab switch 
   assert.equal(keepTarget(had, null, null), null, 'no tab');
   assert.equal(keepTarget(null, null, tab), null, 'nothing to keep yet');
 });
+
+test('the row keeps its height while its buttons are rebuilt at a tab switch (a new page id rebuilds the engine\'s list; without a minimum the tab list jumped up 30 px for a frame or two)', () => {
+  const css = read('src/components/sidebar/sidebar.css');
+  const rule = css.split('\n').find(line => /\.sb-ext-row:not\(\[hidden\]\)\{/.test(line));
+  assert.ok(rule, 'a rule for the shown row');
+  assert.match(rule, /box-sizing:border-box/);
+  assert.match(rule, /min-height:40px/, 'the row\'s own height: 30 px buttons, 2 px above and 8 px below');
+  assert.match(css, /\.sb-ext-row\{flex:none;display:flex;align-items:center;padding:2px 14px 8px;/, 'the padding the minimum is made from');
+});

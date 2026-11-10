@@ -43,6 +43,6 @@ export function ToolbarCustomizer({ profileId, settings, tab, reduced, dispatch 
     <ul className="toolbar-customize-list">
       {builtins.map(item => <li key={item.id} className="toolbar-customize-row fixed"><label className="toolbar-customize-check"><input type="checkbox" checked={item.checked} onChange={() => dispatch(item.action)}/><span>{item.label.replace(/^Show /, '').replace(/^./, c => c.toUpperCase())}</span></label></li>)}
     </ul>
-    <div className="toolbar-customize-footer"><span>{t("toolbarcustomizer.theAciraMenuAlwaysStays")}</span><button type="button" className="toolbar-customize-reset" onClick={() => { resetToolbarItems(profileId); dispatch({ type: 'settings.update', patch: { showHome: true, showTabOverview: true } }); }}>{t("browsersettings.reset")}</button></div>
+    <div className="toolbar-customize-footer"><span>{t("toolbarcustomizer.theAciraMenuAlwaysStays")}</span><button type="button" className="toolbar-customize-reset" onClick={() => { resetToolbarItems(profileId); dispatch({ type: 'settings.update', patch: { showHome: true, showTabOverview: true, showZoomIcon: true, showBookmarkStar: true } }); }}>{t("browsersettings.reset")}</button></div>
   </div>;
 }

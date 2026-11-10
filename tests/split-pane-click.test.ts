@@ -113,7 +113,7 @@ test('main drops a page whose contents are gone before anything walks the pages 
   assert.ok(body.includes('entry.closing||entry.discarding'), 'a close or a sleep in progress is left to closePage');
   assert.ok(body.includes('pages.delete(id)') && body.includes('removePageView(entry)'), 'the entry and its view leave at once');
   assert.ok(body.includes("dispatch({type:'tab.close',id})"), 'and the tab is closed, so a split it was in loses the pane');
-  for (const walker of ['function syncPages(){if(!mainWindow||!pagesAllowed)return;securedPages.reconcile(state);reapDeadPages();', "function applyLayout(next){startupTrace.mark('first-layout');reapDeadPages();"])
+  for (const walker of ['function syncPages(){if(!mainWindow||!pagesAllowed)return;securedPages.reconcile(state);reapDeadPages();', "function applyLayout(next,opts){startupTrace.mark('first-layout');reapDeadPages();"])
     assert.ok(main.includes(walker), `${walker.slice(0, 30)}… reaps first`);
 });
 

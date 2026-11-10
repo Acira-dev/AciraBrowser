@@ -14,7 +14,12 @@
 .address-suggestion[data-kind=answer] .address-suggestion-copy>span{font-size:15px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
 .address-suggestion-key{flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .address-suggestion-enter{flex:0 0 16px;visibility:hidden;color:var(--menu-t3,var(--muted))}
-.address-suggestion-remove{flex:0 0 28px;width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}
+.address-suggestion-remove{position:absolute;inset-block:0;inset-inline-end:4px;margin:auto 0;width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer;opacity:0;pointer-events:none}
+/* 13.6: the remove (x) of a history row shows on hover (and on the keyboard-selected row) over the end of the row, so at rest the title has the whole row. Under it the title fades out instead of being cut. */
+.address-suggestion:is(:hover,[aria-selected=true]) .address-suggestion-remove,.address-suggestion-remove:focus-visible{opacity:1;pointer-events:auto}
+.address-suggestion[data-removable]:is(:hover,[aria-selected=true]) .address-suggestion-copy{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent calc(100% - 28px));mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent calc(100% - 28px))}
+/* A title in a right-to-left script (dir=auto on the title) starts at the row's right, where the x is: such a row keeps the x's room from the start, so nothing shifts or hides under it. */
+.address-suggestion[data-removable]:has(.address-suggestion-copy>span:dir(rtl)) .address-suggestion-copy{padding-right:36px}
 .address-suggestion-remove:hover{background:color-mix(in srgb,currentColor 10%,transparent)}
 .address-suggestion-remove:focus-visible{outline:2px solid currentColor;outline-offset:1px}
 .address-suggestion[aria-selected=true] .address-suggestion-enter{visibility:visible}
