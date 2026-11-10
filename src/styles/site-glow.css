@@ -6,12 +6,19 @@ html[data-site-glow] .app.style-acira:not(.native-layer) { isolation: isolate; }
 .st-glow {
   position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
   background:
-    radial-gradient(ellipse 360px 64% at 150px 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%),
     radial-gradient(ellipse 50% 170px at 70% 30px, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),
     radial-gradient(ellipse 55% 140px at 40% 100%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
 }
+/* The left wash is the sidebar's own (siteGlowEngine.ts, AciraSidebar renders two): the same radial gradient, 150px in from the sidebar's outer edge, 16px past its inner edge so it
+   tapers into the gap beside the page as before. Inside the sidebar it slides, and fades, with the sidebar in every transition. */
+.st-glow-rail {
+  position: absolute; top: 0; bottom: 0; left: 0; right: -16px; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
+  background: radial-gradient(ellipse 360px 64% at 150px 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%);
+}
+html[data-site-glow-tone=dark] .st-glow-rail { mix-blend-mode: screen; }
+html[data-sidebar-side=right] .st-glow-rail { left: -16px; right: 0; background-image: radial-gradient(ellipse 360px 64% at calc(100% - 150px) 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%); }
 html[data-site-glow-tone=dark] .st-glow { mix-blend-mode: screen; }
 /* The sidebar on the right (data-sidebar-side, sidebar-right): the washes mirror with it. */
 html[data-sidebar-side=right] .st-glow { transform: scaleX(-1); }
 /* High contrast and forced colours: no glow (the contrast gate is for the person's own finish). */
-@media (forced-colors: active), (prefers-contrast: more) { .st-glow { display: none; } }
+@media (forced-colors: active), (prefers-contrast: more) { .st-glow, .st-glow-rail { display: none; } }

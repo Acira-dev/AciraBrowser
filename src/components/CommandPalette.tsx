@@ -13,6 +13,7 @@ import { commandLabel } from '../ui/shortcutKeys';
 import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces, workspaceIdOf } from '../runtime/workspaces';
 import { nameIn, shownName, workspaceKey } from '../features/workspaces/WorkspaceSwitcher';
 import { openWorkspacePopupFromPopup } from '../ui/workspaceTarget';
+import { commandsOffered } from '../ui/layoutMode';
 import { noteUse } from '../features/metrics/noteUse';
 
 import { t } from '../i18n';
@@ -52,14 +53,18 @@ export function CommandPalette({ state, dispatch, close, onNavigate, pages }: { 
   // With no tab open, the history is still the window's own profile's, never every profile's.
   const history = useMemo(() => historyVisibleFrom(state, viewer ?? { browserProfileId: state.activeBrowserProfileId }, state.browsingHistory).slice(0, 400).map(visit => ({ url: visit.url, title: visit.title })), [state.browsingHistory, state.browserProfiles, state.activeBrowserProfileId, viewer]);
   // Workspaces (R3-57): switch to another one by name, or start a new one. They belong to this window, so they are not registry commands.
-  const spaces = useMemo<PaletteCommand[]>(() => { const own = windowWorkspaces(state); return [...own.flatMap((workspace, index) => workspace.id === state.activeWorkspaceId ? [] : [{ id: `workspace:${workspace.id}`, label: t('workspaces.paletteSwitch', { name: nameIn(state, workspace) }), category: 'Workspaces', shortcut: workspaceKey(index) }]), ...(own.length && own.length < MAX_WORKSPACES && !profilesAsSpaces(state) ? [{ id: 'workspace:new', label: t('workspaces.new'), category: 'Workspaces' }] : [])]; }, [state.workspaces, state.activeWorkspaceId, state.activeBrowserProfileId, state.settings.spaces, state.browserProfiles]);// eslint-disable-line react-hooks/exhaustive-deps
+  const spaces = useMemo<PaletteCommand[]>(() => { const own = windowWorkspaces(state); return [...own.flatMap((workspace, index) => workspace.id === state.activeWorkspaceId ? [] : [{ id: `workspace:${workspace.id}`, label: t('workspaces.paletteSwitch', { name: nameIn(state, workspace) }), category: 'Workspaces', shortcut: workspaceKey(index), name: nameIn(state, workspace) }]), ...(own.length && own.length < MAX_WORKSPACES && !profilesAsSpaces(state) ? [{ id: 'workspace:new', label: t('workspaces.new'), category: 'Workspaces' }] : [])]; }, [state.workspaces, state.activeWorkspaceId, state.activeBrowserProfileId, state.settings.spaces, state.browserProfiles]);// eslint-disable-line react-hooks/exhaustive-deps
   // R4-48 P1-2: with several workspaces, a search also finds the other workspaces' tabs (a section each, named for the workspace); choosing one switches there.
   const otherTabs = useMemo<PaletteWorkspaceTabs[]>(() => { const elsewhere = state.otherWorkspaceTabs ?? []; if (!elsewhere.length) return []; return windowWorkspaces(state).flatMap(workspace => { const found = elsewhere.filter(tab => workspaceIdOf(state, tab) === workspace.id && tabVisibleFrom(state, viewer, tab)).map(tab => shownTab(tab)); return found.length ? [{ id: workspace.id, name: shownName(workspace), tabs: found }] : []; }); }, [state.otherWorkspaceTabs, state.workspaces, state.activeBrowserProfileId, viewer]);// eslint-disable-line react-hooks/exhaustive-deps
-  const sections = useMemo(() => paletteSections({ query, commands: [...commands, ...spaces], tabs, activeTabId: state.activeTabId, history, pages, recent, otherTabs }), [query, commands, spaces, tabs, state.activeTabId, history, pages, recent, otherTabs]);
+  // 13.5: where the sidebar is held open (Sidebar + address in Full) "Toggle sidebar" is not offered.
+  const offered = useMemo(() => commandsOffered(state, commands), [state.settings, state.windowUi.view, commands]);
+  const sections = useMemo(() => paletteSections({ query, commands: [...offered, ...spaces], tabs, activeTabId: state.activeTabId, history, pages, recent, otherTabs }), [query, offered, spaces, tabs, state.activeTabId, history, pages, recent, otherTabs]);
   const items = flatItems(sections), current = Math.min(active, Math.max(0, items.length - 1));
   // Typing filters the results on the shared list motion (A, round 2): sections that stay glide, new ones settle in.
   useListMotion(list, query, { frequent: true });
-  useEffect(() => setActive(0), [query]);
+  // 13.5 (hunt-e 11): Enter never runs a held-back row (close other tabs, quit...: item.guard) that the person has not moved onto with a key or the pointer.
+  const moved = useRef(false);
+  useEffect(() => { setActive(0); moved.current = false; }, [query]);
   useEffect(() => { list.current?.querySelector<HTMLElement>('[data-active=true]')?.scrollIntoView({ block: 'nearest' }); }, [current, items.length]);
   const run = (item: PaletteItem | undefined) => {
     if (!item) return;
@@ -75,8 +80,8 @@ export function CommandPalette({ state, dispatch, close, onNavigate, pages }: { 
   const keys = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;
     const step = event.key === 'ArrowDown' || event.key === 'Tab' && !event.shiftKey ? 1 : event.key === 'ArrowUp' || event.key === 'Tab' && event.shiftKey ? -1 : 0;
-    if (step && items.length) { event.preventDefault(); event.stopPropagation(); setActive((current + step + items.length) % items.length); return; }
-    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); run(items[current]); }
+    if (step && items.length) { event.preventDefault(); event.stopPropagation(); moved.current = true; setActive((current + step + items.length) % items.length); return; }
+    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); const item = items[current]; if (item?.guard && !moved.current) return; run(item); }
   };
   let index = -1;
   return <>
@@ -84,7 +89,7 @@ export function CommandPalette({ state, dispatch, close, onNavigate, pages }: { 
     <div className="palette-results" id="palette-results" role="listbox" ref={list}>
       {sections.map(section => <div key={section.key} role="group" aria-label={section.label}><div className="palette-section" aria-hidden="true">{section.label}</div>
         {section.items.map(item => { const at = ++index, Icon = item.kind === 'command' ? categoryIcon[item.command.category] || Settings2 : item.kind === 'page' ? pageIcon(item.url) : item.kind === 'web' ? Globe2 : null;
-          return <button type="button" key={item.key} id={`palette-${item.key}`} role="option" aria-selected={at === current} data-active={at === current} tabIndex={-1} className="palette-row" onPointerMove={() => at !== current && setActive(at)} onClick={() => run(item)}>
+          return <button type="button" key={item.key} id={`palette-${item.key}`} role="option" aria-selected={at === current} data-active={at === current} tabIndex={-1} className="palette-row" onPointerMove={() => { if (at !== current) { moved.current = true; setActive(at); } }} onClick={() => run(item)}>
             {Icon ? <Icon size={16}/> : <SiteIdentityIcon url={item.kind === 'tab' ? item.tab.url : item.kind === 'history' ? item.url : ''} favicon={item.kind === 'tab' ? item.tab.favicon : undefined}/>}
             <Title text={item.title} indices={item.indices}/>{item.hint && <span className="palette-hint" title={item.hint}>{item.hint}</span>}{item.meta && <span className="palette-meta">{item.meta}</span>}
           </button>; })}

@@ -101,5 +101,5 @@ test('main wires the action to sleepNow, and every message it speaks is in the E
  const keys=[...body.matchAll(/'(tabsleep\.[A-Za-z]+)'/g)].map(match=>match[1]);
  assert.ok(keys.length>=8);
  for(const key of keys)assert.ok(en[key],key+' is in en.json');
- assert.deepEqual(Object.keys(en).filter(key=>key.startsWith('tabsleep.')).sort(),[...new Set([...keys,'tabsleep.menuTab','tabsleep.menuGroup','tabsleep.menuWorkspace'])].sort(),'no unused or missing tabsleep strings');
+ assert.deepEqual(Object.keys(en).filter(key=>key.startsWith('tabsleep.')).sort(),[...new Set([...keys,'tabsleep.menuTab','tabsleep.menuGroup','tabsleep.menuWorkspace','tabsleep.tipSleeping'])].sort(),'no unused or missing tabsleep strings');
 });

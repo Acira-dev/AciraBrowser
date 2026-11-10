@@ -194,7 +194,7 @@ function aciraExtraApis(ctx){
    }
   }
   // Every other constant and enum Chromium 152 defines (tabs.SPLIT_VIEW_ID_NONE, contextMenus.ACTION_MENU_TOP_LEVEL_LIMIT,
-  // runtime.OnInstalledReason, …), on the namespaces this extension has; anything the engine already defines is left alone.
+  // runtime.OnInstalledReason, ...), on the namespaces this extension has; anything the engine already defines is left alone.
   for(const [path,values] of Object.entries(chromiumConstants||{})){
    let target=chrome;
    try{for(const part of path.split('.'))target=target&&typeof target==='object'?target[part]:undefined;}catch(e){target=undefined;}

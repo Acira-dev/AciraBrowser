@@ -37,6 +37,34 @@ export const sidebarPeekOf = (settings: { sidebarPeek?: Partial<SidebarPeek> } |
 export const hideToolbarOn = (settings: { hideToolbar?: boolean; verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, view: WindowView): boolean =>
   settings?.hideToolbar === true && settings.verticalTabs === true && settings.addressInSidebar !== true && view !== 'seamless';
 
+/** Sidebar + address (tabs and the address bar both in the sidebar) in Full (13.5): the sidebar is the top of the window there, the address field, Back, Reload, Forward and the
+ * window's own buttons all sit in it, so it cannot be closed: no button, no key, no command closes it, and a saved window that has it closed gets it open again. Seamless is the one
+ * view that hides it (it has no docked sidebar to close: the left edge brings it). Compact and Focus are the same window as Full in that layout (ui/sidebarMode.ts viewsOfLayout), so
+ * they hold it open too. Pure and shared: the renderer, the reducer and main (through the runtime bundle) read it from here. */
+export const sidebarHeldOpen = (settings: { verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, view: WindowView): boolean =>
+  settings?.verticalTabs === true && settings.addressInSidebar === true && view !== 'seamless';
+
+/** `sidebarHeldOpen` for a window: an installed web app's window (windowUi.app, set by main) shows no sidebar whatever the layout says (it is the bare, chromeless window an app is), so nothing holds it open there. */
+export const sidebarHeldOpenIn = (settings: { verticalTabs?: boolean; addressInSidebar?: boolean } & Legacy | null | undefined, windowUi: Pick<WindowUi, 'view' | 'app'>): boolean =>
+  windowUi.app !== true && sidebarHeldOpen(settings, effectiveView(settings, windowUi));
+
+/** A window's UI with the sidebar open when `sidebarHeldOpenIn` says it must be. The same object back when it already is (nothing to re-render, no layout change). */
+export function withSidebarHeldOpen<T extends Pick<WindowUi, 'view' | 'app' | 'workspaceOpen' | 'webWorkspaceOpen'>>(settings: Legacy | null | undefined, windowUi: T): T {
+  if (windowUi.workspaceOpen && windowUi.webWorkspaceOpen) return windowUi;
+  return sidebarHeldOpenIn(settings, windowUi) ? { ...windowUi, workspaceOpen: true, webWorkspaceOpen: true } : windowUi;
+}
+
+/** A `ui.update` patch with whatever would close a held-open sidebar taken out of it (the window's view after the patch decides). The same object when nothing has to go. */
+export function patchKeepingSidebarOpen<P extends { view?: WindowView | null; focusMode?: boolean; workspaceOpen?: boolean; webWorkspaceOpen?: boolean }>(settings: Legacy | null | undefined, windowUi: Pick<WindowUi, 'view' | 'app'>, patch: P): P {
+  if (patch.workspaceOpen !== false && patch.webWorkspaceOpen !== false) return patch;
+  const own = Object.hasOwn(patch, 'view') ? patch.view : Object.hasOwn(patch, 'focusMode') ? viewForFocus(settings, windowUi, patch.focusMode === true) : windowUi.view;
+  if (!sidebarHeldOpenIn(settings, { view: own ?? undefined, app: windowUi.app })) return patch;
+  const kept: Record<string, unknown> = { ...patch };
+  if (patch.workspaceOpen === false) delete kept.workspaceOpen;
+  if (patch.webWorkspaceOpen === false) delete kept.webWorkspaceOpen;
+  return kept as P;
+}
+
 type Legacy = Partial<Settings> & { automaticCompact?: boolean; pinExpanded?: boolean };
 
 /** The default view for every window. Settings written before the dial existed carry only the Toolbar choice: its

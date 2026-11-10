@@ -150,6 +150,26 @@ test('the toolbar target of a private session lists its extensions that have a b
  }finally{fs.rmSync(f.dir,{recursive:true,force:true});}
 });
 
+test('a private window with no website yet (its New Tab page) has the same buttons, with no tab (-1): pinned ones of the profile, only what the private session runs, none for any other session',async()=>{
+ const f=fixture({answer:1});
+ try{
+  await f.manager.command({type:'private',profileId:'p',extensionId:ID,allowed:true});
+  const priv=fakePrivate(f.dir);
+  assert.equal(f.manager.privateProfileTarget(priv.session),null,'a session that runs no extension (not attached) has none');
+  await f.manager.attachPrivate({session:priv.session,profile:priv.profile,sourceProfileId:'p',implementation:{},runtimeDir:path.join(priv.folder,'acira-runtime')});
+  priv.loaded.get(ID).manifest.action={default_popup:'popup.html'};
+  let target=f.manager.privateProfileTarget(priv.session);
+  assert.deepEqual([target.supported,target.profileId,target.partition,target.webContentsId,target.actionIds,target.pinnedIds],[true,priv.profile.id,priv.profile.partition,-1,[ID],[]]);
+  await f.manager.command({type:'pin',profileId:'p',extensionId:ID,pinned:true});
+  target=f.manager.privateProfileTarget(priv.session);
+  assert.deepEqual([target.webContentsId,target.pinnedIds],[-1,[ID]],'pinned in the profile: pinned on the private New Tab page too');
+  assert.equal(f.manager.privateProfileTarget({}),null,'any other session has none');
+  assert.equal(f.manager.privateProfileTarget(null),null);
+  f.manager.detachPrivate(priv.session);
+  assert.equal(f.manager.privateProfileTarget(priv.session),null,'a session that has ended has none');
+ }finally{fs.rmSync(f.dir,{recursive:true,force:true});}
+});
+
 test('turning "Allow in private tabs" off in one window reaches the private session another window has open (one list of private sessions for the whole app)',async()=>{
  const a=fixture({answer:1});
  try{

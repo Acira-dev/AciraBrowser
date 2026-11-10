@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "يجب أن تبقى علامات التبويب هذه نشطة الآن",
   "tabsleep.privateStaysAwake": "تُبقي النوافذ الخاصة جميع علامات التبويب نشطة",
   "tabsleep.couldNot": "تعذّر تعليق علامات التبويب",
+  "tabsleep.tipSleeping": "معلّقة",
   "peek.frameLabel": "معاينة الرابط",
   "peek.openAsTab": "فتح كعلامة تبويب",
   "peek.openInSplit": "فتح في العرض المقسّم",

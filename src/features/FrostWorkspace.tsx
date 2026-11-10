@@ -110,7 +110,7 @@ export function ExperimentRail({ state, dispatch }: {
       {!prefs.tabs && groups.length > 0 && section('groups','Tab groups',groups.map(({group,members})=><SidebarGroup key={group.id} group={group} members={members} state={state} dispatch={dispatch}/>),{count:groups.length})}
       
     </div>}
-    <footer><RailButton label={t("browsermenu.settings")} glyph="settings" icon={Settings2} current={current.url === 'acira://settings'} onClick={() => navigate('settings')}/><RailButton label={t("app.switchProfile")} text={profile?.name || 'Personal'} popupTrigger onClick={target => popup(state, 'profile', target)}><span className="ed-profile-initial">{state.browserProfiles.find(profile => profile.id === current.browserProfileId)?.name[0] || 'P'}</span></RailButton></footer>
+    <footer><RailButton label={t("browsermenu.settings")} glyph="settings" icon={Settings2} current={current.url === 'acira://settings'} onClick={() => navigate('settings')}/><RailButton label={t("app.switchProfile")} text={profile?.name || 'Personal'} popupTrigger onClick={target => popup(state, 'profile', target)}><span className="ed-profile-initial"><bdi className="chip-letter">{state.browserProfiles.find(profile => profile.id === current.browserProfileId)?.name[0] || 'P'}</bdi></span></RailButton></footer>
   </aside>;
 }
 /** Reuse the tab strip's validated inline name editor and persisted group state. */

@@ -104,18 +104,39 @@ function stayAwakeKind(reason){
  if(['edited-form','credential-or-file-input','editable-or-canvas-content'].includes(reason))return 'edits';
  return 'other';
 }
-/** Runs inside the page (serialised with toString): is it safe to close? Edited fields, credentials, editable/canvas pages and live media are not. */
-function inspectPage(){
+/** Runs inside the page (serialised with toString): is it safe to close? Edited fields, credentials, editable/canvas pages and live media are not.
+ *  skipSelects (13.5): true leaves the drop-downs out. A select that differs from its default is reported with select:true so the caller can ask whether the PERSON ever touched one (inspectLive). */
+function inspectPage(skipSelects){
  const controls=document.querySelectorAll('input,textarea,select');if(controls.length>5000||document.getElementsByTagName('*').length>50000)return {safe:false,reason:'page-too-large'};
  if(document.designMode==='on'||document.querySelector('[contenteditable]:not([contenteditable="false"]),canvas'))return {safe:false,reason:'editable-or-canvas-content'};
  for(const element of controls){
   if(element.tagName==='INPUT'){if(element.type==='password'&&element.value||element.type==='file'&&element.files.length)return {safe:false,reason:'credential-or-file-input'};if(['checkbox','radio'].includes(element.type)){if(element.checked!==element.defaultChecked)return {safe:false,reason:'edited-form'};}else if(!['hidden','button','submit','reset','image','file'].includes(element.type)){const baseline=document.createElement('input');for(const name of ['type','min','max','step','value'])if(element.hasAttribute(name))baseline.setAttribute(name,element.getAttribute(name));if(element.value!==baseline.value)return {safe:false,reason:'edited-form'};}}
   else if(element.tagName==='TEXTAREA'&&element.value!==element.defaultValue)return {safe:false,reason:'edited-form'};
-  else if(element.tagName==='SELECT'){const options=[...element.options],selected=options.filter(option=>option.selected).map(option=>option.index),defaults=options.filter(option=>option.defaultSelected).map(option=>option.index);if(!element.multiple&&!defaults.length&&options.length)defaults.push(0);if(JSON.stringify(selected)!==JSON.stringify(defaults))return {safe:false,reason:'edited-form'};}
+  else if(element.tagName==='SELECT'){if(skipSelects===true)continue;const options=[...element.options],selected=options.filter(option=>option.selected).map(option=>option.index),defaults=options.filter(option=>option.defaultSelected).map(option=>option.index);if(!element.multiple&&!defaults.length&&options.length)defaults.push(0);if(JSON.stringify(selected)!==JSON.stringify(defaults))return {safe:false,reason:'edited-form',select:true};}
  }
  // A looping video with its sound off (a page's background or hero clip) has no place to lose and nothing to hear: it starts again when the page wakes. Anything else that plays, and any live stream, keeps the tab awake.
  const ambient=media=>media.tagName==='VIDEO'&&media.loop===true&&(media.muted===true||media.volume===0)&&!(media.srcObject instanceof MediaStream);
  for(const media of document.querySelectorAll('audio,video'))if(!media.paused&&!media.ended&&!ambient(media)||media.srcObject instanceof MediaStream&&media.srcObject.getTracks().some(track=>track.readyState==='live'))return {safe:false,reason:'playing-media-or-live-stream'};
  return {safe:true};
 }
-module.exports={underPressure,inspectPage,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};
+// What the page check runs in the page: picture-in-picture and PDF (Chromium's discard_eligibility_policy.cc) on top of inspectPage. skipSelects: see inspectPage.
+function sleepProbe(skipSelects){return `(()=>{if(document.pictureInPictureElement)return {safe:false,reason:'picture-in-picture'};if(document.contentType==='application/pdf')return {safe:false,reason:'pdf'};return (${inspectPage.toString()})(${skipSelects===true});})()`;}
+// 13.5: the page preload (desktop/page-input-preload.cjs) records whether the person ever touched a drop-down in this document. It lives in Electron's isolated world 999 (the
+// world of contextIsolation preloads), out of reach of the page's scripts. Anything but a clear {touched:false} (no preload, a page that never ran it, an error, a slow page) is "unknown".
+const SELECT_WORLD=999;
+const SELECT_RECORD="(()=>{const record=window.__aciraSelectRecord;return record&&record.v===1&&typeof record.touched==='boolean'?{touched:record.touched,nav:String(record.nav||''),baseline:record.baseline===true}:null;})()";
+/** The page check for a live page (webContents): inspectPage in the page itself, and, only when a drop-down differs from its default, whether the page's own script put it there.
+ *  A select the person never touched (no trusted change, key, pointer or click on a select since the document began) is not an edit: the check runs again without the selects.
+ *  The document must have been reached by an ordinary navigation, or by Back / Forward when it is the page Acira restored itself on waking a tab (appRestored): after a person's own Back, Reload or
+ *  anything unknown Chromium may have put an earlier choice of theirs back into a drop-down. Everything else is as before, and every doubt keeps the tab awake: the record unreadable, touched or of
+ *  an unknown kind, or any other reason found. Rejects when the page does not answer in `ms`. */
+async function inspectLive(wc,ms=1500,appRestored=false){
+ const within=promise=>{let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('slow')),ms);})]).finally(()=>clearTimeout(timer));};
+ const untouched=()=>within(Promise.resolve().then(()=>wc.executeJavaScriptInIsolatedWorld(SELECT_WORLD,[{code:SELECT_RECORD}]))).then(value=>Boolean(value)&&value.touched===false&&(value.nav==='navigate'||appRestored===true&&value.nav==='back_forward'),()=>false);
+ let found=await within(Promise.resolve(wc.executeJavaScript(sleepProbe(false))));
+ // Only a drop-down that differs from its default asks about the record (every other page costs nothing extra). The second pass leaves the drop-downs out, so the record is read again
+ // alongside it: if the document was replaced in between, the new one must be trusted too.
+ if(found&&found.safe===false&&found.select===true&&await untouched()){const [second,again]=await Promise.all([within(Promise.resolve(wc.executeJavaScript(sleepProbe(true)))),untouched()]);if(again)found=second;}
+ return found;
+}
+module.exports={underPressure,inspectPage,sleepProbe,inspectLive,SELECT_WORLD,SELECT_RECORD,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};

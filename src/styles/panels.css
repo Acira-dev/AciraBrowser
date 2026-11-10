@@ -90,7 +90,7 @@
   background: none;
   color: inherit;
   font: 400 13px/20px var(--font-ui);
-  text-align: left;
+  text-align: start;
   cursor: default;
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -180,7 +180,8 @@ details[open] > summary .acira-menu-chevron {
   transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
 }
 .acira-menu-label {
-  padding: 8px 8px 2px 36px;
+  padding: 8px 8px 2px;
+  padding-inline-start: 36px;
   font: 500 11px/16px var(--font-ui);
   color: var(--menu-t3);
 }
@@ -197,7 +198,8 @@ details[open] > summary .acira-menu-chevron {
 :root:root:root .browser-popup .popup-header {
   height: 32px;
   min-height: 32px;
-  padding: 0 4px 0 36px;
+  padding: 0 4px;
+  padding-inline-start: 36px;
 }
 :root:root:root .browser-popup .popup-header > strong {
   flex: 1;
@@ -218,7 +220,7 @@ details[open] > summary .acira-menu-chevron {
 }
 /* A row without a leading icon still reserves the 16px column, so its text starts at x = 36. */
 :root:root:root .browser-popup .menu-row:not(:has(> :is(svg, .menu-icon, .editor-glyph, .acira-symbol, .site-identity-icon, img, .profile-avatar))) {
-  padding-left: 32px;
+  padding-inline-start: 32px;
 }
 :root:root:root .browser-popup :is(.menu-row, .tab-result-row, .profile-row):is(:hover, [data-cursor='true']) {
   background: var(--menu-hover);
@@ -235,7 +237,8 @@ details[open] > summary .acira-menu-chevron {
 :root:root:root .browser-popup .zoom-row {
   min-height: 30px;
   gap: 0;
-  padding: 0 20px 0 32px;
+  padding: 0 20px;
+  padding-inline-start: 32px;
 }
 /* The zoom value is a value: 64%, tabular, centred between − and + in a fixed slot so 25% and 500% don't move them. */
 :root:root:root .browser-popup .zoom-row > button:not(.icon-button) {
@@ -253,12 +256,12 @@ details[open] > summary .acira-menu-chevron {
   flex: 0 0 12px;
   width: 12px;
   height: 12px;
-  margin-left: 0;
+  margin-inline-start: 0;
   color: var(--menu-t3);
   opacity: 1;
 }
 :root:root:root .browser-popup:has(.menu-row-more) .menu-row:not(.menu-row-more) > kbd {
-  margin-right: 20px;
+  margin-inline-end: 20px;
 }
 
 /* Tab viewer and command bar: rows on the same grid; the search, hints and footer set apart by fade-ended lines. */
@@ -268,7 +271,7 @@ details[open] > summary .acira-menu-chevron {
 }
 :root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) .tab-result {
   gap: 8px;
-  padding-left: 8px;
+  padding-inline-start: 8px;
 }
 :root:root:root .browser-popup :is(.tab-result-row, .tab-result-list > .tab-switcher-selection) {
   border-radius: 4px;
@@ -308,7 +311,8 @@ details[open] > summary .acira-menu-chevron {
 /* A note inside a panel is a line of secondary text on the text edge, never a filled box. */
 :root:root:root .browser-popup .info-note {
   margin: 0;
-  padding: 6px 8px 8px 32px;
+  padding: 6px 8px 8px;
+  padding-inline-start: 32px;
   border-radius: 0;
   background: none;
   font-size: 12px;
@@ -329,7 +333,8 @@ details[open] > summary .acira-menu-chevron {
 
 /* ── Downloads popover: the list or empty state starts on the text edge, under no title bar. ── */
 :root:root:root .browser-popup .lib-empty {
-  padding: 12px 8px 12px 36px;
+  padding: 12px 8px;
+  padding-inline-start: 36px;
 }
 
 /* ── Make it yours: rows on the glass; one divider above the footer. ── */
@@ -393,8 +398,9 @@ details[open] > summary .acira-menu-chevron {
 /* Equal inner padding: the action's key cap ends 8px inside the row, mirroring the 8px before the glyph column; the
    action's hover fill stays 4px inside the row edge. The cap uses the one key-cap metric (padding 0 4). */
 :root:root:root .toast-row .toast-action {
-  margin-right: -4px;
-  padding: 0 4px 0 8px;
+  margin-inline-end: -4px;
+  padding: 0 4px;
+  padding-inline-start: 8px;
 }
 :root:root:root .toast-row .toast-action kbd {
   padding: 0 4px;
@@ -451,7 +457,7 @@ details[open] > summary .acira-menu-chevron {
 /* The host column ends on one edge whichever row has the cursor (D, M07; restored after dca47e8d removed it with the
    old edge block): the close button's space is already reserved by the row's right padding. */
 :root:root:root .browser-popup:is(.popup-content-tabs, .popup-content-palette) .tab-result-row:is(:hover, [data-cursor=true], :focus-within) .tab-result-label > small {
-  margin-right: 0;
+  margin-inline-end: 0;
 }
 /* Command bar (D, M08; restored after dca47e8d removed it with the old edge block): the section label sits on the row
    titles' edge. */
@@ -459,14 +465,14 @@ details[open] > summary .acira-menu-chevron {
   gap: 8px;
 }
 :root:root:root .browser-popup.popup-content-palette .palette-section {
-  padding-left: 32px;
+  padding-inline-start: 32px;
 }
 /* ── Tab viewer (Alt+T; founder, 25 Oct: "clearer"; M07): the header, the search text and the row titles share the one
    x = 36 edge; the header is in full ink (its count and Alt+T stay quiet); the search is a field (a 1px ring, 32px)
    set apart from the rows rather than another row; no "New tab" footer, which repeated the New tab page's own row. ── */
 :root:root:root .browser-popup.popup-content-tabs > .popup-header {
-  padding-left: 32px;
-  padding-right: 8px;
+  padding-inline-start: 32px;
+  padding-inline-end: 8px;
 }
 :root:root:root .browser-popup.popup-content-tabs > .popup-header > strong {
   color: var(--text-1, var(--text-primary));
@@ -498,7 +504,7 @@ details[open] > summary .acira-menu-chevron {
 }
 /* One host column (M07): the row's 40px end padding already clears the ×, so the selected row's host does not shift. */
 :root:root:root .browser-popup.popup-content-tabs .tab-result-row .tab-result-label > small {
-  margin-right: 0;
+  margin-inline-end: 0;
 }
 
 /* ══ Divider sweep (founder, 25 Oct): every list divider is THE divider (--divider, top of file). ══
@@ -592,7 +598,7 @@ details[open] > summary .acira-menu-chevron {
 :root:root:root .browser-popup .menu-toggle > .menu-switch {
   flex: 0 0 28px;
   overflow: visible;
-  margin-left: auto;
+  margin-inline-start: auto;
   pointer-events: none;
 }
 :root:root:root .browser-popup .menu-toggle > .menu-toggle-blank {
@@ -605,17 +611,17 @@ details[open] > summary .acira-menu-chevron {
   color: var(--toggle-on, var(--accent));
 }
 :root:root:root .browser-popup:has(.menu-toggle) .menu-row:not(.menu-toggle):not(.menu-row-more) > kbd {
-  margin-right: 36px;
+  margin-inline-end: 36px;
 }
 :root:root:root .browser-popup:has(.menu-toggle) .menu-row-more > kbd {
-  margin-right: 16px;
+  margin-inline-end: 16px;
 }
 :root:root:root .browser-popup:has(.menu-toggle) .zoom-row {
-  padding-right: 36px;
+  padding-inline-end: 36px;
 }
 /* A switch row's own shortcut ends on the same column as every other (the switch is its trailing item). */
 :root:root:root .browser-popup:has(.menu-toggle) .menu-row.menu-toggle > kbd {
-  margin-right: 0;
+  margin-inline-end: 0;
 }
 
 /* More tools (V02): the Acira menu's second step, the same rows and no title bar. */

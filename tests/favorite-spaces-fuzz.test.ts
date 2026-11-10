@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialState, makeTab, persistedSnapshot, reduceBrowser, restoreSnapshot } from '../src/runtime/core';
-import { scopeToWorkspace, workspaceIdOf } from '../src/runtime/workspaces';
+import { scopeToWorkspace, workspaceCounts, workspaceIdOf } from '../src/runtime/workspaces';
+import { listedTabs } from '../src/runtime/favoriteTabs';
+import { bulkCloseTargets } from '../src/runtime/profileActions';
+import { tabNumbers } from '../src/runtime/tabNumbers';
 import { groupForTab } from '../src/runtime/tabGroups';
 import { appClickPlan } from '../src/ui/sidebarApps';
 import type { BrowserAction, BrowserSnapshot } from '../src/runtime/types';
@@ -16,10 +19,11 @@ const apps = [{ id: 'app-a', url: 'https://a.test/', title: 'A' }, { id: 'app-b'
 const run = (state: BrowserSnapshot, ...actions: BrowserAction[]) => actions.reduce(reduceBrowser, state);
 function rng(seed: number) { return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-function start(): BrowserSnapshot {
+type Mode = 'in the list' | 'tile only';
+function start(mode: Mode = 'in the list'): BrowserSnapshot {
   const base = createInitialState(), profile = base.activeBrowserProfileId;
   let state = run({ ...base, tabs: ['t1', 't2', 't3'].map(id => makeTab(id, '', `https://${id}.test/`, profile)), activeTabId: 't1' }, { type: 'ui.update', patch: {} });
-  state = run(state, { type: 'workspace.create', name: 'Work' }, { type: 'workspace.create', name: 'Play' });
+  state = run(state, { type: 'settings.update', patch: { verticalTabs: true, ...(mode === 'tile only' ? { favoriteTabsInList: false } : {}) } }, { type: 'workspace.create', name: 'Work' }, { type: 'workspace.create', name: 'Play' });
   return state;
 }
 
@@ -56,14 +60,31 @@ function violations(state: BrowserSnapshot): string[] {
     if (spaces.has(undefined)) out.push('a split names a tab that is gone'); else if (spaces.size > 1) out.push('a split spans two Spaces');
   }
   for (const [space, id] of Object.entries(state.windowUi.lastTabs ?? {})) if (spaceOf(id) !== space) out.push(`remembered tab ${id} of ${space} is elsewhere`);
+  // What "the favorite's tab lives only in its tile" means, however the window got here: the list, the keys, Close other tabs and the shown counts
+  // all leave it out, and the page still counts as open (Delete workspace asks by pages). In the list mode every tab is a tab of the list.
+  const tileOnly = state.settings.favoriteTabsInList === false && !!state.settings.verticalTabs, counts = workspaceCounts(state);
+  const listed = listedTabs(state);
+  if (tileOnly && listed.some(tab => !!tab.favoriteId)) out.push('the keys walk a tile-only favorite tab');
+  if (!tileOnly && scopeToWorkspace(state).tabs.some(tab => !listed.includes(tab))) out.push('a tab of the list is not walked by the keys');
+  for (const space of state.workspaces) {
+    const inSpace = state.tabs.filter(tab => tab.browserProfileId === space.browserProfileId && workspaceIdOf(state, tab) === space.id);
+    const shown = inSpace.filter(tab => !(tileOnly && tab.favoriteId)).length, pages = inSpace.filter(tab => tab.url !== 'acira://new').length;
+    if (counts[space.id]?.tabs !== shown) out.push(`${space.id.slice(-4)} shows ${counts[space.id]?.tabs} tabs, the list holds ${shown}`);
+    if (counts[space.id]?.pages !== pages) out.push(`${space.id.slice(-4)} has ${pages} open pages, counted ${counts[space.id]?.pages}`);
+  }
+  if (tileOnly) {
+    const targets = bulkCloseTargets(state, { type: 'tab.close.others', id: state.activeTabId });
+    for (const id of targets) if (state.tabs.find(tab => tab.id === id)?.favoriteId) out.push('Close other tabs would close a tile-only favorite tab');
+    for (const [id] of tabNumbers(state)) if (state.tabs.find(tab => tab.id === id)?.favoriteId) out.push('a tile-only favorite tab has a tab number');
+  }
   return out;
 }
 
 const shape = (state: BrowserSnapshot) => state.tabs.map(tab => `${tab.id}|${workspaceIdOf(state, tab)}|${tab.favoriteId ?? ''}|${tab.pinned ? 'p' : ''}`).sort().join(';') + '#' + state.activeTabId + '#' + state.activeWorkspaceId;
 
-function walk(seed: number, steps: number): { log: string[]; problem?: string } {
+function walk(seed: number, steps: number, mode: Mode): { log: string[]; problem?: string } {
   const random = rng(seed), pick = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
-  let state = start(), recent: BrowserSnapshot[] = [state];
+  let state = start(mode), recent: BrowserSnapshot[] = [state];
   const log: string[] = [];
   for (let step = 0; step < steps; step++) {
     const spaces = state.workspaces.filter(workspace => workspace.browserProfileId === state.activeBrowserProfileId);
@@ -82,6 +103,7 @@ function walk(seed: number, steps: number): { log: string[]; problem?: string } 
     else if (roll < 0.85) { const tab = pick(tabs), app = pick(apps); label = `tab.favorite ${tab.id} ${app.id}`; next = run(state, { type: 'tab.favorite', id: tab.id, favoriteId: random() < 0.8 ? app.id : null }); }
     else if (roll < 0.89) { label = 'tab.restore'; next = run(state, { type: 'tab.restore' }); }
     else if (roll < 0.93) { const tab = pick(tabs); label = `plain tab.select ${tab.id}`; next = run(state, { type: 'tab.select', id: tab.id }); }
+    else if (roll < 0.955) { const on = state.settings.favoriteTabsInList === false; label = `setting: favorites' tabs ${on ? 'in the list' : 'only in the tile'}`; next = run(state, { type: 'settings.update', patch: { favoriteTabsInList: on } }); }
     else if (roll < 0.97) { label = 'save and restore'; next = restoreSnapshot(JSON.parse(JSON.stringify(persistedSnapshot(state)))); if (shape(next) !== shape(state)) { log.push(label); return { log, problem: `a restart changed the window:\n  ${shape(state)}\n  ${shape(next)}` }; } }
     else { label = `close the active tab ${state.activeTabId}`; next = run(state, { type: 'tab.close', id: state.activeTabId }); }
     log.push(label);
@@ -92,17 +114,19 @@ function walk(seed: number, steps: number): { log: string[]; problem?: string } 
   return { log };
 }
 
-test('favorites across three Spaces: a seeded random walk keeps one tab per favorite, the Space on screen, and a faithful save', () => {
-  for (let seed = 1; seed <= 150; seed++) {
-    const { log, problem } = walk(seed, 70);
-    assert.equal(problem, undefined, `seed ${seed}, after step ${log.length}: ${problem}\n${log.slice(-12).join('\n')}`);
-  }
-});
+for (const mode of ['in the list', 'tile only'] as const) {
+  test(`favorites across three Spaces, tabs ${mode}: a seeded random walk keeps one tab per favorite, the Space on screen, honest lists and counts, and a faithful save`, () => {
+    for (let seed = 1; seed <= 150; seed++) {
+      const { log, problem } = walk(seed, 70, mode);
+      assert.equal(problem, undefined, `seed ${seed}, after step ${log.length}: ${problem}\n${log.slice(-12).join('\n')}`);
+    }
+  });
+}
 
 test('a tile click never changes the Space on screen, wherever the favorite\'s tab is: here, in another Space, or not open yet', () => {
   for (let seed = 1; seed <= 60; seed++) {
     const random = rng(seed * 7919), pick = <T,>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
-    let state = start();
+    let state = start(seed % 2 ? 'tile only' : 'in the list');
     for (let step = 0; step < 40; step++) {
       if (random() < 0.45) { state = run(state, { type: 'workspace.select', id: pick(state.workspaces).id }); continue; }
       const before = state.activeWorkspaceId, app = pick(apps), next = click(state, app);

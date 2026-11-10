@@ -19,6 +19,8 @@ const WORKER_BODY = `self.postMessage((${WORKER_REPORT})())`;
 // UA_FIXTURE_NATIVE=1 measures the engine without the language preference.
 const { scriptFor, addNativeHints } = require('../../../desktop/browser-services/chrome-identity.cjs');
 const wired = new WeakSet(), PAGE_LANGUAGES = ['en-US'];
+// 13.5: the page-start preloads ask main one question per frame (desktop/browser-services/frame-boot.cjs); a harness that loads them must answer it (an unanswered synchronous message fails the page load).
+require('../../../desktop/browser-services/frame-boot.cjs').install(require('electron').ipcMain);
 if (process.env.UA_FIXTURE_NATIVE !== '1') require('electron').ipcMain.on('acira:chrome-identity', event => { event.returnValue = /^https?:/.test(event.senderFrame?.url || '') ? scriptFor(PAGE_LANGUAGES, { topUrl: event.sender.getURL(), frameUrl: event.senderFrame.url }) : ''; });
 function wire(ses) {
   if (wired.has(ses) || process.env.UA_FIXTURE_NATIVE === '1') return; wired.add(ses);

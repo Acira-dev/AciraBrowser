@@ -4,7 +4,7 @@
 // away and not fetched for ever, a full disk or a portal page fails early with plain words, repeated trouble offers the download page, and installs that did
 // not take change what is tried next. One test per row of the map; every feed is local (127.0.0.1) and every clock is the test's own.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),http=require('node:http'),{createHash}=require('node:crypto'),{EventEmitter}=require('node:events');
-const {createAppUpdater,kindOf,friendly,PAUSE_LASTS,DAMAGED_HOLD,STUCK_AFTER,INSTALL_WITHIN,DOWNLOAD_PAGE}=require('../desktop/browser-services/app-updater.cjs');
+const {createAppUpdater,kindOf,friendly,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,STUCK_AFTER,INSTALL_WITHIN,DOWNLOAD_PAGE}=require('../desktop/browser-services/app-updater.cjs');
 
 const sha512=buf=>createHash('sha512').update(buf).digest('base64');
 const blob=(seed,length=400000)=>Buffer.from(Array.from({length},(_,i)=>(i*seed+(i>>8))&255));
@@ -290,4 +290,117 @@ test('main passes a person\'s check as a manual one, and the route\'s refusal ca
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8'),route=fs.readFileSync(path.join(__dirname,'../desktop/browser-services/update-route.cjs'),'utf8');
  assert.match(main,/request\.type==='update\.check'\?appUpdater\.check\(\{manual:true\}\)/);
  assert.equal((route.match(/code:'ERR_UPDATE_ROUTE'/g)||[]).length,2);
+});
+
+// 13.5, update bugs.
+/** electron-updater's BaseUpdater (Windows, Linux): a quitAndInstall made while its own flag is set is ignored, and resets the flag ("install call ignored"). */
+function realLikeInstall(lite){
+ lite.ignored=0;lite.quitAndInstallCalled=false;
+ lite.quitAndInstall=(...args)=>{if(lite.quitAndInstallCalled){lite.ignored++;lite.quitAndInstallCalled=false;return;}lite.quitAndInstallCalled=true;lite.installs.push(args);};
+ return lite;
+}
+
+test('13.5 Install now whose quit was called off (Cancel on the card, a page that stayed): pressed again at once, it reaches electron-updater again; nothing failed, nothing is counted',async t=>{
+ const feed=await feedServer(),root=tmp(),c=clock();t.after(feed.close);
+ const lite=realLikeInstall(liteUpdater(feed,{root})),updater=make(root,lite,{now:c.now,guardSchedule:c.schedule,guardCancel:c.cancel,beforeInstall:async()=>{}});
+ assert.equal(updater.installCancelled(),false,'nothing under way: nothing to release');
+ await updater.check();await until(()=>updater.status().status==='ready');
+ let changes=0;
+ await updater.install();assert.equal(lite.installs.length,1);assert.equal(json(root).attempt.n,1);
+ assert.equal((await updater.install()).installing,true,'while the quit may still happen, a second press waits');assert.equal(lite.installs.length,1);
+ assert.equal(updater.installCancelled(),true,'the quit was called off');
+ assert.equal(c.list.some(timer=>timer.delay===INSTALL_WITHIN),false,'the two-minute timer is gone with the latch');
+ assert.equal(updater.status().status,'ready');assert.equal(updater.status().error,null,'the person cancelled: that is not an error');assert.equal(updater.status().retry.failures,0,'and not trouble');
+ assert.equal(json(root).attempt??null,null,'and the press is not an install that did not take');
+ await updater.install();
+ assert.equal(lite.ignored,0,'electron-updater was not asked while its own flag said an install was under way');
+ assert.equal(lite.installs.length,2,'pressed again: it reaches electron-updater again, at once');assert.equal(json(root).attempt.n,1,'one try recorded for this version, not two');
+ assert.equal(updater.installCancelled(),true);assert.equal(updater.installCancelled(),false,'told once, released once');
+});
+
+test('13.5 the quit that Install now began is called off through restart.calledOff, which every refused close already runs',()=>{
+ const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/createRestart\(\{app,onCalledOff:\(\)=>\{.{0,300}appUpdater\?\.installCancelled\(\).{0,60}openWindows\.calledOff\(\)/s,'main tells the updater whenever a quit is called off');
+ assert.equal((main.match(/restart\.calledOff\(\)/g)||[]).length,3,'Cancel on the card, a page that stayed, a window that could not close');
+});
+
+test('13.5 a person\'s own Check for updates lifts the bad-file hold once in a while; the automatic rounds still wait, and a file that fails again is held again',async t=>{
+ const feed=await feedServer(),root=tmp(),c=clock();t.after(feed.close);feed.mode='corrupt';
+ const updater=make(root,liteUpdater(feed,{root}),{now:c.now,schedule:c.schedule,cancel:c.cancel,guardSchedule:c.schedule,guardCancel:c.cancel});
+ await updater.check();await until(()=>updater.status().status==='error');
+ assert.equal(feed.files().length,2,'two bad copies: held');
+ await updater.check();assert.equal(feed.files().length,2,'an automatic round fetches nothing');assert.match(updater.status().error,/downloaded twice/);
+ // the CDN is fine again; the person presses Check for updates
+ feed.mode='good';c.later(60000);
+ await updater.check({manual:true});await until(()=>updater.status().status==='ready');
+ assert.equal(feed.files().length,3,'the file was fetched again at once, not hours later');assert.equal(updater.status().lastResort,null);
+ // still bad: the person's press fetches it twice more and the hold is back, out of reach of another press for HOLD_BYPASS_EVERY
+ const other=tmp(),d=clock(),second=make(other,liteUpdater(feed,{root:other}),{now:d.now,schedule:d.schedule,cancel:d.cancel,guardSchedule:d.schedule,guardCancel:d.cancel});
+ feed.mode='corrupt';const before=feed.files().length;
+ await second.check();await until(()=>second.status().status==='error');assert.equal(feed.files().length,before+2);
+ d.later(60000);await second.check({manual:true});await until(()=>feed.files().length===before+4&&second.status().status==='error');
+ d.later(60000);await second.check({manual:true});assert.equal(feed.files().length,before+4,'a second press so soon leaves the hold alone (the loop guard)');assert.match(second.status().error,/downloaded twice/);
+ feed.mode='good';d.later(HOLD_BYPASS_EVERY);
+ await second.check({manual:true});await until(()=>second.status().status==='ready');
+ assert.equal(feed.files().length,before+5,'a quarter of an hour on, a press lifts it again');
+});
+
+test('13.5 Settings\' Download button (updates not downloaded automatically) also lifts the hold, once',async t=>{
+ const feed=await feedServer(),root=tmp(),c=clock();t.after(feed.close);feed.mode='corrupt';
+ const updater=make(root,liteUpdater(feed,{root}),{now:c.now,schedule:c.schedule,cancel:c.cancel,guardSchedule:c.schedule,guardCancel:c.cancel});
+ await updater.check();await until(()=>updater.status().status==='error');assert.equal(feed.files().length,2);
+ updater.setAutoDownload(false);feed.mode='good';
+ await updater.check({manual:true});assert.equal(updater.status().status,'available','off: the look finds it and waits for the person');
+ await updater.download();await until(()=>updater.status().status==='ready');
+ assert.equal(feed.files().length,3);
+});
+
+test('13.5 a press that lifted the hold but met a dead connection or a sign-in page spends nothing: the next press may lift it again', async t => {
+ const feed = await feedServer(), root = tmp(), c = clock(); t.after(feed.close); feed.mode = 'corrupt';
+ const updater = make(root, liteUpdater(feed, {root}), {now: c.now, schedule: c.schedule, cancel: c.cancel, guardSchedule: c.schedule, guardCancel: c.cancel});
+ await updater.check(); await until(() => updater.status().status === 'error');
+ assert.equal(feed.files().length, 2, 'two bad copies: held');
+ // the person presses Check while a network sign-in page answers in place of the file: the hold is lifted, the download fails for another reason
+ feed.mode = 'html'; c.later(60000);
+ await updater.check({manual: true}); await until(() => updater.status().status === 'error' && feed.files().length === 3);
+ assert.doesNotMatch(updater.status().error, /downloaded twice/, 'it failed for its own reason');
+ // later the feed serves a damaged copy again (an automatic round): twice, so it is held again
+ feed.mode = 'corrupt'; c.later(60000);
+ await updater.check(); await until(() => feed.files().length === 5 && updater.status().status === 'error');
+ await updater.check(); assert.match(updater.status().error, /downloaded twice/, 'held again');
+ // the feed is right now; the press two minutes after the first one still lifts it: the first press was not spent on a damaged copy
+ feed.mode = 'good'; c.later(60000);
+ await updater.check({manual: true}); await until(() => updater.status().status === 'ready');
+ assert.equal(feed.files().length, 6);
+});
+
+test('13.5 a quit called off for another reason while Install now is still saving the session does not drop the press: the install goes on and asks for the quit', async t => {
+ const feed = await feedServer(), root = tmp(), c = clock(); t.after(feed.close);
+ const lite = realLikeInstall(liteUpdater(feed, {root}));
+ let release; const saving = new Promise(resolve => { release = resolve; });
+ const updater = make(root, lite, {now: c.now, guardSchedule: c.schedule, guardCancel: c.cancel, beforeInstall: () => saving});
+ await updater.check(); await until(() => updater.status().status === 'ready');
+ const pressed = updater.install(); // saving the session...
+ await new Promise(resolve => setTimeout(resolve, 20));
+ assert.equal(updater.installCancelled(), false, 'no quit has been asked for yet: a cancel of some other close is not about this press');
+ release();
+ const result = await pressed;
+ assert.equal(result.installing, true); assert.equal(lite.installs.length, 1, 'the press went on to the updater');
+ assert.equal(json(root).attempt.n, 1);
+ assert.equal(updater.installCancelled(), true, 'now it is');
+ assert.equal(json(root).attempt ?? null, null);
+});
+
+test('13.5 a cancelled quit puts back the install record exactly as it was (an earlier real miss is kept)', async t => {
+ const feed = await feedServer(), root = tmp(), c = clock(); t.after(feed.close);
+ const lite = realLikeInstall(liteUpdater(feed, {root})), updater = make(root, lite, {now: c.now, guardSchedule: c.schedule, guardCancel: c.cancel, beforeInstall: async () => {}});
+ await updater.check(); await until(() => updater.status().status === 'ready');
+ await updater.install(); assert.equal(json(root).attempt.n, 1);
+ // that install did not take (the timer ran out): one miss is on record; the person presses again and then calls the quit off
+ c.fire(timer => timer.delay === INSTALL_WITHIN);
+ await updater.install(); assert.equal(json(root).attempt.n, 2);
+ assert.equal(updater.installCancelled(), true);
+ assert.equal(json(root).attempt.n, 1, 'the earlier miss stays, the cancelled press is not counted');
+ for (let i = 0; i < 3; i++) { await updater.install(); assert.equal(updater.installCancelled(), true); }
+ assert.equal(json(root).attempt.n, 1, 'cancelling again and again never builds up misses');
 });

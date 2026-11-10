@@ -294,7 +294,7 @@ function createBindings(getNamespace, options = {}) {
    * An event object with Chromium's rules (event_emitter.cc): addListener without a function does nothing, filters only where the schema
    * allows them, a listener is added once. `add` / `remove` connect it to whatever delivers the event; `dispatch(...args)` (not
    * enumerable) calls every listener, each in its own try so one failing listener does not stop the others; a listener's exception is
-   * reported as "Error in event handler: …" on the console, as Chromium's exception handler does.
+   * reported as "Error in event handler: ..." on the console, as Chromium's exception handler does.
    */
   function createEvent(label = '', {supportsFilters = false, supportsOptions = false, add, remove, matches} = {}) {
     const listeners = [];

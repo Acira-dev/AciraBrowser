@@ -72,9 +72,15 @@ function createWebApps({dataDir=app.getPath('userData'),testMode=!!process.env.A
    backgroundColor:color(manifest&&manifest.background_color),manifestUrl,iconUrls:candidates.slice(0,6).map(icon=>icon.href),installed:read().some(item=>item.id===appId)};
  }
 
+ /** The app's icon: the first site icon that loads, else Acira's own. Never throws: with no icon at all the app is installed without one.
+  * 13.5: the fallback asked Electron for size 'large', which macOS does not support: the request aborted the whole browser (SIGTRAP) when a site had
+  * no usable icon (none, SVG only, or a fetch past the time limit). The Mac asks for 'normal', as browser-icons.cjs does; 'large' stays where it is
+  * supported (32 px on Windows, 48 px on Linux). */
+ const fallbackIconSize=()=>process.platform==='darwin'?'normal':'large';
  async function pickIcon(session,urls){
-  for(const url of urls){const bytes=await fetchWithin(session,url,{credentials:'omit',redirect:'follow'},MAX_ICON);if(!bytes)continue;const image=nativeImage.createFromBuffer(bytes);if(!image.isEmpty())return image;}
-  const fallback=await app.getFileIcon(process.execPath,{size:'large'}).catch(()=>null);return fallback&&!fallback.isEmpty()?fallback:null;
+  for(const url of urls){try{const bytes=await fetchWithin(session,url,{credentials:'omit',redirect:'follow'},MAX_ICON);if(!bytes)continue;const image=nativeImage.createFromBuffer(bytes);if(!image.isEmpty())return image;}catch{/* an unreadable icon is a miss */}}
+  const fallback=await Promise.resolve().then(()=>app.getFileIcon(process.execPath,{size:fallbackIconSize()})).catch(()=>null);
+  try{return fallback&&!fallback.isEmpty()?fallback:null;}catch{return null;}
  }
  const pngToIco=png=>{const header=Buffer.alloc(6),entry=Buffer.alloc(16);header.writeUInt16LE(0,0);header.writeUInt16LE(1,2);header.writeUInt16LE(1,4);entry.writeUInt8(0,0);entry.writeUInt8(0,1);entry.writeUInt16LE(1,4);entry.writeUInt16LE(32,6);entry.writeUInt32LE(png.length,8);entry.writeUInt32LE(22,12);return Buffer.concat([header,entry,png]);};
  const fileName=name=>(name.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'').replace(/[. ]+$/,'').trim()||'Acira app').slice(0,60);

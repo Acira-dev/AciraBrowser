@@ -13,6 +13,8 @@ app.on('window-all-closed', () => { });
 const preload = path.join(__dirname, '..', '..', '..', 'desktop', 'browser-services', 'scriptlet-preload.cjs');
 ipcMain.on('acira:scriptlets', event => { event.returnValue = []; });
 ipcMain.on('acira:ad-slot-styles', event => { event.returnValue = event.sender.__withRule ? css : ''; });
+// 13.5: the page-start preloads ask main one question per frame (desktop/browser-services/frame-boot.cjs); a harness that loads them must answer it (an unanswered synchronous message fails the page load).
+require('../../../desktop/browser-services/frame-boot.cjs').install(ipcMain);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const page = fs.readFileSync(path.join(__dirname, 'weather.html'));
 const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(page); });

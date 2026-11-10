@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "이 탭들은 지금은 그대로 유지되어야 합니다",
   "tabsleep.privateStaysAwake": "비공개 창에서는 모든 탭이 그대로 유지됩니다",
   "tabsleep.couldNot": "탭을 절전 상태로 전환하지 못했습니다",
+  "tabsleep.tipSleeping": "절전 상태",
   "peek.frameLabel": "링크 미리보기",
   "peek.openAsTab": "탭으로 열기",
   "peek.openInSplit": "화면 분할로 열기",

@@ -50,7 +50,7 @@ const popupRules=texts=>{const rules=[];for(const text of texts)if(typeof text==
 
 /**
  * @param getEngine       the normal ad and tracker engine (Ghostery), or null
- * @param getTexts        the filter list texts the engine was built from
+ * @param getTexts        the filter list texts the engine was built from (or just their lines that contain "popu": no other line is read)
  * @param getTextsKey     changes whenever those lists change, so the pop-up rules are rebuilt
  * @param extraRules      bundled pop-up ad network rules, one per line
  */

@@ -90,26 +90,30 @@ function createExitCleanup({database,getProfiles,getSession,getPipeline,hasLiveP
   held.job=job;held.completed=false;await session.closeAllConnections();if(held.journalError)throw new Error('Cleanup journal could not record new background activity: '+held.journalError);return held;
  }
  function assertQuiescent(owner,session){if(profile(owner.id).partition!==owner.partition||hasLivePages(owner.id)!==false)throw new Error('The profile or its live pages changed while cleanup was running.');if(Object.keys(session.serviceWorkers.getAllRunning()).length)throw new Error('Native service workers are still active. Cleanup remains pending until every worker has stopped; registrations and unselected storage are preserved.');if(barriers.get(owner.id)?.pipeline.hasActiveRequests()!==false)throw new Error('Native network requests are still active or their lifetime is unknown. Cleanup remains pending until the shared pipeline is idle.');}
+ // Native cancellation can settle after a deletion call returns. The barrier
+ // stays in place, and an unknown lifetime still fails the quiescence check.
+ async function waitForQuiescence(owner,session){
+  const pipeline=barriers.get(owner.id)?.pipeline,deadline=Date.now()+1000;
+  while(pipeline?.hasActiveRequests()===true&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+  assertQuiescent(owner,session);
+ }
  async function runJob(job){
   const owner=profile(job.profileId);if(owner.partition!==job.partition)throw new Error('Pending cleanup does not match the actual profile partition.');if(running.has(owner.id)||reviewing.has(owner.id)||hasLivePages(owner.id)!==false)throw new Error('Close every website page for this profile before cleanup.');running.add(owner.id);
   try{
-   const session=await getSession(owner),barrier=await holdBarrier(owner,session,job);assertQuiescent(owner,session);const activityEpoch=barrier.epoch,internal=await protectedOrigins(session,owner),excludeOrigins=[...job.choice.keepOrigins,...internal],results=[],keep=new Set(job.choice.keepOrigins),keptCookieDomains=new Set(job.choice.keepOrigins.map(value=>site(value).cookieDomain));assertQuiescent(owner,session);
+   const session=await getSession(owner),barrier=await holdBarrier(owner,session,job);await waitForQuiescence(owner,session);const activityEpoch=barrier.epoch,internal=await protectedOrigins(session,owner),excludeOrigins=[...job.choice.keepOrigins,...internal],results=[],keep=new Set(job.choice.keepOrigins),keptCookieDomains=new Set(job.choice.keepOrigins.map(value=>site(value).cookieDomain));await waitForQuiescence(owner,session);
    if(job.choice.categories.includes('cookies')){
     let revoked=false,deleted=false,recoveryCompleted=false;
     try{
-     if(!cookieRestore?.flush||!cookieRestore.clear||!cookieRestore.completeClear)throw new Error('Qualified session-cookie recovery is required before exit cookie deletion.');await cookieRestore.flush();assertQuiescent(owner,session);
+     if(!cookieRestore?.flush||!cookieRestore.clear||!cookieRestore.completeClear)throw new Error('Qualified session-cookie recovery is required before exit cookie deletion.');await cookieRestore.flush();await waitForQuiescence(owner,session);
      if(!job.choice.keepOrigins.length){revoked=true;cookieRestore.clear(session);}
      else{const cookies=await session.cookies.get({}),domains=new Map();for(const cookie of cookies){const host=cookie.domain.replace(/^\./,'').replace(/^\[|\]$/g,'');const url=(cookie.secure?'https://':'http://')+(host.includes(':')?'['+host+']':host),domain=site(url).cookieDomain;if(!keptCookieDomains.has(domain))domains.set(domain,url);}for(const [registrableDomain,url]of domains){revoked=true;cookieRestore.clear(session,{origin:url,registrableDomain});}}
-     await session.clearData({dataTypes:['cookies'],excludeOrigins,originMatchingMode:'origin-in-all-contexts'});deleted=true;assertQuiescent(owner,session);if(revoked)await cookieRestore.completeClear(session);recoveryCompleted=true;results.push({category:'cookies',status:'cleared',keepCookieDomains:[...keptCookieDomains]});
+     await session.clearData({dataTypes:['cookies'],excludeOrigins,originMatchingMode:'origin-in-all-contexts'});deleted=true;await waitForQuiescence(owner,session);if(revoked)await cookieRestore.completeClear(session);recoveryCompleted=true;results.push({category:'cookies',status:'cleared',keepCookieDomains:[...keptCookieDomains]});
     }catch(error){results.push({category:'cookies',status:'failed',error:String(error.message||error),nativeDeletionCompleted:deleted,recoveryPaused:revoked?!recoveryCompleted:null});}
    }
-   if(job.choice.categories.includes('storage'))try{assertQuiescent(owner,session);await session.clearData({dataTypes:['fileSystems','indexedDB','localStorage','serviceWorkers','backgroundFetch','cache'],excludeOrigins,originMatchingMode:'origin-in-all-contexts'});results.push({category:'storage',status:'cleared',includesCachedFiles:true});}catch(error){results.push({category:'storage',status:'failed',error:String(error.message||error)});}
+   if(job.choice.categories.includes('storage'))try{await waitForQuiescence(owner,session);await session.clearData({dataTypes:['fileSystems','indexedDB','localStorage','serviceWorkers','backgroundFetch','cache'],excludeOrigins,originMatchingMode:'origin-in-all-contexts'});results.push({category:'storage',status:'cleared',includesCachedFiles:true});}catch(error){results.push({category:'storage',status:'failed',error:String(error.message||error)});}
    if(job.choice.categories.includes('permissions'))try{let count=0;for(const row of permissions.list(owner.id))if(!keep.has(row.requester)||!keep.has(row.embedder)){permissions.reset(owner.id,row.requester,row.embedder,row.permission);count++;}results.push({category:'permissions',status:'cleared',count});}catch(error){results.push({category:'permissions',status:'failed',error:String(error.message||error)});}
    if(job.choice.categories.includes('history'))try{const changed=await commitRecords({profileId:owner.id,keepOrigins:job.choice.keepOrigins});results.push({category:'history',status:'cleared',counts:changed.counts,filesDeleted:false});}catch(error){results.push({category:'history',status:'failed',error:String(error.message||error)});}
-   // Native clearData / record updates can finish before canceled requests emit
-   // their terminal events. Keep the barrier and journal until actual idle.
-   const deadline=Date.now()+1000;while(barrier.pipeline.hasActiveRequests()===true&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
-   assertQuiescent(owner,session);if(barrier.journalError)throw new Error('Cleanup journal could not record new background activity: '+barrier.journalError);if(activityEpoch!==barrier.epoch)throw new Error('Background activity changed during deletion; cleanup remains pending.');
+   await waitForQuiescence(owner,session);if(barrier.journalError)throw new Error('Cleanup journal could not record new background activity: '+barrier.journalError);if(activityEpoch!==barrier.epoch)throw new Error('Background activity changed during deletion; cleanup remains pending.');
    const completed=results.every(result=>result.status==='cleared');if(completed){database.transaction(()=>writeJobs(readJobs().filter(current=>current.profileId!==job.profileId||current.armedAt!==job.armedAt)));barrier.completed=true;}
    return {profileId:owner.id,completed,pending:!completed,networkBlocked:true,results,filesDeleted:false};
   }finally{running.delete(owner.id);}

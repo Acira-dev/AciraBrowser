@@ -313,7 +313,7 @@ function rendererRuntime(ctx){
  // when it was written, then kept current by 'acira.permissions.changed' from the main process).
  const optional=strings(manifest.optional_permissions),optionalOrigins=[...strings(manifest.optional_host_permissions),...optional.filter(isPattern)];
  const baked=ctx.grants&&typeof ctx.grants==='object'&&ctx.grants[extensionId]||{};
- // _permission_features: some permissions exist only from a manifest version on (tabGroups, sidePanel, offscreen … need MV3).
+ // _permission_features: some permissions exist only from a manifest version on (tabGroups, sidePanel, offscreen ... need MV3).
  const allowed=name=>!isPattern(name)&&!(minVersion[name]>manifest.manifest_version);
  let permissions=new Set([...strings(manifest.permissions).filter(allowed),...strings(baked.permissions).filter(name=>optional.includes(name)&&allowed(name))]);
  let origins=[...strings(manifest.host_permissions),...strings(manifest.permissions).filter(isPattern),...strings(baked.origins)];
@@ -369,7 +369,7 @@ function rendererRuntime(ctx){
  /**
   * Chromium rebuilds an extension context's bindings whenever the renderer hears of an extension load or a permission change
   * (NativeExtensionBindingsSystem::UpdateBindingsForContext): every namespace Electron knows is put back as its native lazy property and
-  * every namespace Electron does not know (contextMenus, notifications, downloads, … the 39 "unknown" permissions) is deleted. At app start,
+  * every namespace Electron does not know (contextMenus, notifications, downloads, ... the 39 "unknown" permissions) is deleted. At app start,
   * when profiles' extensions load one after another, that wiped the engine's and Acira's namespaces from workers already running
   * (chrome.tabs.create undefined in uBO Lite and Privacy Badger until their worker restarted). The library froze `chrome` against it,
   * which broke extensions that proxy `chrome` (Proton Pass). Instead each namespace Acira manages is pinned: non-configurable (Chromium's

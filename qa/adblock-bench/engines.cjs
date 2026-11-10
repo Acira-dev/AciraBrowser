@@ -41,6 +41,8 @@ function buildBrave(text, resourcesPath) {
 }
 async function createEngines({ mode, listSet = 'ours' }) {
   const { app, ipcMain } = require('electron');
+    // 13.5: the page-start preloads ask main one question per frame (frame-boot.cjs); a harness that loads them must answer it.
+    require('../../desktop/browser-services/frame-boot.cjs').install(ipcMain);
   const { parse } = require('tldts');
   const text = listText(listSet), stats = () => ({ cssSelectors: 0, styleBytes: 0, scripts: 0, scriptBytes: 0, genericCalls: 0, genericSelectors: 0 });
   let current = stats();

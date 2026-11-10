@@ -9,8 +9,8 @@ const layoutOf = extra => ({ appearance: 'light', captionHeight: 40, captionColo
 
 test('c7 judge: every layout of the matrix, at rest and in every window state, ends with the buttons where the layout wants them', only, async () => {
   const { CONFIGS, judgeCaption } = await load();
-  assert.deepEqual(CONFIGS.map(c => c.name), ['full', 'compact', 'focus', 'seamless', 'sidebar-mode', 'hide-the-toolbar']);
-  const published = { full: layoutOf({}), compact: layoutOf({}), focus: layoutOf({}), seamless: layoutOf({ captionFloat: true, captionHidden: true }), 'sidebar-mode': layoutOf({ captionNotch: true, captionHeight: 34 }), 'hide-the-toolbar': layoutOf({ captionFloat: true, captionHidden: true }) };
+  assert.deepEqual(CONFIGS.map(c => c.name), ['full', 'compact', 'focus', 'seamless', 'sidebar-mode', 'seamless-sidebar-mode', 'hide-the-toolbar']);
+  const published = { full: layoutOf({}), compact: layoutOf({}), focus: layoutOf({}), seamless: layoutOf({ captionFloat: true, captionHidden: true }), 'sidebar-mode': layoutOf({ captionNotch: true, captionHeight: 34 }), 'seamless-sidebar-mode': layoutOf({ captionNotch: true, captionHeight: 34 }), 'hide-the-toolbar': layoutOf({ captionFloat: true, captionHidden: true }) };
   const states = [{}, { maximized: true }, { fullscreen: true }, { minimized: true }, { maximized: true, minimized: true }];
   for (const cfg of CONFIGS) for (const win of states) assert.deepEqual(judgeCaption({ layout: published[cfg.name], win, expect: cfg.expect }), [], `${cfg.name} ${JSON.stringify(win)}`);
 });

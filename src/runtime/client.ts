@@ -1,6 +1,7 @@
 import { useEffect,useRef,useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createInitialState,effectiveView,hideToolbarOn,persistedSnapshot,reduceBrowser,restoreSnapshot,viewForFocus } from './core';
+import { patchKeepingSidebarOpen } from './windowView';
 import { scopeToWorkspace,workspaceHasTabs } from './workspaces';
 import { isGroupFold } from './tabGroups';
 import { startWorkspaceTransition,workspaceSwitched } from '../ui/workspaceMotion';
@@ -95,7 +96,7 @@ export function useBrowser(){
    }
    if(!pending||next.revision>=pending.revision)pending=next;if(!frame){frame=requestAnimationFrame(flush);timer=setTimeout(flush,100);}};
   const unsubscribe=runtime.subscribe(receive);void runtime.getSnapshot().then(full=>apply(complete(full)));return()=>{unsubscribe();cancelAnimationFrame(frame);clearTimeout(timer);};},[]);
- const dispatch=(action:BrowserAction)=>{/* A toast written in the language on screen goes with its message id, so a language change shows it in the new one. */if(action.type==='toast')action=withMessageIds(action,saidAs);if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
+ const dispatch=(action:BrowserAction)=>{/* A toast written in the language on screen goes with its message id, so a language change shows it in the new one. */if(action.type==='toast')action=withMessageIds(action,saidAs);/* 13.5: Sidebar + address in Full holds its sidebar open: whatever would close it is taken out of the patch before anything is drawn or sent (an optimistic close would flash the sidebar shut), and a patch left with nothing is not an action at all. */if(action.type==='ui.update'){const patch=patchKeepingSidebarOpen(latest.current.settings,latest.current.windowUi,action.patch);if(patch!==action.patch){if(!Object.keys(patch).length)return;action={...action,patch};}}if(action.type==='import.undo'){void undoImportBatches(action.batchIds,batchId=>runtime.service({type:'imports.undo',batchId})).then(()=>runtime.dispatch(action.profileIds?.length?action:{type:'toast',text:'Import undone'})).catch(error=>runtime.dispatch({type:'toast',text:String(error?.message||error).slice(0,200),tone:'error'}));return;}
   // Undo of a removed favorite: it comes back with the live tab it had handed to the tab list, if that tab is still open and unclaimed.
   // Undo of Hide this section (ui/sidebarSections.ts): the section is shown again, from whichever view shows the toast.
   if(action.type==='sidebar.section.restore'){restoreHiddenSection(action.token);return;}

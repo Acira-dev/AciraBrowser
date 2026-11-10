@@ -223,6 +223,18 @@ FunctionEnd
     Call AcDropBadUninstaller
   !endif
   !insertmacro IS_POWERSHELL_AVAILABLE
+  !ifndef BUILD_UNINSTALLER
+    ; electron-builder's stock check puts the install folder inside a PowerShell single-quoted string (StartsWith('$INSTDIR', ...)). A single or typographic
+    ; quote in it (a Windows user named O'Brien, Ma'ruf, Ra’ed) ends that string early, PowerShell cannot parse the line and exits 1, which the check reads
+    ; as "Acira is not running": the old Acira is neither waited for nor closed, the old files are in use and the update does not take. With such a folder
+    ; the PowerShell way is off ($IsPowerShellAvailable: 0 = available) and the stock macros take their tasklist / taskkill branch, which names the program
+    ; (AciraBrowser.exe, this user's) and never puts the folder in a command.
+    Call AcQuoteInInstdir
+    Pop $0
+    ${If} $0 = 1
+      StrCpy $IsPowerShellAvailable 1
+    ${EndIf}
+  !endif
   !insertmacro _CHECK_APP_RUNNING
 !macroend
 
@@ -348,6 +360,37 @@ Function AcUpdaterRun
   ${GetOptions} $R0 "--updated" $R1
   Pop $R1
   Pop $R0
+FunctionEnd
+
+; 1 on the stack when $INSTDIR holds a character that ends a PowerShell single-quoted string (' and the typographic single quotes U+2018 to U+201B),
+; else 0. Registers and the rest of the stack are left as they were. Built from what electron-builder's own multiUser.nsh already compiles
+; (${Do}/${LoopUntil}, StrLen, StrCpy with a length and an offset, ${OrIf}).
+Function AcQuoteInInstdir
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  StrCpy $3 0
+  StrLen $1 "$INSTDIR"
+  StrCpy $0 0
+  ${If} $1 > 0
+    ${Do}
+      StrCpy $2 "$INSTDIR" 1 $0
+      ${If} $2 == "'"
+      ${OrIf} $2 == "‘"
+      ${OrIf} $2 == "’"
+      ${OrIf} $2 == "‚"
+      ${OrIf} $2 == "‛"
+        StrCpy $3 1
+      ${EndIf}
+      IntOp $0 $0 + 1
+    ${LoopUntil} $0 >= $1
+  ${EndIf}
+  StrCpy $0 $3
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
 FunctionEnd
 
 ; 1 on the stack when the file is a Windows program (at least 64 KB, an MZ header, a PE header where it points) or cannot be read (nothing is

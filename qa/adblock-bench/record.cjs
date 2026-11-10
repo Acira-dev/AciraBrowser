@@ -6,6 +6,8 @@
 // mode=brave : Brave adblock-rust through the adblock-rs binding (ADBLOCK_RS_PATH), same lists, equivalent cosmetic + scriptlet delivery.
 const fs = require('node:fs'), path = require('node:path');
 const { app, BrowserWindow, session, ipcMain } = require('electron');
+// 13.5: the page-start preloads ask main one question per frame (frame-boot.cjs); a harness that loads them must answer it.
+require('../../desktop/browser-services/frame-boot.cjs').install(ipcMain);
 const { createEngines } = require('./engines.cjs');
 const { createFarbling } = require('../../desktop/browser-services/fingerprint-farbling.cjs');
 const arg = (name, fallback) => { const hit = process.argv.find(a => a.startsWith('--' + name + '=')); return hit ? hit.slice(name.length + 3) : fallback; };

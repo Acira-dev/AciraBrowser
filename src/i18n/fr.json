@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Ces onglets doivent rester actifs pour le moment",
   "tabsleep.privateStaysAwake": "Les fenêtres privées gardent tous les onglets actifs",
   "tabsleep.couldNot": "Impossible de mettre les onglets en veille",
+  "tabsleep.tipSleeping": "en veille",
   "peek.frameLabel": "Aperçu du lien",
   "peek.openAsTab": "Ouvrir dans un onglet",
   "peek.openInSplit": "Ouvrir en vue scindée",

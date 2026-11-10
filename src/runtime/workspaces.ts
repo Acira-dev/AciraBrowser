@@ -98,11 +98,13 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
   const counts: Record<string, { tabs: number; pages: number }> = {};
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
-    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any, unless Settings keep it
-    // only in its tile and the list does not show it (favoriteTabs.ts tabListed).
-    if (state.settings && !tabListed(tab, state.settings)) continue;
+    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any. `tabs` is what the list shows, so a
+    // favorite's tab that Settings keep only in its tile (favoriteTabs.ts tabListed) is left out of it; `pages` is every open page of the Space, because
+    // Delete workspace asks by it and the tile-only page closes with the Space all the same.
     const entry = counts[workspaceIdOf(state, tab)];
-    if (entry) { entry.tabs++; if (tab.url !== 'acira://new') entry.pages++; }
+    if (!entry) continue;
+    if (tab.url !== 'acira://new') entry.pages++;
+    if (!state.settings || tabListed(tab, state.settings)) entry.tabs++;
   }
   return counts;
 }

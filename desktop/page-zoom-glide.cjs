@@ -15,6 +15,11 @@
 // The zoom LEVEL is never touched by the glide: the saved level, the chip and the bubble change on the press (main.cjs browserCommand);
 // only the picture catches up. Anything the glide cannot do (no motion, a hidden page, a debugger already attached by DevTools or an
 // extension, a command that fails, a jump of more than 1.6x) lands at once, which is exactly the old cut.
+//
+// 13.5: no glide while the page's main frame is navigating, from the start of the navigation until it commits (watch()). A renderer crashed once (exit 11) 80 ms into a zoom out glide, with a
+// dozen page scale commands in flight, while the page's second navigation (a JS challenge redirect) was committing; no dump was kept. Page scale commands racing a document swap are the only
+// thing the glide does that a plain zoom step does not, so a step asked for during a navigation is applied at once (the caller's cut), and a navigation that starts under a running glide
+// lands it at once (the final zoom now, the scale back to 1, the session let go). Glides outside navigations are untouched.
 const pageDebugger = require('./page-debugger.cjs');
 const MAX_RATIO = 1.6, TICK_MS = 5, SETTLE_SCALE = .001, SETTLE_SPEED = .06, DEADLINE_FACTOR = 3, DEADLINE_MIN_MS = 700;
 const EPS = 1e-6;
@@ -61,9 +66,12 @@ const kickFor = speed => speed === 'fast' ? .15 : speed === 'premium' ? .4 : 0;
 
 function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => setTimeout(fn, ms), cancelLater = timer => clearTimeout(timer), cap = MAX_RATIO } = {}) {
   const active = new Map();
+  const moving = new WeakSet(), watched = new WeakSet();
 
   const targetOf = wc => active.get(wc)?.target ?? null;
   const isGliding = wc => active.has(wc);
+  /** The page's main frame is between the start of a navigation to another document and its commit (or its end without one). */
+  const isNavigating = wc => Boolean(wc) && moving.has(wc);
 
   function detach(g) {
     const done = () => { try { g.lease.release(); } catch { /* already gone */ } };
@@ -118,6 +126,8 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
   function request({ wc, target, seconds, speed, visible = () => true }) {
     if (!wc || wc.isDestroyed()) return false;
     let g = active.get(wc);
+    // The main frame is navigating: no glide (the caller applies the zoom itself). A glide cannot be running here, a navigation lands it as it starts; if one is, it is over.
+    if (isNavigating(wc)) { if (g) land(g, false); return false; }
     const usable = seconds > 0 && visible();
     if (g) {
       g.target = target; g.seconds = usable ? seconds : g.seconds;
@@ -141,8 +151,10 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
     // The instant path first clears any pinch magnification the person left (visual zoom limits 1..1, then 1..5 again). The glide does too, but
     // only when the page is magnified: the toggle costs a page-wide layout (45 ms on a heavy page) and the glide must not wait for it when there
     // is nothing to clear. It starts once that is answered, so the first scale is not clamped away.
+    // The magnification is cleared with the page scale command through this lease, never by toggling the visual zoom limits: that pushes the page's web preferences again, which drops the
+    // Always dark override (page-debugger.cjs / site-appearance.cjs) and the page turned light for good.
     const magnified = () => { try { return Promise.resolve(g.lease.sendCommand('Page.getLayoutMetrics')).then(m => { const scale = m?.cssVisualViewport?.scale ?? m?.visualViewport?.scale; return !(Number.isFinite(scale) && scale < 1 + 1e-3); }, () => true); } catch { return Promise.resolve(true); } };
-    magnified().then(pinched => pinched ? Promise.resolve(wc.setVisualZoomLevelLimits(1, 1)).then(() => wc.setVisualZoomLevelLimits(1, 5)) : null).catch(() => {}).then(() => {
+    magnified().then(pinched => pinched ? Promise.resolve(g.lease.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: 1 })) : null).catch(() => {}).then(() => {
       if (g.over) return;
       const plan = planGlide({ layout: g.layout, scale: 1 }, g.target, cap);
       if (plan.kind !== 'glide') return land(g);
@@ -155,7 +167,52 @@ function createZoomGlide({ now = () => performance.now(), later = (fn, ms) => se
     const g = active.get(wc); if (!g) return false;
     g.over = true; cancelLater(g.timer); active.delete(wc); detach(g); return true;
   }
-  return { request, abort, targetOf, isGliding };
+  /** Follow the page's main-frame navigations (once per page; call it when the page is made, before it can navigate). */
+  function watch(wc) {
+    if (!wc || watched.has(wc) || typeof wc.on !== 'function') return false;
+    watched.add(wc);
+    const over = () => { moving.delete(wc); };
+    // Electron hands the details as the event's own fields; the old positional form (url, isInPlace, isMainFrame) is still passed alongside.
+    wc.on('did-start-navigation', (event, _url, inPlace, mainFrame) => {
+      if (!(event?.isMainFrame ?? mainFrame) || (event?.isSameDocument ?? inPlace)) return;
+      moving.add(wc);
+      const g = active.get(wc);
+      if (g) land(g);
+    });
+    wc.on('did-navigate', over); // the main frame committed
+    wc.on('did-stop-loading', over); // it ended without one: Stop, a download, a 204, a cancelled load
+    // An aborted main-frame load (-3) is usually the predecessor that a newer navigation cancelled, so it must not end the newer one; that one ends by its own commit, failure or stop.
+    wc.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => { if (isMainFrame && code !== -3) over(); });
+    wc.on('render-process-gone', over);
+    wc.once?.('destroyed', over);
+    return true;
+  }
+  return { request, abort, targetOf, isGliding, isNavigating, watch };
 }
 
-module.exports = { MAX_RATIO, planGlide, springStep, glideSeconds, kickFor, createZoomGlide, BASE_SECONDS };
+/** The visual zoom limits (1..5) that let a trackpad pinch magnify a website, applied once per page, when it is made. Applying them again later pushes the page's web preferences
+ * to its renderer, and that drops the Always dark override of a page that holds a debugger session (a link preview that becomes a tab already holds one): so a page made by anything
+ * other than the tab path (the link preview) gets them at creation, and the tab path finds them there. */
+const limited = new WeakSet();
+function ensureLimits(wc) {
+  if (!wc || limited.has(wc)) return false;
+  limited.add(wc);
+  try { Promise.resolve(wc.setVisualZoomLevelLimits(1, 5)).catch(() => {}); } catch { /* the page is gone */ }
+  return true;
+}
+
+/** Clears a pinch magnification the person left on a website before its zoom is set the instant way. A page that holds a debugger session (Always dark; Light / Dark that differ from
+ * Acira's appearance; the glide) is cleared with the page scale command through that session: the old way, toggling the visual zoom limits, pushes the web preferences again and drops its
+ * Auto Dark Mode override (the page turned light until it was reloaded). A page without a session keeps the old way (nothing to lose). `afterToggle` runs once the old way has been used
+ * on a page that holds a session by then (the command failed, or the session came up while the toggle ran), so the caller can tell the appearance again. Resolves when done, never rejects. */
+function clearMagnification(wc, { afterToggle = null } = {}) {
+  // The old way. A session may have come up while it ran (the page's appearance attaches at dom-ready): then its override is told again once the toggle is over.
+  const told = () => { try { if (pageDebugger.held(wc) > 0) afterToggle?.(); } catch { /* the caller's */ } };
+  const toggle = () => Promise.resolve().then(() => wc.setVisualZoomLevelLimits(1, 1)).then(() => { if (!wc.isDestroyed()) return wc.setVisualZoomLevelLimits(1, 5); }).then(told, error => { told(); throw error; });
+  if (!wc || wc.isDestroyed()) return Promise.resolve(false);
+  const lease = pageDebugger.held(wc) > 0 ? pageDebugger.acquire(wc, 'zoom-clear') : null;
+  if (!lease) return toggle().then(() => true, () => false);
+  return Promise.resolve().then(() => lease.sendCommand('Emulation.setPageScaleFactor', { pageScaleFactor: 1 })).then(() => true, () => toggle().then(() => true, () => false)).finally(() => { try { lease.release(); } catch { /* gone */ } });
+}
+
+module.exports = { MAX_RATIO, planGlide, springStep, glideSeconds, kickFor, createZoomGlide, BASE_SECONDS, ensureLimits, clearMagnification };

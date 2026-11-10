@@ -1,4 +1,43 @@
 const {ipcRenderer}=require('electron');
+// Tab sleep (13.5): did the PERSON touch a drop-down (<select>) on this page? A page's own script that sets a select's value (docs.python.org's version and language
+// pickers) looks like a typed-in edit to the sleep check (desktop/tab-sleep.cjs inspectPage), so the tab never slept. This remembers, from the start of the document, what the
+// person did, in this isolated world where the page's scripts can neither read nor forge it (event.isTrusted is true only for the browser's own events: a page's dispatchEvent and
+// element.click() are never trusted). The main process reads it back with webContents.executeJavaScriptInIsolatedWorld(999, ...) (tab-sleep.cjs inspectLive); a missing or
+// unreadable record means "unknown" and the tab is kept awake as before. "Touched" is any of:
+//  - a trusted change / input / key / pointer / click on a select or inside one;
+//  - a select whose chosen option is not what it was when the person first pressed a key or a pointer anywhere in the page (the state is read in the capture phase of that first press,
+//    before any page handler runs): a custom drop-down (select2, Chosen, Radix, bootstrap-select...) keeps a hidden native select that its script sets after the person clicked its
+//    widget, and so may an extension that fills a form after the person pressed something in the page; no trusted event ever reaches that select. A select the page creates after
+//    that first press counts as changed. One that only the page's own script moved before the first press, or never, does not: that is the docs.python.org case.
+//    (The window's own blur is NOT such a moment: in the real app it fires while a page is still loading, before its script has set its drop-downs, and the tab then never slept.)
+// Registered first on purpose: no other listener of this file may stop an event before it is seen. One answer for the whole document (not per element): a page that rebuilds its select
+// after the person chose still counts as touched. A full navigation is a new document and a new record; pushState keeps it. Main frame only (the check reads the main frame).
+// The record also says how the document was reached (nav: 'navigate', 'back_forward', 'reload', ...). A document reached by Back / Forward or a reload may have had its drop-down values put
+// back by Chromium's own form restoration, which is the person's earlier choice and not the page's script: the sleep check (tab-sleep.cjs inspectLive) only trusts 'navigate', and
+// 'back_forward' only for the page Acira itself restored when it woke a sleeping tab.
+if(process.isMainFrame){
+ try{
+  let kind='';try{kind=String(performance.getEntriesByType('navigation')[0]?.type||'');}catch{/* unknown */}
+  let direct=false,baseline=null;
+  const signature=select=>{try{return select.multiple?Array.prototype.map.call(select.selectedOptions,option=>option.index).join(','):String(select.selectedIndex);}catch{return '?';}};
+  const changedSincePress=()=>{
+   if(!baseline)return false;
+   try{for(const select of document.querySelectorAll('select')){const before=baseline.get(select);if(before===undefined||before!==signature(select))return true;}}catch{return true;}
+   return false;
+  };
+  const record={v:1,nav:kind,get baseline(){return baseline!==null;},get touched(){return direct||changedSincePress();}};
+  const PRESS=new Set(['pointerdown','mousedown','click','keydown']);
+  const note=event=>{
+   if(direct||!event.isTrusted)return;
+   if(!baseline&&PRESS.has(event.type)){try{const seen=new WeakMap();for(const select of document.querySelectorAll('select'))seen.set(select,signature(select));baseline=seen;}catch{direct=true;return;}}
+   const first=typeof event.composedPath==='function'?event.composedPath()[0]:event.target;
+   const select=first&&typeof first.closest==='function'?first.closest('select'):null;
+   if(select)direct=true;
+  };
+  for(const type of ['change','input','pointerdown','mousedown','click','keydown'])window.addEventListener(type,note,{capture:true,passive:true});
+  window.__aciraSelectRecord=record;
+ }catch{/* no record: the sleep check treats that as unknown and keeps the tab awake */}
+}
 // No API is exposed to websites. Only trusted link-preview gestures and the address of a plain link click (for the Leave site?
 // card, at the end) cross this sandboxed, isolated bridge; auth and page data do not. Zoom is not handled here: a trackpad pinch reaches a page as a cancelable Ctrl+wheel before Chromium turns it
 // into visual-viewport zoom, so cancelling Ctrl+wheel in a page turned every pinch into reflowing page zoom. Chromium zooms the
@@ -21,7 +60,7 @@ if(process.platform==='darwin'){
 // window). One modifier only, and a drag that moved more than 4px is not a click (as in Zen's Glance). Only the link's
 // http(s) address, where it was clicked and the box of the link (so the preview grows from the link) cross the bridge.
 let pointerDown=null;
-// Settings › Tabs › Link preview (on by default): when it is off the browser says so, and these gestures are Chromium's again.
+// Settings > Tabs > Link preview (on by default): when it is off the browser says so, and these gestures are Chromium's again.
 let previewOn=true;
 ipcRenderer.on?.('acira:link-preview',(_event,value)=>{previewOn=value?.on!==false;});
 if(process.isMainFrame)window.addEventListener('mousedown',event=>{pointerDown=event.isTrusted&&event.button===0?{x:event.clientX,y:event.clientY}:null;},{capture:true,passive:true});
@@ -110,6 +149,28 @@ if(process.isMainFrame)window.addEventListener('click',event=>{
  if(target&&target!=='_self'&&target!=='_top'&&target!=='_parent')return;
  ipcRenderer.send('acira:link-intent',String(link.href).slice(0,4096));
 },{passive:true});
+// A navigation the page starts itself (a script, a form, a meta refresh, a link the page handled) says where it goes just before the page's own "Leave site?"
+// prompt: the Navigation API's navigate event comes first, then the unload check, which Electron asks main synchronously and without the address. Knowing
+// where it goes lets main ask in the browser's own card and repeat the navigation on Leave (desktop/leave-gate.cjs). Only full-page web navigations cross.
+// A form that posts cannot be repeated as an address: the form that was submitted is kept here, and main asks for the same submit again after Leave.
+let lastSubmit=null;
+if(process.isMainFrame){
+ window.addEventListener('submit',event=>{if(event.isTrusted&&event.target instanceof HTMLFormElement)lastSubmit={form:event.target,submitter:event.submitter||null,at:Date.now()};},{capture:true,passive:true});
+ ipcRenderer.on('acira:replay-submit',()=>{
+  const last=lastSubmit;lastSubmit=null;
+  if(!last||Date.now()-last.at>15000||!last.form.isConnected)return;
+  try{last.form.requestSubmit(last.submitter&&last.form.contains(last.submitter)?last.submitter:undefined);}catch{}
+ });
+ if(window.navigation&&typeof window.navigation.addEventListener==='function')window.navigation.addEventListener('navigate',event=>{
+  try{
+   if(!event.isTrusted||event.hashChange||event.downloadRequest)return;
+   const destination=event.destination;if(!destination||destination.sameDocument)return;
+   const url=String(destination.url||'');if(!/^https?:/i.test(url))return;
+   if(event.formData&&(!lastSubmit||Date.now()-lastSubmit.at>2000)){const source=event.sourceElement,form=source instanceof HTMLFormElement?source:(source&&source.form)||null;if(form)lastSubmit={form,submitter:source instanceof HTMLFormElement?null:source,at:Date.now()};}   // a submit the page made without the event
+   ipcRenderer.send('acira:nav-intent',{url:url.slice(0,4096),type:String(event.navigationType||''),form:Boolean(event.formData)});
+  }catch{}
+ });
+}
 // Two-finger swipe between pages (macOS; desktop/swipe-nav.cjs). Main sees the trackpad's phases but not the page, so for a sideways wheel this says what
 // the page could still scroll that way: the scrollers from the element under the pointer outward (overflow auto or scroll, how far each is scrolled and
 // can scroll, its overscroll-behavior-x) and the page's own, plus whether the page cancelled the wheel. Main decides; nothing here starts a navigation.

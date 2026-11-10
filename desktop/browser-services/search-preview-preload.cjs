@@ -19,7 +19,7 @@ const ENGINES=[
  {id:'startpage',host:/^(www\.)?startpage\.com$/,path:/^\/(sp|do)\/search$|^\/search$/,title:'.result a.result-title,.result a.result-link,.w-gl__result a.w-gl__result-title',block:'.w-gl__result,.result'},
  {id:'ecosia',host:/^(www\.)?ecosia\.org$/,path:/^\/search$/,title:'a[data-test-id="result-link"],.result__title a[href],a.result__link',block:'[data-test-id="mainline-result-web"],article.result,.result'},
 ];
-/** Which engine's result page an address is, or null. Local fixture pages (http://127.0.0.1/acira-serp/<engine>/…) are only
+/** Which engine's result page an address is, or null. Local fixture pages (http://127.0.0.1/acira-serp/<engine>/...) are only
  * answered by the browser in an isolated test profile. Image results are not pages to preview. Pure. */
 function engineOf(address){
  try{
@@ -34,7 +34,7 @@ function engineOf(address){
 }
 const web=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password&&value.length<=4096?url.href:null;}catch{return null;}};
 const base64url=text=>{try{const plain=text.replace(/-/g,'+').replace(/_/g,'/');return decodeURIComponent(escape(atob(plain+'='.repeat((4-plain.length%4)%4))));}catch{return null;}};
-/** The page a result really goes to: the engines' own click-through addresses (Google /url?q=, Bing /ck/a?u=a1…, DuckDuckGo
+/** The page a result really goes to: the engines' own click-through addresses (Google /url?q=, Bing /ck/a?u=a1..., DuckDuckGo
  * /l/?uddg=) are opened at their destination, so the preview never visits the engine's redirect. Pure. */
 function resultTarget(href,pageHost=''){
  const url=web(href);if(!url)return null;

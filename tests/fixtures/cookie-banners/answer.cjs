@@ -14,6 +14,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const rules = createAutoconsentRules(), events = new Map();
 ipcMain.on('acira:autoconsent-setup', event => { const main = event.senderFrame === event.sender.mainFrame, list = rules.rulesFor(event.senderFrame.url, main); event.returnValue = list ? { config: rules.config(), rules: list } : null; });
 ipcMain.on('acira:autoconsent-event', (event, message) => { const list = events.get(event.sender.id) || []; list.push(message.type + (message.cmp ? ':' + message.cmp : '') + (message.type === 'optOutResult' ? ':' + message.result : '')); events.set(event.sender.id, list); });
+// 13.5: the page-start preloads ask main one question per frame (desktop/browser-services/frame-boot.cjs); a harness that loads them must answer it (an unanswered synchronous message fails the page load).
+require('../../../desktop/browser-services/frame-boot.cjs').install(ipcMain);
 const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(fs.readFileSync(path.join(__dirname, 'page.html'))); });
 const MEASURE = `(() => { const banner = document.getElementById('onetrust-banner-sdk'); return { clicked: window.__clicked || [], banner: !!banner && banner.getClientRects().length > 0 && getComputedStyle(banner).opacity !== '0' }; })()`;
 app.whenReady().then(async () => {

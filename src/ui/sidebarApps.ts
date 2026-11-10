@@ -127,12 +127,16 @@ export function appClickPlan<T extends {id:string;url:string;browserProfileId:st
  return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
 /** Whether a tab shows in the sidebar's tab list. A favorite's tab does (the default), unless Settings › Tabs › Sidebar › Favorites keeps it only in its tile
- * (runtime/favoriteTabsRule.ts). Then it is left out only while its tile is there to show it: with Favorites switched off, or once its favorite is gone
- * (until the sidebar hands the tab back), or while its tile is folded behind "+N", it is listed like any tab, so no tab is ever out of reach. */
-export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>,/** How many tiles the grid shows before "+N" takes the last place: the sidebar size's (Narrow 8, Standard and Wide 12), not always twelve. */limit:number=SIDEBAR_APPS_LIMIT)=>{
+ * (runtime/favoriteTabsRule.ts). Then it is left out whenever its tile exists, shown or folded behind "+N": the keys, the counts and Close other tabs already
+ * leave it out (main reads the same rule), so a row for it was a row nothing else agreed on (a 13.4 report: "still working for some tabs", "+3" in the picture).
+ * A folded tile is reached by "+N", and the grid opens itself when the page on screen is its tab (tileFolded, the sidebar's SidebarApps). Only a tab with no tile
+ * at all is listed like any tab, so none is ever out of reach: with Favorites switched off, or once its favorite is gone (until the sidebar hands the tab back). */
+export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>)=>{
  if(tabListed(tab,settings)||favorites.hidden)return true;
- const at=favorites.apps.findIndex(app=>app.id===tab.favoriteId);
- return at<0||(favorites.apps.length>limit&&at>=limit-1);// its favorite is gone, or its tile is folded behind "+N"
+ return !favorites.apps.some(app=>app.id===tab.favoriteId);// its favorite is gone
 };
+/** Whether a favorite's tile is folded behind "+N" in the grid: the grid shows `limit - 1` tiles and "+N" takes the last place once there are more favorites than
+ * `limit` (the sidebar size's, Narrow 8, Standard and Wide 12). */
+export const tileFolded=(apps:readonly {id:string}[],id:string,limit:number=SIDEBAR_APPS_LIMIT)=>{const at=apps.findIndex(app=>app.id===id);return at>=0&&apps.length>limit&&at>=limit-1;};
 /** The tab a favorite is linked to in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
 export const appTabFor=<T extends {browserProfileId:string;favoriteId?:string}>(app:SidebarApp,tabs:readonly T[],profile:string):T|undefined=>favoriteTabOf(tabs,app.id,profile);

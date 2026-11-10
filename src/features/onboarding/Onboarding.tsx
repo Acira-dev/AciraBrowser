@@ -30,6 +30,8 @@ import { isSkipped, nativeMoves, nextStep, visibleSteps, type Direction, type Fl
 import { AppearanceStep, DefaultStep, ImportStep, PrivacyStep, ProfileStep, SearchStep, listOf, useImporter, useProtectionFacts, type ImportRun, type StepApi, type StepContext } from "./steps";
 import { CoverStep, coverSamples } from "./CoverStep";
 import { t, useT, type MessageId } from "../../i18n";
+import { effectiveReducedMotion } from "../../runtime/motion";
+import { useSoftwareDrawing } from "../../ui/softwareDrawing";
 import "./onboarding.css";
 
 type OnboardingProps = {
@@ -110,7 +112,9 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
   const { state, dispatch } = useBrowser();
   useT();
   const settings = state.settings;
-  const reducedMotion = settings.reducedMotion || media("(prefers-reduced-motion: reduce)");
+  // 13.5: the first thing a new person sees; on a window drawn in software it is as quiet as the rest of the interface (runtime/motion.ts)
+  const softwareDrawing = useSoftwareDrawing();
+  const reducedMotion = effectiveReducedMotion(settings, media("(prefers-reduced-motion: reduce)"), softwareDrawing);
   const reducedTransparency =
     settings.reducedTransparency || media("(prefers-reduced-transparency: reduce)") || media("(prefers-contrast: more)");
   // The card's material springs read the speed setting (effects class: 1.4 Premium, 1 Fast); Off is as quiet as reduced.

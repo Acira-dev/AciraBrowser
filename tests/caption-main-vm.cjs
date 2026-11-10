@@ -36,7 +36,7 @@ function fakeWindow({ minimizable = true, maximizable = true, maximized = false 
 /** What a person would see after a call: nothing (transparent or dropped), or the box with the buttons Windows draws for the flags at that moment. */
 const seen = s => !s.overlay || (alpha(s.overlay.color) === 0 && alpha(s.overlay.symbolColor) === 0) ? null : { buttons: 1 + (s.minimizable ? 1 : 0) + (s.maximizable ? 1 : 0) };
 
-function realMainCaption({ source, layout: layoutInit, flags, legacy = false } = {}) {
+function realMainCaption({ source, layout: layoutInit, flags, legacy = false, edge = null } = {}) {
   const text = fs.readFileSync(source || path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   const between = (a, b) => { const from = text.indexOf(a), to = text.indexOf(b, from); assert.ok(from >= 0 && to > from, 'the source still has ' + a + ' .. ' + b); return text.slice(from, to); };
   const decls = /let captionKey='',captionHiddenNow=false[^\n]*\n/.exec(text)[0];
@@ -67,6 +67,16 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false } =
   vm.createContext(sandbox);
   const expose = `;globalThis.__caption={setCaption,notchShown:${handler},hiddenNow:()=>captionHiddenNow,notchIsShown:${isShown},shownAt:()=>captionShownAt,forcedNow:()=>typeof captionForced==='undefined'?false:captionForced,watch:typeof captionWatch==='undefined'?null:captionWatch,setInterfaceDown:value=>{if(typeof interfaceDown!=='undefined')interfaceDown=value;},guard:typeof captionGuard==='undefined'?null:captionGuard};`;
   vm.runInContext(decls + guardSource + watchSource + setCaptionSource + expose, sandbox);
+  // `edge: { state }` (13.5): main's OWN edgeItem (what the edge poller asks of this window: which edges exist, the caption corner, the notch, the corner fallback's tick) is cut out of the source
+  // too and run in the same sandbox, wired to this fake window, so a test can run the real poller (desktop/edge-reveal.cjs) over it. Everything else it reads is a stub the test controls.
+  if (edge) {
+    const line = /const edgeHolds=\{top:false,side:false\},edgeKeys=[^\n]*\n/.exec(text);
+    assert.ok(line, 'the source still has the edge item');
+    const runtime = require('../desktop/runtime.cjs');
+    Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: () => {},
+      effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen });
+    vm.runInContext(line[0] + ';globalThis.__caption.edgeItem=edgeItem;', sandbox);
+  }
   /** Run the fake clock forward, firing timers in order (the legacy 200 ms release, the watcher's 50 ms look, the refresh, a settle). */
   const advance = ms => {
     const end = clock.t + ms;

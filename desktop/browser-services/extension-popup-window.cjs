@@ -15,9 +15,11 @@
 //  - Linux: as before.
 // The extension's page is never touched: no CSS, no script, its size logic stays in extension-action-sizing.cjs.
 const {EventEmitter} = require('node:events');
-const {placePopup, interfaceScale, anchorOnScreen} = require('./extension-popup-placement.cjs');
+const {placePopup, interfaceScale, anchorOnScreen, MARGIN} = require('./extension-popup-placement.cjs');
+const {popupHostFor, ParentSurface, interfaceOrigin, interfaceView, contentArea, learn, learned} = require('./extension-popup-host.cjs');
 const {trace} = require('./ext-trace.cjs');
 const {fitStep, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
+const {attachPopupDiagnostics, placementFacts} = require('./extension-popup-diagnostics.cjs');
 
 // The library's limits for a popup's size.
 const BOUNDS = Object.freeze({minWidth: 25, minHeight: 25, maxWidth: 800, maxHeight: 600});
@@ -45,6 +47,17 @@ const clampSize = (value, min, max) => Math.floor(Math.min(max, Math.max(Number(
 // After a resize the page is measured to see whether it fits (extension-popup-fit.cjs): a short wait lets the page lay out in its new window,
 // and a handful of rounds is more than the worst case needs (a scrollbar's room, then a pixel or two of rounding).
 const FIT_DELAY = 40, FIT_ROUNDS = 6;
+// How long after a press on its own button closed an in-window popup the click that completes that press can still arrive (a slow click, a held button).
+const PRESS_MS = 1000;
+
+/** The ozone platform Chromium was told to use (--ozone-platform / --ozone-platform-hint), '' when none was named. */
+function ozoneOf(electron) {
+  try { const line = electron.app && electron.app.commandLine; return (line && (line.getSwitchValue('ozone-platform') || line.getSwitchValue('ozone-platform-hint'))) || ''; } catch { return ''; }
+}
+function isDark(electron) { try { return Boolean(electron.nativeTheme && electron.nativeTheme.shouldUseDarkColors); } catch { return false; } }
+// What takes a popup that is a view of the browser window away with it: the window changing shape or going out of sight.
+// ('hide' is not one: a window that is shown reports it on its own at times (seen in a test run, 600 ms after a popup opened), and a hidden window takes its views with it.)
+const PARENT_EVENTS = Object.freeze(['resize', 'move', 'maximize', 'unmaximize', 'minimize', 'enter-full-screen', 'leave-full-screen']);
 
 // The popups that exist, so the application menu can tell that the keyboard is in one (popupOf).
 const openPopups = new Set();
@@ -57,8 +70,8 @@ function popupOf(contents) {
 }
 
 class ExtensionPopup extends EventEmitter {
-  /** opts: {extensionId, session, parent, url, anchorRect (CSS px of the interface page), alignment}; deps: {electron, platform}. */
-  constructor(opts, {electron = require('electron'), platform = process.platform} = {}) {
+  /** opts: {extensionId, session, parent, url, anchorRect (CSS px of the interface page), alignment}; deps: {electron, platform, env, diagnostics (the trace hook, a test's own)}. */
+  constructor(opts, {electron = require('electron'), platform = process.platform, diagnostics = attachPopupDiagnostics, env = process.env} = {}) {
     super();
     this.electron = electron;
     this.destroyed = false;
@@ -72,19 +85,34 @@ class ExtensionPopup extends EventEmitter {
     this.size = undefined;                    // the size of the window as this class last set it
     this.fitTimer = undefined;
     const {BaseWindow, WebContentsView} = electron;
-    this.frame = popupFrame({platform, scale: interfaceScale(opts.parent)});
-    this.window = new BaseWindow({
-      show: false, frame: false, parent: opts.parent, movable: false, maximizable: false, minimizable: false, fullscreenable: false, resizable: false, skipTaskbar: true,
-      // Hidden, and as large as a popup may be while its page loads: Chrome loads the page at that size, and pages that size themselves from
-      // window.innerWidth / innerHeight in a script (Surfshark's does: body width = innerWidth) are fixed at whatever they read, here 25 x 25.
-      width: BOUNDS.maxWidth, height: BOUNDS.maxHeight, ...this.frame.window
-    });
-    this.view = new WebContentsView({webPreferences: {session: opts.session, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true}});
-    // An extension page that sets no background is white, as in the library's window.
-    this.view.setBackgroundColor('#ffffff');
-    if (this.frame.radius) this.view.setBorderRadius(this.frame.radius);
-    this.window.contentView.addChildView(this.view);
-    this.view.setBounds({x: 0, y: 0, width: BOUNDS.maxWidth, height: BOUNDS.maxHeight});
+    const scale = interfaceScale(opts.parent);
+    this.platform = platform;
+    this.frame = popupFrame({platform, scale});
+    // Where the window system lets an app place windows the popup is a window of its own, as it always was; where it does not (Wayland) it is a view inside the
+    // browser window (extension-popup-host.cjs). The page, its sizing, its events and its lifecycle are the same.
+    this.hostKind = popupHostFor({platform, env, ozone: ozoneOf(electron), learned: learned()});
+    const pagePreferences = {session: opts.session, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true};
+    if (this.hostKind === 'parent') {
+      this.view = new WebContentsView({webPreferences: pagePreferences});
+      this.view.setBackgroundColor('#ffffff');
+      this.radius = Math.round(MATERIAL_RADIUS * scale);
+      this.view.setBorderRadius(this.radius);
+      this.view.setBounds({x: 0, y: 0, width: BOUNDS.maxWidth, height: BOUNDS.maxHeight});
+      this.window = new ParentSurface({electron, parent: opts.parent, view: this.view, radius: this.radius, dark: isDark(electron)});
+    } else {
+      this.window = new BaseWindow({
+        show: false, frame: false, parent: opts.parent, movable: false, maximizable: false, minimizable: false, fullscreenable: false, resizable: false, skipTaskbar: true,
+        // Hidden, and as large as a popup may be while its page loads: Chrome loads the page at that size, and pages that size themselves from
+        // window.innerWidth / innerHeight in a script (Surfshark's does: body width = innerWidth) are fixed at whatever they read, here 25 x 25.
+        width: BOUNDS.maxWidth, height: BOUNDS.maxHeight, ...this.frame.window
+      });
+      this.view = new WebContentsView({webPreferences: pagePreferences});
+      // An extension page that sets no background is white, as in the library's window.
+      this.view.setBackgroundColor('#ffffff');
+      if (this.frame.radius) this.view.setBorderRadius(this.frame.radius);
+      this.window.contentView.addChildView(this.view);
+      this.view.setBounds({x: 0, y: 0, width: BOUNDS.maxWidth, height: BOUNDS.maxHeight});
+    }
     this.webContents = this.view.webContents;
     // A link or window.open from the popup to a website or to the extension's own page (Floccus' "Add profile" opens its options page this way, Mister
     // Download Manager's "How to fix it" a help page): the default is a window that is a child of this popup, and it closed with the popup 70 ms later, so
@@ -103,9 +131,12 @@ class ExtensionPopup extends EventEmitter {
     // the person clicked somewhere else. Chrome closes the popup with its page.
     this.webContents.on('destroyed', this.destroy);
     this.window.on('blur', this.maybeClose);
+    if (this.hostKind === 'parent') this.closeWithTheWindow();
     this.window.on('closed', this.destroy);
     this.parent.once('closed', this.destroy);
     openPopups.add(this);
+    // What this popup does on this computer goes to the local extension trace (extension-popup-diagnostics.cjs): it never changes what the popup does.
+    try { diagnostics(this); } catch { /* a log that cannot be written is not a reason to lose the popup */ }
     this.readyPromise = this.load(opts.url);
   }
 
@@ -132,7 +163,7 @@ class ExtensionPopup extends EventEmitter {
     if (!focused) { trace('toolbar popup stays: no window of Acira has focus', this.extensionId); return; }
     let title = ''; try { title = String(focused.getTitle()).slice(0, 40); } catch { /* gone */ }
     trace('toolbar popup closes: focus moved to another window of Acira', this.extensionId, {id: focused.id, title});
-    this.destroy();
+    this.closeBecause('focus moved');
   };
 
   destroy = () => {
@@ -140,8 +171,10 @@ class ExtensionPopup extends EventEmitter {
     this.destroyed = true;
     openPopups.delete(this);
     clearTimeout(this.fitTimer);
+    for (const [contents, handler] of this.pressWatch || []) { try { if (!contents.isDestroyed()) contents.off('before-mouse-event', handler); } catch { /* gone */ } }
+    this.pressWatch = undefined;
     if (this.parent) {
-      if (!this.parent.isDestroyed()) this.parent.off('closed', this.destroy);
+      if (!this.parent.isDestroyed()) { this.parent.off('closed', this.destroy); for (const [name, handler] of this.parentHandlers || []) this.parent.off(name, handler); }
       this.parent = undefined;
     }
     const contents = this.webContents, window = this.window;
@@ -150,6 +183,7 @@ class ExtensionPopup extends EventEmitter {
     if (window && !window.isDestroyed()) { window.off('closed', this.destroy); window.destroy(); }
     // A window does not close the page of a view it held: without this the extension's popup page would live on, hidden.
     if (contents && !contents.isDestroyed()) contents.close();
+    this.emit('gone');
   };
 
   show() {
@@ -160,6 +194,23 @@ class ExtensionPopup extends EventEmitter {
     // (Bitwarden's master password) took no keys until the person clicked into it; Chrome's popup has the keyboard at once.
     const contents = this.webContents;
     if (contents && !contents.isDestroyed()) { try { contents.focus(); } catch { /* the window or page went away */ } }
+    if (this.hostKind === 'parent' && !this.pressWatch) this.watchOutsidePresses();
+    this.emit('shown');
+    if (this.hostKind === 'window' && this.platform === 'linux') this.learnPositions();
+  }
+
+  /**
+   * A popup that is a window of its own on Linux: 300 ms after it shows, did the window system put it where it was asked? If it answered { 0, 0 } (Wayland) every
+   * later popup of this run is a view of the browser window instead (extension-popup-host.cjs); this one stays where the compositor put it.
+   */
+  learnPositions() {
+    const timer = setTimeout(() => {
+      try {
+        if (this.destroyed || !this.window || this.window.isDestroyed() || !this.asked) return;
+        if (placementFacts(this.asked, this.window.getBounds()).positionUnknown) learn();
+      } catch { /* the window went away */ }
+    }, 300);
+    if (timer.unref) timer.unref();
   }
 
   async load(url) {
@@ -174,13 +225,70 @@ class ExtensionPopup extends EventEmitter {
   whenReady() { return this.readyPromise; }
 
   /**
+   * A popup inside the browser window closes when the window changes shape or hides, on Escape in the page, and (through closeInWindowPopups, from the places
+   * that know a tab switched or navigated) when the page under it is another. Outside presses close it through the window's blur (ParentSurface).
+   */
+  closeWithTheWindow() {
+    const parent = this.parent;
+    this.parentHandlers = [];
+    for (const name of PARENT_EVENTS) { const handler = () => this.closeBecause('window ' + name); try { parent.on(name, handler); this.parentHandlers.push([name, handler]); } catch { /* an event this window does not have */ } }
+    this.webContents.on('before-input-event', (event, input) => {
+      if (input && input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault && event.preventDefault(); this.closeBecause('Escape'); }
+    });
+  }
+
+  /**
+   * A press on any other view of the window closes the popup at once. The window's blur does it too (ParentSurface), but a press on a part of the interface that takes
+   * no keyboard (a drag area, a disabled control) moves no focus, and a window system that is slow to say who has the keyboard closes the popup late; the press itself is
+   * what the person did.
+   */
+  watchOutsidePresses() {
+    const children = (this.parent && this.parent.contentView && this.parent.contentView.children) || [];
+    this.pressWatch = [];
+    for (const view of children) {
+      const contents = view !== this.view && view.webContents;
+      if (!contents || contents.isDestroyed()) continue;
+      const onInterface = view === interfaceView(this.parent);
+      const handler = (_event, input) => {
+        if (!input || input.type !== 'mouseDown') return;
+        const onButton = onInterface && this.pressOnAnchor(input);
+        if (onButton) this.closedByAnchorPressAt = Date.now();   // the press half of a click on its own button: that click is the toggle
+        this.closeBecause(onButton ? 'press on its button' : 'press outside');
+      };
+      try { contents.on('before-mouse-event', handler); this.pressWatch.push([contents, handler]); } catch { /* a view that takes no listeners */ }
+    }
+  }
+
+  /** Closes the popup and remembers why (the trace's closing line says it). */
+  closeBecause(reason) {
+    if (!this.closeReason) this.closeReason = reason;
+    this.destroy();
+  }
+
+  /** Is this press (in the interface view's own coordinates) on the extension's button the popup hangs from? */
+  pressOnAnchor(input) {
+    const css = this.anchorRect, parent = this.parent;
+    if (!css || !parent) return false;
+    const scale = interfaceScale(parent), slack = 2, x = Number(input.x), y = Number(input.y);
+    return x >= css.x * scale - slack && x <= (css.x + css.width) * scale + slack && y >= css.y * scale - slack && y <= (css.y + css.height) * scale + slack;
+  }
+
+  /** The largest the popup may be: the library's 800 x 600, and inside the browser window when it is a view of it. */
+  limits() {
+    if (this.hostKind !== 'parent' || !this.parent) return {maxWidth: BOUNDS.maxWidth, maxHeight: BOUNDS.maxHeight};
+    const area = contentArea(this.parent), margin = Math.round(MARGIN * interfaceScale(this.parent));
+    return {maxWidth: Math.max(BOUNDS.minWidth, Math.min(BOUNDS.maxWidth, area.width - 2 * margin)), maxHeight: Math.max(BOUNDS.minHeight, Math.min(BOUNDS.maxHeight, area.height - 2 * margin))};
+  }
+
+  /**
    * The size the page asks for, inside the library's limits; the popup keeps its place under the icon at every size. What the window was given
    * on top of that to hold the page (a scrollbar's room, a pixel of rounding) stays while the page asks for the same size and is measured
    * again when it asks for another.
    */
   setSize(rect) {
     if (!this.window || !this.parent) return;
-    const base = {width: clampSize(rect?.width, BOUNDS.minWidth, BOUNDS.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, BOUNDS.maxHeight)};
+    const max = this.limits();
+    const base = {width: clampSize(rect?.width, BOUNDS.minWidth, max.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, max.maxHeight)};
     if (!this.base || this.base.width !== base.width || this.base.height !== base.height) this.extra = {width: 0, height: 0};
     this.base = base;
     this.resize();
@@ -189,7 +297,8 @@ class ExtensionPopup extends EventEmitter {
 
   /** The window at the page's size plus what it was given on top, never past the library's limits. */
   resize() {
-    const size = {width: Math.min(BOUNDS.maxWidth, this.base.width + this.extra.width), height: Math.min(BOUNDS.maxHeight, this.base.height + this.extra.height)};
+    const max = this.limits();
+    const size = {width: Math.min(max.maxWidth, this.base.width + this.extra.width), height: Math.min(max.maxHeight, this.base.height + this.extra.height)};
     this.size = size;
     this.emit('will-resize', size);
     this.place(size);
@@ -216,7 +325,7 @@ class ExtensionPopup extends EventEmitter {
     // 276 x 580 page, uBlock Origin Lite 521 x 600), since the window only ever grows. Measure again in the window the page has now.
     if (this.size !== measured) { this.fitSoon(rounds - 1); return; }
     // The size this class set, not getBounds(): Windows hands back whole pixels converted to DIPs, a value off by one at 125 % and 150 %.
-    const step = fitStep(metrics, this.size, {maxWidth: BOUNDS.maxWidth, maxHeight: BOUNDS.maxHeight});
+    const step = fitStep(metrics, this.size, this.limits());
     if (!step.width && !step.height) return;
     this.extra = {width: this.extra.width + step.width, height: this.extra.height + step.height};
     this.resize();
@@ -233,14 +342,32 @@ class ExtensionPopup extends EventEmitter {
   place(size) {
     const window = this.window, parent = this.parent;
     if (!window || !parent || window.isDestroyed() || parent.isDestroyed?.()) return;
+    if (this.hostKind === 'parent') return this.placeInWindow(size);
     const css = this.anchorRect || {x: 0, y: 0, width: 0, height: 0};
     const scale = interfaceScale(parent);
     const anchor = anchorOnScreen({x: Number(css.x) || 0, y: Number(css.y) || 0, width: Number(css.width) || 0, height: Number(css.height) || 0}, parent, scale);
     const display = this.electron.screen.getDisplayMatching({x: Math.round(anchor.x), y: Math.round(anchor.y), width: Math.max(1, Math.round(anchor.width)), height: Math.max(1, Math.round(anchor.height))});
     const spot = placePopup({anchor, size, window: parent.getContentBounds(), area: display.workArea, scale});
     this.emit('will-move', {x: spot.x, y: spot.y});
+    this.asked = {x: spot.x, y: spot.y, width: size.width, height: size.height};
     window.setBounds({x: spot.x, y: spot.y, width: size.width, height: size.height});
     this.view.setBounds({x: 0, y: 0, width: size.width, height: size.height});
+    this.emit('moved');
+  }
+
+  /**
+   * The popup as a view of the browser window: the icon's rectangle (CSS px of the interface page x Interface size, from the interface page's own origin) in
+   * the window's coordinates, the same rule as the window's (right edge on the icon's when it is in the right half, a flip, a slide in), and the window's
+   * own content as the only area. No screen numbers anywhere: that is the point.
+   */
+  placeInWindow(size) {
+    const parent = this.parent, css = this.anchorRect || {x: 0, y: 0, width: 0, height: 0};
+    const scale = interfaceScale(parent), origin = interfaceOrigin(parent), area = contentArea(parent);
+    const anchor = {x: origin.x + (Number(css.x) || 0) * scale, y: origin.y + (Number(css.y) || 0) * scale, width: (Number(css.width) || 0) * scale, height: (Number(css.height) || 0) * scale};
+    const spot = placePopup({anchor, size, window: area, area, scale});
+    this.emit('will-move', {x: spot.x, y: spot.y});
+    this.asked = {x: spot.x, y: spot.y, width: size.width, height: size.height};
+    this.window.setBounds(this.asked);
     this.emit('moved');
   }
 }
@@ -249,11 +376,11 @@ class ExtensionPopup extends EventEmitter {
  * The window that was last in use, for a toolbar click that has no website tab to name one. Acira's own window is not in the engine's `windows`
  * (getCurrentWindow() answers nothing), but the engine's lastFocusedWindowId is its id, and Electron knows the window by it.
  */
-function windowInUse(store, electron) {
+function windowInUse(store, electron, getWindow) {
   try {
     const registered = typeof store.getCurrentWindow === 'function' ? store.getCurrentWindow() : undefined;
     const id = store.lastFocusedWindowId;
-    const found = registered || (Number.isInteger(id) && typeof electron.BaseWindow?.fromId === 'function' ? electron.BaseWindow.fromId(id) : undefined);
+    const found = registered || (Number.isInteger(id) && typeof electron.BaseWindow?.fromId === 'function' ? electron.BaseWindow.fromId(id) : undefined) || (typeof getWindow === 'function' ? getWindow() : undefined);
     return found && !found.isDestroyed?.() ? found : undefined;
   } catch { return undefined; }
 }
@@ -264,7 +391,7 @@ function windowInUse(store, electron) {
  * popup belongs to the window of the tab it opens for. Returns false (and leaves the library's own popups) when the engine is not the one this is
  * written against.
  */
-function installPopupFrames(runtime, {electron = require('electron'), platform = process.platform} = {}) {
+function installPopupFrames(runtime, {electron = require('electron'), platform = process.platform, getWindow} = {}) {
   const engine = runtime?.api?.browserAction;
   if (!engine || typeof engine.activateClick !== 'function' || typeof engine.getPopupUrl !== 'function' || !engine.ctx?.store || typeof engine.ctx.emit !== 'function') return false;
   if (engine.activateClick.framedPopups) return true;
@@ -274,9 +401,11 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
     if (this.popup) {
       // Only a popup with a live page is closed by the click that follows it; a stale one (its page gone) is cleared away and the click opens the popup.
       const toggle = !this.popup.isDestroyed() && this.popup.extensionId === extensionId && this.popup.isLive();
+      // A popup inside the browser window closes at the press on its own button (watchOutsidePresses); the click that follows that press is the toggle, not a new open.
+      const pressedClosed = this.popup.hostKind === 'parent' && this.popup.isDestroyed() && this.popup.extensionId === extensionId && this.popup.closedByAnchorPressAt && Date.now() - this.popup.closedByAnchorPressAt < PRESS_MS;
       this.popup.destroy();
       this.popup = undefined;
-      if (toggle) return undefined;
+      if (toggle || pressedClosed) return undefined;
     }
     const store = this.ctx.store;
     const tab = tabId >= 0 ? store.getTabById(tabId) : store.getActiveTabOfCurrentWindow();
@@ -287,7 +416,7 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
       // -1, or the id of a website tab that has closed since): the library throws "Unable to get active tab" and the button was dead. The popup
       // opens from the extension's default popup in the window that was in use, as Chrome's does on its own New Tab page.
       url = this.getPopupUrl(extensionId, -1);
-      parent = url ? windowInUse(store, electron) : undefined;
+      parent = url ? windowInUse(store, electron, getWindow) : undefined;
     }
     // No popup page or no window (or no tab and no window in use): the library's own answer (onClicked, or its error).
     if (!parent) return original.call(this, details);
@@ -310,4 +439,11 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
   return true;
 }
 
-module.exports = {ExtensionPopup, popupFrame, installPopupFrames, ownPage, popupOf, BOUNDS, MATERIAL_RADIUS};
+/** Closes the popups that are views of this browser window (the tab changed or navigated under them). Window popups close on focus as ever. */
+function closeInWindowPopups(window) {
+  let closed = 0;
+  for (const popup of [...openPopups]) if (popup.hostKind === 'parent' && !popup.destroyed && (!window || popup.parent === window)) { popup.closeBecause('page changed'); closed++; }
+  return closed;
+}
+
+module.exports = {ExtensionPopup, popupFrame, installPopupFrames, closeInWindowPopups, ownPage, popupOf, BOUNDS, MATERIAL_RADIUS};

@@ -14,7 +14,7 @@ export function windowUiState(input:unknown,tabs:readonly Pick<TabSession,'id'>[
  const own:WindowView|null=Object.hasOwn(raw,'view')?isWindowView(raw.view)?raw.view:null:raw.focusMode===true?'focus':null;
  // A closed member leaves its pane, not the whole split: the rest re-tile in the default layout for their count.
  const open=ids.filter(id=>typeof id==='string'&&tabs.some(tab=>tab.id===id)),kept=open.length<ids.length?{tabIds:open,groupId:split.groupId}:raw.split,groups=normalizeSplitGroups(raw.splitGroups,tabs);
- return {...(typeof raw.zoomTargetTabId==='string'&&tabs.some(tab=>tab.id===raw.zoomTargetTabId)?{zoomTargetTabId:raw.zoomTargetTabId}:{}),focusMode:own==='focus',...(own?{view:own}:{}),workspaceOpen:raw.workspaceOpen===true,webWorkspaceOpen:raw.webWorkspaceOpen===true,
+ return {...(raw.app===true?{app:true as const}:{}),...(typeof raw.zoomTargetTabId==='string'&&tabs.some(tab=>tab.id===raw.zoomTargetTabId)?{zoomTargetTabId:raw.zoomTargetTabId}:{}),focusMode:own==='focus',...(own?{view:own}:{}),workspaceOpen:raw.workspaceOpen===true,webWorkspaceOpen:raw.webWorkspaceOpen===true,
   split:normalizeSplit(kept,tabs.map(tab=>tab.id),activeId),...(groups.length?{splitGroups:groups}:{}),...lastTabsOf(raw.lastTabs,tabs)};
 }
 /** The tab each workspace showed last: only real tabs survive (runtime/workspaces.ts settles the rest). */

@@ -59,13 +59,15 @@ export const sidebarModeHeader = (chrome: boolean, blockShown: boolean): Sidebar
  * strip keeps the toolbar's height (empty, it drags the window) and nothing overlaps them. With the sidebar on the left the Mac's buttons are over the sidebar.
  * Windows' three caption buttons are not in this strip: with the sidebar on the left (or away) they sit in a small notch at the page's top-right corner that shows only
  * while the pointer is along the top of the window (desktop/caption-notch.cjs; the window's caption overlay is the notch), so the page goes to the top. With the sidebar
- * on the right they are over the sidebar's top right, which sidebar-right.css leaves room for (always shown, no notch). Linux keeps its system title bar above the whole window. */
+ * on the right they are over the sidebar's top right, which sidebar-right.css leaves room for (always shown, no notch). Linux keeps its system title bar above the whole window.
+ * Seamless (13.5, `sidebarMode` is then the setting itself: Seamless has no Sidebar-mode header): nothing is docked, the page fills the window and the sidebar only floats in from its edge, so the buttons are the notch on either side.
+ * Before 13.5 Seamless kept the caption hidden and waited for a top edge that Sidebar mode switches off (desktop/main.cjs edgeItem.edges), so hovering the top never showed it and only the 1.2 s corner fallback did. */
 export const ADDRESS_STRIP = 6;
 /** The caption notch's height: Windows' three 46 px buttons in a 34 px band (the caption overlay's height; desktop/caption-notch.cjs NOTCH has the same number). */
 export const NOTCH_HEIGHT = 34;
 /** Windows, Sidebar mode (the header is the block's, not Seamless's, and the window is not fullscreen) with the corner over the page (the sidebar on the left, or away): the caption buttons are a notch, not an empty strip.
  * With the sidebar docked on the right the corner is over the sidebar, which has the room for the buttons, so there is no notch. `side` is the side the strip is laid out for (App.tsx passes 'left' while the sidebar is away or floating). */
-export const captionNotchWanted = (platform: string, sidebarMode: boolean, fullscreen: boolean, side: 'left' | 'right' = 'left'): boolean => platform === 'win32' && sidebarMode && !fullscreen && side === 'left';
+export const captionNotchWanted = (platform: string, sidebarMode: boolean, fullscreen: boolean, side: 'left' | 'right' = 'left', seamless = false): boolean => platform === 'win32' && sidebarMode && !fullscreen && (side === 'left' || seamless);
 export function addressStripHeight(platform: string, toolbarHeight: number, side: 'left' | 'right' = 'left'): number {
   // With the sidebar on the right the Mac's buttons stay over the page column's top left; every other case is the page card's own margin.
   return platform === 'darwin' && side === 'right' ? toolbarHeight : ADDRESS_STRIP;

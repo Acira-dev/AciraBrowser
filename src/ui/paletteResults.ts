@@ -4,10 +4,10 @@ import { windowViewDetail } from './windowViewText';
 import { t } from '../i18n';
 /** Command bar contents (bible §5.4, F39). Pure: the component supplies the registry, tabs in recently-used order,
  * history, Acira pages and the recent command ids. */
-export interface PaletteCommand { id: string; label: string; category: string; shortcut?: string }
+export interface PaletteCommand { id: string; label: string; category: string; shortcut?: string; /** A workspace row: the workspace's own name, so a query equal to it ranks the row first (13.5, hunt-e 11). */ name?: string }
 export interface PaletteTab { id: string; title: string; url: string; favicon?: string }
 export interface PaletteLink { url: string; title: string }
-interface Base { key: string; title: string; indices: number[]; meta: string; score: number; /** R3-65: one plain sentence under a command that is easy to confuse with another (Focus mode vs Compact toolbar). */ hint?: string }
+interface Base { key: string; title: string; indices: number[]; meta: string; score: number; /** 13.5 (hunt-e 11): a command that closes or ends things without a question, and the query does not clearly name it. It is listed after the rest and Enter never runs it by default. */ guard?: true; /** R3-65: one plain sentence under a command that is easy to confuse with another (Focus mode vs Compact toolbar). */ hint?: string }
 export type PaletteItem =
   | Base & { kind: 'command'; command: PaletteCommand }
   | Base & { kind: 'tab'; tab: PaletteTab }
@@ -27,11 +27,19 @@ const looksLikeAddress = (query: string) => !/\s/.test(query) && (/^[a-z][a-z0-9
 const VERBS: Record<string, () => string> = { history: () => t('paletteresults.openHistory'), rewind: () => t('paletteresults.openRewind'), routines: () => t('paletteresults.openTabSets'), 'bookmarks-manager': () => t('paletteresults.openBookmarks'), downloads: () => t('paletteresults.openDownloads'), settings: () => t('paletteresults.openSettings') };
 const PAGE_COMMAND: Record<string, string> = { 'acira://history': 'history', 'acira://rewind': 'rewind', 'acira://routines': 'routines', 'acira://bookmarks': 'bookmarks-manager', 'acira://downloads': 'downloads', 'acira://settings': 'settings' };
 const labelOf = (entry: PaletteCommand) => VERBS[entry.id]?.() || entry.label;
+// 13.5 (hunt-e 11): typing a workspace's name and pressing Enter ran "Close other tabs" (both are whole-word matches). These close or end things
+// without asking, so they are never first unless the query names them: the start of the label that reaches into its second word ("close other",
+// "clear b"), or the whole label when it is one word, and no other command starts that way.
+export const DESTRUCTIVE_COMMANDS = new Set(['close-other-tabs', 'close-tabs-right', 'close-window', 'quit', 'clear-data']);
+const norm = (text: string) => text.trim().toLowerCase().replace(/\s+/g, ' ');
+const WORKSPACE_NAMED = 100;
+const clearlyNames = (query: string, entry: PaletteCommand, all: PaletteCommand[]) => { const q = norm(query); return (q.includes(' ') || q === norm(labelOf(entry))) && norm(labelOf(entry)).startsWith(q) && all.every(other => other.id === entry.id || !norm(labelOf(other)).startsWith(q)); };
 // R3-65 / R3-68: the four views, each said in the one sentence Settings uses.
 const HINTS: Record<string, () => string> = { 'view-full': () => windowViewDetail('full'), 'compact-toolbar': () => windowViewDetail('compact'), 'focus-mode': () => windowViewDetail('focus'), 'seamless-mode': () => windowViewDetail('seamless') };
-const command = (entry: PaletteCommand, query: string): PaletteItem | null => {
+const command = (entry: PaletteCommand, query: string, all: PaletteCommand[] = []): PaletteItem | null => {
   const label = labelOf(entry), match = fuzzyMatch(query, label) || (query ? (() => { const byCategory = fuzzyMatch(query, `${entry.category} ${label}`); return byCategory && { score: byCategory.score - 20, indices: [] }; })() : null);
-  return match && { kind: 'command', key: `command:${entry.id}`, title: label, indices: match.indices, meta: entry.shortcut || '', score: match.score, command: entry, ...(HINTS[entry.id] ? { hint: HINTS[entry.id]!() } : {}) };
+  const named = !!query && entry.name !== undefined && norm(entry.name) === norm(query), held = DESTRUCTIVE_COMMANDS.has(entry.id) && !clearlyNames(query, entry, all);
+  return match && { kind: 'command', key: `command:${entry.id}`, title: label, indices: match.indices, meta: entry.shortcut || '', score: match.score + (named ? WORKSPACE_NAMED : 0), command: entry, ...(held ? { guard: true as const } : {}), ...(HINTS[entry.id] ? { hint: HINTS[entry.id]!() } : {}) };
 };
 const tabItem = (tab: PaletteTab, query: string): PaletteItem | null => {
   const title = tab.title || hostOf(tab.url) || tab.url, byTitle = fuzzyMatch(query, title), byHost = query ? fuzzyMatch(query, hostOf(tab.url)) : null;
@@ -43,7 +51,9 @@ const link = (kind: 'history' | 'page', entry: PaletteLink, query: string): Pale
   const match = byTitle && (!byUrl || byTitle.score >= byUrl.score - 5) ? byTitle : byUrl && { score: byUrl.score - 5, indices: [] };
   return match && { kind, key: `${kind}:${entry.url}`, title, indices: match.indices, meta: hostOf(entry.url), score: match.score, url: entry.url };
 };
-const ranked = (items: (PaletteItem | null)[], limit: number) => (items.filter(Boolean) as PaletteItem[]).sort((a, b) => b.score - a.score).slice(0, limit);
+// A held-back row (see `guard`) comes after every other row of its list, whatever it scores.
+const ranked = (items: (PaletteItem | null)[], limit: number) => (items.filter(Boolean) as PaletteItem[]).sort((a, b) => +!!a.guard - +!!b.guard || b.score - a.score).slice(0, limit);
+const calm = (items: PaletteItem[]) => [...items.filter(item => !item.guard), ...items.filter(item => item.guard)];
 
 export function paletteSections({ query: raw, commands, tabs, activeTabId, history, pages, recent, otherTabs = [] }: PaletteInput): PaletteSection[] {
   const commandsOnly = raw.trimStart().startsWith(commandPrefix), query = (commandsOnly ? raw.trimStart().slice(1) : raw).trim();
@@ -51,18 +61,18 @@ export function paletteSections({ query: raw, commands, tabs, activeTabId, histo
   const recentCommands = recent.map(id => byId.get(id)).filter(Boolean) as PaletteCommand[];
   if (commandsOnly) {
     if (!query) return [
-      { key: 'recent', label: t("paletteresults.recent"), items: recentCommands.slice(0, 5).map(entry => command(entry, '')!) },
-      { key: 'commands', label: t("paletteresults.commands"), items: commands.filter(entry => !recent.includes(entry.id)).map(entry => command(entry, '')!) },
+      { key: 'recent', label: t("paletteresults.recent"), items: calm(recentCommands.slice(0, 5).map(entry => command(entry, '', commands)!)) },
+      { key: 'commands', label: t("paletteresults.commands"), items: commands.filter(entry => !recent.includes(entry.id)).map(entry => command(entry, '', commands)!) },
     ].filter(section => section.items.length);
     // Recently used commands rank a little higher for the same text.
-    const items = ranked(commands.map(entry => { const item = command(entry, query); return item && { ...item, score: item.score + (recent.includes(entry.id) ? 12 - recent.indexOf(entry.id) : 0) }; }), 50);
+    const items = ranked(commands.map(entry => { const item = command(entry, query, commands); return item && { ...item, score: item.score + (recent.includes(entry.id) ? 12 - recent.indexOf(entry.id) : 0) }; }), 50);
     return items.length ? [{ key: 'commands', label: t("paletteresults.commands"), items }] : [];
   }
   const others = tabs.filter(tab => tab.id !== activeTabId);
   if (!query) {
     const start = [
       { key: 'tabs', label: t("paletteresults.openTabsCount", { count: Math.min(others.length, 8) }), items: others.slice(0, 8).map(tab => tabItem(tab, '')!) },
-      { key: 'recent', label: t("paletteresults.commands"), items: recentCommands.slice(0, 4).map(entry => command(entry, '')!) },
+      { key: 'recent', label: t("paletteresults.commands"), items: calm(recentCommands.slice(0, 4).map(entry => command(entry, '', commands)!)) },
     ].filter(section => section.items.length);
     // A single tab and no history of commands yet: show what the bar can do.
     return start.length ? start : paletteSections({ query: commandPrefix, commands, tabs, activeTabId, history, pages, recent });
@@ -74,12 +84,14 @@ export function paletteSections({ query: raw, commands, tabs, activeTabId, histo
   const sections: PaletteSection[] = [
     { key: 'tabs', label: t("paletteresults.openTabsCount", { count: tabRows.length }), items: tabRows },
     ...otherRows,
-    { key: 'commands', label: t("paletteresults.commands"), items: ranked(commands.map(entry => { const item = command(entry, query); return item && { ...item, score: item.score + (recent.includes(entry.id) ? 8 : 0) }; }), 6) },
+    { key: 'commands', label: t("paletteresults.commands"), items: ranked(commands.map(entry => { const item = command(entry, query, commands); return item && { ...item, score: item.score + (recent.includes(entry.id) ? 8 : 0) }; }), 6) },
     { key: 'pages', label: t("browsersettings.acira"), items: ranked(pageRows.map(entry => link('page', entry, query)), 3) },
     { key: 'history', label: t("browsermenu.history"), items: ranked(history.filter(entry => !openUrls.has(entry.url) && !seen.has(entry.url) && seen.add(entry.url)).map(entry => link('history', entry, query)), 5) },
-  ].filter(section => section.items.length).sort((a, b) => b.items[0].score - a.items[0].score);
+  ].filter(section => section.items.length);
+  // A section sorts by its best row that Enter may run; one with only held-back rows goes after the web row, so Enter never closes tabs by accident.
+  const live = sections.filter(section => section.items.some(item => !item.guard)).sort((a, b) => b.items.find(item => !item.guard)!.score - a.items.find(item => !item.guard)!.score), held = sections.filter(section => !live.includes(section));
   const web: PaletteSection = { key: 'web', label: 'Web', items: [{ kind: 'web', key: 'web', title: looksLikeAddress(query) ? `Open ${query}` : `Search for “${query}”`, indices: [], meta: '', score: 0, query }] };
-  return looksLikeAddress(query) || !sections.length ? [web, ...sections] : [...sections, web];
+  return looksLikeAddress(query) || !live.length ? [web, ...live, ...held] : [...live, web, ...held];
 }
 
 export const flatItems = (sections: PaletteSection[]) => sections.flatMap(section => section.items);

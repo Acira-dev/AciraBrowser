@@ -48,7 +48,7 @@ FakeWindow.all = [];
 FakeWindow.getAllWindows = () => FakeWindow.all.filter(window => !window.destroyed);
 FakeWindow.fromId = id => FakeWindow.all.find(window => window.id === id && !window.destroyed) || null;
 
-function fixture({platform = 'darwin', zoom = 1, content = rect(260, 69, 1088, 700), area = rect(0, 29, 1352, 795), anchorRect = rect(845, 39, 30, 30)} = {}) {
+function fixture({platform = 'darwin', env, zoom = 1, content = rect(260, 69, 1088, 700), area = rect(0, 29, 1352, 795), anchorRect = rect(845, 39, 30, 30)} = {}) {
   FakeWindow.all = [];
   const parent = new FakeWindow({});
   parent.content = content;
@@ -59,7 +59,7 @@ function fixture({platform = 'darwin', zoom = 1, content = rect(260, 69, 1088, 7
   parent.contentView.addChildView(ui);
   const displays = [];
   const electron = {BaseWindow: FakeWindow, WebContentsView: FakeView, BrowserWindow: {getAllWindows: () => []}, screen: {getDisplayMatching: box => { displays.push(box); return {workArea: area}; }}};
-  const popup = new ExtensionPopup({extensionId: 'nngceckbapebfimnlniiiahkandclblb', session: {name: 'session'}, parent, url: 'chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html', anchorRect, alignment: 'bottom right'}, {electron, platform});
+  const popup = new ExtensionPopup({extensionId: 'nngceckbapebfimnlniiiahkandclblb', session: {name: 'session'}, parent, url: 'chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html', anchorRect, alignment: 'bottom right'}, {electron, platform, env});
   return {popup, parent, electron, displays, window: popup.window, view: popup.view, contents: popup.webContents};
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -93,7 +93,7 @@ test('the window is the library\'s (frameless, a child of the browser window, fi
   assert.equal(win.window.options.transparent, undefined);
   assert.ok(!win.view.calls.some(call => call[0] === 'radius'), 'Windows rounds the window itself');
   assert.equal(win.window.options.backgroundColor, '#ffffff');
-  const linux = fixture({platform: 'linux'});
+  const linux = fixture({platform: 'linux', env: {XDG_SESSION_TYPE: 'x11'}});
   assert.equal(linux.window.options.roundedCorners, false);
 });
 
@@ -428,8 +428,9 @@ test('electron-chrome-extensions 4.9.0 still has the PopupView and activateClick
 
 test('the toolbar adapter frames the popups of every runtime it attaches (ordinary and private sessions), then sizes them', () => {
   const toolbar = fs.readFileSync(path.join(__dirname, '../desktop/browser-services/extension-toolbar.cjs'), 'utf8');
-  const hooks = toolbar.split("installPopupFrames(runtime);").length - 1;
-  assert.equal(hooks, 2);
+  // the ordinary session's popups, and a private session's (which is given its window: it is one window's, and the engine may not have met it yet)
+  const hooks = toolbar.split("installPopupFrames(runtime);").length - 1, privateHooks = toolbar.split("installPopupFrames(runtime,{getWindow});").length - 1;
+  assert.deepEqual([hooks, privateHooks], [1, 1]);
   assert.equal(toolbar.split("runtime.on('browser-action-popup-created',fitExtensionAction)").length - 1, 2);
   assert.ok(!toolbar.includes('placeExtensionPopup'));
 });

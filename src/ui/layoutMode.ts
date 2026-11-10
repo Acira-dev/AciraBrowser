@@ -1,7 +1,7 @@
 import { workspaceIsOpen } from '../runtime/browserChrome';
 import type { BrowserAction,BrowserSnapshot } from '../runtime/types';
 import { dismissEdge,useChromeEdge } from './chromeEdge';
-import { effectiveView,windowViewOf } from '../runtime/windowView';
+import { effectiveView,sidebarHeldOpenIn,windowViewOf } from '../runtime/windowView';
 import { t } from '../i18n';
 /** One layout store (docs/launch/LAYOUT_MODES.md §5).
  * - layout: native `settings.verticalTabs` (shared by every window; main reads it for the Ctrl+S contract).
@@ -16,8 +16,16 @@ export const layoutOf = (state: Pick<BrowserSnapshot, 'settings'>): LayoutMode =
  * so the toolbar's first control is Back and there is no empty slot where the button stood. */
 export function sidebarControl(state: BrowserSnapshot) {
   const tab = state.tabs.find(item => item.id === state.activeTabId) || state.tabs[0];
-  const open = layoutOf(state) === 'vertical' && !!tab && workspaceIsOpen(state.windowUi, tab);
-  return { visible: layoutOf(state) === 'vertical' && effectiveView(state.settings, state.windowUi) !== 'seamless', open, label: open ? t("app.collapseSidebar") : t("app.expandSidebar") };
+  const open = layoutOf(state) === 'vertical' && !!tab && workspaceIsOpen(state.windowUi, tab), view = effectiveView(state.settings, state.windowUi);
+  // (13.5: Sidebar + address in Full has none either: its sidebar is the top of the window and stays open, windowView.ts sidebarHeldOpen.)
+  return { visible: layoutOf(state) === 'vertical' && view !== 'seamless' && !sidebarHeldOpenIn(state.settings, state.windowUi), open, label: open ? t("app.collapseSidebar") : t("app.expandSidebar") };
+}
+
+/** The commands a list may offer in this window (the command bar, the address list): "Toggle sidebar" (registry id `workspace`, desktop/shortcut-registry.cjs) is not one of them where the sidebar is held open (13.5,
+ * Sidebar + address in Full: nothing closes it, so the command would only answer with nothing). The same array back everywhere else. */
+export const SIDEBAR_TOGGLE_COMMAND = 'workspace';
+export function commandsOffered<T extends { id: string }>(state: Pick<BrowserSnapshot, 'settings' | 'windowUi'>, commands: readonly T[]): readonly T[] {
+  return sidebarHeldOpenIn(state.settings, state.windowUi) ? commands.filter(command => command.id !== SIDEBAR_TOGGLE_COMMAND) : commands;
 }
 
 /** The sidebar stands on the window frame (founder P0, 27 Oct: "the sidebar and the toolbar don't match colors"): docked open, or

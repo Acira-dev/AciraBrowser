@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Эти вкладки сейчас должны оставаться активными",
   "tabsleep.privateStaysAwake": "В приватных окнах все вкладки остаются активными",
   "tabsleep.couldNot": "Не удалось усыпить вкладки",
+  "tabsleep.tipSleeping": "усыплена",
   "peek.frameLabel": "Предпросмотр ссылки",
   "peek.openAsTab": "Открыть во вкладке",
   "peek.openInSplit": "Открыть в разделённом виде",

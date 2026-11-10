@@ -21,6 +21,18 @@ import { sidebarMorphRunning } from './sidebarMorph';
 const FADE_MS = 420;
 let layers: HTMLElement[] = [], front = 0, lastKey = '', lastBase = '', lastColour = '', painted = false;
 const app = () => document.querySelector<HTMLElement>('.app.style-acira:not(.native-layer)');
+/** The left wash is painted by the sidebar itself (13.5): two layers inside the open sidebar (`.st-glow-rail`, see AciraSidebar) that follow the frame layers' colours,
+ *  opacity and fades exactly. A layer behind the frame at a fixed place is not part of what the layout view transition shows under the sidebar column: the sidebar slid in
+ *  without its glow and the glow landed on it in one frame at the end. Inside the sidebar the glow travels, and fades, with it. Mounted layers take the current state at once. */
+const rails: [Set<HTMLElement>, Set<HTMLElement>] = [new Set(), new Set()];
+const railRef = (index: 0 | 1) => (el: HTMLElement | null) => {
+  if (!el) return undefined;
+  rails[index].add(el); el.style.cssText = layers[index]?.style.cssText ?? '';
+  return () => { rails[index].delete(el); };
+};
+/** React refs of the two layers a sidebar renders. */
+export const railGlowRef0 = railRef(0), railGlowRef1 = railRef(1);
+const stackOf = (index: number): HTMLElement[] => [layers[index], ...rails[index as 0 | 1]].filter(Boolean) as HTMLElement[];
 const hexOf = (triple: string) => '#' + triple.trim().split(/\s+/).map(n => Number(n).toString(16).padStart(2, '0')).join('');
 
 function readBase(): SiteTintBase | null {
@@ -66,18 +78,23 @@ export function syncSiteGlow(input: SiteGlowInput, options: { instant?: boolean 
   if (key === lastKey && baseKey === lastBase) return;
   const sameColour = key === lastKey; // only the finish changed: re-derive at once
   lastKey = key; lastBase = baseKey; lastColour = color; if (color) painted = true;
-  const incoming = layers[1 - front], outgoing = layers[front], instant = options.instant || sameColour || reducedMotion();
+  const inIndex = 1 - front, outIndex = front, incoming = layers[inIndex], instant = options.instant || sameColour || reducedMotion();
   const request: SiteGlowRequest | null = color ? { color, strength: SITE_GLOW_STRENGTH[input.level === 'rich' ? 'rich' : 'soft'] } : null;
   const colors = request ? siteGlowColors(request, base) : null;
   const transition = instant ? 'none' : `opacity ${FADE_MS}ms cubic-bezier(.2,0,0,1)`;
   if (colors && colors.opacity > 0) {
     root.setAttribute('data-site-glow', ''); root.setAttribute('data-site-glow-tone', base.dark ? 'dark' : 'light');
-    incoming.style.setProperty('--g1', colors.g1); incoming.style.setProperty('--g2', colors.g2); incoming.style.setProperty('--g3', colors.g3);
-    incoming.style.transition = 'none'; incoming.style.opacity = '0'; void incoming.offsetWidth;
-    incoming.style.transition = transition; outgoing.style.transition = transition;
-    incoming.style.opacity = String(colors.opacity); outgoing.style.opacity = '0'; front = 1 - front;
+    for (const el of stackOf(inIndex)) {
+      el.style.setProperty('--g1', colors.g1); el.style.setProperty('--g2', colors.g2); el.style.setProperty('--g3', colors.g3);
+      el.style.transition = 'none'; el.style.opacity = '0';
+    }
+    void incoming.offsetWidth;
+    for (const el of [...stackOf(inIndex), ...stackOf(outIndex)]) el.style.transition = transition;
+    for (const el of stackOf(inIndex)) el.style.opacity = String(colors.opacity);
+    for (const el of stackOf(outIndex)) el.style.opacity = '0';
+    front = 1 - front;
   } else {
-    for (const l of layers) { l.style.transition = transition; l.style.opacity = '0'; }
+    for (const el of [...stackOf(0), ...stackOf(1)]) { el.style.transition = transition; el.style.opacity = '0'; }
     if (instant) root.removeAttribute('data-site-glow'); else setTimeout(() => { if (!lastColour) root.removeAttribute('data-site-glow'); }, FADE_MS + 40);
   }
 }

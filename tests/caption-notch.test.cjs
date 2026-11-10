@@ -140,7 +140,7 @@ test('main\'s caption overlay is the notch: floating over the page, opaque in th
   assert.match(main, /notch:\(\)=>process\.platform==='win32'\?\{active:layout\.captionNotch===true,hidden:captionHiddenNow\}:null,notchIsShown:\(\)=>captionNotchShown,notchShown:/);
   assert.match(validation, /'captionHidden','captionNotch','pageDragging'/);
   assert.match(validation, /boolean\(value\.captionNotch,'Caption notch'\)/);
-  assert.match(app, /captionNotchWanted\(document\.documentElement\.dataset\.platform \|\| 'darwin', sbChrome, windowFullscreen, addrSide\)/);
+  assert.match(app, /captionNotchWanted\(document\.documentElement\.dataset\.platform \|\| 'darwin', addrWanted, windowFullscreen, addrSide, seamless\)/, '13.5: the setting, not the Full header: Seamless has the notch too (tests/caption-seamless-sidebar-mode.test.ts)');
   assert.match(app, /\.\.\.\(captionNotch \? \{ captionNotch: true, captionHeight: NOTCH_HEIGHT \} : \{\}\)/, 'the notch\'s height replaces the strip\'s, after the ordinary one');
-  assert.match(ui, /captionNotchWanted = \(platform: string, sidebarMode: boolean, fullscreen: boolean, side: 'left' \| 'right' = 'left'\): boolean => platform === 'win32' && sidebarMode && !fullscreen && side === 'left';/);
+  assert.match(ui, /captionNotchWanted = \(platform: string, sidebarMode: boolean, fullscreen: boolean, side: 'left' \| 'right' = 'left', seamless = false\): boolean => platform === 'win32' && sidebarMode && !fullscreen && \(side === 'left' \|\| seamless\);/);
 });

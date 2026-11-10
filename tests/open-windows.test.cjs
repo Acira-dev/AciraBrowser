@@ -155,5 +155,6 @@ test('restart.cjs tells the list every time a quit is called off, and a list tha
 
 test('main.cjs: the one place that calls a quit off also tells the list of open windows', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
-  assert.match(source, /const restart=require\('\.\/restart\.cjs'\)\.createRestart\(\{app,onCalledOff:\(\)=>openWindows\.calledOff\(\)\}\);/);
+  // (13.5: the same call also tells the updater, so Install now works again once its quit is called off: the list of open windows is told last, always)
+  assert.match(source, /const restart=require\('\.\/restart\.cjs'\)\.createRestart\(\{app,onCalledOff:\(\)=>\{[^\n]*?try\{appUpdater\?\.installCancelled\(\);\}catch\{\}openWindows\.calledOff\(\);\}\}\);/);
 });

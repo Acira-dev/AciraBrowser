@@ -7,9 +7,10 @@
 // Built into autoconsent-preload.cjs by scripts/build-ui-preload.mjs (a sandboxed preload cannot require the library); the rules for this frame come from the main
 // process (autoconsent-rules.cjs), and only while "Answer cookie banners" is on for the page.
 const {ipcRenderer,webFrame}=require('electron');
+/* frame-boot client (frame-boot.cjs) */const bootAnswer=(channel,...args)=>{try{const KEY=Symbol.for('acira.frame-boot');let boot=globalThis[KEY];if(!boot)boot=globalThis[KEY]=ipcRenderer.sendSync('acira:frame-boot',location.href,process.isMainFrame,window===window.top)||{};if(Object.prototype.hasOwnProperty.call(boot,channel))return boot[channel];}catch{/* ask directly */}return ipcRenderer.sendSync(channel,...args);};/* end frame-boot client */
 if(/^https?:/.test(location.href)){
  let setup=null;
- try{setup=ipcRenderer.sendSync('acira:autoconsent-setup',process.isMainFrame);}catch{/* A closing window. */}
+ try{setup=bootAnswer('acira:autoconsent-setup',process.isMainFrame);}catch{/* A closing window. */}
  if(setup&&typeof setup.rules==='string'){
   const AutoConsent=require('@duckduckgo/autoconsent').default;
   let consent=null;

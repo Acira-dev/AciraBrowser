@@ -278,3 +278,222 @@ test('app host: records of the profile (never private), start through the manage
     assert.equal(typeof hostModule.connect, 'function');
   } finally { f.cleanup(); }
 });
+
+// ------------------------------------------------------------------------------------------------ onDeterminingFilename (13.5)
+// The extensions that listen are asked for a name before the file gets one. The transfer waits (parked, paused) and lands where they said,
+// inside the Downloads folder; "ask where to save" still asks; private downloads are never offered; a download that is being held paused while
+// its destination is chosen is not "paused" to an extension.
+const itemsModule = require('../desktop/browser-services/ext-api/downloads/item.cjs');
+const waitFor = async (check, ms = 5000) => { const until = Date.now() + ms; while (!check() && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 5)); return check(); };
+function direct() {
+  const ref = {};
+  const f = setup({preferences: {get: () => ({askWhere: false, folder: ref.folder}), destination: name => path.join(ref.folder, name)}});
+  ref.folder = f.folder;
+  return f;
+}
+/** A determiner for a profile; `answer` decides what the extensions say. */
+function determiner(profileId, answer, log = []) {
+  const off = hostModule.setDeterminer(profileId, {listening: () => true, determine: async record => { log.push({...record}); return typeof answer === 'function' ? answer(record) : answer; }});
+  return {off, log};
+}
+
+test('a page download is named by the extension: parked while it answers, announced first, and it lands where the extension said', async () => {
+  const f = direct(), order = [];
+  const asked = determiner('profile-a', async record => { order.push(['asked', f.events.map(e => e.type)]); return {filename: 'invoices/2026/renamed.txt'}; }, []);
+  try {
+    const item = new Item('https://example.com/files/a.txt', {name: 'a.txt', mime: 'text/plain', total: 10});
+    await f.willDownload(item, f.wc);
+    assert.equal(asked.log.length, 1, 'asked once');
+    assert.deepEqual([asked.log[0].url, asked.log[0].mime, asked.log[0].status, asked.log[0].path, asked.log[0].totalBytes],
+      ['https://example.com/files/a.txt', 'text/plain', 'Downloading', path.join(f.folder, 'a.txt'), 10], 'it is told the download as Chrome shows it: the tentative path in the Downloads folder');
+    assert.deepEqual(order, [['asked', ['created']]], 'onCreated came first, then the question');
+    assert.match(item.saved, /download-staging/, 'Electron needs a path at once: parked until the answer');
+    assert.equal(f.dialogs.length, 0, 'no Save dialog: "ask where" is off');
+    assert.equal(f.records[0].path, path.join(f.folder, 'invoices', '2026', 'renamed.txt'));
+    item.finish('hello');
+    assert.equal(await waitFor(() => f.records[0].status === 'Ready'), true, 'the parked file was moved to its place');
+    assert.equal(fs.readFileSync(path.join(f.folder, 'invoices', '2026', 'renamed.txt'), 'utf8'), 'hello');
+    assert.equal(fs.existsSync(path.join(f.folder, 'a.txt')), false);
+    const [created] = f.events;
+    assert.equal(created.type, 'created');
+    assert.equal(itemsModule.toItem(created.record, 1).paused, false, 'not paused');
+  } finally { asked.off(); f.cleanup(); }
+});
+
+test('nothing suggested: the download is named and placed as it always was', async () => {
+  for (const answer of [{}, null]) {
+    const f = direct();
+    const asked = determiner('profile-a', answer);
+    try {
+      const item = new Item('https://example.com/files/plain.txt', {name: 'plain.txt'});
+      await f.willDownload(item, f.wc);
+      assert.equal(f.records[0].path, path.join(f.folder, 'plain.txt'));
+      item.finish();
+      assert.equal(await waitFor(() => f.records[0].status === 'Ready'), true);
+      assert.equal(fs.readFileSync(path.join(f.folder, 'plain.txt'), 'utf8'), '0123456789');
+    } finally { asked.off(); f.cleanup(); }
+  }
+});
+
+test('a suggestion cannot leave the Downloads folder, and "uniquify" and "overwrite" work as they do for downloads.download', async () => {
+  const f = direct();
+  const answers = [{filename: 'x/same.txt'}, {filename: 'x/same.txt'}, {filename: 'x/same.txt', conflictAction: 'overwrite'}, {filename: '..\\..\\evil.txt'}];
+  const asked = determiner('profile-a', () => answers.shift());
+  try {
+    // started by an extension, so that following one another is not a page's burst (the "allow multiple downloads" question)
+    const run = async name => { const url = 'https://example.com/' + name, started = f.service.startExtension({session: f.session, url, headers: {}, owner: f.owner('profile-a'), request: {extension}}); const item = new Item(url, {name}); await f.willDownload(item); await started; return item; };
+    const first = await run('1.txt'); first.finish('one'); await waitFor(() => f.records[0].status === 'Ready');
+    const second = await run('2.txt'); second.finish('two'); await waitFor(() => f.records[1].status === 'Ready');
+    assert.deepEqual(f.records.slice(0, 2).map(r => r.path), [path.join(f.folder, 'x', 'same.txt'), path.join(f.folder, 'x', 'same (1).txt')], 'uniquify, the default');
+    const third = await run('3.txt'); third.finish('three'); await waitFor(() => f.records[2].status === 'Ready');
+    assert.equal(f.records[2].path, path.join(f.folder, 'x', 'same.txt'), 'overwrite keeps the name');
+    assert.equal(fs.readFileSync(path.join(f.folder, 'x', 'same.txt'), 'utf8'), 'three');
+    // a result that somehow carried a path out of the folder (the package refuses those before it gets here) is still contained by the engine
+    const fourth = await run('4.txt');
+    assert.ok(f.records[3].path.startsWith(f.folder + path.sep), f.records[3].path);
+    fourth.finish('four');
+  } finally { asked.off(); f.cleanup(); }
+});
+
+test('"ask where to save" still asks, with the extension\'s name as the default; cancelling cancels', async () => {
+  const f = setup({dialogAnswer: options => ({canceled: false, filePath: options.defaultPath})});
+  const asked = determiner('profile-a', {filename: 'sorted/by-extension.txt'});
+  try {
+    const item = new Item('https://example.com/ask.txt', {name: 'ask.txt'});
+    await f.willDownload(item, f.wc);
+    assert.equal(f.dialogs.length, 1);
+    assert.equal(f.dialogs[0].defaultPath, path.join(f.folder, 'sorted', 'by-extension.txt'));
+    assert.equal(f.records[0].path, path.join(f.folder, 'sorted', 'by-extension.txt'));
+    item.finish('x');
+    assert.equal(await waitFor(() => f.records[0].status === 'Ready'), true);
+  } finally { asked.off(); f.cleanup(); }
+  const g = setup({dialogAnswer: () => ({canceled: true})});
+  const again = determiner('profile-a', {filename: 'never.txt'});
+  try {
+    const item = new Item('https://example.com/no.txt', {name: 'no.txt'});
+    await g.willDownload(item, g.wc);
+    assert.equal(g.records[0].status, 'Cancelled');
+    assert.equal(fs.existsSync(path.join(g.folder, 'never.txt')), false);
+  } finally { again.off(); g.cleanup(); }
+});
+
+test('an extension\'s own download can be renamed by another extension: the suggestion wins over the options\' filename and conflictAction', async () => {
+  const f = direct();
+  fs.writeFileSync(path.join(f.folder, 'moved.bin'), 'older');
+  const asked = determiner('profile-a', {filename: 'moved.bin', conflictAction: 'overwrite'});
+  try {
+    const started = f.service.startExtension({session: f.session, url: 'https://example.com/o.bin', headers: {}, owner: f.owner('profile-a'), request: {extension, filename: 'original/o.bin', conflictAction: 'uniquify'}});
+    const item = new Item('https://example.com/o.bin', {name: 'server.bin'});
+    await f.willDownload(item);
+    await started;
+    assert.equal(asked.log[0].byExtensionId, extension.id);
+    assert.equal(asked.log[0].path, path.join(f.folder, 'original', 'o.bin'), 'it is told where the starting extension wanted it');
+    assert.equal(f.records[0].path, path.join(f.folder, 'moved.bin'));
+    item.finish('newer');
+    assert.equal(await waitFor(() => f.records[0].status === 'Ready'), true);
+    assert.equal(fs.readFileSync(path.join(f.folder, 'moved.bin'), 'utf8'), 'newer');
+  } finally { asked.off(); f.cleanup(); }
+});
+
+test('private and Tor downloads are never offered to an extension, and a download with nobody listening is not held', async () => {
+  const f = direct(), privateOwner = {...f.owner('private-tab-1'), private: true, tabId: 'tab-p'};
+  const asked = determiner('private-tab-1', {filename: 'leak.txt'}), other = determiner('profile-a', {filename: 'x.txt'});
+  other.off();
+  const idle = hostModule.setDeterminer('profile-a', {listening: () => false, determine: async () => { throw new Error('asked'); }});
+  try {
+    const privateService = createDownloads({getOwner: () => privateOwner, dialog: {showSaveDialog: async () => ({canceled: true}), showMessageBox: async () => ({response: 0})}, app: {getPath: () => f.folder}, shell: {},
+      preferences: {get: () => ({askWhere: false, folder: f.folder}), destination: name => path.join(f.folder, name)}, journalPath: path.join(f.dir, 'private-journal.json')});
+    const session = Object.assign(new EventEmitter(), {downloadURL() {}});
+    privateService.attach(session);
+    const item = new Item('https://example.com/p.txt', {name: 'p.txt'});
+    session.emit('will-download', {preventDefault() {}}, item, {});
+    await tick(); await tick();
+    assert.equal(asked.log.length, 0, 'not asked');
+    assert.equal(item.saved, path.join(f.folder, 'p.txt'), 'straight to its place, as before');
+    // nobody listening on the ordinary profile: the same, with no parking
+    const plainItem = new Item('https://example.com/q.txt', {name: 'q.txt'});
+    await f.willDownload(plainItem, f.wc);
+    assert.equal(plainItem.saved, path.join(f.folder, 'q.txt'));
+  } finally { idle(); asked.off(); f.cleanup(); }
+});
+
+test('a download held while its destination is chosen is reported to extensions as running, not paused', async () => {
+  const f = setup({dialogAnswer: () => new Promise(() => {})});   // the Save dialog is open and unanswered
+  try {
+    const item = new Item('https://example.com/held.txt', {name: 'held.txt'});
+    await f.willDownload(item, f.wc);
+    assert.equal(item.paused, true, 'the manager really holds it');
+    item.emit('updated', {}, 'progressing');
+    const created = f.events.find(e => e.type === 'created');
+    assert.ok(created, 'announced');
+    assert.equal(itemsModule.toItem(created.record, 1).paused, false);
+    assert.equal(itemsModule.toItem(created.record, 1).state, 'in_progress');
+  } finally { f.cleanup(); }
+});
+
+test('cancelling while the extensions are still answering ends the download cleanly', async () => {
+  const f = direct();
+  let release;
+  const asked = determiner('profile-a', () => new Promise(resolve => { release = () => resolve({filename: 'late/name.txt'}); }));
+  try {
+    const item = new Item('https://example.com/c.txt', {name: 'c.txt'});
+    await f.willDownload(item, f.wc);
+    assert.equal(f.records[0]?.status === 'Ready', false);
+    item.cancel();
+    release();
+    await tick(); await tick();
+    assert.equal(f.records.find(r => r.status === 'Cancelled') !== undefined, true);
+  } finally { asked.off(); f.cleanup(); }
+});
+
+test('cancelling while the destination is still being chosen cancels, even when the small file has already arrived (the Save dialog, or the extensions asked for a name)', async () => {
+  for (const via of ['save dialog', 'extension suggestion']) {
+    let release;
+    const f = via === 'save dialog' ? setup({dialogAnswer: options => new Promise(resolve => { release = () => resolve({canceled: false, filePath: options.defaultPath}); })}) : direct();
+    const asked = via === 'save dialog' ? null : determiner('profile-a', () => new Promise(resolve => { release = () => resolve({filename: 'late/name.txt'}); }));
+    try {
+      const item = new Item('https://example.com/small.txt', {name: 'small.txt'});
+      await f.willDownload(item, f.wc);
+      assert.equal(typeof release, 'function', via + ': the destination is still being chosen');
+      item.emit('updated', {}, 'progressing');   // as Electron does at once: the row exists while the destination is being chosen
+      item.cancel = () => {};   // all of its bytes have arrived: Electron's cancel() on a finished item does nothing
+      item.finish('hello');
+      const record = f.records[0];
+      await f.service.command(record.id, 'cancel', 'profile-a', f.records, {});
+      release();
+      await waitFor(() => record.status === 'Cancelled' || record.status === 'Ready', 3000);
+      assert.equal(record.status, 'Cancelled', via + ': cancelled, not saved');
+      await tick(); await tick();
+      const left = []; (function walk(dir) { for (const entry of fs.readdirSync(dir, {withFileTypes: true})) { const file = path.join(dir, entry.name); if (entry.isDirectory()) walk(file); else left.push(path.relative(f.dir, file)); } })(f.dir);
+      assert.deepEqual(left.filter(name => !/journal/.test(name)), [], via + ': nothing of it is left on disk');
+    } finally { asked?.off(); f.cleanup(); }
+  }
+});
+
+test('a suggestion that cannot be written is dropped and the download keeps its own name: a folder name over the file system limit, a "folder" that is already a file', async () => {
+  const f = direct();
+  fs.writeFileSync(path.join(f.folder, 'already-a-file'), 'x');
+  const answers = [{filename: 'q'.repeat(300) + '/long.txt'}, {filename: 'already-a-file/inside.txt'}, {filename: 'q'.repeat(300) + '/own.txt'}, {filename: 'already-a-file/own2.txt'}];
+  const asked = determiner('profile-a', () => answers.shift());
+  try {
+    // an extension's own download (not a page's burst) and a page download, each with both kinds
+    const viaExtension = async (name) => { const url = 'https://example.com/' + name, started = f.service.startExtension({session: f.session, url, headers: {}, owner: f.owner('profile-a'), request: {extension}}); const item = new Item(url, {name}); await f.willDownload(item); await started; return item; };
+    for (const name of ['one.txt', 'two.txt']) {
+      const item = await viaExtension(name);
+      const record = f.records.find(r => r.path && r.path.endsWith(name));
+      assert.ok(record, name + ': it was not cancelled');
+      assert.equal(record.path, path.join(f.folder, name), name + ': it keeps its own name');
+      item.finish('ok');
+      assert.equal(await waitFor(() => record.status === 'Ready'), true, name + ': it completes');
+      assert.equal(fs.readFileSync(path.join(f.folder, name), 'utf8'), 'ok');
+    }
+    const item = new Item('https://example.com/own.txt', {name: 'own.txt'});
+    await f.willDownload(item, f.wc);
+    const record = f.records.find(r => r.path && r.path.endsWith('own.txt'));
+    assert.ok(record && record.status !== 'Cancelled', 'a page download is not cancelled either');
+    assert.equal(record.path, path.join(f.folder, 'own.txt'));
+    item.finish('page');
+    assert.equal(await waitFor(() => record.status === 'Ready'), true);
+    assert.ok(!f.toasts.some(toast => /couldn|not saved/i.test(String(toast.text))), 'no "could not save" for it');
+  } finally { asked.off(); f.cleanup(); }
+});

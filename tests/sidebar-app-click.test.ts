@@ -88,7 +88,9 @@ test('the sidebar runs the plan, lists favorites\' tabs like any tab, links drop
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:adopt,favoriteId:app\.id\}\)/,'a tab dropped on Favorites or pinned with Ctrl+Shift+D is linked to the favorite and stays in the list (one function, applyFavorite)');
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:null\}\)/,'a removed favorite hands its tab back');
   assert.match(source,/const tab=appTabFor\(app,favoriteScope\(state\),profileId\),active=tab\?\.id===state\.activeTabId;/);
-  assert.match(source,/<WorkspaceTitle state=\{state\}\/>/,'the workspace title counts every tab of the workspace');
+  // 13.5: the title counts what the list shows (as the workspace menu's counts do): a favorite's tab that lives only in its tile is not a tab of the list.
+  assert.match(source,/<WorkspaceTitle state=\{state\} count=\{listedProfileTabs\.length\}\/>/,'the Space title counts the tabs the list shows, not the tile-only favorite tabs');
+  assert.doesNotMatch(source,/<WorkspaceTitle state=\{state\}\/>/,'no title without the listed count');
   assert.match(source,/title=\{away\?t\("acirasidebar\.clickToGoBack",\{host:appHost\(app\.url\)\|\|address\(app\.url\)\}\):`\$\{app\.title\} · \$\{address\(app\.url\)\}`\}/);
   const en=JSON.parse(readFileSync(new URL('../src/i18n/en.json',import.meta.url),'utf8')) as Record<string,string>;
   assert.equal(en['acirasidebar.clickToGoBack'],'Click to go back to {host}');

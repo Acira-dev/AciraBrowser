@@ -62,6 +62,25 @@ test('exit cleanup waits for delayed native terminal events after deletion befor
  }finally{f.database.close();}
 });
 
+test('exit cleanup waits for native request cancellation between cookies and storage',async()=>{
+ const f=fixture();try{
+  const clear=f.session.clearData;
+  f.session.clearData=async options=>{
+   await clear(options);
+   if(options.dataTypes.includes('cookies')){
+    f.setNetwork(true);
+    setTimeout(()=>f.setNetwork(false),30);
+   }
+  };
+  await f.service.set('A',{enabled:true,categories:['cookies','storage'],keepOrigins:[]});
+  const result=await f.service.runPending();
+  assert.equal(result.completed,true);
+  assert.deepEqual(result.profiles[0].results.map(row=>row.status),['cleared','cleared']);
+  assert.ok(f.calls.some(call=>call.complete),'cookie recovery was resumed');
+  assert.equal(f.service.status('A').pending,false);
+ }finally{f.database.close();}
+});
+
 for(const activity of [true,null])test(`exit cleanup retains its journal when post-deletion network activity stays ${activity===true?'active':'unknown'}`,async()=>{
  const f=fixture();try{
   const clear=f.session.clearData;f.session.clearData=async options=>{await clear(options);f.setNetwork(activity);};

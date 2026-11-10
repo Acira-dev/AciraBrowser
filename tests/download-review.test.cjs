@@ -530,3 +530,38 @@ test('second review 6: a held transfer whose bytes had all arrived when Acira st
     } finally { f.cleanup(); }
   }
 });
+
+// 13.5: a clean quit keeps a running transfer's bytes (download-engine.cjs keepForQuit); the parked ("Ask where") ones too, once the person has answered.
+test('13.5 an "Ask where" transfer that was answered and is running at a clean quit comes back resumable, to the name the person chose', async () => {
+  const f = setup({askWhere: true});
+  try {
+    const item = await parkedHalf(f, 'big.bin');
+    const records = f.records.map(r => ({...r}));
+    assert.equal(f.service.keepForQuit(), true);
+    item.cancel(); // Chromium's cancel at shutdown deletes the staging file
+    assert.equal(f.journal().length, 1, 'the journal keeps it');
+    const next = f.make(); next.attach(f.session);
+    const shown = next.reconcile(records, 'A')[0];
+    assert.equal(shown.canResume, true, 'resumable after the restart');
+    let made = null;
+    f.session.createInterruptedDownload = options => { made = options; };
+    await next.command(records[0].id, 'resume', 'A', records, {webContents: f.wc});
+    assert.ok(made && made.path.startsWith(f.staging) && made.offset === 400 && made.length === 1000, 'native resume gets the bytes where the journal says: ' + JSON.stringify(made));
+    assert.equal(fs.readFileSync(made.path, 'utf8'), 'x'.repeat(400), 'and they are there');
+    assert.deepEqual(fs.readdirSync(path.dirname(made.path)).filter(n => n.endsWith('.acira-partial')), [], 'no second name left');
+  } finally { f.cleanup(); }
+});
+
+test('13.5 a transfer still waiting on the Save dialog at a clean quit is not kept (nothing has been chosen yet): as before, nothing comes back', async () => {
+  const f = setup({askWhere: true});
+  try {
+    const item = f.begin(new Item('wait.bin', {total: 1000}));
+    await until(() => f.replies.length >= 1, 'dialog'); await tick(); await tick();
+    item.write('x'.repeat(100)); f.clock.now += 2000; item.emit('updated', {}, 'progressing');
+    assert.equal(f.service.keepForQuit(), false);
+    item.cancel();
+    const next = f.make();
+    assert.deepEqual(next.reconcile(f.records.map(r => ({...r})), 'A').filter(r => r.canResume), [], 'nothing resumable');
+    assert.equal(fs.existsSync(f.staging), false, 'staging is clean');
+  } finally { f.cleanup(); }
+});

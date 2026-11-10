@@ -12,6 +12,10 @@
 //    Only frames are followed (AUTO's filter). A page's workers are never attached and never detached: asking Chromium to attach us to every Web Worker and then sending Target.detachFromTarget
 //    for each one killed the whole browser process (SIGSEGV in Electron's native layer, a few seconds after opening sites that start workers). The same holds for every session this module
 //    opens: Always dark, and Light / Dark whenever they differ from Acira's own appearance, the page's session and the nested session of every frame.
+//  - The Auto Dark Mode override lives in the page's blink settings, and Chromium re-applies those whenever it pushes the page's web preferences again: webContents.setVisualZoomLevelLimits
+//    (the zoom paths, page creation) and a change of Acira's own appearance (nativeTheme 'updated': the app's, or the system's at sunset) both do, and the page turns light while the session
+//    stays attached. The zoom paths therefore never call it on a page that holds a session (page-zoom-glide.cjs clearMagnification / ensureLimits), and refreshAll({force}) and reassert()
+//    send the override again in the same turn as the cause (one command per page and per frame, only in Always dark). The colour scheme emulation is a media override and is not affected.
 //  - Nothing here may take the app down: every entry point (attach, refreshAll, the debugger's messages, the timers) swallows its own failure, a page that cannot be told stays as it is, and a page
 //    whose renderer crashed is left alone until it navigates again.
 // Only in Always dark: a site is left out by its registrable domain (script-rules.cjs siteOfUrl), saved as a row `dark:<site>` = {dark:'exclude'} in the profile's policies table, and the
@@ -103,6 +107,13 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     entry.want = want; // only once the page has it: a call that failed halfway is made again
     for (const sessionId of entry.frames) tell(lease, want, sessionId).catch(() => {});
   }
+  /** Chromium reset the page's Auto Dark Mode override (it pushed the web preferences again) and nothing else: one command for the page and one for each frame. The colour scheme emulation is
+   *  a media override that survives (measured), and a tab that is not in Always dark has no Auto Dark Mode to lose. */
+  async function reapply(entry) {
+    const lease = entry.lease;
+    await send(lease, 'Emulation.setAutoDarkModeOverride', {enabled: true});
+    for (const sessionId of entry.frames) send(lease, 'Emulation.setAutoDarkModeOverride', {enabled: true}, sessionId).catch(() => {});
+  }
   /** System, or a tab that follows Acira anyway: the overrides are taken back and the session let go. */
   async function disable(wc, entry) {
     const lease = entry.lease;
@@ -128,28 +139,29 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     entry.timer.unref?.();
   }
   /** Brings one page to what it should be showing. Never rejects: a page that cannot be told stays as it is (callers fire it and forget it, so nothing may escape). */
-  async function apply(wc, url, fresh = false) {
-    try { await bring(wc, url, fresh); } catch { /* the page is looked at again at its next navigation or setting change */ }
+  async function apply(wc, url, fresh = false, force = false) {
+    try { await bring(wc, url, fresh, force); } catch { /* the page is looked at again at its next navigation or setting change */ }
   }
   /** Calls for the same page never overlap: a call that arrives meanwhile runs once more at the end. */
-  async function bring(wc, url, fresh) {
+  async function bring(wc, url, fresh, force = false) {
     const entry = pages.get(wc);
     if (!entry || wc.isDestroyed()) return;
     if (fresh) entry.tries = 0;
     if (entry.gone || wc.isCrashed?.()) return; // its renderer crashed: no session on a dead page, no attach loop; the next navigation looks again
-    if (entry.busy) { entry.again = url || true; return; }
+    if (entry.busy) { entry.again = url || true; entry.againForce = entry.againForce || force; return; }
     entry.busy = true;
     try {
       const want = wanted(wc, url || wc.getURL()), session = needsSession(want) ? want : null;
       if (session && !entry.lease) await enable(wc, entry, session);
       else if (session && (entry.want.scheme !== session.scheme || entry.want.auto !== session.auto)) await change(entry, session);
+      else if (session && force && session.auto) await reapply(entry);
       else if (!session && entry.lease) await disable(wc, entry);
     } catch (error) {
       void error; // a page that did not answer is looked at again below
       retryLater(wc, entry);
     } finally {
       entry.busy = false;
-      if (entry.again) { const next = entry.again === true ? undefined : entry.again; entry.again = false; void apply(wc, next); }
+      if (entry.again) { const next = entry.again === true ? undefined : entry.again, again = entry.againForce; entry.again = false; entry.againForce = false; void apply(wc, next, false, again); }
     }
   }
   /** Follows one website page for its life. */
@@ -180,10 +192,13 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
     for (const other of pages.keys()) { if (siteOfUrl(other.getURL()) === site) void apply(other, undefined, true); }
     return status(wc);
   }
-  /** The setting changed, or Acira's own appearance did (what a tab follows anyway). */
-  function refreshAll() { for (const wc of [...pages.keys()]) void apply(wc, undefined, true); }
+  /** The setting changed, or Acira's own appearance did (what a tab follows anyway). `force`: Acira's appearance changed, and Chromium pushes the page's web preferences again
+   *  when it does, which drops the Auto Dark Mode override while the debugger session stays attached: every page that holds a session is told again, in the same turn. */
+  function refreshAll({force = false} = {}) { for (const wc of [...pages.keys()]) void apply(wc, undefined, true, force); }
+  /** A page that holds a session is told its appearance again, at once (something just pushed its web preferences: webContents.setVisualZoomLevelLimits does). Nothing if it holds none. */
+  function reassert(wc) { if (pages.has(wc)) void apply(wc, undefined, false, true); }
   /** For tests and the menu: the settled state of one page. */
   const stateOf = wc => { const entry = pages.get(wc); return entry ? {session: Boolean(entry.lease), want: entry.want, frames: entry.frames.size} : null; };
-  return {attach, status, setExcluded, refreshAll, wanted, darkFor, stateOf, whenIdle: async wc => { for (let i = 0; i < 200 && pages.get(wc)?.busy; i += 1) await new Promise(resolve => setTimeout(resolve, 5)); }};
+  return {attach, status, setExcluded, refreshAll, reassert, wanted, darkFor, stateOf, whenIdle: async wc => { for (let i = 0; i < 200 && pages.get(wc)?.busy; i += 1) await new Promise(resolve => setTimeout(resolve, 5)); }};
 }
 module.exports = {createSiteAppearance, KEY, MODES, LIMIT};

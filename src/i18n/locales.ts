@@ -19,7 +19,7 @@ export const LANGUAGE_CHOICES = ['system', ...LOCALES.map(locale => locale.code)
 
 /** The shipped locale for a setting ('system' or a code) and the system's language tag (en-US, pt-PT, zh-TW…). */
 export function resolveLocale(setting: string | undefined, systemTag = 'en'): LocaleCode {
-  const wanted = !setting || setting === 'system' ? systemTag : setting;
+  const wanted = typeof setting !== 'string' || !setting || setting === 'system' ? (typeof systemTag === 'string' ? systemTag : 'en') : setting; // a saved setting that is not text (13.5, hunt-e 5) reads as the system's
   const exact = LOCALES.find(locale => locale.code.toLowerCase() === wanted.toLowerCase());
   if (exact) return exact.code;
   const language = wanted.toLowerCase().split(/[-_]/)[0];

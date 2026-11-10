@@ -18,7 +18,7 @@ import { matchesSystemTheme, systemThemeActions, useSystemTheme } from "../ui/sy
 import { shortcutFor } from "../ui/shortcutKeys";
 import { toolbarVisibilityItems } from "../ui/toolbarMenu";
 import { resetToolbarItems } from "../ui/toolbarPrefs";
-import { effectiveView, seamlessEdgesOf, windowViews, type WindowView } from "../runtime/windowView";
+import { effectiveView, seamlessEdgesOf, sidebarHeldOpenIn, windowViews, type WindowView } from "../runtime/windowView";
 import { windowViewDetail, windowViewName } from "../ui/windowViewText";
 import { MiniView } from "./settings/WindowViewCards";
 import { SidebarEdgeRows, SidebarSideRow } from "./settings/SidebarRows";
@@ -279,6 +279,8 @@ export function BrowserSettings({ state, dispatch }: Props) {
   const windowView = effectiveView(s, state.windowUi);
   /** "Hide the toolbar" has a row only where there is a toolbar to hide that Seamless does not already hide: tabs in a sidebar (not Sidebar + address), in Full, Compact or Focus. */
   const hideToolbarRow = layoutChoice === "sidebar" && windowView !== "seamless";
+  /** Sidebar + address in Full holds its sidebar open, so Sidebar › Show sidebar has nothing to switch and is not listed (runtime/windowView.ts). */
+  const sidebarClosable = !sidebarHeldOpenIn(s, state.windowUi);
   /** The settings, the profile's tabs switch and (when the address bar moves) the morph, in one step, so the card, the strip and the sidebar always agree (Appearance › Layout and Tabs share this). */
   const chooseTabLayout = (layout: MiniLayout) => setTabsLayout(state, dispatch, layout === "toolbar" ? "top" : layout);
   const toolbarItems = toolbarVisibilityItems(s, tab).filter(
@@ -317,6 +319,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       stockSearch,
       verticalTabs: Boolean(s.verticalTabs),
       hideToolbarRow: hideToolbarRow,
+      sidebarClosable,
     }),
     [
       customColors,
@@ -328,6 +331,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
       stockSearch,
       s.verticalTabs,
       hideToolbarRow,
+      sidebarClosable,
       desktopTheme.supported,
     ],
   );
@@ -796,7 +800,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                         style={{ background: p.color }}
                         aria-hidden="true"
                       >
-                        {p.name[0]}
+                        <bdi className="chip-letter">{p.name[0]}</bdi>
                       </span>
                       <div className="st-copy">
                         <span className="st-title">{p.name}</span>

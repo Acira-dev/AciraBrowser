@@ -231,7 +231,7 @@ test('the host shown is the frame\'s own, and only for web addresses',()=>{
 test('the three ends are wired: the engine asks the card, the preload hooks the page, main routes both',()=>{
  const main=fs.readFileSync(path.join(__dirname,'..','desktop','main.cjs'),'utf8'),engine=fs.readFileSync(path.join(__dirname,'..','desktop','browser-services','permission-engine.cjs'),'utf8');
  assert.match(main,/createSitePrompt\(/);assert.match(main,/sitePrompt\.relayout\(\)/);assert.match(main,/sitePrompt\.onState\(\)/);assert.match(main,/sitePrompt\.dispose\(\)/);
- assert.match(main,/ipcMain\.on\('acira:js-dialog'/);assert.match(main,/void siteDialog\(\{\.\.\.asked/,'"Leave this site?" and the unsaved-tab close (R4-35) use the card');assert.match(main,/\{type:'warning',title:tm\("main\.unsavedChanges"\)/,'a typed address keeps Leave this site?');
+ assert.match(main,/ipcMain\.on\('acira:js-dialog'/);assert.match(main,/siteDialog\(\{\.\.\.asked,site:\{\.\.\.asked\.site,centered:true,contents:wc/,'"Leave this site?" and the unsaved-tab close (R4-35) use the card');assert.match(main,/\{type:'warning',title:tm\("main\.unsavedChanges"\)/,'a typed address keeps Leave this site?');
  assert.match(main,/promptDialog\.showMessageBox\(mainWindow,\{type:'question',popover:true,message,detail,/,'"Open <app>?" (external-protocol.cjs) uses the anchored card');
  assert.match(engine,/js-dialog-preload\.cjs/);assert.match(engine,/getWindow\(wc\)/);
 });

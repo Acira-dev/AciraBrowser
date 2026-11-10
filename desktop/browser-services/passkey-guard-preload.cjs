@@ -15,7 +15,7 @@
 // macOS (2 Nov, `mac` set): Electron shows no passkey sheet of its own. Touch ID / iCloud Keychain passkeys need Apple's browser passkey
 // entitlement, which no build has yet (mac-passkey-preload.cjs adds them in main frames once one does), and a phone (hybrid) needs a QR
 // code Electron never shows. Yet the engine tells pages a passkey can be used (getClientCapabilities() says passkeyPlatformAuthenticator
-// and hybridTransport, and autofill is reported available), so Google asked for a passkey and its "Verifying it's you…" page waited with
+// and hybridTransport, and autofill is reported available), so Google asked for a passkey and its "Verifying it's you..." page waited with
 // nothing on screen until the sign-in session expired. Here the guard answers what is true on a Mac: no platform authenticator, no
 // phone, no autofill (immediate mediation either). A passkey get()/create() is refused at once with NotAllowedError, what a cancelled
 // sheet gives, so the site moves on to its other ways (Google: "Try another way"). A request only a security key can answer still

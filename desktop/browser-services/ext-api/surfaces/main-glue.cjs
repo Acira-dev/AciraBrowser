@@ -3,6 +3,7 @@
 // interface to a window of main.cjs. main.cjs calls attachWindow() once per ordinary window and runCommand() / noted() from two small hooks.
 const bridge=require('./bridge.cjs');
 const {menuData}=require('../../context-commands.cjs');
+const {trace}=require('../../ext-trace.cjs');
 
 /**
  * One ordinary (not private, not Tor) window.
@@ -32,6 +33,8 @@ function attachWindow(deps){
  // action.openPopup() and the shortcut of _execute_action: the interface presses the extension's own button.
  on('open-popup',request=>{
   if(request.handled||!deps.isActive())return;
+  // The extension (action.openPopup, or the key of its _execute_action) asked for its popup: told apart in the local trace from a click on the button.
+  trace('an extension asked for its popup',request.extensionId);
   deps.sendToChrome({type:'extension-popup',extensionId:request.extensionId});
   request.handled=true;
  });

@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {build as esbuild} from 'esbuild';
 import {build as viteBuild} from 'vite';
 import {bundleSharedExtensionSDK} from './release-shared-sdk.mjs';
-import {bundleDesktop,runtimeAlias,workingTreeSource,PATH_LOADED} from './desktop-bundle.mjs';
+import {bundleDesktop,bundleAnswerPreload,runtimeAlias,workingTreeSource,PATH_LOADED} from './desktop-bundle.mjs';
 const require=createRequire(import.meta.url);
 export const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
 export const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -49,7 +49,7 @@ export async function buildIsolated(output){
   if(uiPreload&&Object.values(uiPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox UI preload must bundle every dependency except electron');
   // The cookie-banner answering preload bundles DuckDuckGo's autoconsent the same way (a sandboxed frame preload cannot require it).
   const hasAnswerPreload=await fs.access(path.join(root,'desktop/browser-services/autoconsent-preload-entry.cjs')).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;});
-  const answerPreload=hasAnswerPreload?await esbuild({absWorkingDir:root,entryPoints:['desktop/browser-services/autoconsent-preload-entry.cjs'],outfile:path.join(output,'desktop/browser-services/autoconsent-preload.cjs'),bundle:true,platform:'browser',format:'cjs',target:'chrome130',external:['electron'],legalComments:'inline',metafile:true,logLevel:'silent'}):null;
+  const answerPreload=hasAnswerPreload?await bundleAnswerPreload({root,outfile:path.join(output,'desktop/browser-services/autoconsent-preload.cjs'),metafile:true}):null;
   warnings.push(...(answerPreload?.warnings||[]).map(w=>w.text));
   if(answerPreload&&Object.values(answerPreload.metafile.outputs).some(file=>file.imports.some(entry=>entry.external&&entry.path!=='electron')))throw new Error('Sandbox cookie-answer preload must bundle every dependency except electron');
   // Optional filtering reads this exact preload source to construct an inert

@@ -54,7 +54,7 @@ export function ProfileAvatar({
         color: readableOn(fill),
       }}
     >
-      {profileInitial(name, avatar)}
+      <bdi className="chip-letter">{profileInitial(name, avatar)}</bdi>
     </span>
   );
 }

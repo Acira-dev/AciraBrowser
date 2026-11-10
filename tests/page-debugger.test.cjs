@@ -72,3 +72,40 @@ test('no feature attaches a page\'s debugger on its own any more, except the one
   walk(root);
   assert.deepEqual(found.sort(), ['browser-services/private-session-retirement.cjs', 'browser-services/session-cookie-restore.cjs', 'browser-services/tor-window.cjs', 'page-debugger.cjs'], 'a new debugger user takes a lease (page-debugger.cjs) so a dark tab does not make it give up');
 });
+
+// 13.5: tab sleep asks "is somebody ELSE using this page's debugger?". Acira's own Website appearance session sits on every dark/light tab for as long as it lives and must not hold it awake.
+const {inUseByOthers, PASSIVE} = require('../desktop/page-debugger.cjs');
+
+test('inUseByOthers: no debugger attached, or only the Website appearance session (even with the page frozen by tab sleep gone again): nobody else', () => {
+  const {wc, debug} = fakePage();
+  assert.equal(inUseByOthers(wc), false, 'no debugger at all');
+  const dark = acquire(wc, 'appearance');
+  assert.equal(debug.attached, true); assert.equal(inUseByOthers(wc), false, 'Always dark / Light / Dark: our session, a passive lease');
+  assert.deepEqual(PASSIVE, ['appearance']);
+  dark.release(); assert.equal(debug.attached, false); assert.equal(inUseByOthers(wc), false);
+});
+
+test('inUseByOthers: any other lease, any debugger that is not ours, and anything that cannot be told, count as somebody else', () => {
+  for (const owner of ['zoom-glide', 'secured', 'capture', 'sleep', 'something-new']) {
+    const {wc} = fakePage(), dark = acquire(wc, 'appearance'), other = acquire(wc, owner);
+    assert.equal(inUseByOthers(wc), true, `appearance + ${owner}`); other.release(); assert.equal(inUseByOthers(wc), false, `${owner} done`); dark.release();
+    const alone = acquire(wc, owner); assert.equal(inUseByOthers(wc), true, `${owner} alone`); alone.release();
+  }
+  const foreign = fakePage({attached: true}); assert.equal(inUseByOthers(foreign.wc), true, 'Tor, a hidden cookie page, any other client');
+  assert.equal(acquire(foreign.wc, 'appearance'), null); assert.equal(inUseByOthers(foreign.wc), true, 'and a refused lease does not make it ours');
+  assert.equal(inUseByOthers({debugger: {isAttached() { throw new Error('Object has been destroyed'); }}}), true);
+  assert.equal(inUseByOthers({}), true); assert.equal(inUseByOthers(null), true);
+});
+
+test('inUseByOthers: our session ends under the lease and somebody else attaches: that is somebody else, not the old passive lease', () => {
+  const {wc, debug} = fakePage(); acquire(wc, 'appearance').onDetach(() => {});
+  debug.attached = false; debug.emit('detach', {}, 'target crashed');          // our session is gone
+  assert.equal(inUseByOthers(wc), false, 'nothing attached');
+  debug.attached = true;                                                       // another client attached (no lease of ours)
+  assert.equal(inUseByOthers(wc), true);
+});
+
+test('inUseByOthers: a named list can widen what does not count', () => {
+  const {wc} = fakePage(), a = acquire(wc, 'appearance'), z = acquire(wc, 'zoom-glide');
+  assert.equal(inUseByOthers(wc), true); assert.equal(inUseByOthers(wc, ['appearance', 'zoom-glide']), false); z.release(); a.release();
+});

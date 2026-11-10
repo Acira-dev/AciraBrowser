@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Queste schede devono restare attive per ora",
   "tabsleep.privateStaysAwake": "Le finestre private mantengono attive tutte le schede",
   "tabsleep.couldNot": "Impossibile sospendere le schede",
+  "tabsleep.tipSleeping": "sospesa",
   "peek.frameLabel": "Anteprima del link",
   "peek.openAsTab": "Apri come scheda",
   "peek.openInSplit": "Apri in vista divisa",

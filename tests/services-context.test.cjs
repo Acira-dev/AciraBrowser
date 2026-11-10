@@ -81,3 +81,26 @@ test('a Link preview from a private or Tor tab keeps its links private or Tor',a
  await items.find(i=>i.id==='link-window').click();assert.deepEqual(f.calls.at(-1),['window',{url:'https://destination.example/',profileId:'profile-A',private:true,tor:true}]);
  assert.equal(items.some(i=>['link-private-tab','link-private','link-tor-tab','link-peek'].includes(i.id)),false);
 });
+
+test('13.5: Save image as is offered for an image whose address is data: or blob:, and saves that address; never for other schemes or a missing image', async () => {
+  const data = 'data:image/png;base64,iVBORw0KGgo=', blob = 'blob:https://page.example/5b9e1b2a-0000-4000-8000-000000000000';
+  for (const src of [data, blob]) {
+    const f = setup(), items = f.service.build(f.wc, {frame: f.frame, srcURL: src, mediaType: 'image', hasImageContents: true});
+    const save = items.find(i => i.id === 'image-save');
+    assert.ok(save, src.slice(0, 10) + ' offers Save image as');
+    assert.equal(save.enabled, true);
+    assert.equal(items.some(i => i.id === 'image-tab' || i.id === 'image-copy-url'), false, 'but no address to open in a tab or copy as a link');
+    await save.click();
+    assert.deepEqual(f.calls.at(-1), ['download', src], 'it saves that address');
+  }
+  const f = setup(), unloaded = f.service.build(f.wc, {frame: f.frame, srcURL: data, mediaType: 'image', hasImageContents: false}).find(i => i.id === 'image-save');
+  assert.equal(unloaded.enabled, false, 'an image that has not loaded cannot be saved, as for any other address');
+  for (const src of ['data:text/html,<b>x</b>', 'javascript:alert(1)', 'file:///etc/passwd', 'ftp://x.example/a.png', '']) {
+    const g = setup();
+    assert.equal(g.service.build(g.wc, {frame: g.frame, srcURL: src, mediaType: 'image', hasImageContents: true}).some(i => i.id === 'image-save'), false, JSON.stringify(src.slice(0, 20)));
+  }
+  const g = setup();
+  assert.equal(g.service.build(g.wc, {frame: g.frame, srcURL: data, mediaType: 'video', mediaFlags: {canSave: true}}).some(i => i.id === 'image-save'), false, 'a video is not an image');
+  const web = setup().service.build(setup().wc, {frame: setup().frame, srcURL: 'https://img.example/a.png', mediaType: 'image', hasImageContents: true});
+  assert.equal(web.filter(i => i.id === 'image-save').length, 1, 'an ordinary image still has exactly one Save image as');
+});

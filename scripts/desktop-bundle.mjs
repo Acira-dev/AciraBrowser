@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {build as esbuild} from 'esbuild';
-import {oneByteSource} from './one-byte-source.mjs';
+import {oneByteSource, oneByteFile, LATIN1} from './one-byte-source.mjs';
 
 /** Never bundled: Electron itself, and packages the product loads by path or ships as their own file. */
 export const EXTERNAL = ['electron', 'electron-chrome-extensions'];
@@ -137,5 +137,16 @@ export async function bundleDesktop({root, output, plugins}) {
   await fs.writeFile(workerFile, oneByteSource(await fs.readFile(workerFile, 'utf8')));
   await fs.mkdir(path.join(output, 'sourcemaps'), {recursive: true});
   await fs.rename(path.join(output, 'desktop/main.cjs.map'), path.join(output, 'sourcemaps/main.cjs.map'));
+  return result;
+}
+
+/** The cookie-banner answering preload (browser-services/autoconsent-preload-entry.cjs, DuckDuckGo's autoconsent bundled in: a sandboxed frame preload cannot require it).
+ *  Memory: every frame of every page reads this 177 KB script, and any character above U+00FF in it (a typographic quote in a regular expression or a comment) makes
+ *  the renderer hold it as two-byte text, so it comes out as Latin-1 (scripts/one-byte-source.mjs). The four builds that write it (build-ui-preload.mjs, release-build.mjs
+ *  and the two committed-source builds) all go through here. */
+export const ANSWER_PRELOAD_ENTRY = 'desktop/browser-services/autoconsent-preload-entry.cjs';
+export async function bundleAnswerPreload({root, outfile, plugins = [], metafile = false, banner, logLevel = 'silent'}) {
+  const result = await esbuild({absWorkingDir: root, entryPoints: [ANSWER_PRELOAD_ENTRY], outfile, bundle: true, platform: 'browser', format: 'cjs', target: 'chrome130', external: ['electron'], legalComments: 'inline', metafile, logLevel, plugins, ...(banner ? {banner: {js: banner}} : {})});
+  await oneByteFile(path.resolve(root, outfile), LATIN1);
   return result;
 }

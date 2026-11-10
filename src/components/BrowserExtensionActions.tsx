@@ -13,7 +13,7 @@ const bridge=():ActionBridge|undefined=>(window as unknown as {browserAction?:Ac
 const DEFAULT_BADGE='#666';
 
 /** Preserve the public library's real buttons, badges, context actions and keyboard behavior. */
-export function BrowserExtensionActions({target,limit=6}:{target:ExtensionToolbarTarget|null;limit?:number}){
+export function BrowserExtensionActions({target,limit=6,handlesPopupEvents=true}:{target:ExtensionToolbarTarget|null;limit?:number;/** Only one copy of the buttons answers action.openPopup() and an extension's shortcut: the sidebar's row says false. */handlesPopupEvents?:boolean}){
  const root=useRef<HTMLDivElement>(null),signature=target?JSON.stringify([target.profileId,target.partition,target.webContentsId,target.pinnedIds,limit]):'';
  useEffect(()=>{
   const host=root.current;if(!host||!target?.supported||!target.partition||target.webContentsId===null||!target.pinnedIds.length)return;let alive=true,observer:MutationObserver|undefined,frame=0;const pinned=new Set(target.pinnedIds.slice(0,limit)),rank=new Map(target.pinnedIds.map((id,at)=>[id,String(at)]));let list:HTMLElement|undefined;
@@ -36,7 +36,7 @@ export function BrowserExtensionActions({target,limit=6}:{target:ExtensionToolba
  },[signature]);
  // action.openPopup() and the shortcut of _execute_action: press the extension's own button; an extension that is not on the toolbar opens its popup at the toolbar's end.
  useEffect(()=>{
-  if(limit>12||!target?.supported||!target.partition)return;
+  if(limit>12||!handlesPopupEvents||!target?.supported||!target.partition)return;
   return runtime.subscribeBrowser(event=>{
    if(event.type!=='extension-popup')return;
    const button=root.current?.querySelector('browser-action-list')?.shadowRoot?.querySelector<HTMLButtonElement>(`button.action[id="${CSS.escape(event.extensionId)}"]`);
@@ -44,6 +44,6 @@ export function BrowserExtensionActions({target,limit=6}:{target:ExtensionToolba
    const edge=root.current?.getBoundingClientRect();
    void bridge()?.activate(target.partition!,{eventType:'click',extensionId:event.extensionId,tabId:target.webContentsId??-1,alignment:'bottom right',anchorRect:{x:Math.max(0,(edge?.right??window.innerWidth)-30),y:edge?.top??0,width:30,height:edge?.height||30}});
   });
- },[target?.partition,target?.webContentsId,target?.supported,limit]);
+ },[target?.partition,target?.webContentsId,target?.supported,limit,handlesPopupEvents]);
  return <div className="native-extension-actions" ref={root} aria-label={t("browserextensionactions.pinnedExtensions")} hidden={!target?.supported||!target.pinnedIds.length}/>;
 }

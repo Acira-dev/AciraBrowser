@@ -28,6 +28,8 @@ window.addEventListener('DOMContentLoaded',()=>{if(popupViewport)applyPopupViewp
 contextBridge.exposeInMainWorld('acira',{
  platform:process.platform,initialSnapshot:ipcRenderer.sendSync('acira:initial-snapshot'),
  systemTheme:()=>ipcRenderer.sendSync('acira:system-theme'),subscribeSystemTheme:subscription('acira:system-theme-changed'),
+ /* 13.5: whether the window is drawn in software (gpu-drawing.cjs); Reduce motion follows it until the person chooses (runtime/motion.ts) */
+ softwareDrawing:()=>ipcRenderer.sendSync('acira:software-drawing')===true,subscribeSoftwareDrawing:subscription('acira:software-drawing-changed'),
  getSnapshot:()=>ipcRenderer.invoke('acira:snapshot'),dispatch:action=>invoke('acira:dispatch',action).then(()=>{}),subscribe:subscription('acira:state'),
  browserCommand:command=>invoke('acira:browser-command',command),setBrowserLayout:layout=>send('acira:set-layout',layout),getBrowserLayout:()=>ipcRenderer.invoke('acira:get-layout'),subscribeLayout:subscription('acira:layout'),subscribeBrowser:subscription('acira:browser-event'),closeOverlay:id=>send('acira:close-overlay',id),overlayReady:(id,stage,provider)=>invoke('acira:overlay-ready',id,stage,provider),popupBackdrop:id=>invoke('acira:popup-backdrop',id),popupBackdropSnapshot:id=>invoke('acira:popup-backdrop-snapshot',id),startPopupCapture:(id,key)=>invoke('acira:start-popup-capture',id,key),
  extensions:request=>invoke('acira:extensions',request),

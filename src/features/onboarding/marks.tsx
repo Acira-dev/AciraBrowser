@@ -33,7 +33,7 @@ export function SourceAvatar({
   const fill = isGreyProfileColor(source.color || source.fillColor) ? profileColorFor(source.name) : source.color || source.fillColor!;
   return (
     <span className="fr-avatar" style={{ width: size, height: size, background: fill, color: readable(fill), fontSize: Math.round(size * 0.46) }} aria-hidden="true">
-      {source.initial || [...source.name.trim()][0]?.toLocaleUpperCase() || "?"}
+      <bdi className="chip-letter">{source.initial || [...source.name.trim()][0]?.toLocaleUpperCase() || "?"}</bdi>
     </span>
   );
 }

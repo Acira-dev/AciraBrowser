@@ -50,8 +50,9 @@ const RESUMES=2; // a download that goes quiet or whose connection drops goes on
 // STUCK_AFTER: 'checking' or 'downloading' with no sign of life for this long starts again from a clean check; STALE_FOR_MANUAL: the same for a manual "Check for updates";
 // INSTALL_WITHIN: Install now whose quit never came lets the person try again; PAUSE_LASTS: a pause older than this is dropped; DAMAGED_HOLD: a file that failed its
 // SHA-512 twice is not fetched again for this long (a new hash in the feed starts at once); DISK_MARGIN: room kept beyond the file; HARD_FAILURES / ANY_FAILURES: after this many
-// failures that are not just a bad connection (or in all) the last-resort download path is offered (status.lastResort).
-const STUCK_AFTER=5*60*1000,STALE_FOR_MANUAL=20*1000,INSTALL_WITHIN=2*60*1000,PAUSE_LASTS=7*24*60*60*1000,DAMAGED_HOLD=6*60*60*1000,DISK_MARGIN=64*1024*1024;
+// failures that are not just a bad connection (or in all) the last-resort download path is offered (status.lastResort). HOLD_BYPASS_EVERY: a person's own Check for
+// updates (or Download) lifts a DAMAGED_HOLD once per this long for a file; the hold is the loop guard against fetching a bad file every round, a person is not a round.
+const STUCK_AFTER=5*60*1000,STALE_FOR_MANUAL=20*1000,INSTALL_WITHIN=2*60*1000,PAUSE_LASTS=7*24*60*60*1000,DAMAGED_HOLD=6*60*60*1000,HOLD_BYPASS_EVERY=15*60*1000,DISK_MARGIN=64*1024*1024;
 const HARD_FAILURES=2,ANY_FAILURES=5,DOWNLOAD_PAGE='https://acirabrowser.com/download/';
 const count=value=>Number.isFinite(value)&&value>=0?Math.round(value):null;
 const clean=value=>String(value?.message||value||'Update check failed.').replace(/\s+/g,' ').slice(0,200);
@@ -219,7 +220,7 @@ function closeUpdaterConnections(){try{const {session}=require('electron');void 
 /** Replacing an AppImage removes it and moves the new one in: both need its folder (and the file) to be writable. null when they are. */
 function appImageProblem(file){try{fs.accessSync(path.dirname(file),fs.constants.W_OK);fs.accessSync(file,fs.constants.W_OK);return null;}catch(error){return error?.code==='ENOENT'?null:'Move the Acira AppImage to a folder you can write to to use automatic updates.';}} // (a path that is not there cannot be judged: left to electron-updater)
 function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
+function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,holdBypassEvery=HOLD_BYPASS_EVERY,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -279,11 +280,14 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  // resumed: Resume was pressed and no new byte has come yet ({from}: the bytes counted at the first progress after it); a failure then goes back to
  // paused, saying the connection failed, instead of hiding the download. quitStep: what atQuit does for this quit (once). installHooks: the listeners
  // MacUpdater's quitAndInstall left on Squirrel.Mac for Install now, removed if that install fails (one left behind restarted Acira at a later hand-over).
- let resumed=null,quitStep=null,installHooks=null;
+ let resumed=null,quitStep=null,installHooks=null,attemptBefore=null,quitAsked=false; // quitAsked: quitAndInstall has been called for the Install now under way (a quit called off before that is not about it); attemptBefore: the install record as it was before Install now, put back when the quit is called off (installCancelled)
  // refused: the files (by SHA-512) found not signed by the application owner in this run, with why; never downloaded again in this run (see refuse).
  const refused=new Map();
  // damaged: how often a file (by SHA-512) failed its check in this run; holdOff: a file that failed twice, not fetched again until the time given; handoffFailures: the same file failing at electron-updater / Squirrel
  const holdOff=new Map(),damaged=new Map(),handoffFailures=new Map();
+ // personAsked: a look or a download the person began (Check for updates, Download) is under way; startDownload reads it at once. bypassed: when a person's check last lifted a file's hold (by SHA-512).
+ // lifting: files whose hold a person's press lifted and whose download is under way (the lift is spent only when that download comes back damaged: a connection that failed, a portal page or a pause spends nothing)
+ let personAsked=false;const bypassed=new Map(),lifting=new Set();
  // Mirrors (update-download.cjs): the address of a file that worked last (kept for LEANS_FOR, so a pause or a retry does not wait again on one that was silent), and the addresses
  // that supplied the bytes of a file that failed its SHA-512 (skipped on the next try, unless that leaves none). In memory only: every launch asks the first address first.
  const leaning=new Map(),suspect=new Map();
@@ -341,7 +345,20 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  function endInstall(){
   if(installTimer!==null){guardCancel(installTimer);installTimer=null;}
   if(installing&&installHooks){for(const listener of installHooks.added)installHooks.native.removeListener('update-downloaded',listener);installHooks=null;}
-  installing=false;
+  // electron-updater (Windows, Linux) ignores a second quitAndInstall while its own flag says one was made ("install call ignored"): without this the
+  // next press of Install now got through Acira's latch and then did nothing there, and only the press after it worked.
+  if(installing&&updater&&updater.quitAndInstallCalled===true)updater.quitAndInstallCalled=false;
+  installing=false;quitAsked=false;
+ }
+ /** The quit that Install now began was refused or called off (Cancel on the "Leave this site?" or "Close Acira?" card, a page that stayed, a window that
+  *  could not close; main tells it through restart.calledOff). The person changed their mind, so nothing failed: the latch is released at once and the
+  *  press is not counted as an install that did not take. Install now works again, with nothing to wait for. Nothing under way: nothing happens. */
+ function installCancelled(){
+  if(!installing||!quitAsked)return false; // (still saving the session: some other close was called off, not this press)
+  endInstall();
+  attempt=attemptBefore;attemptBefore=null;try{persist();}catch{}
+  changed();
+  return true;
  }
  function setup(){
   if(updater||unsupported)return updater;
@@ -397,7 +414,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   // electron-updater's own download, when it downloads by itself (see startDownload); each byte keeps its watchdog quiet
   updater.on('download-progress',progress=>{rearm();progressed({percent:progress?.percent,transferred:progress?.transferred,total:progress?.total,bytesPerSecond:progress?.bytesPerSecond});});
   updater.on('update-downloaded',info=>{
-   disarm();background=null;resumed=null;damaged.clear();updater.autoInstallOnAppQuit=missed<3; // a pulled build had turned it off; this one the feed offers (three installs that did not take switch the silent install at quit off: Install now stays)
+   disarm();background=null;resumed=null;damaged.clear();lifting.clear();updater.autoInstallOnAppQuit=missed<3; // a pulled build had turned it off; this one the feed offers (three installs that did not take switch the silent install at quit off: Install now stays)
    succeeded();state.status='ready';state.available=info?.version||state.available;state.progress=100;state.speed=null;state.pausable=false;state.lastChecked=now();state.notes=notesText(info?.releaseNotes)||state.notes;
    if(held){held=null;try{persist();}catch{}}
    // keep the notes with the version, so the "Acira updated" note can show them after the restart
@@ -596,10 +613,16 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    retry.succeeded();troubled(Object.assign(new Error(refused.get(target.sha512)),{code:'ERR_UPDATER_INVALID_SIGNATURE'}));Object.assign(state,{status:'error',error:refused.get(target.sha512),speed:null,pausable:false,lastChecked:now()});changed();return;
   }
   // a file that failed its SHA-512 twice is not fetched again for a while (each 2-hour round used to download 200 MB again); a new hash in the feed starts at once
-  const hold=holdOff.get(target.sha512);
+  // (a person's own Check for updates, or Download, lifts the hold once in holdBypassEvery for that file: two bad copies from the CDN must not keep a good file away for hours when
+  //  the person asks; the automatic rounds still wait, and a file that fails twice again is held again, out of reach of another press for holdBypassEvery)
+  const hold=holdOff.get(target.sha512),asked=personAsked;
   if(hold&&hold.until>now()){
-   if(behind){background=null;return;}
-   Object.assign(state,{status:'error',error:hold.message,speed:null,pausable:false,lastChecked:now()});troubled(Object.assign(new Error(hold.message),{code:'ERR_UPDATE_DAMAGED'}));changed();return;
+   const last=bypassed.get(target.sha512);
+   if(asked&&!behind&&(last===undefined||now()-last>=holdBypassEvery))lifting.add(target.sha512);
+   else{
+    if(behind){background=null;return;}
+    Object.assign(state,{status:'error',error:hold.message,speed:null,pausable:false,lastChecked:now()});troubled(Object.assign(new Error(hold.message),{code:'ERR_UPDATE_DAMAGED'}));changed();return;
+   }
   }
   if(hold)holdOff.delete(target.sha512);
   if(held&&held.sha512!==target.sha512){fetched.discard(held.dir);held=null;} // the feed moved on: the old bytes go
@@ -680,10 +703,11 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
     // (with mirrors: the addresses that supplied its bytes are tried last next time; the second failure is held off whatever the addresses)
     if(times===1&&target.mirrors?.length&&Array.isArray(error.sources)&&error.sources.length){suspect.set(target.sha512,new Set([...(suspect.get(target.sha512)||[]),...error.sources]));leaning.delete(target.sha512);}
     if(times===1){void startDownload();return;}
-    suspect.delete(target.sha512);damaged.delete(target.sha512);holdOff.set(target.sha512,{until:now()+damagedHold,message:'The update was downloaded twice and did not match what the feed says. Acira tries again in a few hours.'});
+    suspect.delete(target.sha512);damaged.delete(target.sha512);holdOff.set(target.sha512,{until:now()+damagedHold,message:'The update was downloaded twice and did not match what the feed says. Acira tries again in a few hours.'});if(lifting.delete(target.sha512))bypassed.set(target.sha512,now());
    }
    // the same file failing again at the hand-over (Squirrel.Mac, electron-updater): the second time its cached copy goes, so the next try fetches a fresh one
    if(stage==='handoff'){const times=(handoffFailures.get(target.sha512)||0)+1;handoffFailures.set(target.sha512,times);if(times>=2){handoffFailures.delete(target.sha512);await where.helper.clear().catch(()=>{});}}
+   if(error?.code!=='ERR_CHECKSUM_MISMATCH')lifting.delete(target.sha512);
    fail(error);
   }finally{if(job?.id===id)job=null;}
  }
@@ -715,7 +739,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   // Mac, 'ready': a downloaded update waits for Install now. Checking again hands it to Squirrel.Mac a second time, which either fails (status 'error':
   // the pill and Install now disappear) or stages a second install under the first. The first check after the restart finds anything newer.
   if(platform==='darwin'&&state.status==='ready')return status();
-  return look();
+  return look(manual);
  }
  /** The read-only look of a copy that cannot update itself: the same addresses and rules (update-feeds.cjs), nothing downloaded, no retry ladder (the next round asks again). */
  async function peek(){
@@ -735,14 +759,14 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   finally{looking=false;}
   return status();
  }
- async function look(){
-  failedRound=false;looking=true;lastLook=now();alive();retryAt=null;
+ async function look(byPerson=false){
+  failedRound=false;looking=true;lastLook=now();alive();retryAt=null;personAsked=byPerson;
   // route: the check leaves by the active profile's route (its proxy); a route that is not confirmed sends nothing and counts as a failed look
-  try{await lookUp();}catch(error){fail(error);}finally{looking=false;}
+  try{await lookUp();}catch(error){fail(error);}finally{looking=false;personAsked=false;}
   return status();
  }
  // Settings' Download, when updates are not downloaded automatically
- async function download(){if(unsupported||state.status!=='available')return status();alive();failedRound=false;state.status='downloading';state.error=null;changed();setup();void startDownload();return status();}
+ async function download(){if(unsupported||state.status!=='available')return status();alive();failedRound=false;state.status='downloading';state.error=null;changed();setup();personAsked=true;void startDownload();personAsked=false;return status();}
  /** Pause: the download stops where it is and keeps its bytes. The pause is kept in updater.json: a quit and relaunch starts paused, and nothing is
   *  looked for or downloaded until Resume. Only Acira's own download pauses (pausable); electron-updater's could only start again from zero. */
  function pause(){
@@ -802,13 +826,13 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    // --force-run, so the setup opens Acira again when it is done. Squirrel.Mac ignores both arguments. MacUpdater waits for Squirrel.Mac with a listener
    // when Squirrel is still unpacking the update; it is noted, so a failed install takes it away again (see fail).
    const native=updater.nativeUpdater,before=typeof native?.listeners==='function'?new Set(native.listeners('update-downloaded')):null;
-   attemptStarted(state.available);
+   attemptBefore=attempt;quitAsked=true;attemptStarted(state.available);
    updater.quitAndInstall(true,true);
    if(before){const added=native.listeners('update-downloaded').filter(listener=>!before.has(listener));installHooks=added.length?{native,added}:null;}
    // Acira is still here installWithin later: the quit never came (the "Close Acira?" card was cancelled, a page held it, the installer did not start). The latch is released, so
    // Install now works again, and the try is counted.
    installTimer=guardSchedule(()=>{installTimer=null;if(!installing)return;endInstall();state.error='Acira did not restart to install the update. You can try Restart to update again.';troubled(Object.assign(new Error(state.error),{code:'ERR_UPDATE_INSTALL'}));changed();},installWithin);installTimer?.unref?.();
-  }catch(error){installing=false;throw error;}
+  }catch(error){installing=false;quitAsked=false;throw error;}
   return {...status(),installing:true};
  }
  const within=(promise,ms)=>new Promise(resolve=>{const timer=setTimeout(()=>resolve(null),ms);timer.unref?.();Promise.resolve(promise).then(value=>{clearTimeout(timer);resolve(value);},()=>{clearTimeout(timer);resolve(null);});});
@@ -867,6 +891,6 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  }
  // and while an update waits (Windows; a Mac's waits with Squirrel.Mac and is not looked at again), every READY_RECHECK, so a pulled build is dropped
  function start(){if(started||unsupported&&!checkOnly)return;started=true;const first=schedule(()=>{firstRan=true;void check();armNext();},stubbed?1500:CHECK_DELAY);first?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
- return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
+ return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,installCancelled,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
 }
-module.exports={createAppUpdater,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
+module.exports={createAppUpdater,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};

@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "These tabs have to stay awake right now",
   "tabsleep.privateStaysAwake": "Private windows keep every tab awake",
   "tabsleep.couldNot": "Couldn't put the tabs to sleep",
+  "tabsleep.tipSleeping": "sleeping",
   "peek.frameLabel": "Link preview",
   "peek.openAsTab": "Open as tab",
   "peek.openInSplit": "Open in split view",

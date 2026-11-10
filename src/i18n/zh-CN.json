@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "这些标签页目前需要保持唤醒",
   "tabsleep.privateStaysAwake": "隐私窗口中的所有标签页都保持唤醒",
   "tabsleep.couldNot": "无法让这些标签页进入休眠",
+  "tabsleep.tipSleeping": "休眠中",
   "peek.frameLabel": "链接预览",
   "peek.openAsTab": "在标签页中打开",
   "peek.openInSplit": "在分屏视图中打开",

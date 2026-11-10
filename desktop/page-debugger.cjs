@@ -60,4 +60,23 @@ function acquire(wc, owner = '') {
 /** Whether we hold the session (any lease), and how many. */
 function held(wc) { const state = registry.get(wc); return state ? state.leases.size : 0; }
 
-module.exports = {acquire, held};
+/** Leases that only describe how a page looks and are held for as long as the page lives: Website appearance (13.3) keeps one on every tab it tells a colour scheme. */
+const PASSIVE = ['appearance'];
+
+/**
+ * Is somebody ELSE using this page's debugger (13.5, tab sleep)? True when a debugger is attached that is not our session (Tor, a hidden cookie page, any other client),
+ * when a lease of a different kind is open (a camera check, a zoom glide, a secured page, tab sleep's own freeze: all brief), and when it cannot be told. False when no debugger is
+ * attached, or when the session is ours and every lease on it is one of `passive`. Fails towards true: a page that might be inspected is never put to sleep. DevTools is a separate
+ * client (webContents.isDevToolsOpened) and is not looked at here.
+ */
+function inUseByOthers(wc, passive = PASSIVE) {
+  try {
+    if (!wc.debugger.isAttached()) return false;
+    const state = registry.get(wc);
+    if (!state || !state.ours || !state.leases.size) return true;
+    for (const lease of state.leases) if (lease.over || !passive.includes(lease.owner)) return true;
+    return false;
+  } catch { return true; }
+}
+
+module.exports = {acquire, held, inUseByOthers, PASSIVE};

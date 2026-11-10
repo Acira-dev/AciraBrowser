@@ -44,6 +44,9 @@ function iconBrand(bitmap, width, height) {
   return colours.brand && colours.brand.share >= .05 ? { rgb: math.fromHex(colours.brand.hex).slice(0, 3), hex: colours.brand.hex } : null;
 }
 
+/** How long after a page's first declared theme-color a following one is still part of the page settling (applied without the hold's dwell). */
+const SETTLE_MS = 600;
+
 function createSiteColour({
   now = () => Date.now(), schedule = setTimeout, cancel = clearTimeout,
   level = () => 'soft',            // 'off' | 'soft' | 'rich' (the setting)
@@ -57,7 +60,7 @@ function createSiteColour({
   const remember = (host, hex) => { if (!rememberHosts || !host) return; hostMemory.delete(host); hostMemory.set(host, hex); if (hostMemory.size > HOST_MEMORY) hostMemory.delete(hostMemory.keys().next().value); };
 
   function attach(tabId, { emit, url = () => '' }) {
-    const tab = { id: tabId, emit, url, host: null, theme: null, hold: math.createHold(), shown: null, none: 0, timers: new Set(), generation: 0, force: false, disposed: false, icons: [], iconColour: undefined, sampledVisible: false };
+    const tab = { id: tabId, emit, url, host: null, theme: null, themeSeen: false, settleUntil: 0, hold: math.createHold(), shown: null, none: 0, timers: new Set(), generation: 0, force: false, disposed: false, icons: [], iconColour: undefined, sampledVisible: false };
     tabs.set(tabId, tab);
     const later = (ms, fn) => { const t = schedule(() => { tab.timers.delete(t); if (!tab.disposed) fn(); }, ms); t.unref?.(); tab.timers.add(t); return t; };
     const clear = () => { for (const t of tab.timers) cancel(t); tab.timers.clear(); };
@@ -99,6 +102,7 @@ function createSiteColour({
     return {
       /** A main-frame navigation committed: keep the last colour; another site resets the hold and gets the remembered colour at once. */
       navigated(newUrl) {
+        tab.themeSeen = false; tab.settleUntil = 0; // a new page: its first declared colour is applied at once (themeColor below), the same site or not
         const host = hostOf(newUrl);
         if (host !== tab.host) {
           tab.host = host; tab.theme = null; tab.hold = math.createHold(); tab.force = true; tab.none = 0; tab.icons = []; tab.iconColour = undefined;
@@ -108,7 +112,17 @@ function createSiteColour({
       },
       loaded() { schedulePass(); },
       inPage() { clear(); later(400, () => resolve()); },
-      themeColor(color) { tab.theme = color ? rgbOf(color) : null; clear(); later(120, () => resolve()); },
+      /** A page's theme-color. The FIRST brand colour a page declares after a navigation is applied at once, with no debounce and no dwell (13.5: the glow used to start about 165 ms
+       *  after the page knew its colour, and a same-site page that changed colour waited for the 1.5 s pass for its second read). Declared colours that follow within SETTLE_MS (a page
+       *  that boots with a default and then sets its own) are applied after the short debounce, also without the dwell; after that a change is debounced and goes through the hold
+       *  as before, so a page that animates its theme-color cannot flicker the glow. Anything that is not a brand colour (white, black, grey) keeps the old path. */
+      themeColor(color) {
+        tab.theme = color ? rgbOf(color) : null; clear();
+        const declared = !!(tab.theme && isBrand(tab.theme)), first = !tab.themeSeen; tab.themeSeen = true;
+        if (declared && first) { tab.settleUntil = now() + SETTLE_MS; tab.force = true; later(0, () => resolve()); return; }
+        if (declared && now() < tab.settleUntil) { tab.force = true; later(120, () => resolve()); return; }
+        later(120, () => resolve());
+      },
       iconChanged(urls) { tab.icons = Array.isArray(urls) ? urls.filter(u => typeof u === 'string').slice(0, 4) : []; tab.iconColour = undefined; later(600, () => resolve()); },
       /** The tab came on screen (or the setting changed): read it once now. */
       shown() { clear(); later(300, () => resolve()); },

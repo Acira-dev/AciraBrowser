@@ -1,0 +1,27 @@
+/* The letter in a round profile chip (the profile avatar, the Settings profile list, the import sources, the setup card's
+   profile, the workspace page's rail footer) is wrapped in .chip-letter.
+
+   On Linux the letter is centred on the capital letters instead of on the font's ascent and descent. With a fractional or
+   doubled display scale Blink rounds those two to whole device pixels and, when the descent was rounded down, moves one pixel
+   from the ascent to the descent (font_metrics.cc, subpixel positioning). A letter centred by them then sits about one
+   device pixel high in its circle, and a fallback font with other metrics moves it further. Trimming the text box to the
+   capital letters (cap to alphabetic baseline) and centring that box does not depend on either.
+
+   Mac and Windows keep the line-box centring they have always had: this rule does not apply there, so their chips are
+   pixel for pixel what they were. tests/chip-letter-centred.test.cjs measures both. */
+@supports (text-box: trim-both cap alphabetic) {
+  html[data-platform='linux'] .chip-letter {
+    display: block;
+    text-rendering: geometricPrecision;
+    text-box: trim-both cap alphabetic;
+  }
+
+  /* At fractional scale Blink snaps the cap box and ink separately. This nudges
+     the glyph onto the closer raster row without moving the chip. */
+  @media (min-resolution: 1.25dppx) and (max-resolution: 1.75dppx) {
+    html[data-platform='linux'] .chip-letter {
+      position: relative;
+      top: -0.0625px;
+    }
+  }
+}

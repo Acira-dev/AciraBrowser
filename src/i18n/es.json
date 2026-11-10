@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Estas pestañas tienen que seguir activas por ahora",
   "tabsleep.privateStaysAwake": "Las ventanas privadas mantienen todas las pestañas activas",
   "tabsleep.couldNot": "No se pudieron suspender las pestañas",
+  "tabsleep.tipSleeping": "suspendida",
   "peek.frameLabel": "Vista previa del enlace",
   "peek.openAsTab": "Abrir como pestaña",
   "peek.openInSplit": "Abrir en vista dividida",

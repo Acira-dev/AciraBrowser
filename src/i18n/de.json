@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Diese Tabs müssen im Moment aktiv bleiben",
   "tabsleep.privateStaysAwake": "Private Fenster halten alle Tabs aktiv",
   "tabsleep.couldNot": "Die Tabs konnten nicht in den Ruhezustand versetzt werden",
+  "tabsleep.tipSleeping": "im Ruhezustand",
   "peek.frameLabel": "Linkvorschau",
   "peek.openAsTab": "Als Tab öffnen",
   "peek.openInSplit": "In geteilter Ansicht öffnen",

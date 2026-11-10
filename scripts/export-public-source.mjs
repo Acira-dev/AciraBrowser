@@ -14,7 +14,7 @@ const rootFiles = new Set(['.gitignore', 'LICENSE', 'THIRD_PARTY_NOTICES.md',
   'package.json', 'package-lock.json', 'index.html', 'launch.mjs', 'vite.config.ts',
   'tsconfig.json', 'design-tokens.json', 'page-zoom-levels.json']);
 const scriptFiles = new Set(['build-filter-engine.cjs', 'build-installer-helper.cjs', 'deploy-site-reports.mjs',
-  'build-ui-preload.mjs', 'deploy-metrics.mjs', 'desktop-bundle.mjs', 'one-byte-source.mjs', 'fetch-tor.mjs',
+  'build-ui-preload.mjs', 'deploy-metrics.mjs', 'desktop-bundle.mjs', 'one-byte-source.mjs', 'one-byte-chunks.mjs', 'one-byte-chunks.d.mts', 'fetch-tor.mjs',
   'fetch-baseline-filters.mjs', 'install-runtime.mjs', 'installer-art-main.cjs',
   'installer-frames-main.cjs', 'uninstall-art-main.cjs', 'mirror-spellcheck-dictionaries.mjs',
   'publish-spellcheck-dictionaries.mjs', 'preview.mjs', 'preview-snapshot.mjs',

@@ -8,8 +8,10 @@
   align-items: center;
   gap: 6px;
   height: 24px;
-  margin: 0 4px 0 2px;
-  padding: 0 10px 0 7px;
+  margin: 0;
+  margin-inline: 2px 4px;
+  padding: 0;
+  padding-inline: 7px 10px;
   border: 0;
   border-radius: 12px;
   color: var(--accent-ink, var(--accent, #3b6eea));
@@ -97,7 +99,7 @@
 .update-pop-actions { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }
 .update-pop-gap { flex: 1 1 auto; }
 .update-pop-actions .acira-button { flex: 0 0 auto; white-space: nowrap; }
-.update-pop-actions .acira-button-quiet { margin-left: 0; padding-inline: 8px; }
+.update-pop-actions .acira-button-quiet { margin-inline-start: 0; padding-inline: 8px; }
 
 /* The download (option B): the identity row ends in a 26px ring that fills with the real progress, the control that pauses and resumes. Its track is
    the row's ink at a whisper, the fill the ink itself; paused, the fill keeps its length in the muted ink (--menu-t3) and the dots dim. The line under
@@ -125,8 +127,8 @@ button.update-ring:focus-visible { outline: 2px solid var(--focus-ring-color, va
 .update-download .update-pop-note { padding-bottom: 2px; }
 .update-pop-detail { font-variant-numeric: tabular-nums; }
 .update-pop-retry { display: block; }
-.update-pop-links { padding: 0 8px 2px 26px; }
-.update-popover:not(.update-download) .update-pop-links { padding: 0 8px 6px 30px; }
+.update-pop-links { padding: 0 8px 2px; padding-inline-start: 26px; }
+.update-popover:not(.update-download) .update-pop-links { padding: 0 8px 6px; padding-inline-start: 30px; }
 .update-pop-links .acira-button-quiet { height: 24px; padding: 0 6px; border-radius: 4px; font: 450 12px/16px var(--font-ui, 'Inter', sans-serif); }
 @media (prefers-reduced-motion: reduce) { .update-ring-fill { transition: none; } button.update-ring:active { scale: none; } }
 .app[data-reduced-motion='true'] .update-ring-fill { transition: none; }

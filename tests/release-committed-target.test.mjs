@@ -21,4 +21,8 @@ test('immutable Windows candidate captures and bundles the shared release target
  assert.equal(databaseFixture.sha256,createHash('sha256').update(execFileSync('git',['show','HEAD:desktop/database.cjs'])).digest('hex'),'fixture seed source stays pinned to the actual product commit');
  const bundle=await fs.readFile(path.join(output,'desktop/main.cjs'),'utf8');
  assert.equal(/require\(\s*['"]\.\.\/\.\.\/packaging\//.test(bundle),false,'installed startup cannot depend on a source packaging folder');
+ // Memory (13.5): the committed-source build writes the interface chunks and the cookie-banner preload as Latin-1 text too (scripts/one-byte-chunks.mjs, bundleAnswerPreload).
+ const wide=/[^\u0000-\u00ff]/;
+ for(const file of await fs.readdir(path.join(output,'dist/assets')))if(/^(?:App|index|BrowserSettings|Onboarding|client|fr|de|es|it|pt-BR|tr)-[\w-]+\.js$/.test(file))assert.equal(wide.test(await fs.readFile(path.join(output,'dist/assets',file),'utf8')),false,file+' is Latin-1 text');
+ assert.equal(wide.test(await fs.readFile(path.join(output,'desktop/browser-services/autoconsent-preload.cjs'),'utf8')),false,'the cookie-banner preload is Latin-1 text');
 });

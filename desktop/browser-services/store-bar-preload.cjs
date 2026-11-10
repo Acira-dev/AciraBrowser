@@ -1,7 +1,7 @@
 'use strict';
 // Chrome Web Store detail pages only: draws the small "Add to Acira" bar (see extension-store-bar.cjs for the main-process side).
 // The store's own button is disabled outside Chrome. The bar sends only the extension ID from the page address; the main process checks it against
-// the top frame's address again, asks the same permission review as Settings → Extensions, and answers with the result.
+// the top frame's address again, asks the same permission review as Settings > Extensions, and answers with the result.
 const {ipcRenderer}=require('electron');
 const pageAddress=()=>location.href;
 const idFromAddress=address=>{try{const url=new URL(address);if(url.protocol!=='https:')return null;const ok=url.hostname==='chromewebstore.google.com'&&url.pathname.startsWith('/detail/')||url.hostname==='chrome.google.com'&&url.pathname.startsWith('/webstore/detail/');const last=url.pathname.split('/').filter(Boolean).at(-1)||'';return ok&&/^[a-p]{32}$/.test(last)?last:null;}catch{return null;}};
@@ -16,7 +16,7 @@ const STATUS_WORDS={works:'Tested in Acira: works.',limited:'Tested in Acira: li
 const make=(tag,props={},...children)=>{const element=document.createElement(tag);Object.assign(element,props);for(const child of children)element.append(child);return element;};
 if(window===window.top&&/^https:\/\/(?:chromewebstore|chrome)\.google\.com\//.test(pageAddress())){
  let host=null,shadow=null,current=null,state='add',message='',info=null,name='',retries=0,lastTry=0;
- const title=()=>document.title.replace(/\s*[-–—]\s*Chrome Web Store\s*$/i,'').trim()||'This extension';
+ const title=()=>document.title.replace(/\s*[-\u2013\u2014]\s*Chrome Web Store\s*$/i,'').trim()||'This extension';
  const remove=()=>{if(host){host.remove();host=null;shadow=null;}};
  function render(){
   if(!current||!info||!info.available){remove();return;}
@@ -25,7 +25,7 @@ if(window===window.top&&/^https:\/\/(?:chromewebstore|chrome)\.google\.com\//.te
   name=title();
   const installed=state==='added'||info.installed&&state==='add';
   const note=message||(installed?'Added to this Acira profile.':info.compat?[STATUS_WORDS[info.compat.status]||'',info.compat.note||''].filter(Boolean).join(' '):'Adds it to this Acira profile. You review its access first.');
-  const label=installed?'Added to Acira':state==='adding'?'Adding…':state==='error'?'Try again':'Add to Acira';
+  const label=installed?'Added to Acira':state==='adding'?'Adding\u2026':state==='error'?'Try again':'Add to Acira';
   const button=make('button',{type:'button',textContent:label,disabled:installed||state==='adding'});
   button.addEventListener('click',()=>{if(button.disabled)return;state='adding';message='Review the access in the window that opened.';render();
    ipcRenderer.invoke('acira:store-install',{id:current}).then(result=>{if(result&&result.ok){state='added';message='';info={...info,installed:true};}else if(result&&result.cancelled){state='add';message='';}else{state='error';message=(result&&result.error)||'The extension was not added.';}render();}).catch(()=>{state='error';message='The extension was not added.';render();});});

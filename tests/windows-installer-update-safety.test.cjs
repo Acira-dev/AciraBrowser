@@ -17,7 +17,7 @@ const made=[];test.after(()=>{for(const dir of made)fs.rmSync(dir,{recursive:tru
 const tmp=()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'acira-nsis-'));made.push(dir);return dir;};
 
 /** Just enough NSIS for these Functions: registers, the stack, the error flag, files, FindFirst, the registry (a Map), Call, and LogicLib
- *  ${If}/${IfNot}/${AndIf}/${AndIfNot}/${EndIf} with =, >=, >, <, ==, !=, ${Errors} and ${FileExists}. Anything else throws, so a new instruction
+ *  ${If}/${IfNot}/${AndIf}/${AndIfNot}/${OrIf}/${EndIf} and ${Do}/${LoopUntil} with =, >=, >, <, ==, !=, ${Errors} and ${FileExists}, StrLen and StrCpy with a length and an offset. Anything else throws, so a new instruction
  *  cannot slip through untested. */
 function nsis({defines={},parameters='',registry=new Map()}={}){
  const vars={},stack=[],files=new Map();let errors=false,handles=0;
@@ -39,11 +39,16 @@ function nsis({defines={},parameters='',registry=new Map()}={}){
   while(lines.length){
    const line=lines.shift(),parts=tokens(line);
    if(parts[0]==='${If}'||parts[0]==='${IfNot}'){
-    const conditions=[{not:parts[0]==='${IfNot}',parts:parts.slice(1)}];
-    while(/^\$\{AndIf(Not)?\}/.test(lines[0]||'')){const next=tokens(lines.shift());conditions.push({not:next[0]==='${AndIfNot}',parts:next.slice(1)});}
+    // groups: conditions joined by ${AndIf} are one group, ${OrIf} starts the next; the test passes when any group holds in full
+    const groups=[[{not:parts[0]==='${IfNot}',parts:parts.slice(1)}]];
+    while(/^\$\{(AndIf|OrIf)(Not)?\}/.test(lines[0]||'')){const next=tokens(lines.shift());if(/^\$\{OrIf/.test(next[0]))groups.push([]);groups.at(-1).push({not:/Not\}$/.test(next[0]),parts:next.slice(1)});}
     const inner=[];let depth=1;
     while(lines.length){const next=lines.shift();if(/^\$\{(If|IfNot)\}/.test(next))depth++;if(next==='${EndIf}'&&--depth===0)break;inner.push(next);}
-    out.push({conditions,body:parse(inner)});
+    out.push({groups,body:parse(inner)});
+   }else if(parts[0]==='${Do}'){
+    const inner=[];let depth=1,until=null;
+    while(lines.length){const next=lines.shift();if(next==='${Do}')depth++;if(/^\$\{LoopUntil\}/.test(next)&&--depth===0){until=tokens(next).slice(1);break;}inner.push(next);}
+    out.push({until,body:parse(inner)});
    }else out.push({parts});
   }
   return out;
@@ -52,13 +57,15 @@ function nsis({defines={},parameters='',registry=new Map()}={}){
  function load(text){const lines=text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith(';'));const name=lines[0].split(/\s+/)[1];functions[name]=parse(lines.slice(1,-1));}
  function run(block){
   for(const step of block){
-   if(step.conditions){if(step.conditions.every(c=>test(c.parts)!==c.not))run(step.body);continue;}
+   if(step.groups){if(step.groups.some(group=>group.every(c=>test(c.parts)!==c.not)))run(step.body);continue;}
+   if(step.until){let rounds=0;do{if(++rounds>100000)throw new Error('the loop did not end');run(step.body);}while(!test(step.until));continue;}
    const [op,...args]=step.parts;
    switch(op){
     case 'Push':stack.push(word(args[0]));break;
     case 'Pop':if(!stack.length){errors=true;break;}vars[target(args[0])]=stack.pop();break;
     case 'Exch':{const name=target(args[0]),top=stack.pop();stack.push(vars[name]??'');vars[name]=top;break;}
-    case 'StrCpy':vars[target(args[0])]=word(args[1]);break;
+    case 'StrCpy':{const value=word(args[1]);if(args.length>2){const [length,offset]=[num(word(args[2])),num(word(args[3]??'0'))];vars[target(args[0])]=value.slice(offset,offset+length);}else vars[target(args[0])]=value;break;}
+    case 'StrLen':vars[target(args[0])]=String(word(args[1]).length);break;
     case 'ClearErrors':errors=false;break;
     case 'IntOp':{const [a,o,b]=[num(word(args[1])),args[2],num(word(args[3]))];vars[target(args[0])]=String(o==='*'?a*b:o==='+'?a+b:NaN);break;}
     case 'FileOpen':{try{const fd=fs.openSync(file(word(args[1])),'r');const id=String(++handles);files.set(id,{fd,at:0});vars[target(args[0])]=id;}catch{errors=true;vars[target(args[0])]='';}break;}
@@ -175,4 +182,40 @@ test('beta.14: every install, an update included, writes the uninstall entry\'s 
  const {UUID}=require('builder-util-runtime'),config=require('../packaging/electron-builder.cjs');
  assert.equal(UUID.v5(config.appId,UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')),'d22525d0-18d8-53f4-9ae4-17967a9ba3f1');
  assert.ok(!config.nsis?.guid,'no custom guid: the key stays the app id\'s');
+});
+
+// 13.5: a quote in the install folder broke the stock running-app check, which puts the folder inside a PowerShell single-quoted string.
+const quoteIn=dir=>{
+ const machine=nsis();machine.load(body('AcQuoteInInstdir'));
+ for(const register of ['0','1','2','3'])machine.vars[register]='kept '+register;
+ machine.vars.INSTDIR=dir;machine.call('AcQuoteInInstdir');
+ assert.equal(machine.stack.length,1,'the stack is left with the answer only');const answer=machine.stack.pop();
+ assert.deepEqual([machine.vars[0],machine.vars[1],machine.vars[2],machine.vars[3]],['kept 0','kept 1','kept 2','kept 3'],'registers as they were');
+ return answer;
+};
+
+test('a folder with a single quote, or a typographic one, is told apart from the ordinary ones',()=>{
+ for(const dir of ['C:\\Users\\Ann\\AppData\\Local\\Programs\\Acira Browser','C:\\Program Files\\Acira Browser','C:\\Users\\Müller\\AppData\\Local\\Programs\\Acira Browser','C:\\Users\\محمد\\AppData\\Local\\Programs\\Acira Browser','C:\\Users\\a`b\\x','x',''])
+  assert.equal(quoteIn(dir),'0',JSON.stringify(dir));
+ for(const dir of ["C:\\Users\\O'Brien\\AppData\\Local\\Programs\\Acira Browser","C:\\Users\\Ma'ruf\\AppData\\Local\\Programs\\Acira Browser","'x","x'","''",'C:\\Users\\Ra\u2019ed\\x','C:\\Users\\Sa\u2018id\\x','C:\\Users\\a\u201Ab\\x','C:\\Users\\a\u201Bb\\x'])
+  assert.equal(quoteIn(dir),'1',JSON.stringify(dir));
+});
+
+test('the running-app check turns the PowerShell way off for such a folder (installer only, after the stock probe, before the stock check); the other way never puts the folder in a command',()=>{
+ const check=nsh.slice(nsh.indexOf('!macro customCheckAppRunning'),nsh.indexOf('!macroend',nsh.indexOf('!macro customCheckAppRunning')));
+ assert.match(check,/!insertmacro IS_POWERSHELL_AVAILABLE\n\s+!ifndef BUILD_UNINSTALLER\n(?:\s+;[^\n]*\n)+\s+Call AcQuoteInInstdir\n\s+Pop \$0\n\s+\$\{If\} \$0 = 1\n\s+StrCpy \$IsPowerShellAvailable 1\n\s+\$\{EndIf\}\n\s+!endif\n\s+!insertmacro _CHECK_APP_RUNNING/);
+ const stock=template('include','allowOnlyOneInstallerInstance.nsh'),macro=name=>stock.slice(stock.indexOf('!macro '+name),stock.indexOf('!macroend',stock.indexOf('!macro '+name)));
+ assert.match(stock,/Var \/GLOBAL IsPowerShellAvailable ; 0 = available, 1 = not available/,'the flag the check sets, and what its values mean');
+ for(const name of ['FIND_PROCESS','KILL_PROCESS']){
+  const text=macro(name),other=text.slice(text.lastIndexOf('${else}'));
+  assert.match(text,/\$IsPowerShellAvailable == 0/,name);
+  assert.match(text,/StartsWith\('\$INSTDIR'/,name+': the folder is inside a PowerShell single-quoted string');
+  assert.doesNotMatch(other,/\$INSTDIR/,name+': the other way names the program, never the folder');
+  assert.match(other,/\$\{_FILE\}/,name+': it names the program');
+ }
+ // why it broke: with a quote in the folder the single-quoted string has an odd number of quotes, which PowerShell cannot parse (exit 1 = "not running")
+ const command=macro('FIND_PROCESS').match(/Exec `([^`]*StartsWith[^`]*)`/)[1];
+ const quotes=dir=>command.replace('$INSTDIR',dir).split("'").length-1;
+ assert.equal(quotes('C:\\Users\\Ann\\x')%2,0,'an ordinary folder: the quotes pair up');
+ assert.equal(quotes("C:\\Users\\O'Brien\\x")%2,1,"O'Brien: they do not");
 });

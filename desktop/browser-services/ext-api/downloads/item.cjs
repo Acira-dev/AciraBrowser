@@ -42,7 +42,10 @@ function stateOf(status) {
  * `id` is the integer id (ids.cjs); options.exists(path) answers whether a finished file is still on disk.
  */
 function toItem(record, id, {exists = file => fs.existsSync(file)} = {}) {
-  const status = String(record.status || ''), state = stateOf(status);
+  // The manager holds every download paused while its file name is being chosen (the Save dialog, an extension's suggestion): a record that is
+  // "Paused" yet can neither be paused nor resumed is that hold, not the person's pause. Chrome's onCreated says paused:false there.
+  const held = record.status === 'Paused' && record.canPause === false && record.canResume === false;
+  const status = held ? 'Downloading' : String(record.status || ''), state = stateOf(status);
   const url = typeof record.url === 'string' ? record.url : '';
   const total = finite(record.totalBytes) && record.totalBytes > 0 ? record.totalBytes : -1;
   const received = finite(record.receivedBytes) ? record.receivedBytes : 0;

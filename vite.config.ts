@@ -1,4 +1,6 @@
 import { defineConfig } from "vite";
+// Memory: every built chunk as Latin-1 text (one byte per character in the renderers) with the program unchanged: scripts/one-byte-chunks.mjs.
+import { oneByteChunks } from "./scripts/one-byte-chunks.mjs";
 
 export default defineConfig({
   base: "./",
@@ -21,7 +23,7 @@ channel.onmessage=event=>{if(event.data==='refresh')location.reload();};`);
       // CSS and JavaScript while the person evaluates its intermediate frames.
       return [];
     },
-  }],
+  }, oneByteChunks()],
   server: {
     host: "127.0.0.1",
     port: 5194,

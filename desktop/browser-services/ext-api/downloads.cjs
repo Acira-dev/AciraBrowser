@@ -10,7 +10,9 @@ const path = require('node:path');
 const host = require('./downloads/host.cjs');
 const items = require('./downloads/item.cjs');
 const {createIdStore} = require('./downloads/ids.cjs');
+const determine = require('./downloads/determine.cjs');
 const {ERRORS} = items;
+const EVENT_DETERMINING = 'downloads.onDeterminingFilename';
 
 const stores = new Map();
 /** One id store per profile folder: every profile's package in this process shares it (ids are unique across profiles). */
@@ -18,6 +20,14 @@ function idStoreFor(userData) {
   const file = userData ? path.join(userData, 'extension-download-ids.json') : null, key = file || ':memory:';
   if (!stores.has(key)) stores.set(key, createIdStore({file}));
   return stores.get(key);
+}
+
+/** The extensions of a profile in the order they were added (Acira's registry keeps that order), oldest first: onDeterminingFilename's "installed last wins". */
+function installOrder(userData, profileId) {
+  try {
+    const entries = JSON.parse(fs.readFileSync(path.join(userData, 'extensions.json'), 'utf8')).entries;
+    return (Array.isArray(entries) ? entries : []).filter(entry => entry && entry.profileId === profileId).map(entry => String(entry.id));
+  } catch { return []; }
 }
 
 const visible = (record, profileId) => !!record && !record.private && record.browserProfileId === profileId && !String(record.browserProfileId || '').startsWith('private-');
@@ -78,7 +88,7 @@ module.exports = {
       const found = items.search(allItems(), query || {}), byId = new Map(records().map(record => [ids.idFor(record.id), record]));
       const doomed = found.map(item => byId.get(item.id)).filter(Boolean);
       if (doomed.length) await needHost().erase(profileId, doomed.map(record => record.id));
-      for (const record of doomed) { const id = ids.idFor(record.id); api.broadcast('downloads.onErased', id); ids.forget(record.id); }
+      for (const record of doomed) { const id = ids.idFor(record.id); api.broadcast('downloads.onErased', id); ids.forget(record.id); told.delete(record.id); }
       return found.map(item => item.id);
     });
     api.handle('downloads.removeFile', async (event, id) => {
@@ -91,22 +101,40 @@ module.exports = {
       if (delta && api.listening('downloads.onChanged').length) api.broadcast('downloads.onChanged', delta);
     });
 
+    // chrome.downloads.onDeterminingFilename: the manager asks before it names a file (host.determiner), the extension answers with suggest().
+    const determiner = determine.createDeterminer({
+      listening: () => api.listening(EVENT_DETERMINING),
+      send: (extensionId, payload) => api.emit(extensionId, EVENT_DETERMINING, payload),
+      order: () => installOrder(api.userData, api.sourceProfileId || profileId)
+    });
+    api.handle('downloads.determineFilename', (event, key, suggestion) => { determiner.answer(event.extension.id, key, suggestion); });
+    const unloaded = (_event, extension) => determiner.forget(extension && extension.id);
+    try { api.session?.extensions?.on?.('extension-unloaded', unloaded); } catch { /* an engine without extension events: the time limit covers it */ }
+    const unsetDeterminer = host.setDeterminer(profileId, {listening: determiner.listening, determine: record => determiner.determine(itemOf(record))});
+
     // Events from the manager. The change is applied to the Downloads page's records after this runs, so records() is still "before".
     const listening = () => ({created: api.listening('downloads.onCreated').length > 0, changed: api.listening('downloads.onChanged').length > 0});
+    // What the extensions were last told about a download that is still running: the next change is measured against that, so a state the manager
+    // only holds for itself (paused while the file's name is chosen) never shows up as a change the extension did not see coming.
+    const told = new Map();
     const off = host.on(event => {
       const record = event.record;
       if (!record || event.profileId !== profileId || !visible({...record, browserProfileId: event.profileId}, profileId)) return;
       const wanted = listening();
       if (event.type === 'created') {
-        if (wanted.created) api.broadcast('downloads.onCreated', itemOf(record));
-        else ids.idFor(record.id);
-      } else if (event.type === 'changed' && wanted.changed) {
-        const previous = records().find(item => item.id === record.id);
-        if (!previous) return;
-        const delta = items.deltaOf(itemOf(previous), itemOf({...previous, ...record}));
+        const item = itemOf(record);
+        if (wanted.created) { api.broadcast('downloads.onCreated', item); if (item.state === 'in_progress') told.set(record.id, item); } else ids.idFor(record.id);
+      } else if (event.type === 'changed') {
+        if (!wanted.changed) { told.delete(record.id); return; }
+        const page = records().find(item => item.id === record.id);
+        const before = told.get(record.id) || (page ? itemOf(page) : null);
+        if (!before) return;
+        const after = itemOf({...(page || {}), ...record});
+        if (after.state === 'in_progress') told.set(record.id, after); else told.delete(record.id);
+        const delta = items.deltaOf(before, after);
         if (delta) api.broadcast('downloads.onChanged', delta);
       }
     });
-    return {dispose() { off(); ids.flush(); }};
+    return {dispose() { off(); unsetDeterminer(); determiner.dispose(); try { api.session?.extensions?.removeListener?.('extension-unloaded', unloaded); } catch { /* gone with the session */ } ids.flush(); }};
   }
 };

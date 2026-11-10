@@ -27,6 +27,8 @@ async function read(level, host, port, fresh) {
   ses.registerPreloadScript({ type: 'frame', filePath: path.join(__dirname, '..', '..', 'desktop', 'browser-services', 'farbling-preload.cjs') });
   const handler = event => { try { event.returnValue = farble.scriptFor(event.sender.getURL(), event.senderFrame.url); } catch { event.returnValue = ''; } };
   ipcMain.removeAllListeners('acira:farbling'); ipcMain.on('acira:farbling', handler);
+// 13.5: the page-start preloads ask main one question per frame (frame-boot.cjs); a harness that loads them must answer it.
+require('../../desktop/browser-services/frame-boot.cjs').install(ipcMain);
   const win = new BrowserWindow({ x: -2600, y: 0, width: 600, height: 400, show: true, webPreferences: { session: ses, sandbox: true } });
   await win.loadURL(`http://${host}:${port}/`);
   const result = await win.webContents.executeJavaScript('window.result');

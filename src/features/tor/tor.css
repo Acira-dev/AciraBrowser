@@ -40,10 +40,10 @@
 /* The Tor chip's panel rides A's panel system (panels.css); only the note and the onion slot are local. */
 .tor-popover{display:flex;flex-direction:column}
 .tor-popover .tor-pop-onion{display:grid;place-items:center;width:16px;height:16px;color:var(--tor-ink,currentColor)}
-.tor-popover .tor-pop-note,.tor-panel .tor-pop-note{text-align:left;margin:0;padding:2px 8px 8px 36px;font-size:12px;line-height:16px;color:var(--menu-t3,inherit);text-wrap:pretty}
+.tor-popover .tor-pop-note,.tor-panel .tor-pop-note{text-align:start;margin:0;padding:2px 8px 8px;padding-inline-start:36px;font-size:12px;line-height:16px;color:var(--menu-t3,inherit);text-wrap:pretty}
 .tor-popover .tor-pop-problem,.tor-panel .tor-pop-problem{color:var(--btn-danger-ink,var(--tor-danger,#b3382f))}
 /* P08 (A): in the chip panel the note starts on the rows' text edge, not 4px past it (measured at 100% and 150%). */
-.tor-popover .tor-pop-note{padding-left:32px}
+.tor-popover .tor-pop-note{padding-inline-start:32px}
 /* New Tor identity asks first (R3-61): what happens, then Cancel / New identity, right-aligned on the panel's 8px inset. */
 .tor-popover-ask .tor-pop-note{padding-bottom:10px;color:var(--menu-t2,var(--menu-t3,inherit))}
 /* A failed identity stays on its question and says why, in the shared danger ink (readable on the dark popup too; --tor-danger is only defined on the chip and page). */
@@ -56,20 +56,20 @@
 .tor-mark[data-state=error]{color:var(--tor-danger,#b3382f)}
 .tor-page .tor-column{width:min(420px,100%)}
 .tor-page .tor-panel{--menu-t3:var(--text-secondary,var(--text-2,currentColor));width:100%;margin:32px 0 0;position:static}
-.tor-page .tor-progress{margin:0 8px 6px 36px}
+.tor-page .tor-progress{margin:0 8px 6px;margin-inline-start:36px}
 .tor-page .tor-panel .acira-menu-row[data-armed]{color:var(--tor-danger,#b3382f)}
 .tor-page .tor-panel .acira-menu-row:disabled{opacity:.32}
 
 /* Tor vault rows (TorKept.tsx): the panel's rows plus a bookmark row with its own remove button. */
-.tor-panel .acira-menu-label{padding:6px 8px 2px 36px}
-.tor-panel .tor-bm{padding-right:4px}
-.tor-panel .tor-bm-open{appearance:none;border:0;background:none;color:inherit;font:inherit;text-align:left;min-width:0;padding:0;cursor:default}
+.tor-panel .acira-menu-label{padding:6px 8px 2px;padding-inline-start:36px}
+.tor-panel .tor-bm{padding-inline-end:4px}
+.tor-panel .tor-bm-open{appearance:none;border:0;background:none;color:inherit;font:inherit;text-align:start;min-width:0;padding:0;cursor:default}
 .tor-panel .tor-bm-open .acira-menu-title{display:block}
 .tor-panel .tor-bm-remove{appearance:none;border:0;border-radius:4px;background:none;color:var(--menu-t3,inherit);font:inherit;font-size:12px;height:24px;padding:0 8px;cursor:default}
 .tor-panel .tor-bm-remove:hover{background:var(--menu-hover);color:var(--tor-danger,#b3382f)}
 .tor-panel .tor-bm-open:focus-visible,.tor-panel .tor-bm-remove:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent,Highlight));outline-offset:-2px}
-.tor-panel .tor-kept-note{display:flex;align-items:center;gap:8px;padding-left:12px}
-.tor-panel .tor-kept-note:not([data-ok]){padding-left:36px;color:var(--tor-danger,#b3382f)}
+.tor-panel .tor-kept-note{display:flex;align-items:center;gap:8px;padding-inline-start:12px}
+.tor-panel .tor-kept-note:not([data-ok]){padding-inline-start:36px;color:var(--tor-danger,#b3382f)}
 
 /* Tor security level (TorLevel.tsx): the three levels, what the chosen one does, and the offer to reopen the Tor tabs that still run at the previous one.
    One control in the Tor panel (inside a disclosure body) and in Settings; only the layout is local, the segmented track and buttons are the shared ones. */
@@ -80,8 +80,8 @@
 .tor-level .acira-seg button{min-width:0;padding:0 4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .tor-level-summary{margin:10px 0 0;overflow-wrap:anywhere}
 .tor-level-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;color:var(--tor-level-ink)}
-.tor-level-list li{position:relative;padding-left:14px;overflow-wrap:anywhere}
-.tor-level-list li::before{content:'';position:absolute;left:3px;top:6px;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.45}
+.tor-level-list li{position:relative;padding-inline-start:14px;overflow-wrap:anywhere}
+.tor-level-list li::before{content:'';position:absolute;inset-inline-start:3px;top:6px;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.45}
 .tor-level-problem{margin:8px 0 0;color:var(--btn-danger-ink,var(--tor-danger,#b3382f))}
 .tor-level-stale,.tor-level-done{margin:10px 0 0;color:var(--tor-level-ink)}
 .tor-level-apply{margin-top:12px;padding:10px 12px;border-radius:6px;border:1px solid var(--tor-line,var(--line,rgb(127 127 127/.22)));background:color-mix(in srgb,var(--tor-ink,#7d4698) 7%,transparent)}
@@ -92,24 +92,24 @@
 
 /* The circuit of the current site (TorCircuit.tsx): this browser, guard, middle, exit, the site, joined by one line. Rows sit on the panel's icon column (8px
    padding, 16px column, 8px gap) so the dots line up with the icons of the rows around them. */
-.tor-site-label{padding:6px 8px 4px 32px}
+.tor-site-label{padding:6px 8px 4px;padding-inline-start:32px}
 .tor-circuit{--tor-ink-panel:color-mix(in srgb,#8d4fbd 72%,var(--menu-t1,currentColor));list-style:none;margin:0;padding:2px 8px 4px;display:flex;flex-direction:column}
 .tor-hop{position:relative;display:grid;grid-template-columns:16px minmax(0,1fr) auto;column-gap:8px;align-items:start;padding:0 0 8px;font:400 12px/16px var(--font-ui);color:var(--menu-t3)}
 .tor-hop:last-child{padding-bottom:0}
 .tor-hop-dot{position:relative;display:block;width:16px;height:16px}
 .tor-hop-dot::before{content:'';position:absolute;left:4.5px;top:4.5px;width:7px;height:7px;box-sizing:border-box;border-radius:50%;border:1.5px solid var(--tor-ink-panel,#7d4698);background:var(--menu-bg,transparent)}
 .tor-hop-end .tor-hop-dot::before{width:5px;height:5px;left:5.5px;top:5.5px;border:0;background:var(--menu-t3,currentColor);opacity:.7}
-.tor-hop:not(:last-child)::after{content:'';position:absolute;left:7.25px;top:13px;bottom:-3px;width:1.5px;border-radius:1px;background:var(--tor-ink-panel,#7d4698);opacity:.32}
+.tor-hop:not(:last-child)::after{content:'';position:absolute;inset-inline-start:7.25px;top:13px;bottom:-3px;width:1.5px;border-radius:1px;background:var(--tor-ink-panel,#7d4698);opacity:.32}
 .tor-hop-body{display:flex;flex-direction:column;min-width:0}
 .tor-hop-place{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:450 13px/16px var(--font-ui);color:currentColor}
 .tor-hop-detail{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-variant-numeric:tabular-nums;color:var(--menu-t3)}
 .tor-hop-role{max-width:104px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:500;color:var(--menu-t2)}
 .tor-hop-end-name{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;color:var(--menu-t2)}
-.tor-circuit-note{margin:0;padding:2px 8px 8px 32px;font:400 12px/16px var(--font-ui);color:var(--menu-t3);text-wrap:pretty}
+.tor-circuit-note{margin:0;padding:2px 8px 8px;padding-inline-start:32px;font:400 12px/16px var(--font-ui);color:var(--menu-t3);text-wrap:pretty}
 .tor-circuit-slot{min-height:166px}
 
 /* Tor Browser's download warning (TorDownloadNotice.tsx), above the list of downloads in the panel and on the Downloads page. Text colours follow whatever surface it sits on. */
-.tor-dl-notice{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:10px;margin:4px 8px 8px;padding:10px 12px;border-radius:8px;border:1px solid color-mix(in srgb,#8d4fbd 30%,transparent);background:color-mix(in srgb,#8d4fbd 9%,transparent);font:400 12px/16px var(--font-ui,inherit);text-align:left}
+.tor-dl-notice{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:10px;margin:4px 8px 8px;padding:10px 12px;border-radius:8px;border:1px solid color-mix(in srgb,#8d4fbd 30%,transparent);background:color-mix(in srgb,#8d4fbd 9%,transparent);font:400 12px/16px var(--font-ui,inherit);text-align:start}
 .tor-dl-notice>.tor-glyph{margin-top:0;color:color-mix(in srgb,#8d4fbd 78%,currentColor)}
 .tor-dl-notice strong{display:block;font-weight:500}
 .tor-dl-notice p{margin:2px 0 0;color:color-mix(in srgb,currentColor 74%,transparent);overflow-wrap:anywhere}
@@ -130,7 +130,7 @@
 
 /* "This onion site needs a key" (TorOnionAuth.tsx): the navigation error page's own layout with a key field instead of the technical details. */
 .tor-onion-auth .ne-glyph{color:var(--tor-ink,#7d4698)}
-.tor-auth-form{display:flex;flex-direction:column;align-items:stretch;width:min(420px,100%);margin:20px auto 0;text-align:left}
+.tor-auth-form{display:flex;flex-direction:column;align-items:stretch;width:min(420px,100%);margin:20px auto 0;text-align:start}
 .tor-auth-form label{margin:0 0 6px;font:500 12px/16px var(--font-ui,inherit)}
 .tor-auth-form input{box-sizing:border-box;width:100%;height:36px;padding:0 12px;border:1px solid var(--line-strong,rgb(127 127 127/.38));border-radius:8px;background:var(--input-fill,rgb(127 127 127/.1));color:inherit;font:400 13px/20px var(--font-mono,ui-monospace,Consolas,monospace);letter-spacing:.02em}
 .tor-auth-form input::placeholder{color:color-mix(in srgb,currentColor 45%,transparent);letter-spacing:0;font-family:var(--font-ui,inherit)}

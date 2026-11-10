@@ -26,7 +26,7 @@ const onColor = (value?: string) => { const rgb = hexRgb(value); if (!rgb) retur
 function Avatar({ source }: { source: ImportSource }) {
   const fill = source.color || source.fillColor;
   const style = source.picture ? undefined : { background: fill || undefined, color: onColor(fill) };
-  return <span className="aip-avatar" style={style} data-plain={!source.picture && !fill ? '' : undefined} aria-hidden="true">{source.picture ? <img src={source.picture} alt="" width={24} height={24} draggable={false} /> : <bdi>{(source.initial || source.name || '?').slice(0, 1).toUpperCase()}</bdi>}</span>;
+  return <span className="aip-avatar" style={style} data-plain={!source.picture && !fill ? '' : undefined} aria-hidden="true">{source.picture ? <img src={source.picture} alt="" width={24} height={24} draggable={false} /> : <bdi className="chip-letter">{(source.initial || source.name || '?').slice(0, 1).toUpperCase()}</bdi>}</span>;
 }
 
 /** A browser's own app icon (read from its installed executable), or its first letter when there is none to read. */

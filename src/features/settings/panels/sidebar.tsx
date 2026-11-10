@@ -5,6 +5,7 @@ import { setSidebarAppsHidden, setSidebarAppsPlace, useSidebarApps } from '../..
 import { clampSidebarWidth } from '../../../ui/sidebarLayout';
 import { sidebarSideOf } from '../../../ui/sidebarSide';
 import { sidebarPatch, workspaceIsOpen } from '../../../runtime/browserChrome';
+import { sidebarHeldOpenIn } from '../../../runtime/windowView';
 import { useRef, useSyncExternalStore } from 'react';
 import { useFlip } from '../../../ui/sharedMotion';
 import { moveSection, openSidebarCustomize, saveSections, sectionLayout, sectionShown, SECTION_NAMES, toggleSection, type SectionId } from '../../../ui/sidebarSections';
@@ -52,9 +53,11 @@ export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
   useFlip(sections, layout.order.join(','));
   return (<>
     <SettingGroup title={t("acirasidebar.sidebar")} id="sidebar">
-      <SettingRow id="sidebar-visible" title={t("sidebar.showSidebar")} detail={t("sidebar.showSidebarDetail")}>
-        <Switch label={t("sidebar.showSidebar")} checked={open} onChange={(next) => dispatch({ type: 'ui.update', patch: sidebarPatch(next) })} />
-      </SettingRow>
+      {!sidebarHeldOpenIn(state.settings, state.windowUi) && (
+        <SettingRow id="sidebar-visible" title={t("sidebar.showSidebar")} detail={t("sidebar.showSidebarDetail")}>
+          <Switch label={t("sidebar.showSidebar")} checked={open} onChange={(next) => dispatch({ type: 'ui.update', patch: sidebarPatch(next) })} />
+        </SettingRow>
+      )}
       <SidebarSizeRow state={state} dispatch={dispatch} />
       <SidebarSideRow state={state} dispatch={dispatch} always />
       <SidebarEdgeRows state={state} dispatch={dispatch} describe />

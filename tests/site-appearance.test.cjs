@@ -195,9 +195,9 @@ test('the settings bridge accepts the four values and nothing else, and a new pr
 test('main wires it to every website page: tabs, link previews, the hint, and Acira\'s own appearance changing', () => {
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8'), peek = fs.readFileSync(path.join(__dirname, '../desktop/rewind/peek.cjs'), 'utf8');
   assert.match(main, /if\(tab\.contentKind==='web'\)siteAppearance\.attach\(wc,tab\)/, 'tab pages');
-  assert.match(main, /pageCreated:\(wc,source\)=>siteAppearance\.attach\(wc,source\)/, 'a link preview is told the same colours as a tab');
+  assert.match(main, /pageCreated:\(wc,source\)=>\{ensureLimits\(wc\);zoomGlide\.watch\(wc\);siteAppearance\.attach\(wc,source\);\}/, 'a link preview is told the same colours as a tab (and gets its zoom limits before it holds a session, and its navigations followed by the zoom glide)');
   assert.match(peek, /pageCreated\(wc,source\)/);
-  assert.match(main, /nativeTheme\.on\('updated',\(\)=>siteAppearance\.refreshAll\(\)\)/, 'Dark while Acira turns dark needs no session any more, and the reverse');
+  assert.match(main, /nativeTheme\.on\('updated',\(\)=>siteAppearance\.refreshAll\(\{force:true\}\)\)/, 'Dark while Acira turns dark needs no session any more, and the reverse; a page that holds one is told again (Chromium pushed its preferences)');
   assert.match(main, /Object\.hasOwn\(action\.patch,'websiteAppearance'\)\)setTimeout\(\(\)=>siteAppearance\.refreshAll\(\),0\)/, 'the setting is applied to open tabs at once');
 });
 
@@ -301,4 +301,64 @@ test('13.4: a page whose renderer crashed is not attached again until it navigat
   const clean = await open({mode: 'always-dark'});
   clean.wc.emit('render-process-gone', {}, {reason: 'clean-exit', exitCode: 0}); clean.wc.emit('dom-ready'); await clean.settle();
   assert.equal(clean.appearance.stateOf(clean.wc).session, true);
+});
+
+// 13.5: Chromium pushes a page's web preferences again when Acira's own appearance changes (and on webContents.setVisualZoomLevelLimits), which drops the Auto Dark Mode override
+// while the debugger session stays attached: the page turns light until it is reloaded. refreshAll({force}) (nativeTheme 'updated') and reassert() tell such a page again, at once.
+test('13.5: a change of Acira\'s own appearance tells every page that holds a session its appearance again (page and frames), and a plain refresh with nothing changed sends nothing', async () => {
+  const f = await open({mode: 'always-dark', nativeDark: false});
+  f.wc.debugger.emit('message', {}, 'Target.attachedToTarget', {sessionId: 'frame-1', targetInfo: {type: 'iframe'}}, '');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const count = () => f.wc.log.filter(entry => Array.isArray(entry) && entry[0] === 'Emulation.setAutoDarkModeOverride').length;
+  const before = count();
+  f.appearance.refreshAll(); await f.settle();
+  assert.equal(count(), before, 'the setting did not change, the tab was already told: nothing is sent');
+  const mediaBefore = sent(f.wc, 'Emulation.setEmulatedMedia').length;
+  f.box.nativeDark = true; f.appearance.refreshAll({force: true}); await f.settle();
+  assert.equal(count(), before + 2, 'the page and its frame are told again');
+  assert.equal(sent(f.wc, 'Emulation.setEmulatedMedia').length, mediaBefore, 'only the Auto Dark Mode override was lost: the colour scheme emulation survives and is not sent again');
+  assert.equal(lastAuto(f.wc).enabled, true); assert.equal(lastAuto(f.wc, 'frame-1').enabled, true); assert.equal(lastScheme(f.wc), 'dark');
+  assert.equal(sent(f.wc, 'Target.detachFromTarget').length, 0); assert.equal(f.wc.debugger.attached, true, 'the session stays');
+});
+
+test('13.5: a forced refresh sends no repeated commands to a page that holds no session, and does not attach one', async () => {
+  for (const [mode, nativeDark] of [['system', false], ['dark', true], ['light', false]]) {
+    const f = await open({mode, nativeDark});
+    f.appearance.refreshAll({force: true}); await f.settle();
+    assert.deepEqual(f.wc.log, [], `${mode} on a ${nativeDark ? 'dark' : 'light'} Acira follows Acira: nothing at all`);
+  }
+  for (const [mode, nativeDark] of [['light', true], ['dark', false]]) { // a session without Auto Dark Mode has nothing to lose
+    const f = await open({mode, nativeDark}), before = f.wc.log.length;
+    f.appearance.refreshAll({force: true}); f.appearance.reassert(f.wc); await f.settle();
+    assert.equal(f.wc.log.length, before, `${mode} on a ${nativeDark ? 'dark' : 'light'} Acira holds a session but no Auto Dark Mode: nothing is sent again`);
+  }
+  const tor = await open({mode: 'always-dark', tor: true}, 'https://www.example.com/', {privacy: 'tor'});
+  tor.appearance.refreshAll({force: true}); tor.appearance.reassert(tor.wc); await tor.settle(); assert.deepEqual(tor.wc.log, [], 'Tor is never touched');
+});
+
+test('13.5: reassert() tells one page again at once; during a running call it is not lost, and on a page that is gone it does nothing', async () => {
+  const f = await open({mode: 'always-dark'});
+  const before = sent(f.wc, 'Emulation.setAutoDarkModeOverride').length;
+  f.appearance.reassert(f.wc); await f.settle();
+  assert.equal(sent(f.wc, 'Emulation.setAutoDarkModeOverride').length, before + 1);
+  // a forced call that arrives while another call is running runs once more afterwards, forced
+  const slow = make({mode: 'always-dark'}), wc = fakePage('https://www.example.com/');
+  slow.appearance.attach(wc, tab()); slow.appearance.reassert(wc);
+  await settle(slow.appearance, wc);
+  assert.ok(sent(wc, 'Emulation.setAutoDarkModeOverride').length >= 2, 'the page was told by the first call and again by the forced one: ' + sent(wc, 'Emulation.setAutoDarkModeOverride').length);
+  assert.doesNotThrow(() => f.appearance.reassert({}), 'a page that is not tracked'); assert.doesNotThrow(() => f.appearance.reassert(null));
+  const ended = await open({mode: 'always-dark'}); ended.wc.emit('destroyed'); assert.doesNotThrow(() => ended.appearance.reassert(ended.wc));
+});
+
+test('13.5: a forced refresh on a page whose renderer crashed, or that does not answer, ends and tells nobody', async () => {
+  const f = make({mode: 'always-dark', commandMs: 20, retries: 0}), wc = fakePage('https://www.example.com/');
+  f.appearance.attach(wc, tab()); await settle(f.appearance, wc);
+  wc.emit('render-process-gone', {}, {reason: 'crashed', exitCode: 11}); wc.isCrashed = () => true;
+  const sentBefore = wc.log.length; f.appearance.refreshAll({force: true}); f.appearance.reassert(wc); await settle(f.appearance, wc);
+  assert.equal(wc.log.length, sentBefore, 'nothing is sent to a crashed page');
+  const mute = make({mode: 'always-dark', commandMs: 20, retries: 0}), quiet = fakePage('https://www.example.com/');
+  mute.appearance.attach(quiet, tab()); await settle(mute.appearance, quiet);
+  quiet.debugger.sendCommand = () => new Promise(() => {});
+  mute.appearance.refreshAll({force: true}); await new Promise(resolve => setTimeout(resolve, 120)); await mute.appearance.whenIdle(quiet);
+  assert.ok(true, 'ends: the silent page cost nothing');
 });

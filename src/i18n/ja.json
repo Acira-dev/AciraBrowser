@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "これらのタブは今はスリープできません",
   "tabsleep.privateStaysAwake": "プライベートウィンドウのタブはスリープしません",
   "tabsleep.couldNot": "タブをスリープさせられませんでした",
+  "tabsleep.tipSleeping": "スリープ中",
   "peek.frameLabel": "リンクのプレビュー",
   "peek.openAsTab": "タブとして開く",
   "peek.openInSplit": "分割表示で開く",

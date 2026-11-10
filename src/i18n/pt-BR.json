@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Estas guias precisam continuar ativas por enquanto",
   "tabsleep.privateStaysAwake": "As janelas privadas mantêm todas as guias ativas",
   "tabsleep.couldNot": "Não foi possível suspender as guias",
+  "tabsleep.tipSleeping": "suspensa",
   "peek.frameLabel": "Pré-visualização do link",
   "peek.openAsTab": "Abrir como guia",
   "peek.openInSplit": "Abrir em visualização dividida",

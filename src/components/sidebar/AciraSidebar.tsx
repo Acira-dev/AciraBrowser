@@ -1,3 +1,4 @@
+import { railGlowRef0, railGlowRef1 } from '../../ui/siteGlowEngine';
 import { AnimatePresence,motion } from 'motion/react';
 import { useCallback,useEffect,useLayoutEffect,useRef,useState,useSyncExternalStore,type CSSProperties,type DragEvent,type KeyboardEvent,type MouseEvent,type PointerEvent,type ReactNode } from 'react';
 import { ArrowUp,ArrowUpRight,BookOpen,Bookmark,Check,ChevronDown,Clock3,Columns2,Download,FileText,History as HistoryGlyph,PanelTop,Folder,FolderOpen,Link2,Maximize2,PanelsTopLeft,Pin,Plus,Search,Settings2,Star,VolumeX,X,type LucideIcon } from '../AppIcons';
@@ -44,7 +45,7 @@ import { animateSpring,classScale,frequentStretch,motionSpeed,stripEase,stripMs,
 import { bookmarkContext,openPage,savedPageIdentity } from '../../ui/pageActions';
 import { openRailSection,setRailPrefs,toggleRailSection,useRailPrefs } from '../../ui/railPrefs';
 import { useShownTabsSwitch } from '../../ui/layoutSync';
-import { appClickPlan,appHost,appTabFor,droppedLink,listedInSidebar,moveSidebarApp,normalizeAppUrl,noteReleasedTab,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,SIDEBAR_APPS_LIMIT,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
+import { appClickPlan,appHost,appTabFor,droppedLink,listedInSidebar,moveSidebarApp,normalizeAppUrl,noteReleasedTab,removeSidebarAppWithUndo,seedSidebarApps,setSidebarAppsHidden,SIDEBAR_APPS_LIMIT,tileFolded,updateSidebarApp,useSidebarApps,type SidebarApp } from '../../ui/sidebarApps';
 import { focusSidebarControl,keepTabFocus,listedTabIds,neighbourTabId,tabFocusEnvironment } from '../../ui/sidebarFocus';
 import { pointerAnchor,rowAnchor } from '../../ui/popup';
 import { profileDownloads } from '../../ui/downloadActivity';
@@ -93,6 +94,7 @@ import { formatShortcut } from '../../ui/platform';
 import { useTabNumbers } from '../../ui/tabNumbers';
 import { tabNumberMatches } from '../../runtime/tabNumbers';
 
+import { SidebarExtensions } from './SidebarExtensions';
 import { t } from '../../i18n';
 type Dispatch=(action:BrowserAction)=>void;
 const APP_TYPE='application/x-acira-app',LINK_TYPE='text/uri-list';
@@ -295,7 +297,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const setWidth=(next:number)=>dispatch({type:'settings.update',patch:{sidebarWidth:clampSidebarWidth(next)}});
  // A favorite's tab is an ordinary tab of the list, where it was, unless Settings keep it only in its tile (runtime/favoriteTabsRule.ts, ui/sidebarApps.ts listedInSidebar).
  const favorites=useSidebarApps(profileId,privateMode);
- const folded=FAVORITES_LIMIT[sizeOf(clampSidebarWidth(state.settings.sidebarWidth))],listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings,folded);
+ const listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings);
  const groups=state.tabGroups.filter(group=>group.browserProfileId===profileId).map(group=>({group,members:state.tabs.filter(tab=>listed(tab)&&groupForTab(state,tab)?.id===group.id)})).filter(item=>item.members.length);
  const profileTabs=state.tabs.filter(tab=>tab.browserProfileId===profileId),listedProfileTabs=profileTabs.filter(listed);
  const active=profileTabs.find(tab=>tab.id===state.activeTabId);
@@ -364,9 +366,10 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
   :<SidebarReading key={id} state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>;
  if(!shown)return <aside className="ed-rail acira-sidebar" aria-label={t("acirasidebar.sidebar")} aria-hidden="true" inert data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined}/>;
  return <aside className={`ed-rail acira-sidebar is-expanded${peeking&&!expanded?' is-peek':''}`} aria-label={t("acirasidebar.sidebar")} data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined} data-addr-side={addressSide.block||undefined} data-addr-open={addressSide.open||undefined}>
+  {/* the site glow's left wash lives here so it travels with the sidebar (siteGlowEngine.ts railGlowRef) */}<span className="st-glow-rail" aria-hidden="true" ref={railGlowRef0}/><span className="st-glow-rail" aria-hidden="true" ref={railGlowRef1}/>
   {/* Favorites sit at the top (the default) or at the bottom, above the workspace row and the footer (Settings > Tabs > Sidebar > Favorites). */}
   {show('favorites')&&!favoritesBottom?<><SidebarTop state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode}/>{favoritesSeparator(favorites.apps.length)&&<div className="sb-sep" role="separator"/>}</>:<div className="sb-top-space" aria-hidden="true"/>}
-  <div className="sb-sections-wrap">{!customizing&&<WorkspaceTitle state={state}/>}<div ref={peek.root} className="sb-scroll" onContextMenu={background}>
+  <div className="sb-sections-wrap">{!customizing&&<SidebarExtensions tab={current}/>}{!customizing&&<WorkspaceTitle state={state} count={listedProfileTabs.length}/>}<div ref={peek.root} className="sb-scroll" onContextMenu={background}>
    {customizing?<SidebarCustomize layout={layout} onChange={changeLayout} onDone={()=>setCustomizing(false)} favoritesPlace={favorites.place==='bottom'?'bottom':'top'}/>:blocks.map(block)}
   </div>
   {peek.edge&&active&&<button type="button" className="sb-active-peek" data-edge={peek.edge} title={t("acirasidebar.showTheCurrentTab")} onClick={peek.reveal}><SiteIdentityIcon url={active.url} favicon={active.favicon} size={16}/><span className="sb-active-peek-title">{title(active)}</span><PreviewIcon icon={peek.edge==='above'?ArrowUp:ChevronDown} size={12}/></button>}
@@ -453,6 +456,10 @@ function SidebarApps({state,dispatch,current,profileId,privateMode}:{state:Brows
  // Called before the early returns below (hidden, no favorites, the drop target): a hook after them makes the first favorite, the last one removed and Hide
  // favorites change the number of hooks between renders (React error #310/#300, the interface reloads itself).
  const size=useSidebarSize(clampSidebarWidth(state.settings.sidebarWidth));
+ // Settings keep a favorite's tab only in its tile and its tile is folded behind "+N": with no row and no tile the page on screen would have no place in the
+ // sidebar, so the grid opens (the same state +N sets) whenever the page on screen changes to such a tab. Closing it by hand stays closed until the page changes.
+ const foldedActive=favoriteTabsOnlyInTile(state.settings)&&!!current.favoriteId&&tileFolded(apps,current.favoriteId,FAVORITES_LIMIT[size]);
+ useLayoutEffect(()=>{if(foldedActive)setMore(true);},[foldedActive,current.id]);
  // The active tile's ring takes its site's colour: each tile's own icon, read once on this computer (ui/siteIconColor.ts); a private window keeps the answers in memory.
  const colours=useIconColors(apps.map(app=>({key:app.id,site:appHost(app.url),src:app.icon||siteIdentity(app.url).icon||siteIcon(app.url)})),!privateMode);
  useEffect(()=>{if(!seeded)seedSidebarApps(profileId,privateMode,newTab.shortcuts.filter(item=>item.sidebar).map(item=>({url:item.url,title:item.title})));},[seeded,profileId,privateMode]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -1001,7 +1008,7 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
   onMouseDown={event=>{if(event.button===1)event.preventDefault();}} onAuxClick={event=>{if(event.button===1&&!pinned){event.preventDefault();onClose();}}}
   onContextMenu={event=>{event.preventDefault();event.stopPropagation();context(event.currentTarget,event);}}>
   {renaming?<div className="sb-tab-main sb-tab-editing"><span className="sb-tab-icon" data-loading={loading||undefined}>{loading?<DotMatrix preset="loader" size={14} reducedMotion={state.settings.reducedMotion}/>:markInIcon?<TabPrivacyMark privacy={privacy!} size={16} className="sb-tab-icon-mark"/>:<SiteIdentityIcon url={tab.url} favicon={tab.favicon} size={16} error={!!tab.error}/>}</span><TabNameInput tab={shown} dispatch={dispatch} onDone={()=>{setRenaming(null);requestAnimationFrame(()=>rowRef.current?.querySelector<HTMLElement>('.sb-tab-main')?.focus({preventScroll:true}));}}/></div>:
-  <button className="sb-tab-main" data-sb-focus onDoubleClick={event=>{event.preventDefault();setRenaming('inline');}} aria-current={active?'page':undefined} aria-label={privacy||sound==='playing'||linkTip?`${name}${privacy?`, ${privacyNames[privacy].label}`:''}${sound==='playing'?`, ${t("tabsound.playing")}`:''}${linkTip?`, ${linkTip}`:''}`:undefined} title={cardAnswers(cardMode,tab)?undefined:`${name}${tab.customTitle?' · '+t("tabrename.renamedTip"):''}${privacy?' · '+privacyNames[privacy].tip:''}${tab.sleeping?' · sleeping':''}${isWeb(tab)?'\n'+address(tab.url):''}`} onClick={()=>{if(pane)selectStripTab(state,dispatch,tab.id,pane);else if(!active)dispatch({type:'tab.select',id:tab.id});}}
+  <button className="sb-tab-main" data-sb-focus onDoubleClick={event=>{event.preventDefault();setRenaming('inline');}} aria-current={active?'page':undefined} aria-label={privacy||sound==='playing'||linkTip?`${name}${privacy?`, ${privacyNames[privacy].label}`:''}${sound==='playing'?`, ${t("tabsound.playing")}`:''}${linkTip?`, ${linkTip}`:''}`:undefined} title={cardAnswers(cardMode,tab)?undefined:`${name}${tab.customTitle?' · '+t("tabrename.renamedTip"):''}${privacy?' · '+privacyNames[privacy].tip:''}${tab.sleeping?' · '+t("tabsleep.tipSleeping"):''}${isWeb(tab)?'\n'+address(tab.url):''}`} onClick={()=>{if(pane)selectStripTab(state,dispatch,tab.id,pane);else if(!active)dispatch({type:'tab.select',id:tab.id});}}
    onKeyDown={event=>{
     if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();context(event.currentTarget);return;}
     if(event.key==='Delete'&&!pinned){event.preventDefault();const root=event.currentTarget.closest('.acira-sidebar'),next=root?neighbourTabId(listedTabIds(root),tab.id):undefined;onClose();if(next)keepTabFocus(next,tabFocusEnvironment());return;}

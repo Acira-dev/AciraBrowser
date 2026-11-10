@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "इन टैब को अभी जागते रहना ज़रूरी है",
   "tabsleep.privateStaysAwake": "निजी विंडो में सभी टैब जागते रहते हैं",
   "tabsleep.couldNot": "टैब सुलाए नहीं जा सके",
+  "tabsleep.tipSleeping": "सुलाया गया",
   "peek.frameLabel": "लिंक का पूर्वावलोकन",
   "peek.openAsTab": "टैब के रूप में खोलें",
   "peek.openInSplit": "स्प्लिट व्यू में खोलें",

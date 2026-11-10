@@ -3312,6 +3312,7 @@
   "tabsleep.stayMany": "Bu sekmelerin şu anda uyanık kalması gerekiyor",
   "tabsleep.privateStaysAwake": "Gizli pencereler tüm sekmeleri uyanık tutar",
   "tabsleep.couldNot": "Sekmeler uyutulamadı",
+  "tabsleep.tipSleeping": "uykuda",
   "peek.frameLabel": "Bağlantı önizlemesi",
   "peek.openAsTab": "Sekme olarak aç",
   "peek.openInSplit": "Bölünmüş görünümde aç",
