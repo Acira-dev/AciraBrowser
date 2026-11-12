@@ -6,9 +6,10 @@ function signed(){const {privateKey,publicKey}=crypto.generateKeyPairSync('rsa',
 test('CRX3 accepts genuine developer signatures in explicit local-fixture mode and denies modified contents/identity',()=>{const f=signed(),verified=verifyCRX3(f.buffer,f.id,{requireStorePublisher:false});assert.equal(verified.id,f.id);const changed=Buffer.from(f.buffer);changed[changed.length-1]^=1;assert.throws(()=>verifyCRX3(changed,f.id,{requireStorePublisher:false}),/signature/);assert.throws(()=>verifyCRX3(f.buffer,'a'.repeat(32),{requireStorePublisher:false}),/identity/);assert.throws(()=>verifyCRX3(f.buffer,f.id),/publisher/,'Store path cannot accept a self-signed fixture package');});
 test('store URL is HTTPS Google delivery with exact native extension identity; malformed headers fail bounded',()=>{const url=new URL(storeURL('a'.repeat(32),'152.0.1.0'));assert.equal(url.hostname,'clients2.google.com');assert.equal(url.searchParams.get('acceptformat'),'crx3');assert.equal(new URLSearchParams(url.searchParams.get('x')).get('id'),'a'.repeat(32));assert.throws(()=>storeURL('../path'));assert.throws(()=>verifyCRX3(Buffer.alloc(12),'a'.repeat(32)));});
 // Store packages are large (Bitwarden 25 MB, Grammarly, Momentum): on a slow link a flat 30 s deadline can never finish them. The download is bounded by
-// stalls (no data for 30 s) and an overall ten-minute cap instead; each chunk, redirect and response restarts the stall timer.
-test('store download times out on stalls and a long overall cap, not a flat 30 s total',()=>{
+// stalls (no data for 30 s) and a pace floor instead (after the first byte, every minute must bring 32 KB per second; tests/extension-download-pace.test.cjs
+// drives it); each chunk, redirect and response restarts the stall timer.
+test('store download times out on stalls and a pace floor, not a flat 30 s total and not a fixed overall cap',()=>{
  const source=require('node:fs').readFileSync(require.resolve('../desktop/browser-services/extension-packages.cjs'),'utf8');
- assert.match(source,/Extension delivery stalled: no data for 30 seconds/);assert.match(source,/Extension delivery timed out after 10 minutes/);assert.doesNotMatch(source,/Extension delivery timed out\.'/);
+ assert.match(source,/Extension delivery stalled: no data for 30 seconds/);assert.match(source,/Extension delivery is too slow: under 32 KB per second/);assert.doesNotMatch(source,/timed out after 10 minutes/);assert.doesNotMatch(source,/Extension delivery timed out\.'/);
  assert.ok((source.match(/arm\(\)/g)||[]).length>=4,'stall timer is re-armed on redirect, response and every data chunk');
 });

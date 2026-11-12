@@ -219,6 +219,51 @@ test('a click while one of Acira\'s own pages is in front (the button reaches th
   assert.equal(h.clicks().length, 0);
 });
 
+test('13.7: a click that names no website tab (-1: only the New Tab page or Settings is open, as the extensions menu\'s Open row sends it) reaches an extension without a popup as onClicked with that page, address included; a popup still opens; a website in front or no tab list is the engine\'s as before', () => {
+  // What tabs.query tells an extension WITHOUT the tabs permission (no url), and the window the tab list keeps for it.
+  const described = {id: 2000000003, windowId: 1, active: true};
+  const setup = ({kind = 'internal', address = 'acira://new', model = true, tabs = true} = {}) => {
+    const h = actionHost();
+    if (model) {
+      h.store.impl = {tabModel: {windows: () => [{id: 1, state: {tabs: [{id: 'tab-a', url: address, contentKind: kind}], activeTabId: 'tab-a'}}]}};
+      // Like the real handlers, this refuses a caller that is no extension.
+      h.handlers.set('tabs.query', {callback: event => (!event.extension ? {__acira_error: 'ACCESS_DENIED'} : tabs ? [described] : []), extensionContext: false});
+    }
+    h.clicks = () => h.sent.filter(entry => entry[1] === 'browserAction.onClicked');
+    h.click = tabId => h.handlers.get('browserAction.activate').callback({type: 'frame', sender: {id: 99}}, {eventType: 'click', extensionId: ID, tabId});
+    return h;
+  };
+  // The New Tab page alone, an action without a popup: the extension is told about that page, with the chrome:// address Chrome gives it (Tabrr: onClicked -> chrome.tabs.create({}); Colorway reads tab.url);
+  // the engine, which would throw "Unable to get active tab", is not asked.
+  let h = setup();
+  assert.equal(h.click(-1), undefined);
+  assert.deepEqual(h.clicks(), [[ID, 'browserAction.onClicked', {...described, url: 'chrome://newtab/'}]]);
+  assert.equal(h.activated.length, 0);
+  // Settings and the other pages: the same rule as the tab list's (acira://settings is chrome://settings/).
+  h = setup({address: 'acira://settings'});
+  assert.equal(h.click(-1), undefined);
+  assert.equal(h.clicks()[0][2].url, 'chrome://settings/');
+  // The same for a tab id that no longer names a page.
+  h = setup();
+  assert.equal(h.click(99), undefined);
+  assert.equal(h.clicks().length, 1);
+  // An action WITH a popup: the engine's click (installPopupFrames opens the popup from the window in use), no onClicked.
+  h = setup();
+  h.engine.getAction(ID).popup = 'popup.html';
+  assert.equal(h.click(-1), 'engine');
+  assert.equal(h.clicks().length, 0);
+  // A website in front of the window (the interface's -1 is stale), or an empty window: the engine answers as before.
+  h = setup({kind: 'web', address: 'https://a.test/'});
+  assert.equal(h.click(-1), 'engine');
+  assert.equal(h.clicks().length, 0);
+  h = setup({tabs: false});
+  assert.equal(h.click(-1), 'engine');
+  // No tab list (a private session that runs extensions): as before.
+  h = setup({model: false});
+  assert.equal(h.click(-1), 'engine');
+  assert.equal(h.clicks().length, 0);
+});
+
 test('the toolbar\'s state: a tab\'s own values win over the global ones, every known tab has its entry', () => {
   const h = actionHost();
   h.tabs.add({id: 5, isDestroyed: () => false, on() {}});
@@ -278,11 +323,11 @@ test('the button\'s menu: the extension\'s action items, then Options and Unpin;
     assert.equal(h.sent.at(-1)[2].menuItemId, 'act');
     const opened = [];
     const unpin = e => opened.push(['unpin', e.extensionId]);
-    h.store.createTab = details => { opened.push(['url', details.url]); return Promise.resolve(); };
+    h.store.createTab = details => { opened.push(['url', details.url, details.windowId]); return Promise.resolve(); };
     bridge.hub.on('unpin', unpin);
     asked.templates[2].click(); asked.templates[3].click();
     bridge.hub.off('unpin', unpin);
-    assert.deepEqual(opened, [['url', `chrome-extension://${ID}/options.html`], ['unpin', ID]]);
+    assert.deepEqual(opened, [['url', `chrome-extension://${ID}/options.html`, -2], ['unpin', ID]], 'Options names the current window: the engine\'s last focused window may be an extension window the host refuses');
   } finally { bridge.hub.off('menu', take); }
   // nobody shows it: the engine's own menu
   assert.equal(activate({type: 'frame'}, {eventType: 'contextmenu', extensionId: ID, tabId: 1, anchorRect: {x: 0, y: 0, width: 1, height: 1}}), 'engine');

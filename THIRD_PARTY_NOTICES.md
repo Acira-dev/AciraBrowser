@@ -54,7 +54,7 @@ The inherited `public/workspace-coast.png` has unresolved creator/license eviden
 
 Dia, Apple and ElevenLabs visuals/behavior may be used as design references. Their private production source, proprietary services, logos and sample artwork are not licensed by this file. Any later adopted public motion implementation needs its exact commit/file/license and adaptation evidence; no Apple artwork may enter the package.
 
-Source availability: https://github.com/Acira-dev/AciraBrowserNoAI. A repository URL is not evidence of a successful push; verified commit identities are recorded under docs/release/.
+Source availability: https://github.com/Acira-dev/AciraBrowser. Every release is tagged there (mac-v<version>, windows-v<version>, linux-v<version>).
 
 | Query-parameter stripping | brave/brave-core@1e6f002 components/query_filter/browser/utils.cc (ported to JavaScript); rules brave/adblock-lists@ff303c3 brave-lists/query-filter.json -> resources/filters/query-filter.json | MPL-2.0. desktop/browser-services/navigation-clean.cjs. |
 | De-AMP page detection | brave/brave-core@1e6f002 components/de_amp/browser/de_amp_util.cc (AMP and canonical-link rules, ported to a frame preload) | MPL-2.0. desktop/browser-services/de-amp-preload.cjs, navigation-clean.cjs. |

@@ -18,8 +18,13 @@ const {createDownloadPreferences} = require('../desktop/download-preferences.cjs
 class Item extends EventEmitter {
   constructor(name, {url = 'https://files.example/' + encodeURIComponent(name), total = 10} = {}) {
     super(); Object.assign(this, {name, url, total, offset: 0, saved: '', paused: false, locked: null, finished: false});
-    setImmediate(() => { this.locked = this.saved; });
   }
+  /**
+   * Electron reads the save path once, the moment the will-download listeners return, and that is where the file is locked. The test calls this right after it
+   * emits will-download (begin() below). A timer-based stand-in (setImmediate) was set only on a later turn of the event loop: on a loaded machine a wait that
+   * was already due ran first, and the test wrote into a path that did not exist yet.
+   */
+  capture() { this.locked = this.saved; return this; }
   getURL() { return this.url; } getURLChain() { return [this.url]; } getFilename() { return this.name; } getSavePath() { return this.saved; }
   getReceivedBytes() { return this.offset; } getTotalBytes() { return this.total; } getMimeType() { return 'application/octet-stream'; } getETag() { return '"e"'; } getLastModifiedTime() { return ''; }
   isPaused() { return this.paused; } canResume() { return this.paused; } pause() { this.paused = true; } resume() { this.paused = false; }
@@ -48,7 +53,7 @@ function setup({askWhere = false, askSite = async () => true, dir = fs.mkdtempSy
     app: {getPath: () => folder}, shell: {showItemInFolder() {}, openPath: async () => ''}, journalPath: path.join(userData, 'download-recovery.json'), now: () => clock.now});
   const service = make();
   service.attach(session);
-  const begin = item => { session.emit('will-download', {preventDefault() {}}, item, wc); return item; };
+  const begin = item => { session.emit('will-download', {preventDefault() {}}, item, wc); return item.capture(); };
   const reply = (n, answer) => replies[n](answer);
   const journal = () => { try { return JSON.parse(fs.readFileSync(path.join(userData, 'download-recovery.json'), 'utf8')).entries; } catch { return []; } };
   const staging = path.join(userData, 'download-staging');
@@ -326,7 +331,7 @@ test('7b. an "Ask where" download a crash stopped can be resumed after the resta
     let resumed;
     f.session.createInterruptedDownload = options => {
       resumed = new Item('big.bin', {total: 20}); resumed.saved = options.path; resumed.offset = options.offset; resumed.paused = true;
-      f.session.emit('will-download', {preventDefault() {}}, resumed, null);
+      f.session.emit('will-download', {preventDefault() {}}, resumed, null); resumed.capture();
     };
     next.attach(f.session);
     await next.command(shown.id, 'resume', 'A', records, {webContents: f.wc});
@@ -504,7 +509,7 @@ test('second review 6: a resumed "Ask where" transfer holds its final name again
       await parkedHalf(f, 'big.bin');
       const records = f.records.map(r => ({...r})), next = f.make();
       next.attach(f.session);
-      f.session.createInterruptedDownload = options => { const resumed = new Item('big.bin', {total: 1000}); resumed.saved = options.path; resumed.offset = options.offset; resumed.paused = true; f.session.emit('will-download', {preventDefault() {}}, resumed, null); };
+      f.session.createInterruptedDownload = options => { const resumed = new Item('big.bin', {total: 1000}); resumed.saved = options.path; resumed.offset = options.offset; resumed.paused = true; f.session.emit('will-download', {preventDefault() {}}, resumed, null); resumed.capture(); };
       await next.command(records[0].id, 'resume', 'A', records, {webContents: f.wc});
       await wait(20);
       fs.mkdirSync(path.join(f.dir, 'Elsewhere'), {recursive: true}); f.preferences.set({askWhere: false, folder: path.join(f.dir, 'Elsewhere')});

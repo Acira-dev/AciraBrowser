@@ -43,7 +43,7 @@ test('only the toolbar\'s copy answers action.openPopup() and an extension\'s sh
   const buttons = read('src/components/BrowserExtensionActions.tsx');
   assert.match(buttons, /handlesPopupEvents=true/, 'the toolbar\'s default');
   assert.match(buttons, /if\(limit>12\|\|!handlesPopupEvents\|\|!target\?\.supported\|\|!target\.partition\)return;/);
-  assert.match(buttons, /\[target\?\.partition,target\?\.webContentsId,target\?\.supported,limit,handlesPopupEvents\]/);
+  assert.match(buttons, /\[target\?\.partition,target\?\.webContentsId,target\?\.supported,limit,handlesPopupEvents,silent\]/);
 });
 
 test('the row\'s styles use no physical left or right (the sidebar on the right and right-to-left languages lay it out as the left one), wrap instead of scrolling, and hide with the row', () => {

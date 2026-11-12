@@ -185,7 +185,7 @@ test('main.cjs\'s real setCaption: the notch layout starts hidden, a reveal is t
   // the shown backdrop is opaque (the frame colour at alpha 1) with the symbol colour on, the hidden one is transparent on both.
   assert.equal(state.overlays.length, 5, 'hidden at the start (twice: after the buttons changed), shown, hidden (twice): no more');
   assert.deepEqual(state.overlays.map(o => o.height), Array(5).fill(NOTCH_HEIGHT), 'the height never changes between states');
-  assert.deepEqual(state.overlays.map(o => [alpha(o.color), alpha(o.symbolColor)]), [[0, 0], [0, 0], [1, 1], [0, 0], [0, 0]], 'backdrop and glyphs go on together and off together, in the one call');
+  assert.deepEqual(state.overlays.map(o => [alpha(o.color), alpha(o.symbolColor)]), [[0, 0], [0, 0], [0, 1], [0, 0], [0, 0]], 'the glyphs go on and off in the one call; the overlay stays clear (13.7: the box behind them is the rounded view, caption-backing.cjs)');
   assert.deepEqual(Object.keys(state.overlays[1]).sort(), ['color', 'height', 'symbolColor'], 'the overlay carries colours and height only (Windows owns the buttons\' width)');
 });
 
@@ -239,7 +239,7 @@ test('main.cjs wires it: the guard module, one apply per setCaption with the pai
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(main, /const captionGuard=require\('\.\/caption-guard\.cjs'\)\.createCaptionGuard\(\{platform:process\.platform,window:\(\)=>mainWindow\}\);/);
   assert.match(main, /if\(captionHiddenNow&&!hidden\)captionShownAt=Date\.now\(\);\n captionHiddenNow=hidden;/, 'the flag is set before anything is painted, as the close handler reads it');
-  assert.match(main, /captionGuard\.apply\(\{hidden,paint:again=>\{if\(again\|\|options\.force===true\|\|key!==captionKey\)\{try\{updateCaption\(mainWindow,\{\.\.\.caption,hidden:layout\.captionHidden===true\}\);captionKey=key;captionFails=0;\}catch\(error\)/);
+  assert.match(main, /captionGuard\.apply\(\{hidden,paint:again=>\{if\(again\|\|options\.force===true\|\|key!==captionKey\)\{try\{updateCaption\(mainWindow,\{\.\.\.caption,hidden:layout\.captionHidden===true\}\);[^\n]*captionBackdrop\.apply\(box,\{above:overlayHost,linger:!hidden&&!box\?require\('\.\/caption-backing\.cjs'\)\.HANDOVER_MS:0\}\);captionKey=key;captionFails=0;\}catch\(error\)/);
   assert.doesNotMatch(main, /guardCaption|captionGuardTimer|setTimeout\(release/, 'the 200 ms switch-on timer is gone');
   assert.match(main, /\(captionHiddenNow\|\|Date\.now\(\)-captionShownAt<200\)/, 'close keeps its own 200 ms rule: it changes nothing about how the box looks');
   assert.match(main, /if\(captionHiddenNow&&!hidden\)captionShownAt=Date\.now\(\);/);

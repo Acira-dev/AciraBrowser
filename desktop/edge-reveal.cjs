@@ -41,7 +41,7 @@ const ENGAGED_DWELL = { top: 650, side: 650 };
 const ENGAGED_PUSH = { top: 260, side: 260 };
 
 // Animation speed (Settings > Appearance): the waits between the pointer and the bar are about intent, not motion, but "Fast" and "None" ask for a bar
-// that does not make you wait (founder, 6 Nov: Briski's "it takes 1 second to appear": the 650ms engaged wait below was most of it, whatever the speed).
+// that does not make you wait (reported 6 Nov: Briski's "it takes 1 second to appear": the 650ms engaged wait below was most of it, whatever the speed).
 // PREMIUM is the numbers above, untouched (the same objects). FAST serves Fast and None (Off / Reduce motion): the motion differs, the waits do not.
 // Floors, from simulating the controller against passing pointers (tests/edge-reveal.test.cjs "Fast waits"): 60/30ms is the shortest rest/arrival pair that
 // keeps every crossing of the zone, every slide along it faster than 0.4px/ms and every touch of 30ms or less a pass (30ms is also two samples of the 16ms
@@ -85,7 +85,8 @@ const distanceOutside = (point, b) => {
  * the right one is the left one seen in a mirror, so the pointer is mirrored across the window before any rule looks at it), size {topHeight, sideWidth} (how big the revealed chrome
  * is, DIPs), pressed (a button held in any frame, an in-page drag, a native menu or dialog: nothing reveals), engaged (the page
  * reports something to use under the pointer: a longer rest is needed, see ENGAGED_DWELL), band (DIPs of screen above the window that the system keeps for itself
- * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere), speed ('premium', 'fast' or 'off': which waits apply, see WAITS).
+ * while it is fullscreen: the menu bar's band on a notched display, 0 elsewhere), speed ('premium', 'fast' or 'off': which waits apply, see WAITS),
+ * cornerOnly (Windows' caption corner watch, caption-notch.cjs: only the `caption` corner shows the top).
  * Pins (Ctrl+Shift+E) are set with pin(). */
 function createEdgeController({ now = Date.now } = {}) {
   const zones = { top: fresh(), side: fresh() };
@@ -121,19 +122,21 @@ function createEdgeController({ now = Date.now } = {}) {
     // the pointer that goes to "the top" ends in that band, outside the window. It is at the top edge of the screen, which is what the zone
     // stands for: it counts as pressing against the window's top edge, and keeps the bar open while it stays there.
     const inBand = !!(point && b && input.band > 0 && point.x >= b.x && point.x < b.x + b.width && point.y < b.y && point.y >= b.y - input.band);
+    // `cornerOnly` (Windows, caption-notch.cjs createCaptionCorner): the top is the caption buttons alone and only their corner shows them; no edge strip, push-out or bounce.
+    const cornerOnly = !!input.cornerOnly;
     const trigger = {
-      top: !!(live && (rel && (rel.y <= EDGE.top || caption) || inBand)),
+      top: !!(live && (rel && ((!cornerOnly && rel.y <= EDGE.top) || caption) || (!cornerOnly && inBand))),
       // (The caption buttons' corner belongs to the top: with the sidebar on the right it shares its upper end with the side zone.)
       side: !!(live && rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top && !caption),
     };
-    // A push out across the left or top edge (the founder's two monitors: the window's edge is not the screen's, so the pointer
+    // A push out across the left or top edge (the two monitors: the window's edge is not the screen's, so the pointer
     // slips past it): remember where it crossed; if it stops close past that edge, that is a reveal, not a trip to the neighbour.
     // Back in, close to the edge it left by, soon after leaving: the overshoot came back (BOUNCE).
     const bounced = { top: false, side: false };
     if (inside && crossed) {
       if (live && t - crossed.at <= BOUNCE_WINDOW) {
         if (crossed.zone === 'side') bounced.side = rel.x <= BOUNCE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top;
-        else bounced.top = rel.y <= BOUNCE.top;
+        else bounced.top = !cornerOnly && rel.y <= BOUNCE.top;
       }
       crossed = null;
     }
@@ -150,7 +153,7 @@ function createEdgeController({ now = Date.now } = {}) {
       if (past > EXIT[exit.zone] || !across || t - exit.at > EXIT_WINDOW) exit.zone = '';
       else if (Math.hypot(v.x, v.y) < 0.25) { if (!exit.still) exit.still = t; } else exit.still = 0;
     }
-    const exited = { top: bounced.top || (exit?.zone === 'top' && !!exit.still && t - exit.still >= EXIT_DWELL), side: bounced.side || (exit?.zone === 'side' && !!exit.still && t - exit.still >= EXIT_DWELL) };
+    const exited = { top: bounced.top || (!cornerOnly && exit?.zone === 'top' && !!exit.still && t - exit.still >= EXIT_DWELL), side: bounced.side || (exit?.zone === 'side' && !!exit.still && t - exit.still >= EXIT_DWELL) };
     const toward = { top: -v.y, side: -v.x }, along = { top: point ? point.x : 0, side: point ? point.y : 0 };
     const pushing = { top: !!(rel && rel.y <= PUSH) || inBand, side: !!(rel && rel.x <= PUSH) };
     const onChrome = {
@@ -181,11 +184,12 @@ function createEdgeController({ now = Date.now } = {}) {
         if (asked) { z.phase = 'shown'; z.shownAt = t; z.leaveAt = 0; z.held = true; z.keyed = true; z.via = 'key'; why[zone] = z.pinned ? 'pinned' : 'key'; continue; }
         // A held button (a seek bar, a slider, text being selected, a drawing, a drag; in any frame), an in-page drag or a native
         // menu or dialog is not a rest at the edge: nothing comes up under it, and nothing after it either until the pointer has
-        // left the edge and come back (founder, 30 Oct; R8: this also holds for the overshoot-and-return reveals above and below).
+        // left the edge and come back (reported 30 Oct; R8: this also holds for the overshoot-and-return reveals above and below).
         if (input.pressed) { z.phase = 'hidden'; z.since = 0; z.blocked = z.blocked || !!trigger[zone]; why[zone] = 'pressed'; continue; }
         if (exited[zone] && !z.blocked && t >= z.lockUntil) { z.phase = 'shown'; z.shownAt = t; z.leaveAt = 0; z.held = false; z.keyed = false; z.via = 'exit'; z.outsideAt = t; why[zone] = 'exit'; exit = null; continue; }
         if (!trigger[zone] || z.blocked) { z.phase = 'hidden'; z.since = 0; continue; }
-        if (t < z.lockUntil) { z.phase = 'hidden'; z.since = 0; continue; }
+        // (The caption buttons' own corner in `cornerOnly`: the hidden buttons are under the pointer, so they come back at once, lock-out or not.)
+        if (t < z.lockUntil && !(cornerOnly && caption)) { z.phase = 'hidden'; z.since = 0; continue; }
         if (z.phase === 'hidden') { z.phase = 'dwelling'; z.since = t; z.fast = toward[zone] >= APPROACH; z.anchor = along[zone]; }
         // Sliding along the edge (a pass on the way somewhere, a scroll with the pointer parked near the edge) is not a rest: the
         // dwell counts only while the pointer stays within SWEEP px along the edge (sampling-rate independent).
@@ -225,16 +229,23 @@ function createEdgeController({ now = Date.now } = {}) {
   return { sample, geometryChanged, pin, dismiss, pinned, phase, active, constants: { EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP } };
 }
 
+/** Windows' caption corner watch (13.7): with a caption hidden over the page, the next look comes before a pointer moving CORNER_REACH DIPs per ms (a fast flick) could reach
+ * its corner: 16 ms near it, the idle 250 ms from 2500 DIPs away. One cursor read per look. */
+const CORNER_REACH = 10;
+const cornerLook = distance => Math.max(16, Math.min(250, Math.round(distance / CORNER_REACH)));
+
 /** The poller: one timer for the whole app, however many windows. 16ms while an Acira window that can use the edges is
  * focused (or an edge is showing); a slow look-around otherwise, so an idle browser does no per-frame work.
- * `windows()` returns [{ window, state, emit(event), size(), holds(), suspended(), controller }] for every window. */
+ * `windows()` returns [{ window, state, emit(event), size(), holds(), suspended(), controller }] for every window. Optional: `pointerEvents()` (the window's own
+ * pointer source, { point() } in content coordinates, when the system's answer cannot be trusted: Wayland, pointer-point.cjs; null otherwise) and `cursorRead(point)`
+ * (every screen answer, so a constant (0, 0) is learned). */
 function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule = setTimeout, cancel = clearTimeout }) {
   let timer = null, stopped = false;
   const seen = new Map();
   const entryOf = item => { let entry = seen.get(item); if (!entry) { entry = { edge: createEdgeController({ now }), last: { top: false, side: false, pinned: { top: false, side: false } }, listening: false }; seen.set(item, entry); } return entry; };
   const step = () => {
     timer = null;
-    let fast = false;
+    let fast = false, soon = 250;
     for (const item of windows()) {
       const win = item.window;
       if (!win || win.isDestroyed?.()) { seen.delete(item); continue; }
@@ -262,20 +273,45 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         entry.notchShown = shown;
         if ((notchInput?.active && focused) || notch.active()) fast = true;
       }
+      // Windows, 13.7: the corner watch (caption-notch.cjs createCaptionCorner). A caption hidden over the page (Seamless, Hide the toolbar, the notch) shows its buttons the
+      // moment the pointer is in their corner, whether or not this window has the keyboard. Told to main after the toolbar's own news below (`reportCorner`), so the overlay
+      // is painted once, over the toolbar when one is coming or in its box when none is. While the corner is hidden and nothing else keeps the fast cadence, the poller looks
+      // sooner the closer the pointer is to it, so the corner is seen within a tick of the pointer reaching it even in a window that is not in front.
+      const cornerInput = item.corner?.() || null;
+      let reportCorner = () => {};
+      if (cornerInput || entry.cornerShown) {
+        const watch = entry.cornerWatch ??= require('./caption-notch.cjs').createCaptionCorner({ now });
+        const watching = !!cornerInput?.active, point = watching || watch.active() ? screen.getCursorScreenPoint() : null, box = win.getContentBounds();
+        const shown = watch.sample({
+          point, bounds: box, suspended: !!item.suspended?.() || !!win.isMinimized?.() || !!win.isFullScreen?.(), active: watching, hidden: !!cornerInput?.hidden,
+          height: cornerInput?.height, speed: item.speed?.() || 'premium', pressed: !!item.pressed?.(),
+        });
+        if (watch.active()) fast = true;
+        else if (watching && cornerInput.hidden) soon = Math.min(soon, cornerLook(require('./caption-notch.cjs').cornerDistance(point, box, cornerInput.height)));
+        reportCorner = () => { const current = item.cornerIsShown ? !!item.cornerIsShown() : !!entry.cornerShown; if (shown !== current) item.cornerShown?.(shown); entry.cornerShown = shown; };
+      }
       const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium' };
       const enabled = enabledEdges(input);
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
       if (TRACE) { const line = JSON.stringify({ ...input, enabled }); if (line !== entry.input) { entry.input = line; console.log('[edge-input]', Date.now(), line); } }
       // Nothing to watch in a view whose edges are all off (Full with a closed sidebar, by default): no per-frame work.
       const wants = focused && (enabled.top || enabled.side);
-      if (!wants && !entry.edge.active() && !entry.last.top && !entry.last.side && !entry.last.pinned.top && !entry.last.pinned.side) continue;
+      if (!wants && !entry.edge.active() && !entry.last.top && !entry.last.side && !entry.last.pinned.top && !entry.last.pinned.side) { reportCorner(); continue; }
       fast = true;
       if (TRACE) { const line = JSON.stringify({ pressed: !!item.pressed?.(), engaged: !!item.engaged?.(), ...item.why?.() }); if (line !== entry.intent) { entry.intent = line; console.log('[edge-intent]', Date.now(), line); } }
-      const bounds = win.getContentBounds();
+      // Wayland (pointer-point.cjs): the system never says where the pointer is (Electron answers {0,0}), so the window's own pointer events do. They are in the
+      // window's content coordinates, so the box is the content's size at the origin: only the width and height of getContentBounds() are used, never its x and y (on Wayland
+      // those are a made-up constant, and an event's globalX / globalY are its x and y plus that same made-up origin). Everywhere else: as it always was.
+      const content = win.getContentBounds(), events = item.pointerEvents?.() || null;
+      const bounds = events ? { x: 0, y: 0, width: content.width, height: content.height } : content;
+      const looking = focused || entry.edge.active();
+      const point = !looking ? null : events ? events.point() : screen.getCursorScreenPoint();
+      if (looking && !events) item.cursorRead?.(point);
+      if (TRACE) { const line = JSON.stringify({ mode: events ? 'events' : 'screen', point, bounds }); if (line !== entry.pointerLine && Date.now() - (entry.pointerAt || 0) >= 250) { entry.pointerLine = line; entry.pointerAt = Date.now(); console.log('[edge-point]', Date.now(), line); } }
       const result = entry.edge.sample({
-        point: focused || entry.edge.active() ? screen.getCursorScreenPoint() : null,
+        point,
         bounds,
-        band: win.isFullScreen?.() ? Math.max(0, bounds.y - (screen.getDisplayMatching?.(bounds)?.bounds.y ?? bounds.y)) : 0,
+        band: !events && win.isFullScreen?.() ? Math.max(0, bounds.y - (screen.getDisplayMatching?.(bounds)?.bounds.y ?? bounds.y)) : 0,
         focused,
         suspended: !!item.suspended?.() || !!win.isMinimized?.(),
         ...input,
@@ -300,8 +336,9 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         entry.last = { top: result.top, side: result.side, pinned };
         item.emit({ type: 'chrome-edge', top: result.top, side: result.side, pinned });
       }
+      reportCorner();
     }
-    if (!stopped) timer = schedule(tick, fast ? 16 : 250);
+    if (!stopped) timer = schedule(tick, fast ? 16 : soon);
     timer?.unref?.();
   };
   // One window's trouble (a getter that throws mid-close, a bad cursor read) must never stop the poller for every window: it would end every edge reveal and the Windows
@@ -319,4 +356,4 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
   return { tick, pin: (item, zone, on) => { entryOf(item).edge.pin(zone, on); }, dismiss: (item, zone) => { entryOf(item).edge.dismiss(zone); }, pinned: (item, zone) => !!seen.get(item)?.edge.pinned(zone), entryFor: item => seen.get(item) };
 }
 
-module.exports = { createEdgeController, watchChromeEdges, WAITS, waitsFor, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };
+module.exports = { createEdgeController, watchChromeEdges, cornerLook, CORNER_REACH, WAITS, waitsFor, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };

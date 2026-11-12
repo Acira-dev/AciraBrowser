@@ -17,10 +17,29 @@ const alpha = color => {
 /** A BrowserWindow that remembers every call that matters to the caption, in order, and the state each call left behind. `dropOverlay()` is what Windows does when it
  * loses what the overlay drew: the buttons are gone from the screen, and nothing tells the app. */
 function fakeWindow({ minimizable = true, maximizable = true, maximized = false } = {}) {
-  const state = { minimizable, maximizable, maximized, overlay: null, drawn: null, overlays: [], calls: [], states: [], failOverlay: 0, visible: true, minimized: false, fullscreen: false, bounds: { x: 100, y: 50, width: 1200, height: 800 } };
-  const note = call => { state.calls.push(call); state.states.push({ call, minimizable: state.minimizable, maximizable: state.maximizable, overlay: state.drawn && { ...state.drawn } }); };
+  const state = { views: [], backingCalls: [], backing: null, children: [], listeners: {}, backingLog: [], minimizable, maximizable, maximized, overlay: null, drawn: null, overlays: [], calls: [], states: [], failOverlay: 0, visible: true, minimized: false, fullscreen: false, bounds: { x: 100, y: 50, width: 1200, height: 800 } };
+  const note = call => { state.calls.push(call); state.states.push({ call, minimizable: state.minimizable, maximizable: state.maximizable, overlay: state.drawn && { ...state.drawn }, backing: state.backing && state.backing.visible ? { ...state.backing } : null }); };
+  /** A plain View (13.7: the rounded box behind the buttons is one). `state.backing` is what it shows now; it takes no input of its own (no web contents, no handler). */
+  state.View = class FakeView {
+    constructor() { state.views.push(this); this.visible = true; this.color = null; this.bounds = null; this.radius = 0; this.blur = 0; this.order = []; }
+    setBorderRadius(radius) { this.radius = radius; this.order.push('radius'); }
+    setBackgroundBlur(blur) { this.blur = blur; this.order.push('blur' + blur); }
+    setBackgroundColor(color) { this.color = color; this.sync('backing.color'); }
+    setBounds(bounds) { this.bounds = { ...bounds }; this.sync('backing.bounds'); }
+    getBounds() { return { ...this.bounds }; }
+    setVisible(on) { this.visible = !!on; this.sync(on ? 'backing(shown)' : 'backing(hidden)'); }
+    getVisible() { return this.visible; }
+    /** What a frame sees is the state at the end of the tick, so the latest snapshot takes the box's state; the box's own calls are listed apart (the overlay's order of calls is judged on its own). */
+    sync(call) { state.backing = this; state.backingCalls.push({ call, at: state.calls.length }); const last = state.states.at(-1); if (last) last.backing = this.visible ? { visible: true, color: this.color, bounds: this.bounds && { ...this.bounds }, radius: this.radius } : null; }
+  };
   const window = {
-    isDestroyed: () => false, isVisible: () => state.visible, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen, isFocused: () => true,
+    isDestroyed: () => false, isVisible: () => state.visible,
+    getContentSize: () => [state.bounds.width, state.bounds.height], on(event, fn) { (state.listeners[event] ||= []).push(fn); },
+    contentView: {
+      get children() { return state.children.slice(); },
+      addChildView(view, index) { state.children.splice(index === undefined ? state.children.length : index, 0, view); state.backingLog.push('add'); },
+      removeChildView(view) { const at = state.children.indexOf(view); if (at >= 0) state.children.splice(at, 1); },
+    }, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen, isFocused: () => true,
     getContentBounds: () => ({ ...state.bounds }),
     isMinimizable: () => state.minimizable, isMaximizable: () => state.maximizable, isMaximized: () => state.maximized,
     setMinimizable(on) { state.minimizable = on; note('setMinimizable(' + on + ')'); },
@@ -42,7 +61,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
   const decls = /let captionKey='',captionHiddenNow=false[^\n]*\n/.exec(text)[0];
   const guardSource = legacy ? between('/** Windows: while the caption is hidden', 'function nativeTokens()') : /const captionGuard=require\('\.\/caption-guard\.cjs'\)[^\n]*\n/.exec(text)[0];
   const watchSource = legacy ? '' : /\/\*\* Windows safety nets[^\n]*\n(?:\/\*[^\n]*\*\/\n)?const captionWatch=require\('\.\/caption-watch\.cjs'\)[^\n]*\n/.exec(text)[0];
-  const setCaptionSource = between('const captionBacking=', 'const uiCrashTimes=[];');
+  const setCaptionSource = between(text.includes('const captionBehind=') ? 'const captionBehind=' : 'const captionBacking=', 'const uiCrashTimes=[];');
   const handler = /notchShown:(shown=>\{if\(captionNotchShown===shown\)return;captionNotchShown=shown;setCaption\(\);\})/.exec(text)?.[1] || 'shown=>{if(captionNotchShown===shown)return;captionNotchShown=shown;setCaption();}';
 
   const isShown = /notchIsShown:(\(\)=>captionNotchShown)/.exec(text)?.[1] || '()=>captionNotchShown';
@@ -54,11 +73,12 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
   const untimer = entry => { const at = clock.timers.indexOf(entry); if (at >= 0) clock.timers.splice(at, 1); };
   const watchModule = require('../desktop/caption-watch.cjs'), logged = [];
   const sandbox = {
-    process: { platform: 'win32' }, mainWindow: window, layout, screen, Date: { now: () => clock.t }, processErrors: { record: (kind, detail) => logged.push(kind + ': ' + detail) },
+    process: { platform: 'win32' }, mainWindow: window, View: state.View, overlayHost: undefined, layout, screen, Date: { now: () => clock.t }, processErrors: { record: (kind, detail) => logged.push(kind + ': ' + detail) },
     updateCaption: (w, caption) => updateCaption(w, caption, 'win32'), // main passes no platform: platform.cjs reads process.platform, which here is the Mac's
     currentMaterial: () => 'acrylic', nativeTokens: () => ({ '--frame': '#eef0f2' }),
     setTimeout: timer, clearTimeout: untimer,
     require: id => {
+      if (id === './caption-backing.cjs') { const backingModule = require('../desktop/caption-backing.cjs'); return { ...backingModule, createCaptionBacking: options => backingModule.createCaptionBacking({ ...options, schedule: timer, cancel: untimer }) }; }
       if (id === './caption-guard.cjs') return require('../desktop/caption-guard.cjs');
       if (id === './caption-watch.cjs') return { ...watchModule, createCaptionWatch: options => watchModule.createCaptionWatch({ ...options, now: () => clock.t, schedule: timer, cancel: untimer }) };
       throw new Error('unexpected require ' + id);
@@ -74,7 +94,9 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
     assert.ok(line, 'the source still has the edge item');
     const runtime = require('../desktop/runtime.cjs');
     Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: () => {},
-      effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen });
+      effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen,
+      // 13.7: main's pointer source (desktop/pointer-point.cjs), as a Windows window has it: the screen answer, never the events path (that is Wayland's)
+      pointerSource: require('../desktop/pointer-point.cjs').createPointerSource({ platform: 'win32', env: {} }) });
     vm.runInContext(line[0] + ';globalThis.__caption.edgeItem=edgeItem;', sandbox);
   }
   /** Run the fake clock forward, firing timers in order (the legacy 200 ms release, the watcher's 50 ms look, the refresh, a settle). */
@@ -90,7 +112,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
   };
   /** What the edge poller does for this window: every `step` ms (16 while an edge is active, 250 idle) it calls the item's captionTick. */
   const poll = (ms, step = 50) => { for (let left = ms; left > 0; left -= step) { advance(Math.min(step, left)); sandbox.__caption.watch?.tick(); } };
-  return { api: sandbox.__caption, window, state, layout, clock, screen, advance, poll, logged };
+  return { api: sandbox.__caption, window, state, layout, clock, screen, advance, poll, logged, setOverlayHost: host => { sandbox.overlayHost = host; } };
 }
 
 module.exports = { realMainCaption, fakeWindow, seen, alpha, NOTCH_HEIGHT };

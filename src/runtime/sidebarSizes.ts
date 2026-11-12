@@ -23,8 +23,6 @@ export const steppedSize = (size: SidebarSize, direction: -1 | 1): SidebarSize =
 
 /** Favorites per row at a size. */
 export const FAVORITES_ACROSS: Record<SidebarSize, 2 | 3 | 4> = { narrow: 2, standard: 3, wide: 4 };
-/** Most favorites a size shows before the "+N" tile takes the last place: never more than four rows, so Narrow's band is as tall as Standard's. */
-export const FAVORITES_LIMIT: Record<SidebarSize, number> = { narrow: 8, standard: 12, wide: 12 };
 /** How many columns the grid has. Narrow and Wide are strict (2 and 4). Standard is 3, except for the counts where 3 leaves a ragged last row and 4
  * does not (4 or 8 tiles): they keep 4 across, as they always have, so no existing grid moves when the sizes arrive. */
 export function favoriteColumns(size: SidebarSize, tiles: number): number {

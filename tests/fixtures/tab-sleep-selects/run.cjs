@@ -13,6 +13,9 @@ const data = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-tab-sleep-selects-'));
 const {inspectLive, sleepProbe, SELECT_WORLD, SELECT_RECORD} = require(path.join(root, 'desktop', 'tab-sleep.cjs'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), stage = text => process.stderr.write('stage ' + text + '\n'); // progress on stderr: where a crash happened
 const out = {scenarios: [], errors: []};
+// Test knobs (tests/tab-sleep-selects.test.cjs): TS_SETTLE_MS = the wait after each input event (80); TS_ONLY=1 = the lost-edit hunt alone; TS_PLACES = its places (page,frame,cross).
+const SETTLE = Number(process.env.TS_SETTLE_MS ?? 80);
+const {landOnce} = require('./persist.cjs');
 let finished = false;
 const done = (code, error) => { if (finished) return; finished = true; let text; try { text = JSON.stringify({...out, ...(error ? {error: String(error)} : {})}); } catch (failure) { text = JSON.stringify({scenarios: [], errors: ['result not printable: ' + failure.message], error: String(error || failure.message)}); } console.log('RESULT ' + text); try { fs.rmSync(data, {recursive: true, force: true}); } catch { /* left for the OS */ } app.exit(code); };
 setTimeout(() => done(3, 'timed out'), 300000).unref();
@@ -105,13 +108,13 @@ app.whenReady().then(async () => {
     const cdp = (method, params) => ends(wc.debugger.sendCommand(method, params), 20000, method);
     const evaluate = code => ends(wc.executeJavaScript(code), 20000, 'evaluate');
     const centre = async (selector, nth = 0, frame = '') => { const box = await evaluate(`(()=>{const root=${frame ? `document.getElementById(${JSON.stringify(frame)}).contentDocument` : 'document'};const e=root.querySelectorAll(${JSON.stringify(selector)})[${nth}];const r=e.getBoundingClientRect();const o=${frame ? `document.getElementById(${JSON.stringify(frame)}).getBoundingClientRect()` : '{left:0,top:0}'};return {x:Math.round(o.left+r.left+r.width/2),y:Math.round(o.top+r.top+r.height/2)}})()`); return box; };
-    const mouse = async (x, y, modifiers = 0) => { await cdp('Input.dispatchMouseEvent', {type: 'mouseMoved', x, y, modifiers}); await cdp('Input.dispatchMouseEvent', {type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, modifiers}); await cdp('Input.dispatchMouseEvent', {type: 'mouseReleased', x, y, button: 'left', clickCount: 1, modifiers}); await sleep(80); };
+    const mouse = async (x, y, modifiers = 0) => { await cdp('Input.dispatchMouseEvent', {type: 'mouseMoved', x, y, modifiers}); await cdp('Input.dispatchMouseEvent', {type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, modifiers}); await cdp('Input.dispatchMouseEvent', {type: 'mouseReleased', x, y, button: 'left', clickCount: 1, modifiers}); await sleep(SETTLE); };
     const move = async (x, y) => { await cdp('Input.dispatchMouseEvent', {type: 'mouseMoved', x, y}); await sleep(40); };
     const wheel = async (x, y) => { await cdp('Input.dispatchMouseEvent', {type: 'mouseWheel', x, y, deltaX: 0, deltaY: 40}); await sleep(80); };
     const keys = {ArrowDown: ['ArrowDown', 'ArrowDown', 40], Tab: ['Tab', 'Tab', 9], Shift: ['Shift', 'ShiftLeft', 16]};
-    const key = async name => { const [k, code, vk] = keys[name]; await cdp('Input.dispatchKeyEvent', {type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk}); await cdp('Input.dispatchKeyEvent', {type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk}); await sleep(80); };
-    const type = async letter => { await cdp('Input.dispatchKeyEvent', {type: 'keyDown', key: letter, code: 'Key' + letter.toUpperCase(), text: letter, unmodifiedText: letter, windowsVirtualKeyCode: letter.toUpperCase().charCodeAt(0)}); await cdp('Input.dispatchKeyEvent', {type: 'keyUp', key: letter, code: 'Key' + letter.toUpperCase(), windowsVirtualKeyCode: letter.toUpperCase().charCodeAt(0)}); await sleep(80); };
-    const text = async value => { await cdp('Input.insertText', {text: value}); await sleep(80); };
+    const key = async name => { const [k, code, vk] = keys[name]; await cdp('Input.dispatchKeyEvent', {type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk}); await cdp('Input.dispatchKeyEvent', {type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk}); await sleep(SETTLE); };
+    const type = async letter => { await cdp('Input.dispatchKeyEvent', {type: 'keyDown', key: letter, code: 'Key' + letter.toUpperCase(), text: letter, unmodifiedText: letter, windowsVirtualKeyCode: letter.toUpperCase().charCodeAt(0)}); await cdp('Input.dispatchKeyEvent', {type: 'keyUp', key: letter, code: 'Key' + letter.toUpperCase(), windowsVirtualKeyCode: letter.toUpperCase().charCodeAt(0)}); await sleep(SETTLE); };
+    const text = async value => { await cdp('Input.insertText', {text: value}); await sleep(SETTLE); };
     // frame-aware helpers for the hunt: the control's centre in page coordinates, and a script run in the frame that holds the control (the iframe's, when there is one)
     const inner = () => wc.mainFrame.framesInSubtree.find(frame => frame !== wc.mainFrame) || wc.mainFrame;
     const where = async (selector, nth = 0) => { const frame = inner(), box = await frame.executeJavaScript(`(()=>{const r=document.querySelectorAll(${JSON.stringify(selector)})[${nth}].getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`); if (frame === wc.mainFrame) return {x: Math.round(box.x), y: Math.round(box.y)}; const o = await evaluate('(()=>{const r=document.getElementById("f").getBoundingClientRect();return {x:r.left,y:r.top}})()'); return {x: Math.round(o.x + box.x), y: Math.round(o.y + box.y)}; };
@@ -122,6 +125,7 @@ app.whenReady().then(async () => {
   };
   const record = wc => Promise.resolve(wc.executeJavaScriptInIsolatedWorld(SELECT_WORLD, [{code: SELECT_RECORD}])).catch(error => 'error: ' + error.message);
   const check = async (name, setup, options) => {
+    if (process.env.TS_ONLY) { out.scenarios.push({name, skipped: true}); return; }
     const entry = {name}; stage('check ' + name);
     try {
       const page_ = await open(name, options); entry.record0 = await record(page_.wc);
@@ -208,14 +212,16 @@ app.whenReady().then(async () => {
       date: async p => { await p.focusIn('#c'); for (const digit of '01012030') await p.type(digit); },
       file: async p => { const file = path.join(data, 'chosen.txt'); fs.writeFileSync(file, 'x'); const {root: doc} = await p.cdp('DOM.getDocument', {depth: -1, pierce: true}); const {nodeId} = await p.cdp('DOM.querySelector', {nodeId: doc.nodeId, selector: '#c'}); await p.cdp('DOM.setFileInputFiles', {files: [file], nodeId}); },
     };
+    const KEYBOARD = ['text', 'textarea', 'search', 'password', 'number', 'contenteditable', 'range', 'date'];   // the kinds a person fills with the keyboard (a click then keys, or keys on the focused control)
     out.hunt = [];
-    for (const kind of Object.keys(KINDS)) for (const place of ['', 'frame', 'cross']) {
+    for (const kind of Object.keys(KINDS)) for (const place of (process.env.TS_PLACES ? process.env.TS_PLACES.split(',').map(x => x === 'page' ? '' : x) : ['', 'frame', 'cross'])) {
       if (place && (kind === 'file' || kind === 'select')) continue; // a file chooser and a native menu cannot be driven from outside a frame without a person
       const name = (place ? 'ctl-' + place + '/' : 'ctl/') + kind, entry = {kind, place: place || 'page'}; stage('hunt ' + name);
       try {
         const p = await open(name); await sleep(place ? 500 : 100);
         entry.untouched = await inspectLive(p.wc);
-        await person[kind](p); await sleep(150); entry.landed = await p.landed();
+        if (KEYBOARD.includes(kind)) { const before = await p.landed(); entry.attempts = await landOnce({step: () => person[kind](p), landed: () => p.landed(), before, sleep}); } else await person[kind](p);
+        await sleep(150); entry.landed = await p.landed();
         entry.record = await record(p.wc); entry.found = await inspectLive(p.wc);
         entry.before = await p.evaluate(sleepProbe(false)).catch(() => undefined);
         if (!place) { await p.evaluate('history.pushState({},"","/p/' + name + '?step=2")'); await sleep(100); entry.afterPushState = await inspectLive(p.wc); }

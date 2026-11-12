@@ -7,7 +7,8 @@ import { createRequire } from 'node:module';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { createInitialState, persistedSnapshot, reduceBrowser, restoreSnapshot } from '../src/runtime/core';
-import { FAVORITES_ACROSS, FAVORITES_LIMIT, SIDEBAR_SIZE_BREAKS, SIDEBAR_SIZE_ORDER, SIDEBAR_SIZES, favoriteColumns, sizeOf, snapSidebarWidth, steppedSize } from '../src/runtime/sidebarSizes';
+import { FAVORITES_ACROSS, SIDEBAR_SIZE_BREAKS, SIDEBAR_SIZE_ORDER, SIDEBAR_SIZES, favoriteColumns, sizeOf, snapSidebarWidth, steppedSize } from '../src/runtime/sidebarSizes';
+import * as sidebarSizes from '../src/runtime/sidebarSizes';
 import { bookmarkTarget, SIZE_REF } from '../src/ui/bookmarkMenu';
 import { Check } from '../src/components/AppIcons';
 import { LOCALES } from '../src/i18n/locales';
@@ -79,13 +80,12 @@ test('Favorites columns: Narrow 2 and Wide 4 always; Standard 3, and 4 only wher
   assert.deepEqual([3, 5, 6, 7, 9, 10, 11, 12].map((tiles) => favoriteColumns('standard', tiles)), [3, 3, 3, 3, 3, 3, 3, 3]);
 });
 
-test('the Favorites band is never taller than four rows: Narrow shows 7 and "+N", Standard 12, Wide 12 in three rows', () => {
-  assert.deepEqual(FAVORITES_LIMIT, { narrow: 8, standard: 12, wide: 12 });
-  for (const size of SIDEBAR_SIZE_ORDER) assert.ok(Math.ceil(FAVORITES_LIMIT[size] / FAVORITES_ACROSS[size]) <= 4, size);
-  assert.equal(Math.ceil(FAVORITES_LIMIT.wide / FAVORITES_ACROSS.wide), 3);
-  // With the cap the overflow tile takes the last place: 12 favorites at Narrow show 7 and "+5".
-  const limit = FAVORITES_LIMIT.narrow, apps = 12, overflow = apps > limit, shown = overflow ? limit - 1 : apps;
-  assert.deepEqual([shown, overflow ? apps - shown : 0], [7, 5]);
+test('13.7: the Favorites grid has no limit: every favorite shows, the size only sets the columns (2, 3 or 4 across)', () => {
+  assert.deepEqual(FAVORITES_ACROSS, { narrow: 2, standard: 3, wide: 4 });
+  assert.equal((sidebarSizes as Record<string, unknown>).FAVORITES_LIMIT, undefined, 'no cap before a "+N" tile');
+  // 24 favorites (the most there can be) fill 12, 8 and 6 rows at the three sizes: the grid grows, the list below scrolls as it always did.
+  assert.deepEqual(SIDEBAR_SIZE_ORDER.map((size) => Math.ceil(24 / favoriteColumns(size, 24))), [12, 8, 6]);
+  for (const size of SIDEBAR_SIZE_ORDER) for (const tiles of [1, 7, 12, 13, 24]) assert.ok(favoriteColumns(size, tiles) >= 2 && favoriteColumns(size, tiles) <= 4, `${size} ${tiles}`);
 });
 
 test('arrow keys step through the sizes and stop at the ends', () => {
@@ -134,8 +134,7 @@ test('the edge: it opens the menu on a right-click and with the menu key, snaps 
   assert.match(handle, /sidebarKeyWidth\(side,/);
   // the hook runs before SidebarApps' early returns (React error #310 otherwise: tests/hooks-order.test.ts); the limit follows it
   assert.match(sidebar, /const size=useSidebarSize\(clampSidebarWidth\(state\.settings\.sidebarWidth\)\);/, 'the Favorites grid follows the size, live while the edge is dragged');
-  assert.match(sidebar, /const limit=FAVORITES_LIMIT\[size\],overflow=/);
-  assert.match(sidebar, /const cols=favoriteColumns\(size,tiles\)/);
+  assert.match(sidebar, /const tiles=apps\.length,cols=favoriteColumns\(size,tiles\)/);
   assert.doesNotMatch(sidebar, /tiles%3!==0&&tiles%4===0\|\|tiles===4\?4:3/, 'the column rule lives in runtime/sidebarSizes.ts only');
   const layout = read('src/ui/sidebarLayout.ts');
   assert.match(layout, /setPreviewedSize\(sizeOf\(width\)\)/, 'the preview publishes the size, not every pixel');

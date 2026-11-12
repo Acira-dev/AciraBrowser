@@ -25,4 +25,23 @@ function frontTab(api,extension){
  return Array.isArray(found)&&found[0]&&typeof found[0]==='object'?found[0]:undefined;
 }
 
-module.exports={pageInFront,frontTab};
+/** What an extension sees for an Acira page address: internal pages are shown as chrome:// pages (the same rule as ext-api/tabs/model.cjs exposeUrl). */
+const exposeUrl=url=>'chrome://'+String(url).slice(8).replace(/^new\/?$/,'newtab').replace(/\/?$/,'/');
+
+/**
+ * The page in front of the window in use when it is one of Acira's own (the New Tab page, Settings, History...), described as chrome.tabs describes it and WITH its chrome:// address: the
+ * click that is being answered is the extension's activeTab on that page, so Chrome tells it where it was used (an extension with no "tabs" permission otherwise gets no url, and a handler
+ * that reads tab.url throws). undefined when a website is in front, the window has no tab, or the tab list cannot say. Needs no address from the caller: a button that names no tab (-1) is
+ * exactly the case where the interface could not point at a website.
+ */
+function frontOwnPage(api,extension){
+ const front=frontTab(api,extension);
+ if(!front)return undefined;
+ const windows=quiet(()=>api.store()?.impl?.tabModel?.windows?.());
+ const window=Array.isArray(windows)?windows.find(item=>item&&item.id===front.windowId):undefined,state=window&&window.state;
+ const tab=state&&Array.isArray(state.tabs)?state.tabs.find(item=>item.id===state.activeTabId):undefined;
+ if(!tab||tab.contentKind==='web'||typeof tab.url!=='string'||!tab.url.startsWith('acira://'))return undefined;
+ return {...front,url:exposeUrl(tab.url)};
+}
+
+module.exports={pageInFront,frontTab,frontOwnPage};

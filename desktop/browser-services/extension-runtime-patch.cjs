@@ -87,10 +87,15 @@ function frameLoader(hash){
   let text = null;
   try { text = require("electron").ipcRenderer.sendSync(${JSON.stringify(LOADER_CHANNEL)}, ${JSON.stringify(hash)}); } catch (e) { text = null; }
   if (typeof text !== "string") { console.error("Acira: the extension API preload could not be loaded"); return; }
-  new Function("require", "process", text)(require, process);
+  let run;   // an offscreen document's CSP refuses new Function: end quietly
+  try { run = new Function("require", "process", text); } catch (e) { if (e instanceof EvalError) return; throw e; }
+  run(require, process);
 })();
 `;
 }
+// The loader also runs in Chromium's own offscreen documents (an AI assistant's, Bitwarden's, ...): they run the preload in the page's own world with the extension's
+// default CSP (no unsafe-eval), which refuses new Function. There is nothing for the preload to add to such a page (Chrome gives an offscreen document only
+// chrome.runtime, which is Chromium's own), so the loader ends there without an error. Any other error still surfaces.
 let channel=false;
 function listen(){
  if(channel)return;
@@ -113,7 +118,7 @@ function installPatchedPreload(session,userData,options={}){
   const file=path.join(dir,`chrome-extension-api.preload.${hash}.js`),loader=path.join(dir,`chrome-extension-api.preload.${hash}.frame.js`);
   fs.mkdirSync(dir,{recursive:true});
   if(!fs.existsSync(file))fs.writeFileSync(file,patched);
-  if(!fs.existsSync(loader))fs.writeFileSync(loader,frameLoader(hash));
+  {const want=frameLoader(hash);if(!fs.existsSync(loader)||fs.readFileSync(loader,'utf8')!==want)fs.writeFileSync(loader,want);}   // the file name carries the preload's hash only: a changed loader replaces the old file
   texts.delete(hash);texts.set(hash,patched);while(texts.size>8)texts.delete(texts.keys().next().value);
   listen();
   let swapped=false;

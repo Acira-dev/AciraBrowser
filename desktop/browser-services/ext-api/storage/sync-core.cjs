@@ -126,7 +126,9 @@ function createStorageCore() {
     };
     const writing = plan => {
       try { limit(); } catch (error) { return Promise.reject(error); }
-      return Promise.resolve(lock(() => read().then(stored => plan(stored))));
+      const job = Promise.resolve(lock(() => read().then(stored => plan(stored))));
+      if (io.track) io.track(job);   // the write is issued after the read answers: a context that reloads itself right after set() must wait for it (runtime-renderer.cjs)
+      return job;
     };
     const save = done => (Object.keys(done.changes).length ? write(done.next, done.before) : undefined);
     return {
@@ -149,6 +151,7 @@ function createStorageCore() {
     const visible = key => key !== hidden;
     const finish = (job, callback) => {
       const settled = job.then(() => undefined);
+      if (env.track) env.track(settled);   // runtime.reload() waits for a write that is still in flight (runtime-renderer.cjs)
       if (!callback) return settled;
       settled.then(() => env.withLastError(undefined, () => callback()), error => env.withLastError(String(error && error.message || error), () => callback()));
       return undefined;
@@ -226,6 +229,7 @@ function createStorageCore() {
           if (!found || !has(found, KEY)) return env.call('clear');
           return env.call('get', null).then(all => { const keys = Object.keys(all || {}).filter(key => key !== KEY); return keys.length ? env.call('remove', keys) : undefined; });
         }).then(() => undefined);
+        if (env.track) env.track(job);
         if (!callback) return job;
         job.then(() => env.withLastError(undefined, () => callback()), error => env.withLastError(String(error && error.message || error), () => callback()));
         return undefined;

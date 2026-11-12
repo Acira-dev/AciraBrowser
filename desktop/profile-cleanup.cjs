@@ -41,7 +41,11 @@ function createProfileCleanup({database,cookieRestore,permissions,getSession,get
  async function recover(ids){
   let result;
   try{
-   for(const id of ids){const context=contexts.get(id);hold(context);if(!context.attached){const attached=await cookieRestore.attach({session:context.session,profileId:id,partition:context.partition,private:false});if(attached?.supported===false)throw Error('Website-session recovery is unavailable. Cleanup remains pending.');context.attached=true;}}
+   // Restore runs to its end before any cleanup, so nothing it puts back can outlive a clear. When restore is off
+   // ({supported:false}: Linux with no keyring, where Chromium falls back to basic_text, or a restore that failed)
+   // nothing more is saved or put back this run, and a clear still revokes the saved copy, so nothing cleared can
+   // come back: the profile browses. Only an attach that throws keeps the hold.
+   for(const id of ids){const context=contexts.get(id);hold(context);if(!context.attached){await cookieRestore.attach({session:context.session,profileId:id,partition:context.partition,private:false});context.attached=true;}}
    result=await service.runPending({phase:'startup'});
    const safe=new Set();
    for(const id of ids){const current=service.status(id),failure=result.profiles.find(item=>item.profileId===id&&!item.completed);if(failure||current.pending||current.networkBlocked||current.recoveryError)errors.set(id,failure?.error||current.recoveryError||'Selected cleanup is still pending. Close website tabs and retry, or reopen Acira.');else{errors.delete(id);safe.add(id);}}

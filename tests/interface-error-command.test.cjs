@@ -26,5 +26,5 @@ test('main hides the pages when told, and only the window\'s own interface can t
   assert.match(main,/function setInterfaceFailed\(on\)/);
   assert.match(main,/!authActive&&!interfaceFailed&&!!rect/,'a page view is not shown while the interface shows its error screen');
   assert.match(main,/if\(command\.type==='interface-error'\)\{if\(e\.sender===chromeView\?\.webContents\)setInterfaceFailed\(command\.on\);return;\}/,'the popup layer cannot hide the window\'s pages');
-  assert.match(main,/if\(e\.sender===chromeView\.webContents\)\{interfaceFailed=false;uiLayoutAt=Date\.now\(\);const adopted=fastSwitchWait\.adopt\(valid,state\.activeTabId\);applyLayout\(adopted\.layout,\{forceChanged:adopted\.forceChanged\}\);\}/,'the interface drawing again (it publishes a layout) puts the pages back');
+  assert.match(main,/if\(e\.sender===chromeView\.webContents\)\{interfaceFailed=false;uiLayoutAt=Date\.now\(\);const adopted=fastSwitchWait\.adopt\(valid,state\.activeTabId,layout\);applyLayout\(adopted\.layout,\{forceChanged:adopted\.forceChanged\}\);\}/,'the interface drawing again (it publishes a layout) puts the pages back');
 });

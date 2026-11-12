@@ -39,6 +39,19 @@ function runtimeRenderer(acira) {
         const overrides = {};
         for (const name of ['setUninstallURL', 'openOptionsPage', 'requestUpdateCheck', 'getContexts']) if (typeof built[name] === 'function') overrides[name] = built[name];
 
+        // reload: Chrome keeps a write the extension made just before it reloads itself (HubSpot Sales stores "reloaded at" in storage.sync and reloads
+        // at once; its 2 hour guard reads that mark, so a lost write made it reload every 2 seconds). storage.sync here is a read, then a write, so the
+        // reload waits for this context's own writes to reach the browser, for 2 seconds at most. With nothing in flight it is the native call, in the same turn.
+        if (typeof base.reload === 'function') overrides.reload = function reload(...args) {
+          const writes = acira.pendingWrites;
+          if (args.length || !writes || !writes.size) return base.reload(...args);
+          let done = false;
+          const go = () => { if (done) return; done = true; try { base.reload(); } catch (error) { /* gone */ } };
+          Promise.allSettled([...writes]).then(go, go);
+          setTimeout(go, 2000);
+          return undefined;
+        };
+
         // sender.tab of a message or connection from a content script: Electron fills id but windowId 0 and index 0 (Vimium's K / J / t read them).
         // The tabs come from the main process (runtime.cjs: tabs.get's objects) into this table, kept current while a listener exists; a listener is
         // called by the native event itself, in the same turn, with the sender corrected from the table (same return value, same sendResponse).

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LightField } from "./LightField";
-import { createPrism, type PrismInputs } from "./prismRenderer";
+import { createPrismAsync, type Prism, type PrismInputs } from "./prismRenderer";
 import { poseDrift, poseOmega, settle } from "./poseSpring";
 import { motionScale } from "../../ui/sharedMotion";
 
@@ -88,13 +88,10 @@ export function PrismField({
   const [generation, setGeneration] = useState(0);
   const refresh = useRef<(() => void) | null>(null);
   useEffect(() => {
-    const node = canvas.current;
-    if (!node) return;
-    const prism = createPrism(node);
-    if (!prism) {
-      setFailed(true);
-      return;
-    }
+    const host = canvas.current;
+    if (!host) return;
+    // The shaders compile in the driver's own threads (createPrismAsync): the first-run screen is on screen meanwhile, not after a stall of this thread.
+    const mount = (node: HTMLCanvasElement, prism: Prism): (() => void) => {
     const stage = node.parentElement || node;
     // The field color comes from the stage (finish-tinted, theme-aware): read on mount, on prop changes and once a
     // second, never per frame.
@@ -272,6 +269,24 @@ export function PrismField({
       finaleOwners.delete(node);
       frostOwners.delete(node);
       if (!transferred) prism.dispose();
+    };
+    };
+    let live = true,
+      release: (() => void) | undefined;
+    void createPrismAsync(host).then((prism) => {
+      if (!live) {
+        prism?.dispose();
+        return;
+      }
+      if (!prism) {
+        setFailed(true);
+        return;
+      }
+      release = mount(host, prism);
+    });
+    return () => {
+      live = false;
+      release?.();
     };
   }, [reducedMotion, generation]);
   // New props reach the loop through `target`; the field color and the reduced-motion still refresh here.

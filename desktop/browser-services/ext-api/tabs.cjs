@@ -66,7 +66,19 @@ module.exports = {
       const originalSend = router.sendEvent;
       const sendEvent = function (target, name, ...args) {
         if (name === 'browserAction.onClicked' && args[0] && typeof args[0] === 'object' && Number.isInteger(args[0].id)) {
-          try { const record = model.byTabId(args[0].id); if (record) args = [model.chromeTab(record, api.getExtension(target)), ...args.slice(1)]; } catch { /* the engine's details stand */ }
+          try {
+            const record = model.byTabId(args[0].id), extension = record && api.getExtension(target);
+            if (record) {
+              const tab = model.chromeTab(record, extension);
+              // The click is the extension's activeTab on this tab, and Chrome tells it where it was used. A website's page has the grant in the table (so its address is already there); one of
+              // Acira's own pages (the New Tab page, Settings) has no page of the engine to hold one, so an extension with activeTab and no tabs permission got no url, and a handler that reads
+              // tab.url (Colorway: tab.url.match) threw. The address of an own page is chrome://newtab/ and the like, nothing a person's browsing is in.
+              let activeTab = false;
+              try { activeTab = !!(extension && api.permissions && api.permissions.has(extension, 'activeTab')); } catch { /* the table cannot say: no */ }
+              if (tab.url === undefined && !record.wc && activeTab) { tab.url = record.url; tab.title = record.title; }
+              args = [tab, ...args.slice(1)];
+            }
+          } catch { /* the engine's details stand */ }
         }
         return originalSend.call(this, target, name, ...args);
       };

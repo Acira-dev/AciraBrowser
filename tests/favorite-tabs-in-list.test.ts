@@ -7,10 +7,11 @@ import { bulkCloseTargets } from '../src/runtime/profileActions';
 import { favoriteTabsInList, favoriteTabsOnlyInTile, listedTabs, tabListed } from '../src/runtime/favoriteTabs';
 import { workspaceCounts, workspaceIdOf } from '../src/runtime/workspaces';
 import { tabNumbers } from '../src/runtime/tabNumbers';
-import { listedInSidebar, tileFolded } from '../src/ui/sidebarApps';
+import { listedInSidebar } from '../src/ui/sidebarApps';
+import { favoriteStaysHome, navigateFromRow } from '../src/ui/pageActions';
 import type { BrowserAction, BrowserSnapshot } from '../src/runtime/types';
 
-// Item 33 (founder, 7 Nov): "some people want to see the favorite's tab in the list too, some want the favorite only above, so it should be an option."
+// Item 33 (reported 7 Nov): "some people want to see the favorite's tab in the list too, some want the favorite only above, so it should be an option."
 // Settings › Tabs › Sidebar › Favorites › "Favorites' tabs in the tab list": on (the default, beta.11) the tab is an ordinary row; off, a tab opened from or
 // linked to a favorite lives only in its tile. One pure rule (runtime/favoriteTabsRule.ts), read by the list, the counts, the keys and Close other tabs.
 const run = (state: BrowserSnapshot, ...actions: BrowserAction[]) => actions.reduce(reduceBrowser, state);
@@ -81,9 +82,9 @@ test('the sidebar lists a hidden tab again only when there is no tile to show it
 
 // A 13.4 report (Windows): "Favorites' tabs in the tab list is turned off but still working for some tabs not all, especially these ones that become
 // hidden", with "+3" in the picture. The sidebar listed a tab whose tile was folded behind "+N" while main's keys, counts and Close other tabs already left
-// it out, so such a tab was a row nothing else agreed on. A favorite's tab is out of the list whether its tile is shown or folded; the grid opens itself
-// when the page on screen is a folded tile's (the next test).
-test('a favorite behind +N is out of the list like every other favorite, whether or not +N was opened', () => {
+// it out, so such a tab was a row nothing else agreed on. A favorite's tab is out of the list for every favorite. 13.7: there is no "+N" any more, every
+// favorite has its tile in the grid (a 13.6 report: "all the favorite tabs I add would show right there"), and this still holds for any number of favorites.
+test('every favorite, however many there are, is out of the list like every other favorite', () => {
   const settings = { verticalTabs: true, favoriteTabsInList: false }, app = (id: string) => ({ id, url: `https://${id}.test/`, title: id });
   const many = Array.from({ length: 14 }, (_, i) => app('app-' + (i + 1)));
   for (const id of ['app-1', 'app-3', 'app-11', 'app-12', 'app-13', 'app-14']) assert.equal(listedInSidebar({ favoriteId: id }, { apps: many, hidden: false }, settings), false, `${id} is a favorite with a tile`);
@@ -91,7 +92,7 @@ test('a favorite behind +N is out of the list like every other favorite, whether
   assert.equal(listedInSidebar({ favoriteId: 'app-13' }, { apps: many, hidden: true }, settings), true, 'Favorites switched off: no tile at all, so the tab shows');
 });
 
-test('the list on screen is the list main reads: numbers, Ctrl+PageDown, the counts and Close other tabs agree for every favorite, folded or not', () => {
+test('the list on screen is the list main reads: numbers, Ctrl+PageDown, the counts and Close other tabs agree for every favorite', () => {
   const state0 = createInitialState(), profile = state0.activeBrowserProfileId, settings = { verticalTabs: true, favoriteTabsInList: false };
   const apps = Array.from({ length: 14 }, (_, i) => ({ id: 'app-' + (i + 1), url: `https://f${i + 1}.test/`, title: 'Fav ' + (i + 1) }));
   const plain = ['p1', 'p2'].map(id => makeTab(id, '', `https://${id}.test/`, profile));
@@ -107,22 +108,54 @@ test('the list on screen is the list main reads: numbers, Ctrl+PageDown, the cou
   }
 });
 
-test('the favorites grid opens itself when the page on screen is the tab of a tile folded behind +N, and only then', () => {
-  const app = (id: string) => ({ id, url: `https://${id}.test/`, title: id });
-  const many = Array.from({ length: 14 }, (_, i) => app('app-' + (i + 1)));
-  assert.equal(tileFolded(many, 'app-12'), true, 'Standard: eleven tiles and +3, so the twelfth is folded');
-  assert.equal(tileFolded(many, 'app-11'), false, 'the eleventh shows');
-  assert.equal(tileFolded(many, 'app-14'), true);
-  assert.equal(tileFolded(many, 'app-8', 8), true, 'Narrow: seven tiles and +N');
-  assert.equal(tileFolded(many, 'app-7', 8), false);
-  assert.equal(tileFolded(many.slice(0, 12), 'app-12'), false, 'twelve fit with no +N');
-  assert.equal(tileFolded(many.slice(0, 8), 'app-8', 8), false, 'eight fit at Narrow with no +N');
-  assert.equal(tileFolded(many, 'app-99'), false, 'no such favorite: nothing is folded');
-  assert.equal(tileFolded(many, ''), false);
+test('13.7: the favorites grid shows every favorite: no "+N" tile, no collapse arrow, no fold state, no limit constant', () => {
+  const source = read('../src/components/sidebar/AciraSidebar.tsx'), sizes = read('../src/runtime/sidebarSizes.ts'), apps = read('../src/ui/sidebarApps.ts'), css = read('../src/components/sidebar/sidebar.css');
+  assert.doesNotMatch(source, /sb-app-more|showCountMoreFavorites|showFewerFavorites|foldedActive|tileFolded|FAVORITES_LIMIT|SIDEBAR_APPS_LIMIT|overflow=!more|setMore/, 'the sidebar has no fold');
+  assert.doesNotMatch(sizes + apps, /FAVORITES_LIMIT|SIDEBAR_APPS_LIMIT|tileFolded/, 'no limit and no fold helper');
+  assert.doesNotMatch(css, /sb-app-more/, 'no style for the +N tile or the collapse arrow');
+  assert.match(source, /const tiles=apps\.length,cols=favoriteColumns\(size,tiles\)/, 'the grid is as long as the favorites');
+  assert.match(source, /const tiles=apps\.map\(\(app,index\)=>\{/, 'every favorite is drawn');
+});
+
+// A 13.6 report (Windows): "I am on YouTube, which is in my bookmarks, but in the left bar it's highlighting Google Calendar." A Bookmarks row navigated the tab on
+// screen, and that was the Google Calendar favorite's tab: it stayed linked to its favorite (so its tile kept the ring, on Calendar's own icon) while the page was
+// YouTube. A saved-page row now opens another site's page in a new tab beside a favorite's tab; the favorite's tab stays on its site.
+test('a favorite\'s tab stays on its site: a saved page of another site opens in a new tab, a page of the same site opens in place', () => {
+  const calendar = { favoriteId: 'app-cal', url: 'https://calendar.google.com/calendar/u/0/r' };
+  assert.equal(favoriteStaysHome(calendar, 'https://www.youtube.com/'), true, 'YouTube from the Calendar favorite\'s tab');
+  assert.equal(favoriteStaysHome(calendar, 'https://calendar.google.com/calendar/u/0/r/month'), false, 'the same site opens in place');
+  assert.equal(favoriteStaysHome({ ...calendar, url: 'https://www.youtube.com/watch?v=1' }, 'https://youtube.com/'), false, 'www is the same site');
+  assert.equal(favoriteStaysHome({ url: 'https://calendar.google.com/' }, 'https://www.youtube.com/'), false, 'an ordinary tab navigates as it always did');
+  assert.equal(favoriteStaysHome(undefined, 'https://www.youtube.com/'), false);
+  const state0 = createInitialState(), profile = state0.activeBrowserProfileId;
+  const tab = makeTab('cal', '', calendar.url, profile), other = makeTab('p', '', 'https://example.test/', profile);
+  const state = run({ ...state0, tabs: [other, tab], activeTabId: 'cal' }, { type: 'tab.favorite', id: 'cal', favoriteId: 'app-cal' } as BrowserAction);
+  const sent: BrowserAction[] = [];
+  navigateFromRow(state, action => sent.push(action))('https://www.youtube.com/');
+  navigateFromRow({ ...state, activeTabId: 'p' }, action => sent.push(action))('https://www.youtube.com/');
+  navigateFromRow(state, action => sent.push(action))('https://calendar.google.com/calendar/u/0/r/week');
+  assert.deepEqual(sent, [
+    { type: 'tab.new', url: 'https://www.youtube.com/' },
+    { type: 'tab.navigate', url: 'https://www.youtube.com/' },
+    { type: 'tab.navigate', url: 'https://calendar.google.com/calendar/u/0/r/week' },
+  ]);
   const source = read('../src/components/sidebar/AciraSidebar.tsx');
-  assert.match(source, /const foldedActive=favoriteTabsOnlyInTile\(state\.settings\)&&!!current\.favoriteId&&tileFolded\(apps,current\.favoriteId,FAVORITES_LIMIT\[size\]\)/, 'only with the option off, for a favorite\'s tab');
-  assert.match(source, /useLayoutEffect\(\(\)=>\{if\(foldedActive\)setMore\(true\);\},\[foldedActive,current\.id\]\)/, 'it opens when the page on screen changes, and a collapse by hand stays');
-  assert.doesNotMatch(source, /listedInSidebar\(tab,favorites,state\.settings,folded\)/, 'the sidebar no longer passes a fold limit to the list');
+  assert.equal((source.match(/openPage\(event,url,dispatch,navigateFromRow\(state,dispatch\)\)/g) || []).length, 3, 'the Bookmarks, History and Reading list rows');
+  assert.doesNotMatch(source, /openPage\(event,url,dispatch,next=>dispatch\(\{type:'tab\.navigate',url:next\}\)\)/, 'no sidebar row navigates a favorite\'s tab away');
+});
+
+// Decided (11 Nov, 13.7): "Leave it as it is ... just remove the dot." The small dot under a favorite that has an open tab (and the darker "away" dot) is not drawn any more.
+// Nothing else changes: the selected tile keeps its 2px site-colour ring and its gliding card, and every reader of data-open (the rigs, the tile/list agreement) still works.
+test('13.7: no dot under an open favorite; the data-open / data-away / data-sleeping attributes stay and the selected tile keeps its ring', () => {
+  const css = read('../src/components/sidebar/sidebar.css'), sidebar = read('../src/components/sidebar/AciraSidebar.tsx');
+  assert.doesNotMatch(css, /\.sb-app\[data-open\]::after|\.sb-app\[data-away\]::after|\.sb-app\[aria-current=page\]::after|\.sb-app\[data-sleeping\][^{]*::after/, 'no dot rule is left');
+  assert.doesNotMatch(css, /3px dot/);
+  assert.match(sidebar, /data-open=\{tab\?'':undefined\}/, 'data-open is still drawn on the tile (tile/list agreement, the rigs read it)');
+  assert.match(sidebar, /data-away=\{away\|\|undefined\}/, 'and data-away');
+  assert.match(sidebar, /data-sleeping=\{tab\?\.sleeping&&favoriteTabsOnlyInTile\(state\.settings\)\?'':undefined\}/, 'and data-sleeping');
+  assert.match(css, /\.sb-app\[data-sleeping\]:not\(\[aria-current=page\]\):not\(:hover\):not\(:focus-visible\)>\*\{opacity:var\(--sb-sleeping-icon\)\}/, 'a sleeping tab still dims its tile icon');
+  assert.match(css, /\.sb-app\[aria-current=page\]\{background:var\(--sb-current\);box-shadow:var\(--sb-current-shadow\)\}/, 'the 13.6 selected tile rule is unchanged');
+  assert.match(css, /\.sb-app\[aria-current=page\],\.sb-apps>\.sb-glide\)\{background:color-mix\(in oklab,var\(--sb-site\) var\(--sb-site-tint\),var\(--sb-current\)\);box-shadow:inset 0 0 0 2px var\(--sb-site\)\}/, 'the 2px site-colour ring and the gliding card are unchanged');
 });
 
 test('the option is saved with the window and comes back after a restart; an old save without it means on', () => {

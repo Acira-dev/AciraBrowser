@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { SidebarSide } from '../runtime/types';
 import { SIDEBAR_SIZES, sizeOf, steppedSize, type SidebarSize } from '../runtime/sidebarSizes';
-export { SIDEBAR_SIZES, SIDEBAR_SIZE_BREAKS, SIDEBAR_SIZE_ORDER, sizeOf, snapSidebarWidth, steppedSize, favoriteColumns, FAVORITES_LIMIT, type SidebarSize } from '../runtime/sidebarSizes';
+export { SIDEBAR_SIZES, SIDEBAR_SIZE_BREAKS, SIDEBAR_SIZE_ORDER, sizeOf, snapSidebarWidth, steppedSize, favoriteColumns, type SidebarSize } from '../runtime/sidebarSizes';
 /** Sidebar width is the native `settings.sidebarWidth` (validated 168–320 in main, shared by every window). It is always one of the three sizes
  * (runtime/sidebarSizes.ts: Narrow 168, Standard 240, Wide 312); the reducer snaps whatever it is given. The range below is the drag's: the edge follows the
  * pointer between Narrow and Wide and rubber-bands past them, then settles on the nearest size.

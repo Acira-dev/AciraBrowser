@@ -398,3 +398,32 @@ test('real Electron, lost-edit hunt: nothing the 13.4 check kept awake sleeps no
     assert.equal(row.untouched.safe === false ? row.untouched.reason : 'safe', row.kind === 'contenteditable' && row.place === 'page' ? 'editable-or-canvas-content' : 'safe', `${row.kind}/${row.place}: untouched page`);
   }
 });
+
+// A person's typing into a control in a cross-site iframe: the click puts the keyboard in that frame's process through the browser, a moment later, and text sent before it arrives
+// goes nowhere (a saved failing run of the serial suite on a loaded laptop: "number/cross: the person's input did land in the control (\"\")"; the fixture waited a fixed 80 ms
+// after the click). The fixture (fixtures/tab-sleep-selects/persist.cjs) now sends the input again while the control shows nothing of it.
+const {landOnce} = require('./fixtures/tab-sleep-selects/persist.cjs');
+test('a person\'s keyboard input that went nowhere (the keyboard was not in the frame yet) is sent again until the control shows it, and not again once it does', async () => {
+  const waits = [];
+  const control = {value: ''}, sleep = async ms => { waits.push(ms); };
+  let sent = 0;
+  const late = await landOnce({step: async () => { sent++; if (sent >= 3) control.value = '5'; }, landed: async () => control.value, before: '', sleep});
+  assert.equal(late, 3, 'the third attempt landed');
+  assert.equal(sent, 3);
+  assert.deepEqual(waits, [300, 300], 'a pause between attempts, none after the one that landed');
+  sent = 0; control.value = '';
+  assert.equal(await landOnce({step: async () => { sent++; control.value = 'x'; }, landed: async () => control.value, before: '', sleep}), 1);
+  assert.equal(sent, 1, 'an input that landed at once is sent once');
+  sent = 0; control.value = '50';
+  assert.equal(await landOnce({step: async () => { sent++; }, landed: async () => control.value, before: '50', sleep, tries: 4}), 0, 'a control that never changes is given up on after `tries`');
+  assert.equal(sent, 4);
+});
+test('real Electron, lost-edit hunt, cross-site iframes with no wait after each input event: the person\'s keyboard input still lands (the fixture sends it again until it does)', {skip}, () => {
+  const run = spawnSync(electron, [fixture, ...(process.platform === 'darwin' ? ['-ApplePersistenceIgnoreState', 'YES'] : [])], {encoding: 'utf8', timeout: 320000, killSignal: 'SIGKILL', env: {...process.env, ELECTRON_RUN_AS_NODE: undefined, ELECTRON_ENABLE_LOGGING: '0', TS_SETTLE_MS: '0', TS_ONLY: '1', TS_PLACES: 'cross'}});
+  const line = (run.stdout || '').split(/\r?\n/).find(text => text.startsWith('RESULT ')); assert.ok(line, ((run.stdout || '') + (run.stderr || '')).slice(-600));
+  const result = JSON.parse(line.slice(7)); assert.ok(result.hunt.length >= 10, 'the cross-site rows ran: ' + result.hunt.length);
+  for (const row of result.hunt) {
+    assert.equal(row.error, undefined, `${row.kind}/${row.place}: ${row.error}`);
+    assert.ok(row.landed !== null && row.landed !== undefined && row.landed !== '' && row.landed !== false || row.kind === 'radio', `${row.kind}/${row.place}: the person's input did land in the control (${JSON.stringify(row.landed)}, ${row.attempts} attempts)`);
+  }
+});

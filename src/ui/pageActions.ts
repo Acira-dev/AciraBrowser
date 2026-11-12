@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import type { BrowserAction,BrowserSnapshot } from '../runtime/types';
+import type { BrowserAction,BrowserSnapshot,TabSession } from '../runtime/types';
 
 export function openPage(event:MouseEvent,url:string,dispatch:(action:BrowserAction)=>void,onNavigate:(url:string)=>void){
   if(event.button!==0&&event.button!==1)return;
@@ -7,6 +7,16 @@ export function openPage(event:MouseEvent,url:string,dispatch:(action:BrowserAct
   if(event.button===1||event.ctrlKey||event.metaKey||event.shiftKey){dispatch({type:'tab.new',url,background:!event.shiftKey});return;}
   onNavigate(url);
 }
+
+const siteOf=(url:string)=>{try{return new URL(url).hostname.replace(/^www\./,'');}catch{return '';}};
+/** A favorite's tab stays on its site: a saved page from another site (a Bookmarks, History or Reading list row in the sidebar) opens in a new tab beside it
+ * instead of taking its place. Navigating the tab away left the favorite's tile ringed on its own icon while the page on screen was another site's (a 13.6
+ * report: "I am on YouTube ... in the left bar it's highlighting Google Calendar"). A page of the site the tab is on still opens in place. */
+export const favoriteStaysHome=(tab:Pick<TabSession,'favoriteId'|'url'>|undefined,url:string)=>!!tab?.favoriteId&&siteOf(tab.url)!==siteOf(url);
+/** What a plain click on a saved-page row does with the tab on screen (openPage's onNavigate). */
+export const navigateFromRow=(state:BrowserSnapshot,dispatch:(action:BrowserAction)=>void)=>(url:string)=>{
+  dispatch(favoriteStaysHome(state.tabs.find(tab=>tab.id===state.activeTabId),url)?{type:'tab.new',url}:{type:'tab.navigate',url});
+};
 
 export const bookmarkMenuEvent='acira-study-bookmark-menu';
 export type BookmarkMenuRequest={url:string;anchor:{x:number;y:number;width:number;height:number}};

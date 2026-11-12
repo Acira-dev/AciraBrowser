@@ -119,6 +119,12 @@ module.exports={
         const front=ownPage.frontTab(api,extension);
         if(front&&!engine()?.getPopupUrl?.(details.extensionId,wc.id)){api.emit(details.extensionId,'browserAction.onClicked',front);return undefined;}
        }else activeTab.grant(api.session,details.extensionId,wc.id,wc.getURL());
+      }else if(extension){
+       // No website tab for the button to name: the interface sends -1 when only Acira's own pages (the New Tab page, Settings) are open, as the extensions menu's "Open" row does with the New Tab
+       // page in front, and a tab that has closed since is the same. The engine then looks for the active tab, finds none and throws, so the button of an extension without a popup was dead
+       // (a popup opens from installPopupFrames). Chrome tells the extension about its own New Tab page like any tab: onClicked with that page.
+       const front=ownPage.frontOwnPage(api,extension);
+       if(front&&!engine()?.getPopupUrl?.(details.extensionId,-1)){api.emit(details.extensionId,'browserAction.onClicked',front);return undefined;}
       }
      }catch{/* no tab */}
     }
@@ -139,7 +145,7 @@ module.exports={
    if(rows.length)rows.push({type:'separator'});
    const profile=api.storeKey;
    rows.push({id:'ext-action:options',label:api.t('ext.menu.options'),enabled:typeof options==='string'&&options!=='',click:()=>{
-    try{void Promise.resolve(api.store().createTab({url:new URL(String(options).replace(/^\/+/,''),`chrome-extension://${extension.id}/`).href})).catch(()=>{});}catch{/* no window */}
+    try{void Promise.resolve(api.store().createTab({url:new URL(String(options).replace(/^\/+/,''),`chrome-extension://${extension.id}/`).href,windowId:-2/* the current browser window: left out, the engine uses the last focused window, which may be an extension window (13.7, runtime.cjs) */})).catch(()=>{});}catch{/* no window */}
    }});
    rows.push({id:'ext-action:unpin',label:api.t('ext.menu.unpin'),enabled:true,click:()=>{bridge.hub.emit('unpin',{session:api.session,profileId:profile,extensionId:extension.id,handled:false});}});
    const request={session:api.session,sender:event?.sender||null,anchor:details.anchorRect,extension:{id:extension.id,name:extension.name},templates:rows,handled:false};

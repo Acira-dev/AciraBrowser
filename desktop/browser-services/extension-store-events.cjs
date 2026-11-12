@@ -9,6 +9,19 @@ const adapted=new WeakMap();   // store -> what the engine's window observers ad
  * engine's own observers, and each now observes a window or tab once in its life. Its first observers still report its end, and the event
  * itself still reaches every later listener (Acira's tabs, runtime and windows packages follow tabs coming back). No public option exists.
  * What the engine adds to a window is noted, so a removed profile's runtime can let go of the windows it shares with the others. */
+const NAVIGATION='did-start-navigation',DISPOSED=/Render frame was disposed before WebFrameMain could be accessed/;
+/** A page whose renderer has gone (a crash, or page-hang.cjs ending a page that stopped answering) starts its next navigation from that
+ * frame: the engine's webNavigation.onBeforeNavigate reads details.frame.top, Electron throws "Render frame was disposed before WebFrameMain
+ * could be accessed", and the throw leaves reload() / loadURL() as an uncaught exception in main and skips the page's later listeners
+ * (soak, 11 Nov). The engine's listeners on that event skip exactly that error (no onBeforeNavigate for a navigation that starts from a
+ * frame with no document); any other error still throws. They keep their order and count; the engine never removes them. */
+function guardNavigation(tab,had){
+ for(const listener of tab.listeners(NAVIGATION)){
+  if(had.includes(listener))continue;
+  const guarded=function(...args){try{return listener.apply(this,args);}catch(error){if(!DISPOSED.test(String(error?.message)))throw error;return undefined;}};
+  tab.removeListener(NAVIGATION,listener);tab.on(NAVIGATION,guarded);
+ }
+}
 function observeOnce(runtime){
  const store=runtime?.ctx?.store;if(!store||typeof store.listeners!=='function'||typeof store.on!=='function'||typeof store.removeListener!=='function')return false;
  if(adapted.has(store))return true;
@@ -17,6 +30,7 @@ function observeOnce(runtime){
   const seen=new WeakSet();
   const once=function(item,...rest){
    if(item&&typeof item==='object'){if(seen.has(item))return undefined;seen.add(item);}
+   if(name==='tab-added'&&typeof item?.listeners==='function'){const had=item.listeners(NAVIGATION);try{return observe.call(this,item,...rest);}finally{guardNavigation(item,had);}}
    if(name!=='window-added'||typeof item?.eventNames!=='function')return observe.call(this,item,...rest);
    const before=new Map(item.eventNames().map(event=>[event,item.listeners(event)]));
    try{return observe.call(this,item,...rest);}
@@ -33,4 +47,4 @@ function releaseWindows(runtime){
  return released;
 }
 const observedOnce=runtime=>!!runtime?.ctx?.store&&adapted.has(runtime.ctx.store);
-module.exports={observeOnce,observedOnce,releaseWindows};
+module.exports={observeOnce,observedOnce,releaseWindows,guardNavigation};

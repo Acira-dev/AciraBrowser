@@ -34,3 +34,28 @@ test('a package shimmed by an older Acira gets the current script once (sync is 
  assert.equal(applyStorageSyncShim(dir),false,'idempotent');
  assert.ok(SHIM_SOURCE.includes('__acira_sync__'),'the shim is generated from the sync core');
 });
+
+// Chrome gives content scripts chrome.extension.inIncognitoContext; this engine gives them no chrome.extension at all. Calendly's content
+// scripts read it on every page (ChromeStorage.isIncognito) and threw "Cannot read properties of undefined (reading 'inIncognitoContext')",
+// so its sidebar never opened from the toolbar button.
+test('content scripts get chrome.extension.inIncognitoContext (false); a chrome.extension that is already there is kept',()=>{
+ const run=chrome=>{const context=vm.createContext({chrome,self:null,console,Promise,Proxy,Reflect,queueMicrotask,Object,JSON,Array,Error});context.self=context;vm.runInContext(SHIM_SOURCE,context);return context.chrome;};
+ const bare=run({runtime:{id:'cbhilkcodigmigfbnphipnnmamjfkipp'}});
+ assert.equal(bare.extension.inIncognitoContext,false);
+ const kept={inIncognitoContext:true,getURL:()=>'x'},given=run({runtime:{},extension:kept});
+ assert.equal(given.extension,kept,'the same object');assert.equal(given.extension.inIncognitoContext,true);
+ const partial=run({runtime:{},extension:{}});assert.equal(partial.extension.inIncognitoContext,false);
+ assert.doesNotThrow(()=>run(undefined),'no chrome object: nothing to do');
+});
+
+test('a store package installed by 13.6 gets the inIncognitoContext line at the next start (restore re-applies the script)',()=>{
+ const manifest={manifest_version:3,permissions:['storage'],content_scripts:[{matches:['<all_urls>'],js:['/module_async_frame.js']}]};
+ const dir=pack(manifest);assert.equal(applyStorageSyncShim(dir),true);
+ const older=SHIM_SOURCE.split('\n').filter(line=>!line.includes('inIncognitoContext')).join('\n');
+ assert.notEqual(older,SHIM_SOURCE);fs.writeFileSync(path.join(dir,SHIM_NAME),older);
+ assert.equal(applyStorageSyncShim(dir),true,'the 13.6 script is replaced');
+ assert.match(fs.readFileSync(path.join(dir,SHIM_NAME),'utf8'),/inIncognitoContext=false/);
+ assert.deepEqual(read(dir).content_scripts[0].js,[SHIM_NAME,'/module_async_frame.js']);
+ const manager=fs.readFileSync(path.join(__dirname,'../desktop/browser-services/extension-manager.cjs'),'utf8'),restore=manager.slice(manager.indexOf('async function restore()'),manager.indexOf('async function restore()')+1200);
+ assert.match(restore,/entry\.source==='Chrome Web Store'\)try\{require\('\.\/extension-shims\.cjs'\)\.applyStorageSyncShim\(entry\.path\);\}catch\{\}[\s\S]*api\.loadExtension\(entry\.path/,'applied before the package loads at start');
+});

@@ -243,7 +243,7 @@ test('main: the uninstall URL is kept per extension and opened (once) in a new t
   const second = stubApi({store, dir});
   const again = runtimePackage.install(second.api);
   again.forget(ID);
-  assert.deepEqual(opened, [{url: 'https://example.com/bye', active: true}]);
+  assert.deepEqual(opened, [{url: 'https://example.com/bye', active: true, windowId: -2}], 'in the current browser window, named: the engine would otherwise use the last focused window, which may be an extension window');
   again.forget(ID);
   assert.equal(opened.length, 1, 'opened once');
   set(event({}, other), '');   // cleared
@@ -264,7 +264,7 @@ test('main: openOptionsPage opens options_ui / options_page in a tab, brings an 
   await open(event({options_page: '/legacy.html'}));
   await open(event({options_ui: {page: 'ui.html'}, options_page: 'legacy.html'}));
   assert.deepEqual(created.map(c => c.url), [`chrome-extension://${ID}/options/index.html`, `chrome-extension://${ID}/legacy.html`, `chrome-extension://${ID}/ui.html`]);
-  assert.ok(created.every(c => c.active === true));
+  assert.ok(created.every(c => c.active === true && c.windowId === -2));
   const existing = {getURL: () => `chrome-extension://${ID}/options/index.html#section`, isDestroyed: () => false};
   tabs.push(existing);
   await open(event({options_ui: {page: 'options/index.html'}}));
@@ -275,6 +275,23 @@ test('main: openOptionsPage opens options_ui / options_page in a tab, brings an 
   await assert.rejects(async () => open(event({options_ui: {page: 'https://evil.example/x.html'}})), /Could not create an options page\./);
   await open(event({options_ui: {page: '//evil.example/x.html'}}));   // leading slashes are the extension's own root, never another host
   assert.equal(created.at(-1).url, `chrome-extension://${ID}/evil.example/x.html`);
+});
+
+test('13.7: openOptionsPage twice: the engine fills in the last focused window when none is named, and that is the extension window the first call opened; the host refuses it. The call names the current window', async () => {
+  // The library's store: createTab({windowId missing}) uses lastFocusedWindowId, which an opened extension window became; main.cjs destination() refuses a window that is not a browser window.
+  const BROWSER = 2, EXTENSION_WINDOW = 9, created = [];
+  const store = {lastFocusedWindowId: BROWSER, createTab: async details => {
+    if (!details.windowId) details.windowId = store.lastFocusedWindowId;
+    if (details.windowId !== -2 && details.windowId !== BROWSER) throw new Error('The extension window is not in its browsing profile.');
+    created.push(details.url);
+    store.lastFocusedWindowId = EXTENSION_WINDOW;   // the page opened in a window of its own and took the focus
+  }};
+  const {api, handlers} = stubApi({store, tabs: [], dir: fs.mkdtempSync(path.join(os.tmpdir(), 'acira-p3-'))});
+  runtimePackage.install(api);
+  const open = handlers.get('runtime.openOptionsPage');
+  await open(event({options_page: 'options.html'}));
+  await open(event({options_page: 'options.html'}));   // the page is not among the pages the engine can bring forward (it was closed): a new one, from the second call
+  assert.equal(created.length, 2, 'both calls opened the options page');
 });
 
 test('main: the engine\'s store keeps selectTab on its host object (store.impl): an open options tab is found there', async () => {

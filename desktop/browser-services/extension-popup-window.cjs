@@ -18,7 +18,7 @@ const {EventEmitter} = require('node:events');
 const {placePopup, interfaceScale, anchorOnScreen, MARGIN} = require('./extension-popup-placement.cjs');
 const {popupHostFor, ParentSurface, interfaceOrigin, interfaceView, contentArea, learn, learned} = require('./extension-popup-host.cjs');
 const {trace} = require('./ext-trace.cjs');
-const {fitStep, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
+const {fitStep, laidOutIn, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
 const {attachPopupDiagnostics, placementFacts} = require('./extension-popup-diagnostics.cjs');
 
 // The library's limits for a popup's size.
@@ -47,6 +47,15 @@ const clampSize = (value, min, max) => Math.floor(Math.min(max, Math.max(Number(
 // After a resize the page is measured to see whether it fits (extension-popup-fit.cjs): a short wait lets the page lay out in its new window,
 // and a handful of rounds is more than the worst case needs (a scrollbar's room, then a pixel or two of rounding).
 const FIT_DELAY = 40, FIT_ROUNDS = 6;
+// How long after the load a report that is the window's own minimum size echoed back is not taken for the page's size (isMinimumEcho): the echo arrives within
+// about 100 ms of the load (25 ms to 80 ms measured with Proton Pass); a second is generous and a page that really shrinks later is as it always was.
+const ECHO_MS = 1000;
+// A window of 25 DIPs is a fractional number of pixels at 125 % (31.25) and its page reads 26 px: the echo is the minimum plus a pixel or two.
+const ECHO_SLACK = 2;
+// A held report (holdEcho) is checked every ECHO_RECHECK_MS, at most ECHO_CHECKS times: laid out in the window it has twice in a row, with nothing else reported, it is taken.
+const ECHO_RECHECK_MS = 250, ECHO_CHECKS = 8;
+// How many asked sizes a popup remembers the extra room of (a page asks for a handful of sizes: one for each of its screens).
+const LEARNED = 24;
 // How long after a press on its own button closed an in-window popup the click that completes that press can still arrive (a slow click, a held button).
 const PRESS_MS = 1000;
 
@@ -82,8 +91,10 @@ class ExtensionPopup extends EventEmitter {
     this.alignment = opts.alignment;
     this.base = undefined;                    // the size the page asked for (inside the library's limits)
     this.extra = {width: 0, height: 0};       // what the window has been given on top, to hold the page (scrollbar room, rounding)
+    this.learned = new Map();                 // the extra room the window needed for each size the page asked for: "273x374" -> {width, height}
     this.size = undefined;                    // the size of the window as this class last set it
     this.fitTimer = undefined;
+    this.echoRecheckMs = ECHO_RECHECK_MS;     // how long a held minimum-size report waits before the page is looked at again (holdEcho); a test's own
     const {BaseWindow, WebContentsView} = electron;
     const scale = interfaceScale(opts.parent);
     this.platform = platform;
@@ -152,7 +163,63 @@ class ExtensionPopup extends EventEmitter {
     return !this.destroyed && !this.gone && !this.loadFailed && Boolean(contents) && !contents.isDestroyed();
   }
 
-  updatePreferredSize = (_event, size) => { this.setSize(size); if (this.hidden) this.show(); };
+  updatePreferredSize = (_event, size) => {
+    // The window keeps the size the page asked for while a report that may be the echo of the window that was shrunk before it is looked into (holdEcho).
+    if (this.isMinimumEcho(size)) { this.holdEcho(size); return; }
+    this.releaseEcho();
+    if (size && Number.isFinite(size.width) && Number.isFinite(size.height)) this.reported = {width: size.width, height: size.height};
+    this.setSize(size); if (this.hidden) this.show();
+  };
+
+  /**
+   * A report that may be the window's own minimum size echoed back, in the moments after the page loaded. load() puts the window at the minimum (25 x 25) when the page
+   * has loaded, so the page re-lays out in a 25 px viewport and reports that, and what it then lays out in that viewport (25 x 25, then 25 x 56). Proton Pass asks
+   * 600 x 430, and its own script then sets its size from the window it is in (--popup-width = the document's clientWidth): a window taken to 25 px by those
+   * reports kept the page at 25 px, and it rested at the narrowest its words fit, a 56 x 311 sliver, at every opening. A report with a side at the minimum, right
+   * after the page had asked for a real size (both sides above it), is such a report until the page shows it is not (holdEcho). Only in the first ECHO_MS after the
+   * load; a first report at the minimum is a size (the popup must show), and so is any later one.
+   */
+  isMinimumEcho(size) {
+    if (!size || !this.reported || !(Date.now() < this.echoUntil)) return false;
+    return (size.width <= BOUNDS.minWidth + ECHO_SLACK || size.height <= BOUNDS.minHeight + ECHO_SLACK) && this.reported.width > BOUNDS.minWidth + ECHO_SLACK && this.reported.height > BOUNDS.minHeight + ECHO_SLACK;
+  }
+
+  /**
+   * The window goes back to the size the page asked for (a report of the 25 px window that was gone when the page laid out is not a size), and the report is held: if
+   * the page has laid out in the window it has, and for a further ECHO_RECHECK_MS says nothing else (a page that was only echoing lays out in its window and reports its own
+   * size, which releases the held one), the minimum is what the page wants, and the window takes it as it always did. checkEcho does that, with the same rule as fit():
+   * a size only counts if the page was laid out in the window it is measured in (laidOutIn).
+   */
+  holdEcho(size) {
+    this.echoPending = {width: size.width, height: size.height};
+    this.echoQuiet = false;
+    this.setSize(this.reported);
+    this.armEchoCheck(ECHO_CHECKS);
+  }
+
+  releaseEcho() { this.echoPending = undefined; this.echoQuiet = false; clearTimeout(this.echoTimer); }
+
+  armEchoCheck(rounds) {
+    clearTimeout(this.echoTimer);
+    this.echoTimer = setTimeout(() => { void this.checkEcho(rounds); }, this.echoRecheckMs);
+    this.echoTimer.unref?.();
+  }
+
+  async checkEcho(rounds) {
+    const pending = this.echoPending, contents = this.webContents;
+    if (!pending || this.destroyed || !this.window || !contents || contents.isDestroyed() || typeof contents.executeJavaScript !== 'function') return;
+    const measured = this.size;
+    let metrics; try { metrics = await contents.executeJavaScript(METRICS_SCRIPT); } catch { return; }
+    if (this.echoPending !== pending || this.destroyed || !this.window) return;   // a size came (or the popup went) while the page was measured
+    let zoom = 1; try { zoom = contents.getZoomFactor?.() || 1; } catch { /* gone */ }
+    if (!laidOutIn(metrics, measured, zoom) || this.size !== measured) { this.echoQuiet = false; if (rounds > 1) this.armEchoCheck(rounds - 1); return; }
+    // Laid out in its window: once is the page's layout of the moment (Proton's script sets its size 50 ms after a resize), twice in a row, with nothing reported
+    // in between, is what the page wants.
+    if (!this.echoQuiet) { this.echoQuiet = true; if (rounds > 1) this.armEchoCheck(rounds - 1); return; }
+    this.echoPending = undefined; this.echoQuiet = false;
+    this.reported = pending;
+    this.setSize(pending);
+  }
 
   maybeClose = () => {
     // DevTools open beside a popup, or the focus in another application, keep it open (the library's rule).
@@ -171,6 +238,7 @@ class ExtensionPopup extends EventEmitter {
     this.destroyed = true;
     openPopups.delete(this);
     clearTimeout(this.fitTimer);
+    clearTimeout(this.echoTimer);
     for (const [contents, handler] of this.pressWatch || []) { try { if (!contents.isDestroyed()) contents.off('before-mouse-event', handler); } catch { /* gone */ } }
     this.pressWatch = undefined;
     if (this.parent) {
@@ -216,6 +284,7 @@ class ExtensionPopup extends EventEmitter {
   async load(url) {
     try { await this.webContents.loadURL(url); } catch (error) { this.loadFailed = true; console.error(error); }
     if (this.destroyed) return;
+    this.echoUntil = Date.now() + ECHO_MS;
     this.setSize({width: BOUNDS.minWidth, height: BOUNDS.minHeight});
   }
 
@@ -282,14 +351,17 @@ class ExtensionPopup extends EventEmitter {
 
   /**
    * The size the page asks for, inside the library's limits; the popup keeps its place under the icon at every size. What the window was given
-   * on top of that to hold the page (a scrollbar's room, a pixel of rounding) stays while the page asks for the same size and is measured
-   * again when it asks for another.
+   * on top of that to hold the page (a scrollbar's room, a pixel or two of rounding) stays while the page asks for the same size. For another
+   * size it is what the window needed the last time the page asked for that size (none the first time, measured again either way).
+   * At 125 % uBlock Origin Lite asked 288 x 374, then 272 x 374 (its page is 273 x 374.6: the width it reports without a scrollbar is a pixel short, and in a
+   * window that wide a scrollbar comes and it asks 15 px more), over and over, every few milliseconds, and a window that went back to no extra room at
+   * each ask never kept the pixel or two that holds the page: the popup changed width for as long as it was open.
    */
   setSize(rect) {
     if (!this.window || !this.parent) return;
     const max = this.limits();
     const base = {width: clampSize(rect?.width, BOUNDS.minWidth, max.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, max.maxHeight)};
-    if (!this.base || this.base.width !== base.width || this.base.height !== base.height) this.extra = {width: 0, height: 0};
+    if (!this.base || this.base.width !== base.width || this.base.height !== base.height) this.extra = {...(this.learned.get(`${base.width}x${base.height}`) || {width: 0, height: 0})};
     this.base = base;
     this.resize();
     this.fitSoon(FIT_ROUNDS);
@@ -306,9 +378,14 @@ class ExtensionPopup extends EventEmitter {
   }
 
   fitSoon(rounds) {
+    if (this.destroyed || rounds <= 0) { clearTimeout(this.fitTimer); this.fitAt = undefined; return; }
+    // A measure that is on its way keeps its time: a page that asks for a new size more often than FIT_DELAY (uBlock Origin Lite asked every
+    // 10 to 50 ms while a scrollbar came and went) pushed the measure back for as long as it asked, and was never measured. (A timer a second
+    // late is one that was cleared: a new one is set.)
+    if (this.fitAt && Date.now() - this.fitAt < 1000) { this.fitRounds = Math.max(rounds, this.fitRounds || 0); return; }
     clearTimeout(this.fitTimer);
-    if (this.destroyed || rounds <= 0) return;
-    this.fitTimer = setTimeout(() => { void this.fit(rounds); }, FIT_DELAY);
+    this.fitAt = Date.now() + FIT_DELAY; this.fitRounds = rounds;
+    this.fitTimer = setTimeout(() => { this.fitAt = undefined; void this.fit(this.fitRounds); }, FIT_DELAY);
     this.fitTimer.unref?.();
   }
 
@@ -316,19 +393,28 @@ class ExtensionPopup extends EventEmitter {
   async fit(rounds) {
     const contents = this.webContents;
     if (this.destroyed || !this.window || !this.base || !contents || contents.isDestroyed() || typeof contents.executeJavaScript !== 'function') return;
-    const measured = this.size;   // the window the page is measured in
+    const measured = this.size, base = this.base, extra = this.extra;   // the window the page is measured in, and the asked size and extra room it is made of
     let metrics;
     try { metrics = await contents.executeJavaScript(METRICS_SCRIPT); } catch { return; }   // a page that is loading or going away
     if (this.destroyed || !this.window || this.window.isDestroyed()) return;
-    // The window changed while the page was measured (the page started at 25 x 25, laid out wide there, and asked for its real size meanwhile): these
-    // numbers are of a window that is gone. Growing the window by them left it larger than its page for good (Dark Reader 527 x 600 around a
-    // 276 x 580 page, uBlock Origin Lite 521 x 600), since the window only ever grows. Measure again in the window the page has now.
-    if (this.size !== measured) { this.fitSoon(rounds - 1); return; }
-    // The size this class set, not getBounds(): Windows hands back whole pixels converted to DIPs, a value off by one at 125 % and 150 %.
-    const step = fitStep(metrics, this.size, this.limits());
+    // The numbers are of the window the page had when the script ran, if the page was laid out in it. A page that has not caught up with its window (its
+    // viewport is still the window's previous size) has none: Bitwarden's 480 x 600 page, measured in the 25 x 25 viewport it had right after the load while the
+    // window already had 480 x 600, "overflowed" by 455 px; the window grew by the 320 px left to the 800 px limit, the sizing measure then read 800 in the
+    // 800 px window, and the popup stayed 800 wide: the page's content clipped by its own 480 px body and scrolled sideways, the 320 px beyond it empty.
+    // Measure again once the page has the window's size.
+    let zoom = 1; try { zoom = contents.getZoomFactor?.() || 1; } catch { /* gone */ }
+    if (!laidOutIn(metrics, measured, zoom)) { this.fitSoon(rounds - 1); return; }
+    const step = fitStep(metrics, measured, this.limits());   // measured, not getBounds(): Windows hands back whole pixels converted to DIPs, a value off by one at 125 % and 150 %
     if (!step.width && !step.height) return;
-    this.extra = {width: this.extra.width + step.width, height: this.extra.height + step.height};
-    this.resize();
+    const needed = {width: extra.width + step.width, height: extra.height + step.height};
+    // What that size of page needs is kept for the next time the page asks for it (setSize), even if the window is another one by now.
+    const key = `${base.width}x${base.height}`;
+    this.learned.delete(key); this.learned.set(key, {...needed});
+    if (this.learned.size > LEARNED) this.learned.delete(this.learned.keys().next().value);
+    // The window is still the one that was measured: it takes the room now. If the page asked for another size while it was measured (a page that keeps
+    // asking: uBlock Origin Lite), the numbers are of a window that is gone and the window is not grown by them: it gave Dark Reader 527 x 600 around a
+    // 276 x 580 page and uBlock Origin Lite 521 x 600, since the window only ever grows. They are kept for their own size above, and the page is measured again.
+    if (this.size === measured && this.base.width === base.width && this.base.height === base.height) { this.extra = needed; this.resize(); }
     this.fitSoon(rounds - 1);
   }
 
@@ -420,7 +506,7 @@ function installPopupFrames(runtime, {electron = require('electron'), platform =
     }
     // No popup page or no window (or no tab and no window in use): the library's own answer (onClicked, or its error).
     if (!parent) return original.call(this, details);
-    this.popup = new ExtensionPopup({extensionId, session: this.ctx.session, parent, url, anchorRect, alignment, openPage: typeof store.createTab === 'function' ? pageUrl => store.createTab({url: pageUrl, active: true}) : undefined}, {electron, platform});
+    this.popup = new ExtensionPopup({extensionId, session: this.ctx.session, parent, url, anchorRect, alignment, openPage: typeof store.createTab === 'function' ? pageUrl => store.createTab({url: pageUrl, active: true, windowId: -2}) : undefined}, {electron, platform});
     this.ctx.emit('browser-action-popup-created', this.popup);
     return undefined;
   }

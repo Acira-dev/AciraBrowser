@@ -30,6 +30,8 @@ const HOOK_ENV = Object.freeze([
   'ACIRA_BOOKMARK_TRACE', // logs each extension bookmark-store change (extension-bookmark-buffer.cjs), for rigs only
   'ACIRA_QA_FAST_SWITCH', // keeps an in-memory audit of every fast tab switch (fast-switch.cjs): what main presented against what the interface then sent; rigs only
   'ACIRA_POPUP_HOST', // 'window' | 'parent': an extension's toolbar popup as a window of its own or as a view inside the browser window (extension-popup-host.cjs), for rigs on a Mac; read only on a test profile
+  'ACIRA_TEST_PASSWORD_STORE', // basic_text | unknown: the run sees Linux with no keyring, so website-session restore is off (session-cookie-restore.cjs storageForRun); read only on a test profile
+  'ACIRA_POINTER_SOURCE', // 'events' | 'screen': where the edge reveal reads the pointer, the window's own pointer events (what Wayland needs) or screen.getCursorScreenPoint() (desktop/pointer-point.cjs); lets a Mac run the Wayland path in the real app; read only on a test profile
 ]);
 // The other ACIRA_ names the shipped code reads, and why a real build keeps them (tests/test-hooks-packaged.test.cjs makes every new one
 // pick a list).

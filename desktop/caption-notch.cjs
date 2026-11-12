@@ -2,7 +2,7 @@
 // Windows, Sidebar mode: the page goes to the top of the window and the three caption buttons (minimise, maximise, close) sit in a small notch at its top-right
 // corner. The notch is the window's own caption overlay (platform.cjs titleBarOverlay: native buttons, so dragging, double-click to maximise and Windows' snap
 // layouts on the maximise button keep working), drawn in the frame's colour over the page. It shows ONLY while the pointer is along the top of the window and is
-// transparent the rest of the time (founder, 7 Nov 2026).
+// transparent the rest of the time (reported 7 Nov 2026).
 //
 // The page is a native view stacked above the interface, so the interface never sees the pointer at the window's top edge: main watches the cursor, as it does for
 // Seamless's edges. The rules are Seamless's top edge, unchanged (edge-reveal.cjs: rest in the top 8 px for 90 ms, a fast arrival or a push against the edge for 40 ms, a
@@ -47,4 +47,38 @@ function createCaptionNotch({ now = Date.now } = {}) {
   };
 }
 
-module.exports = { createCaptionNotch, NOTCH, CORNER };
+/** 13.7, the corner watch: every caption hidden over the page (Seamless and Hide the toolbar, whose hidden caption only the interface's toolbar brought back, and this
+ * notch) shows its buttons the moment the pointer is in their corner, in that same poller tick, whether or not the window has the keyboard. A hidden caption's buttons are still
+ * Windows' hit regions: under the pointer they were drawn as a hover colour with no glyph (an empty grey square, a red close) until the toolbar's round trip through the
+ * interface brought them back (94 to 176 ms measured) or, in a window that is not in front (the edge rules ignore its pointer), the 1.2 s corner fallback did (caption-watch.cjs),
+ * in its box. Windows' own buttons answer in a window that is not in front, so this one does too. The rules are the edge controller's top in `cornerOnly`: only the corner shows
+ * it, it stays while the pointer is along the caption band, then the grace, nothing while a button is held. Main ORs it with the notch above, or with the interface's layout.
+ * Input: point, bounds, suspended (minimised, full screen, an HTML-fullscreen page), active (the caption is over the page on Windows), hidden (it is hidden now: the corner
+ * shows it), height (the caption overlay's height), speed, pressed. Returns whether the buttons show. */
+function createCaptionCorner({ now = Date.now } = {}) {
+  const edge = createEdgeController({ now });
+  return {
+    sample({ point, bounds, suspended, active, hidden, height, speed, pressed }) {
+      const band = Math.max(NOTCH.height, Math.round(height || 0));
+      return edge.sample({
+        point, bounds, band: 0, focused: true, speed, pressed: !!pressed, cornerOnly: true,
+        suspended: !active || !!suspended,
+        view: 'seamless', vertical: true, docked: true, edges: { top: true, side: false }, peek: {},
+        keys: { top: false, side: false }, holds: { top: false, side: false }, engaged: false,
+        size: { topHeight: band, sideWidth: 0 },
+        caption: hidden ? { width: CORNER.width, height: Math.max(CORNER.height, band) } : null,
+      }).top;
+    },
+    /** Is it showing or about to (the poller keeps its fast cadence while so). */
+    active: () => edge.active(),
+  };
+}
+
+/** How far the pointer is from a hidden caption's corner, in DIPs (0 inside): the poller looks more often the closer it is (edge-reveal.cjs). */
+function cornerDistance(point, bounds, height) {
+  if (!point || !bounds) return Infinity;
+  const h = Math.max(CORNER.height, Math.round(height || 0)), x0 = bounds.x + bounds.width - CORNER.width, x1 = bounds.x + bounds.width, y0 = bounds.y, y1 = bounds.y + h;
+  return Math.hypot(Math.max(x0 - point.x, 0, point.x - x1), Math.max(y0 - point.y, 0, point.y - y1));
+}
+
+module.exports = { createCaptionNotch, createCaptionCorner, cornerDistance, NOTCH, CORNER };

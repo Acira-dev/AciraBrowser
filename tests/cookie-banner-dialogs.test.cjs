@@ -77,6 +77,28 @@ test('with answering on too, hiding waits so the banner can be answered first, t
  const {waiting,after}=results['answer-first'];
  assert.equal(waiting.banner,true,'still shown while it can be answered');assert.equal(after.banner,false,'hidden after the wait');
 });
+// A click first waits for two frames of a hidden window (about a second of its own, more when the frames come late): a check planned 1500 ms after a click began
+// was made 500 ms after it landed, or at once, before the frame script had looked again (`wall`: "the site's lock holds under its dialog: auto"). The runner's schedule
+// (fixtures/cookie-banners/schedule.cjs) gives every check its reaction time after the click LANDED.
+const {stepWait}=require('./fixtures/cookie-banners/schedule.cjs');
+test('a step waits for its planned time, and never runs sooner than 1500 ms after the last click landed',()=>{
+ const base={startedAt:1000,reaction:1500};
+ assert.equal(stepWait({...base,at:6000,now:1000}),6000,'nothing before it: its planned time');
+ assert.equal(stepWait({...base,at:8000,now:7500,landedAt:7500}),1500,'a click that landed 500 ms before the planned time: the reaction time, not 500 ms');
+ assert.equal(stepWait({...base,at:8000,now:9000,landedAt:9000}),1500,'a click that took longer than its slot: the same reaction time, not none');
+ assert.equal(stepWait({...base,at:6500,now:1000,landedAt:0}),6500,'no click yet');
+ assert.equal(stepWait({...base,at:11500,now:7500,landedAt:7500}),5000,'a long planned gap stays as planned (sign-in: 5 s)');
+ assert.equal(stepWait({...base,at:6000,now:20000,landedAt:0}),0,'a step already late runs at once');
+});
+test('frames that come late (every click 800 ms slower) do not make the page be read before it reacted',{skip},()=>{
+ const wall=CASES.filter(item=>item.name==='wall'),env={...process.env,ELECTRON_ENABLE_LOGGING:'0',COOKIE_CLICK_EXTRA_MS:'800'};delete env.ELECTRON_RUN_AS_NODE;
+ const run=spawnSync(electron,[path.join(__dirname,'fixtures','cookie-banners','run.cjs'),JSON.stringify(wall)],{encoding:'utf8',timeout:90000,env});
+ const line=(run.stdout||'').split(/\r?\n/).find(text=>text.startsWith('RESULT '));assert.ok(line,((run.stdout||'')+(run.stderr||'')).slice(0,600));
+ const {unlocked,dialog,closed}=JSON.parse(line.slice(7))[0].steps;
+ assert.equal(unlocked.locked,false,'page scrolls: '+unlocked.bodyOverflow);
+ assert.equal(dialog.dialog,true);assert.equal(dialog.locked,true,'the site\'s lock holds under its dialog: '+dialog.bodyOverflow);
+ assert.equal(closed.dialog,false);assert.equal(closed.locked,false,'scrolls again after the dialog closed: '+closed.bodyOverflow);
+});
 test('the release outranks a site\'s lock rule, and after the person acts only what already held the page is the banner\'s',()=>{
  const source=fs.readFileSync(path.join(__dirname,'..','desktop','browser-services','content-filter-preload.cjs'),'utf8');
  assert.match(source,/:root:not\(#acira-u\):not\(#acira-u\)>body:not\(#acira-u\)\{overflow-y:auto!important\}/);

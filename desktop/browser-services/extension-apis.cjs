@@ -213,6 +213,8 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',sourc
  // Acira's permission table (extension-permission-table.cjs): the manifest's permissions, including the 39 Electron calls "unknown", plus
  // granted optional ones (persisted). Every check below uses it, so a permission granted by permissions.request counts like a declared one.
  const permissions=require('./extension-permission-table.cjs').createPermissionTable({userData,storeKey,getExtension,log:(...args)=>console.warn('[ext-permissions]',...args)});
+ // The request pipeline's extension-cookies participant asks this table for host permission (browser-services/extension-cookies.cjs).
+ require('./extension-cookies.cjs').rememberPermissionTable(session,permissions);
  const permitted=(extension,name)=>!!extension&&permissions.has(extension,name);
  // permissions.request: ask the user (Acira's prompt when one is supplied; until then the engine's), then record the grant.
  // target: the extension's id or its Extension object. Resolves true when everything asked is held afterwards.

@@ -9,8 +9,6 @@ export type SidebarApp={id:string;url:string;title:string;icon?:string};
 /** `place`: where the tiles sit in the sidebar. Only 'bottom' is written (top is the default and stays absent), so older records and tests read the same. */
 export type SidebarApps={apps:SidebarApp[];hidden:boolean;seeded:boolean;place?:'bottom'};
 export const SIDEBAR_APPS_MAX=24;
-/** Tiles the grid shows before "+N" folds the rest (the last slot is the "+N" tile itself). */
-export const SIDEBAR_APPS_LIMIT=12;
 const KEY='acira-sidebar-apps',EVENT='acira-sidebar-apps',memory=new Map<string,SidebarApps>(),cached=new Map<string,{raw:string|null;value:SidebarApps}>();
 const EMPTY:SidebarApps={apps:[],hidden:false,seeded:false};
 const scope=(profile:string,privateMode:boolean)=>(privateMode?'private:':'normal:')+profile;
@@ -127,16 +125,13 @@ export function appClickPlan<T extends {id:string;url:string;browserProfileId:st
  return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
 /** Whether a tab shows in the sidebar's tab list. A favorite's tab does (the default), unless Settings › Tabs › Sidebar › Favorites keeps it only in its tile
- * (runtime/favoriteTabsRule.ts). Then it is left out whenever its tile exists, shown or folded behind "+N": the keys, the counts and Close other tabs already
- * leave it out (main reads the same rule), so a row for it was a row nothing else agreed on (a 13.4 report: "still working for some tabs", "+3" in the picture).
- * A folded tile is reached by "+N", and the grid opens itself when the page on screen is its tab (tileFolded, the sidebar's SidebarApps). Only a tab with no tile
- * at all is listed like any tab, so none is ever out of reach: with Favorites switched off, or once its favorite is gone (until the sidebar hands the tab back). */
+ * (runtime/favoriteTabsRule.ts). Then it is left out whenever its tile exists: the keys, the counts and Close other tabs already leave it out (main reads the
+ * same rule), so a row for it was a row nothing else agreed on. Every favorite has a tile in the grid (no "+N" fold since 13.7), so the tab is always reachable
+ * from it. Only a tab with no tile at all is listed like any tab, so none is ever out of reach: with Favorites switched off, or once its favorite is gone
+ * (until the sidebar hands the tab back). */
 export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>)=>{
  if(tabListed(tab,settings)||favorites.hidden)return true;
  return !favorites.apps.some(app=>app.id===tab.favoriteId);// its favorite is gone
 };
-/** Whether a favorite's tile is folded behind "+N" in the grid: the grid shows `limit - 1` tiles and "+N" takes the last place once there are more favorites than
- * `limit` (the sidebar size's, Narrow 8, Standard and Wide 12). */
-export const tileFolded=(apps:readonly {id:string}[],id:string,limit:number=SIDEBAR_APPS_LIMIT)=>{const at=apps.findIndex(app=>app.id===id);return at>=0&&apps.length>limit&&at>=limit-1;};
 /** The tab a favorite is linked to in this window, if it is open: in the workspace on screen or another (`tabs` then holds both). */
 export const appTabFor=<T extends {browserProfileId:string;favoriteId?:string}>(app:SidebarApp,tabs:readonly T[],profile:string):T|undefined=>favoriteTabOf(tabs,app.id,profile);

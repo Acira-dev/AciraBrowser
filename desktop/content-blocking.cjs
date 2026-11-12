@@ -8,7 +8,7 @@ const {createThreatLists}=require('./browser-services/threat-lists.cjs'),{create
 const {createFarbling,reduceClientHints}=require('./browser-services/fingerprint-farbling.cjs');
 const {createPrivacyPlus,privacyPlusRows}=require('./browser-services/privacy-plus.cjs'),{createDebouncer}=require('./browser-services/debounce.cjs'),{createCnameUncloaker,systemResolver,dohResolver,eligibleHost}=require('./browser-services/cname-uncloak.cjs');
 const {createNavigationCleaner}=require('./browser-services/navigation-clean.cjs'),{createPopupPolicy,watchPopup}=require('./browser-services/popup-policy.cjs');
-const {RequestPipeline}=require('./request-pipeline.cjs'),{createFilterUpdates}=require('./browser-services/filter-updates.cjs'),{createRedirectResources}=require('./browser-services/redirect-resources.cjs');
+const {RequestPipeline}=require('./request-pipeline.cjs'),{createExtensionCookies}=require('./browser-services/extension-cookies.cjs'),{createFilterUpdates}=require('./browser-services/filter-updates.cjs'),{createRedirectResources}=require('./browser-services/redirect-resources.cjs');
 const {createOptionalFiltering}=require('./browser-services/optional-filtering.cjs'),{engineFeatureStatus}=require('./browser-services/engine-features.cjs');
 const {createScriptRules}=require('./browser-services/script-rules.cjs');
 const {parse}=require('tldts'),{createHTTPSOnly}=require('./browser-services/https-only.cjs'),{createProxySettings}=require('./browser-services/proxy-settings.cjs');
@@ -127,6 +127,8 @@ function createContentBlocking({ipcMain,dialog:askDialog=dialog,database,getOwne
   pipeline.useSendHeaders(quietRequest);
   pipeline.useSendHeaders(details=>reduceClientHints(details,privacyPlus.get().fingerprint,{allowNativeAuthentication:!session.__aciraTor&&!session[Symbol.for('acira.tor.session')]}));
   pipeline.useSendHeaders(dnrParticipant(session,'sendHeaders'));
+  // An extension's own credentialed requests get the site's cookies Chrome would send (browser-services/extension-cookies.cjs); every other request returns at its first test.
+  pipeline.useSendHeaders(createExtensionCookies(session));
   pipeline.useHeaders(details=>{const wc=details.webContents||webContents.fromId(details.webContentsId||0);if(!wc||!getOwner(wc)||!enabled(session,wc,wc.getURL()||details.url))return {};let result={};updates.getEngine().onHeadersReceived(details,patch=>{result=patch;});return result;});
   pipeline.useHeaders(dnrParticipant(session,'headers'));if(process.platform==='win32')pipeline.useHeaders(passkeyPolicy);/* no Permissions-Policy denial on macOS and Linux: a Mac's security keys still reach the engine (the page guard answers passkeys there) */scriptRules.attach(session,{profileId,privateMode});pipeline.useBefore(details=>{const wc=details.webContents||webContents.fromId(details.webContentsId||0);if(wc&&getOwner(wc))scriptRules.watch(session,wc);return {};});pipeline.useHeaders(details=>scriptRules.headers(details,session));optionalFilters.attach(session,profileId,privateMode,pipeline);https.attach(session,profileId,privateMode,pipeline);void proxy.attach(session,profileId,privateMode).catch(()=>{});return pipeline;
  }

@@ -28,7 +28,9 @@ function storageRenderer(acira, core) {
           const spec = Array.isArray(list) ? list.find(item => item.name === name) : list && list[name];
           if (spec) acira.bindings.parseWith('storage.' + name, acira.bindings.signatureFor(spec), args);   // Chromium's own TypeError, synchronously
         } : undefined;
-        const area = core.createArea({call, lock, notify});
+        // A write (sync, and local / session in a worker: each is a read, then a write) is listed while it is in flight; runtime.reload() (runtime-renderer.cjs) waits for the list before it reloads this extension.
+        const track = job => { const writes = acira.pendingWrites; if (!writes) return; writes.add(job); const done = () => writes.delete(job); job.then(done, done); };
+        const area = core.createArea({call, lock, notify, track});
         const nativeRoot = worker ? acira.event('storage.relay') : base.onChanged;
         if (!worker && manifest.background && manifest.background.service_worker && base.onChanged && typeof base.onChanged.addListener === 'function')
           base.onChanged.addListener((changes, areaName) => { acira.call('storage.forward')(areaName, changes).catch(() => undefined); });
@@ -65,11 +67,11 @@ function storageRenderer(acira, core) {
           events: {onChanged: events.managed}
         });
 
-        const guarded = core.guardLocal(local, {call, lastError, withLastError: acira.withLastError, notify, validate});
+        const guarded = core.guardLocal(local, {call, lastError, withLastError: acira.withLastError, notify, validate, track});
         guarded.onChanged = events.local;
         const overrides = {local: acira.extend(local, guarded), sync, managed, onChanged: events.root};
         if (worker && base.session && typeof base.session.set === 'function') {
-          const tracked = core.trackWrites(base.session, 'session', {lastError, withLastError: acira.withLastError, notify, validate});
+          const tracked = core.trackWrites(base.session, 'session', {lastError, withLastError: acira.withLastError, notify, validate, track});
           overrides.session = acira.extend(base.session, {set: tracked.set, remove: tracked.remove, clear: tracked.clear, onChanged: events.session});
         }
         return acira.extend(base, overrides);

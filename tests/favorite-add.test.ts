@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { addFavorite, favoriteToast, favoriteTabTitle, iconsToBackfill, openTabIcon, planFavorite, type FavoriteTab } from '../src/ui/favoriteAdd';
 import { addSidebarApp, readSidebarApps } from '../src/ui/sidebarApps';
 
-// One way to make a favorite (founder, 6 Nov): dragging a tab up gave the good tile, the other ways gave something else. Every way now comes
+// One way to make a favorite (reported 6 Nov): dragging a tab up gave the good tile, the other ways gave something else. Every way now comes
 // through ui/favoriteAdd.ts, so the same tab gives the same stored favorite and the same tab hand-over whichever way it is added.
 const store = new Map<string, string>();
 Object.assign(globalThis, {
@@ -147,7 +147,7 @@ test('the motion: the bookmark\'s split, with the tile as its end; the tab stays
   assert.match(sidebar, /data-morph=\{favoriteMorphing\(app\.id\)\?'':undefined\} data-motion-skip=\{favoriteMorphing\(app\.id\)\?'':undefined\}/, 'the new tile is held back and left out of the list\'s enter animation');
   assert.match(sidebar, /const adding=favoritePlan\?\.kind==='add';/);
   assert.match(sidebar, /else if\(!adding\)current\.rowPreview\?\.end\(/, 'a drop that makes a favorite splits instead of going home');
-  assert.match(sidebar, /tiles\.splice\(Math\.min\(pin!\.index,shown\.length\),0,<span key="gap" className="sb-app sb-app-slot sb-app-gap"/, 'the tiles make room under a tab that would make a favorite');
+  assert.match(sidebar, /tiles\.splice\(Math\.min\(pin!\.index,apps\.length\),0,<span key="gap" className="sb-app sb-app-slot sb-app-gap"/, 'the tiles make room under a tab that would make a favorite');
   assert.match(sidebar, /if\(tile\.classList\.contains\('sb-app-gap'\)\)return items\.indexOf\(tile\);/, 'over the slot the drop stays: the slot never chases the pointer');
   assert.match(sidebar, /animateSpring\(wrap,\[\{translate:`0 \$\{shift\}px`\},\{translate:'0 0'\}\],'reorder\.move'/, 'the list below glides when the first favorite opens the region');
   assert.match(readFileSync(new URL('../src/components/sidebar/sidebar.css', import.meta.url), 'utf8'), /\.sb-app\[data-morph\]\{opacity:0\}/);

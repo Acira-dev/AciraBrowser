@@ -6,6 +6,7 @@
 //    the engine announces it once (windows.onCreated).
 //  - One page is detached and attached again 30 times (a close cancelled by "Leave site?"): its 'did-start-navigation' count stays put and the
 //    store still sees it come back.
+//  - A page whose renderer has gone is reloaded, then sent to a new address: neither throws, nothing is uncaught, and the page loads.
 // Prints one line: RESULT <json>. Run by tests/extension-runtime-leaks.test.cjs (also: electron --use-mock-keychain tests/fixtures/extension-runtime-leaks/run.cjs).
 const {app,BrowserWindow,WebContentsView,session,powerMonitor,screen}=require('electron'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const root=path.resolve(__dirname,'..','..','..');
@@ -73,6 +74,19 @@ app.whenReady().then(async()=>{
   for(let i=0;i<30;i++){manager.removeTab(wc);manager.attachTab(wc,window);}
   out.pageAfter30=wc.listenerCount('did-start-navigation');out.tabAddedEvents=added;out.tabBack=store.tabs.has(wc);
   await close(kept);
+
+  // A page whose renderer has gone (a crash, or page-hang.cjs ending a page that stopped answering), then Reload or a new address: the
+  // engine's webNavigation listener read the disposed frame and threw out of reload() / loadURL() (13.7 soak, 11 Nov).
+  const uncaught=[],onUncaught=error=>uncaught.push(String(error&&error.message||error));process.on('uncaughtException',onUncaught);
+  const sad=open(),swc=sad.webContents,page=title=>'data:text/html,<title>'+title+'</title>'+title;
+  const finished=()=>new Promise(resolve=>{const t=setTimeout(()=>resolve(false),15000);swc.once('did-finish-load',()=>{clearTimeout(t);resolve(true);});});
+  const crash=()=>new Promise(resolve=>{const frame=swc.mainFrame;void frame.executeJavaScript('0').catch(()=>{});/* page-hang.cjs holds the frame like this before it ends the page */swc.once('render-process-gone',()=>setTimeout(resolve,0));swc.forcefullyCrashRenderer();});
+  const attempt=async run=>{await crash();const crashed=swc.isCrashed(),loaded=finished();let threw=null;try{const value=run();if(value&&typeof value.catch==='function')value.catch(()=>{});}catch(error){threw=String(error&&error.message||error);}
+   return {crashed,threw,loaded:await loaded,title:swc.getTitle(),crashedAfter:swc.isCrashed()};};
+  await swc.loadURL(page('first'));
+  out.crashedTab={reload:await attempt(()=>swc.reload()),address:await attempt(()=>swc.loadURL(page('second')))};
+  await new Promise(resolve=>setTimeout(resolve,200));process.removeListener('uncaughtException',onUncaught);out.crashedTab.uncaught=uncaught;
+  await close(sad);
  }catch(error){out.error=String(error&&error.stack||error);}
  finally{clearTimeout(timer);out.warnings=warnings.filter(text=>/MaxListeners/.test(text));console.log('RESULT '+JSON.stringify(out));try{window?.destroy();}catch{}app.exit(0);}
 });

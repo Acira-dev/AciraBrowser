@@ -5,7 +5,7 @@
 //    (Wait / Close page). The question goes away when the page answers again. Close page ends the page's process, so the tab shows its
 //    error page and can be reloaded.
 //  - Stop, Reload or a new address on a page that then gives no answer for a few seconds ends the page's process and repeats the action.
-const PROBE_MS = 4000;
+const PROBE_MS = 4000, RETRY_MS = 100;
 
 function createPageHang({ask, onChange = () => {}, waiting = () => false, setTimer = setTimeout, probeMs = PROBE_MS} = {}) {
   const probes = new WeakMap();
@@ -40,12 +40,22 @@ function createPageHang({ask, onChange = () => {}, waiting = () => false, setTim
       if (probe.answered || wc.isDestroyed() || waiting(wc)) return;
       const now = wc.mainFrame;
       if (!now || now.processId !== process || now.routingId !== routing) return;
-      if (typeof redo === 'function') wc.once('render-process-gone', () => setTimer(() => { if (!wc.isDestroyed()) redo(); }, 0));
+      if (typeof redo === 'function') wc.once('render-process-gone', () => setTimer(() => again(wc, redo, 1), 0));
       end(wc);
     }, probeMs);
+  }
+
+  /** The action again, on the fresh process. A throw out of it (soak, 11 Nov: a navigation listener read the frame that had gone) must not
+   *  be left uncaught in main: the action is tried once more a moment later, and a second throw is only logged. */
+  function again(wc, redo, tries) {
+    if (wc.isDestroyed()) return;
+    try { redo(); } catch (error) {
+      if (tries > 0) setTimer(() => again(wc, redo, tries - 1), RETRY_MS);
+      else console.warn('A page that stopped answering could not be loaded again:', String(error && error.message || error));
+    }
   }
 
   return {watch, recover};
 }
 
-module.exports = {createPageHang, PROBE_MS};
+module.exports = {createPageHang, PROBE_MS, RETRY_MS};

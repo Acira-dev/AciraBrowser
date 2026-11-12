@@ -24,8 +24,11 @@ function createNewTabOverride({WebContentsView,getWindow,pageBounds,radius=()=>8
   if(children.indexOf(view)===at)return;if(at===others.length)win.contentView.addChildView(view);else win.contentView.addChildView(view,at);
  }
  function sync(){
-  const want=current(),win=getWindow(),bounds=pageBounds();
-  if(!want||!win||win.isDestroyed()||!bounds){hide();return null;}
+  // pageBounds() only while the override is wanted: main.cjs's version trims for a docked side panel, and that call remembers the page card the panel sits beside, which a page view (a split) must keep.
+  const want=current(),win=getWindow();
+  if(!want||!win||win.isDestroyed()){hide();return null;}
+  const bounds=pageBounds();
+  if(!bounds){hide();return null;}
   const key=want.profileId+'|'+want.extensionId;
   if(shown&&shown.key!==key)dispose();
   if(!shown){
@@ -46,4 +49,19 @@ function createNewTabOverride({WebContentsView,getWindow,pageBounds,radius=()=>8
  return {sync,hide,dispose,current:()=>shown?{tabId:shown.tabId,url:shown.url,webContents:shown.view.webContents}:null};
 }
 
-module.exports={createNewTabOverride,overrideFor};
+/** Does an extension's request for a tab ask for the New Tab page? Chrome: no address at all (chrome.tabs.create({})) or one of the New Tab addresses. An explicit about:blank is a blank page, not this. */
+function asksForNewTab(address){
+ if(address===undefined||address===null)return true;
+ const text=String(address).trim();
+ return text===''||/^(?:chrome:\/\/(?:newtab|new-tab-page)\/?|about:newtab|chrome-search:\/\/local-ntp\/local-ntp\.html)$/i.test(text);
+}
+
+/** The page area the override view fills: what the page view of an ordinary tab gets (main.cjs trims page views for a docked extension side panel),
+ * so the panel keeps its width instead of lying under the extension's page. `trim(bounds, page)` and `clamp(bounds)` are main.cjs's own. Pure. */
+function overrideBounds({layout,authActive=false,trim=bounds=>bounds,clamp=bounds=>bounds}){
+ if(!layout||layout.visible===false||authActive)return null;
+ const page=layout.pageBounds;if(!page)return null;
+ return clamp(trim(page,page));
+}
+
+module.exports={createNewTabOverride,overrideFor,asksForNewTab,overrideBounds};

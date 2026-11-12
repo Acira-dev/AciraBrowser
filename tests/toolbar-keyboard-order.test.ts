@@ -17,6 +17,6 @@ test('the actions are built in the saved order, the profile button among them, t
   const row = app.slice(app.indexOf('const shownItems = '));
   assert.match(row, /lead = shownItems\[0\]\?\.id === 'profile' \? 1 : 0;/);
   assert.match(row, /\{shownItems\.slice\(0, lead\)\.map\(item => toolbarAction\(item\.id\)\)\}<BrowserExtensionActions target=\{extensionTarget\}\/>\{shownItems\.slice\(lead\)\.map\(item => toolbarAction\(item\.id\)\)\}/);
-  assert.match(app, /\{parts\.exitFocus \? layoutToggle : optionalActions\}/);
+  assert.match(app, /\{parts\.exitFocus \? <>\{layoutToggle\}<BrowserExtensionActions target=\{extensionTarget\} silent\/><\/> : optionalActions\}/, 'Focus draws only its way out; a silent copy of the extension buttons answers action.openPopup()');
   assert.doesNotMatch(app, /profileAction/, 'the profile button is not placed on its own any more');
 });

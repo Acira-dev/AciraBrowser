@@ -107,6 +107,7 @@ export function useBrowser(){
   // A workspace with no tab here gets a new one with a fresh id: only main may make that, so its switch is not optimistic.
   if(native&&(OPTIMISTIC.has(action.type)||isGroupFold(latest.current,action))&&!location.search.includes('view=overlay')&&(action.type!=='workspace.select'||workspaceHasTabs(latest.current,action.id))){
    if(action.type==='tab.new'&&!action.id)sent={...action,id:'tab-'+crypto.randomUUID()};
+   /* 13.7: the interface draws a tab switch itself, on this frame, before main answers: main must not show the page ahead of it (desktop/fast-switch.cjs, `optimistic`) */if(action.type==='tab.select')sent={...action,optimistic:true};
    // Main hears of the action before this frame is drawn, so a still it lays over the page area (a new tab page leaving) lands on the same frame.
    // Its answer is a later task, so it can never arrive before the optimistic state below is in place.
    void runtime.dispatch(sent).catch(error=>console.error('Browser action failed',error));dispatched=true;

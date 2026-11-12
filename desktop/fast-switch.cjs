@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Fast tab switch (13.6).
+ * Fast tab switch (13.6), and the guard that keeps it from ever showing the wrong page (13.7).
  *
  * A tab switch used to show the new page only after the interface had drawn it: main reduced the action, sent the new state, the interface
  * rendered it (the sidebar's rows, the address field, the progress bar...), measured the page area, and only then sent its layout back; main
@@ -12,14 +12,20 @@
  * reduces the action. The interface's own layout still arrives afterwards (the interface stays the authority): when it equals what was presented it
  * changes nothing, and when it differs (a sidebar that is sliding, a page area that moved) main places the page exactly as it did before.
  *
- * Two rules keep this from ever showing a wrong picture:
- *  - It only runs when the layout in force is the settled single view of the tab being left (no split, no morph or slide in flight, no popup other
- *    than a toast or the zoom badge, nothing hiding the page), the new tab is an ordinary website whose page is alive and already on its address,
- *    and nothing else owns the screen (a sign-in, a full-screen page, a link preview, a dialog). Anything else takes the old road.
- *  - A burst of switches (A -> B -> C) leaves the interface's layouts for B and C on their way after main has already shown C. A layout whose single
- *    view is a tab the burst has already left is stale: it carries the newest tab instead, so the page never steps back to B. The layout of the
- *    newest tab ends the wait (and counts as a change, so the side effects of a layout that follows a switch - the caption, the published layout,
- *    the new-tab prime - run exactly once, as before).
+ * What can go wrong is the layouts that are still on their way. The interface builds every layout from the state it rendered, and stamps it with
+ * that state's revision (`stateRevision`). While main has shown a page ahead of the interface, a layout stamped with a revision older than the
+ * switch was built before it: applied as sent it would take the page back to a tab the person has left (the report on 13.6: "both tabs appear back
+ * and forth for a moment, then it switches"). Such a layout keeps the page main shows; the first layout stamped with the switch's revision or a
+ * later one has caught up, is applied as sent, and ends the wait. This holds for every order: a double click, a switch back (A, B, A), a switch to
+ * a tab that is not presented early (a new tab page, a sleeping tab) while an earlier one waits, a burst. The wait is by revision, never by tab id,
+ * because a layout for tab A can be the old one or the new one.
+ *
+ * Only a switch the interface does NOT draw itself is presented early (the shortcuts main handles: Cmd/Ctrl+1..9, a notification, an extension). A click
+ * is drawn by the interface on its own frame (an optimistic update: its layout follows the action within a few ms), so it takes the old road, exactly as in 13.5.
+ *
+ * Presenting early only happens when the layout in force is the settled single view of the tab being left (no split, no morph or slide in
+ * flight, no popup other than a toast or the zoom badge, nothing hiding the page), the new tab is an ordinary website whose page is alive and
+ * already on its address, and nothing else owns the screen (a sign-in, a full-screen page, a link preview, a dialog). Anything else takes the old road.
  */
 const STALE_MS = 1500;
 const SLIDE_SETTLE_MS = 1500;
@@ -29,7 +35,7 @@ const single = layout => !!layout && Array.isArray(layout.views) && layout.views
 /** Key order does not matter when two layouts are compared. */
 const canonical = value => Array.isArray(value) ? '[' + value.map(canonical).join(',') + ']' : value && typeof value === 'object' ? '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}' : JSON.stringify(value);
 /** What differs between the layout main presented and the one the interface sent: the keys, for a rig that audits the prediction. */
-const differing = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(key => canonical(a[key]) !== canonical(b[key]));
+const differing = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(key => key !== 'stateRevision' && canonical(a[key]) !== canonical(b[key]));
 
 /** The layout to present for a switch to `state.activeTabId`, or null when the switch must wait for the interface. Pure. */
 function planSwitch({ previous, state, layout, entry, needsLoad, busy, now, layoutAt }) {
@@ -51,36 +57,61 @@ function planSwitch({ previous, state, layout, entry, needsLoad, busy, now, layo
   return { ...layout, views: [{ ...view, tabId: to }] };
 }
 
-/** The wait between main's early presentation and the interface's own layout for that tab. */
+/** The views a stale layout is applied with: the tab main shows, at the place the layout puts its view (or main's own views when the layout says nothing usable). */
+function heldViews(next, layout, shown) {
+  if (Array.isArray(next.views) && next.views.length === 1) return [{ ...next.views[0], tabId: shown }];
+  return layout && Array.isArray(layout.views) && layout.views.length ? layout.views : next.views;
+}
+
+/** The wait between main's early presentation and the interface's own layouts for that switch. */
 function createFastSwitch({ now = Date.now, audit = null } = {}) {
-  let waiting = null; // { tabId, left: Set of tab ids the burst has left, at, predicted }
+  let waiting = null; // { revision: the state revision the interface must have reached, shown: the tab main shows, active: the window's active tab, at, predicted }
   const record = (kind, extra) => { if (audit) audit({ kind, ...extra }); };
+  const live = () => { if (waiting && now() - waiting.at > STALE_MS) { record('expired', {}); waiting = null; } return waiting; };
   return {
-    /** Remember that the page of `tabId` was shown ahead of the interface (as `predicted`); `from` is the tab it replaced. */
-    note(tabId, from, predicted) {
-      const t = now();
-      if (waiting && t - waiting.at < STALE_MS) { waiting.left.add(waiting.tabId); waiting.left.add(from); waiting.tabId = tabId; waiting.left.delete(tabId); waiting.at = t; waiting.predicted = predicted; }
-      else waiting = { tabId, left: new Set([from]), at: t, predicted };
-      record('early', { tabId });
+    /**
+     * main reduced a tab.select. Returns the layout to present at once, or null.
+     * A select that cannot be presented early (a new tab page, a sleeping tab, a tab the person already had) while an earlier one still waits keeps the wait
+     * and moves the revision the interface must reach to this select: the layouts on their way are older than it too.
+     * `forced`: this select must take the old road (a tab brought here from another space, a split taken apart). `uiAware`: the interface already draws it.
+     */
+    select({ previous, state, layout, entry, needsLoad, busy, layoutAt, forced, uiAware }) {
+      const to = state && state.activeTabId, from = previous && previous.activeTabId;
+      if (!to || to === from) return null;                  // nothing changed: whatever waits keeps waiting
+      live();
+      // The interface draws this switch itself, on the click's own frame (an optimistic update), and sends its layout right behind the action: it is AHEAD of
+      // main, not behind. Nothing to show early (that gained 4 ms on a quiet Mac), and nothing older can still be on its way (every layout it sent before
+      // arrived before the action): an earlier wait is over.
+      if (uiAware) { if (waiting) { record('ui-ahead', { tabId: to }); waiting = null; } return null; }
+      const t = now(), revision = state.revision;
+      const early = forced ? null : planSwitch({ previous, state, layout, entry, needsLoad, busy, now: t, layoutAt });
+      if (early) { waiting = { revision, shown: to, active: to, at: t, predicted: early }; record('early', { tabId: to }); return early; }
+      if (waiting) { waiting.revision = revision; waiting.active = to; waiting.at = t; record('held', { tabId: to }); }
+      return null;
     },
-    /** A layout from the interface: `{ layout, forceChanged }`. `activeTabId` is the tab the window has now: when something else changed it (the tab was closed, another was opened) the wait is over. */
-    adopt(next, activeTabId) {
-      if (!waiting) return { layout: next, forceChanged: false };
-      if (now() - waiting.at > STALE_MS) { record('expired', {}); waiting = null; return { layout: next, forceChanged: false }; }
-      if (activeTabId !== undefined && activeTabId !== waiting.tabId) { record('moved-on', {}); waiting = null; return { layout: next, forceChanged: true }; }
-      const view = single(next);
-      if (view && view.tabId === waiting.tabId) {
-        if (audit) { const keys = waiting.predicted ? differing(waiting.predicted, next) : ['no prediction']; record(keys.length ? 'differs' : 'matched', { tabId: view.tabId, keys, after: now() - waiting.at, ...(keys.includes('overlay') ? { overlay: [waiting.predicted?.overlay?.kind ?? null, next.overlay?.kind ?? null] } : {}) }); }
+    /**
+     * A layout from the interface: `{ layout, forceChanged }`. `activeTabId` is the tab the window has now; `current` is the layout in force.
+     * Stale layouts (older than the switch, or unstamped) keep the page main shows; the first that has caught up is applied as sent.
+     */
+    adopt(next, activeTabId, current) {
+      if (!live()) return { layout: next, forceChanged: false };
+      // something other than a select changed the active tab (the tab shown was closed, another opened): the interface's layout is the answer
+      if (activeTabId !== undefined && activeTabId !== waiting.active) { record('moved-on', {}); waiting = null; return { layout: next, forceChanged: true }; }
+      const stamp = next.stateRevision;
+      if (Number.isInteger(stamp) && Number.isInteger(waiting.revision) && stamp >= waiting.revision) {
+        if (audit) {
+          const view = single(next);
+          if (view && view.tabId === waiting.shown) { const keys = waiting.predicted ? differing(waiting.predicted, next) : ['no prediction']; record(keys.length ? 'differs' : 'matched', { tabId: view.tabId, keys, after: now() - waiting.at, ...(keys.includes('overlay') ? { overlay: [waiting.predicted?.overlay?.kind ?? null, next.overlay?.kind ?? null] } : {}) }); }
+          else record('moved', { views: Array.isArray(next.views) ? next.views.length : -1 });
+        }
         waiting = null; return { layout: next, forceChanged: true };
       }
-      if (view && waiting.left.has(view.tabId)) { record('stale', { tabId: view.tabId }); return { layout: { ...next, views: [{ ...view, tabId: waiting.tabId }] }, forceChanged: false }; }
-      // the interface is showing something else now (a split, a new tab page, nothing): it has caught up with whatever it wants
-      record('moved', { views: next.views.length }); waiting = null;
-      return { layout: next, forceChanged: true };
+      record('stale', { stamp: Number.isInteger(stamp) ? stamp : null });
+      return { layout: { ...next, views: heldViews(next, current, waiting.shown) }, forceChanged: false };
     },
     /** Anything that ends the wait: the old road takes over. */
     cancel() { waiting = null; },
-    get waiting() { return waiting ? waiting.tabId : null; }
+    get waiting() { return waiting ? waiting.shown : null; }
   };
 }
 

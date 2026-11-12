@@ -352,6 +352,28 @@ test('the id an extension knows a page by (a tab restored from sleep keeps its o
   assert.deepEqual([target.args[0].tabId, target.args[0].sourceTabId, target.args[0].url], [asleepId, asleepId, 'https://asleep.example/x']);
 });
 
+test('13.7: the toolbar click on one of Acira\'s own pages tells an activeTab extension where it was used (chrome://newtab/), as Chrome does; an extension without activeTab or tabs still gets no address', async () => {
+  const run = async permissions => {
+    const rig = createRig({manifest: {manifest_version: 3, permissions}});
+    const one = rig.addWindow({focused: true});
+    const own = rig.addTab(one, {id: 'tab-new', url: 'acira://new', title: 'New tab', page: false, contentKind: 'internal'});
+    one.state.activeTabId = own.id;
+    const listed = plain(await rig.world.chrome.tabs.query({active: true}));
+    assert.equal(listed.length, 1);
+    rig.sent.length = 0;
+    rig.router.sendEvent(rig.ID, 'browserAction.onClicked', {id: listed[0].id});
+    return {listed: listed[0], clicked: rig.sent.find(entry => entry.name === 'browserAction.onClicked').args[0]};
+  };
+  const granted = await run(['activeTab']);
+  assert.equal(granted.listed.url, undefined, 'tabs.query itself still hides it (that is not a click)');
+  assert.equal(granted.clicked.url, 'chrome://newtab/');
+  assert.equal(typeof granted.clicked.title, 'string');
+  const plainOne = await run(['storage']);
+  assert.equal(plainOne.clicked.url, undefined);
+  const withTabs = await run(['tabs']);
+  assert.equal(withTabs.clicked.url, 'chrome://newtab/');
+});
+
 test('connect: the port waits for the page behind the tab id (a restored tab\'s own id is not its page\'s), keeps early messages in order, and passes both ways', async () => {
   const ports = [];
   const native = {tabs: {connect(tabId, info) { const port = fakePort((info && info.name) || ''); port.tabId = tabId; ports.push(port); return port; }}};

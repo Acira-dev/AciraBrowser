@@ -233,3 +233,47 @@ test('extension side: an extension without activeTab never asks; Chromium\'s err
   await new Promise(resolve => failing.chrome.scripting.executeScript({target: {tabId: 1}, func: () => 1}, () => { errors.push(failing.chrome.runtime.lastError && failing.chrome.runtime.lastError.message); resolve(); }));
   assert.equal(errors[0], 'boom');
 });
+
+// 13.7 (Inspecta): a bundled content script is often several MB (its js/content-bundle.js is 3.4 MB) and Chrome sets no limit; the old 2 MiB cap on
+// injected FILES answered "Could not load file". The text of a func / css keeps its 2 MiB limit; a file is read up to 16 MiB.
+test('files: a 3 MB content file injects; the func text keeps 2 MiB; a file over 16 MiB is refused; css files follow the same rule', async () => {
+  const h = scriptingHost();
+  try {
+    const wc = fakeTab(7, 'https://example.com/a');
+    h.tabs.set(7, wc);
+    const run = (name, details) => h.call(`scripting.activeTab.${name}`, null, details);
+    h.handlers.get('browserAction.activate').callback({type: 'frame', sender: {id: 1}}, {eventType: 'click', extensionId: ID, tabId: 7});
+    fs.writeFileSync(path.join(h.dir, 'big.js'), '/*' + 'x'.repeat(3 * 1024 * 1024) + '*/document.title');
+    const big = await run('executeScript', {target: {tabId: 7}, files: ['big.js']});
+    assert.deepEqual(big.map(r => [r.frameId, r.result]), [[0, 'isolated-result']]);
+    assert.ok(wc.calls.at(-1)[2].length > 3 * 1024 * 1024, 'the whole file reached the world');
+    const text = await run('executeScript', {target: {tabId: 7}, world: 'ISOLATED', source: 'x'.repeat(2 * 1024 * 1024 + 1)});
+    assert.match(text.__acira_error, /^Exactly one of 'func' and 'files' must be specified\.$/, 'the text of a func keeps its 2 MiB limit');
+    fs.writeFileSync(path.join(h.dir, 'huge.js'), 'x'.repeat(16 * 1024 * 1024 + 1));
+    assert.deepEqual(await run('executeScript', {target: {tabId: 7}, files: ['huge.js']}), {__acira_error: "Could not load file: 'huge.js'."});
+    fs.writeFileSync(path.join(h.dir, 'big.css'), 'a{}'.repeat(1024 * 1024));
+    assert.equal(await run('insertCSS', {target: {tabId: 7}, files: ['big.css']}), undefined, 'a 3 MB stylesheet file is fine');
+    assert.match((await run('insertCSS', {target: {tabId: 7}, css: 'a'.repeat(2 * 1024 * 1024 + 1)})).__acira_error, /^Exactly one of 'css' and 'files' must be specified\.$/);
+  } finally { h.dispose?.(); }
+});
+
+// Electron rejects a result it cannot clone (a script that ends with `globalThis.f = f;` ends with a function) after the code has run; Chrome drops it.
+test('a result Electron cannot clone is dropped like Chrome does; any other error still rejects', async () => {
+  const h = scriptingHost();
+  try {
+    const wc = fakeTab(7, 'https://example.com/a');
+    h.tabs.set(7, wc);
+    const run = (name, details) => h.call(`scripting.activeTab.${name}`, null, details);
+    h.handlers.get('browserAction.activate').callback({type: 'frame', sender: {id: 1}}, {eventType: 'click', extensionId: ID, tabId: 7});
+    let fail = new Error('An object could not be cloned.');
+    wc.executeJavaScriptInIsolatedWorld = async () => { throw fail; };
+    const frames = wc.mainFrame.framesInSubtree;
+    frames[0].executeJavaScript = async () => { throw fail; };
+    const isolated = await run('executeScript', {target: {tabId: 7}, files: ['content.js']});
+    assert.deepEqual(isolated.map(r => [r.frameId, r.result]), [[0, undefined]], 'isolated world: no error, no result');
+    const main = await run('executeScript', {target: {tabId: 7}, world: 'MAIN', files: ['content.js']});
+    assert.deepEqual(main.map(r => [r.frameId, r.result]), [[0, undefined]], 'MAIN world: same');
+    fail = new Error('ReferenceError: nope is not defined');
+    assert.deepEqual(await run('executeScript', {target: {tabId: 7}, files: ['content.js']}), {__acira_error: 'ReferenceError: nope is not defined'}, 'a real error still rejects');
+  } finally { h.dispose?.(); }
+});

@@ -130,4 +130,11 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
  function dispose(){for(const state of states.values()){state.disabled=true;state.version++;if(state.listener)state.session.cookies.removeListener('changed',state.listener);state.access?.close();}states.clear();}
  return {attach,flush,clear,completeClear,removeProfile,dispose};
 }
-module.exports={createSessionCookieRestore,cookieParam};
+/** Scripted runs only (a throwaway profile named by ACIRA_BROWSER_TEST_DATA): ACIRA_TEST_PASSWORD_STORE=basic_text (or unknown) makes the run see
+ *  Linux with no keyring, where Chromium's password store falls back to basic_text and website-session restore is off. Ignored otherwise. */
+function storageForRun({safeStorage,platform=process.platform,env=process.env}){
+ const backend=env.ACIRA_BROWSER_TEST_DATA?env.ACIRA_TEST_PASSWORD_STORE:undefined;
+ if(!['basic_text','unknown'].includes(backend))return {safeStorage,platform};
+ return {platform:'linux',safeStorage:{isEncryptionAvailable:()=>safeStorage.isEncryptionAvailable(),encryptString:text=>safeStorage.encryptString(text),decryptString:bytes=>safeStorage.decryptString(bytes),getSelectedStorageBackend:()=>backend}};
+}
+module.exports={createSessionCookieRestore,cookieParam,storageForRun};

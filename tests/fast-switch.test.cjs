@@ -63,92 +63,176 @@ test('the new tab needs a live page that is already on its address; and nothing 
   assert.equal(plan({busy: true}), null, 'a sign-in, a full-screen page, a link preview, a dialog');
 });
 
-test('the interface layout that follows: the tab it was waiting for ends the wait and counts as a change', () => {
+// The wait (13.7): every layout the interface sends is stamped with the revision of the state it was built from. A layout older than the switch keeps the page main shows.
+const stamped = (id, rev, extra = {}) => ({...layoutOf(id, extra), stateRevision: rev});
+const sel = (wait, from, to, rev, over = {}) => wait.select({previous: {...stateOf(from), revision: rev - 1}, state: {...stateOf(to), revision: rev}, layout: layoutOf(from), entry: entry(), needsLoad: false, busy: false, layoutAt: 0, forced: false, ...over});
+const shownOf = out => out.layout.views.length ? out.layout.views[0].tabId : null;
+
+test('a select shows the new tab at once; a select of the tab already on screen changes nothing', () => {
   const wait = createFastSwitch();
-  const first = layoutOf('b');
-  assert.deepEqual(wait.adopt(first), {layout: first, forceChanged: false}, 'nothing was presented early: untouched');
-  wait.note('b', 'a');
+  assert.equal(sel(wait, 'a', 'a', 2), null);
+  assert.equal(wait.waiting, null);
+  const early = sel(wait, 'a', 'b', 2);
+  assert.deepEqual(early.views, [{tabId: 'b', bounds}]);
   assert.equal(wait.waiting, 'b');
-  assert.deepEqual(wait.adopt(first), {layout: first, forceChanged: true});
-  assert.equal(wait.waiting, null);
-  assert.deepEqual(wait.adopt(first), {layout: first, forceChanged: false}, 'one layout only');
 });
 
-test('a burst A -> B -> C: the interface layouts for A and B are stale and carry C; the layout for C ends the wait', () => {
+test('the layout that has caught up (stamped with the switch\'s revision or later) is applied as sent, counts as a change and ends the wait; an older one keeps the page', () => {
   const wait = createFastSwitch();
-  wait.note('b', 'a'); wait.note('c', 'b');
-  assert.equal(wait.waiting, 'c');
-  const stale = layoutOf('b', {pageImmediate: true});
-  const out = wait.adopt(stale);
-  assert.deepEqual(out.layout.views, [{tabId: 'c', bounds}], 'the page never steps back to B');
+  assert.deepEqual(wait.adopt(stamped('b', 5)), {layout: stamped('b', 5), forceChanged: false}, 'nothing was presented early: untouched');
+  sel(wait, 'a', 'b', 2);
+  const old = stamped('a', 1), out = wait.adopt(old, 'b', layoutOf('b'));
+  assert.deepEqual(out.layout.views, [{tabId: 'b', bounds}], 'built before the switch: it must not take the page back to A');
   assert.equal(out.forceChanged, false);
-  assert.equal(wait.adopt(layoutOf('a')).layout.views[0].tabId, 'c', 'a layout for the tab the burst began on is stale too');
-  assert.equal(wait.waiting, 'c', 'still waiting for C');
-  const caughtUp = wait.adopt(layoutOf('c'));
-  assert.equal(caughtUp.layout.views[0].tabId, 'c');
-  assert.equal(caughtUp.forceChanged, true);
+  assert.equal(wait.waiting, 'b', 'still waiting');
+  const fresh = stamped('b', 2), done = wait.adopt(fresh, 'b', layoutOf('b'));
+  assert.equal(done.layout, fresh);
+  assert.equal(done.forceChanged, true);
+  assert.equal(wait.waiting, null);
+  assert.deepEqual(wait.adopt(old, 'b', layoutOf('b')), {layout: old, forceChanged: false}, 'one wait only');
+});
+
+test('a layout that says nothing about its state (unstamped) is treated as older', () => {
+  const wait = createFastSwitch(); sel(wait, 'a', 'b', 2);
+  const out = wait.adopt(layoutOf('a'), 'b', layoutOf('b'));
+  assert.deepEqual(out.layout.views, [{tabId: 'b', bounds}]);
+  assert.equal(wait.waiting, 'b');
+});
+
+test('a burst A, B, C: the layouts built for A and B carry C; the one built for C ends the wait', () => {
+  const wait = createFastSwitch();
+  sel(wait, 'a', 'b', 2); sel(wait, 'b', 'c', 3, {layout: layoutOf('b')});
+  assert.equal(wait.waiting, 'c');
+  assert.equal(shownOf(wait.adopt(stamped('b', 2), 'c', layoutOf('c'))), 'c');
+  assert.equal(shownOf(wait.adopt(stamped('a', 1), 'c', layoutOf('c'))), 'c');
+  assert.equal(wait.waiting, 'c');
+  const done = wait.adopt(stamped('c', 3), 'c', layoutOf('c'));
+  assert.equal(shownOf(done), 'c');
+  assert.equal(done.forceChanged, true);
   assert.equal(wait.waiting, null);
 });
 
-test('a switch back to a tab the burst left (A -> B -> A) waits for A, and B is the stale one', () => {
+test('13.6 BLINK: a switch back (A, B, A) before the interface answers: the layout for A built before the first switch is older than the second and keeps the page', () => {
   const wait = createFastSwitch();
-  wait.note('b', 'a'); wait.note('a', 'b');
-  assert.equal(wait.adopt(layoutOf('b')).layout.views[0].tabId, 'a');
-  assert.equal(wait.adopt(layoutOf('a')).forceChanged, true);
+  sel(wait, 'a', 'b', 2); sel(wait, 'b', 'a', 3, {layout: layoutOf('b')});
+  assert.equal(wait.waiting, 'a');
+  // by tab id these three are indistinguishable from the answer; by revision they are not
+  assert.equal(shownOf(wait.adopt(stamped('a', 1), 'a', layoutOf('a'))), 'a', 'built for the first A: stale, A stays');
+  assert.equal(wait.waiting, 'a', 'and it does not end the wait');
+  assert.equal(shownOf(wait.adopt(stamped('b', 2), 'a', layoutOf('a'))), 'a', 'built for B: stale, B must not come back');
+  assert.equal(wait.waiting, 'a');
+  assert.equal(wait.adopt(stamped('a', 3), 'a', layoutOf('a')).forceChanged, true);
 });
 
-test('an interface that moved on (a split, a new tab page, no view) ends the wait and is applied as sent', () => {
-  for (const next of [{...layoutOf('a'), views: []}, {...layoutOf('a'), views: [{tabId: 'a', bounds}, {tabId: 'q', bounds}]}, layoutOf('n')]) {
-    const wait = createFastSwitch(); wait.note('b', 'a');
-    const out = wait.adopt(next);
-    assert.equal(out.layout, next);
-    assert.equal(out.forceChanged, true);
-    assert.equal(wait.waiting, null);
+test('13.6 BLINK: a double click (the same tab selected twice before the interface answers) does not drop the guard', () => {
+  const wait = createFastSwitch();
+  sel(wait, 'a', 'b', 2);
+  assert.equal(wait.select({previous: {...stateOf('b'), revision: 2}, state: {...stateOf('b'), revision: 3}, layout: layoutOf('b'), entry: entry(), needsLoad: false, busy: false, layoutAt: 0, forced: false}), null);
+  assert.equal(wait.waiting, 'b', 'the second select of B changes nothing');
+  assert.equal(shownOf(wait.adopt(stamped('a', 1), 'b', layoutOf('b'))), 'b', 'the layout built before the first select still cannot take the page back to A');
+});
+
+test('13.6 BLINK: a select that cannot be shown early (a new tab page, a sleeping tab) while an earlier one waits keeps the guard and moves the revision to wait for', () => {
+  const wait = createFastSwitch();
+  sel(wait, 'a', 'b', 2);
+  // C is not a website page: no early layout, the wait stays and now needs the interface to reach revision 3
+  assert.equal(sel(wait, 'b', 'n', 3, {layout: layoutOf('b')}), null);
+  assert.equal(wait.waiting, 'b', 'B stays on screen until the interface answers for the new tab page');
+  assert.equal(shownOf(wait.adopt(stamped('a', 1), 'n', layoutOf('b'))), 'b');
+  assert.equal(shownOf(wait.adopt(stamped('b', 2), 'n', layoutOf('b'))), 'b', 'the layout built for B is older than the new tab page: B stays, not a flash of something else');
+  const done = wait.adopt({...stamped('n', 3), views: []}, 'n', layoutOf('b'));
+  assert.deepEqual(done.layout.views, [], 'the interface\'s answer for the new tab page is applied as sent');
+  assert.equal(done.forceChanged, true);
+});
+
+test('a stale layout with no view, or a split, still keeps the page main shows (its other fields are applied)', () => {
+  for (const views of [[], [{tabId: 'a', bounds}, {tabId: 'q', bounds}]]) {
+    const wait = createFastSwitch(); sel(wait, 'a', 'b', 2);
+    const next = {...stamped('a', 1), views, pageBounds: {...bounds, width: 640}};
+    const out = wait.adopt(next, 'b', layoutOf('b'));
+    assert.deepEqual(out.layout.views, [{tabId: 'b', bounds}]);
+    assert.equal(out.layout.pageBounds.width, 640, 'geometry that changed since (a resize) still reaches main');
   }
+});
+
+test('the page main shows takes the place the stale layout gives it', () => {
+  const wait = createFastSwitch(); sel(wait, 'a', 'b', 2);
+  const moved = {x: 100, y: 6, width: 900, height: 700};
+  const out = wait.adopt({...stamped('a', 1), views: [{tabId: 'a', bounds: moved}]}, 'b', layoutOf('b'));
+  assert.deepEqual(out.layout.views, [{tabId: 'b', bounds: moved}]);
+});
+
+test('something other than a select changing the active tab (the tab shown was closed, another opened) ends the wait: the interface layout is applied as sent', () => {
+  const wait = createFastSwitch(); sel(wait, 'a', 'b', 2);
+  const next = stamped('a', 3);
+  const out = wait.adopt(next, 'a', layoutOf('b'));
+  assert.equal(out.layout, next);
+  assert.equal(out.forceChanged, true);
+  assert.equal(wait.waiting, null);
 });
 
 test('the wait does not outlive a window that never answers, and cancel ends it', () => {
   let t = 1000; const wait = createFastSwitch({now: () => t});
-  wait.note('b', 'a'); t += STALE_MS + 1;
-  const out = wait.adopt(layoutOf('a'));
-  assert.equal(out.layout.views[0].tabId, 'a', 'after the cap, the interface is believed');
-  assert.equal(out.forceChanged, false);
-  wait.note('b', 'a'); wait.cancel();
+  sel(wait, 'a', 'b', 2); t += STALE_MS + 1;
+  const old = stamped('a', 1);
+  assert.deepEqual(wait.adopt(old, 'b', layoutOf('b')), {layout: old, forceChanged: false}, 'after the cap, the interface is believed');
+  sel(wait, 'a', 'b', 4); wait.cancel();
   assert.equal(wait.waiting, null);
-  assert.equal(wait.adopt(layoutOf('a')).layout.views[0].tabId, 'a');
 });
 
-test('main.cjs wires it: the action, the interface layout, the forced change and the off switch', () => {
+test('a select forced onto the old road (a tab brought here from another space, a split taken apart) shows nothing early but keeps an earlier wait', () => {
+  const wait = createFastSwitch(); sel(wait, 'a', 'b', 2);
+  assert.equal(sel(wait, 'b', 'c', 3, {layout: layoutOf('b'), forced: true}), null);
+  assert.equal(wait.waiting, 'b');
+  assert.equal(shownOf(wait.adopt(stamped('b', 2), 'c', layoutOf('b'))), 'b');
+});
+
+test('a select the interface draws itself (a click: an optimistic update) shows nothing ahead of it and ends an earlier wait', () => {
+  const wait = createFastSwitch();
+  sel(wait, 'a', 'b', 2);
+  assert.equal(wait.waiting, 'b');
+  assert.equal(sel(wait, 'b', 'c', 3, {layout: layoutOf('b'), uiAware: true}), null, 'the interface is ahead of main for this one: the old road');
+  assert.equal(wait.waiting, null, 'every layout it sent before the click arrived before the action: nothing older is on its way');
+  const next = stamped('c', 1);
+  assert.deepEqual(wait.adopt(next, 'c', layoutOf('b')), {layout: next, forceChanged: false}, 'its layouts, stamped with the revision it started from, are applied as sent');
+  assert.equal(sel(createFastSwitch(), 'a', 'b', 2, {uiAware: true}), null, 'also with nothing waiting');
+});
+
+test('main accepts the interface\'s optimistic tab.select (the whole action validation, not only the case: the first build of this change was refused by the top-level key list)', () => {
+  const {validateAction} = require('../desktop/validation.cjs');
+  const snapshot = {tabs: [{id: 'a'}, {id: 'b'}], activeTabId: 'a', windowUi: {}, settings: {}, tabGroups: [], workspaces: [], browserProfiles: [], activeBrowserProfileId: 'p'};
+  assert.doesNotThrow(() => validateAction({type: 'tab.select', id: 'b', optimistic: true}, snapshot));
+  assert.doesNotThrow(() => validateAction({type: 'tab.select', id: 'b'}, snapshot));
+  assert.throws(() => validateAction({type: 'tab.select', id: 'b', optimistic: 'yes'}, snapshot), /Drawn by the interface already/);
+  assert.throws(() => validateAction({type: 'tab.select', id: 'b', surprise: true}, snapshot));
+});
+
+test('main.cjs wires it: the action, the interface layout with its revision, the forced change and the off switch', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(main, /if\(action\.type==='tab\.select'\)fastSwitchTo\(action,previous,peekOpen\);if\(action\.type!=='tick'\|\|meaningful\)\{syncPages\(\);/, 'before syncPages, which presents the layout');
   assert.match(main, /const peekOpen=peek\.active;[^]*?peek\.onState\(state\);/, 'a link preview closes on any tab change: whether it was open is read before that');
-  assert.match(main, /const adopted=fastSwitchWait\.adopt\(valid,state\.activeTabId\);applyLayout\(adopted\.layout,\{forceChanged:adopted\.forceChanged\}\)/);
+  assert.match(main, /fastSwitchWait\.select\(\{previous,state,layout,layoutAt:uiLayoutAt,forced:!!\(action\.here\|\|action\.individual\)\|\|process\.env\.ACIRA_NO_FAST_SWITCH==='1'/, 'every tab.select goes through the wait, forced ones included');
+  assert.match(main, /forced:!!\(action\.here\|\|action\.individual\)\|\|process\.env\.ACIRA_NO_FAST_SWITCH==='1',uiAware:!!action\.optimistic,/, 'a switch the interface already draws is not shown ahead of it');
+  const client = fs.readFileSync(path.join(__dirname, '..', 'src', 'runtime', 'client.ts'), 'utf8');
+  assert.match(client, /if\(action\.type==='tab\.select'\)sent=\{\.\.\.action,optimistic:true\};/, 'the interface tags the optimistic select it sends');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'desktop', 'validation.cjs'), 'utf8'), /case 'tab\.select':shape\(\['id','individual','here','optimistic'\],\['id'\]\)/);
+  assert.match(main, /const adopted=fastSwitchWait\.adopt\(valid,state\.activeTabId,layout\);applyLayout\(adopted\.layout,\{forceChanged:adopted\.forceChanged\}\)/);
   assert.match(main, /function applyLayout\(next,opts\)/);
   assert.match(main, /\|\|!!opts\?\.forceChanged/);
-  assert.match(main, /ACIRA_NO_FAST_SWITCH==='1'/);
-  assert.match(main, /action\.here\|\|action\.individual/, 'a tab brought here from another space takes the old road');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.tsx'), 'utf8');
+  assert.match(app, /const layout: BrowserLayout = \{ views, stateRevision: state\.revision,/, 'the interface stamps its layout with the state it was built from');
+  const validation = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'validation.cjs'), 'utf8');
+  assert.match(validation, /'pageDragging','stateRevision'\],'Browser layout'/);
+  assert.match(validation, /number\(value\.stateRevision,0,Number\.MAX_SAFE_INTEGER,'State revision'\)/);
 });
 
 test('a rig can audit the prediction: the interface layout is compared with what main presented, whatever the key order', () => {
   const rows = [], wait = createFastSwitch({audit: row => rows.push(row)});
   const predicted = {views: [{tabId: 'b', bounds}], pageBounds: bounds, pageImmediate: true, visible: true};
-  wait.note('b', 'a', predicted);
-  wait.adopt({visible: true, pageImmediate: true, pageBounds: {...bounds}, views: [{bounds: {...bounds}, tabId: 'b'}]});
-  wait.note('b', 'a', predicted);
-  wait.adopt({...predicted, pageBounds: {...bounds, width: 700}, pageImmediate: false});
+  sel(wait, 'a', 'b', 2);
+  wait.adopt({visible: true, pageImmediate: true, pageBounds: {...bounds}, stateRevision: 2, views: [{bounds: {...bounds}, tabId: 'b'}]}, 'b', predicted);
+  sel(wait, 'a', 'b', 4);
+  wait.adopt({...predicted, pageBounds: {...bounds, width: 700}, pageImmediate: false, stateRevision: 4}, 'b', predicted);
   assert.deepEqual(rows.map(row => row.kind), ['early', 'matched', 'early', 'differs']);
-  assert.deepEqual(rows[3].keys.sort(), ['pageBounds', 'pageImmediate']);
-});
-
-test('something else changing the active tab (the early tab is closed, another opened) ends the wait: the interface layout is applied as sent, never replaced by the closed tab', () => {
-  const wait = createFastSwitch();
-  wait.note('b', 'a');
-  // tab B is closed within the wait; the window's active tab is A again, and the interface (which left A earlier) sends the layout for A
-  const out = wait.adopt(layoutOf('a'), 'a');
-  assert.equal(out.layout.views[0].tabId, 'a');
-  assert.equal(out.forceChanged, true);
-  assert.equal(wait.waiting, null);
-  // while the wait is on and the active tab is the one waited for, a stale layout still carries it
-  wait.note('b', 'a');
-  assert.equal(wait.adopt(layoutOf('a'), 'b').layout.views[0].tabId, 'b');
+  assert.deepEqual(rows[3].keys.sort(), ['pageBounds', 'pageImmediate'], 'the stamp itself is not a difference');
 });

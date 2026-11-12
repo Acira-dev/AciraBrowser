@@ -49,3 +49,31 @@ test('profile removal disposes the runtime, and the engine is adapted before any
  const adapt=manager.indexOf('observeOnce(runtime)'),packages=manager.indexOf("require('./extension-apis.cjs').installExtensionApis(runtime");
  assert.ok(adapt>0&&packages>adapt,'observeOnce runs before installExtensionApis adds its tab and window listeners');
 });
+
+// Soak, 11 Nov (13.7 tip): page-hang ended a heavy tab and its reload threw inside the engine's webNavigation listener ("Render frame was
+// disposed before WebFrameMain could be accessed"), uncaught in main. Reload of a crashed tab and a new address on it took the same path.
+test('a page whose renderer has gone reloads, or takes a new address, with no throw and nothing uncaught',{skip},()=>{
+ assert.ok(result,problem);assert.equal(result.error,undefined,result.error);
+ const {reload,address,uncaught}=result.crashedTab;
+ assert.deepEqual(uncaught,[],'nothing uncaught in main');
+ for(const [name,step,title] of [['reload',reload,'first'],['new address',address,'second']]){
+  assert.equal(step.crashed,true,name+': the renderer had gone');assert.equal(step.threw,null,name+': no throw out of the call');
+  assert.equal(step.loaded,true,name+': the page loads');assert.equal(step.title,title,name);assert.equal(step.crashedAfter,false,name);
+ }
+});
+
+test('the engine\'s navigation listener skips only the disposed-frame error, keeps its place, and later listeners still hear the event',()=>{
+ const {EventEmitter}=require('node:events'),{observeOnce}=require('../desktop/browser-services/extension-store-events.cjs');
+ const engine=fs.readFileSync(require.resolve('electron-chrome-extensions').replace(/[^/\\]+$/,'index.js'),'utf8');
+ assert.ok(engine.includes('tab.on("did-start-navigation", this.onBeforeNavigate.bind(this, tab));')&&engine.includes('var getFrameId = (frame) => frame === frame.top ? 0 : frame.frameTreeNodeId;'),'the engine still reads frame.top in its did-start-navigation listener (recheck this guard when it changes)');
+ const store=new EventEmitter(),heard=[];
+ store.on('tab-added',tab=>{tab.on('did-start-navigation',details=>{heard.push('engine:'+(details.frame===details.frame.top?0:1));});});
+ assert.equal(observeOnce({ctx:{store}}),true);
+ const tab=new EventEmitter();store.emit('tab-added',tab);tab.on('did-start-navigation',()=>heard.push('acira'));
+ const live={get top(){return live;}},gone={get top(){throw new Error('Render frame was disposed before WebFrameMain could be accessed');}},broken={get top(){throw new Error('something else');}};
+ tab.emit('did-start-navigation',{frame:live});
+ assert.doesNotThrow(()=>tab.emit('did-start-navigation',{frame:gone}),'a navigation from a frame that has gone');
+ assert.throws(()=>tab.emit('did-start-navigation',{frame:broken}),/something else/,'any other error still throws');
+ assert.deepEqual(heard,['engine:0','acira','acira'],'the engine hears live frames first, as before; later listeners hear the gone-frame navigation');
+ assert.equal(tab.listenerCount('did-start-navigation'),2);store.emit('tab-added',tab);assert.equal(tab.listenerCount('did-start-navigation'),2,'still observed once');
+});

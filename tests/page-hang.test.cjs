@@ -71,3 +71,19 @@ test('a page waiting on its own alert() card is blocked on purpose: Stop, Reload
  hang.recover(wc,()=>{});assert.equal(timers.length,1,'and is watched as usual');
  assert.ok(main.includes('waiting:wc=>Boolean(jsDialogs?.waiting(wc))'),'main tells page-hang about open dialogs');
 });
+
+// Soak, 11 Nov (13.7 tip): page-hang ended a heavy tab, and its reload threw inside electron-chrome-extensions' webNavigation listener
+// ("Render frame was disposed before WebFrameMain could be accessed"): uncaught in main, the tab left on its crash page.
+test('a recovery reload that throws is tried once more a moment later and is never left uncaught',async()=>{
+ const {RETRY_MS}=require('../desktop/page-hang.cjs');const r=rig(),wc=page({answers:false}),seen=[];let calls=0;const loaded=[];
+ const original=r.timers.push.bind(r.timers);r.timers.push=entry=>{seen.push(entry.ms);return original(entry);};
+ r.hang.recover(wc,()=>{calls++;if(calls===1)throw new Error('Render frame was disposed before WebFrameMain could be accessed');loaded.push('reloaded');});
+ await r.flush();
+ assert.equal(wc.crashes,1);assert.equal(calls,2,'tried once more');assert.deepEqual(loaded,['reloaded'],'the tab ends reloaded');
+ assert.deepEqual(seen,[4000,0,RETRY_MS]);assert.equal(RETRY_MS,100);
+ const warned=[],warn=console.warn;console.warn=(...args)=>warned.push(args.join(' '));
+ try{const always=page({answers:false});let tries=0;r.hang.recover(always,()=>{tries++;throw new Error('still failing');});await r.flush();
+  assert.equal(tries,2,'two attempts, then it stops');assert.equal(warned.length,1);assert.match(warned[0],/still failing/);}
+ finally{console.warn=warn;}
+ const closed=page({answers:false});let late=0;r.hang.recover(closed,()=>{late++;closed.destroy();throw new Error('gone');});await r.flush();assert.equal(late,1,'a tab closed meanwhile is not tried again');
+});

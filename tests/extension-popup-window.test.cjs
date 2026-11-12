@@ -1,5 +1,5 @@
 'use strict';
-// An extension's toolbar popup was a bare square rectangle flush against the toolbar (founder, 6 Nov 2026). electron-chrome-extensions makes its
+// An extension's toolbar popup was a bare square rectangle flush against the toolbar (reported 6 Nov 2026). electron-chrome-extensions makes its
 // window with `roundedCorners: false` and a BrowserWindow's own page cannot be clipped, so Acira makes the window (desktop/browser-services/
 // extension-popup-window.cjs): the system's rounded frame where there is one, Acira's menu radius (8 px x Interface size) on macOS, the same size
 // logic, the same lifecycle. These tests pin the frame per platform, the lifecycle the library's PopupView had, and the engine hook.
@@ -398,7 +398,23 @@ test('installPopupFrames gives the popup the store\'s createTab for pages the po
   installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
   click(e);
   e.engine.popup.webContents.openHandler({url: 'chrome-extension://aaaa/options.html#/new'});
-  assert.deepEqual(made, [{url: 'chrome-extension://aaaa/options.html#/new', active: true}], 'opened in front, through the store (the fixture\'s extension is \'aaaa\')');
+  assert.deepEqual(made, [{url: 'chrome-extension://aaaa/options.html#/new', active: true, windowId: -2}], 'opened in front, in the current window, through the store (the fixture\'s extension is \'aaaa\')');
+});
+
+test('a page a toolbar popup opens goes to the current window, not to the engine\'s last focused one (an extension page\'s window that had the focus in between)', async () => {
+  const e = engineFixture();
+  const store = e.engine.ctx.store, resolved = [];
+  store.lastFocusedWindowId = 99;   // an extension page's own window (a Bitwarden vault tab, an options page) that was the last to have the focus
+  // as the engine's store does: a createTab that names no window is given the last focused one
+  store.createTab = async details => { const copy = {...details}; if (!copy.windowId) copy.windowId = store.lastFocusedWindowId; resolved.push(copy.windowId); };
+  installPopupFrames(e.runtime, {electron: e.electron, platform: 'darwin'});
+  for (let round = 0; round < 2; round++) {
+    click(e);
+    e.engine.popup.webContents.openHandler({url: 'https://example.com/help'});
+    await tick();
+    e.engine.popup.destroy();   // the popup closes when its page opens; the second press then opens a new one, not the toggle that closes it
+  }
+  assert.deepEqual(resolved, [-2, -2], 'both times the current window (13.6: the last focused window, 99, each time)');
 });
 
 test('installPopupFrames leaves an engine it was not written for alone, and installs once', () => {

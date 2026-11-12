@@ -1,5 +1,5 @@
 'use strict';
-// 13.5, Windows, Seamless + Sidebar + address: the minimise, maximise and close buttons (reported 9 Nov 2026: "glitch").
+// 13.5, Windows, Seamless + Sidebar + address: the minimise, maximise and close buttons (we, 9 Nov 2026: "glitch").
 //
 // What was wrong. Sidebar + address switches the top edge off (main.cjs edgeItem.edges: { top: false, side: true }: there is no toolbar to bring down), but in Seamless the interface still
 // hid the caption (captionHidden + captionFloat: its "top bar is hidden" flags) and waited for the top edge to bring it back with the toolbar. That reveal belongs to the top zone, which does
@@ -46,18 +46,21 @@ test('main\'s own edge item says Sidebar + address has no top edge, in Seamless:
   assert.equal(runtime.effectiveView(state.settings, state.windowUi), 'seamless');
 });
 
-test('13.4: hovering the top of the window shows nothing, and the corner only after its 1.2 s fallback (the reported glitch)', () => {
+// History: in 13.4 (and 13.5 for a window that was not in front) the hidden caption's corner showed the buttons only after the corner fallback's 1.2 s. 13.7's corner watch
+// (tests/caption-seamless-corner.test.cjs) shows them in the poller tick the pointer reaches the corner, so this layout, which has no top edge, still never waits there.
+test('13.4 layout (hidden caption, no top edge): hovering the top away from the corner shows nothing, and the corner shows the buttons at once (13.4 waited for the 1.2 s fallback: the reported glitch)', () => {
   const middle = rig(LAYOUT_13_4); warm(middle); middle.point(middle.middle);
   const idle = middle.run(3000);
   assert.equal(middle.first(idle), null, 'a rest at the top, anywhere but the corner: nothing in 3 s');
   const r = rig(LAYOUT_13_4); warm(r); r.point(r.corner);
   const frames = r.run(2500);
   const when = r.first(frames);
-  assert.ok(when !== null && when >= 1100, `the corner shows the buttons only at ${when} ms (the corner fallback's dwell is 1200)`);
-  assert.equal(r.ctx.state.minimizable === true || r.ctx.state.maximizable === true, true, 'then they are on');
-  // until then the hidden caption is a dead corner: minimise and maximise off, so a click there reaches nothing
-  const dead = rig(LAYOUT_13_4); warm(dead); dead.point(dead.corner); dead.run(600);
-  assert.equal(dead.ctx.api.guard.held(), true, 'minimise and maximise are held off while the pointer waits in the corner');
+  assert.ok(when !== null && when <= STEP * 2, `the corner shows the buttons at ${when} ms (13.6: only at the fallback's 1200)`);
+  assert.deepEqual(r.widths(frames), [3], 'as one piece of three buttons');
+  assert.equal(r.ctx.state.minimizable === true || r.ctx.state.maximizable === true, true, 'and they are on');
+  // away from the corner the hidden caption is a dead corner: minimise and maximise off, so a click there reaches nothing
+  const dead = rig(LAYOUT_13_4); warm(dead); dead.point(dead.middle); dead.run(600);
+  assert.equal(dead.ctx.api.guard.held(), true, 'minimise and maximise are held off while the pointer rests along the top');
   assert.equal(dead.box(), null, 'and nothing is drawn there');
 });
 
@@ -97,7 +100,7 @@ test('13.5: no overlay with fewer than three buttons is ever on screen, through 
   for (const s of r.ctx.state.states) { const b = seen(s); assert.ok(!b || b.buttons === 3, `after ${s.call}: ${b && b.buttons} buttons`); }
 });
 
-// ---- edge paths (no errors, glitches or crashes): repeats, jitter, layout changes under the pointer, window events -------------------------------------------------
+// ---- edge paths (we, 9 Nov: no errors, glitches or crashes): repeats, jitter, layout changes under the pointer, window events -------------------------------------------------
 const setLayout = (r, layout) => { for (const key of ['captionHidden', 'captionFloat', 'captionNotch', 'captionHeight']) delete r.ctx.layout[key]; Object.assign(r.ctx.layout, layout); r.ctx.api.setCaption(); };
 const everyBoxIsFull = r => { for (const s of r.ctx.state.states) { const b = seen(s); assert.ok(!b || b.buttons === 3, `after ${s.call}: a visible box of ${b && b.buttons} buttons`); } };
 

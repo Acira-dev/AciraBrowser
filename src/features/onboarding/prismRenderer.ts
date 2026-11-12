@@ -211,7 +211,7 @@ void main(){
     light*=1.-BLACKS*.92*(1.-smoothstep(0.,.3,peak));
     c=bg+(1.-bg)*(1.-exp(-light));
   }else{
-    // Light (the founder's pick, round 5): light through frosted glass. Pale aqua pools of transmitted light drift slowly
+    // Light (the pick, round 5): light through frosted glass. Pale aqua pools of transmitted light drift slowly
     // across true white, the way sunlight through a glass of water lands on a white table; inside them run caustic
     // filaments, refracted by a slow ripple and softened as if seen through frost (four taps a few pixels apart). The
     // three colour channels sit a hair apart, so the brightest filaments catch a faint dispersed fringe. Outside the
@@ -311,7 +311,28 @@ export type Prism = {
   dispose: () => void;
 };
 
+/** A prism whose programs are being built: wait for the driver (compiled), then take it (finish). */
+type Started = { compiled: (poll?: number, give?: number) => Promise<void>; finish: () => Prism | null };
+
+/** The renderer, built at once: reads the programs' link status, which makes this thread wait for the driver to compile all five (4.5 s on the laptop). */
 export function createPrism(canvas: HTMLCanvasElement): Prism | null {
+  const started = startPrism(canvas);
+  return started ? started.finish() : null;
+}
+
+/**
+ * The same renderer, without the stall: the five programs are handed to the driver (KHR_parallel_shader_compile: it compiles and links in its own threads and says when it is
+ * done) and this thread is free meanwhile; the first-run screen was not on screen for the 4.5 s the synchronous build took on a fresh profile (Skip setup came up 8 to 15 s after
+ * the window opened). Without the extension it is the synchronous build, a turn later. `give` caps the wait; after it the status is read as before.
+ */
+export async function createPrismAsync(canvas: HTMLCanvasElement, poll = 12, give = 20000): Promise<Prism | null> {
+  const started = startPrism(canvas);
+  if (!started) return null;
+  await started.compiled(poll, give);
+  return started.finish();
+}
+
+function startPrism(canvas: HTMLCanvasElement): Started | null {
   const gl = canvas.getContext("webgl2", {
     alpha: false,
     antialias: false,
@@ -321,6 +342,8 @@ export function createPrism(canvas: HTMLCanvasElement): Prism | null {
     powerPreference: "low-power",
   });
   if (!gl) return null;
+  // Enabled before the first compile: the driver only compiles in its own threads for programs made after the extension is on (asked afterwards, the build was still synchronous).
+  const parallel = gl.getExtension("KHR_parallel_shader_compile");
   const build = (source: string) => {
     const program = gl.createProgram()!;
     for (const [kind, text] of [
@@ -334,10 +357,6 @@ export function createPrism(canvas: HTMLCanvasElement): Prism | null {
       gl.deleteShader(shader);
     }
     gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      gl.deleteProgram(program);
-      return null;
-    }
     return program;
   };
   const fogPass = build(fogShader),
@@ -345,7 +364,18 @@ export function createPrism(canvas: HTMLCanvasElement): Prism | null {
     downPass = build(down),
     blurPass = build(blur),
     finalPass = build(composite);
-  if (!fogPass || !lightPass || !downPass || !blurPass || !finalPass) return null;
+  const passes = [fogPass, lightPass, downPass, blurPass, finalPass];
+  const compiled = async (poll = 12, give = 20000) => {
+    if (!parallel) return;
+    const until = performance.now() + give;
+    while (performance.now() < until && !gl.isContextLost() && !passes.every((program) => gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR)))
+      await new Promise((resolve) => setTimeout(resolve, poll));
+  };
+  const finish = (): Prism | null => {
+  if (!passes.every((program) => gl.getProgramParameter(program, gl.LINK_STATUS))) {
+    for (const program of passes) gl.deleteProgram(program);
+    return null;
+  }
   const at = (program: WebGLProgram) => (name: string) => gl.getUniformLocation(program, name);
   const f = at(fogPass),
     s = at(lightPass),
@@ -490,4 +520,6 @@ export function createPrism(canvas: HTMLCanvasElement): Prism | null {
     }
   };
   return { resize, draw, dispose };
+  };
+  return { compiled, finish };
 }

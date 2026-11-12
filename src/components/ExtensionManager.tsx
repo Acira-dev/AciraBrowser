@@ -6,7 +6,7 @@ import {useExtensionToolbar} from '../ui/useExtensionToolbar';
 import { FolderOpen,RefreshCw,Trash2 } from './AppIcons';
 import './ExtensionManager.css';
 import { ExtensionsIcon } from './ToolbarIcon';
-import {ActionRow,Disclosure} from './PanelParts';
+import {ActionRow,Disclosure,SwitchRow} from './PanelParts';
 import {MenuFormFlyout} from './MenuFormFlyout';
 
 import { t } from '../i18n';
@@ -37,6 +37,7 @@ export function ExtensionManager({profileId,profileName,tab,privateMode=false,on
    {list.map(extension=><Disclosure key={extension.id} className="acira-extension" icon={<ExtensionsIcon size={16} className="acira-menu-icon"/>} title={extension.name} sub={t('extensionmanager.versionStatus',{version:extension.version,status:secured&&extension.enabled?t('extensionmanager.unavailableHere'):extension.status==='loaded'?t('extensionmanager.on'):extension.status==='disabled'?t('extensionmanager.off'):t('extensionmanager.unavailable')})+(extension.compat?' · '+compatWord(extension.compat.status):'')}>
     <ActionRow label={extension.enabled?t("extensionmanager.turnOff"):t("antiTracking.turnOn")} disabled={busy} onClick={()=>void request({type:extension.enabled?'disable':'enable',profileId,extensionId:extension.id})}/>
     {extension.hasAction&&<ActionRow label={extension.pinned?t("extensionmanager.unpinFromToolbar"):t("extensionmanager.pinToToolbar")} disabled={busy||!extension.enabled} onClick={()=>void request({type:'pin',profileId,extensionId:extension.id,pinned:!extension.pinned})}/>}
+    {extension.overridesNewTab&&<SwitchRow id={`extension-newtab-${extension.id}`} label={t("extensionmanager.useAsNewTab")} checked={extension.newTabChosen??false} disabled={busy||!extension.enabled} onChange={()=>void request({type:'newTab',profileId,extensionId:extension.id,allowed:!extension.newTabChosen})}/>}
     <ActionRow label={extension.source==='Chrome Web Store'?t("extensionmanager.checkForUpdate"):t("error.reload")} disabled={busy||!extension.enabled} onClick={()=>void request({type:extension.source==='Chrome Web Store'?'update':'reload',profileId,extensionId:extension.id})}/>
     <ActionRow label={t("acirasidebar.remove")} danger disabled={busy} onClick={()=>void request({type:'remove',profileId,extensionId:extension.id})}/>
     <Disclosure className="acira-nested" title={t("extensionmanager.whatItCanAccess")}>{(extension.access??extension.permissions).length?<ul>{(extension.access??extension.permissions).map(line=><li key={line}>{line}</li>)}</ul>:<p>{t("extensionmanager.itAsksForNoSpecial")}</p>}<p>{t("extensionmanager.itCannotOpenFilesOn")}</p></Disclosure>

@@ -11,14 +11,24 @@
 // use: no inline menu, no page details).
 const fs=require('node:fs'),path=require('node:path');
 const activeTab=require('./surfaces/active-tab.cjs');
+const {createRelays}=require('./content/relay.cjs'),{createContentWorld}=require('./content/world.cjs');
 
 const UNAVAILABLE={unavailable:true};
-const MAX_SOURCE=2*1024*1024;
+const MAX_SOURCE=2*1024*1024;// the text of a func / css
+const MAX_FILES=16*1024*1024;// files of the extension: a bundled content script is often several MB (Inspecta's is 3.4 MB); Chrome sets no such limit
+// A file's result is its last evaluated value. Electron answers a value it cannot clone (a function: `globalThis.x = x;` ends a script with one)
+// with a rejection, after the code has run; Chrome drops a non-serializable result silently. Anything else (a real error) still rejects.
+const cloneable=async run=>{try{return await run();}catch(error){if(/could not be cloned/i.test(String(error&&error.message)))return undefined;throw error;}};
 const worldOf=id=>1_100_000+[...id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,7)%900_000;
 
 module.exports={
  namespaces:['scripting'],
  install(api){
+  /* The chrome.* a click-injected script can use (content/world.cjs): the hidden relay pages and the shim that talks to them. */
+  const relays=createRelays({});
+  const hasPermission=(extension,name)=>{try{return api.permissions?!!api.permissions.has(extension,name):(extension.manifest?.permissions||[]).includes(name);}catch{return false;}};
+  const content=createContentWorld({session:api.session,userData:api.userData,relays,activeTab,hasPermission});
+  try{api.session?.extensions?.on?.('extension-unloaded',(_event,extension)=>{if(extension&&extension.id)relays.forget(api.session,extension.id);});}catch{/* an engine without extension events: the relay page closes when idle */}
   const hasActiveTab=extension=>api.permissions?api.permissions.has(extension,'activeTab'):(extension.manifest?.permissions||[]).includes('activeTab');
   function tabOf(event,target){
    const tabId=target&&Number.isInteger(target.tabId)?target.tabId:null;
@@ -37,7 +47,7 @@ module.exports={
     const full=path.resolve(root,String(file).replace(/^[\\/]+/,''));
     if(!extension.path||!full.startsWith(root+path.sep))throw new Error(`Could not load file: '${file}'.`);
     let text;try{text=fs.readFileSync(full,'utf8');}catch{throw new Error(`Could not load file: '${file}'.`);}
-    if(text.length>MAX_SOURCE)throw new Error(`Could not load file: '${file}'.`);
+    if(text.length>MAX_FILES)throw new Error(`Could not load file: '${file}'.`);
     return text;
    });
   }
@@ -69,13 +79,16 @@ module.exports={
    const wc=tabOf(event,details?.target);
    if(!wc||hostAccess(event.extension,wc))return UNAVAILABLE;
    const code=typeof details.source==='string'?details.source:Array.isArray(details.files)?read(event.extension,details.files).join('\n;\n'):null;
-   if(code===null||code.length>MAX_SOURCE)throw new Error('Exactly one of \'func\' and \'files\' must be specified.');
+   if(code===null||code.length>(typeof details.source==='string'?MAX_SOURCE:MAX_FILES))throw new Error('Exactly one of \'func\' and \'files\' must be specified.');
    const out=[];
+   const world=worldOf(event.extension.id);
    for(const frame of framesOf(event.extension,wc,details.target)){
     const isMain=frame===wc.mainFrame;
+    // The isolated world has no chrome object: a package Acira unpacked gets chrome.runtime / storage / i18n first (content/world.cjs), the way a content script has them.
+    const shim=isMain&&details.world!=='MAIN'?content.prepare(event.extension,wc,world):null;
     const result=isMain&&details.world!=='MAIN'
-     ?(await wc.executeJavaScriptInIsolatedWorld(worldOf(event.extension.id),[{code}]))
-     :(await frame.executeJavaScript(code));
+     ?(await cloneable(()=>wc.executeJavaScriptInIsolatedWorld(world,[{code:shim?shim+';\n'+code:code}])))
+     :(await cloneable(()=>frame.executeJavaScript(code)));
     out.push({frameId:isMain?0:frame.frameTreeNodeId,documentId:frame.processId!==undefined?`${frame.processId}:${frame.routingId}`:undefined,result:result===undefined?undefined:result});
    }
    return out.map(entry=>(entry.documentId===undefined?{frameId:entry.frameId,result:entry.result}:entry));
@@ -84,13 +97,13 @@ module.exports={
    const wc=tabOf(event,details?.target);
    if(!wc||hostAccess(event.extension,wc))return UNAVAILABLE;
    const css=typeof details.css==='string'?details.css:Array.isArray(details.files)?read(event.extension,details.files).join('\n'):null;
-   if(css===null||css.length>MAX_SOURCE)throw new Error('Exactly one of \'css\' and \'files\' must be specified.');
+   if(css===null||css.length>(typeof details.css==='string'?MAX_SOURCE:MAX_FILES))throw new Error('Exactly one of \'css\' and \'files\' must be specified.');
    for(const frame of framesOf(event.extension,wc,details.target)){
     if(frame===wc.mainFrame)await wc.insertCSS(css,{cssOrigin:details.origin==='USER'?'user':'author'});
     else await frame.executeJavaScript(`(()=>{const s=document.createElement('style');s.textContent=${JSON.stringify(css)};(document.head||document.documentElement).append(s);})()`);
    }
    return undefined;
   });
-  return {forget:id=>activeTab.clear(api.session,id)};
+  return {forget:id=>{activeTab.clear(api.session,id);relays.forget(api.session,id);},dispose:()=>relays.closeAll()};
  }
 };

@@ -390,6 +390,8 @@ function rendererRuntime(ctx){
   /** The permissions and host patterns this extension holds now: {permissions, origins}. */
   permissions:()=>({permissions:[...permissions],origins:[...origins]}),
   call,event,build,buildType,extend,bindings,errors:bindings.errors,withLastError,
+  /** Writes this context has started that must reach the browser first if it reloads itself (storage.sync is a read then a write): runtime.reload waits for them. */
+  pendingWrites:new Set(),
   chrome:()=>g.chrome,later:bindings.later,callbackArgs:bindings.callbackArgs});
  const definitions=Object.create(null),owned=new Set();
  for(const pkg of packages){

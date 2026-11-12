@@ -135,8 +135,9 @@ test('main\'s caption overlay is the notch: floating over the page, opaque in th
   const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const main = read('desktop/main.cjs'), app = read('src/App.tsx'), validation = read('desktop/validation.cjs'), ui = read('src/ui/addressInSidebar.ts');
   assert.match(main, /const notch=process\.platform==='win32'&&layout\.captionNotch===true;if\(!notch&&captionNotchShown\)captionNotchShown=false;/);
-  assert.match(main, /floating=layout\.captionFloat===true\|\|notch,hidden=process\.platform==='win32'&&\(notch\?!captionNotchShown:layout\.captionHidden===true\)/, 'hidden unless the watcher shows it; Seamless\'s own hidden state is untouched');
-  assert.match(main, /captionBacking\(tone,notch\?1:\.88\)/, 'the notch is opaque, Seamless\'s floating caption keeps its .88');
+  // 13.7: hidden unless the notch's watcher or the corner watch (caption-notch.cjs createCaptionCorner, tests/caption-seamless-corner.test.cjs) shows it; Seamless's own hidden state is untouched
+  assert.match(main, /floating=layout\.captionFloat===true\|\|notch,hidden=process\.platform==='win32'&&\(notch\?!captionNotchShown&&!captionCornerShown:layout\.captionHidden===true&&!captionCornerShown\)/, 'hidden unless the watcher or the corner watch shows it; Seamless\'s own hidden state is untouched');
+  assert.match(main, /const captionBehind=\(\{notch,overPage,tone,color\}\)=>notch\|\|overPage\?\{overlay:'#00000000',box:\{tone\}\}:\{overlay:color,box:null\};/, 'the notch and Seamless\'s floating caption share one look: the overlay clear, the rounded box behind (13.7, chosen in one place)');
   assert.match(main, /notch:\(\)=>process\.platform==='win32'\?\{active:layout\.captionNotch===true,hidden:captionHiddenNow\}:null,notchIsShown:\(\)=>captionNotchShown,notchShown:/);
   assert.match(validation, /'captionHidden','captionNotch','pageDragging'/);
   assert.match(validation, /boolean\(value\.captionNotch,'Caption notch'\)/);

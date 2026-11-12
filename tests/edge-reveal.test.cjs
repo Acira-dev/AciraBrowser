@@ -522,6 +522,36 @@ test('R4-24: the hidden caption buttons\' corner (Windows) shows the top at once
   assert.equal(none.hold(at(win.width - 30, 20), 400).top, false, 'without a hidden caption the corner is page');
 });
 
+test('13.7 cornerOnly (Windows\' caption corner watch): only the hidden caption\'s corner shows the top, at once, and the lock-out never keeps the buttons from the pointer on them', () => {
+  const caption = { width: 144, height: 36 }, corner = at(win.width - 30, 20), along = at(win.width / 2, 2);
+  const r = rig({ caption, cornerOnly: true });
+  assert.equal(r.hold(along, 1500).top, false, 'a rest on the top strip, away from the corner: nothing (the toolbar is the interface\'s business)');
+  assert.equal(r.hold(at(win.width / 2, 0), 600).top, false, 'pressed against the top edge: nothing');
+  r.hold(away, 300);
+  r.hold(at(win.width / 2, 80), 16); r.hold(at(win.width / 2, 30), 16);
+  assert.equal(r.hold(elapsed => at(win.width / 2, -20 - elapsed * 3), 200).top, false, 'a push out across the top edge: nothing');
+  r.hold(away, 600);
+  const shown = r.until('top', corner, 200);
+  assert.ok(shown !== null && shown <= STEP, `the corner reveals on the first sample, got ${shown}`);
+  assert.equal(r.hold(corner, 1500).top, true, 'and stays while the pointer rests on it');
+  assert.equal(r.hold(at(win.width - 400, 20), 100).top, true, 'along the caption band it stays (the grace)');
+  const gone = r.untilHidden('top', away, 2000);
+  assert.ok(gone !== null && gone >= GRACE.top - STEP && gone <= GRACE.top + MIN_VISIBLE + STEP * 4, `gone after the grace, got ${gone}`);
+  // hidden a moment ago (the lock-out), the pointer is back on the buttons: they come back at once, not after the lock-out
+  const again = r.until('top', corner, 200);
+  assert.ok(again !== null && again <= STEP, `back on the buttons at once, got ${again}`);
+  assert.equal(r.hold(corner, 400, { pressed: true }).top, true, 'a button pressed while they show keeps them (the click lands)');
+  r.untilHidden('top', away, 2000); r.hold(away, 300);
+  assert.equal(r.hold(corner, 400, { pressed: true }).top, false, 'a button held down from elsewhere: nothing reveals');
+  r.hold(away, 300);
+  assert.equal(r.hold(corner, 400, { suspended: true }).top, false, 'minimised, full screen: nothing');
+  const none = rig({ cornerOnly: true });
+  assert.equal(none.hold(corner, 600).top, false, 'without a hidden caption the corner is page');
+  // the ordinary rules are unchanged without the flag: the same strip rest reveals the top
+  const plain = rig({ caption });
+  within(plain.until('top', along, 400), DWELL.top);
+});
+
 // ---- R5: "Show the closed sidebar at the left edge", one switch per view (Full off, Compact and Focus on) ---------------------
 // Founder: "if I close the sidebar, it must not open automatically when the mouse nears the edge, especially in Full view".
 const PEEK = { full: false, compact: true, focus: true };

@@ -16,6 +16,8 @@ const path = require('node:path');
 const tabIds = require('./surfaces/tab-ids.cjs');
 
 const NO_OPTIONS = 'Could not create an options page.';
+/** chrome.windows.WINDOW_ID_CURRENT: the host's destination() answers it with the focused browser window of the profile. */
+const CURRENT_WINDOW = -2;
 const internals = {
   /** Acira's version, for 'chrome_update' (replaced in tests). */
   browserVersion() { try { return String(require('electron').app.getVersion()); } catch { return ''; } },
@@ -98,7 +100,9 @@ module.exports = {
         try { same = sameDocument(open.getURL(), url); } catch { same = false; }
         if (same) { try { select(open); return; } catch { /* not a tab of this profile: look on, then open one */ } }
       }
-      await store.createTab({url, active: true});
+      // The current browser window, named: left out, the engine fills in the last focused window, which is the "Acira extension" window the first call opened (an extension page has a
+      // window of its own), and the host refuses a window that is not a browser window of the profile: the second call failed with "The extension window is not in its browsing profile".
+      await store.createTab({url, active: true, windowId: CURRENT_WINDOW});
     });
 
     // sender.tab. Electron builds it for messages from content scripts with the right id but windowId 0 and index 0. The renderer side
@@ -250,7 +254,7 @@ module.exports = {
         const url = urls.take(extensionId);
         const store = api.store();
         if (!url || !store || typeof store.createTab !== 'function') return;
-        Promise.resolve(store.createTab({url, active: true})).catch(error => api.log('uninstall page was not opened:', error && error.message));
+        Promise.resolve(store.createTab({url, active: true, windowId: CURRENT_WINDOW})).catch(error => api.log('uninstall page was not opened:', error && error.message));
       }
     };
   }
