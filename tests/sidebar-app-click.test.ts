@@ -88,8 +88,8 @@ test('the sidebar runs the plan, lists favorites\' tabs like any tab, links drop
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:adopt,favoriteId:app\.id\}\)/,'a tab dropped on Favorites or pinned with Ctrl+Shift+D is linked to the favorite and stays in the list (one function, applyFavorite)');
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:null\}\)/,'a removed favorite hands its tab back');
   assert.match(source,/const tab=appTabFor\(app,favoriteScope\(state\),profileId\),active=tab\?\.id===state\.activeTabId;/);
-  // 13.5: the title counts what the list shows (as the workspace menu's counts do): a favorite's tab that lives only in its tile is not a tab of the list.
-  assert.match(source,/<WorkspaceTitle state=\{state\} count=\{listedProfileTabs\.length\}\/>/,'the Space title counts the tabs the list shows, not the tile-only favorite tabs');
+  // 13.9: the title counts every open tab (as the workspace menu's counts do): a favorite's tab that lives only in its tile is still an open tab, never "0 tabs".
+  assert.match(source,/<WorkspaceTitle state=\{state\} count=\{profileTabs\.length\}\/>/,'the Space title counts every open tab, the tile-only favorite tabs too');
   assert.doesNotMatch(source,/<WorkspaceTitle state=\{state\}\/>/,'no title without the listed count');
   assert.match(source,/title=\{away\?t\("acirasidebar\.clickToGoBack",\{host:appHost\(app\.url\)\|\|address\(app\.url\)\}\):`\$\{app\.title\} · \$\{address\(app\.url\)\}`\}/);
   const en=JSON.parse(readFileSync(new URL('../src/i18n/en.json',import.meta.url),'utf8')) as Record<string,string>;
@@ -110,7 +110,8 @@ test('Close tab: the favorite\'s right-click editor offers it only while the fav
   assert.equal(en['app.closeTab'],'Close tab');
 });
 
-test('Ctrl+Tab\'s Next tab walks the list on screen too: a favorite\'s tab is a tab of it unless it lives only in its tile',()=>{
+test('Ctrl+Tab\'s Next tab walks the list on screen, then the tabs that live only in a Favorites tile (13.9: a Favorite\'s tab is a tab for the keys)',()=>{
   const sidebar=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
-  assert.match(sidebar,/cycle=vertical\?state\.tabs\.filter\(tab=>tab\.browserProfileId===profile&&listed\(tab\)\):state\.tabs;const target=nextInCycle\(tabCycleOrder\(cycle,state\.tabGroups,state\.activeTabId,vertical\)/);
+  assert.match(sidebar,/own=vertical\?state\.tabs\.filter\(tab=>tab\.browserProfileId===profile\):state\.tabs,target=nextInCycle\(nextTabOrder\(own,state\.tabGroups,state\.activeTabId,vertical,listed\),/);
 });
+

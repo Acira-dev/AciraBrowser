@@ -226,6 +226,8 @@ function packageApi(base,pkg){
   /** The ordinary profile a private session's extensions come from (a private session's storeKey is its own private profile), or '' for an ordinary session. */
   sourceProfileId:typeof base.sourceProfileId==='string'?base.sourceProfileId:'',
   getWindow:base.getWindow||(()=>null),getExtension:base.getExtension||(()=>null),dialog:base.dialog||null,t:base.t||((id)=>id),
+  /** True while this extension's "Allow access to file URLs" switch is on (extension-file-access.cjs): ext-api/file-access.cjs reads a file for an extension page only then. */
+  fileAccessAllowed:typeof base.fileAccessAllowed==='function'?base.fileAccessAllowed:()=>false,
   /** Acira's permission table for this profile (extension-permission-table.cjs): has, hasOrigin, active, granted, grant, revoke, request, onChange. */
   permissions:base.permissions||null,
   /** The engine's tab/window store (electron-chrome-extensions' ctx.store), or null. */
@@ -434,6 +436,8 @@ function rendererRuntime(ctx){
  const api=Object.freeze({extensionId,manifest,isWorker,has,available,
   /** True in a private session that runs this extension ("Allow in private tabs"): the extension is allowed in incognito. */
   incognito:ctx.incognito===true,
+  /** True when this extension's "Allow access to file URLs" switch is on (extension-file-access.cjs): chrome.extension.isAllowedFileSchemeAccess answers it. */
+  fileAccess:ctx.fileAccess===true,
   /** The permissions and host patterns this extension holds now: {permissions, origins}. */
   permissions:()=>({permissions:[...permissions],origins:[...origins]}),
   call,event,build,buildType,extend,bindings,errors:bindings.errors,withLastError,
@@ -533,11 +537,11 @@ function rendererRuntime(ctx){
 
 /** The preload text for one session: an expression that evaluates to the renderer runtime of every package.
  *  options: {packages, grants} (grants: the permission table's snapshot(), {id: {permissions, origins}}). */
-function rendererSource({packages=loadPackages(),grants={},incognito=false}={}){
+function rendererSource({packages=loadPackages(),grants={},incognito=false,fileAccess=[]}={}){
  const list=packages.filter(pkg=>pkg.renderer).map(pkg=>`{name: ${JSON.stringify(pkg.name)}, namespaces: ${JSON.stringify(pkg.namespaces)}, renderer: (${asExpression(pkg.renderer)})}`);
  const granted={};for(const [id,value] of Object.entries(grants&&typeof grants==='object'?grants:{}))if(/^[a-p]{32}$/.test(id)&&value&&typeof value==='object')granted[id]={permissions:Array.isArray(value.permissions)?value.permissions:[],origins:Array.isArray(value.origins)?value.origins:[]};
  const minVersions={};for(const [name,rule] of Object.entries(surface().permissions||{}))if(rule&&rule.minManifestVersion)minVersions[name]=rule.minManifestVersion;
- return `(${rendererRuntime.toString()})({ electron, extensionId, manifest, ExtensionEvent, withLastError: acira_withLastError, createBindings: (${createBindings.toString()}), schema: ${schemaSource()}, permissionMinVersion: ${JSON.stringify(minVersions)}, guards: ${JSON.stringify(ESSENTIAL_GUARDS)}, grants: ${JSON.stringify(granted)}, packages: [${list.join(', ')}], incognito: ${incognito===true} })`;
+ return `(${rendererRuntime.toString()})({ electron, extensionId, manifest, ExtensionEvent, withLastError: acira_withLastError, createBindings: (${createBindings.toString()}), schema: ${schemaSource()}, permissionMinVersion: ${JSON.stringify(minVersions)}, guards: ${JSON.stringify(ESSENTIAL_GUARDS)}, grants: ${JSON.stringify(granted)}, packages: [${list.join(', ')}], incognito: ${incognito===true}, fileAccess: ${JSON.stringify([...new Set((Array.isArray(fileAccess)?fileAccess:[]).filter(id=>typeof id==='string'&&/^[a-p]{32}$/.test(id)))].sort())}.includes(extensionId) })`;
 }
 
 module.exports={loadPackages,installPackages,installEventGate,namespaceOfEvent,rendererSource,rendererRuntime,schemaSource,slimSpec,asExpression,failure,namespaceOfHandler,ACCESS_DENIED};

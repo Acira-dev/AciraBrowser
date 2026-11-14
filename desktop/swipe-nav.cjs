@@ -371,9 +371,33 @@ function createSwipeNav(deps) {
     },
   });
 
+  // Over the sidebar's body instead of a page (Arc, Zen): a sideways swipe goes to the previous (back) or next (forward) workspace, once per
+  // gesture, with the same threshold, the same natural direction and the same rule that up-and-down is the list's own scroll. Nothing is drawn:
+  // the workspace switch has its own motion. Which part of the window is under the pointer is asked of the interface (deps.sidebar.zoneAt) when
+  // the fingers land; the gesture waits for the answer the way a page swipe waits for the page's scroll facts.
+  let side = null;
+  if (deps.sidebar) {
+    let zone = null, asked = 0;
+    side = createSwipeTracker({
+      now, after, clear, config: deps.config,
+      enabled: () => Boolean(deps.enabled?.()) && !deps.blocked?.(),
+      begin: sample => {
+        if (deps.pageAt?.(sample.x, sample.y)) return false;
+        zone = null; const mine = ++asked;
+        const answer = value => { if (mine !== asked) return; zone = value === 'sidebar' ? 'sidebar' : 'other'; side.factsChanged(); };
+        Promise.resolve().then(() => deps.sidebar.zoneAt(sample.x, sample.y)).then(answer, () => answer('other'));
+        return true;
+      },
+      canGo: direction => Boolean(deps.sidebar.canStep?.(direction === 'back' ? -1 : 1)),
+      verdict: () => (zone === null ? 'wait' : zone === 'sidebar' ? 'go' : 'blocked'),
+      rows: () => 0,
+      emit: effect => { if (effect.type === 'commit') { try { deps.sidebar.step(effect.direction === 'back' ? -1 : 1); } catch { /* the window is closing */ } } },
+    });
+  }
+
   return {
-    /** One native scroll sample (see decodeSample). */
-    sample: raw => { try { tracker.feed(raw); } catch { tracker.abort(); } },
+    /** One native scroll sample (see decodeSample): a page's history, or over the sidebar the workspaces. */
+    sample: raw => { try { tracker.feed(raw); } catch { tracker.abort(); } if (side) try { side.feed(raw); } catch { side.abort(); } },
     /** The page's scroll snapshot for the wheel it just saw: {toward, prevented, chain} from the page of `tabId`. */
     facts: (tabId, payload) => {
       if (!payload || typeof payload !== 'object' || (payload.toward !== -1 && payload.toward !== 1) || !Array.isArray(payload.chain) || payload.chain.length > 32) return;
@@ -389,14 +413,15 @@ function createSwipeNav(deps) {
     /** The window's layout changed: the views stay above the page, or the gesture ends if a menu took the space. */
     relayout: () => {
       if (!visible.chip && !visible.list) return;
-      if (deps.blocked?.()) { tracker.abort(); return; }
+      if (deps.blocked?.()) { tracker.abort(); side?.abort(); return; }
       const win = getWindow();
       for (const role of ['chip', 'list']) if (visible[role] && live(role)) try { win.contentView.addChildView(views[role].view); } catch { /* gone */ }
     },
-    abort: () => tracker.abort(),
+    abort: () => { tracker.abort(); side?.abort(); },
     dispose: destroy,
     get active() { return tracker.state !== 'idle' && tracker.state !== 'off'; },
     get tracker() { return tracker; },
+    get sidebarTracker() { return side; },
     get views() { return {chip: live('chip')?.view.webContents || null, list: live('list')?.view.webContents || null}; },
   };
 }

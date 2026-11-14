@@ -169,10 +169,16 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
  // the extension (forgetParked) or Reset all drops them.
  let parked=new Map();
  let recording=null;
- const defaultsOf=command=>(platform==='darwin'&&command.mac||command.defaults).map(accel=>expand(accel,platform)).filter(Boolean);
+ /* An extension's suggested key (commands.cjs gives it as the command's default) can take an ALIAS of a browser command (a default that is not the command's first): the address bar answers to Ctrl+L, Ctrl+E, Ctrl+K, F6 and Alt+D,
+    and an AI assistant extension's Ctrl+E on Windows/Linux was left unassigned because of the second, so the shortcut that closes its side panel never reached it. The command keeps its first key and its other aliases and simply loses that one. What an
+    extension never takes: a command's first (own) key, a key the person gave a command, and the reserved ones (commands.cjs decides; Acira's own keys win, as before). */
+ let extensionKeys=null;
+ const rawDefaults=command=>(platform==='darwin'&&command.mac||command.defaults).map(accel=>expand(accel,platform)).filter(Boolean);
+ const claimedByExtensions=()=>extensionKeys??=new Set(COMMANDS.filter(c=>c.dynamic&&String(c.id).startsWith('ext:')).flatMap(rawDefaults));
+ const defaultsOf=command=>command.dynamic?rawDefaults(command):rawDefaults(command).filter((accel,index)=>index===0||!claimedByExtensions().has(accel));
  const bindingsOf=command=>custom.has(command.id)?custom.get(command.id):defaultsOf(command);
  function effective(){const map=new Map();for(const command of availableCommands())for(const accel of bindingsOf(command))if(!map.has(accel))map.set(accel,command.id);return map;}
- function view(command){const bindings=bindingsOf(command);return {id:command.id,label:command.label,category:command.category,defaults:defaultsOf(command),defaultsDisplay:defaultsOf(command).map(a=>display(a,platform)),bindings,display:bindings.map(a=>display(a,platform)),customized:custom.has(command.id),unbound:bindings.length===0,...(command.note?{note:command.note}:{})};}
+ function view(command){const bindings=bindingsOf(command);return {id:command.id,label:command.label,category:command.category,defaults:defaultsOf(command),defaultsDisplay:defaultsOf(command).map(a=>display(a,platform)),bindings,display:bindings.map(a=>display(a,platform)),customized:custom.has(command.id),reserved:Boolean(command.action&&require('./key-routing.cjs').RESERVED.has(command.action.action)),unbound:bindings.length===0,...(command.note?{note:command.note}:{})};}
  const list=()=>availableCommands().map(view);
  function save(){
   if(!file)return;
@@ -302,7 +308,7 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
   return base;
  }
  load();
- return {platform,setDynamic(prefix,commands){setDynamicCommands(prefix,commands);load();onChange();},list,set,clear,reset,resetAll,forgetParked,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
+ return {platform,setDynamic(prefix,commands){setDynamicCommands(prefix,commands);extensionKeys=null;load();onChange();},/* the combinations the system or the editing keys own (Ctrl+C, Alt+Tab ...): never an extension's; Alt+letter and the like, which a person may not record, an extension may still suggest */reservedKey:accel=>RESERVED_COMBOS.has(accel),list,set,clear,reset,resetAll,forgetParked,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
   /** A command's first key as menus print it ("Alt+←", "Ctrl+Shift+T"; "⇧⌘T" on macOS), or undefined when it has none. */
   menuKey(id){const command=BY_ID.get(id),first=command&&bindingsOf(command)[0];if(!first)return undefined;if(platform==='darwin')return display(first,platform);const arrows={Left:'←',Right:'→',Up:'↑',Down:'↓',PageUp:'PgUp',PageDown:'PgDn'};return first.split('+').map(key=>arrows[key]||key).join('+');},
   /** Label -> accelerator display for toolbar hints. */

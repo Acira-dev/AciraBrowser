@@ -12,7 +12,7 @@ export function AiFreeButton({controlTitle}:{controlTitle:(label:string)=>string
  useEffect(()=>{let alive=true;const read=()=>runtime.service({type:'filters.profile-status'}).then(result=>{if(alive)setOn(!!result.filters?.aiContent);}).catch(()=>{});void read();const unsubscribe=runtime.subscribeBrowser?.(event=>{if(event.type==='filters-changed')void read();});return()=>{alive=false;unsubscribe?.();};},[]);
  const toggle=()=>{if(on===null||busy)return;setBusy(true);void runtime.service({type:'filters.profile-set',patch:{aiContent:!on}}).then(result=>setOn(!!result.filters?.aiContent)).catch(()=>{}).finally(()=>setBusy(false));};
  const label=on?'AI-free mode is on. AI answers and AI buttons on websites are hidden. Click to turn it off.':'AI-free mode is off. Click to hide AI answers and AI buttons on websites.';
- return <button type="button" className={`icon-button ${on?'active':''}`} aria-pressed={!!on} aria-label={on?t("main.aiFreeModeOn"):t("main.aiFreeModeOff")} title={controlTitle(label)} disabled={on===null||busy} onClick={toggle}>
+ return <button type="button" className={`icon-button toolbar-aifree ${on?'active':''}`} aria-pressed={!!on} aria-label={on?t("main.aiFreeModeOn"):t("main.aiFreeModeOff")} title={controlTitle(label)} disabled={on===null||busy} onClick={toggle}>
   <PreviewIcon icon={on?SparklesOff:Sparkles} className="toolbar-icon" size={18}/>
  </button>;
 }

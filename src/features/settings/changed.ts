@@ -47,10 +47,10 @@ export function appearanceResetPatch(s: AppearanceLook): Partial<Settings> {
 }
 
 /** What Reset sidebar layout puts back (Settings › Tabs › Sidebar): the sidebar shown, on the left, at Standard size, tabs along the top, Favorites shown at the top with their tabs
- * in the tab list, new tabs at the top, tab groups among the tabs. Kept as they are: the Favorites themselves, the sidebar sections (hidden, reordered) and the edge switches.
+ * only in their tiles, new tabs at the top, tab groups among the tabs. Kept as they are: the Favorites themselves, the sidebar sections (hidden, reordered) and the edge switches.
  * The button and the check that enables it both read this one list. */
 export const SIDEBAR_RESET = {
-  settings: { sidebarWidth: SIDEBAR_SIZES.standard, sidebarSide: 'left' as SidebarSide, favoriteTabsInList: true, verticalTabs: false },
+  settings: { sidebarWidth: SIDEBAR_SIZES.standard, sidebarSide: 'left' as SidebarSide, favoriteTabsInList: false, verticalTabs: false },
   appsHidden: false,
   appsPlace: 'top' as 'top' | 'bottom',
   rail: { tabs: false, newTabsTop: true, newTabsTopChosen: false, folders: 'mixed' as SidebarFolders },

@@ -17,9 +17,9 @@ v8.setFlagsFromString('--no-sparkplug');
 const ID = 'abcdefghijklmnopabcdefghijklmnop';
 let engineText = null;
 
-function extensionWorld(manifest, {answer = () => undefined, packages, grants = {}, native = {}, browser, worker = true, id = ID, userGesture = false, globals = {}, incognito = false} = {}) {
+function extensionWorld(manifest, {answer = () => undefined, packages, grants = {}, native = {}, browser, worker = true, id = ID, userGesture = false, globals = {}, incognito = false, fileAccess = false} = {}) {
   engineText = engineText || fs.readFileSync(require.resolve('electron-chrome-extensions/preload'), 'utf8');
-  const text = patchPreload(engineText, {userScriptsAllowed: [], grants, ...(incognito ? {incognito: true} : {}), ...(packages ? {packages} : {})});
+  const text = patchPreload(engineText, {userScriptsAllowed: [], grants, ...(incognito ? {incognito: true} : {}), ...(fileAccess ? {fileAccess: Array.isArray(fileAccess) ? fileAccess : [id]} : {}), ...(packages ? {packages} : {})});
   if (!text) throw new Error('the preload patch no longer matches the pinned engine');
   const calls = [], listeners = new Map(), logged = {log: [], warn: [], error: []};
   const electron = {

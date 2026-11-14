@@ -23,6 +23,8 @@ function capturedTabExit(intent:TabDropIntent,point:Point):'before'|'after'|null
  if(center>=intent.end-intent.edge||travel>12&&pointer>=intent.end-edge)return 'after';
  return null;
 }
+/** The top of a folder's header (as a share of its height) that is a place above the folder; the rest of the header drops onto the folder. */
+const HEADER_EXIT=.4;
 const contains=(bounds:DOMRect,point:Point)=>point.x>=bounds.left&&point.x<=bounds.right&&point.y>=bounds.top&&point.y<=bounds.bottom;
 export function captureTabDrag(from:string,tabs:TabSession[],groups:TabGroup[]){
  const index=tabs.findIndex(tab=>tab.id===from),tab=tabs[index];if(!tab)return null;
@@ -53,8 +55,9 @@ export function releaseTabDrag(drop:BrowserAction|null,origin:ReturnType<typeof 
  return drop;
 }
 /** Use insertion boundaries for grouped drags, with a small allowance for pointer jitter. */
-export function tabDropAtPoint(root:HTMLElement|null,point:Point,from:string,tabs:TabSession[],groups:TabGroup[],vertical=false,intent?:TabDropIntent|null,measure:(node:HTMLElement)=>DOMRect=node=>node.getBoundingClientRect()):BrowserAction|null{
+export function tabDropAtPoint(root:HTMLElement|null,point:Point,from:string,tabs:TabSession[],groups:TabGroup[],vertical=false,intent?:TabDropIntent|null,measure:(node:HTMLElement)=>DOMRect=node=>node.getBoundingClientRect(),reach?:Point):BrowserAction|null{
  const source=tabs.find(tab=>tab.id===from);if(!root||!source||!Number.isFinite(point.x)||!Number.isFinite(point.y))return null;
+ // `reach` is the pointer in the layout `measure` reads (the sidebar's drag measures the list without the room it opened, so what the person sees and what is tested are one place; sidebarTabDrag.ts `reach`).
  // R3-79: the whole split (its chip, any member, the gap between two members) takes the tab at the slot under the pointer.
  const splitDrop=splitDropAt(root.ownerDocument,point,from,vertical);
  if(splitDrop)return {type:'split.group.add',id:splitDrop.groupId,tabId:from,index:splitDrop.index};
@@ -78,11 +81,22 @@ export function tabDropAtPoint(root:HTMLElement|null,point:Point,from:string,tab
   return target?{type:'tab.drop',from,to:target.id,position:after?'after':'before',groupId:null}:sourceGroup?{type:'tab.drop',from,groupId:null}:null;
  }
  if(point.x<bounds.left-(vertical?across:along)||point.x>bounds.right+(vertical?across:along)||point.y<bounds.top-(vertical?along:across)||point.y>bounds.bottom+(vertical?along:across))return null;
- const hitPoint={x:Math.max(bounds.left,Math.min(bounds.right,point.x)),y:Math.max(bounds.top,Math.min(bounds.bottom,point.y))};
+ const aim=reach??point,hitPoint={x:Math.max(bounds.left,Math.min(bounds.right,aim.x)),y:Math.max(bounds.top,Math.min(bounds.bottom,aim.y))};
  const capsule=[...root.querySelectorAll<HTMLElement>('[data-group-tray]')].find(node=>node.dataset.groupTray&&!node.hasAttribute('inert')&&groups.some(group=>group.id===node.dataset.groupTray&&group.collapsed)&&contains(measure(node),hitPoint));
  if(capsule){const group=groups.find(group=>group.id===capsule.dataset.groupTray)!;return sourceGroup?.id===group.id?detach('before'):group.browserProfileId===source.browserProfileId?{type:'tab.drop',from,groupId:group.id}:null;}
  const headers=[...root.querySelectorAll<HTMLElement>('[data-group-header]')].filter(node=>node.dataset.groupHeader&&!node.hasAttribute('inert'));
  const groupHeader=headers.find(node=>contains(measure(node),hitPoint));
+ if(groupHeader&&vertical){
+  // The sidebar's folder header: its top is a place above the folder (the same as the row above it), the rest drops onto it. A folder's ends are real places, not the edge of a pixel.
+  const group=groups.find(group=>group.id===groupHeader.dataset.groupHeader),box=measure(groupHeader);
+  if(group&&group.browserProfileId===source.browserProfileId){
+   const members=tabs.filter(tab=>tab.id!==from&&groupForTab({tabGroups:groups},tab)?.id===group.id),first=members[0];
+   if(hitPoint.y<box.top+box.height*HEADER_EXIT)return first?{type:'tab.drop',from,to:first.id,position:'before',groupId:null}:{type:'tab.drop',from,groupId:null};
+   if(sourceGroup?.id===group.id)return first?{type:'tab.drop',from,to:first.id,position:'before',groupId:group.id}:null;
+   return members.length?{type:'tab.drop',from,groupId:group.id}:null;
+  }
+  return null;
+ }
  if(groupHeader){const group=groups.find(group=>group.id===groupHeader.dataset.groupHeader);if(sourceGroup&&group?.id===sourceGroup.id)return detach('before');return group&&group.browserProfileId===source.browserProfileId&&tabs.some(tab=>groupForTab({tabGroups:groups},tab)?.id===group.id)?{type:'tab.drop',from,groupId:group.id}:null;}
  const collapsedHeaders=headers.filter(node=>groups.some(group=>group.id===node.dataset.groupHeader&&group.collapsed));
  const candidates=[...root.querySelectorAll<HTMLElement>('[data-tab-id]'),...collapsedHeaders].filter(node=>(node.dataset.tabId||node.dataset.groupTab)!==from&&!node.hasAttribute('inert'))
@@ -94,7 +108,7 @@ export function tabDropAtPoint(root:HTMLElement|null,point:Point,from:string,tab
   if(captured){const exit=capturedTabExit(captured,point);return exit?detach(exit):null;}
   return sourceGroup?{type:'tab.drop',from,groupId:null}:null;
  }
- const axis=vertical?point.y:point.x,start=(bounds:DOMRect)=>vertical?bounds.top:bounds.left,end=(bounds:DOMRect)=>vertical?bounds.bottom:bounds.right;
+ const axis=vertical?aim.y:aim.x,start=(bounds:DOMRect)=>vertical?bounds.top:bounds.left,end=(bounds:DOMRect)=>vertical?bounds.bottom:bounds.right;
  const distance=(bounds:DOMRect)=>Math.max(start(bounds)-axis,axis-end(bounds),0);
  const direct=candidates.find(item=>contains(item.bounds,hitPoint));
  // The grabbed point can be anywhere on a tab. Its center crossing a broad
@@ -113,10 +127,53 @@ export function tabDropAtPoint(root:HTMLElement|null,point:Point,from:string,tab
  // The existing label is an explicit join target, including a collapsed group.
  const header=[...target.node.querySelectorAll<HTMLElement>('[data-group-id]')].find(node=>node.dataset.groupId===group.id&&contains(measure(node),point));
  if(header)return {type:'tab.drop',from,groupId:group.id};
- const peers=candidates.filter(item=>groupForTab({tabGroups:groups},item.tab!)?.id===group.id),edge=Math.min(16,(end(target.bounds)-start(target.bounds))*.18);
+ const peers=candidates.filter(item=>groupForTab({tabGroups:groups},item.tab!)?.id===group.id),edge=Math.min(16,(end(target.bounds)-start(target.bounds))*(vertical?0:.18));
  const leadingHeader=headers.find(node=>node.dataset.groupHeader===group.id),leading=leadingHeader?measure(leadingHeader):undefined;
  const outside=target===peers[0]&&(leading?axis<start(leading):axis<=start(target.bounds)+edge)||target===peers.at(-1)&&axis>=end(target.bounds)-edge;
  return {type:'tab.drop',from,to:tab.id,groupId:outside?null:group.id,position};
+}
+
+/** Where the carried tab stands now, as a drop: beside its neighbour in its own folder, or (a loose tab) beside the tab next to it. The decision while the pointer is over the slot that is open at its place. */
+export function stayDrop(from:string,tabs:TabSession[],groups:TabGroup[]):BrowserAction|null{
+ const source=tabs.find(tab=>tab.id===from);if(!source)return null;
+ const group=groupForTab({tabGroups:groups},source),at=tabs.indexOf(source);
+ if(group){
+  const mates=tabs.filter(tab=>tab.id!==from&&groupForTab({tabGroups:groups},tab)?.id===group.id),before=mates.filter(tab=>tabs.indexOf(tab)<at).at(-1),after=mates.find(tab=>tabs.indexOf(tab)>at);
+  return before?{type:'tab.drop',from,to:before.id,position:'after',groupId:group.id}:after?{type:'tab.drop',from,to:after.id,position:'before',groupId:group.id}:{type:'tab.drop',from,groupId:group.id};
+ }
+ const next=tabs[at+1],previous=tabs[at-1],near=next??previous;
+ return near?{type:'tab.drop',from,to:near.id,position:next?'before':'after',groupId:null}:null;
+}
+/** At the end of a folder the slot opens one row tall, and a tab there can be the folder's last or the tab after the folder: the same place, two levels. The slot's upper part keeps the tab inside
+ *  and its lower part takes it out, with a band between so the decision does not flicker; the pointer never has to cross a whole empty row to leave. `y` is the pointer, `slot` the open slot. */
+const END_OUT=.6,END_IN=.4;
+export function folderEndFlip(action:BrowserAction|null,tabs:TabSession[],groups:TabGroup[],y:number,slot:{top:number;height:number}):BrowserAction|null{
+ const where=dropPlace(action,tabs,groups);if(!where||where.kind!=='edge'||action?.type!=='tab.drop'||where.position!=='after')return null;
+ // Where the tab stands now stays (its own place is not a decision to leave); it leaves by the pointer going below its row.
+ if(JSON.stringify(stayDrop(action.from,tabs,groups))===JSON.stringify(action))return null;
+ const share=(y-slot.top)/Math.max(1,slot.height),to=tabs.find(tab=>tab.id===where.to),group=to&&groupForTab({tabGroups:groups},to);if(!group)return null;
+ if(where.anchor==='tab'&&where.level==='in'){
+  const last=tabs.filter(tab=>tab.id!==action.from&&groupForTab({tabGroups:groups},tab)?.id===group.id).at(-1);
+  return last?.id===where.to&&share>=END_OUT?{...action,groupId:null}:null;
+ }
+ return where.anchor==='block'&&share<END_IN?{...action,groupId:group.id}:null;
+}
+
+/** Where a drop (see `tabDropAtPoint`) lands in the list, in terms of what the person sees: one description for the grey slot, the blue line and the room the rows open, so they can
+ *  never disagree with each other or with the drop. `in`: at the level of the tab it is placed beside (inside its folder); `top`: at the top level, which for a tab that leaves its
+ *  folder at the folder's first or last place is the edge of the whole folder. */
+export type DropPlace={kind:'join';group:string}|{kind:'edge';anchor:'tab'|'block';id:string;position:'before'|'after';level:'in'|'top';/** The tab the action names (the folder's first or last member for a block). */to:string};
+/** `join`: dropped onto a folder's header, which takes it as its last tab: the header is ringed and no slot opens (the rows stay where they are, so the header stays under the pointer). */
+export function dropPlace(action:BrowserAction|null,tabs:TabSession[],groups:TabGroup[]):DropPlace|null{
+ if(action?.type!=='tab.drop'||action.wholeGroup)return null;
+ if(!action.to)return action.groupId?{kind:'join',group:action.groupId}:null;
+ const to=tabs.find(tab=>tab.id===action.to);if(!to)return null;
+ const group=groupForTab({tabGroups:groups},to),position=action.position??'before';
+ if(action.groupId&&group?.id!==action.groupId)return {kind:'join',group:action.groupId};
+ if(!group||action.groupId===group.id)return {kind:'edge',anchor:'tab',id:to.id,position,level:group?'in':'top',to:to.id};
+ const members=tabs.filter(tab=>tab.id!==action.from&&groupForTab({tabGroups:groups},tab)?.id===group.id);
+ if(position==='before'&&members[0]?.id===to.id||position==='after'&&members.at(-1)?.id===to.id)return {kind:'edge',anchor:'block',id:group.id,position,level:'top',to:to.id};
+ return {kind:'edge',anchor:'tab',id:to.id,position,level:'in',to:to.id};
 }
 
 /** Moving a label relocates its block; it never merges groups or changes membership. */

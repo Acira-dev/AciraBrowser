@@ -41,18 +41,18 @@ function nativeRuntime(manifest, {contexts = []} = {}) {
   };
 }
 
-function setup(manifestExtra = {}, {worker = true, answer = () => undefined, contexts, incognito = false} = {}) {
+function setup(manifestExtra = {}, {worker = true, answer = () => undefined, contexts, incognito = false, fileAccess = false, id} = {}) {
   const manifest = {manifest_version: 3, permissions: [], ...manifestExtra};
   const native = nativeRuntime(manifest, {contexts});
-  const world = extensionWorld(manifest, {packages: packages(), worker, answer, incognito, native: {runtime: native.runtime}, browser: {runtime: {id: ID}}});
+  const world = extensionWorld(manifest, {packages: packages(), worker, answer, incognito, fileAccess, ...(id ? {id} : {}), native: {runtime: native.runtime}, browser: {runtime: {id: ID}}});
   return {world, chrome: world.chrome, native};
 }
 
-test('both packages load: runtime (main + renderer), extension (renderer)', () => {
+test('both packages load: runtime (main + renderer), extension (renderer, and the main-side file reader for "Allow access to file URLs")', () => {
   const found = extApi.loadPackages({fresh: true});
   const runtime = found.find(p => p.name === 'runtime'), extension = found.find(p => p.name === 'extension');
   assert.deepEqual([runtime.namespaces, !!runtime.install, !!runtime.renderer], [['runtime'], true, true]);
-  assert.deepEqual([extension.namespaces, !!extension.install, !!extension.renderer], [['extension'], false, true]);
+  assert.deepEqual([extension.namespaces, !!extension.install, !!extension.renderer], [['extension'], true, true]);
 });
 
 test('setUninstallURL: Chromium\'s argument checks, then Acira keeps the URL (promise and callback forms)', async () => {
@@ -111,6 +111,21 @@ test('what stays native stays: getURL, id, getManifest, messaging members, event
   for (const name of ['onMessage', 'onConnect', 'onMessageExternal', 'onConnectExternal', 'onInstalled', 'onUpdateAvailable'])
     assert.equal(typeof chrome.runtime[name].addListener, 'function', name);
   assert.equal(world.browser.runtime.setUninstallURL, chrome.runtime.setUninstallURL, 'browser.runtime mirrors');
+});
+
+test('extension.isAllowedFileSchemeAccess answers the extension\'s "Allow access to file URLs" switch (Chromium util::AllowFileAccess): false by default, true when it is on, promise and callback, page and worker', async () => {
+  for (const worker of [false, true]) {
+    const off = setup({}, {worker}).chrome.extension, on = setup({}, {worker, fileAccess: true}).chrome.extension;
+    assert.equal(await off.isAllowedFileSchemeAccess(), false);
+    assert.equal(await on.isAllowedFileSchemeAccess(), true);
+    assert.equal(await new Promise(resolve => on.isAllowedFileSchemeAccess(resolve)), true);
+    assert.equal(await new Promise(resolve => off.isAllowedFileSchemeAccess(resolve)), false);
+    assert.throws(() => on.isAllowedFileSchemeAccess(1), /Error in invocation of extension\.isAllowedFileSchemeAccess\(optional function callback\)/);
+  }
+  // The list the preload carries names every extension of the profile whose switch is on: each one reads only its own entry.
+  const OTHER = 'ponmlkjihgfedcbaponmlkjihgfedcba';
+  assert.equal(await setup({}, {worker: false, fileAccess: [OTHER]}).chrome.extension.isAllowedFileSchemeAccess(), false, 'another extension\'s switch is not mine');
+  assert.equal(await setup({}, {worker: false, fileAccess: [OTHER, ID]}).chrome.extension.isAllowedFileSchemeAccess(), true);
 });
 
 test('extension.isAllowedFileSchemeAccess / isAllowedIncognitoAccess: false, promise and callback; getViews as Chromium has it', async () => {
@@ -606,7 +621,7 @@ test('inside a private session that runs the extension (Allow in private tabs) i
     const {chrome} = setup({}, {worker, incognito: true});
     assert.equal(await chrome.extension.isAllowedIncognitoAccess(), true);
     assert.equal(await new Promise(resolve => chrome.extension.isAllowedIncognitoAccess(resolve)), true);
-    assert.equal(await chrome.extension.isAllowedFileSchemeAccess(), false, 'file access is still never given');
+    assert.equal(await chrome.extension.isAllowedFileSchemeAccess(), false, 'file access is its own switch: off here');
     assert.equal(chrome.extension.inIncognitoContext, true);
   }
   assert.notEqual(setup({}, {worker: false}).chrome.extension.inIncognitoContext, true, 'an ordinary profile is not an incognito context');

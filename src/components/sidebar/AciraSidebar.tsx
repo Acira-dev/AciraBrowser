@@ -1,4 +1,4 @@
-import { railGlowRef0, railGlowRef1 } from '../../ui/siteGlowEngine';
+import { railGlowRef0, railGlowRef1, railGlowRef2 } from '../../ui/siteGlowEngine';
 import { AnimatePresence,motion } from 'motion/react';
 import { useCallback,useEffect,useLayoutEffect,useRef,useState,useSyncExternalStore,type CSSProperties,type DragEvent,type KeyboardEvent,type MouseEvent,type PointerEvent,type ReactNode } from 'react';
 import { ArrowUp,ArrowUpRight,BookOpen,Bookmark,Check,ChevronDown,Clock3,Columns2,Download,FileText,History as HistoryGlyph,PanelTop,Folder,FolderOpen,Link2,Maximize2,PanelsTopLeft,Pin,Plus,Search,Settings2,Star,VolumeX,X,type LucideIcon } from '../AppIcons';
@@ -22,7 +22,7 @@ import { appendedTabs,nameAndNote,newTabInGroupActions } from './sidebarActions'
 import { GroupFolderGlyph } from './GroupFolderGlyph';
 import type { SidebarFolders } from '../../ui/railPrefs';
 import type { SplitGroup } from '../../runtime/splitLayout';
-import { groupKeyboardDrop,tabDropAtPoint } from '../tabGroupDrag';
+import { dropPlace,folderEndFlip,groupKeyboardDrop,stayDrop,tabDropAtPoint,type DropPlace } from '../tabGroupDrag';
 import { sidebarPatch,workspaceIsOpen } from '../../runtime/browserChrome';
 import { runtime } from '../../runtime/client';
 import { siteIdentity } from '../../runtime/sites';
@@ -56,7 +56,7 @@ import { ProfileAvatar } from '../../features/accounts/profileModel';
 import { TabPrivacyMark,isNewTabState,privacyNames } from '../TabPrivacyMark';
 import { bookmarkControl } from '../../ui/bookmarkControl';
 import { layoutOf,setSidebarPeek,useSidebarPeek } from '../../ui/layoutMode';
-import { markSwitcherReleased,mruOrder,nextInCycle,readCtrlTabMode,readStamps,recordActivation,switcherIndex,tabCycleOrder,writeSwitcherStart } from '../../ui/tabMru';
+import { markSwitcherReleased,mruOrder,nextInCycle,nextTabOrder,readCtrlTabMode,readStamps,recordActivation,switcherIndex,writeSwitcherStart } from '../../ui/tabMru';
 import { cancelSplitDrag,endSplitDrag,moveSplitDrag,splitDropAction } from '../../ui/splitDrop';import { carryChip } from '../../ui/useTabDragSurface';import { createEdgeScroller } from '../../ui/dragEdgeScroll';
 export { sidebarControl } from '../../ui/layoutMode';
 import { clampSidebarWidth,draggedSidebarWidth,favoriteColumns,overSidebar,previewSidebarWidth,rubberBandWidth,sidebarEdgeOf,sidebarKeyWidth,SIDEBAR_WIDTH,sizeOf,snapSidebarWidth,useSidebarSize } from '../../ui/sidebarLayout';
@@ -95,6 +95,7 @@ import { useTabNumbers } from '../../ui/tabNumbers';
 import { tabNumberMatches } from '../../runtime/tabNumbers';
 
 import { SidebarExtensions } from './SidebarExtensions';
+import { revealQuiet } from '../../ui/revealQuiet';
 import { t } from '../../i18n';
 type Dispatch=(action:BrowserAction)=>void;
 const APP_TYPE='application/x-acira-app',LINK_TYPE='text/uri-list';
@@ -121,20 +122,24 @@ function moveFocus(event:KeyboardEvent<HTMLElement>,from:HTMLElement=event.curre
 /** Scrolls the tab list (only it, and only up or down) so `node` shows. scrollIntoView scrolled every box around the row too: the
  * sidebar is overflow:hidden, so while a switch slid the new list in from the right it scrolled 8px sideways, and the space row and
  * the footer drifted left and back (reported 3 Nov). */
-function revealRow(box:HTMLElement,node:HTMLElement,block:'nearest'|'center',behavior:ScrollBehavior){
+function revealRow(box:HTMLElement,node:HTMLElement,block:'nearest'|'center',behavior:ScrollBehavior):boolean{
  let top=0,at:HTMLElement|null=node;while(at&&at!==box){top+=at.offsetTop;at=at.offsetParent as HTMLElement|null;}
- if(at!==box)return;
+ if(at!==box)return false;
  const view=box.scrollTop,height=box.clientHeight,size=node.offsetHeight;
  const goal=block==='center'?top-(height-size)/2:top<view?top:top+size>view+height?top+size-height:view,to=Math.max(0,Math.min(goal,box.scrollHeight-height));
- if(Math.abs(to-view)>.5)box.scrollTo({top:to,behavior});
+ if(Math.abs(to-view)<=.5)return false;
+ box.scrollTo({top:to,behavior});return true;
 }
 /** Keeps the current tab findable: scrolls to it when it changes or when a tab opens in the background, and reports
  * which edge it went past while the list is scrolled away from it. */
 function useActiveReveal(activeId:string,tabs:TabSession[],enabled:boolean,reduced:boolean,space:string){
  const root=useRef<HTMLDivElement>(null),[edge,setEdge]=useState<'above'|'below'|null>(null);
  const seen=useRef<Set<string>|null>(null),lastActive=useRef(activeId),lastSpace=useRef(space);
+ // While the list scrolls to the tab that was just selected, the "current tab" pill stays away: the tab is on its way into view, and the pill's arrival (and, a frame later, the Bookmarks row it pushes into view) took 36px off the list's height in two steps before the scroll had begun, cutting the bottom rows and popping both rows in (round 6, 150 %). The pill is for a tab the list is scrolled away from.
+ const quiet=useRef(revealQuiet()).current;
  const row=(id:string)=>root.current?.querySelector<HTMLElement>(`.sb-tab[data-tab-id="${CSS.escape(id)}"]:not(.sb-flip-ghost)`)||null;
  const measure=useCallback(()=>{
+  if(quiet.quiet())return;
   const node=enabled?row(activeId):null,box=root.current;if(!node||!box||!node.getClientRects().length||node.closest('[inert]')){setEdge(null);return;}
   // Layout position, not the painted one: measured mid-FLIP (rows still transformed) the row read as scrolled away and
   // the "current tab" pill stayed up over a visible row until the next scroll.
@@ -149,8 +154,16 @@ function useActiveReveal(activeId:string,tabs:TabSession[],enabled:boolean,reduc
   // Another space's list arrives scrolled where its tab is, not scrolling there from where the last list was.
   const switched=lastSpace.current!==space;lastSpace.current=space;
   if(!enabled||!target){measure();return;}
-  const frame=requestAnimationFrame(()=>{const node=row(target),box=root.current;if(node&&box)revealRow(box,node,'nearest',reduced||switched?'auto':'smooth');measure();});
-  return()=>cancelAnimationFrame(frame);
+  const token=quiet.start(),smooth=!(reduced||switched);
+  // The last reveal to start is the one that ends the quiet: when its scroll has finished (or at once when nothing scrolled), the pill is measured for where the list stopped.
+  const done=()=>{if(quiet.end(token))measure();};
+  const frame=requestAnimationFrame(()=>{
+   const node=row(target),box=root.current;
+   if(!(node&&box&&revealRow(box,node,'nearest',smooth?'smooth':'auto')&&smooth)){done();return;}
+   box.addEventListener('scrollend',done,{once:true});window.setTimeout(done,900);
+  });
+  // A newer change (another tab, a tab opened) ends this quiet: the next run starts its own, or measures at once.
+  return()=>{cancelAnimationFrame(frame);quiet.end(token);};
  },[activeId,ids,enabled,space]);// eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>{const box=root.current;if(!box)return;box.addEventListener('scroll',measure,{passive:true});const observer=new ResizeObserver(measure);observer.observe(box);measure();return()=>{box.removeEventListener('scroll',measure);observer.disconnect();};},[measure]);
  return {root,edge,reveal:()=>{const node=row(activeId),box=root.current;if(node&&box)revealRow(box,node,'center',reduced?'auto':'smooth');}};
@@ -204,8 +217,8 @@ function switcherKey(type:string,direction:number,state:BrowserSnapshot,dispatch
  const mode=readCtrlTabMode();
  if(mode==='viewer'){void runtime.browserCommand({type:'ui',tabId:state.activeTabId,action:'open',kind:'tabs'});return;}
  if(state.tabs.length<2)return;
- // Next tab walks the list on screen (runtime/favoriteTabs.ts listedTabs, as main's Ctrl+PageDown): a tab that lives only in its tile is not in it.
- if(mode==='next'){const vertical=layoutOf(state)==='vertical',profile=state.tabs.find(tab=>tab.id===state.activeTabId)?.browserProfileId,cycle=vertical?state.tabs.filter(tab=>tab.browserProfileId===profile&&listed(tab)):state.tabs;const target=nextInCycle(tabCycleOrder(cycle,state.tabGroups,state.activeTabId,vertical),state.activeTabId,direction>0?1:-1);if(target&&target!==state.activeTabId)dispatch({type:'tab.select',id:target});return;}
+ // Next tab walks the rows of the list on screen, then the tabs that live only in their tile (runtime/favoriteTabs.ts listedTabs, as main's Ctrl+PageDown): a Favorite's tab is a tab for the keys, so the walk reaches it and goes on from it.
+ if(mode==='next'){const vertical=layoutOf(state)==='vertical',profile=state.tabs.find(tab=>tab.id===state.activeTabId)?.browserProfileId,own=vertical?state.tabs.filter(tab=>tab.browserProfileId===profile):state.tabs,target=nextInCycle(nextTabOrder(own,state.tabGroups,state.activeTabId,vertical,listed),state.activeTabId,direction>0?1:-1);if(target&&target!==state.activeTabId)dispatch({type:'tab.select',id:target});return;}
  switcher.steps+=direction;writeSwitcherStart(switcher.steps);
  if(!switcher.timer&&!switcher.open)switcher.timer=window.setTimeout(()=>{switcher.open=true;switcher.timer=0;writeSwitcherStart(switcher.steps);void runtime.browserCommand({type:'ui',tabId:state.activeTabId,action:'open',kind:'switcher'});},120);
 }
@@ -295,7 +308,7 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const listTabs=useShownTabsSwitch(vertical,prefs.tabs,profileId);
  const width=clampSidebarWidth(state.settings.sidebarWidth);
  const setWidth=(next:number)=>dispatch({type:'settings.update',patch:{sidebarWidth:clampSidebarWidth(next)}});
- // A favorite's tab is an ordinary tab of the list, where it was, unless Settings keep it only in its tile (runtime/favoriteTabsRule.ts, ui/sidebarApps.ts listedInSidebar).
+ // A favorite's tab lives only in its tile unless Settings list it too (the default since 13.9; runtime/favoriteTabsRule.ts, ui/sidebarApps.ts listedInSidebar). It is still a tab: it counts, and the keys reach it.
  const favorites=useSidebarApps(profileId,privateMode);
  const listed=(tab:TabSession)=>listedInSidebar(tab,favorites,state.settings);
  const groups=state.tabGroups.filter(group=>group.browserProfileId===profileId).map(group=>({group,members:state.tabs.filter(tab=>listed(tab)&&groupForTab(state,tab)?.id===group.id)})).filter(item=>item.members.length);
@@ -359,17 +372,17 @@ export function AciraSidebar({state,dispatch}:{state:BrowserSnapshot;dispatch:Di
  const background=(event:MouseEvent<HTMLElement>)=>{const target=event.target as HTMLElement;if(target!==event.currentTarget&&!target.classList.contains('sb-sep')&&!target.classList.contains('sb-foot'))return;event.preventDefault();/* Right-click on empty space: a small menu with New workspace… and Customize sidebar…; a private window has no workspaces, so it goes straight to Customize. */if(windowWorkspaces(state).length||profilesAsSpaces(state))openWorkspacePopup(state,'workspace-context',event,{mode:'sidebar'});else setCustomizing(true);};
  const blocks:{id:SectionId;lead:boolean}[]=[];
  for(const id of layout.order)if(id==='tabs'?listTabs&&(show('tabs')||show('pinned')):show(id))blocks.push({id,lead:blocks.length>0});
- const block=({id,lead}:{id:SectionId;lead:boolean})=>id==='tabs'?<SidebarTabs key={id} state={state} dispatch={dispatch} tabs={listedProfileTabs} groups={groups} newTabsTop={!!prefs.newTabsTop} folders={prefs.folders??'mixed'} showPinned={show('pinned')} showList={show('tabs')} lead={lead}/>
+ const block=({id,lead}:{id:SectionId;lead:boolean})=>id==='tabs'?<SidebarTabs key={id} state={state} dispatch={dispatch} tabs={listedProfileTabs} openCount={profileTabs.length} groups={groups} newTabsTop={!!prefs.newTabsTop} folders={prefs.folders??'mixed'} showPinned={show('pinned')} showList={show('tabs')} lead={lead}/>
   :id==='bookmarks'?<SidebarBookmarks key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>
   :id==='downloads'?<SidebarDownloads key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead} navigate={navigate}/>
   :id==='history'?<SidebarHistory key={id} state={state} dispatch={dispatch} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead} navigate={navigate}/>
   :<SidebarReading key={id} state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode} folded={prefs.folded} reduced={reduced} lead={lead}/>;
  if(!shown)return <aside className="ed-rail acira-sidebar" aria-label={t("acirasidebar.sidebar")} aria-hidden="true" inert data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined}/>;
  return <aside className={`ed-rail acira-sidebar is-expanded${peeking&&!expanded?' is-peek':''}`} aria-label={t("acirasidebar.sidebar")} data-current-privacy={currentPrivacy} data-reduced-motion={reduced||undefined} data-addr-side={addressSide.block||undefined} data-addr-open={addressSide.open||undefined}>
-  {/* the site glow's left wash lives here so it travels with the sidebar (siteGlowEngine.ts railGlowRef) */}<span className="st-glow-rail" aria-hidden="true" ref={railGlowRef0}/><span className="st-glow-rail" aria-hidden="true" ref={railGlowRef1}/>
+  {/* the site glow's left wash lives here so it travels with the sidebar (siteGlowEngine.ts railGlowRef) */}<span className="st-glow-rail" aria-hidden="true" ref={railGlowRef0}/><span className="st-glow-rail" aria-hidden="true" ref={railGlowRef1}/><span className="st-glow-rail" aria-hidden="true" ref={railGlowRef2}/>
   {/* Favorites sit at the top (the default) or at the bottom, above the workspace row and the footer (Settings > Tabs > Sidebar > Favorites). */}
   {show('favorites')&&!favoritesBottom?<><SidebarTop state={state} dispatch={dispatch} current={current} profileId={profileId} privateMode={privateMode}/>{favoritesSeparator(favorites.apps.length)&&<div className="sb-sep" role="separator"/>}</>:<div className="sb-top-space" aria-hidden="true"/>}
-  <div className="sb-sections-wrap">{!customizing&&<SidebarExtensions tab={current}/>}{!customizing&&<WorkspaceTitle state={state} count={listedProfileTabs.length}/>}<div ref={peek.root} className="sb-scroll" onContextMenu={background}>
+  <div className="sb-sections-wrap">{!customizing&&<SidebarExtensions tab={current}/>}{!customizing&&<WorkspaceTitle state={state} count={profileTabs.length}/>}<div ref={peek.root} className="sb-scroll" onContextMenu={background}>
    {customizing?<SidebarCustomize layout={layout} onChange={changeLayout} onDone={()=>setCustomizing(false)} favoritesPlace={favorites.place==='bottom'?'bottom':'top'}/>:blocks.map(block)}
   </div>
   {peek.edge&&active&&<button type="button" className="sb-active-peek" data-edge={peek.edge} title={t("acirasidebar.showTheCurrentTab")} onClick={peek.reveal}><SiteIdentityIcon url={active.url} favicon={active.favicon} size={16}/><span className="sb-active-peek-title">{title(active)}</span><PreviewIcon icon={peek.edge==='above'?ArrowUp:ChevronDown} size={12}/></button>}
@@ -591,7 +604,7 @@ function AppEditor({app,tab,tabs,current,profileId,privateMode,reduced,dispatch,
 
 /** Pinned tabs (their own zone, no close), then the Tabs zone: New tab first (last when "New tabs at the top" is off),
  * then groups and loose tabs in tab order (a group sits where its first tab is; groups are not hoisted). */
-function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',showPinned=true,showList=true,lead=false}:{state:BrowserSnapshot;dispatch:Dispatch;tabs:TabSession[];groups:{group:TabGroup;members:TabSession[]}[];newTabsTop:boolean;/** Where the groups sit among the tabs (Settings > Sidebar > Tab groups). */folders?:SidebarFolders;showPinned?:boolean;showList?:boolean;lead?:boolean}){
+function SidebarTabs({state,dispatch,tabs,openCount,groups,newTabsTop,folders='mixed',showPinned=true,showList=true,lead=false}:{state:BrowserSnapshot;dispatch:Dispatch;tabs:TabSession[];/** Every tab open in this profile, the Favorites' tabs that live only in their tile too (the New tab button says how many are open). */openCount?:number;groups:{group:TabGroup;members:TabSession[]}[];newTabsTop:boolean;/** Where the groups sit among the tabs (Settings > Sidebar > Tab groups). */folders?:SidebarFolders;showPinned?:boolean;showList?:boolean;lead?:boolean}){
  // Arc/Dia (reported 24 Oct): newest tabs first, right under the New tab row. A tab that was just appended is shown
  // at the top at once (the model is reordered a moment later), so it never flashes at the bottom first; a reopened
  // tab keeps its own place.
@@ -613,7 +626,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
  },[tabs.map(tab=>tab.id).join(),newTabsTop]);// eslint-disable-line react-hooks/exhaustive-deps
  // Ctrl/Cmd held: the figure each row answers to (ui/tabNumbers.ts); null the rest of the time.
  const numbers=useTabNumbers(state);
- const list=useRef<HTMLDivElement>(null),[dragging,setDragging]=useState<string|null>(null),[hint,setHint]=useState<{id:string;position:'before'|'after'}|{group:string}|null>(null);
+ const list=useRef<HTMLDivElement>(null),[dragging,setDragging]=useState<string|null>(null),[hint,setHint]=useState<{id:string;position:'before'|'after';/** The line sits at the top level though its row is inside a folder (a tab leaving it at its end). */out?:boolean}|{group:string}|null>(null);
  const ordered=[...[...appended].reverse(),...restTabs.filter(tab=>!appended.includes(tab))];
  // Free splits are entries of their own; a split in a group is one of that group's rows (sidebarRows.ts).
  const {entries,groupRows,visibleTabs,folderCount,looseCount}=sidebarRows(state,ordered,groups,folders),visible=visibleTabs(pinnedTabs);
@@ -623,6 +636,27 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
  const latest=useRef({state,dispatch});latest.current={state,dispatch};
  const drag=useRef<{id:string;/** Which row: a linked tab has two (its group row, its card row). */key:string;/** Grabbed in a split's card (a pane row), not by a group row of the same tab. */card:boolean;x:number;y:number;pointer:number;moved:boolean;node:HTMLElement;off:()=>void;chip?:ReturnType<typeof carryChip>;rowPreview?:ReturnType<typeof carrySidebarRow>;release?:()=>void;full?:boolean;split?:SplitGroup;/** A whole tab group carried by its header: it only goes to a workspace. */group?:TabGroup}|null>(null),suppressClick=useRef(false);
  const hintFor=(action:BrowserAction|null)=>action?.type==='tab.drop'||action?.type==='split.separate'?action.to&&action.position?{id:action.to,position:action.position}:action.groupId?{group:action.groupId}:null:null;
+ /** The drop under the pointer, tested in the list as it lies with the carried row's place closed and no room open (sidebarTabDrag.ts `reach`): what the person sees under the pointer is what is tested.
+  *  Inside the slot that is open the last decision stands. */
+ const lastDrop=useRef<BrowserAction|null|undefined>(undefined),lastPoint=useRef<{x:number;y:number}|null>(null);
+ const listDrop=(preview:RowPreview|undefined,point:{x:number;y:number},id:string)=>{
+  const {state}=latest.current,reach=preview?.reach(point);
+  // Inside the slot that is open the last decision stands (or, at the start, the carried tab stays where it is); at a folder's end the slot's lower part takes the tab out.
+  if(preview&&reach===null){const slot=preview.slot(),last=lastDrop.current===undefined?stayDrop(id,state.tabs,state.tabGroups):lastDrop.current,flip=slot?folderEndFlip(last,state.tabs,state.tabGroups,point.y,slot):null;return lastDrop.current=flip??last;}
+  return lastDrop.current=tabDropAtPoint(list.current,point,id,state.tabs,state.tabGroups,true,undefined,preview?.closed,reach??point);
+ };
+ /** The blue line, from the same place the slot and the room use (dropPlace): on the row the drop lands beside; for a tab leaving its folder, on the row next to the folder's edge at the top level. */
+ const hintOf=(raw:BrowserAction|null,over:BrowserAction|null):{id:string;position:'before'|'after';out?:boolean}|{group:string}|null=>{
+  const where=dropPlace(raw,latest.current.state.tabs,latest.current.state.tabGroups);
+  if(!where||over?.type==='split.separate')return hintFor(over);
+  if(where.kind==='join')return {group:where.group};
+  if(where.anchor==='tab')return {id:where.id,position:where.position};
+  if(where.position==='after')return {id:where.to,position:'after',out:true};
+  const header=list.current?.querySelector<HTMLElement>(`.sb-group-header[data-group-header="${CSS.escape(where.id)}"]`),previous=header?.closest('.sb-group')?.previousElementSibling as HTMLElement|null|undefined;
+  if(previous?.classList.contains('sb-tab')&&previous.dataset.tabId)return {id:previous.dataset.tabId,position:'after'};
+  const last=previous?.classList.contains('sb-group')?[...previous.querySelectorAll<HTMLElement>('.sb-tab[data-tab-id]')].at(-1):undefined;
+  return last?.dataset.tabId?{id:last.dataset.tabId,position:'after',out:true}:null;
+ };
  const setHintIf=(next:ReturnType<typeof hintFor>)=>setHint(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
  // A sidebar that hides mid-drag (a peeking one closes as soon as the pointer is over the page) unmounts this list, but a drag that has
  // moved is not the list's to end: its window listeners run to the release, the carried icon stays under the pointer and the split
@@ -703,7 +737,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
     openRailSection('bookmarks-open',owner.browserProfileId,false);
     current.rowPreview?.bookmark(()=>document.querySelector<HTMLElement>(`.acira-sidebar .sb-bookmark[data-bookmark-key="${CSS.escape(pageKey(owner.url))}"]`),settled);
    }
-   else if(!adding)current.rowPreview?.end(destination?document.querySelector<HTMLElement>(`[data-ws="${CSS.escape(destination)}"]`):null,Boolean(destination||split||commit&&point&&inSidebar&&!bookmarkZone&&appsIndexAt(point)===null&&tabDropAtPoint(list.current,listPoint(point),current.id,state.tabs,state.tabGroups,true,undefined,current.rowPreview?.bounds)),Boolean(split));
+   else if(!adding)current.rowPreview?.end(destination?document.querySelector<HTMLElement>(`[data-ws="${CSS.escape(destination)}"]`):null,Boolean(destination||split||commit&&point&&inSidebar&&!bookmarkZone&&appsIndexAt(point)===null&&listDrop(current.rowPreview,listPoint(point),current.id)),Boolean(split));
    current.chip?.end(Boolean(split));
    if(!commit)cancelSplitDrag();
    if(split)dispatch(split);
@@ -711,7 +745,7 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
    else if(commit&&point&&inSidebar){const at=appsIndexAt(point),owner=state.tabs.find(item=>item.id===current.id);
     if(at!==null&&owner){const profile=state.browserProfiles.find(item=>item.id===owner.browserProfileId);pinTab(owner,at,state,!!profile?.private,dispatch,adding?current.rowPreview:null);}
     else if(owner&&overBookmarks(point))saveToBookmarks(owner,state,dispatch,bookmarkBefore);
-    else{const action=paneDrop(besideCard(tabDropAtPoint(list.current,listPoint(point),current.id,state.tabs,state.tabGroups,true,undefined,current.rowPreview?.bounds)),current.id,current.card);if(action){skipNextFlip();dispatch(action);}}}
+    else{const action=paneDrop(besideCard(lastDrop.current!==undefined&&lastPoint.current&&Math.hypot(point.x-lastPoint.current.x,point.y-lastPoint.current.y)<2?lastDrop.current:listDrop(current.rowPreview,listPoint(point),current.id)),current.id,current.card);if(action){skipNextFlip();dispatch(action);}}}
    current.node.closest('.sb-split-group')?.removeAttribute('data-leaving');
    markWorkspaceDrop(null);setDragging(null);setHint(null);setPinHint(null);setBookmarkHint(false);setTabDragActive(false);window.setTimeout(()=>{suppressClick.current=false;},0);
   };
@@ -742,11 +776,13 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
    // Over Favorites with a page that is not a favorite yet: a copy will go up, so the tab stays as it is and the tiles make room (the split).
    const newFavorite=at!==null&&!!owner&&(isWeb(owner)||owner.url.startsWith('acira://'))&&planFavorite({profileId:owner.browserProfileId,privateMode:!!state.browserProfiles.find(item=>item.id===owner.browserProfileId)?.private,url:owner.url,tab:owner,tabs:favoriteScope(state)}).kind==='add';
    setPinHint(at===null?null:{index:at,adding:newFavorite});setBookmarkHint(Boolean(newBookmark));markWorkspaceDrop(point,dropNote({kind:'tabs',ids:[current.id]}));
-   const over=inSidebar&&at===null&&!saving?paneDrop(besideCard(tabDropAtPoint(list.current,listPoint(point),current.id,state.tabs,state.tabGroups,true,undefined,current.rowPreview?.bounds)),current.id,current.card):null;
+   let raw=inSidebar&&at===null&&!saving?listDrop(current.rowPreview,listPoint(point),current.id):null,over=raw?paneDrop(besideCard(raw),current.id,current.card):null;lastPoint.current=point;
    current.full=saving||sidebarRowArea(point,current.node.closest<HTMLElement>('.acira-sidebar'),current.full??true,current.rowPreview.bounds);
    // A slot opens among the saved pages only for a page not saved yet (a drop there saves it; a saved one stays as it is).
-   current.rowPreview.move(point,current.full,over,newBookmark?document.querySelector<HTMLElement>('.acira-sidebar [data-zone=bookmarks]'):null,newFavorite);
-   setHintIf(hintFor(over));
+   current.rowPreview.move(point,current.full,over,newBookmark?document.querySelector<HTMLElement>('.acira-sidebar [data-zone=bookmarks]'):null,newFavorite,dropPlace(raw,state.tabs,state.tabGroups));
+   // The slot the decision opened is where the rows lie now: test the pointer against it once more, so what is shown is what a release here does.
+   if(raw){const again=listDrop(current.rowPreview,listPoint(point),current.id);if(JSON.stringify(again)!==JSON.stringify(raw)){raw=again;over=raw?paneDrop(besideCard(raw),current.id,current.card):null;current.rowPreview.move(point,current.full,over,null,newFavorite,dropPlace(raw,state.tabs,state.tabGroups));}}
+   setHintIf(hintOf(raw,over));
    // A linked copy dragged out of its card can only leave the split (its tab keeps its place in its group), so no drop line is drawn for
    // it: the row says so instead ("Remove from split view" in place of its title) until it is over a drop that really lands somewhere else.
    current.node.closest('.sb-split-group')?.toggleAttribute('data-leaving',over?.type==='split.separate'&&!!state.windowUi.splitGroups?.some(group=>group.linked?.includes(current.id)));
@@ -757,20 +793,20 @@ function SidebarTabs({state,dispatch,tabs,groups,newTabsTop,folders='mixed',show
   const key=(next:globalThis.KeyboardEvent)=>{if(next.key==='Escape'&&drag.current?.moved){next.preventDefault();next.stopPropagation();finish(false);}};
   window.addEventListener('blur',blur);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',cancel);window.addEventListener('keydown',key,true);
   const off=()=>{scrollEdge.stop();window.removeEventListener('blur',blur);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cancel);window.removeEventListener('keydown',key,true);};
-  drag.current?.off();drag.current={id:tab.id,key:rowId,card,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false,node:event.currentTarget,off,...(split?{split}:{}),...(group?{group}:{})};
+  drag.current?.off();lastDrop.current=undefined;drag.current={id:tab.id,key:rowId,card,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false,node:event.currentTarget,off,...(split?{split}:{}),...(group?{group}:{})};
  };
  // Motion is compositor-only (founder: the sidebar must never lag): rows never animate height. The scroll region's
  // FLIP pass (useFlip) slides rows that moved with transform, fades new rows in and fades a ghost of a closed row out.
  const moveBy=(tab:TabSession,direction:-1|1)=>{const at=visible.findIndex(item=>item.id===tab.id),target=visible[at+direction];if(!target)return;skipNextFlip();dispatch({type:'tab.drop',from:tab.id,to:target.id,position:direction<0?'before':'after',groupId:groupForTab(state,target)?.id??null});};
  // A linked tab (reported 28 Oct) has two rows: its own in the group (`link`: also in that split) and a copy in the split's card
  // (`copy`: × removes it from the split, a drag out only leaves the split). They share the tab id, so the copy has its own keys.
- const row=(tab:TabSession,options:{pinned?:boolean;hidden?:boolean;pane?:SplitGroup;link?:SplitGroup;copy?:boolean}={})=>{const rowKey=options.copy?'link:'+tab.id:tab.id;return <TabRow key={rowKey} tab={tab} state={state} dispatch={dispatch} pinned={options.pinned} hidden={options.hidden} pane={options.pane} link={options.link} copy={options.copy} number={options.copy||options.hidden?undefined:numbers?.figures.get(tab.id)} numberTyped={options.copy||options.hidden||!numbers||numbers.typed===null?undefined:(numbers.figures.get(tab.id)!==undefined&&tabNumberMatches(numbers.figures.get(tab.id)!,numbers.typed)?'match':'other')} dragging={dragging===rowKey} hint={!options.copy&&hint&&'id' in hint&&hint.id===tab.id?hint.position:undefined} onMove={direction=>moveBy(tab,direction)} onClose={()=>dispatch(options.copy?{type:'split.separate',tabId:tab.id}:{type:'tab.close',id:tab.id})} onPointerDown={event=>startDrag(event,tab,undefined,!!options.pane,rowKey)}/>;};
+ const row=(tab:TabSession,options:{pinned?:boolean;hidden?:boolean;pane?:SplitGroup;link?:SplitGroup;copy?:boolean}={})=>{const rowKey=options.copy?'link:'+tab.id:tab.id;return <TabRow key={rowKey} tab={tab} state={state} dispatch={dispatch} pinned={options.pinned} hidden={options.hidden} pane={options.pane} link={options.link} copy={options.copy} number={options.copy||options.hidden?undefined:numbers?.figures.get(tab.id)} numberTyped={options.copy||options.hidden||!numbers||numbers.typed===null?undefined:(numbers.figures.get(tab.id)!==undefined&&tabNumberMatches(numbers.figures.get(tab.id)!,numbers.typed)?'match':'other')} dragging={dragging===rowKey} hint={!options.copy&&hint&&'id' in hint&&hint.id===tab.id?hint.position:undefined} hintOut={!options.copy&&!!hint&&'id' in hint&&hint.id===tab.id&&hint.out} onMove={direction=>moveBy(tab,direction)} onClose={()=>dispatch(options.copy?{type:'split.separate',tabId:tab.id}:{type:'tab.close',id:tab.id})} onPointerDown={event=>startDrag(event,tab,undefined,!!options.pane,rowKey)}/>;};
  // A split row and its panes; inside a group it is one of the group's members (indented, in the group's colour).
  const splitBlock=(split:SplitGroup,members:TabSession[],nestedIn?:TabGroup,hidden=false)=><SidebarSplit key={split.id} state={state} dispatch={dispatch} split={split} members={members} reduced={reduced} row={row} focusFrom={moveFocus} nestedIn={nestedIn} hidden={hidden} dragging={dragging==='split:'+split.id} onPointerDown={event=>{const anchor=state.tabs.find(tab=>split.tabIds.includes(tab.id));if(anchor&&(event.target as HTMLElement).closest('.split-group-parent'))startDrag(event,anchor,split);}} openMenu={(node,pointer)=>{const lead=members.find(tab=>tab.id===split.lastActiveTabId)||members[0];if(lead)popup(state,'split-context',node,lead.id,pointer);}}/>;
  const groupChildren=(group:TabGroup,members:TabSession[])=>groupRows(group,members).map(item=>item.kind==='tab'?row(item.tab,{hidden:item.hidden,link:item.link}):splitBlock(item.split,item.members,group,item.hidden));
  // The open-tab count sits at the row's end (reported 25 Oct: kept, but not as a header of its own); Ctrl+T takes its
  // place on hover.
- const newTab=<button key="new-tab" className="sb-new-tab" data-flip="new-tab" data-sb-focus onContextMenu={event=>{event.preventDefault();event.stopPropagation();popup(state,'strip-context',event.currentTarget,undefined,event);}} aria-label={t("acirasidebar.newTabCountOpen", { count: tabs.length })} onKeyDown={moveFocus} onClick={()=>dispatch({type:'tab.new'})}><span className="sb-tab-icon"><PreviewIcon icon={Plus} size={14}/></span><span>{t("browsermenu.newTab")}</span><span className="sb-new-end" aria-hidden="true"><kbd>{formatShortcut('Ctrl T')}</kbd></span></button>;
+ const newTab=<button key="new-tab" className="sb-new-tab" data-flip="new-tab" data-sb-focus onContextMenu={event=>{event.preventDefault();event.stopPropagation();popup(state,'strip-context',event.currentTarget,undefined,event);}} aria-label={t("acirasidebar.newTabCountOpen", { count: openCount ?? tabs.length })} onKeyDown={moveFocus} onClick={()=>dispatch({type:'tab.new'})}><span className="sb-tab-icon"><PreviewIcon icon={Plus} size={14}/></span><span>{t("browsermenu.newTab")}</span><span className="sb-new-end" aria-hidden="true"><kbd>{formatShortcut('Ctrl T')}</kbd></span></button>;
  // Groups in an area of their own (item 14): a line is the area's edge, as it is for the zones (no header, founder 25 Oct).
  const listed:ReactNode[]=entries.map(entry=>entry.kind==='tab'?row(entry.tab):entry.kind==='split'?splitBlock(entry.split,entry.members):<SidebarGroup key={entry.group.id} group={entry.group} members={entry.members} state={state} dispatch={dispatch} showMembers joining={!!hint&&'group' in hint&&hint.group===entry.group.id} dragging={dragging==='group:'+entry.group.id} onPointerDown={event=>{const lead=entry.members.find(tab=>tab.id===entry.group.lastActiveTabId)||entry.members[0];if(lead)startDrag(event,lead,undefined,false,'group:'+entry.group.id,entry.group);}}>{groupChildren(entry.group,entry.members)}</SidebarGroup>);
  if(folders!=='mixed'&&folderCount>0&&looseCount>0)listed.splice(folders==='above'?folderCount:looseCount,0,<div key="sep-folders" className="sb-sep" role="separator" data-flip="sep:folders"/>);
@@ -980,7 +1016,7 @@ function useLoadingSignal(on:boolean){
  return on&&late;
 }
 
-function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=false,number,numberTyped,dragging,hint,onMove,onClose,onPointerDown}:{tab:TabSession;state:BrowserSnapshot;dispatch:Dispatch;pinned?:boolean;hidden?:boolean;/** The split whose card lists this row (the one place a pane shows, 28 Oct). */pane?:SplitGroup;/** Linked copies (reported 28 Oct): `link` marks the tab's row in its group as also drawn in this loose split; `copy` marks the split card's row of such a tab (its × removes it from the split, its group colour and tooltip say where the tab lives). */link?:SplitGroup;copy?:boolean;/** The figure Ctrl/Cmd+number goes to this tab by, drawn at the row's end while the key is held. */number?:number;/** While a first digit waits for its second (Ctrl/Cmd+1, then 5 = tab 15): 'match' for the figures it can still lead to (10…19 for 1), 'other' for the rest. */numberTyped?:'match'|'other';dragging:boolean;hint?:'before'|'after';onMove:(direction:-1|1)=>void;onClose:()=>void;onPointerDown:(event:PointerEvent<HTMLDivElement>)=>void}){
+function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=false,number,numberTyped,dragging,hint,hintOut=false,onMove,onClose,onPointerDown}:{tab:TabSession;state:BrowserSnapshot;dispatch:Dispatch;pinned?:boolean;hidden?:boolean;/** The split whose card lists this row (the one place a pane shows, 28 Oct). */pane?:SplitGroup;/** Linked copies (reported 28 Oct): `link` marks the tab's row in its group as also drawn in this loose split; `copy` marks the split card's row of such a tab (its × removes it from the split, its group colour and tooltip say where the tab lives). */link?:SplitGroup;copy?:boolean;/** The figure Ctrl/Cmd+number goes to this tab by, drawn at the row's end while the key is held. */number?:number;/** While a first digit waits for its second (Ctrl/Cmd+1, then 5 = tab 15): 'match' for the figures it can still lead to (10…19 for 1), 'other' for the rest. */numberTyped?:'match'|'other';dragging:boolean;hint?:'before'|'after';hintOut?:boolean;onMove:(direction:-1|1)=>void;onClose:()=>void;onPointerDown:(event:PointerEvent<HTMLDivElement>)=>void}){
  // D's private tabs and N's Tor tabs (TabSession.privacy; 'tor' is typed when N's tabs land).
  const active=tab.id===state.activeTabId,sound=tabSound(tab),name=title(tab),raw=tab.privacy as string|undefined,privacy:'private'|'tor'|undefined=raw==='private'||raw==='tor'?raw:undefined,privateTab=privacy==='private',torTab=privacy==='tor',markInIcon=!!privacy&&isNewTabState(tab.url);
  const loading=useLoadingSignal(tabShowsLoading(tab));
@@ -997,7 +1033,7 @@ function TabRow({tab,state,dispatch,pinned=false,hidden=false,pane,link,copy=fal
  // A linked tab is two rows of one tab: both read as current together. The group row carries the split glyph ("Also in split view"),
  // the card row the group's colour and link glyph ("In group G") and a fainter title; the card row's × removes it from the split.
  const homeGroup=copy?groupForTab(state,tab):undefined,linkTip=copy?t("acirasidebar.linkedInGroup",{group:homeGroup?.name||'Unnamed group'}):link?t("acirasidebar.linkedInSplit"):undefined;
- return <div className="sb-tab" ref={rowRef} role="listitem" data-flip={hidden?undefined:'t:'+tab.id+(copy?'~split':'')} data-tab-id={tab.id} data-link-role={copy?'split':link?'group':undefined} data-split-link={copy?homeGroup?.id||'':undefined} data-in-split={link?.id} style={copy&&homeGroup?{'--group-color':tabGroupColor(homeGroup.color)} as CSSProperties:siteColor?{'--site':siteColor} as CSSProperties:undefined} data-glow={siteColor?'':undefined} data-split-pane={pane?.id} data-solo={solo||undefined} onPointerEnter={event=>startTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} onPointerLeave={event=>stopTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} data-private={privateTab||undefined} data-tor={torTab||undefined} data-pinned={pinned||undefined} data-hidden={hidden||undefined} inert={hidden||undefined} aria-hidden={hidden||undefined} data-sleeping={tab.sleeping||undefined} data-capturing={tab.capturing?.length||undefined} data-risk={tab.risk?.kind} title={tab.risk?`${tab.risk.title}. ${tab.risk.detail}`:undefined} aria-current={active||undefined} data-dragging={dragging||undefined} data-drop={hint} onPointerDown={onPointerDown} onDragStart={event=>event.preventDefault()}
+ return <div className="sb-tab" ref={rowRef} role="listitem" data-flip={hidden?undefined:'t:'+tab.id+(copy?'~split':'')} data-tab-id={tab.id} data-link-role={copy?'split':link?'group':undefined} data-split-link={copy?homeGroup?.id||'':undefined} data-in-split={link?.id} style={copy&&homeGroup?{'--group-color':tabGroupColor(homeGroup.color)} as CSSProperties:siteColor?{'--site':siteColor} as CSSProperties:undefined} data-glow={siteColor?'':undefined} data-split-pane={pane?.id} data-solo={solo||undefined} onPointerEnter={event=>startTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} onPointerLeave={event=>stopTitleMarquee(event.currentTarget.querySelector<HTMLElement>('.sb-tab-title'))} data-private={privateTab||undefined} data-tor={torTab||undefined} data-pinned={pinned||undefined} data-hidden={hidden||undefined} inert={hidden||undefined} aria-hidden={hidden||undefined} data-sleeping={tab.sleeping||undefined} data-capturing={tab.capturing?.length||undefined} data-risk={tab.risk?.kind} title={tab.risk?`${tab.risk.title}. ${tab.risk.detail}`:undefined} aria-current={active||undefined} data-dragging={dragging||undefined} data-drop={hint} data-drop-out={hint&&hintOut||undefined} onPointerDown={onPointerDown} onDragStart={event=>event.preventDefault()}
   onMouseDown={event=>{if(event.button===1)event.preventDefault();}} onAuxClick={event=>{if(event.button===1&&!pinned){event.preventDefault();onClose();}}}
   onContextMenu={event=>{event.preventDefault();event.stopPropagation();context(event.currentTarget,event);}}>
   {renaming?<div className="sb-tab-main sb-tab-editing"><span className="sb-tab-icon" data-loading={loading||undefined}>{loading?<DotMatrix preset="loader" size={14} reducedMotion={state.settings.reducedMotion}/>:markInIcon?<TabPrivacyMark privacy={privacy!} size={16} className="sb-tab-icon-mark"/>:<SiteIdentityIcon url={tab.url} favicon={tab.favicon} size={16} error={!!tab.error}/>}</span><TabNameInput tab={shown} dispatch={dispatch} onDone={()=>{setRenaming(null);requestAnimationFrame(()=>rowRef.current?.querySelector<HTMLElement>('.sb-tab-main')?.focus({preventScroll:true}));}}/></div>:

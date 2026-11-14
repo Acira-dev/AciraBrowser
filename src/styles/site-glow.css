@@ -16,6 +16,10 @@ html[data-site-glow] .app.style-acira:not(.native-layer) { isolation: isolate; }
   background: radial-gradient(ellipse 360px 64% at 150px 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%);
 }
 html[data-site-glow-tone=dark] .st-glow-rail { mix-blend-mode: screen; }
+/* An IDLE glow layer, a frame layer or a rail at opacity 0 with no fade running (no `data-lit`, siteGlowEngine.ts), is not kept on the compositor: with will-change at
+   rest every idle layer stayed a full-window composited layer after the first site colour, with a compositor surface of its own in dark (12.6 MB at 2x) and an overlap
+   layer above it. Opacity 0 draws nothing, so the picture is the same; a fade still starts from the opacity computed a frame ago. */
+.st-glow:not([data-lit]), .st-glow-rail:not([data-lit]) { will-change: auto; }
 html[data-sidebar-side=right] .st-glow-rail { left: -16px; right: 0; background-image: radial-gradient(ellipse 360px 64% at calc(100% - 150px) 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%); }
 html[data-site-glow-tone=dark] .st-glow { mix-blend-mode: screen; }
 /* The sidebar on the right (data-sidebar-side, sidebar-right): the washes mirror with it. */

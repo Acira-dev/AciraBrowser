@@ -8,7 +8,7 @@ import { favoriteTabOf, listedTabs } from '../src/runtime/favoriteTabs';
 import { scopeToWorkspace, workspaceCounts, workspaceIdOf } from '../src/runtime/workspaces';
 import type { BrowserAction, BrowserSnapshot } from '../src/runtime/types';
 
-// A favorite is linked to one tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; founder, 6 Nov: "the tab must not
+// A favorite is linked to one tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; reported 6 Nov: "the tab must not
 // disappear when it's added to Favorites"). The tab is an ordinary tab of the list, where it was; the tile reaches it. The reducer half:
 // runtime/favoriteTabs.ts and its uses in core.ts.
 const run = (state: BrowserSnapshot, ...actions: BrowserAction[]) => actions.reduce(reduceBrowser, state);
@@ -321,11 +321,13 @@ test('workspace tab counts include the favorite\'s tab, as the list does (the wo
   assert.deepEqual(workspaceCounts(state)[work], { tabs: 1, pages: 0 }, 'only Work\'s new tab');
 });
 
-test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk the list on screen: the favorite\'s tab is in it, in the sidebar and in the strip', () => {
+test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk every tab: the favorite\'s tab is in it, as a row (Favorites\' tabs in the tab list On) or after the rows (the default, tiles only)', () => {
   let state = open(base());
   const own = owners(state)[0].id;
-  state = run(state, { type: 'settings.update', patch: { verticalTabs: true } });
+  state = run(state, { type: 'settings.update', patch: { verticalTabs: true, favoriteTabsInList: true } });
   assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'Ctrl+9 (the last tab) is the favorite\'s, the last row of the list');
+  state = run(state, { type: 'settings.update', patch: { verticalTabs: true, favoriteTabsInList: false } });
+  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'tiles only: no row, but the keys still reach it (13.9)');
   state = run(state, { type: 'settings.update', patch: { verticalTabs: false } });
   assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'the strip lists it too');
   // Only the open workspace's tabs, as before.
@@ -336,6 +338,6 @@ test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk the list on screen: the favorite\
   assert.match(main, /case 'cycle-tab':\{[^}]*const here=listedTabs\(state\),i=here\.findIndex\(t=>t\.id===active\.id\);if\(!here\.length\|\|i<0&&!active\.favoriteId\)break;/);
   assert.match(main, /id:\(i<0\?\(command\.direction>0\?here\[0\]:here\.at\(-1\)\):here\[\(i\+command\.direction\+here\.length\)%here\.length\]\)\.id/);
   assert.match(main, /case 'select-tab':\{const here=listedTabs\(state\),target=command\.index<0\?here\.at\(-1\):here\[command\.index\]/);
-  assert.match(main, /case 'move-tab':\{const here=listedTabs\(state\),index=here\.findIndex\(t=>t\.id===active\.id\),neighbor=index<0\?undefined:/);
-  assert.match(readFileSync(new URL('../src/runtime/core.ts', import.meta.url), 'utf8'), /export \{ listedTabs \} from '\.\/favoriteTabs';/, 'main reads it from the runtime bundle');
+  assert.match(main, /case 'move-tab':\{[^}]*const here=rowTabs\(state\),index=here\.findIndex\(t=>t\.id===active\.id\),neighbor=index<0\?undefined:/);
+  assert.match(readFileSync(new URL('../src/runtime/core.ts', import.meta.url), 'utf8'), /export \{ listedTabs, rowTabs \} from '\.\/favoriteTabs';/, 'main reads it from the runtime bundle');
 });

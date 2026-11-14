@@ -230,3 +230,18 @@ try{
  },true);
  ipcRenderer.send('acira:key-ack-ready');
 }catch{/* no acknowledgement from this frame (no MessageChannel, no window): the main process keeps the key itself */}
+// The mouse's back and forward buttons (3 and 4 here). Chromium steps the page's history on their release unless the page cancelled that mouseup or its
+// auxclick (content/browser/web_contents/web_contents_impl.cc HandleMouseEvent, after the renderer's answer; Blink merges the two). A tab's history may
+// also hold Acira's own page before the first site (its New Tab), which this page's history does not have: main steps there only when the page did not
+// cancel the button, and only this page knows that. So once per release it says whether it did, read after every listener has run (a timer, not a
+// microtask: the browser's own events run microtasks between listeners). Every frame, as the button reaches the frame under the pointer.
+{
+ let pending=null;
+ const seen=event=>{
+  if(!event.isTrusted||(event.button!==3&&event.button!==4))return;
+  if(event.type==='mouseup'){const record={button:event.button,events:[event]};pending=record;setTimeout(()=>{if(pending===record)pending=null;try{ipcRenderer.send('acira:mouse-nav',{button:record.button===3?'back':'forward',prevented:record.events.some(item=>item.defaultPrevented)});}catch{/* the page is closing */}},0);}
+  else if(pending&&pending.button===event.button)pending.events.push(event);
+ };
+ window.addEventListener('mouseup',seen,{capture:true,passive:true});
+ window.addEventListener('auxclick',seen,{capture:true,passive:true});
+}

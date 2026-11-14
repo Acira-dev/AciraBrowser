@@ -141,7 +141,7 @@ test('main: the window\'s focus event gives the stored target the keyboard first
   assert.ok(handler > 0);
   const body = main.slice(handler, main.indexOf('pageFocus.activated();});', handler));
   const auth = body.indexOf('if(authActive){focusContents(chromeView?.webContents);return;}');
-  const gate = body.indexOf('focusGate.activated();');
+  const gate = body.indexOf('focusGate.activated(activationFallback);'); // 13.8 check 14: with the fallback (tests/focus-return.test.cjs)
   assert.ok(auth > 0 && gate > auth, 'after the sign-in card\'s own rule');
   assert.ok(gate < body.indexOf('const contents=webContents.getFocusedWebContents?.()||focusedContents;'), 'before the overlay and page-focus checks');
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialState, makeTab, persistedSnapshot, reduceBrowser, restoreSnapshot } from '../src/runtime/core';
 import { scopeToWorkspace, workspaceCounts, workspaceIdOf } from '../src/runtime/workspaces';
-import { listedTabs } from '../src/runtime/favoriteTabs';
+import { listedTabs, rowTabs } from '../src/runtime/favoriteTabs';
 import { bulkCloseTargets } from '../src/runtime/profileActions';
 import { tabNumbers } from '../src/runtime/tabNumbers';
 import { groupForTab } from '../src/runtime/tabGroups';
@@ -23,7 +23,7 @@ type Mode = 'in the list' | 'tile only';
 function start(mode: Mode = 'in the list'): BrowserSnapshot {
   const base = createInitialState(), profile = base.activeBrowserProfileId;
   let state = run({ ...base, tabs: ['t1', 't2', 't3'].map(id => makeTab(id, '', `https://${id}.test/`, profile)), activeTabId: 't1' }, { type: 'ui.update', patch: {} });
-  state = run(state, { type: 'settings.update', patch: { verticalTabs: true, ...(mode === 'tile only' ? { favoriteTabsInList: false } : {}) } }, { type: 'workspace.create', name: 'Work' }, { type: 'workspace.create', name: 'Play' });
+  state = run(state, { type: 'settings.update', patch: { verticalTabs: true, favoriteTabsInList: mode !== 'tile only' } }, { type: 'workspace.create', name: 'Work' }, { type: 'workspace.create', name: 'Play' });
   return state;
 }
 
@@ -60,22 +60,24 @@ function violations(state: BrowserSnapshot): string[] {
     if (spaces.has(undefined)) out.push('a split names a tab that is gone'); else if (spaces.size > 1) out.push('a split spans two Spaces');
   }
   for (const [space, id] of Object.entries(state.windowUi.lastTabs ?? {})) if (spaceOf(id) !== space) out.push(`remembered tab ${id} of ${space} is elsewhere`);
-  // What "the favorite's tab lives only in its tile" means, however the window got here: the list, the keys, Close other tabs and the shown counts
-  // all leave it out, and the page still counts as open (Delete workspace asks by pages). In the list mode every tab is a tab of the list.
-  const tileOnly = state.settings.favoriteTabsInList === false && !!state.settings.verticalTabs, counts = workspaceCounts(state);
-  const listed = listedTabs(state);
-  if (tileOnly && listed.some(tab => !!tab.favoriteId)) out.push('the keys walk a tile-only favorite tab');
-  if (!tileOnly && scopeToWorkspace(state).tabs.some(tab => !listed.includes(tab))) out.push('a tab of the list is not walked by the keys');
+  // What "the favorite's tab lives only in its tile" means, however the window got here (13.9): the list and Close other tabs leave it out, but it is still a
+  // tab: the keys walk it (after the rows), the shown counts include it and the page counts as open (Delete workspace asks by pages). In the list mode every tab is a row.
+  const tileOnly = state.settings.favoriteTabsInList !== true && !!state.settings.verticalTabs, counts = workspaceCounts(state);
+  const listed = listedTabs(state), rows = rowTabs(state);
+  if (scopeToWorkspace(state).tabs.some(tab => !listed.includes(tab))) out.push('a tab of the Space is not walked by the keys');
+  if (tileOnly && rows.some(tab => !!tab.favoriteId)) out.push('a tile-only favorite tab has a row');
+  if (tileOnly && listed.slice(0, rows.length).some((tab, i) => tab !== rows[i])) out.push('the keys do not walk the rows first');
   for (const space of state.workspaces) {
     const inSpace = state.tabs.filter(tab => tab.browserProfileId === space.browserProfileId && workspaceIdOf(state, tab) === space.id);
-    const shown = inSpace.filter(tab => !(tileOnly && tab.favoriteId)).length, pages = inSpace.filter(tab => tab.url !== 'acira://new').length;
+    const shown = inSpace.length, pages = inSpace.filter(tab => tab.url !== 'acira://new').length;
     if (counts[space.id]?.tabs !== shown) out.push(`${space.id.slice(-4)} shows ${counts[space.id]?.tabs} tabs, the list holds ${shown}`);
     if (counts[space.id]?.pages !== pages) out.push(`${space.id.slice(-4)} has ${pages} open pages, counted ${counts[space.id]?.pages}`);
   }
   if (tileOnly) {
     const targets = bulkCloseTargets(state, { type: 'tab.close.others', id: state.activeTabId });
     for (const id of targets) if (state.tabs.find(tab => tab.id === id)?.favoriteId) out.push('Close other tabs would close a tile-only favorite tab');
-    for (const [id] of tabNumbers(state)) if (state.tabs.find(tab => tab.id === id)?.favoriteId) out.push('a tile-only favorite tab has a tab number');
+    const numbers = tabNumbers(state);
+    rows.slice(0, 8).forEach((tab, i) => { if (numbers.get(tab.id) !== i + 1) out.push(`row ${i + 1} is numbered ${numbers.get(tab.id)}`); });
   }
   return out;
 }
@@ -103,7 +105,7 @@ function walk(seed: number, steps: number, mode: Mode): { log: string[]; problem
     else if (roll < 0.85) { const tab = pick(tabs), app = pick(apps); label = `tab.favorite ${tab.id} ${app.id}`; next = run(state, { type: 'tab.favorite', id: tab.id, favoriteId: random() < 0.8 ? app.id : null }); }
     else if (roll < 0.89) { label = 'tab.restore'; next = run(state, { type: 'tab.restore' }); }
     else if (roll < 0.93) { const tab = pick(tabs); label = `plain tab.select ${tab.id}`; next = run(state, { type: 'tab.select', id: tab.id }); }
-    else if (roll < 0.955) { const on = state.settings.favoriteTabsInList === false; label = `setting: favorites' tabs ${on ? 'in the list' : 'only in the tile'}`; next = run(state, { type: 'settings.update', patch: { favoriteTabsInList: on } }); }
+    else if (roll < 0.955) { const on = state.settings.favoriteTabsInList !== true; label = `setting: favorites' tabs ${on ? 'in the list' : 'only in the tile'}`; next = run(state, { type: 'settings.update', patch: { favoriteTabsInList: on } }); }
     else if (roll < 0.97) { label = 'save and restore'; next = restoreSnapshot(JSON.parse(JSON.stringify(persistedSnapshot(state)))); if (shape(next) !== shape(state)) { log.push(label); return { log, problem: `a restart changed the window:\n  ${shape(state)}\n  ${shape(next)}` }; } }
     else { label = `close the active tab ${state.activeTabId}`; next = run(state, { type: 'tab.close', id: state.activeTabId }); }
     log.push(label);

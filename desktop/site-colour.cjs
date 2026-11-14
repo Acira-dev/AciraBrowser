@@ -78,8 +78,8 @@ function createSiteColour({
         const flat = strip && flatStrip(strip.bitmap, strip.width, strip.height);
         if (flat && isBrand(flat.rgb)) found = { rgb: flat.rgb, from: 'edge' };
       }
-      if (!found && tab.icons.length) {
-        if (tab.iconColour === undefined) { tab.iconColour = null; const hex = await iconOf(tabId, tab.icons).catch(() => null); if (token !== tab.generation || tab.disposed) return; tab.iconColour = hex || null; }
+      if (!found && (tab.icons.length || tab.iconColour)) {
+        if (tab.iconColour === undefined) { tab.iconColour = null; const hex = await iconOf(tabId, tab.icons).catch(() => null); if (token !== tab.generation || tab.disposed) return; if (!tab.iconColour) tab.iconColour = hex || null; }
         if (tab.iconColour) found = { rgb: rgbOf(tab.iconColour), from: 'icon' };
       }
       if (token !== tab.generation || tab.disposed) return;
@@ -105,7 +105,7 @@ function createSiteColour({
         tab.themeSeen = false; tab.settleUntil = 0; // a new page: its first declared colour is applied at once (themeColor below), the same site or not
         const host = hostOf(newUrl);
         if (host !== tab.host) {
-          tab.host = host; tab.theme = null; tab.hold = math.createHold(); tab.force = true; tab.none = 0; tab.icons = []; tab.iconColour = undefined;
+          tab.host = host; tab.theme = null; tab.hold = math.createHold(); tab.force = true; tab.none = 0; tab.icons = []; tab.iconColour = undefined; tab.iconHanded = false;
           if (host && hostMemory.has(host) && level() !== 'off' && !blocked(tabId)) { const hex = hostMemory.get(host); if (hex !== tab.shown) { tab.shown = hex; emit({ siteColor: hex }); if (hex) tab.hold.push(rgbOf(hex), now(), { force: true }); } }
         }
         clear();
@@ -123,7 +123,10 @@ function createSiteColour({
         if (declared && now() < tab.settleUntil) { tab.force = true; later(120, () => resolve()); return; }
         later(120, () => resolve());
       },
-      iconChanged(urls) { tab.icons = Array.isArray(urls) ? urls.filter(u => typeof u === 'string').slice(0, 4) : []; tab.iconColour = undefined; later(600, () => resolve()); },
+      /** The icon the tab itself resolved (tab-icons: the page's best declared icon, fetched once with the longer wait) gave this brand colour (or none): it replaces a reading that found
+       *  nothing, so the colour never depends on the second, 4 s fetch alone. A colour handed over this way stays through the page's own icon announcement (`iconChanged` keeps it; the glow does not drop while the second fetch runs) and is replaced only by another handed over for a new icon. */
+      iconResolved(hex) { if (typeof hex === 'string' && hex && tab.iconColour !== hex && isBrand(rgbOf(hex))) { tab.iconColour = hex; tab.iconHanded = true; clear(); later(120, () => resolve()); later(400, () => resolve()); } },
+      iconChanged(urls) { tab.icons = Array.isArray(urls) ? urls.filter(u => typeof u === 'string').slice(0, 4) : []; if (!tab.iconHanded) tab.iconColour = undefined; later(600, () => resolve()); },
       /** The tab came on screen (or the setting changed): read it once now. */
       shown() { clear(); later(300, () => resolve()); },
       /** Called whenever the tab is on screen (cheap): the first time it is seen with nothing read yet, read it. */
@@ -145,8 +148,29 @@ async function captureStrip(wc, { dip = STRIP_DIP, width: viewWidth = 1200 } = {
   const size = image.getSize(1), bitmap = image.toBitmap({ scaleFactor: 1 });
   return bitmap.length === size.width * size.height * 4 ? { bitmap, width: size.width, height: size.height } : null;
 }
-/** Electron glue: the brand colour of the icon a page announced (A: SVG by the colours the file names; ICO by its bitmap; PNG and the rest through
- *  nativeImage). Fetched through the TAB's own session, without cookies, answered from the HTTP cache when the page just loaded it; at most 400 KB, 4 s. */
+/** The brand colour of an icon file's bytes (A: SVG by the colours the file names; ICO by its bitmap; PNG and the rest through nativeImage): `{hex}` when it has one,
+ *  `{none: true}` when it is a picture with no brand colour (a white tile with a grey mark), `{skip: true}` when it cannot be read. Pure but for `nativeImage`. */
+function brandOfIcon(bytes, { nativeImage, iconImage }) {
+  bytes = Buffer.from(bytes).subarray(0, 400000);
+  const kind = iconImage.sniff(bytes);
+  if (kind === 'svg') {
+    const list = math.svgColours(bytes.toString('utf8')), brand = list.find(item => isBrand(math.fromHex(item.hex).slice(0, 3)));
+    return brand ? { hex: brand.hex } : { skip: true };
+  }
+  let size = null, bitmap = null;
+  if (kind === 'ico') {
+    const pictures = iconImage.icoPictures(bytes), best = pictures && iconImage.icoPreference(pictures, 64)[0];
+    if (!best) return { skip: true };
+    if (best.png) { const image = nativeImage.createFromBuffer(Buffer.from(bytes.subarray(best.offset, best.offset + best.size))); if (!image.isEmpty()) { size = image.getSize(1); bitmap = image.toBitmap({ scaleFactor: 1 }); } }
+    else { const dib = math.decodeIcoBitmap(bytes, best.offset); if (dib) { size = { width: dib.width, height: dib.height }; bitmap = dib.bgra; } }
+  } else { const image = nativeImage.createFromBuffer(bytes); if (!image.isEmpty()) { size = image.getSize(1); bitmap = image.toBitmap({ scaleFactor: 1 }); } }
+  if (!bitmap || bitmap.length !== size.width * size.height * 4) return { skip: true };
+  const brand = iconBrand(bitmap, size.width, size.height);
+  return brand ? { hex: brand.hex } : { none: true };
+}
+/** Electron glue: the brand colour of the icon a page announced, fetched through the TAB's own session, without cookies, answered from the HTTP cache when the page just loaded it;
+ *  at most 400 KB, 4 s. This is the FALLBACK: the icon the tab already resolved for its own tab and sidebar row (tab-icons.resolvePageIcon, one fetch with 15 s) is handed to the colour
+ *  as it arrives (`iconResolved` below), so a heavy page whose second, shorter fetch times out still gets its colour (Twitch: no theme-color, no flat top edge, only the icon). */
 async function iconColour(wc, urls, { nativeImage, iconImage }) {
   const withTimeout = (promise, ms) => Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(null), ms))]);
   for (const url of urls) {
@@ -154,21 +178,9 @@ async function iconColour(wc, urls, { nativeImage, iconImage }) {
     try {
       const response = await withTimeout(wc.session.fetch(url, { credentials: 'omit', cache: 'force-cache' }), 4000);
       if (!response || !response.ok) continue;
-      const bytes = Buffer.from(await response.arrayBuffer()).subarray(0, 400000), kind = iconImage.sniff(bytes);
-      if (kind === 'svg') {
-        const list = math.svgColours(bytes.toString('utf8')), brand = list.find(item => isBrand(math.fromHex(item.hex).slice(0, 3)));
-        if (brand) return brand.hex; continue;
-      }
-      let size = null, bitmap = null;
-      if (kind === 'ico') {
-        const pictures = iconImage.icoPictures(bytes), best = pictures && iconImage.icoPreference(pictures, 64)[0];
-        if (!best) continue;
-        if (best.png) { const image = nativeImage.createFromBuffer(Buffer.from(bytes.subarray(best.offset, best.offset + best.size))); if (!image.isEmpty()) { size = image.getSize(1); bitmap = image.toBitmap({ scaleFactor: 1 }); } }
-        else { const dib = math.decodeIcoBitmap(bytes, best.offset); if (dib) { size = { width: dib.width, height: dib.height }; bitmap = dib.bgra; } }
-      } else { const image = nativeImage.createFromBuffer(bytes); if (!image.isEmpty()) { size = image.getSize(1); bitmap = image.toBitmap({ scaleFactor: 1 }); } }
-      if (!bitmap || bitmap.length !== size.width * size.height * 4) continue;
-      const brand = iconBrand(bitmap, size.width, size.height);
-      if (brand) return brand.hex; return null;
+      const read = brandOfIcon(Buffer.from(await response.arrayBuffer()), { nativeImage, iconImage });
+      if (read.hex) return read.hex;
+      if (read.none) return null;
     } catch { /* an icon that does not load gives nothing */ }
   }
   return null;
@@ -179,4 +191,4 @@ function decodeIcon(nativeImage, dataUrl) {
   try { const image = nativeImage.createFromDataURL(dataUrl); if (image.isEmpty()) return null; const size = image.getSize(1), bitmap = image.toBitmap({ scaleFactor: 1 }); return bitmap.length === size.width * size.height * 4 ? { bitmap, width: size.width, height: size.height } : null; } catch { return null; }
 }
 
-module.exports = { createSiteColour, isBrand, flatStrip, iconBrand, hostOf, captureStrip, decodeIcon, iconColour };
+module.exports = { createSiteColour, isBrand, flatStrip, iconBrand, hostOf, captureStrip, decodeIcon, iconColour, brandOfIcon };

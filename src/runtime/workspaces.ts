@@ -1,6 +1,5 @@
 import enMessages from '../i18n/en.json';
 import { format as formatMessage } from '../i18n/format';
-import { tabListed } from './favoriteTabsRule';
 import { navigationTitle } from './navigation';
 import { settleSpaces } from './profileSpaces';
 import { leaveSplit, normalizeSplitGroups } from './splitGroups';
@@ -98,13 +97,13 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
   const counts: Record<string, { tabs: number; pages: number }> = {};
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
-    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any. `tabs` is what the list shows, so a
-    // favorite's tab that Settings keep only in its tile (favoriteTabs.ts tabListed) is left out of it; `pages` is every open page of the Space, because
-    // Delete workspace asks by it and the tile-only page closes with the Space all the same.
+    // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any, also when Settings keep it only in its
+    // tile (the default since 13.9): the tab is open, so a Space whose only page is a favorite says "1 tab", never "0 tabs". `pages` is every open page of the
+    // Space, because Delete workspace asks by it and a tile-only page closes with the Space all the same.
     const entry = counts[workspaceIdOf(state, tab)];
     if (!entry) continue;
     if (tab.url !== 'acira://new') entry.pages++;
-    if (!state.settings || tabListed(tab, state.settings)) entry.tabs++;
+    entry.tabs++;
   }
   return counts;
 }

@@ -89,7 +89,8 @@ test('Edge scroll is wired into the sidebar list, the top strip and the compact 
   assert.match(sidebar, /lastMove=next;if\(inSidebar\)scrollEdge\.update\(point\.y\);else scrollEdge\.stop\(\);/);
   assert.match(sidebar, /const off=\(\)=>\{scrollEdge\.stop\(\);/, 'the release, a cancel, Esc and a blur all end it');
   assert.match(sidebar, /return point\.y>box\.bottom&&point\.y<=peek\.bottom\?\{x:point\.x,y:box\.bottom-2\}:point\.y<box\.top&&point\.y>=peek\.top\?\{x:point\.x,y:box\.top\+2\}:point;/, 'a drop on the peek where the scroll rests is a drop at that end of the list');
-  assert.equal(sidebar.match(/tabDropAtPoint\(list\.current,listPoint\(point\),/g)?.length, 3, 'every drop read of a tab drag goes through it');
+  assert.equal(sidebar.match(/listDrop\(current\.rowPreview,listPoint\(point\),/g)?.length, 4, 'every drop read of a tab drag goes through it (listDrop tests the pointer in the list as it lies with the carried row\'s place closed, then reads tabDropAtPoint)');
+  assert.match(sidebar, /return lastDrop\.current=tabDropAtPoint\(list\.current,point,id,state\.tabs,state\.tabGroups,true,undefined,preview\?\.closed,reach\?\?point\);/);
   assert.equal(sidebar.match(/splitMoveAt\(listPoint\(point\),/g)?.length, 2, 'and of a split row');
   assert.match(sidebar, /const seen=zone\.closest<HTMLElement>\('\.sb-scroll'\)\?\.getBoundingClientRect\(\);\s*return point\.x>=hit\.left&&point\.x<=hit\.right&&point\.y>=hit\.top&&point\.y<=hit\.bottom&&\(!seen\|\|point\.y>=seen\.top&&point\.y<=seen\.bottom\);\}/, 'the saved pages are a drop only where they are seen: scrolled under the peek they saved a bookmark nobody saw being made');
   for (const [name, source] of [['strip', strip], ['compact', compact]] as const) {

@@ -1,4 +1,5 @@
 import { animate } from 'motion/react';
+import type { DropPlace } from '../components/tabGroupDrag';
 import type { BrowserAction } from '../runtime/types';
 import { fillChipIcon } from './chipIcon';
 import { liquidChip,liquidFork,liquidTargets,type LiquidTarget } from './liquidSnap';
@@ -19,17 +20,19 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
   const home=row.getBoundingClientRect(),scroll=row.closest<HTMLElement>('.sb-scroll'),scrollTop=scroll?.scrollTop??0,sidebar=row.closest<HTMLElement>('.acira-sidebar');
   const rows=[...root.querySelectorAll<HTMLElement>('.sb-tab:not(.sb-flip-ghost)')].filter(node=>node.getBoundingClientRect().height>0);
   // What makes room, each as one piece: a tab row, a split card (its panes go with it), a group's header, New tab. Only the rows
-  // moved before, so a split card stood still while the rows and Bookmarks slid past it (founder, 30 Oct: "Split view" under "Bookmarks").
+  // moved before, so a split card stood still while the rows and Bookmarks slid past it (reported 30 Oct: "Split view" under "Bookmarks").
   const pieces=[...root.querySelectorAll<HTMLElement>('.sb-tab,.sb-split-group,.sb-group>.sb-group-header,.sb-new-tab')].filter(node=>node!==row&&!node.closest('.sb-flip-ghosts')&&!node.classList.contains('sb-flip-ghost')&&!(node.classList.contains('sb-tab')&&node.parentElement?.closest('.sb-split-group'))&&node.getBoundingClientRect().height>0);
   const following=scroll?[...scroll.children].filter((node):node is HTMLElement=>node instanceof HTMLElement&&node!==root&&!node.contains(root)&&node.getBoundingClientRect().top>=root.getBoundingClientRect().bottom-1):[];
   const boxes=new Map([row,...rows,...pieces,...following].map(node=>[node,node.getBoundingClientRect()]));
   // One row's room: its height and the space to the next piece.
   const pitch=(()=>{const tops=pieces.map(node=>boxes.get(node)!);const after=tops.filter(box=>box.top>home.top+1).sort((a,b)=>a.top-b.top)[0];if(after)return after.top-home.top;const before=tops.filter(box=>box.bottom<=home.top+1).sort((a,b)=>b.bottom-a.bottom)[0];return before?home.bottom-before.bottom:home.height;})();
   const moves=new Map<HTMLElement,{animation?:Animation;offset:number}>();
+  /** Set once a drop has been projected: from then on the slot is where it was last drawn (none for a drop onto a folder). */
+  let layoutOpen=false;
   const preview=document.createElement('div'),gap=document.createElement('div'),icon=document.createElement('span'),title=document.createElement('span');
   preview.className='tab-drag-preview sidebar-tab-drag-preview';preview.setAttribute('aria-hidden','true');preview.inert=true;
   gap.className='sidebar-tab-drag-gap';gap.setAttribute('aria-hidden','true');gap.inert=true;
-  // Over the saved pages the tab's own place stays open as an empty slot (founder, 31 Oct): the copy that goes home recreates the
+  // Over the saved pages the tab's own place stays open as an empty slot (reported 31 Oct): the copy that goes home recreates the
   // tab there, instead of being laid over a row that is still showing.
   const homeSlot=document.createElement('div');homeSlot.className='sidebar-tab-drag-gap sidebar-tab-home-slot';homeSlot.setAttribute('aria-hidden','true');homeSlot.inert=true;
   icon.className='sidebar-drag-icon';icon.append((row.querySelector('.sb-tab-icon')??row).cloneNode(true));
@@ -41,7 +44,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
   preview.style.setProperty('--surface',card.getPropertyValue('--tab-carry-bg').trim()||card.getPropertyValue('--surface'));
   preview.style.setProperty('--carry-font',paint.font);
   host.append(gap,homeSlot,preview);if(!options.stay)row.dataset.sidebarDragSource='';
-  let pointer=grab,p=0,target=0,stop:(()=>void)|undefined,ended=false,projected:BrowserAction|null=null,bookmarkZone:HTMLElement|null=null,favoriteOn=false,before:string|null=null,forkFrame:((now:number)=>void)|undefined,forkTargets:(()=>LiquidTarget[])|undefined;
+  let pointer=grab,p=0,target=0,stop:(()=>void)|undefined,ended=false,projected:BrowserAction|null=null,layoutSlot:number|null=null,bookmarkZone:HTMLElement|null=null,favoriteOn=false,before:string|null=null,forkFrame:((now:number)=>void)|undefined,forkTargets:(()=>LiquidTarget[])|undefined;
   const delta=()=>scrollTop-(scroll?.scrollTop??0);
   const bounds=(node:HTMLElement)=>{const box=boxes.get(node);return box?new DOMRect(box.x,box.y+delta(),box.width,node.classList.contains('sb-tab')?box.height:node.getBoundingClientRect().height):laid(node);};
   // Where a node lies out, without the room this drag gave it: its own translate and its section's (a section still gliding back
@@ -102,18 +105,25 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     before=null;showGap(null);
     for(const [node] of [...moves])shift(node,0);
   };
-  const project=(action:BrowserAction|null)=>{
-    projected=action;
+  const project=(action:BrowserAction|null,where:DropPlace|null=null)=>{
+    projected=action;layoutOpen=true;
     if(bookmarkZone){projectBookmark(bookmarkZone);return;}
     if(favoriteOn){projectFavorite();return;}
     row.dataset.sidebarDragSource='';before=null;homeSlot.style.opacity='0';
+    // Onto a folder's header: the slot goes and the rows stay as they are (opening or closing room moved the header from under the pointer).
+    if(where?.kind==='join'){showGap(null);return;}
     // The saved pages close their slot again.
     for(const [node] of [...moves])if(!pieces.includes(node)&&!following.includes(node))shift(node,0);
+    // One place for the slot, the line and the room (tabGroupDrag.ts `dropPlace`): a tab that leaves its folder at its first or last place is placed at the edge of the whole folder,
+    // at the top level; a drop onto a folder's header opens no slot.
+    const edge=where?.kind==='edge'?where:null,block=edge?.anchor==='block'?root.querySelector<HTMLElement>(`.sb-group-header[data-group-header="${CSS.escape(edge.id)}"]`):null;
     const to=action?.type==='tab.drop'&&action.to?rows.find(node=>node.dataset.tabId===action.to):null;
-    const anchor=to?(to.parentElement?.closest<HTMLElement>('.sb-split-group')??to):null;
+    const anchor=edge?.anchor==='block'&&edge.position==='before'?block:to?(to.parentElement?.closest<HTMLElement>('.sb-split-group')??to):null;
     const own=!!anchor&&(anchor===row||anchor.contains(row));
     const box=anchor&&!own?bounds(anchor):null,homeTop=bounds(row).top;
-    const after=action?.type==='tab.drop'&&action.position==='after';
+    const after=edge?edge.position==='after':action?.type==='tab.drop'&&action.position==='after';
+    // At the top level the slot is as wide as a top-level row, whatever row it is measured from.
+    const level=edge?.anchor==='block'&&block?bounds(block):box;
     // Pieces after the row close up behind it; pieces from the drop line on open the row's room there. The two cancel out for
     // whatever lies past both, Bookmarks included, so nothing is left lying over anything.
     const line=box?(after?box.top+1:box.top):Infinity;
@@ -124,9 +134,10 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       if(box&&top>=line&&(node===anchor||!node.contains(anchor!)))offset+=pitch;
       shift(node,offset);
     }
-    if(!box){showGap(null);return;}
-    const edge=(after?box.bottom+pitch-home.height:box.top)-((after?box.bottom:box.top)>homeTop+1?pitch:0);
-    showGap({left:box.left,top:edge,width:box.width,height:home.height});
+    if(!box){layoutSlot=null;showGap(null);return;}
+    const slotY=(after?box.bottom+pitch-home.height:box.top)-((after?box.bottom:box.top)>homeTop+1?pitch:0);
+    layoutSlot=slotY;
+    showGap({left:level!.left,top:slotY,width:level!.width,height:home.height});
   };
   /** The layout of the list as laid out (no translate): it changes once the new order is in the page. */
   const layoutKey=()=>[row,...pieces].map(node=>node.isConnected?`${node.offsetTop}`:'x').join(',');
@@ -179,7 +190,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     requestAnimationFrame(watch);
   };
   place();
-  /** The split (founder, 31 Oct) for a saved page and, the same way, for a favorite (6 Nov): `tile` is the favorite's tile, where the second half ends as the
+  /** The split (reported 31 Oct) for a saved page and, the same way, for a favorite (6 Nov): `tile` is the favorite's tile, where the second half ends as the
    *  icon-only tile instead of a row. `tile.stay`: no drag, the tab's row stays where it is and only a copy of it goes (the tab menu, Cmd+Shift+D, the "+" form). */
   const split=(destination:()=>HTMLElement|null,onSettled:()=>void,tile?:{slot?:()=>DOMRect|null;stay?:boolean})=>{
       if(ended)return;ended=true;stop?.();liquid.dispose();forkFrame=undefined;forkTargets=undefined;
@@ -279,11 +290,18 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       };
       frame(performance.now());
   };
+  /** The list as it lies with the carried row's place closed and no room opened: where a row stands for a decision. The rows move on their own (the room), so what is tested must not. */
+  const closed=(node:HTMLElement)=>{const box=bounds(node);return box.top>bounds(row).top+1&&!node.contains(row)?new DOMRect(box.x,box.y-pitch,box.width,box.height):box;};
+  /** The pointer as the closed list sees it: the slot that is open now (the carried row's own place at the start) is where rows are pushed down by one row's room, so a pointer below
+   *  it is one room higher in the closed list; null inside the slot (the decision stays). What the person sees under the pointer is what is tested. */
+  const reach=(point:Point):Point|null=>{const slot=layoutSlot??(layoutOpen?null:bounds(row).top);if(slot===null||point.y<slot)return point;return point.y>=slot+pitch?{x:point.x,y:point.y-pitch}:null;};
   return {
-    bounds,
+    bounds,closed,reach,
+    /** The slot that is open now (the carried row's own place at the start), where the rows lie: its top and its height; null when a drop opens none. */
+    slot:()=>{const top=layoutOpen?layoutSlot:bounds(row).top;return top===null?null:{top,height:pitch};},
     /** The saved page this drop goes before (null: after the last one). */
     bookmarkBefore:()=>before,
-    /** A bookmark is a copy, and the copy is made as liquid (founder, 31 Oct: "split down the middle", "each part turns into just the icon",
+    /** A bookmark is a copy, and the copy is made as liquid (reported 31 Oct: "split down the middle", "each part turns into just the icon",
      *  "each icon, asynchronously, goes back to its place and expands"). The carried row splits down its middle as split view's glass does
      *  (liquidFork: the browser's gooey union of two rounded shapes, the neck stretching and letting go; the springs are the carried
      *  chip's own row -> chip morph, `tab.split`). Each half gives up its text and is the tab's icon on a small glass chip; one floats up
@@ -294,11 +312,11 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
     /** A tab becoming a favorite is this same split with the tile as its end: a copy splits off the tab (liquid, in two halves while the tab is
      *  carried; one copy while the tab's row stays), goes up and ends as the icon-only tile, the other tiles having made room. */
     favorite(destination:()=>HTMLElement|null,onSettled:()=>void,options:{slot?:()=>DOMRect|null;stay?:boolean}={}){split(destination,onSettled,options);},
-    move(point:Point,full:boolean,action:BrowserAction|null,bookmarks:HTMLElement|null=null,favorites=false){
+    move(point:Point,full:boolean,action:BrowserAction|null,bookmarks:HTMLElement|null=null,favorites=false,where:DropPlace|null=null){
       if(ended)return;pointer=point;
       // Between the list and the saved pages (a separator, a section's edge) nothing changes: re-arranging there moved the sections
       // under the pointer and back.
-      if(!full||action||bookmarks||favorites!==favoriteOn){bookmarkZone=full?bookmarks:null;favoriteOn=full&&favorites&&!bookmarks;project(full?action:null);}
+      if(!full||action||bookmarks||favorites!==favoriteOn){bookmarkZone=full?bookmarks:null;favoriteOn=full&&favorites&&!bookmarks;project(full?action:null,where);}
       const next=full?0:1;liquid.point(point,!full);
       if(next!==target){target=next;stop?.();const scale=motionScale();if(!scale)p=next;else{const controls=animate(p,next,{...morphSpring(next?'tab.split':'tab.merge',scale),onUpdate:value=>{p=value;place();}});stop=()=>controls.stop();}}
       place();
@@ -308,7 +326,7 @@ export function carrySidebarRow(row:HTMLElement,root:HTMLElement,grab:Point,acti
       liquid.end(Boolean(destination));
       const clean=()=>{preview.remove();delete row.dataset.sidebarDragSource;};
       // A drop in the list: the rows keep the room they made until the new order is laid out, then the layout has it (no snap back
-      // to the old order while the change travels, founder, 30 Oct: "a delay when dropping").
+      // to the old order while the change travels, reported 30 Oct: "a delay when dropping").
       if(committed&&!destination&&!handOver&&gap.style.opacity==='1'){
         const slot=gap.getBoundingClientRect(),was=layoutKey();
         settleInto(slot,()=>layoutKey()!==was,settleRoom,()=>row.isConnected?row.getBoundingClientRect():null,()=>{delete row.dataset.sidebarDragSource;},restoreRoom);

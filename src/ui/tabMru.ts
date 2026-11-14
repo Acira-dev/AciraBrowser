@@ -4,7 +4,7 @@
 import { groupForTab } from '../runtime/tabGroups';
 import type { TabGroup, TabSession } from '../runtime/types';
 
-/** What Ctrl+Tab does (founder, 24 Oct): the next tab in order like Chrome (default), the recently used tab with a
+/** What Ctrl+Tab does (reported 24 Oct): the next tab in order like Chrome (default), the recently used tab with a
  * switcher while Ctrl is held, or the tab viewer. */
 export type CtrlTabMode = 'next' | 'recent' | 'viewer';
 const STAMPS = 'acira-tab-mru', MODE = 'acira-ctrl-tab-mode', LEGACY_ORDER = 'acira-tab-switcher-order', OPEN = 'acira-tab-switcher-open', RELEASED = 'acira-tab-switcher-released', LIMIT = 400;
@@ -34,6 +34,13 @@ export function tabCycleOrder(tabs: readonly CycleTab[], groups: readonly TabGro
     rest.push(...own.filter(item => !pinned(item) && groupOf(item)?.id === group.id && shown(item)));
   }
   return [...own.filter(pinned), ...rest].map(tab => tab.id);
+}
+/** What Ctrl+Tab's "Next tab" walks (13.9): in the sidebar layout the rows of the list in the order it shows them (tabCycleOrder), then the tabs that live only in their
+ * Favorites tile (`listed` false: the default, runtime/favoriteTabsRule.ts), in tab order, as main's listedTabs puts them for Ctrl+PageDown and Ctrl+1…9. So a Favorite's tab is
+ * a tab for the keys: the walk reaches it and goes on from it, wrapping. `tabs` are this profile's. Tabs along the top list every tab, so nothing is held back there. Pure. */
+export function nextTabOrder<T extends CycleTab>(tabs: readonly T[], groups: readonly TabGroup[], activeId: string, sidebar: boolean, listed: (tab: T) => boolean): string[] {
+  const order = tabCycleOrder(sidebar ? tabs.filter(listed) : tabs, groups, activeId, sidebar);
+  return sidebar ? [...order, ...tabs.filter(tab => !listed(tab)).map(tab => tab.id)] : order;
 }
 /** The tab `direction` steps from the current one in `order`, wrapping; from outside the order, the first or last. */
 export function nextInCycle(order: readonly string[], activeId: string, direction: 1 | -1): string | undefined {

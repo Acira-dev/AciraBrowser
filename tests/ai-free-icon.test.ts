@@ -34,7 +34,7 @@ test('The menu row, the toolbar button and the status toast of AI-free mode use 
   assert.doesNotMatch(menu, /M8 1\.8 13 3\.6/, 'the menu draws no second shield of its own');
   assert.match(button, /<PreviewIcon icon=\{on\?SparklesOff:Sparkles\} className="toolbar-icon" size=\{18\}\/>/, 'the toolbar button too, with its pressed state');
   assert.doesNotMatch(button, /M8 1\.8 13 3\.6|m5\.6 8 1\.7 1\.7/, 'no shield, and no check when on');
-  assert.match(button, /className=\{`icon-button \$\{on\?'active':''\}`\} aria-pressed=\{!!on\}/);
+  assert.match(button, /className=\{`icon-button toolbar-aifree \$\{on\?'active':''\}`\} aria-pressed=\{!!on\}/);
   const main = read('desktop/main.cjs');
   assert.match(main, /text:now\?tm\("main\.aiFreeModeOn"\):tm\("main\.aiFreeModeOff"\),tone:'status',icon:now\?'sparkles-off':'sparkles'\}/, 'the shortcut\'s toast shows the new state');
   assert.match(main, /tone:'status',icon:request\.patch\.aiContent\?'sparkles-off':'sparkles'\}/, 'and the switch\'s');

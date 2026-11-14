@@ -222,6 +222,7 @@
 /* The drop line. A tab joining a split (src/ui/splitDropTarget.ts marks the pane beside the slot with data-split-insert: between two
    panes, or on the card's top or bottom edge) draws the same line at that slot, from the pane's title edge, over a current row's card. */
 .app.style-acira .acira-sidebar .sb-tab:is([data-drop],[data-split-insert])::before{content:'';position:absolute;left:30px;right:8px;height:2px;border-radius:1px;background:var(--sb-ring);pointer-events:none;z-index:1}
+.app.style-acira .acira-sidebar .sb-tab[data-drop-out]::before{left:calc(30px - var(--sb-group-indent,21px))}  /* a tab leaving its folder: the line is at the top level though the row it is drawn on is inside */
 .app.style-acira .acira-sidebar .sb-tab:is([data-drop=before],[data-split-insert=before])::before{top:-1px}
 .app.style-acira .acira-sidebar .sb-tab:is([data-drop=after],[data-split-insert=after])::before{bottom:-1px}
 .app.style-acira .acira-sidebar [data-split-child]>.sb-tab[data-split-insert]::before{left:46px}

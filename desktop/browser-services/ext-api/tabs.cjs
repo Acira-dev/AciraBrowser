@@ -6,12 +6,15 @@
 const {createTabsModel, ERRORS, NONE} = require('./tabs/model.cjs');
 const tabIdBridge = require('./surfaces/tab-ids.cjs');
 const {createTabEvents} = require('./tabs/events.cjs');
+const settingsPage = require('./tabs/settings-page.cjs');
 
 const NEW_TAB_URLS = new Set(['chrome://newtab', 'chrome://newtab/', 'chrome-search://local-ntp/local-ntp.html']);
 
 /** The URL an extension asked for, resolved against its own root (Extension::GetResourceURL) and checked: Chromium's messages where Chrome has one. */
 function prepareUrl(extension, text) {
   if (NEW_TAB_URLS.has(text)) return {kind: 'newtab', href: ''};
+  // chrome://extensions (Chrome's page for an extension's own switches, e.g. "Allow access to file URLs"): Acira's Extensions settings (tabs/settings-page.cjs).
+  if (settingsPage.isExtensionsPage(text)) return {kind: 'settings', href: 'acira://settings'};
   let url;
   try { url = new URL(text, `chrome-extension://${extension.id}/`); } catch { throw new Error(ERRORS.url(text)); }
   if (url.protocol === 'javascript:') throw new Error(ERRORS.javascript);
@@ -140,6 +143,21 @@ module.exports = {
         if (opener.windowId !== w.id) throw new Error(ERRORS.openerCreate);
       }
       let record;
+      if (target.kind === 'settings') {
+        // Settings is one tab per profile: the open one is shown, else one is made; either way it lands on the Extensions section.
+        const existing = settingsPage.existingSettingsTab(w.state.tabs, w.profileId), id = existing ? existing.id : settingsPage.newSettingsTabId();
+        await settingsPage.aimSettings({nativeWindowId: w.id, tabId: id, section: 'Extensions'});
+        if (existing) { if (active) w.dispatch({type: 'tab.select', id}); }
+        else w.dispatch({type: 'tab.new', url: 'acira://settings', id, background: !active, browserProfileId: w.profileId});
+        const opened = stripOf(w.id).find(tab => tab.id === id);
+        if (!opened) throw new Error('The new tab could not be created.');
+        if (props.pinned && !existing) w.dispatch({type: 'tab.pin', id});
+        if (props.index != null && !existing) place(w.id, id, props.index);
+        events.schedule();
+        const settingsRecord = model.records().find(item => item.acira === id);
+        if (!settingsRecord) throw new Error('The new tab could not be created.');
+        return model.chromeTab(settingsRecord, extension);
+      }
       if (target.kind === 'newtab') {
         // Acira's new-tab page is drawn by the interface, not by a page: the tab exists, an extension cannot address it by id.
         const before = new Set(stripOf(w.id).map(tab => tab.id));
@@ -175,7 +193,12 @@ module.exports = {
         if (opener.windowId !== record.windowId) throw new Error(ERRORS.openerUpdate);
       }
       if (target && target.kind === 'newtab') throw new Error('Acira cannot turn a page into the new-tab page from an extension yet.');
-      if (target) {
+      if (target && target.kind === 'settings') {
+        // The tab itself becomes Acira's Settings, on the Extensions section (the tab keeps its id, as a navigation does).
+        if (!record.window) throw new Error('Acira cannot show Settings inside this page.');
+        await settingsPage.aimSettings({nativeWindowId: record.window.id, tabId: record.acira, section: 'Extensions'});
+        record.window.dispatch({type: 'tab.navigate', url: target.href, tabId: record.acira});
+      } else if (target) {
         if (record.window && target.kind === 'web') record.window.dispatch({type: 'tab.navigate', url: target.href, tabId: record.acira});
         else if (record.wc) await record.wc.loadURL(target.href);
         else throw new Error('Acira cannot show an extension page inside a browser tab yet.');

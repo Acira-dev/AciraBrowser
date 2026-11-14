@@ -20,11 +20,31 @@ export function typedLocalPath(input: unknown): TypedLocalPath | null {
   return null;
 }
 
+/** A typed file: address (`file:///Users/me/a.pdf`, `file:///C:/Users/me/a.pdf`, `file://server/share/x.txt`) as the local path it names, or null for anything else (credentials, another scheme,
+ *  `file:` without the slashes, which is text as for any scheme). The host of another machine is a network share, the same kind as `\\server\share`. The result says it came from an address, so the
+ *  caller can navigate the tab to it as Chrome does (a typed path, 13.5, opens like a dropped file: a tab of its own). */
+export type TypedFileUrl = TypedLocalPath & { url: true };
+export function typedFileUrl(input: unknown): TypedFileUrl | null {
+  if (typeof input !== 'string' || input.length > 4096 || /[\u0000-\u001f]/.test(input)) return null;
+  const text = input.trim();
+  if (!/^file:\/\//i.test(text)) return null;
+  let url: URL;
+  try { url = new URL(text); } catch { return null; }
+  if (url.protocol !== 'file:' || url.username || url.password) return null;
+  let path: string;
+  try { path = decodeURIComponent(url.pathname); } catch { return null; }
+  if (/[\u0000-\u001f]/.test(path)) return null;
+  if (url.hostname && url.hostname.toLowerCase() !== 'localhost') return { kind: 'unc', path: `\\\\${url.hostname}${path.replace(/\//g, '\\')}`, url: true };
+  if (/^\/[A-Za-z]:\/./.test(path)) return { kind: 'drive', path: path.slice(1), url: true };
+  if (/^\/[^/]/.test(path)) return { kind: 'posix', path, url: true };
+  return null;
+}
+
 /** What to do with typed text, on this platform. Windows reads drive paths and refuses network shares; Mac and Linux read absolute paths with forward slashes
  *  (a backslash path there is just text). A share is never opened or looked up (no network access from the address bar), and a path that is not a file
  *  that exists (a folder, a missing file, a search that happens to start with a path) is `none`. */
 export function typedLocalFile(input: unknown, options: { platform: string; isFile: (path: string) => boolean }): TypedLocalFile {
-  const found = typedLocalPath(input);
+  const found = typedLocalPath(input) ?? typedFileUrl(input);
   if (!found) return { action: 'none' };
   const windows = options.platform === 'win32';
   if (found.kind === 'unc') return windows ? { action: 'refuse' } : { action: 'none' };

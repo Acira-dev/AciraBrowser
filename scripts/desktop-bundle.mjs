@@ -56,6 +56,7 @@ export const PATH_LOADED = [
   'desktop/site-prompt.html',
   'desktop/site-prompt-preload.cjs',
   'desktop/browser-services/js-dialog-preload.cjs',
+  'desktop/browser-services/capture-tracker-preload.cjs',
   'desktop/passwords/page-preload.cjs',
   'desktop/passwords/prompt-frame.html',
   'desktop/passwords/prompt-frame-preload.cjs',

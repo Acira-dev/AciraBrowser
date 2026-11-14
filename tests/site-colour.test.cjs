@@ -89,3 +89,52 @@ test('dispose cancels every pending read', async () => {
   let reads = 0; const h = harness({ stripOf: async () => { reads++; return null; } });
   h.tab.navigated('https://a.test/'); h.tab.loaded(); h.tab.dispose(); await h.clock.advance(6000); assert.equal(reads, 0); assert.equal(h.control.tabs.size, 0);
 });
+
+// Twitch (reported 14 Nov): no theme-color, a dark or white top edge, a purple icon: the glow depends on the icon alone. The colour used to come only from its own second fetch (4 s,
+// answered from the cache): a heavy page that timed it out kept the tab's icon and lost the glow. The icon the tab itself resolved now gives the colour too.
+const TWITCH_FAVICON_32 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAETSURBVHgB7ZU7DoJAEIb/JV7MBq/hCVROIJ7AqI2t0d5WsTF2dhzBI1hbsLIYwyPADgzrFvI1PJbk+5lZBoEaNq6cR4APA0wDIdTRgQV5lgGI8skZnbAe5a8ditwkjk15LoANeS5AW7nqabGvdfcrA9iiD9AHsB5gACZVI5o6uv+rBbct7AW4H4Dw+DmPp+7ipwGU/L5P5V4g/O8aexM2kkusvEsqVxitQOHNd7F8VnyGXIHiny37mWVFZSTyQIzL1tgV0MljQrwwq1pkBaDIoxeG3lU80XUAgvyhk/MC6OSOXs4KoJWfxIPysACRlSslV1YGpwIhV65oOwlDygYzEqBuqLShUQuSWd6hvBFLV/owwBuAI3t8NBey8QAAAABJRU5ErkJggg==', 'base64');
+const fakeNativeImage = (width, height, paint) => ({ createFromBuffer: () => ({ isEmpty: () => false, getSize: () => ({ width, height }), toBitmap: () => bgra(width, height, paint) }) });
+test('brandOfIcon: Twitch\'s real 32 px favicon gives its purple, a white tile with a grey mark none, an unreadable file skip', () => {
+  const { brandOfIcon } = require('../desktop/site-colour.cjs'), iconImage = require('../desktop/browser-services/icon-image.cjs');
+  const purple = (x, y) => (x < 6 || y < 6 ? [255, 255, 255] : [145, 70, 255]);
+  assert.deepEqual(brandOfIcon(TWITCH_FAVICON_32, { nativeImage: fakeNativeImage(32, 32, purple), iconImage }), { hex: '#9146ff' });
+  const tile = (x, y) => (x > 12 && x < 20 && y > 12 && y < 20 ? [154, 160, 166] : [255, 255, 255]);
+  assert.deepEqual(brandOfIcon(TWITCH_FAVICON_32, { nativeImage: fakeNativeImage(32, 32, tile), iconImage }), { none: true });
+  assert.deepEqual(brandOfIcon(Buffer.from('not a picture'), { nativeImage: { createFromBuffer: () => ({ isEmpty: () => true }) }, iconImage }), { skip: true });
+});
+test('a site with only an icon: the tab\'s own resolved icon gives the glow when the colour\'s own fetch finds nothing, and a late failure does not take it away', async () => {
+  const { clock, emitted, tab } = harness({ iconOf: async () => null, stripOf: async () => null });
+  tab.navigated('https://www.twitch.tv/chilledcat_music'); tab.iconChanged(['https://assets.twitch.tv/assets/favicon-16.png', 'https://assets.twitch.tv/assets/favicon-32.png']);
+  await clock.advance(1500); assert.deepEqual(emitted, [], 'its own fetch found nothing: no glow yet');
+  tab.iconResolved('#9146ff'); await clock.advance(400);
+  assert.deepEqual(emitted, ['#9146ff'], 'the colour of the icon the tab already resolved');
+  // the colour-safety rule still applies: a grey or a near-white from an icon is not a brand colour
+  const other = harness({ iconOf: async () => null, stripOf: async () => null });
+  other.tab.navigated('https://example.com/'); other.tab.iconChanged(['https://example.com/i.png']); other.tab.iconResolved('#f4f4f4'); other.tab.iconResolved('#808080'); await other.clock.advance(1500);
+  assert.deepEqual(other.emitted, []);
+});
+test('the colour\'s own icon fetch that finishes after the tab\'s icon gave a colour does not overwrite it with nothing', async () => {
+  let release; const late = new Promise(resolve => { release = resolve; });
+  const { clock, emitted, tab } = harness({ iconOf: () => late, stripOf: async () => null });
+  tab.navigated('https://www.twitch.tv/x'); tab.iconChanged(['https://assets.twitch.tv/assets/favicon-32.png']);
+  await clock.advance(700); tab.iconResolved('#9146ff'); await clock.advance(300); release(null); await clock.advance(1500);
+  assert.deepEqual(emitted, ['#9146ff']);
+});
+
+test('an icon colour handed over before the page announced any icons counts (the stored icon at commit, the icon the tab resolved when no favicon event came)', async () => {
+  const { clock, emitted, tab } = harness({ iconOf: async () => null, stripOf: async () => null });
+  tab.navigated('https://www.twitch.tv/chilledcat_music');   // no iconChanged: Chromium reported none for this document
+  tab.iconResolved('#9146ff'); await clock.advance(400);
+  assert.deepEqual(emitted, ['#9146ff']);
+});
+
+test('a colour handed over by the tab\'s icon stays through the page\'s own icon announcement (no drop while the colour\'s second fetch runs), and a new icon\'s colour replaces it', async () => {
+  const never = new Promise(() => {});
+  const { clock, emitted, tab } = harness({ iconOf: () => never, stripOf: async () => null });
+  tab.navigated('https://www.twitch.tv/x'); tab.iconResolved('#9146ff'); await clock.advance(400);
+  assert.deepEqual(emitted, ['#9146ff']);
+  tab.iconChanged(['https://assets.twitch.tv/assets/favicon-32.png']); await clock.advance(6000);
+  assert.deepEqual(emitted, ['#9146ff'], 'the announcement did not wipe the colour: nothing was published, nothing dropped');
+  tab.iconResolved('#ff0033'); await clock.advance(800);
+  assert.equal(emitted[emitted.length - 1], '#ff0033', 'the site changed its icon: the new colour');
+});

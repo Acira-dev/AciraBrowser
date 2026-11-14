@@ -60,7 +60,7 @@ import { FullscreenLights } from './ui/FullscreenLights';
 import { dismissible, otherSpaceToasts, pushToast, spentToasts, toastHostRefused, toastKeysSaying, rememberDismissed, toastRoom, toastSpentAtLoad, toastStackHeight, type QueuedToast } from './ui/toastQueue';
 import { createToastTimers, type ToastTimers } from './ui/toastTimers';
 import { CommandPalette } from './components/CommandPalette';
-import { typedLocalPath } from './runtime/localPath';
+import { typedFileUrl, typedLocalPath } from './runtime/localPath';
 import { CheckMark, CrossMark } from './components/CheckMark';
 import { setSplitDropContext,takeDropPoint,useSplitPicker } from './ui/splitDrop';import { SplitMorphLayer,type SplitMorphRun } from './components/SplitMorphLayer';import { dropOrigin,homeRect,morphIntent,planMorph,shouldMorph,type MorphRect,type PaneBox } from './ui/splitMorph';import { motionScale } from './ui/splitMotion';import { CARRIED_SIZE } from './ui/useTabDragSurface';
 import { SplitPicker,type SplitPickerPane } from './components/SplitPicker';import { SplitPaneZone } from './components/SplitPaneZone';import { SplitPaneDragLayer,SplitRibbon } from './components/SplitRibbon';import { paneDragPicker,usePaneDrag } from './ui/paneDrag';
@@ -775,8 +775,9 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
     const navigate = (input: string, tabId = tab.id, typed?: string) => {
         /* Enter on the first suggestion row hands this the address the typed text resolved to (a search for it), and the text itself as `typed`: it is the typed text that may be a path. A row for something else (a history page) stays what it is. */
         const text = typed !== undefined && resolveNavigation(typed, ...searchFor(s, state.tabs.find(item => item.id === tabId)?.privacy), state.websiteLanguage).url === input ? typed : input;
-        if (!typedLocalPath(text)) { navigateTo(input, tabId, typed); return; }
-        void runtime.service({ type: 'typed-file.open', text }).then(result => {
+        const address = typedFileUrl(text);   // a typed file: address navigates this tab (Chrome); a typed path opens a tab of its own, as a dropped file does
+        if (!address && !typedLocalPath(text)) { navigateTo(input, tabId, typed); return; }
+        void runtime.service({ type: 'typed-file.open', text, ...(address ? { tabId } : {}) }).then(result => {
             if (!result?.typedFile?.handled) { navigateTo(input, tabId, typed); return; }
             setAddressEditTab(null); releaseAutomatic(); compactChrome.send({ type: 'commit' }); setOverlay(null); setReveal(false);
         }, () => navigateTo(input, tabId, typed));

@@ -165,17 +165,24 @@ function createIdentity({session,getWindow=()=>null,createWindow=defaultAuthWind
 
 function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
  const state=new Map();
- /* The tab each open panel was opened for, by extension id ({tabId}; the host does not keep one: current() has none). Options are read for THAT tab, as Chromium's per-tab panels are: an extension that only has
-    per-tab options (an AI assistant extension: no manifest side_panel, setOptions({tabId, path, enabled}) on every click) had its open panel closed by its own next setOptions, which read the options without a tab and found no panel. */
+ /* The tab each open panel was opened for, by extension id ({tabId}), for a host that does not say (the real one does: list() carries each panel's tab). Options are read for THAT tab, as Chromium's per-tab panels are: an
+    extension that only has per-tab options (an AI assistant extension: no manifest side_panel, setOptions({tabId, path, enabled}) on every click) had its open panel closed by its own next setOptions, which read the options without a tab. */
  const panelTabs=new Map();
  const of=id=>{let entry=state.get(id);if(!entry){entry={behavior:{openPanelOnActionClick:false},global:{},tabs:new Map()};state.set(id,entry);}return entry;};
  const manifestPath=id=>getExtension(id)?.manifest?.side_panel?.default_path;
  /** The page and switch for one tab: tab-specific options override the extension-wide ones, which start from the manifest. */
  function options(id,tabId){const entry=of(id),global={path:entry.global.path??manifestPath(id),enabled:entry.global.enabled??true},tab=tabId!==undefined?entry.tabs.get(pageOf(tabId)):undefined;return {path:tab?.path??global.path,enabled:tab?.enabled??global.enabled};}
  function urlFor(id,tabId){const found=options(id,tabId);if(!found.enabled||!found.path)return null;return extensionURL(id,found.path);}
+ /** A tab with options of its own has a panel of its own (Chromium: the tab's SidePanelRegistry); the others share the window's. */
+ const hasOwnOptions=(id,tabId)=>tabId!==undefined&&of(id).tabs.has(pageOf(tabId));
+ const sameTab=(a,b)=>a!==undefined&&b!==undefined&&pageOf(a)===pageOf(b);
+ /** Every panel the host keeps for the extension: the one in front and the tabs' kept ones. A host without list() (a fake) has at most the one current() names. */
+ const panelsOf=id=>{try{if(typeof host?.list==='function')return host.list(id);const now=host?.current?.(id);return now?[now]:[];}catch{return [];}};
+ const tabOfPanel=(id,panel)=>panel.tabId!==undefined?panel.tabId:(panel.tabKey===undefined||panel.tabKey!=='window'?panelTabs.get(id)?.tabId:undefined);
  async function open(id,{windowId,tabId,sender}={}){
   if(!host)return failure(MESSAGES.panelHost);const url=urlFor(id,tabId);if(!url)return failure(MESSAGES.panelPath);
-  const extension=getExtension(id);let opened;const mine={tabId};const onClosed=details=>{if(panelTabs.get(id)===mine)panelTabs.delete(id);emit(id,'sidePanel.onClosed',{windowId:opened?.windowId??windowId??-1,path:details?.url||url});};try{opened=await host.open({extensionId:id,name:String(extension?.name||extension?.manifest?.name||'Extension'),url,windowId,tabId,sender,onClosed});}catch(error){return failure(error?.message||MESSAGES.panelHost);}
+  const extension=getExtension(id);let opened;const mine={tabId};const onClosed=details=>{if(panelTabs.get(id)===mine)panelTabs.delete(id);emit(id,'sidePanel.onClosed',{windowId:opened?.windowId??windowId??-1,path:details?.url||url});};
+  try{opened=await host.open({extensionId:id,name:String(extension?.name||extension?.manifest?.name||'Extension'),url,windowId,tabId,pageId:tabId!==undefined?pageOf(tabId):undefined,perTab:hasOwnOptions(id,tabId),sender,onClosed});}catch(error){return failure(error?.message||MESSAGES.panelHost);}
   if(opened?.error)return failure(opened.error);
   /* Already showing: Chromium's SidePanelCoordinator::Show does nothing then ("If the side panel is already showing, cancel all loads and do nothing"), so there is no new panel and no onOpened (ExtensionSidePanelCoordinator tells the extension once, on_opened_dispatched_). */
   if(opened?.reused===true){const known=panelTabs.get(id);if(known&&tabId!==undefined)known.tabId=tabId;return undefined;}
@@ -191,7 +198,15 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
    const entry=of(id),target=input.tabId!==undefined?(entry.tabs.get(pageOf(input.tabId))||{}):entry.global,tabKey=input.tabId!==undefined?pageOf(input.tabId):undefined;
    if(input.path!==undefined)target.path=input.path;if(input.enabled!==undefined)target.enabled=input.enabled;
    if(input.tabId!==undefined){if(entry.tabs.size>=1000&&!entry.tabs.has(tabKey))entry.tabs.delete(entry.tabs.keys().next().value);entry.tabs.set(tabKey,target);}
-   const now=host?.current?.(id),at=now?(now.tabId??panelTabs.get(id)?.tabId):undefined;if(now&&!urlFor(id,at))void host.close({extensionId:id});else if(now&&input.path!==undefined){const url=urlFor(id,at);if(url&&url!==now.url)host.navigate?.({extensionId:id,url});}
+   /* Which open panels this change is for: a tab's own options are for that tab's panel and nobody else's (the other tabs' panels, and the window's, are left alone); the extension-wide ones are for the window's panel and for
+      the panels of tabs that have no options of their own. Each one is then read again for ITS tab: turned off, it closes; given a new path, it shows that at once. */
+   for(const panel of panelsOf(id)){
+    const at=tabOfPanel(id,panel);
+    if(input.tabId!==undefined){if(!sameTab(at,input.tabId))continue;}else if(at!==undefined&&hasOwnOptions(id,at))continue;
+    const url=urlFor(id,at);
+    if(!url)void host.close({extensionId:id,tabKey:panel.tabKey,windowId:panel.windowId});
+    else if(input.path!==undefined&&url!==panel.url)host.navigate?.({extensionId:id,url,tabKey:panel.tabKey,windowId:panel.windowId});
+   }
    return undefined;
   },
   getOptions(event,input){const id=event.extension.id,tabId=input?.tabId,found=options(id,tabId);return {...(found.path!==undefined?{path:found.path}:{}),enabled:found.enabled,...(tabId!==undefined?{tabId}:{})};},
@@ -199,11 +214,18 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
   getPanelBehavior(event){return {...of(event.extension.id).behavior};},
   getLayout(){return {side:'right'};},
   open(event,input){if(!input||typeof input!=='object'||(input.windowId===undefined&&input.tabId===undefined))return failure('Either windowId or tabId must be specified.');return open(event.extension.id,{windowId:input.windowId,tabId:input.tabId});},
-  async close(event,input){const id=event.extension.id;if(!host?.current?.(id))return failure(MESSAGES.noPanel);await host.close({extensionId:id,windowId:input?.windowId});return undefined;},
+  /** sidePanel.close({tabId}): that tab's panel (or the window's, which it shows); {windowId}: the window's; the one in front for either. */
+  async close(event,input){
+   const id=event.extension.id,all=panelsOf(id);
+   const target=input?.tabId!==undefined?(all.find(panel=>sameTab(tabOfPanel(id,panel),input.tabId))||all.find(panel=>panel.tabKey==='window'&&panel.shown!==false)):all.find(panel=>panel.shown!==false)||all[0];
+   if(!target)return failure(MESSAGES.noPanel);
+   await host.close({extensionId:id,windowId:target.windowId??input?.windowId,tabKey:target.tabKey});return undefined;
+  },
   /** The toolbar button: with openPanelOnActionClick the click toggles the panel instead of the popup. Returns true when it handled the click. */
   actionClick(id,{tabId,sender}){
    if(!of(id).behavior.openPanelOnActionClick||!urlFor(id,tabId)||!host)return false;
-   if(host.current?.(id)){void host.close({extensionId:id});return true;}
+   const own=hasOwnOptions(id,tabId),here=panelsOf(id).find(panel=>panel.shown!==false&&(own?sameTab(tabOfPanel(id,panel),tabId):panel.tabKey===undefined||panel.tabKey==='window'||!hasOwnOptions(id,tabOfPanel(id,panel))));
+   if(here){void host.close({extensionId:id,tabKey:here.tabKey,windowId:here.windowId});return true;}
    void open(id,{tabId,sender});return true;
   },
   forget(id){state.delete(id);panelTabs.delete(id);}
@@ -211,14 +233,14 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
 }
 
 /** Installs the handlers on one runtime (one ordinary profile session). Returns the pieces other code needs, or null when the router is missing. */
-function installExtensionApis(runtime,{session,userData,storeKey='default',sourceProfileId='',getWindow=()=>null,sidePanelHost=null,stores=null,userScriptsAllowed=()=>false,t,createOffscreenContents,createAuthWindow,captureBroker=null,pickShare=null,dialog=null,refreshPreload=()=>false,promptPermissions=null,extApiDir}={}){
+function installExtensionApis(runtime,{session,userData,storeKey='default',sourceProfileId='',getWindow=()=>null,sidePanelHost=null,stores=null,userScriptsAllowed=()=>false,fileAccessAllowed=()=>false,t,createOffscreenContents,createAuthWindow,captureBroker=null,pickShare=null,dialog=null,refreshPreload=()=>false,promptPermissions=null,extApiDir}={}){
  const router=runtime?.ctx?.router;if(!router||typeof router.handle!=='function'||!(router.handlers instanceof Map))return null;
  const extensions=session?.extensions||session;
  const getExtension=id=>{try{return extensions?.getExtension?.(id)||null;}catch{return null;}};
  const emit=(id,name,...args)=>{try{router.sendEvent(id,name,...args);}catch{}};
  // Acira's permission table (extension-permission-table.cjs): the manifest's permissions, including the 39 Electron calls "unknown", plus
  // granted optional ones (persisted). Every check below uses it, so a permission granted by permissions.request counts like a declared one.
- const permissions=require('./extension-permission-table.cjs').createPermissionTable({userData,storeKey,getExtension,log:(...args)=>console.warn('[ext-permissions]',...args)});
+ const permissions=require('./extension-permission-table.cjs').createPermissionTable({userData,storeKey,getExtension,fileAccess:fileAccessAllowed,log:(...args)=>console.warn('[ext-permissions]',...args)});
  // The request pipeline's extension-cookies participant asks this table for host permission (browser-services/extension-cookies.cjs).
  require('./extension-cookies.cjs').rememberPermissionTable(session,permissions);
  const permitted=(extension,name)=>!!extension&&permissions.has(extension,name);
@@ -497,10 +519,11 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',sourc
   try{const running=Object.values(session.serviceWorkers?.getAllRunning?.()||{}).some(info=>String(info.scope||'').startsWith(origin+'/'));if(worker&&running)out.push({contextType:'BACKGROUND',contextId:crypto.createHash('sha256').update(id+'|bg').digest('hex').slice(0,32),tabId:-1,windowId:-1,frameId:-1,documentUrl:extensionURL(id,worker),documentOrigin:origin,incognito:false});}catch{}
   const doc=offscreen.documents.get(id);
   if(doc&&!doc.webContents.isDestroyed?.())out.push({contextType:'OFFSCREEN_DOCUMENT',contextId:doc.contextId,tabId:-1,windowId:-1,frameId:0,documentId:doc.documentId,documentUrl:doc.webContents.getURL?.()||doc.url,documentOrigin:origin,incognito:false});
-  const panel=sidePanelHost?.current?.(id);
-  if(panel?.webContents&&!panel.webContents.isDestroyed())out.push({contextType:'SIDE_PANEL',contextId:crypto.createHash('sha256').update(id+'|panel|'+panel.webContents.id).digest('hex').slice(0,32),tabId:-1,windowId:panel.windowId??-1,frameId:0,documentUrl:panel.webContents.getURL(),documentOrigin:origin,incognito:false});
+  /* every panel the extension has alive, the one in front and the kept ones of other tabs (Chromium lists a hidden tab's panel too; its page tells the tab in its URL, as the AI assistant extension's does) */
+  const panels=(()=>{try{if(typeof sidePanelHost?.list==='function')return sidePanelHost.list(id);const now=sidePanelHost?.current?.(id);return now?[now]:[];}catch{return [];}})().filter(item=>item?.webContents&&!item.webContents.isDestroyed());
+  for(const panel of panels)out.push({contextType:'SIDE_PANEL',contextId:crypto.createHash('sha256').update(id+'|panel|'+panel.webContents.id).digest('hex').slice(0,32),tabId:-1,windowId:panel.windowId??-1,frameId:0,documentUrl:panel.webContents.getURL(),documentOrigin:origin,incognito:false});
   try{
-   const skip=new Set([doc?.webContents,panel?.webContents].filter(Boolean));
+   const skip=new Set([doc?.webContents,...panels.map(item=>item.webContents)].filter(Boolean));
    for(const wc of require('electron').webContents.getAllWebContents()){
     if(wc.isDestroyed()||wc.session!==session||skip.has(wc)||!wc.getURL().startsWith(origin+'/'))continue;
     const type=typeof wc.getType==='function'?wc.getType():'window';
@@ -511,14 +534,14 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',sourc
   return out.filter(c=>pick('contextTypes',c.contextType)&&pick('contextIds',c.contextId)&&pick('tabIds',c.tabId)&&pick('windowIds',c.windowId)&&pick('documentIds',c.documentId)&&pick('frameIds',c.frameId)&&pick('documentUrls',c.documentUrl)&&pick('documentOrigins',c.documentOrigin)&&(filter?.incognito===undefined||filter.incognito===false));
  });
 
- try{extensions?.on?.('extension-unloaded',(_event,extension)=>{offscreen.close(extension?.id);if(sidePanelHost?.current?.(extension?.id))void sidePanelHost.close({extensionId:extension.id});});}catch{}
+ try{extensions?.on?.('extension-unloaded',(_event,extension)=>{offscreen.close(extension?.id);if(sidePanelHost?.current?.(extension?.id)||sidePanelHost?.list?.(extension?.id)?.length)void sidePanelHost.close({extensionId:extension.id,all:true});});}catch{}
  // declarativeNetRequest enforcement for this profile (dnr-host.cjs); the request pipeline in content-blocking.cjs asks it per request.
  let dnr=null;try{dnr=require('./dnr-host.cjs').attachDnrHost({session,router,userData,storeKey,emit,getExtension,log:(...args)=>console.warn('[dnr]',...args)});}catch(error){console.warn('[dnr] not attached',error?.message);}
  // Work packages (ext-api/*.cjs, docs/launch/EXTENSION_WORK_PACKAGES.md): installed last, so a package's handler replaces any above.
  let packages={packages:[],forget(){},dispose(){}};
  try{
   const extApi=require('./ext-api/index.cjs'),list=extApiDir?extApi.loadPackages({dir:extApiDir}):extApi.loadPackages();
-  packages=extApi.installPackages({session,runtime,router,userData,storeKey,sourceProfileId,getWindow,getExtension,emit,dialog,t,permissions,log:(...args)=>console.warn(...args)},{packages:list});
+  packages=extApi.installPackages({session,runtime,router,userData,storeKey,sourceProfileId,getWindow,getExtension,emit,dialog,t,permissions,fileAccessAllowed,log:(...args)=>console.warn(...args)},{packages:list});
   /* ANY package that did not load or install is said LOUDLY, on stderr and in the local trace (<user data>/logs/extension-windows.log): one line per profile session. A build whose bundle bound ext-api/runtime.cjs to
      the wrong module once left all 22 packages out of the packaged Mac and Windows apps without a word. A clean session writes "ext-api packages installed <profile> <n>"; a packaged launch check looks for that line. */
   const problems=[...(list.problems||[]).map(item=>`${item.file}: ${item.message}`),...(packages.failed||[]).map(item=>`${item.name}: ${item.message}`)],wanted=list.filter(item=>item.install).length;

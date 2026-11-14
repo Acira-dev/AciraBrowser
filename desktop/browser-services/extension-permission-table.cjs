@@ -69,7 +69,7 @@ function originsCoverUrl(origins,url){
  * createPermissionTable({userData, storeKey, getExtension, log}) for one profile session.
  *   getExtension(id) -> Electron's Extension ({id, manifest, …}) or null.
  */
-function createPermissionTable({userData,storeKey='default',getExtension=()=>null,log=()=>{}}={}){
+function createPermissionTable({userData,storeKey='default',getExtension=()=>null,log=()=>{},fileAccess=()=>false}={}){
  const safeKey=String(storeKey).replace(/[^A-Za-z0-9_-]/g,'_')||'default';
  const file=userData?path.join(userData,'extension-permissions',`${safeKey}.json`):null;
  let grants=Object.create(null);
@@ -133,6 +133,8 @@ function createPermissionTable({userData,storeKey='default',getExtension=()=>nul
  return {
   declared:id=>{const manifest=manifestOf(id);return manifest?declared(manifest):declared({});},
   active,granted,has,hasOrigin,contains,grant,revoke,forget,
+  /** Does this extension hold "Allow access to file URLs" (extension-file-access.cjs)? Without it a file: host pattern is not part of its permissions (Chromium's ParseHostPermissions drops SCHEME_FILE without ALLOW_FILE_ACCESS). */
+  fileAccess:target=>{try{return fileAccess(idOf(target))===true;}catch{return false;}},
   /** Granted optional permissions of every extension of this profile: {id: {permissions, origins}} (written into the engine preload). */
   snapshot:()=>JSON.parse(JSON.stringify(grants)),
   /** listener(id, {added, removed, active}) after every grant or revoke. Returns a function that removes the listener. */

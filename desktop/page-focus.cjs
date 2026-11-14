@@ -78,13 +78,17 @@ function createFocusGate({active, give, usable = () => true}) {
       stored = contents;
       return 'stored';
     },
-    /** The window became the active one: the stored target takes the keyboard now. Returns it, or null when there was none to give. */
-    activated() {
+    /** The window became the active one: the stored target takes the keyboard now. When there is none it may still take (it closed, or it is
+     * no longer on screen), `fallback()` names who does: the window must never come back with the keyboard nowhere (13.8 laptop check 14,
+     * activationTarget below). Returns who was given the keyboard, or null when nobody was. */
+    activated(fallback) {
       const contents = stored;
       stored = null;
-      if (!live(contents) || !usable(contents)) return null;
-      hand(contents);
-      return contents;
+      if (live(contents) && usable(contents)) { hand(contents); return contents; }
+      const other = typeof fallback === 'function' ? fallback() : null;
+      if (!live(other)) return null;
+      hand(other);
+      return other;
     },
     /** A web contents of this window got the keyboard (its 'focus' event: a press, a Tab, the platform's own restore on activation). */
     focused(contents) { if (live(contents) && active()) held = contents; },
@@ -92,6 +96,30 @@ function createFocusGate({active, give, usable = () => true}) {
     holder() { return live(stored) ? stored : live(held) ? held : null; },
     stored() { return live(stored) ? stored : null; },
   };
+}
+
+/**
+ * Who takes the keyboard when the window becomes the active one and no stored request may (13.8 laptop check 14: Windows 11, Acira in the
+ * background through 30 s of reloads, redirects, a blocked pop-up, new tabs and a page calling window.focus(); brought back with
+ * SetForegroundWindow, as Alt+Tab does: 0 of 3 keys reached the page). On activation the platform restores the view that held the keyboard
+ * when the window was left (desktop_native_widget_aura.cc OnWindowActivated -> FocusManager::RestoreFocusedView; native_widget_mac.mm
+ * OnWindowKeyStatusChanged), and a view that is no longer drawn (the page of a tab that is not on screen any more) cannot take it: the keyboard
+ * is nowhere. Chromium falls back to the contents' own initial focus (BrowserView::RestoreFocus -> WebContents::RestoreFocus /
+ * SetInitialFocus). Here: whatever holds the keyboard after the platform's restore stays when it is live and on screen; else, in order, an
+ * open Link preview, an open menu or panel, the interface when it held the keyboard as the window was left (the person was typing there: the
+ * field keeps its text and caret), the page on screen, else the interface. Called synchronously from the window's own 'focus' event, so a
+ * press that came with the activation (a click in the address field) lands after it and wins, as it does in Chromium.
+ * env: focused the web contents holding the keyboard now (null: nowhere), usable(contents) is it live and on screen in this window, preview,
+ * popup, ui, page the candidates (null when absent), held who held the keyboard when the window was left.
+ */
+function activationTarget({focused = null, usable = () => true, preview = null, popup = null, held = null, ui = null, page = null}) {
+  const live = value => Boolean(value && !(typeof value.isDestroyed === 'function' && value.isDestroyed()));
+  if (live(focused) && usable(focused)) return null;
+  if (live(preview)) return preview;
+  if (live(popup)) return popup;
+  if (live(ui) && held === ui) return ui;
+  if (live(page)) return page;
+  return live(ui) ? ui : null;
 }
 
 /**
@@ -180,4 +208,4 @@ function createPageFocus({window, chrome, page, blocked = () => false, focus, wi
   };
 }
 
-module.exports = {createPageFocus, createFocusGate, interfaceKeepsFocus, isTextField, typingFor, typingProbe, INTERFACE_FOCUS_PROBE, ACTIVATE_DELAY_MS, RETRY_MS, RETRIES};
+module.exports = {createPageFocus, createFocusGate, activationTarget, interfaceKeepsFocus, isTextField, typingFor, typingProbe, INTERFACE_FOCUS_PROBE, ACTIVATE_DELAY_MS, RETRY_MS, RETRIES};

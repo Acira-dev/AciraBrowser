@@ -61,12 +61,14 @@ test('Mac and Linux: an absolute path to a file opens; backslash and drive paths
 
 test('the address bar asks main first, and main answers with the file opener the drop already uses', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8'), main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(app, /if \(!typedLocalPath\(text\)\) \{ navigateTo\(input, tabId, typed\); return; \}/);
-  assert.match(app, /runtime\.service\(\{ type: 'typed-file\.open', text \}\)/);
+  assert.match(app, /if \(!address && !typedLocalPath\(text\)\) \{ navigateTo\(input, tabId, typed\); return; \}/);
+  // Beta 13.9: a typed file: address names the tab it was typed in (it navigates there, as in Chrome); a typed path still opens a tab of its own.
+  assert.match(app, /const address = typedFileUrl\(text\);/);
+  assert.match(app, /runtime\.service\(\{ type: 'typed-file\.open', text, \.\.\.\(address \? \{ tabId \} : \{\}\) \}\)/);
   // Enter on the first suggestion row arrives as the search URL plus the typed text: the typed text is what is asked about, only when the row is that search.
   assert.match(app, /const text = typed !== undefined && resolveNavigation\(typed, [^;]*\)\.url === input \? typed : input;/);
-  assert.match(main, /case 'typed-file\.open':\{shape\(\['text'\]\);if\(privateMode\|\|torMode/);
+  assert.match(main, /case 'typed-file\.open':\{shape\(\['text','tabId'\]\);if\(request\.tabId!==undefined&&\(typeof request\.tabId!=='string'\|\|request\.tabId\.length>200\)\)throw new Error\('Invalid typed file request'\);if\(privateMode\|\|torMode/);
   assert.match(main, /typedLocalFile\(request\.text,\{platform:process\.platform/);
-  assert.match(main, /openDroppedFile\(pathToFileURL\(verdict\.file\)\.href\)/);
+  assert.match(main, /openDroppedFile\(pathToFileURL\(verdict\.file\)\.href,request\.tabId\)/);
   assert.ok(!/[^\x00-\x7f]/.test(main.slice(main.indexOf("case 'typed-file.open'"), main.indexOf("case 'imports.discover'"))), 'main.cjs stays ASCII (one non-ASCII letter doubles the script\u2019s memory)');
 });

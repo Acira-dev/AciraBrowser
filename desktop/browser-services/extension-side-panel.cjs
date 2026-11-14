@@ -27,76 +27,153 @@ function trimBounds(bounds,page,geometry){
  return {...bounds,width:Math.max(1,bounds.width-geometry.reserve)};
 }
 
+/** Entries of the host are keyed like Chromium's registries: 'tab:<id>' is a panel that belongs to one tab (options set with a tabId: SidePanelRegistry of that tab, kept alive while another tab is in front),
+ * 'window' is the one every tab without a panel of its own shows (the extension-wide options). One panel is shown at a time: the active tab's own, else the window's. */
+const WINDOW_KEY='window';
 function createSidePanelHost({WebContentsView,getWindow,pageBounds,radius=()=>8,relayout=()=>{},dark=()=>true,motionScale=()=>1,labels=()=>({close:'Close',closeKey:'Esc'}),lang=()=>'en',openTab=()=>{},raiseAbove=null}){
- let current=null,anchor=null;
- const geometry=()=>current?panelGeometry(pageBounds(),anchor):null;
- function sendState(phase){if(!current||current.frame.webContents.isDestroyed())return;const l=labels();current.frame.webContents.send('acira:side-panel-frame-state',{phase,name:current.name,dark:!!dark(),motionScale:Number(motionScale())||0,radius:Math.round(radius()),closeLabel:l.close,closeKey:l.closeKey,lang:lang()});}
+ const entries=new Map();   // key -> panel
+ let shown=null,activeKey=null,anchor=null;
+ const geometry=()=>shown?panelGeometry(pageBounds(),anchor):null;
+ const infoOf=panel=>({extensionId:panel.extensionId,url:panel.url,webContents:panel.view.webContents,tabKey:panel.key,tabId:panel.tabId,shown:panel===shown});
+ /** The extension's page no longer exists (window.close() from the panel, the extension unloaded or reloaded). */
+ const gone=panel=>{try{return panel.view.webContents.isDestroyed();}catch{return true;}};
+ const frameGone=panel=>{try{return panel.frame.webContents.isDestroyed();}catch{return true;}};
+ function sendState(panel,phase,motion){if(!panel||frameGone(panel))return;const l=labels();panel.frame.webContents.send('acira:side-panel-frame-state',{phase,name:panel.name,dark:!!dark(),motionScale:motion===undefined?(Number(motionScale())||0):motion,radius:Math.round(radius()),closeLabel:l.close,closeKey:l.closeKey,lang:lang()});}
+ /** What is in front: the active tab's own panel, else the window's. Entries whose page is gone are never targets. */
+ function targetFor(){
+  const own=activeKey?entries.get(activeKey):null;if(own&&!gone(own))return own;
+  const all=entries.get(WINDOW_KEY);return all&&!gone(all)?all:null;
+ }
  function place(){
-  if(!current)return;const win=getWindow();if(!win||win.isDestroyed())return;const g=geometry();
-  if(!g){current.frame.setVisible(false);current.view.setVisible(false);return;}raise();
-  current.frame.setBounds(g.panel);current.view.setBounds(g.content);current.view.setBorderRadius?.(Math.round(radius()));current.frame.setVisible(true);current.view.setVisible(current.revealed);
+  if(!shown)return;const win=getWindow();if(!win||win.isDestroyed())return;const g=geometry();
+  if(!g){shown.frame.setVisible(false);shown.view.setVisible(false);return;}raise();
+  shown.frame.setBounds(g.panel);shown.view.setBounds(g.content);shown.view.setBorderRadius?.(Math.round(radius()));shown.frame.setVisible(true);shown.view.setVisible(shown.revealed);
  }
  /** Above the pages, below whatever raiseAbove names (the window's popup layer); views are only moved when they are out of place. */
  function raise(){
-  if(!current)return;const win=getWindow();if(!win||win.isDestroyed())return;const children=win.contentView.children,others=children.filter(v=>v!==current.frame&&v!==current.view);
+  if(!shown)return;const win=getWindow();if(!win||win.isDestroyed())return;const children=win.contentView.children,others=children.filter(v=>v!==shown.frame&&v!==shown.view);
   const above=raiseAbove?raiseAbove(others):undefined,at=typeof above==='number'&&above>=0&&above<=others.length?above:others.length;
-  if(children.indexOf(current.frame)===at&&children.indexOf(current.view)===at+1)return;
-  if(at===others.length){win.contentView.addChildView(current.frame);win.contentView.addChildView(current.view);}else{win.contentView.addChildView(current.frame,at);win.contentView.addChildView(current.view,at+1);}
+  if(children.indexOf(shown.frame)===at&&children.indexOf(shown.view)===at+1)return;
+  if(at===others.length){win.contentView.addChildView(shown.frame);win.contentView.addChildView(shown.view);}else{win.contentView.addChildView(shown.frame,at);win.contentView.addChildView(shown.view,at+1);}
  }
- function reveal(){if(!current||current.revealed)return;current.revealed=true;clearTimeout(current.cap);place();}
- /** The extension's page no longer exists (window.close() from the panel, the extension unloaded or reloaded). */
- const gone=panel=>{try{return panel.view.webContents.isDestroyed();}catch{return true;}};
+ function reveal(panel){if(!panel||panel.revealed)return;panel.revealed=true;clearTimeout(panel.cap);if(panel===shown)place();}
  function teardown(panel){
   clearTimeout(panel.cap);clearTimeout(panel.exit);const win=getWindow();
   for(const view of [panel.view,panel.frame]){try{if(win&&!win.isDestroyed())win.contentView.removeChildView(view);}catch{}try{if(!view.webContents.isDestroyed())view.webContents.close();}catch{}}
  }
- function close({silent=false}={}){
-  if(!current)return Promise.resolve();const panel=current;current=null;relayout();
+ /** A panel that is not in front: out of the window, nothing else touched (its page keeps running, as a tab's panel does in Chromium). */
+ function hide(panel){
+  const win=getWindow();
+  for(const view of [panel.frame,panel.view]){try{view.setVisible(false);}catch{}try{if(win&&!win.isDestroyed())win.contentView.removeChildView(view);}catch{}}
+ }
+ /** Puts the right panel in front: the one that was in front goes out of the window (kept), the new one comes in (no animation: it is only the same panel coming back). */
+ function reconcile(){
+  const target=targetFor();
+  if(target===shown)return;
+  const was=shown;shown=target;
+  if(was)hide(was);
+  if(target){
+   /* a panel that was never in front (made for another tab) plays its own entrance when it first comes forward: the frame's animation only runs while its view is visible */
+   if(!target.everShown){target.everShown=true;if(!target.entered){target.revealed=false;clearTimeout(target.cap);target.cap=setTimeout(()=>{if(!gone(target))reveal(target);},REVEAL_CAP_MS);}}
+   raise();place();
+  }
+  relayout();
+ }
+ function closePanel(panel,{silent=false}={}){
+  if(entries.get(panel.key)===panel)entries.delete(panel.key);
+  const wasShown=panel===shown;if(wasShown)shown=null;
   return new Promise(resolve=>{
-   const done=()=>{teardown(panel);if(!silent)try{panel.onClosed?.({extensionId:panel.extensionId,url:panel.url});}catch{}resolve();};
-   if(!motionScale()||panel.frame.webContents.isDestroyed()){done();return;}
-   try{panel.view.setVisible(false);panel.frame.webContents.send('acira:side-panel-frame-state',{phase:'out',name:panel.name,dark:!!dark(),motionScale:Number(motionScale()),radius:Math.round(radius()),closeLabel:labels().close,closeKey:labels().closeKey,lang:lang()});}catch{}
+   const done=()=>{teardown(panel);if(!silent)try{panel.onClosed?.({extensionId:panel.extensionId,url:panel.url});}catch{}reconcile();resolve();};
+   if(!wasShown||!motionScale()||frameGone(panel)){if(wasShown)relayout();done();return;}
+   relayout();
+   try{panel.view.setVisible(false);sendState(panel,'out');}catch{}
    panel.onGone=done;panel.exit=setTimeout(done,Math.round(260*Math.max(1,Number(motionScale())||1)));
   });
  }
- async function open({extensionId,name,url,session,onClosed}){
+ /** Which panel a request means: the named tab's (or the window's), else the one in front, narrowed to an extension when one is named. */
+ function pick({tabKey,extensionId}={}){
+  if(tabKey!==undefined){const found=entries.get(tabKey);return found&&(extensionId===undefined||found.extensionId===extensionId)?found:null;}
+  if(extensionId===undefined)return shown;
+  if(shown&&shown.extensionId===extensionId)return shown;
+  for(const panel of entries.values())if(panel.extensionId===extensionId)return panel;
+  return null;
+ }
+ function close({silent=false,tabKey,extensionId,all=false}={}){
+  if(all&&extensionId!==undefined){return Promise.all([...entries.values()].filter(panel=>panel.extensionId===extensionId).map(panel=>closePanel(panel,{silent}))).then(()=>undefined);}
+  const panel=pick({tabKey,extensionId});if(!panel)return Promise.resolve();
+  return closePanel(panel,{silent});
+ }
+ /** True only when the panel is really on screen: in front, both pages alive, both views in the window. This, not "the host remembers it", is what makes a second open a no-op (Chromium's SidePanelCoordinator::Show looks at the shown entry). */
+ function reallyShown(panel){
+  if(panel!==shown||gone(panel)||frameGone(panel))return false;
+  const win=getWindow();if(!win||win.isDestroyed())return false;
+  const children=win.contentView.children;return children.includes(panel.frame)&&children.includes(panel.view);
+ }
+ async function open({extensionId,name,url,session,onClosed,tabKey=WINDOW_KEY,tabId}){
   const win=getWindow();if(!win||win.isDestroyed())throw new Error('The side panel is not available in this window.');
   if(!panelGeometry(pageBounds()))throw new Error('The window is too narrow for a side panel.');
+  let existing=entries.get(tabKey);
   /* A panel whose page is gone (it closed itself: see the 'destroyed' listener below) is not "already open": an open() that answered {reused:true} for it left an empty column and a button that did nothing. */
-  if(current&&current.extensionId===extensionId&&gone(current))await close({silent:true});
-  if(current&&current.extensionId===extensionId){if(current.url!==url)navigate({extensionId,url});return {reused:true};}
-  if(current)await close();
+  if(existing&&gone(existing)){await closePanel(existing,{silent:true});existing=entries.get(tabKey);}
+  /* Neither is a panel the host remembers but nobody can see (its card or page out of the window, a card whose page was lost): it is shown again, or made new, so a press is never a no-op for a panel that is not there. */
+  if(existing&&existing.extensionId===extensionId&&frameGone(existing)){await closePanel(existing,{silent:true});existing=entries.get(tabKey);}
+  if(existing&&existing.extensionId===extensionId){
+   if(tabId!==undefined)existing.tabId=tabId;
+   if(existing.url!==url)navigate({extensionId,url,tabKey});
+   if(!reallyShown(existing)){reconcile();raise();place();relayout();}
+   return {reused:true};
+  }
+  if(existing)await closePanel(existing);
   const frame=new WebContentsView({webPreferences:{preload:FRAME_PRELOAD,sandbox:true,contextIsolation:true,nodeIntegration:false,spellcheck:false,transparent:true}});
   frame.setBackgroundColor?.('#00000000');
-  const view=new WebContentsView({webPreferences:{session,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,allowRunningInsecureContent:false,spellcheck:true}});
+  /* a second view that cannot be made must not leave the first behind, and nothing is remembered for a panel that was never made */
+  let view;try{view=new WebContentsView({webPreferences:{session,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,allowRunningInsecureContent:false,spellcheck:true}});}catch(error){try{frame.webContents.close();}catch{}throw error;}
   const origin=`chrome-extension://${extensionId}/`;
-  const panel={extensionId,name,url,frame,view,onClosed,revealed:false,cap:null,exit:null,onGone:null};current=panel;
-  frame.webContents.ipc.on('acira:side-panel-frame',(_event,command)=>{if(command==='close'&&current===panel)void close();else if(command==='entered'&&current===panel){panel.entered=true;if(panel.loaded)reveal();}else if(command==='gone')panel.onGone?.();});
+  const panel={key:tabKey,tabId,extensionId,name,url,frame,view,onClosed,revealed:false,cap:null,exit:null,onGone:null,everShown:false};entries.set(tabKey,panel);
+  frame.webContents.ipc.on('acira:side-panel-frame',(_event,command)=>{if(command==='close'&&entries.get(panel.key)===panel)void closePanel(panel);else if(command==='entered'){panel.entered=true;if(panel.loaded)reveal(panel);}else if(command==='gone')panel.onGone?.();});
   const external=target=>{try{const u=new URL(target);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}};
   view.webContents.setWindowOpenHandler(details=>{if(external(details.url))void openTab(details.url);return {action:'deny'};});
   view.webContents.on('will-navigate',(event,target)=>{const to=typeof target==='string'?target:event?.url;if(String(to||'').startsWith(origin))return;event.preventDefault?.();if(external(to))void openTab(to);});
-  view.webContents.once('dom-ready',()=>{panel.loaded=true;if(current===panel&&panel.entered)reveal();});
+  view.webContents.once('dom-ready',()=>{panel.loaded=true;if(panel.entered)reveal(panel);});
   /* The page closing itself (window.close(), as Image Downloader's own close button does; the extension being unloaded or reloaded does the same): Chromium's ExtensionHost::CloseContents runs the close
      handler the side panel coordinator set, which closes the panel (HandleCloseExtensionSidePanel) and tells the extension (OnClosed). Here the contents are destroyed and the view taken out of the
      window, which left Acira's card as an empty column and the panel "open" for good: the same close as the Close button, so the column goes, the state clears and the button opens it again. */
-  view.webContents.on('destroyed',()=>{if(current===panel)void close();});
-  frame.webContents.once('did-finish-load',()=>{sendState('in');});
-  panel.cap=setTimeout(()=>{if(current===panel)reveal();},REVEAL_CAP_MS);
-  raise();relayout();place();
-  await frame.webContents.loadFile(FRAME).catch(()=>{});
-  view.webContents.loadURL(url).catch(()=>{});
+  view.webContents.on('destroyed',()=>{if(entries.get(panel.key)===panel)void closePanel(panel);});
+  frame.webContents.once('did-finish-load',()=>{sendState(panel,'in');});
+  panel.cap=setTimeout(()=>{if(entries.get(panel.key)===panel&&panel===shown)reveal(panel);},REVEAL_CAP_MS);
+  /* Whatever goes wrong while the panel is being brought up, the host must not keep a half-made panel: every later press would be "already open" for it (the stuck state of the laptop's second run). */
+  try{
+   reconcile();
+   relayout();
+   await frame.webContents.loadFile(FRAME).catch(()=>{});
+   view.webContents.loadURL(url).catch(()=>{});
+  }catch(error){
+   if(entries.get(panel.key)===panel)await closePanel(panel,{silent:true});
+   throw error;
+  }
   return {opened:true};
  }
- function navigate({extensionId,url}){if(!current||current.extensionId!==extensionId)return;current.url=url;current.view.webContents.loadURL(url).catch(()=>{});}
+ function navigate({extensionId,url,tabKey}){const panel=pick({tabKey,extensionId});if(!panel||panel.extensionId!==extensionId)return;panel.url=url;panel.view.webContents.loadURL(url).catch(()=>{});}
+ /** The window's tabs, as main knows them: which one is in front (a panel of its own, or the window's, comes with it) and which still exist (a closed tab's panel goes with it, as Chromium destroys the tab's registry). */
+ function sync({activeKey:active=null,keys=null}={}){
+  activeKey=active;
+  if(keys){for(const panel of [...entries.values()])if(panel.key!==WINDOW_KEY&&!keys.has(panel.key))void closePanel(panel);}
+  reconcile();
+ }
  return {
-  open,close,navigate,place,raise,
-  current:()=>current?{extensionId:current.extensionId,url:current.url,webContents:current.view.webContents}:null,
+  open,close,navigate,place,raise,sync,
+  /** The panel in front, or null. */
+  current:()=>shown?infoOf(shown):null,
+  /** Every panel this window keeps for an extension (the one in front and the tabs' kept ones). */
+  list:extensionId=>[...entries.values()].filter(panel=>!gone(panel)&&(extensionId===undefined||panel.extensionId===extensionId)).map(infoOf),
+  find:({extensionId,tabKey}={})=>{const panel=pick({tabKey,extensionId});return panel&&!gone(panel)?infoOf(panel):null;},
+  reallyShown:({extensionId,tabKey}={})=>{const panel=pick({tabKey,extensionId});return !!panel&&reallyShown(panel);},
   /** Called once per layout pass before the page views are placed; trim then remembers the card the panel sits beside. */
   begin(){anchor=null;},
-  trim:(bounds,page)=>{const out=trimBounds(bounds,page,current?panelGeometry(page):null);if(out!==bounds)anchor={...bounds};return out;},
-  restyle(){if(current)sendState('in');},
-  destroy(){if(!current)return;const panel=current;current=null;teardown(panel);}
+  trim:(bounds,page)=>{const out=trimBounds(bounds,page,shown?panelGeometry(page):null);if(out!==bounds)anchor={...bounds};return out;},
+  restyle(){if(shown)sendState(shown,'in');},
+  destroy(){const all=[...entries.values()];entries.clear();shown=null;for(const panel of all)teardown(panel);}
  };
 }
 
-module.exports={createSidePanelHost,panelGeometry,trimBounds,GAP,HEADER};
+module.exports={createSidePanelHost,panelGeometry,trimBounds,GAP,HEADER,WINDOW_KEY};

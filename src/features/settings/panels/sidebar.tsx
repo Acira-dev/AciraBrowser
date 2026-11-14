@@ -6,6 +6,7 @@ import { clampSidebarWidth } from '../../../ui/sidebarLayout';
 import { sidebarSideOf } from '../../../ui/sidebarSide';
 import { sidebarPatch, workspaceIsOpen } from '../../../runtime/browserChrome';
 import { sidebarHeldOpenIn } from '../../../runtime/windowView';
+import { favoriteTabsInList } from '../../../runtime/favoriteTabsRule';
 import { useRef, useSyncExternalStore } from 'react';
 import { useFlip } from '../../../ui/sharedMotion';
 import { moveSection, openSidebarCustomize, saveSections, sectionLayout, sectionShown, SECTION_NAMES, toggleSection, type SectionId } from '../../../ui/sidebarSections';
@@ -69,7 +70,7 @@ export function SidebarGroups({ state, dispatch }: SettingsPanelProps) {
         <Switch label={t("sidebar.showFavoritesInTheSidebar")} checked={!apps.hidden} onChange={(next) => setSidebarAppsHidden(tab.browserProfileId, privateMode, !next)} />
       </SettingRow>
       <SettingRow id="sidebar-apps-tabs" title={t("sidebar.favoriteTabsInList")} detail={t("sidebar.favoriteTabsInListDetail")}>
-        <Switch label={t("sidebar.favoriteTabsInList")} checked={state.settings.favoriteTabsInList !== false} onChange={(next) => dispatch({ type: 'settings.update', patch: { favoriteTabsInList: next } })} />
+        <Switch label={t("sidebar.favoriteTabsInList")} checked={favoriteTabsInList(state.settings)} onChange={(next) => dispatch({ type: 'settings.update', patch: { favoriteTabsInList: next } })} />
       </SettingRow>
       <SettingRow id="sidebar-new-tabs-top" title={t("sidebar.newTabsAtTheTop")} detail={t("sidebar.newTabsTopDetail")}>
         <Switch label={t("sidebar.newTabsAtTheTop")} checked={rail.newTabsTop !== false} onChange={(next) => setRailPrefs({ newTabsTop: next, newTabsTopChosen: true }, tab.browserProfileId, privateMode)} />

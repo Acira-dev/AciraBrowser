@@ -150,7 +150,8 @@ test('main wires it: the pages and the interface report their pointer events, th
   assert.match(main, /const pointerSource=require\('\.\/pointer-point\.cjs'\)\.createPointerSource\(\{platform:process\.platform,env:process\.env,ozone:/, 'one source per window, told the ozone platform Chromium was given');
   assert.match(main, /getSwitchValue\('ozone-platform'\)\|\|app\.commandLine\.getSwitchValue\('ozone-platform-hint'\)/);
   assert.match(main, /wc\.on\('before-mouse-event',\(_e,mouse\)=>\{pointerHeld\.note\(mouse\);notePointer\(wc,mouse,entry\.view\);/, 'a tab\'s page');
-  assert.match(main, /chromeView\.webContents\.on\('before-mouse-event',\(_e,mouse\)=>\{pointerHeld\.note\(mouse\);if\(chromeView\)notePointer\(chromeView\.webContents,mouse,chromeView\);/, 'the interface');
+  // (the mouse's back and forward buttons are taken first by desktop/mouse-nav.cjs: tests/mouse-nav.test.cjs)
+  assert.match(main, /chromeView\.webContents\.on\('before-mouse-event',\(_e,mouse\)=>\{(?:if\(mouseNav\.ui\('interface',mouse,_e\)\)return;)?pointerHeld\.note\(mouse\);if\(chromeView\)notePointer\(chromeView\.webContents,mouse,chromeView\);/, 'the interface');
   assert.match(main, /pointerEvents:\(\)=>pointerSource\.eventsMode\(\)\?pointerSource:null,cursorRead:point=>pointerSource\.noteCursorRead\(point\)/, 'the poller\'s item');
   assert.match(main, /wc\.on\('destroyed',\(\)=>pointerSource\.forget\(wc\)\);return entry;\}/, 'a closed page');
   assert.match(main, /const notePointer=\(owner,mouse,view\)=>\{if\(!pointerSource\.listening\)return;try\{pointerSource\.note\(owner,mouse,view\.getBounds\(\)\);\}catch\{\}\};/, 'nothing is recorded where the source does not listen (Mac, Windows)');

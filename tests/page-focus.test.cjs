@@ -226,7 +226,7 @@ test('main: the `focus-page` command is answered before any tab lookup (it must 
   assert.ok(command > 0, 'handled');
   assert.ok(command < main.indexOf("if(c.type==='tab-card')"), 'first');
   assert.ok(command < main.indexOf("const entry=tab.contentKind==='web'?ensurePage(tab):null"), 'before ensurePage');
-  assert.ok(main.includes("restoreVisibleFocus();pageFocus.activated();});resize();"), "the window's focus event");
+  assert.ok(main.includes("restoreVisibleFocus();pageFocus.activated();/* and once more when the activation has settled"), "the window's focus event (13.8 check 14 adds a settled re-check after it: tests/focus-return.test.cjs)");
 });
 
 test('the command is accepted with a tab and nothing else', () => {

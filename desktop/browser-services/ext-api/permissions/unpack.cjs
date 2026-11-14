@@ -131,8 +131,7 @@ function scriptableHosts(manifest) {
  * UnpackPermissionSet: splits a request ({permissions, origins}) by what the extension's manifest says about each entry. Throws
  * Error(<Chromium's message>) for an unknown permission name or an unparsable pattern.
  *   apis:    {required, optional, unlisted}      (names)
- *   origins: {required, optional, scriptable, unlisted, restricted}   (normalized patterns; restricted = file: patterns, Acira never gives
- *            extensions file access)
+ *   origins: {required, optional, scriptable, unlisted, restricted}   (normalized patterns; restricted = file: patterns of an extension without "Allow access to file URLs")
  */
 function unpack(permissionTable, extension, request) {
   const decl = permissionTable.declared(extension);
@@ -158,7 +157,8 @@ function unpack(permissionTable, extension, request) {
     const parsed = parsePattern(text);
     if (!parsed.ok) throw new Error(invalidOrigin(text, parsed.error));
     const {spec, scheme} = parsed.pattern;
-    if (scheme === 'file') { origins.restricted.push(spec); continue; }
+    // Chromium: a file: host pattern is only part of an extension's permissions with file access (permissions_parser.cc ParseHostPermissions drops SCHEME_FILE without ALLOW_FILE_ACCESS); with the switch on it is an ordinary pattern.
+    if (scheme === 'file' && !(typeof permissionTable.fileAccess === 'function' && permissionTable.fileAccess(extension))) { origins.restricted.push(spec); continue; }
     let used = false;
     if (covered(decl.origins, spec)) { used = true; origins.required.push(spec); }
     else if (covered(decl.optionalOrigins, spec)) { used = true; origins.optional.push(spec); }

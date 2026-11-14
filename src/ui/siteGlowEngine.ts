@@ -20,20 +20,40 @@ import type { SiteColorLevel } from '../runtime/types';
 import { sidebarMorphRunning } from './sidebarMorph';
 
 const FADE_MS = 420;
+/** Layers: THREE (frame layers, and the sidebar's, one set per index). A colour that arrives while a fade is running (a quick second tab, Ctrl+Tab through several) must not be painted into the layer that is still fading out: with two layers
+ *  that layer's colour was swapped while visible and its opacity snapped to 0, and the tint of the frame dropped by a fifth of its strength in one frame (the toolbar band lost 11-16 levels). The new colour goes on the layer, other than the
+ *  front one, that shows the least; every other layer fades on to nothing from where it is. */
+const LAYERS = 3;
+/** The layer that gets the next colour: not the front one, and of the others the one that shows the least (the first on a tie). */
+export function pickGlowLayer(shown: number[], front: number): number {
+  let toward = -1, least = Infinity;
+  for (let i = 0; i < shown.length; i++) { if (i === front) continue; if (shown[i] < least) { least = shown[i]; toward = i; } }
+  return toward;
+}
 let layers: HTMLElement[] = [], front = 0, lastKey = '', lastBase = '', lastColour = '', painted = false;
 const app = () => document.querySelector<HTMLElement>('.app.style-acira:not(.native-layer)');
 /** The left wash is painted by the sidebar itself (13.5): two layers inside the open sidebar (`.st-glow-rail`, see AciraSidebar) that follow the frame layers' colours,
  *  opacity and fades exactly. A layer behind the frame at a fixed place is not part of what the layout view transition shows under the sidebar column: the sidebar slid in
  *  without its glow and the glow landed on it in one frame at the end. Inside the sidebar the glow travels, and fades, with it. Mounted layers take the current state at once. */
-const rails: [Set<HTMLElement>, Set<HTMLElement>] = [new Set(), new Set()];
-const railRef = (index: 0 | 1) => (el: HTMLElement | null) => {
+const rails: Set<HTMLElement>[] = Array.from({ length: LAYERS }, () => new Set<HTMLElement>());
+const railRef = (index: number) => (el: HTMLElement | null) => {
   if (!el) return undefined;
-  rails[index].add(el); el.style.cssText = layers[index]?.style.cssText ?? '';
+  rails[index].add(el); el.style.cssText = layers[index]?.style.cssText ?? ''; lightOne(el, !!layers[index]?.hasAttribute('data-lit'));
   return () => { rails[index].delete(el); };
 };
-/** React refs of the two layers a sidebar renders. */
-export const railGlowRef0 = railRef(0), railGlowRef1 = railRef(1);
-const stackOf = (index: number): HTMLElement[] => [layers[index], ...rails[index as 0 | 1]].filter(Boolean) as HTMLElement[];
+/** React refs of the three layers a sidebar renders. */
+export const railGlowRef0 = railRef(0), railGlowRef1 = railRef(1), railGlowRef2 = railRef(2);
+const stackOf = (index: number): HTMLElement[] => [layers[index], ...rails[index]].filter(Boolean) as HTMLElement[];
+/** A glow layer (a frame layer and its rails) wears `data-lit` while it shows a glow or is still fading: only then does the stylesheet keep it on the compositor
+ *  (`will-change`, styles/site-glow.css). An idle layer at opacity 0 used to stay a full-window composited layer for good after the first site colour, with a compositor
+ *  surface of its own in dark (12.6 MB at 2x) and an overlap layer above it. Opacity 0 draws nothing: the picture and the fades are the same. */
+const lightOne = (el: HTMLElement, lit: boolean) => { if (lit) el.setAttribute('data-lit', ''); else el.removeAttribute('data-lit'); };
+const light = (index: number, lit: boolean) => { for (const el of stackOf(index)) lightOne(el, lit); };
+/** After a layer has faded out (or at once without a fade), put it away, unless a colour has been put on it again since. */
+const putAwayWhenFaded = (index: number, wait: number) => {
+  const put = () => { const layer = layers[index]; if (layer && (parseFloat(layer.style.opacity) || 0) === 0) light(index, false); };
+  if (wait > 0) setTimeout(put, wait); else put();
+};
 const hexOf = (triple: string) => '#' + triple.trim().split(/\s+/).map(n => Number(n).toString(16).padStart(2, '0')).join('');
 
 function readBase(): SiteTintBase | null {
@@ -45,8 +65,8 @@ function readBase(): SiteTintBase | null {
 }
 function ensureLayers() {
   const node = app(); if (!node) return false;
-  if (layers.length === 2 && layers.every(l => l.isConnected)) return true;
-  layers = [0, 1].map(() => { const el = document.createElement('div'); el.className = 'st-glow'; el.setAttribute('aria-hidden', 'true'); node.prepend(el); return el; });
+  if (layers.length === LAYERS && layers.every(l => l.isConnected)) return true;
+  layers = Array.from({ length: LAYERS }, () => { const el = document.createElement('div'); el.className = 'st-glow'; el.setAttribute('aria-hidden', 'true'); node.prepend(el); return el; });
   return true;
 }
 const reducedMotion = () => app()?.getAttribute('data-reduced-motion') === 'true' || matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -77,23 +97,27 @@ export function syncSiteGlow(input: SiteGlowInput, options: { instant?: boolean 
   if (key === lastKey && baseKey === lastBase) return;
   const sameColour = key === lastKey; // only the finish changed: re-derive at once
   lastKey = key; lastBase = baseKey; lastColour = color; if (color) painted = true;
-  const inIndex = 1 - front, outIndex = front, incoming = layers[inIndex], instant = options.instant || sameColour || reducedMotion();
+  const instant = options.instant || sameColour || reducedMotion();
+  const inIndex = pickGlowLayer(layers.map(layer => instant ? 0 : (parseFloat(getComputedStyle(layer).opacity) || 0)), front), incoming = layers[inIndex], outIndexes = layers.map((_, i) => i).filter(i => i !== inIndex);
   const request: SiteGlowRequest | null = color ? { color, strength: SITE_GLOW_STRENGTH[input.level === 'rich' ? 'rich' : 'soft'] } : null;
   const colors = request ? siteGlowColors(request, base) : null;
   const transition = instant ? 'none' : `opacity ${FADE_MS}ms cubic-bezier(.2,0,0,1)`;
   if (colors && colors.opacity > 0) {
     root.setAttribute('data-site-glow', ''); root.setAttribute('data-site-glow-tone', base.dark ? 'dark' : 'light');
+    light(inIndex, true);
     for (const el of stackOf(inIndex)) {
       el.style.setProperty('--g1', colors.g1); el.style.setProperty('--g2', colors.g2); el.style.setProperty('--g3', colors.g3);
       el.style.transition = 'none'; el.style.opacity = '0';
     }
     void incoming.offsetWidth;
-    for (const el of [...stackOf(inIndex), ...stackOf(outIndex)]) el.style.transition = transition;
+    for (const index of layers.keys()) for (const el of stackOf(index)) el.style.transition = transition;
     for (const el of stackOf(inIndex)) el.style.opacity = String(colors.opacity);
-    for (const el of stackOf(outIndex)) el.style.opacity = '0';
-    front = 1 - front;
+    for (const index of outIndexes) for (const el of stackOf(index)) el.style.opacity = '0';   // a transition retargets from where the layer is: a fade that is running goes on, no step
+    for (const index of outIndexes) putAwayWhenFaded(index, instant ? 0 : FADE_MS + 40);
+    front = inIndex;
   } else {
-    for (const el of [...stackOf(0), ...stackOf(1)]) { el.style.transition = transition; el.style.opacity = '0'; }
+    for (const index of layers.keys()) for (const el of stackOf(index)) { el.style.transition = transition; el.style.opacity = '0'; }
+    for (const index of layers.keys()) putAwayWhenFaded(index, instant ? 0 : FADE_MS + 40);
     if (instant) root.removeAttribute('data-site-glow'); else setTimeout(() => { if (!lastColour) root.removeAttribute('data-site-glow'); }, FADE_MS + 40);
   }
 }

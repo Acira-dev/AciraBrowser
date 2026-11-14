@@ -37,7 +37,7 @@ test('which files may be opened, and only by a drop the browser started',()=>{
   const kinds=read('desktop/accounts/open-files.cjs').match(/const FILE_KINDS = new Set\(\[([^\]]*)\]\)/)?.[1]||'';
   for(const kind of ['.pdf','.png','.jpg','.txt','.html','.mp3','.mp4','.webm'])assert.ok(kinds.includes('"'+kind+'"'),kind+' is allowed');
   for(const kind of ['.exe','.bat','.cmd','.ps1','.js','.vbs','.msi','.lnk','.scr','.dll','.jar','.reg','.url'])assert.ok(!kinds.includes('"'+kind+'"'),kind+' is not allowed');
-  const open=main.slice(main.indexOf('function openDroppedFile(address)'),main.indexOf('function openDroppedFile(address)')+900);
+  const open=main.slice(main.indexOf('function openDroppedFile(address,tabId)'),main.indexOf('function openDroppedFile(address,tabId)')+1200);
   assert.match(open,/url\.protocol!=='file:'\|\|url\.hostname\|\|url\.username\|\|url\.password/,'no network shares, no credentials');
   assert.match(open,/realpathSync/);
   assert.match(open,/info\.isFile\(\)/);

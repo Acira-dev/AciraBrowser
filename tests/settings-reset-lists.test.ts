@@ -99,13 +99,14 @@ const rested: SidebarLayoutNow = {
 test('Reset sidebar layout is off for the default layout and on for each setting it puts back', () => {
   assert.equal(sidebarLayoutChanged(rested), false);
   assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: undefined, newTabsTop: undefined, folders: undefined }), false, 'unset means the default');
+  assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: false }), false, 'Off is the default since 13.9');
   const each: Record<string, Partial<SidebarLayoutNow>> = {
     'size Narrow (beta.13)': { width: 168 },
     'size Wide (beta.13)': { width: 312 },
     'side Right (beta.13)': { side: 'right' },
     'Favorites hidden': { appsHidden: true },
     'Favorites at the bottom (beta.13)': { appsPlace: 'bottom' },
-    'Favorites’ tabs out of the list (beta.13)': { favoriteTabsInList: false },
+    'Favorites’ tabs in the list (13.9: the default is out of it)': { favoriteTabsInList: true },
     'tabs in the sidebar': { tabsInSidebar: true },
     'new tabs at the bottom': { newTabsTop: false },
     'tab groups above (beta.13)': { folders: 'above' },

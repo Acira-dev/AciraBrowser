@@ -45,5 +45,15 @@ if(/^https?:/.test(location.href)){
    if(['cmpDetected','popupFound','optOutResult','autoconsentDone','autoconsentError'].includes(message.type))ipcRenderer.send('acira:autoconsent-event',{type:message.type,cmp:typeof message.cmp==='string'?message.cmp.slice(0,80):'',result:message.result===true,isCosmetic:message.isCosmetic===true,mainFrame:process.isMainFrame});
   };
   try{consent=new AutoConsent(send,setup.config,{compact:JSON.parse(setup.rules)});}catch{/* Rules this build cannot read: the banner stays. */}
+  // The library's prehide appends its rule with `styleEl.innerText += rule`. Reading innerText makes the page bring its style and layout up to date at that moment,
+  // and in this preload the document does not exist yet when the library starts, so prehide waits for DOMContentLoaded: every page paid one forced full layout
+  // there (a speed pass: 6 ms on a large page, 1.6 ms on an article, consent banner or not). The same rule, written to the same <style id="autoconsent-prehide">,
+  // through textContent, which reads nothing from layout. The library's undoPrehide removes that element as before. (A <style> is never rendered: its innerText is its text.)
+  if(consent&&consent.domActions&&typeof consent.domActions.prehide==='function')consent.domActions.prehide=function(selector){
+   const id='autoconsent-prehide';let styleEl=document.querySelector('style#'+id);
+   if(!(styleEl instanceof HTMLStyleElement)){const parent=document.head||document.getElementsByTagName('head')[0]||document.documentElement;styleEl=document.createElement('style');styleEl.id=id;parent.appendChild(styleEl);}
+   styleEl.textContent+=`${selector} { opacity: 0 !important; z-index: -1 !important; pointer-events: none !important; } `;
+   return selector.length>0;
+  };
  }
 }

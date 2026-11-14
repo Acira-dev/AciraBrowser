@@ -2,7 +2,7 @@ import type { BrowserSnapshot, Settings, TabSession } from './types';
 import { workspaceTabs } from './workspaces';
 import { favoriteTabsInList, favoriteTabsOnlyInTile, tabListed } from './favoriteTabsRule';
 
-/** A favorite and its tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; founder, 6 Nov: "the tab must not disappear
+/** A favorite and its tab (reviewer, 2 Nov: "fav tabs aren't a tab … it's basically a bookmark"; reported 6 Nov: "the tab must not disappear
  *  when it's added to Favorites"). The favorites themselves are the interface's, per profile (ui/sidebarApps.ts). A favorite is a saved address
  *  with a tile; the tab it is linked to is an ordinary tab in the list, exactly where it was, with its group and its place. The link is the
  *  tab's `favoriteId`, saved with the window, so it comes back after a restart. While that tab is open the tile shows it (a dot, the raised
@@ -31,6 +31,14 @@ export function settleFavoriteTabs(s: BrowserSnapshot, previous?: BrowserSnapsho
 
 export { favoriteTabsInList, favoriteTabsOnlyInTile, tabListed };
 
-/** The tabs Ctrl+1…9, Ctrl+PageDown/PageUp, Ctrl+Shift+PageDown/PageUp and Ctrl+Tab's Next tab walk: the open workspace's, in order, as the list on
- *  screen shows them (so a tab that lives only in its tile has no number). */
-export const listedTabs = (state: BrowserSnapshot): TabSession[] => workspaceTabs(state).filter(tab => tabListed(tab, state.settings));
+/** The tabs the list on screen shows, in order: the open workspace's, less a favorite's tab that Settings keep only in its tile (the default since 13.9). What
+ *  "move tab" walks, since only these have a place to move to. */
+export const rowTabs = (state: BrowserSnapshot): TabSession[] => workspaceTabs(state).filter(tab => tabListed(tab, state.settings));
+/** The tabs Ctrl+1…9, Ctrl+PageDown/PageUp, Ctrl+Shift+PageDown/PageUp and Ctrl+Tab's Next tab walk: the open workspace's, in order. A favorite's tab that lives only in
+ *  its tile is a tab like any other (13.9): the keys reach it and the counts include it. It comes after the rows of the list, so Ctrl+1…8 still land on the
+ *  rows exactly as the numbers drawn on them say, nothing shifts for anyone who never opens a favorite, and the next tab after the last row is the first of the tiles'
+ *  tabs; the last tab (Ctrl+9) is the last of them. Tile-only tabs keep the order of the window's tab list among themselves. */
+export const listedTabs = (state: BrowserSnapshot): TabSession[] => {
+  const all = workspaceTabs(state), rows = all.filter(tab => tabListed(tab, state.settings));
+  return rows.length === all.length ? rows : [...rows, ...all.filter(tab => !tabListed(tab, state.settings))];
+};

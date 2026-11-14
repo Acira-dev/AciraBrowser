@@ -48,8 +48,47 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
  const filename=partition=>path.join(directory,createHash('sha256').update(partition).digest('hex')+'.bin');
  function writeSynced(file,bytes){let descriptor;try{descriptor=io.openSync(file,'w',0o600);io.writeFileSync(descriptor,bytes);io.fsyncSync(descriptor);}finally{if(descriptor!==undefined)io.closeSync(descriptor);}}
  function unlink(file){try{io.unlinkSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}}
+ // A smoothness pass: the hot paths (a cookie change event, the capture a moment after) wait for the disk OFF the main thread. Each file is written
+ // in the same order and its bytes reach the system at once (an app crash keeps them, as before); only the wait for the disk itself (fsync: 10-35 ms
+ // on main per write, two per deletion, during cookie-heavy page loads) runs on libuv's pool, and nothing after it (the rename, the marker's removal)
+ // starts before it is done. Clearing website data, startup and profile removal keep the synchronous writes above and below.
+ const syncOff=descriptor=>typeof io.fsync==='function'?new Promise((resolve,reject)=>io.fsync(descriptor,error=>error?reject(error):resolve())):Promise.resolve().then(()=>io.fsyncSync(descriptor));
+ async function writeDurable(file,bytes){let descriptor;try{descriptor=io.openSync(file,'w',0o600);io.writeFileSync(descriptor,bytes);await syncOff(descriptor);}finally{if(descriptor!==undefined)io.closeSync(descriptor);}}
+ const nextTemporary=file=>file+'.next.tmp';
+ /** A held session cookie went away (a logout, an overwrite): from this moment the saved snapshot must not come back. The marker's bytes are written
+  *  before this returns; while one is on its way or on disk (until a save that knows of every deletion removes it) a burst writes no other. */
+ function noteDeletion(state){
+  state.deletions=(state.deletions||0)+1;state.savedText=null;
+  if(state.marking)return;
+  const file=filename(state.partition);io.mkdirSync(directory,{recursive:true,mode:0o700});
+  state.marking=writeDurable(file+'.revoked',Buffer.from('1\n')).catch(async markerError=>{try{unlink(file);return;}catch{}try{await writeDurable(file,Buffer.alloc(0));return;}catch{}throw markerError;});
+  state.marking.catch(()=>{});
+ }
+ async function saveAsync(state){
+  if(state.disabled)return;
+  if(!available())throw new Error('Secure website-session storage is unavailable');
+  const text=JSON.stringify({version:1,profileId:state.profileId,partition:state.partition,cookies:[...state.cookies.values()]});if(Buffer.byteLength(text)>MAX_BYTES)throw new Error('Website-session snapshot exceeded bounds');
+  if(text===state.savedText)return;
+  const encrypted=safeStorage.encryptString(text);if(encrypted.length>MAX_BYTES+4096)throw new Error('Encrypted website-session snapshot exceeded bounds');
+  io.mkdirSync(directory,{recursive:true,mode:0o700});const file=filename(state.partition),temporary=nextTemporary(file),at=state.deletions||0;
+  try{await writeDurable(temporary,encrypted);}catch(error){try{unlink(temporary);}catch{}throw error;}
+  // A deletion (or a clear, or the profile's removal) while this waited: this set is out of date; the save that follows it writes the current one.
+  if(state.disabled||(state.deletions||0)!==at){unlink(temporary);return;}
+  try{io.renameSync(temporary,file);}catch(error){try{unlink(temporary);}catch{}throw error;}
+  unlink(file+'.revoked');state.marking=null;state.savedText=text;
+ }
+ async function persistDeletionAsync(state){
+  try{await state.marking;await saveAsync(state);state.deletionError=null;}
+  catch{state.clearing=true;state.deletionError=new Error('Website session recovery is paused because a credential deletion could not be saved. Retry clearing website data.');report();throw state.deletionError;}
+ }
+ /** The listener's deletion: marked now, saved on the queue (one save for a burst). A failure pauses recovery exactly as the synchronous path does. */
+ function persistDeletionSoon(state){
+  noteDeletion(state);
+  if(state.persistQueued)return;state.persistQueued=true;
+  state.queue=state.queue.then(()=>{state.persistQueued=false;return persistDeletionAsync(state);}).catch(()=>{});
+ }
  function revoke(state){
-  state.savedText=null;const file=filename(state.partition);io.mkdirSync(directory,{recursive:true,mode:0o700});
+  state.deletions=(state.deletions||0)+1;state.savedText=null;const file=filename(state.partition);io.mkdirSync(directory,{recursive:true,mode:0o700});
   // This marker contains no cookie/profile values. Startup must ignore any older
   // encrypted snapshot while a credential-deletion save is incomplete.
   try{writeSynced(file+'.revoked',Buffer.from('1\n'));}
@@ -61,7 +100,7 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
   const text=JSON.stringify({version:1,profileId:state.profileId,partition:state.partition,cookies:[...state.cookies.values()]});if(Buffer.byteLength(text)>MAX_BYTES)throw new Error('Website-session snapshot exceeded bounds');
   if(text===state.savedText)return;
   const encrypted=safeStorage.encryptString(text);if(encrypted.length>MAX_BYTES+4096)throw new Error('Encrypted website-session snapshot exceeded bounds');
-  io.mkdirSync(directory,{recursive:true,mode:0o700});const file=filename(state.partition);writeSynced(file+'.tmp',encrypted);io.renameSync(file+'.tmp',file);unlink(file+'.revoked');state.savedText=text;
+  io.mkdirSync(directory,{recursive:true,mode:0o700});const file=filename(state.partition);writeSynced(file+'.tmp',encrypted);io.renameSync(file+'.tmp',file);unlink(file+'.revoked');state.marking=null;state.savedText=text;
  }
  function persistDeletion(state){
   try{revoke(state);save(state);state.deletionError=null;}
@@ -73,7 +112,7 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
    const version=state.version,cookies=await state.access.read();if(state.disabled||state.clearing)return;if(version!==state.version)continue;
    if(!Array.isArray(cookies)||cookies.length>MAX_COOKIES*4)throw new Error('Cookie snapshot exceeded bounds');
    const next=new Map();for(const cookie of cookies){if(cookieParam(cookie))next.set(cookieKey(cookie),cookie);if(next.size>MAX_COOKIES)throw new Error('Session cookie snapshot exceeded bounds');}
-   const removed=[...state.cookies.keys()].some(key=>!next.has(key));state.cookies=next;if(removed)persistDeletion(state);else save(state);return;
+   const removed=[...state.cookies.keys()].some(key=>!next.has(key));state.cookies=next;if(removed){noteDeletion(state);await persistDeletionAsync(state);}else await saveAsync(state);return;
   }
   throw new Error('Cookie snapshot did not settle');
  }
@@ -91,7 +130,7 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
   state.access=makeAccess(session);
   state.listener=(_event,cookie,_cause,removed)=>{
    state.version++;
-   if(removed||cookie.session!==true){let held=false;for(const [key,saved]of state.cookies)if(baseKey(saved)===baseKey(cookie)){state.cookies.delete(key);held=true;}if(held)try{persistDeletion(state);}catch{return;}}
+   if(removed||cookie.session!==true){let held=false;for(const [key,saved]of state.cookies)if(baseKey(saved)===baseKey(cookie)){state.cookies.delete(key);held=true;}if(held)persistDeletionSoon(state);}
    if(!state.restoring)scheduleSoon(state);
   };
   session.cookies.on('changed',state.listener);state.restoring=true;
@@ -126,7 +165,7 @@ function createSessionCookieRestore({directory,safeStorage,platform=process.plat
   else state.cookies.clear();persistDeletion(state);
  }
  async function completeClear(session){const state=states.get(session);if(!state||state.disabled)return;await state.queue;if(state.deletionError)throw state.deletionError;state.version++;state.clearing=false;try{await capture(state);}catch{state.clearing=true;state.deletionError=new Error('Website session recovery remains paused. Retry clearing website data.');report();throw state.deletionError;}}
- async function removeProfile(partition){revoke({partition});for(const [session,state]of states)if(state.partition===partition){state.disabled=true;state.version++;if(state.listener)session.cookies.removeListener('changed',state.listener);state.access?.close();states.delete(session);}unlink(filename(partition));unlink(filename(partition)+'.tmp');}
+ async function removeProfile(partition){revoke({partition});for(const [session,state]of states)if(state.partition===partition){state.disabled=true;state.version++;if(state.listener)session.cookies.removeListener('changed',state.listener);state.access?.close();states.delete(session);}unlink(filename(partition));unlink(filename(partition)+'.tmp');unlink(nextTemporary(filename(partition)));}
  function dispose(){for(const state of states.values()){state.disabled=true;state.version++;if(state.listener)state.session.cookies.removeListener('changed',state.listener);state.access?.close();}states.clear();}
  return {attach,flush,clear,completeClear,removeProfile,dispose};
 }

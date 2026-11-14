@@ -16,15 +16,17 @@ const groups=new Map();   // one entry per profile session: Map(commandId -> reg
 function publish(){
  const registry=bridge.getShortcuts();
  if(!registry||typeof registry.setDynamic!=='function')return;
- // A suggested key that Acira (or an extension that came first) already uses stays unassigned, as in Chrome.
+ // A suggested key is the extension's unless another extension came first or Acira keeps it: a command's own (first) key, a key the person gave a command, a reserved command's keys (New tab, Close tab ...), or a reserved
+ // combination (Ctrl+C ...). Acira's own keys win, as in Chrome. The one thing an extension can take is an ALIAS of a browser command (a default that is not its first key): Ctrl+E is also the address bar's, and an AI assistant extension's
+ // Ctrl+E (the shortcut that closes its side panel) on Windows/Linux was "taken" by it and never ran. The registry takes that alias away from the command (shortcut-registry.cjs claimedByExtensions).
  const taken=new Set();
- try{for(const command of registry.list())if(!command.id.startsWith(PREFIX))for(const accel of command.bindings)taken.add(accel);}catch{/* registry not ready */}
+ try{for(const command of registry.list()){if(command.id.startsWith(PREFIX))continue;for(const accel of (command.customized||command.reserved)?command.bindings:command.bindings.slice(0,1))taken.add(accel);}}catch{/* registry not ready */}
  const merged=[];
  for(const group of groups.values())for(const command of group.values()){
   let defaults=[];
   if(command.key){
    const accel=registry.canonical?.(command.key)||command.key;
-   if(!taken.has(accel)){defaults=[accel];taken.add(accel);}
+   if(!taken.has(accel)&&!registry.reservedKey?.(accel)){defaults=[accel];taken.add(accel);}
   }
   merged.push({...command.entry,defaults});
  }

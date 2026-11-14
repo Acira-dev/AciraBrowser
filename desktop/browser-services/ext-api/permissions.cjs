@@ -19,8 +19,10 @@ module.exports = {
 
     // permissions.getAll: the active set (manifest + granted optional), content-script hosts included (PackPermissionSet reads effective_hosts).
     api.handle('permissions.getAll', event => {
-      const active = table.active(event.extension);
-      return pack({permissions: active.permissions, origins: effectiveOrigins(event.extension.manifest || {}, active)});
+      const active = table.active(event.extension), origins = effectiveOrigins(event.extension.manifest || {}, active);
+      // Without file access an explicit file: pattern is not one of the extension's permissions (Chromium drops it at load: permissions_parser.cc); <all_urls> stays.
+      const fileAccess = typeof table.fileAccess === 'function' && table.fileAccess(event.extension);
+      return pack({permissions: active.permissions, origins: fileAccess ? origins : origins.filter(origin => !/^file:/i.test(origin))});
     });
 
     // permissions.contains: true when everything asked is held; anything the manifest does not list is simply not held.

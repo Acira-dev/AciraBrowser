@@ -26,7 +26,7 @@ function fakeSession() {
   return {session, hooks, started};
 }
 function fakeWorker() { const sent = []; return {sent, destroyed: false, send(channel, payload) { sent.push([channel, payload]); }, isDestroyed() { return this.destroyed; }}; }
-function setup({manifests = {}} = {}) {
+function setup({manifests = {}, fileAccess = []} = {}) {
   const {session, hooks, started} = fakeSession();
   const pipeline = new RequestPipeline(session);
   const handlers = new Map();
@@ -36,7 +36,7 @@ function setup({manifests = {}} = {}) {
   const tab = {id: 7, isDestroyed: () => false, getURL: () => 'https://page.example/'};
   const engineStore = {tabs: new Set([tab]), tabToWindow: new WeakMap([[tab, {id: 3}]])};
   const api = {session, handle: (name, fn) => handlers.set(name, fn), getExtension: id => extensions[id] || null, store: () => engineStore,
-    permissions: null, log() {}};
+    permissions: null, fileAccessAllowed: id => fileAccess.includes(id), log() {}};
   const installed = webRequest.install(api);
   const worker = fakeWorker();
   session.worker = worker;
@@ -129,6 +129,24 @@ test('filters, host permissions, initiators, tabs and hidden requests', async ()
   assert.equal(worker.sent.length + other.sent.length, before + 1, 'Web Store, the browser\'s own downloads and file: are hidden; an extension sees its own resources only');
   assert.equal(other.sent.at(-1)[1].d.url, `chrome-extension://${OTHER}/x.js`);
   void extensions;
+});
+
+test('file: requests: hidden from every extension unless its "Allow access to file URLs" is on AND its host permissions reach file: (Chromium web_request_permissions.cc)', async () => {
+  const seen = async fileAccess => {
+    const {hooks, add, worker, tab} = setup({fileAccess});
+    add('onBeforeRequest', 'w:0', {urls: ['<all_urls>']});
+    await run(hooks, 'onBeforeRequest', request({url: 'file:///C:/docs/x.pdf', initiatorOrigin: undefined, webContents: tab}));
+    return worker.sent.map(([, payload]) => payload.d.url);
+  };
+  assert.deepEqual(await seen([]), [], 'switch off: hidden, as before');
+  assert.deepEqual(await seen([OTHER]), [], 'another extension\'s switch is not this one\'s');
+  assert.deepEqual(await seen([ID]), ['file:///C:/docs/x.pdf'], 'switch on and <all_urls>: seen');
+  // The switch on is not enough: the host permissions must reach file: (https://only.example/* does not).
+  const {hooks, add, tab} = setup({fileAccess: [OTHER]});
+  const other = fakeWorker();
+  add('onBeforeRequest', 'w:0', {urls: ['<all_urls>']}, [], OTHER, other);
+  await run(hooks, 'onBeforeRequest', request({url: 'file:///C:/docs/x.pdf', initiatorOrigin: undefined, webContents: tab}));
+  assert.equal(other.sent.length, 0, 'switch on but no host permission for file:');
 });
 
 test('requests of an extension are seen only by that extension; a Tor-flagged session shows nothing', async () => {

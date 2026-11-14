@@ -120,13 +120,14 @@ test('the window wiring: one window per open workspace, scoped shortcuts, other 
  for(const type of ['workspace.create','workspace.select','workspace.update','workspace.delete','workspace.restore','workspace.move-tabs'])assert.ok(main.includes(`'${type}'`),`${type} is in main's actionNames`);
  assert.match(main,/action\.type==='workspace\.select'&&!privateMode/,'picking a workspace another window has open brings that window forward');
  assert.match(main,/c\.state\.activeWorkspaceId===action\.id/);
- // Scoped to the open workspace: listedTabs is workspaceTabs, less a favorite's tab the list does not show when Settings keep it only in its tile (favoriteTabs.ts).
+ // Scoped to the open workspace: listedTabs is workspaceTabs, the rows first and then a favorite's tab that Settings keep only in its tile (favoriteTabs.ts, 13.9: it is still a tab).
  assert.match(main,/case 'select-tab':\{const here=listedTabs\(state\)/);
  assert.match(main,/case 'cycle-tab':\{[^}]*const here=listedTabs\(state\)/);
- assert.match(read('src/runtime/favoriteTabs.ts'),/export const listedTabs = \(state: BrowserSnapshot\): TabSession\[\] => workspaceTabs\(state\)\.filter\(tab => tabListed\(tab, state\.settings\)\);/);
+ assert.match(read('src/runtime/favoriteTabs.ts'),/export const listedTabs = \(state: BrowserSnapshot\): TabSession\[\] => \{\n  const all = workspaceTabs\(state\), rows = all\.filter\(tab => tabListed\(tab, state\.settings\)\);/);
+ assert.match(read('src/runtime/favoriteTabs.ts'),/export const rowTabs = \(state: BrowserSnapshot\): TabSession\[\] => workspaceTabs\(state\)\.filter\(tab => tabListed\(tab, state\.settings\)\);/);
  assert.match(main,/case 'switch-workspace':/);
  assert.match(main,/normalizeWorkspaces\(state\)/);
- for(const name of ['workspaceTabs','listedTabs','normalizeWorkspaces','windowWorkspaces','scopeToWorkspace','workspaceIdOf'])assert.equal(typeof runtime[name],'function',name);
+ for(const name of ['workspaceTabs','listedTabs','rowTabs','normalizeWorkspaces','windowWorkspaces','scopeToWorkspace','workspaceIdOf'])assert.equal(typeof runtime[name],'function',name);
 });
 
 test('a workspace saved in one run opens as it was in the next, and an old save opens as one workspace',()=>{

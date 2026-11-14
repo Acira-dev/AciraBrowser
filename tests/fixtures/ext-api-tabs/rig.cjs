@@ -44,7 +44,7 @@ function createRig({manifest = {manifest_version: 3, permissions: ['tabs']}, per
   const addWindow = ({focused = false} = {}) => {
     const win = {id: windows.length + 1, destroyed: false, isDestroyed() { return this.destroyed; }};
     const window = {
-      id: win.id, win, profileId: 'p', focused, pages: new Map(), state: {tabs: [], activeTabId: '', tabGroups: [], activeWorkspaceId: ''},
+      id: win.id, win, profileId: 'p', focused, pages: new Map(), state: {tabs: [], activeTabId: '', tabGroups: [], activeWorkspaceId: '', windowId: `window-${win.id}`},
       dispatch(action) { dispatched.push(action); reduce(window, action); notify(); },
       command(action) { commands.push(action); const tab = window.state.tabs.find(t => t.id === action.tabId); if (action.type === 'zoom' && tab) { tab.zoom = action.zoom; notify(); } },
       bounds: () => ({x: 10, y: 20, width: 1000, height: 700}), pageBounds: () => ({x: 0, y: 80, width: 1000, height: 600}), maximized: () => false
@@ -63,7 +63,7 @@ function createRig({manifest = {manifest_version: 3, permissions: ['tabs']}, per
       case 'tab.close': { const i = at(action.id); if (i < 0) break; const [tab] = tabs.splice(i, 1); const entry = window.pages.get(tab.id); if (entry) { store.tabs.delete(entry.view.webContents); entry.view.webContents.destroyed = true; window.pages.delete(tab.id); } if (window.state.activeTabId === tab.id) window.state.activeTabId = tabs[0]?.id || ''; break; }
       case 'tab.navigate': { const tab = tabs[at(action.tabId)]; tab.url = action.url; tab.loading = true; const page = window.pages.get(tab.id); if (page) page.view.webContents.url = action.url; break; }
       case 'tab.new': {
-        const tab = addTab(window, {url: action.url || 'acira://newtab', title: '', page: !!action.url, contentKind: action.url ? 'web' : 'internal'});
+        const tab = addTab(window, {url: action.url || 'acira://newtab', title: '', page: !!action.url, contentKind: action.url ? 'web' : 'internal', ...(action.id ? {id: action.id} : {})});
         if (!action.background) window.state.activeTabId = tab.id;
         break;
       }

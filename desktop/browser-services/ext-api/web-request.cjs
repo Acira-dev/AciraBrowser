@@ -12,7 +12,7 @@
 //    without 'extraHeaders' the renderer erases Cookie, Referer, Origin, Accept-Language, Accept-Encoding and Set-Cookie (as Chromium).
 //  - who sees what (web_request_permissions.cc): host permission for the URL and, for non-navigation requests, for the initiator;
 //    requests of an extension only to that extension; hidden: other schemes, Chrome Web Store and other sensitive URLs, the browser's own
-//    requests (Acira's filter-list updates, update checks), file: URLs (Acira loads extensions without file access). Private, Tor and other
+//    requests (Acira's filter-list updates, update checks), file: URLs (unless the extension's "Allow access to file URLs" is on and its host permissions reach them). Private, Tor and other
 //    non-profile sessions never load extensions, so their requests never reach this code; a Tor-flagged session is refused anyway.
 //  - order: onBeforeRequest → onBeforeSendHeaders → onSendHeaders → onHeadersReceived → onAuthRequired → onBeforeRedirect |
 //    onResponseStarted → onCompleted | onErrorOccurred. Acira's blocker and DNR act like Chrome's DNR: listeners still hear onBeforeRequest
@@ -102,7 +102,8 @@ function install(api){
   if(!parts)return false;
   if(parts.scheme==='about')return true;
   if(parts.scheme==='chrome-extension')return parts.host===id;
-  if(parts.scheme==='file')return false; // Acira loads extensions without file access
+  // Chromium (web_request_permissions.cc, extension.h ALLOW_FILE_ACCESS): a file: URL is seen only by an extension with "Allow access to file URLs" on that also has host permission for it
+  if(parts.scheme==='file')return typeof api.fileAccessAllowed==='function'&&api.fileAccessAllowed(id)===true&&hostAccess(id)(parts);
   return hostAccess(id)(parts);
  };
  const store=()=>{try{return api.store();}catch{return null;}};
