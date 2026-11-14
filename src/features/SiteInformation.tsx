@@ -3,6 +3,7 @@ import {Disclosure} from '../components/PanelParts';
 import {useEffect,useRef,useState} from 'react';
 import {runtime} from '../runtime/client';
 import type {TabSession} from '../runtime/types';
+import {isWebsite} from '../runtime/newTabPage';
 import type {SiteStatus,SiteDataCategory,SiteClearResult,ConnectionCertificate} from '../runtime/connectedServices';
 import {currentLocale,t,useT,type MessageId} from '../i18n';
 import '../styles/site-information.css';
@@ -18,10 +19,10 @@ const categoryName=(category:string)=>{const id=categoryIds[category as SiteData
 export function SiteInformation({tab}:{tab:TabSession}){
  useT();
  const [status,setStatus]=useState<SiteStatus>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<SiteDataCategory[]>(['cookies','storage']),[result,setResult]=useState<SiteClearResult>(),[certificate,setCertificate]=useState<ConnectionCertificate>(),generation=useRef(0);
- useEffect(()=>{const version=++generation.current;setStatus(undefined);setResult(undefined);setCertificate(undefined);setBusy(false);setError('');if(tab.contentKind!=='web'||tab.loading||tab.error)return;void runtime.service({type:'site.status',tabId:tab.id}).then(value=>{if(version===generation.current)setStatus(value.site);}).catch(error=>{if(version===generation.current)setError(error instanceof Error?error.message:t('site.unavailable'));});return()=>{generation.current++;};},[tab.id,tab.url,tab.loading,tab.error]);
+ useEffect(()=>{const version=++generation.current;setStatus(undefined);setResult(undefined);setCertificate(undefined);setBusy(false);setError('');if(!isWebsite(tab)||tab.loading||tab.error)return;void runtime.service({type:'site.status',tabId:tab.id}).then(value=>{if(version===generation.current)setStatus(value.site);}).catch(error=>{if(version===generation.current)setError(error instanceof Error?error.message:t('site.unavailable'));});return()=>{generation.current++;};},[tab.id,tab.url,tab.loading,tab.error]);
  useEffect(()=>{if(status?.connection!=='https')return;const version=generation.current;void runtime.service({type:'site.certificate',tabId:tab.id}).then(value=>{if(version===generation.current)setCertificate(value.connectionCertificate);}).catch(()=>{});},[status?.origin,status?.connection,tab.id]);
  const run=async(action:()=>Promise<void>)=>{const version=generation.current;setBusy(true);setError('');try{await action();}catch(error){if(version===generation.current)setError(error instanceof Error?error.message:t('site.changed'));}finally{if(version===generation.current)setBusy(false);}};
- if(tab.contentKind!=='web')return null;
+ if(!isWebsite(tab))return null;
  return <section className="site-information" aria-label={t('site.aria')} aria-busy={busy} data-popup-pending={!tab.loading&&!tab.error&&!status&&!error||undefined}>
   {certificate?.available&&<Disclosure title={t('site.cert')}><dl className="site-certificate"><dt>{t('site.connection')}</dt><dd>{certificate.verified?t('site.certVerified'):t('site.certUnverified')}</dd>{certificate.issuedBy&&<><dt>{t('site.issuedBy')}</dt><dd><bdi>{certificate.issuedBy}</bdi></dd></>}{certificate.validUntil&&longDate(certificate.validUntil)&&<><dt>{t('site.validUntil')}</dt><dd>{longDate(certificate.validUntil)}</dd></>}</dl></Disclosure>}
   <Disclosure className="site-data-disclosure" title={t('site.permsAndData')} value={status?t('plural.cookies',{count:status.cookieCount}):undefined}><h3>{t('site.dataHeading')}</h3>{status?<><p><bdi>{t('site.cookiesFor',{count:status.cookieCount,scope:status.cookieScope})}</bdi></p><p className="info-note site-storage-scope"><bdi>{t('site.storage',{scope:status.storageScope,size:status.storageBytes===null?t('site.sizeUnavailable'):t('site.bytes',{size:status.storageBytes.toLocaleString(currentLocale())})})}</bdi></p></>:!error&&<p role="status">{t('site.reading')}</p>}

@@ -178,7 +178,7 @@ test('a key the person moved shows no number: only digits whose chord still runs
 test('main\'s select-tab is still the expression the numbers copy, and main feeds the hold from every page', () => {
   const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
   assert.match(main, /case 'select-tab':\{const here=listedTabs\(state\),target=command\.index<0\?here\.at\(-1\):here\[command\.index\];if\(noted==='wait'\)hearKeyUps\(wc\);else if\(target\)\{dispatch\(\{type:'tab\.select',id:target\.id\}\);\}/, 'change runtime/tabNumbers.ts with it; a first digit that waits runs nothing but the key-up helper');
-  assert.match(main, /function shortcut\(wc,event,input,menuCommand,origin=[^)]*\)\{\n const noted=input&&!authActive&&!shortcutRegistry\?\.isRecording\(\)\?tabNumberHold\.note\(input\):undefined;/, 'every page and the interface report their keys to the hold');
+  assert.match(main, /function shortcut\(wc,event,input,menuCommand,origin=[^)]*\)\{\n const noted=(?:replay\?replay\.noted:)?input&&!authActive&&!shortcutRegistry\?\.isRecording\(\)\?tabNumberHold\.note\(input\):undefined;/, 'every page and the interface report their keys to the hold');
   assert.match(main, /if\(noted==='taken'\)\{event\?\.preventDefault\(\);return;\}/, 'the second digit of a two-digit number runs nothing else (Ctrl+0 is the zoom reset)');
   assert.equal((main.match(/if\(mouse\.type==='mouseDown'\)tabNumberHold\.abandon\(\)/g) || []).length, 2, 'a click in a page or in the interface drops a waiting digit');
   assert.match(main, /owner=noted==='flushed'\?null:pageOwner\(pages,wc\)/, 'a digit sent to its tab by the next key must not pull the old page back');

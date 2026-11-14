@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {fetchMacWidevineRuntime} from './fetch-mac-widevine.mjs';
+import {fetchMacWidevineRuntime,removeMacWidevineRuntime} from './fetch-mac-widevine.mjs';
 import {betaVersion} from './package-mac-beta.mjs';
 import {packageBetaInstaller} from './package-mac-beta-installer.mjs';
 const require=createRequire(import.meta.url),run=promisify(execFile),repo=path.resolve(import.meta.dirname,'..');
@@ -49,6 +49,7 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  await fs.rm(path.join(contents,'Frameworks'),{recursive:true});
  await fs.cp(path.join(runtime.runtime,'Contents/Frameworks'),path.join(contents,'Frameworks'),{recursive:true,verbatimSymlinks:true});
  await fs.copyFile(path.join(runtime.runtime,'Contents/MacOS/Electron'),path.join(contents,'MacOS/AciraBrowser'));
+ await removeMacWidevineRuntime(runtime);   // the package has what it needs from it (a stopped or failed build before this point leaves it for the next build's sweep, fetch-mac-widevine.mjs)
  await fs.mkdir(application);
  for(const folder of ['desktop','dist','resources','node_modules','source-licenses'])try{await fs.cp(path.join(candidate,folder),path.join(application,folder),{recursive:true,verbatimSymlinks:true});}catch(error){if(error.code!=='ENOENT')throw error;}
  for(const file of ['package.json','page-zoom-levels.json','LICENSE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(candidate,file),path.join(application,file));

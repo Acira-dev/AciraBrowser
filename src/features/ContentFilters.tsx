@@ -1,12 +1,13 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import {runtime} from '../runtime/client';import type {BrowserSnapshot,ContentFilters} from '../runtime/types';
+import {isWebsite} from '../runtime/newTabPage';
 import '../styles/content-filters.css';
 import {t,useT} from '../i18n';
 import {SettingGroup,SettingRow,Switch} from './settings/controls';
 import {useSettingsDraft} from './settings/draft';
 import {AiHides} from './settings/AiHides';
 export function ContentFilterControls({state,scope='profile'}:{state:BrowserSnapshot;scope?:'profile'|'site'}){
- const active=state.tabs.find(tab=>tab.id===state.activeTabId),target=active?.contentKind==='web'?active:state.tabs.find(tab=>tab.id===state.windowUi.zoomTargetTabId&&tab.contentKind==='web'&&tab.browserProfileId===state.activeBrowserProfileId)||state.tabs.find(tab=>tab.contentKind==='web'&&tab.browserProfileId===state.activeBrowserProfileId),id=useId();
+ const active=state.tabs.find(tab=>tab.id===state.activeTabId),target=active&&isWebsite(active)?active:state.tabs.find(tab=>tab.id===state.windowUi.zoomTargetTabId&&isWebsite(tab)&&tab.browserProfileId===state.activeBrowserProfileId)||state.tabs.find(tab=>isWebsite(tab)&&tab.browserProfileId===state.activeBrowserProfileId),id=useId();
  useT();
  const [filters,setFilters]=useState<ContentFilters>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[domain,setDomain]=useSettingsDraft('filters-source-domain'),[changed,setChanged]=useState(false);
  /* The error is the last line of the group, below the add-source field and the reset row: bring it into view so a refused entry is not silent. */

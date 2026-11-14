@@ -2,6 +2,9 @@
 // chrome.privacy (ext-api/privacy*.cjs): only what Acira really controls is controllable; the rest says so truthfully.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const chromeSettings = require('../desktop/browser-services/extension-chrome-settings.cjs');
 const settingsHelper = require('../desktop/browser-services/ext-api/_settings.cjs');
 const extApi = require('../desktop/browser-services/ext-api/index.cjs');
@@ -74,20 +77,26 @@ test('settings Acira fixes answer truthfully: the real value, not_controllable, 
   } finally { w.dispose(); }
 });
 
-test('address and card autofill: Acira has neither, so an extension can hold them off, and a password manager sees itself in control (Bitwarden\'s "default password manager" check)', async () => {
+const THREE = ['autofillAddressEnabled', 'autofillCreditCardEnabled', 'passwordSavingEnabled'];
+// Bitwarden's BrowserApi.browserAutofillSettingsOverridden(): all three controlled_by_this_extension with value false.
+const overriddenFor = w => async id => { let all = true; for (const name of THREE) { const got = await w.call(id, 'privacy.services.' + name + '.get', {}); all = all && got.levelOfControl === 'controlled_by_this_extension' && !got.value; } return all; };
+// Bitwarden's BrowserApi.updateDefaultBrowserAutofillSettings(value): its "default password manager" switch sets all three to !on.
+const press = (w, id, on) => (async () => { for (const name of THREE) await w.call(id, 'privacy.services.' + name + '.set', {value: !on}); })();
+
+test('address and card autofill: Acira has neither; an extension\'s value is kept and answered as in Chrome, true or false, and a password manager sees itself in control', async () => {
   const w = world({packages: ['privacy'], extensions: {[A]: ext, [B]: ext}, storeKey: 'autofill'});
   try {
     chromeSettings.provide({passwordsEnabled: () => true});
-    for (const [name] of table.OFF_ONLY) {
+    for (const [name] of [...table.NO_FEATURE].reverse()) { // autofillEnabled last: it also sets the other two
       const path = 'privacy.' + name;
-      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, name + ' before');
+      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, name + ' before: Acira has no such autofill');
       await w.call(A, path + '.set', {value: true});
-      assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, name + ': "on" is not used, there is no autofill to switch on');
+      assert.deepEqual(await w.call(A, path + '.get', {}), {value: true, levelOfControl: 'controlled_by_this_extension'}, name + ': the extension\'s "on" is its value (SetPreferenceFunction stores it)');
       await w.call(A, path + '.set', {value: false});
       assert.deepEqual(await w.call(A, path + '.get', {}), {value: false, levelOfControl: 'controlled_by_this_extension'}, name + ' held off');
     }
     await w.call(A, PW + '.set', {value: false});
-    const overridden = async id => { let all = true; for (const name of ['autofillAddressEnabled', 'autofillCreditCardEnabled', 'passwordSavingEnabled']) { const got = await w.call(id, 'privacy.services.' + name + '.get', {}); all = all && got.levelOfControl === 'controlled_by_this_extension' && !got.value; } return all; };
+    const overridden = overriddenFor(w);
     assert.equal(await overridden(A), true, 'the extension that switched all three off is the default password manager');
     assert.equal(await overridden(B), false, 'another extension is not');
     await w.call(A, 'privacy.services.autofillAddressEnabled.clear', {});
@@ -95,7 +104,32 @@ test('address and card autofill: Acira has neither, so an extension can hold the
   } finally { w.dispose(); }
 });
 
-test('passwordSavingEnabled: an extension may switch the built-in offer off, never back on for someone who turned it off', async () => {
+test('Bitwarden\'s "default password manager" switch, with the person\'s own save offer off: on, off, on again; its check follows every press and onChange tells it', async () => {
+  const w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'bw'});
+  try {
+    chromeSettings.provide({passwordsEnabled: () => false});
+    for (const name of THREE) w.listen(A, 'privacy.services.' + name + '.onChange');
+    for (const name of THREE) await w.call(A, 'privacy.services.' + name + '.get', {});
+    const overridden = overriddenFor(w), heard = () => w.sent.filter(s => /\.onChange$/.test(s[1])).map(s => [s[1].split('.')[2], s[2].value, s[2].levelOfControl]);
+    await press(w, A, true);
+    assert.equal(await overridden(A), true, 'on');
+    assert.equal(chromeSettings.passwordSavingOffByExtension('bw'), true, 'Acira\'s save offer is off while it is the default');
+    assert.deepEqual(heard(), [['autofillAddressEnabled', false, 'controlled_by_this_extension'], ['autofillCreditCardEnabled', false, 'controlled_by_this_extension'],
+      ['passwordSavingEnabled', false, 'controlled_by_this_extension']]);
+    w.sent.length = 0;
+    await press(w, A, false);
+    assert.equal(await overridden(A), false, 'off: it read "still the default" before, so the switch went back on by itself');
+    for (const name of THREE) assert.deepEqual(await w.call(A, 'privacy.services.' + name + '.get', {}), {value: true, levelOfControl: 'controlled_by_this_extension'}, name);
+    assert.deepEqual(heard(), [['autofillAddressEnabled', true, 'controlled_by_this_extension'], ['autofillCreditCardEnabled', true, 'controlled_by_this_extension'],
+      ['passwordSavingEnabled', true, 'controlled_by_this_extension']], 'onChange for each of the three');
+    assert.equal(chromeSettings.passwordSavingOffByExtension('bw'), false);
+    assert.equal(chromeSettings.fact('passwordsEnabled'), false, 'the person\'s own "off" is untouched: Acira\'s offer stays off');
+    await press(w, A, true);
+    assert.equal(await overridden(A), true, 'on again');
+  } finally { w.dispose(); }
+});
+
+test('passwordSavingEnabled: the extension\'s value is answered as in Chrome; only a winning false switches Acira\'s offer off, a true never turns it back on for someone who switched it off', async () => {
   const w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'pw'});
   try {
     chromeSettings.provide({passwordsEnabled: () => true});
@@ -108,10 +142,48 @@ test('passwordSavingEnabled: an extension may switch the built-in offer off, nev
     await w.call(A, PW + '.clear', {});
     assert.equal(chromeSettings.passwordSavingOffByExtension('pw'), false);
     chromeSettings.provide({passwordsEnabled: () => false});
+    assert.deepEqual(await w.call(A, PW + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, 'the person\'s own "off"');
     await w.call(A, PW + '.set', {value: true});
-    assert.deepEqual(await w.call(A, PW + '.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'}, 'the person\'s own "off" stands');
-    assert.equal(w.store().winner(PW), null);
+    assert.deepEqual(await w.call(A, PW + '.get', {}), {value: true, levelOfControl: 'controlled_by_this_extension'}, 'the extension\'s value');
+    assert.equal(w.store().winner(PW).value, true);
+    assert.equal(chromeSettings.passwordSavingOffByExtension('pw'), false);
+    assert.equal(chromeSettings.fact('passwordsEnabled'), false, 'Acira\'s offer still follows the person\'s switch');
   } finally { w.dispose(); }
+});
+
+test('the deprecated autofillEnabled also sets the card and address settings (SetPreferenceFunction::Run), and clearing it leaves them', async () => {
+  const w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'old-autofill'});
+  try {
+    for (const name of ['autofillAddressEnabled', 'autofillCreditCardEnabled']) { w.listen(A, 'privacy.services.' + name + '.onChange'); await w.call(A, 'privacy.services.' + name + '.get', {}); }
+    await w.call(A, 'privacy.services.autofillEnabled.set', {value: false});
+    for (const name of ['autofillEnabled', 'autofillAddressEnabled', 'autofillCreditCardEnabled'])
+      assert.deepEqual(await w.call(A, 'privacy.services.' + name + '.get', {}), {value: false, levelOfControl: 'controlled_by_this_extension'}, name);
+    assert.deepEqual(w.sent.filter(s => /\.onChange$/.test(s[1])).map(s => s[1].split('.')[2]).sort(), ['autofillAddressEnabled', 'autofillCreditCardEnabled']);
+    await w.call(A, 'privacy.services.autofillEnabled.clear', {});
+    assert.deepEqual(await w.call(A, 'privacy.services.autofillEnabled.get', {}), {value: false, levelOfControl: 'controllable_by_this_extension'});
+    assert.deepEqual(await w.call(A, 'privacy.services.autofillAddressEnabled.get', {}), {value: false, levelOfControl: 'controlled_by_this_extension'}, 'ClearPreferenceFunction has no fan-out');
+  } finally { w.dispose(); }
+});
+
+test('a password manager\'s switch survives a restart, stops counting while the extension is unloaded (disabled) and comes back, and goes with an uninstall', async () => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-bw-restart-'));
+  let w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'keep', userData});
+  try {
+    chromeSettings.provide({passwordsEnabled: () => true});
+    await press(w, A, true);
+    w.installed.dispose(); chromeSettings.reset();
+    w = world({packages: ['privacy'], extensions: {[A]: ext}, storeKey: 'keep', userData});
+    chromeSettings.provide({passwordsEnabled: () => true});
+    assert.equal(await overriddenFor(w)(A), true, 'after a restart');
+    assert.equal(chromeSettings.passwordSavingOffByExtension('keep'), true);
+    w.unload(A);
+    assert.equal(chromeSettings.passwordSavingOffByExtension('keep'), false, 'disabled: Acira\'s offer is back');
+    w.load(A, ext);
+    assert.equal(chromeSettings.passwordSavingOffByExtension('keep'), true, 'enabled again: its value counts again (ExtensionPrefValueMap::SetExtensionState)');
+    w.installed.forget(A);
+    assert.equal(chromeSettings.passwordSavingOffByExtension('keep'), false, 'uninstalled');
+    assert.deepEqual(w.store().keys(), [], 'its values are gone');
+  } finally { w.dispose(); fs.rmSync(userData, {recursive: true, force: true}); }
 });
 
 test('Tor: every privacy setting is fixed and nothing is applied', async () => {

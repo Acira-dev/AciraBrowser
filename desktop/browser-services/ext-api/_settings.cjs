@@ -128,14 +128,16 @@ function installSettings(api,definitions,options={}){
    if(isFixed(def)){log(`${def.path}: fixed by Acira; the extension's value is not used`);return;}
    if(typeof def.accept==='function'&&!def.accept(value,ctx)){log(`${def.path}: Acira keeps its own value; the extension's is not used`);return;}
    check();
-   const before=store.scopeValue(def.key,id,scope),extension=api.getExtension(id);
-   own++;try{store.setValue(def.key,id,value,scope,extension&&(extension.name||extension.manifest&&extension.manifest.name));}finally{own--;}
+   // def.also: settings the same set() controls too (Chromium: the deprecated autofillEnabled also sets the card and address prefs).
+   const keys=[def.key,...(Array.isArray(def.also)?def.also.filter(key=>byKey.has(key)):[])];
+   const before=keys.map(key=>store.scopeValue(key,id,scope)),extension=api.getExtension(id),name=extension&&(extension.name||extension.manifest&&extension.manifest.name);
+   own++;try{for(const key of keys)store.setValue(key,id,value,scope,name);}finally{own--;}
    try{await runApply(def,{strict:true,ifChanged:true});}
    catch(error){
-    own++;try{if(before.has)store.setValue(def.key,id,before.value,scope);else store.clearValue(def.key,id,scope);}finally{own--;}
+    own++;try{keys.forEach((key,at)=>{if(before[at].has)store.setValue(key,id,before[at].value,scope);else store.clearValue(key,id,scope);});}finally{own--;}
     await runApply(def);throw error;
    }
-   check([def]);
+   check(keys.map(key=>byKey.get(key)));
   });
   api.handle(`${def.path}.clear`,async(event,request)=>{
    const id=extensionId(event),scope=scopeOf(request);

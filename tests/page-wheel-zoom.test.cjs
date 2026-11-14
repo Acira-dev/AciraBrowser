@@ -42,7 +42,7 @@ const fs=require('node:fs'),path=require('node:path');
 function preload(platform){
  const listeners=new Map(),sent=[],add=(type,fn)=>{if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},
   win={addEventListener:(type,fn)=>add(type,fn),removeEventListener:(type,fn)=>listeners.get(type)?.delete(fn)},
-  doc={addEventListener:()=>{},removeEventListener:()=>{}},handlers={},ipc={send:(...args)=>sent.push(args),on:(channel,fn)=>{handlers[channel]=fn;},invoke(){return Promise.resolve();}};
+  doc={addEventListener:()=>{},removeEventListener:()=>{}},handlers={},ipc={send:(...args)=>{if(!String(args[0]).startsWith('acira:key-ack'))sent.push(args);},on:(channel,fn)=>{handlers[channel]=fn;},invoke(){return Promise.resolve();}};
  const src=fs.readFileSync(path.join(__dirname,'../desktop/page-input-preload.cjs'),'utf8');
  new Function('require','window','document','process','navigator','location',src)(()=>({ipcRenderer:ipc}),win,doc,{platform,isMainFrame:true},{},{href:'https://a.test/'});
  const fire=(type,event)=>{for(const fn of [...(listeners.get(type)||[])])fn(event);};

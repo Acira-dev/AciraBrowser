@@ -31,5 +31,5 @@ test('the tab shows and keeps the address the page really has, without the crede
 
 test('main does not reload a page whose address it holds with the credentials the tab no longer shows',()=>{
  const main=readFileSync(new URL('../desktop/main.cjs',import.meta.url),'utf8');
- assert.ok(main.includes("if(entry.loadedURL!==tab.url&&require('./runtime.cjs').withoutCredentials(entry.loadedURL)!==tab.url)void loadPage(tab,entry)"),'syncPages compares the tab with the loaded address minus credentials');
+ assert.ok(main.includes("if(pageNeedsLoad(tab,entry))void loadPage(tab,entry)")&&main.includes("if(entry.loadedURL===want||require('./runtime.cjs').withoutCredentials(entry.loadedURL)===want)return false;"),'syncPages compares the tab\'s page address with the loaded address minus credentials (13.8: pageNeedsLoad, which also knows the New Tab\'s extension page)');
 });

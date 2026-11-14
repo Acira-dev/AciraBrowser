@@ -9,6 +9,12 @@ const NETWORK_STATE=Symbol.for('acira.native.request-network-state-v1');
 const OBSERVERS=Symbol.for('acira.request-observers-v1');
 const PHASES=['before','sendHeaders','sent','headers','responseStarted','redirect','completed','error'];
 const LAZY={sent:'onSendHeaders',responseStarted:'onResponseStarted',redirect:'onBeforeRedirect',completed:'onCompleted',error:'onErrorOccurred'};
+// 13.8 exit-cleanup diagnostics. The lifetime count is a Set of ids added at onBeforeRequest and removed at onCompleted / onErrorOccurred. When the packaged exit-cleanup check
+// read {"contents":[],"requests":[true],"workers":0}, nothing said WHICH request was still counted. Each counted request now has a record (host only, type, method, the web
+// contents it belongs to or none, age, last phase), so a failed cleanup, its shutdown record and the check's poll can name it. Electron's proxying factory
+// (shell/browser/net/proxying_url_loader_factory.cc) reports an end for every request it removes, so nothing is dropped from the count: a request that is open is open.
+const ownerAliveDefault=id=>{try{const found=require('electron').webContents?.fromId(id);return found?!found.isDestroyed():false;}catch{return true;}};
+const hostOf=url=>{try{return new URL(url).hostname.slice(0,253);}catch{return '';}};
 const observerRegistry=session=>{if(!session[OBSERVERS])Object.defineProperty(session,OBSERVERS,{value:{list:[],pipelines:new Set()},configurable:true});return session[OBSERVERS];};
 /** observer: {phases: iterable of PHASES, notify(phase, details, result)}. Returns {update(phases), dispose()}. */
 function observeRequests(session,observer){
@@ -29,21 +35,21 @@ function requestView(details){
 }
 /** One owner for each Electron webRequest event; participants return patches, never replace listeners. */
 class RequestPipeline{
- constructor(session){
-  const supportsLifetime=typeof session.webRequest.onCompleted==='function'&&typeof session.webRequest.onErrorOccurred==='function';this.session=session;if(!session[NETWORK_STATE])Object.defineProperty(session,NETWORK_STATE,{value:{version:1,holds:new Set(),retired:false,reason:null,active:new Set(),tracking:supportsLifetime}});this.networkState=session[NETWORK_STATE];if(this.networkState.version!==1||typeof this.networkState.holds?.add!=='function'||typeof this.networkState.retired!=='boolean')throw new Error('Native request seal state is invalid.');if(!this.networkState.active){this.networkState.active=new Set();this.networkState.tracking=false;}if(!supportsLifetime)this.networkState.tracking=false;
+ constructor(session,{ownerAlive=ownerAliveDefault,now=Date.now}={}){
+  const supportsLifetime=typeof session.webRequest.onCompleted==='function'&&typeof session.webRequest.onErrorOccurred==='function';this.session=session;if(!session[NETWORK_STATE])Object.defineProperty(session,NETWORK_STATE,{value:{version:1,holds:new Set(),retired:false,reason:null,active:new Set(),tracking:supportsLifetime}});this.networkState=session[NETWORK_STATE];if(this.networkState.version!==1||typeof this.networkState.holds?.add!=='function'||typeof this.networkState.retired!=='boolean')throw new Error('Native request seal state is invalid.');if(!this.networkState.active){this.networkState.active=new Set();this.networkState.tracking=false;}if(!(this.networkState.requests instanceof Map))this.networkState.requests=new Map();if(!supportsLifetime)this.networkState.tracking=false;this.requests=this.networkState.requests;this.ownerAlive=ownerAlive;this.now=now;
   this.before=[];this.headers=[];this.sending=[];this.active=this.networkState.active;Object.defineProperty(this,'tracking',{get:()=>this.networkState.tracking,set:value=>{this.networkState.tracking=value;}});
   this.observers=observerRegistry(session);this.watching=Object.fromEntries(PHASES.map(phase=>[phase,false]));this.hooked=new Set();
-  session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{if(this.tracking&&/^(?:https?|wss?):/i.test(details.url)){if(!Number.isSafeInteger(details.id)||this.active.size>=100000){this.tracking=false;this.active.clear();}else this.active.add(details.id);}this.run(this.before,details,this.watching.before?this.tap('before',details,callback):callback);});
-  session.webRequest.onHeadersReceived({urls:['<all_urls>']},(details,callback)=>this.run(this.headers,details,this.watching.headers?this.tap('headers',details,callback):callback));
-  if(typeof session.webRequest.onBeforeSendHeaders==='function')session.webRequest.onBeforeSendHeaders({urls:['<all_urls>']},(details,callback)=>this.run(this.sending,details,this.watching.sendHeaders?this.tap('sendHeaders',details,callback):callback));
+  session.webRequest.onBeforeRequest({urls:['<all_urls>']},(details,callback)=>{if(this.tracking&&/^(?:https?|wss?):/i.test(details.url)){if(!Number.isSafeInteger(details.id)||this.active.size>=100000){this.tracking=false;this.active.clear();this.requests.clear();}else{this.active.add(details.id);this.track(details);}}this.run(this.before,details,this.watching.before?this.tap('before',details,callback):callback);});
+  session.webRequest.onHeadersReceived({urls:['<all_urls>']},(details,callback)=>{this.phase(details.id,'headers');this.run(this.headers,details,this.watching.headers?this.tap('headers',details,callback):callback);});
+  if(typeof session.webRequest.onBeforeSendHeaders==='function')session.webRequest.onBeforeSendHeaders({urls:['<all_urls>']},(details,callback)=>{this.phase(details.id,'sendHeaders');this.run(this.sending,details,this.watching.sendHeaders?this.tap('sendHeaders',details,callback):callback);});
   if(this.tracking){this.hook('completed');this.hook('error');}
   this.observers.pipelines.add(this);this.rewatch();
  }
  /** Which phases observers want now; Electron listeners for lazily hooked phases follow (lifetime tracking keeps onCompleted / onErrorOccurred). */
  rewatch(){for(const phase of PHASES)this.watching[phase]=this.observers.list.some(entry=>entry.phases.has(phase));for(const phase of Object.keys(LAZY)){const keep=this.watching[phase]||(this.tracking&&(phase==='completed'||phase==='error'));if(keep)this.hook(phase);else this.unhook(phase);}}
- hook(phase){const name=LAZY[phase];if(this.hooked.has(phase)||typeof this.session.webRequest[name]!=='function')return;this.hooked.add(phase);const watching=this.watching,active=this.active;
+ hook(phase){const name=LAZY[phase];if(this.hooked.has(phase)||typeof this.session.webRequest[name]!=='function')return;this.hooked.add(phase);const watching=this.watching,active=this.active,requests=this.requests;
   // Lifetime hooks stay as cheap as before P5 while nobody watches: one Set delete and one boolean.
-  const listener=phase==='completed'?details=>{active.delete(details.id);if(watching.completed)this.notify('completed',details);}:phase==='error'?details=>{active.delete(details.id);if(watching.error)this.notify('error',details);}:details=>{if(watching[phase])this.notify(phase,details);};
+  const listener=phase==='completed'?details=>{active.delete(details.id);requests.delete(details.id);if(watching.completed)this.notify('completed',details);}:phase==='error'?details=>{active.delete(details.id);requests.delete(details.id);if(watching.error)this.notify('error',details);}:details=>{if(watching[phase])this.notify(phase,details);};
   this.session.webRequest[name]({urls:['<all_urls>']},listener);}
  unhook(phase){if(!this.hooked.has(phase))return;this.hooked.delete(phase);try{this.session.webRequest[LAZY[phase]](null);}catch{}}
  notify(phase,details,result){for(const entry of this.observers.list)if(entry.phases.has(phase))try{entry.notify(phase,details,result);}catch(error){console.error('Request observer failed',error?.message);}}
@@ -55,6 +61,12 @@ class RequestPipeline{
  useSendHeaders(handler){this.sending.push(handler);return()=>{this.sending=this.sending.filter(h=>h!==handler);};}
  /** Native lifetime events, including page-less requests. Unknown never means idle. */
  hasActiveRequests(){return this.tracking?this.active.size>0:null;}
+ /** One record for a request that has been counted (host only, never a path or query). */
+ track(details){const at=this.now(),known=this.requests.get(details.id);if(known){known.phase='before';known.at=at;return;}const owner=Number.isSafeInteger(details.webContentsId)&&details.webContentsId>0?details.webContentsId:null;this.requests.set(details.id,{host:hostOf(details.url),resourceType:String(details.resourceType||'').slice(0,24),method:String(details.method||'').slice(0,12),webContentsId:owner,startedAt:at,phase:'before',at});}
+ phase(id,name){const record=this.requests.get(id);if(record){record.phase=name;record.at=this.now();}}
+ describe(record,now,alive){return {host:record.host,resourceType:record.resourceType,method:record.method,webContentsId:record.webContentsId===null?'none':record.webContentsId,webContentsExists:record.webContentsId===null?null:alive,ageMs:now-record.startedAt,phase:record.phase,phaseAgeMs:now-record.at};}
+ /** For a failed cleanup or check: every request still counted, as the person-free facts above, and whether its web contents still exists (the cleanup's record and the rig's poll print this). */
+ trackedRequests(){const now=this.now(),out=[];for(const record of this.requests.values()){let alive=true;if(record.webContentsId!==null)try{alive=this.ownerAlive(record.webContentsId)!==false;}catch{alive=true;}out.push(this.describe(record,now,alive));}return out;}
  holdNetwork(reason='native transition'){if(typeof reason!=='string'||reason.length>120||/[\u0000-\u001f]/.test(reason))throw new Error('Use a bounded native network-hold reason.');const token={reason};this.networkState.holds.add(token);let released=false;return()=>{if(!released){released=true;this.networkState.holds.delete(token);}};}
  sealNetwork(reason='retired native context'){if(typeof reason!=='string'||reason.length>120||/[\u0000-\u001f]/.test(reason))throw new Error('Use a bounded native retirement reason.');this.networkState.retired=true;this.networkState.reason=reason;return this.networkStatus();}
  networkStatus(){return {blocked:this.networkState.retired||this.networkState.holds.size>0,retired:this.networkState.retired,temporaryHolds:this.networkState.holds.size};}

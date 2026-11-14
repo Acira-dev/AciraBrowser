@@ -110,7 +110,10 @@ module.exports = {
     api.handle('downloads.determineFilename', (event, key, suggestion) => { determiner.answer(event.extension.id, key, suggestion); });
     const unloaded = (_event, extension) => determiner.forget(extension && extension.id);
     try { api.session?.extensions?.on?.('extension-unloaded', unloaded); } catch { /* an engine without extension events: the time limit covers it */ }
-    const unsetDeterminer = host.setDeterminer(profileId, {listening: determiner.listening, determine: record => determiner.determine(itemOf(record))});
+    // The item an extension is asked about carries the file's BASE name, not its whole path: Chromium's ChromeDownloadManagerDelegate::NotifyExtensions
+    // passes virtual_path.BaseName() to ExtensionDownloadsEventRouter::OnDeterminingFilename (13.7 sent the absolute path, so an extension that
+    // answers with item.filename, or puts a folder in front of it, got "Invalid filename" back and its answer was dropped).
+    const unsetDeterminer = host.setDeterminer(profileId, {listening: determiner.listening, determine: record => determiner.determine({...itemOf(record), filename: path.basename(String(record.path || ''))})});
 
     // Events from the manager. The change is applied to the Downloads page's records after this runs, so records() is still "before".
     const listening = () => ({created: api.listening('downloads.onCreated').length > 0, changed: api.listening('downloads.onChanged').length > 0});

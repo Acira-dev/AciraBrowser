@@ -7,7 +7,7 @@ import {build as esbuild} from 'esbuild';
 import {build as viteBuild} from 'vite';
 import {root,sha,filesIn,copyMacMaterial} from './release-build.mjs';
 import {bundleSharedExtensionSDK} from './release-shared-sdk.mjs';
-import {bundleDesktop,bundleAnswerPreload,runtimeAlias,rewriteDirname,PATH_LOADED} from './desktop-bundle.mjs';
+import {bundleDesktop,bundleAnswerPreload,runtimeAlias,rewriteDirname,extApiPackageFiles,PATH_LOADED} from './desktop-bundle.mjs';
 const require=createRequire(import.meta.url);
 // Explicit shared runtime inputs only; never read arbitrary packaging files from the working tree.
 const sharedNativeSource=new Set(['packaging/release-target.cjs','packaging/release-target.json']);
@@ -37,7 +37,7 @@ export async function buildCommitted(output){
  while(queue.length){const file=queue.shift();if(seen.has(file)||['desktop/runtime.cjs','desktop/i18n.cjs'].includes(file))continue;seen.add(file);native.push(file);for(const match of text(file).matchAll(/require\(['"](\.{1,2}\/[^'"]+\.cjs)['"]\)/g)){const next=path.posix.normalize(path.posix.join(path.posix.dirname(file),match[1]));if(!next.startsWith('desktop/')&&!sharedNativeSource.has(next))throw new Error('Native dependency escaped desktop: '+next);queue.push(next);}}
  const sharedSDK=await bundleSharedExtensionSDK(output);
  // The main process is one bundle (scripts/desktop-bundle.mjs): siblings come from the committed tree, ./runtime.cjs from src/runtime/core.ts.
- const bundled=await bundleDesktop({root,output,plugins:[runtimeAlias(root),sourceOverlay(false)]});
+ /* the extension API packages of the COMMITTED tree must all be in the bundle (desktop-bundle.mjs checkBundledPackages) */const bundled=await bundleDesktop({root,output,plugins:[runtimeAlias(root),sourceOverlay(false)],packageFiles:extApiPackageFiles([...tree.keys()])});
  // Sandboxed UI preloads cannot require sibling CommonJS files at runtime.
  // Build the approved source entry as one bundle; never copy a shared generated preload.
  const uiPreload=tree.has('desktop/ui-preload-entry.cjs')?await esbuild({absWorkingDir:root,entryPoints:['desktop/ui-preload-entry.cjs'],outfile:path.join(output,'desktop/ui-preload.cjs'),bundle:true,platform:'node',format:'cjs',target:'node24',external:['electron'],metafile:true,logLevel:'silent',plugins:[sourceOverlay(false)]}):null;

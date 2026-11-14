@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Popup Follow Fixture",
+  "version": "1.0.0",
+  "description": "A toolbar popup whose content changes size after it has opened (after a click, after a timer): the layouts that matter for Chromium's popup auto-size. Test fixture, not a real extension.",
+  "action": {
+    "default_title": "Popup follow fixture",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "sw.js"
+  },
+  "options_page": "options.html"
+}

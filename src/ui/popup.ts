@@ -81,22 +81,23 @@ const mainMenuHeight=(state:BrowserSnapshot,rowHeight=menuRowHeight)=>{const lay
  *  adds Open alone and Remove from split view, another website (when the current tab is one) Split view; a grouped tab Remove from
  *  group; a window with workspaces Move to (not for a private or Tor tab); then close others / to the left / to the right when
  *  there is an unpinned tab there. Without the tab's id (a measured case) it counts a website in the middle of the strip. */
-export function tabMenuRows(state:BrowserSnapshot,target?:{contentKind:string;id?:string;privacy?:string}):number{
-  const web=!target||target.contentKind==='web',at=target?.id?state.tabs.findIndex(tab=>tab.id===target.id):-1;
+export function tabMenuRows(state:BrowserSnapshot,target?:{contentKind:string;id?:string;privacy?:string;url?:string}):number{
+  /* the New Tab's extension page is a web tab but not a website: the rows of a start page (runtime/newTabPage.ts) */
+  const web=!target||target.contentKind==='web'&&target.url!=='acira://new',at=target?.id?state.tabs.findIndex(tab=>tab.id===target.id):-1;
   const pane=at>=0&&!!state.windowUi?.splitGroups?.some(split=>split.tabIds.includes(target!.id!)),current=state.tabs.find(tab=>tab.id===state.activeTabId);
   const unpinned=(list:readonly TabSession[])=>list.some(tab=>!tab.pinned)?1:0;
-  const split=at<0?web?1:0:pane?2:web&&target!.id!==state.activeTabId&&current?.contentKind==='web'?1:0;
+  const split=at<0?web?1:0:pane?2:web&&target!.id!==state.activeTabId&&current?.contentKind==='web'&&current.url!=='acira://new'?1:0;
   const closes=at<0?web?3:2:unpinned(state.tabs.filter(tab=>tab.id!==target!.id))+unpinned(state.tabs.slice(0,at))+unpinned(state.tabs.slice(at+1));
   const grouped=target&&state.tabGroups?.length&&groupForTab(state,target as TabSession)?1:0,workspace=windowWorkspaces(state).length&&!target?.privacy?1:0;
   // A Tor tab on a website (or any website tab of a Tor window) adds New Tor circuit for this site.
-    const torCircuit=target?.contentKind==='web'&&(target.privacy==='tor'||Boolean((state.browserProfiles.find(profile=>profile.id===state.activeBrowserProfileId) as {tor?:boolean}|undefined)?.tor))?1:0;
+    const torCircuit=target?.contentKind==='web'&&target.url!=='acira://new'&&(target.privacy==='tor'||Boolean((state.browserProfiles.find(profile=>profile.id===state.activeBrowserProfileId) as {tor?:boolean}|undefined)?.tor))?1:0;
     return 9+(web?2:0)+split+closes+grouped+workspace+torCircuit;
 }
 export function popupNaturalHeight(kind:string,state:BrowserSnapshot,{recent=paletteRecent(),target,parent}:{recent?:number;target?:{contentKind:string};parent?:string}={}):number {
   return baseNaturalHeight(kind,state,{recent,target})+(parent==='menu'&&(kind==='more-tools'||kind==='downloads')?submenuHeaderHeight:0);
 }
 function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{recent:number;target?:{contentKind:string;id?:string}}):number {
-  const base=62,web=state.tabs.find(tab=>tab.id===state.activeTabId)?.contentKind==='web';
+  const base=62,shown=state.tabs.find(tab=>tab.id===state.activeTabId),web=shown?.contentKind==='web'&&shown.url!=='acira://new';
   // Header and search, then 32px rows that touch (bible 5.4b), then the footer.
   // Header 44 + search field 44 + rows; no footer (the New tab page has its own row). 190 measured for 3 tabs.
   // Comfortable (default): 52px two-line rows and the New tab footer (4px padding + 30px row); Compact: 32px rows, no footer.
@@ -252,7 +253,7 @@ export const popupFollowsTrigger=(kind:string,hasStripChip:boolean)=>kind==='acc
 
 export type GroupEditorPlacement={anchor:Rectangle;align:'start'|'end';side:'below'|'right'|'left'};
 /** Where a new group's menu (its name and colour editor) opens: next to the group, pointing at it, like Chrome's tab-group
- * editor (R6 founder bug: it opened at the toolbar's menu button, on the other side of the window, because it was placed
+ * editor (R6 bug: it opened at the toolbar's menu button, on the other side of the window, because it was placed
  * before the group's chip or header existed). In a tab strip it hangs under the group's chip, left edges together
  * (popupGeometry flips it above when there is no room below). In the sidebar it opens beside the header: on the right,
  * its top on the header's top (slid up only as far as it must to fit), on the left only when the right has no room, and

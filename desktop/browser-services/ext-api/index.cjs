@@ -1,7 +1,7 @@
 'use strict';
 // The registry for Chrome extension API work packages (contract: docs/launch/EXTENSION_WORK_PACKAGES.md).
 //
-// A package is one or two files in this folder, found by name; nothing else is edited to add one:
+// A package is one or two files in this folder, listed by name in _packages.cjs (the release bundle follows that list; tests/ext-api-package-list.test.cjs keeps it equal to the folder):
 //   <name>.cjs           main process:  module.exports = {namespaces: ['tabGroups'], install(api) { api.handle('tabGroups.get', …); return {forget(id) {}}; }}
 //   <name>-renderer.cjs  extension pages and service workers (the engine's preload main world):
 //                        module.exports = {namespaces: ['tabGroups'], renderer(acira) { return {tabGroups: {factory: base => acira.build('tabGroups', {…})}}; }}
@@ -16,28 +16,56 @@
 // separate `browser`. When the user grants or removes an optional permission, running pages and workers gain or lose namespaces at once.
 const fs=require('node:fs'),path=require('node:path');
 const signature=require('../extension-api-signature.cjs');
+const {createLazyEvents}=require('./events/lazy.cjs');
 const {createBindings,surface}=signature;
 
 const NAME=/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const cache=new Map();
 
-/** Every package in `dir`: [{name, namespaces, install?, renderer?, files}]. Throws on a malformed package or a namespace claimed twice. */
-function loadPackages({dir=__dirname,fresh=false}={}){
- const key=path.resolve(dir);if(!fresh&&cache.has(key))return cache.get(key);
- let files=[];try{files=fs.readdirSync(key,{withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('.cjs')&&entry.name!=='index.cjs'&&!entry.name.startsWith('_')).map(entry=>entry.name).sort();}catch{files=[];}
- const byName=new Map(),known=surface().namespaces;
- for(const file of files){
-  const renderer=file.endsWith('-renderer.cjs'),name=file.slice(0,renderer?-'-renderer.cjs'.length:-'.cjs'.length);
-  if(!NAME.test(name))throw new Error(`ext-api/${file}: a package name is lower-case words joined by '-'`);
-  const mod=require(path.join(key,file)),entry=byName.get(name)||{name,namespaces:new Set(),files:[]};
-  entry.files.push(file);
-  for(const ns of Array.isArray(mod.namespaces)?mod.namespaces:[]){
-   if(typeof ns!=='string'||!known[ns]||known[ns].status==='types')throw new Error(`ext-api/${file}: '${ns}' is not a namespace Chromium exposes to extensions`);
-   entry.namespaces.add(ns);
+/**
+ * Every package: [{name, namespaces, install?, renderer?, files}]. Throws on a malformed package or a namespace claimed twice.
+ * With no `dir` the packages are the written-out list in _packages.cjs, which the release bundle follows (a require whose name is read from a folder at run time is
+ * invisible to a bundler, and the packaged Mac and Windows apps shipped none of them until 13.8). With a `dir` (a test's own folder of packages) that folder is read.
+ */
+function loadPackages({dir,fresh=false}={}){
+ const listed=dir===undefined,key=listed?'<list>':path.resolve(dir);if(!fresh&&cache.has(key))return cache.get(key);
+ let found;   // [[file, module]], sorted by file name
+ if(listed){
+  const written=require('./_packages.cjs'),modules=written.modules();
+  found=written.FILES.map(file=>[file,modules[file]]);
+  if(!found.length)throw Object.assign(new Error('ext-api: no extension API packages were found. This build lost them; Acira\'s own extension API work would be missing.'),{code:'EXT_API_NO_PACKAGES'});
+  // In a source tree the folder is there and must equal the list (a package added without listing it would be left out of the bundle). A bundle has no such folder.
+  let onDisk=null;try{onDisk=fs.readdirSync(__dirname,{withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('.cjs')&&entry.name!=='index.cjs'&&!entry.name.startsWith('_')).map(entry=>entry.name).sort();}catch{onDisk=null;}
+  if(onDisk){const listedNames=new Set(written.FILES),folderNames=new Set(onDisk),missing=onDisk.filter(file=>!listedNames.has(file)),extra=written.FILES.filter(file=>!folderNames.has(file));
+   if(missing.length||extra.length)throw new Error(`ext-api: _packages.cjs and the folder disagree (not listed: ${missing.join(', ')||'none'}; listed but not in the folder: ${extra.join(', ')||'none'})`);}
+ }else{
+  let files=[];try{files=fs.readdirSync(key,{withFileTypes:true}).filter(entry=>entry.isFile()&&entry.name.endsWith('.cjs')&&entry.name!=='index.cjs'&&!entry.name.startsWith('_')).map(entry=>entry.name).sort();}catch{files=[];}
+  found=files.map(file=>[file,require(path.join(key,file))]);
+ }
+ const byName=new Map(),known=surface().namespaces,problems=[];
+ for(const [file,mod] of found){
+  try{
+   const renderer=file.endsWith('-renderer.cjs'),name=file.slice(0,renderer?-'-renderer.cjs'.length:-'.cjs'.length);
+   if(!NAME.test(name))throw new Error(`ext-api/${file}: a package name is lower-case words joined by '-'`);
+   const namespaces=[];
+   for(const ns of Array.isArray(mod&&mod.namespaces)?mod.namespaces:[]){
+    if(typeof ns!=='string'||!known[ns]||known[ns].status==='types')throw new Error(`ext-api/${file}: '${ns}' is not a namespace Chromium exposes to extensions`);
+    namespaces.push(ns);
+   }
+   if(renderer){if(!mod||typeof mod.renderer!=='function')throw new Error(`ext-api/${file} must export renderer(acira)`);}
+   else if(!mod||typeof mod.install!=='function')throw new Error(`ext-api/${file} must export install(api)`);
+   const entry=byName.get(name)||{name,namespaces:new Set(),files:[]};
+   entry.files.push(file);
+   for(const ns of namespaces)entry.namespaces.add(ns);
+   if(renderer)entry.renderer=mod.renderer;else entry.install=mod.install;
+   byName.set(name,entry);
+  }catch(error){
+   // A package that breaks the contract in a build (the bundle once bound ext-api/runtime.cjs to the reducer) must not cost the other 21: the rest load, and this is said LOUDLY (stderr, and
+   // `problems` on the list, which extension-apis.cjs writes to the local trace). A folder a caller names (a test's own packages) stays strict: it throws.
+   if(!listed)throw error;
+   problems.push({file,message:error&&error.message?error.message:String(error)});
+   console.error(`[ext-api] ${error&&error.message?error.message:error} (the package file ${file} was left out)`);
   }
-  if(renderer){if(typeof mod.renderer!=='function')throw new Error(`ext-api/${file} must export renderer(acira)`);entry.renderer=mod.renderer;}
-  else{if(typeof mod.install!=='function')throw new Error(`ext-api/${file} must export install(api)`);entry.install=mod.install;}
-  byName.set(name,entry);
  }
  const owners=new Map();
  for(const entry of byName.values())for(const ns of entry.namespaces){
@@ -45,6 +73,7 @@ function loadPackages({dir=__dirname,fresh=false}={}){
   owners.set(ns,entry.name);
  }
  const packages=[...byName.values()].map(entry=>({...entry,namespaces:[...entry.namespaces]}));
+ Object.defineProperty(packages,'problems',{value:problems,enumerable:false});
  cache.set(key,packages);return packages;
 }
 
@@ -108,16 +137,34 @@ function installEventGate(base){
     manifest:extension.manifest||{},isWorker:listener.type==='service-worker'});
   }catch{return false;}
  };
- const addOriginal=router.addListener,sendOriginal=router.sendEvent;
+ const addOriginal=router.addListener,sendOriginal=router.sendEvent,removeOriginal=router.removeListener;
+ // Chromium's lazy event dispatch (events/lazy.cjs): an event for ONE extension whose worker has not registered its listener in this run yet is held until it does, not dropped.
+ const workers=base.session&&base.session.serviceWorkers;
+ const lazy=createLazyEvents({
+  getExtension:id=>{try{return base.getExtension?.(id)||null;}catch{return null;}},
+  deliver:(id,name,args)=>sendOriginal.call(router,id,name,...args),
+  startWorker:workers&&typeof workers.startWorkerForScope==='function'?scope=>workers.startWorkerForScope(scope):null,
+  live:(id,name)=>{const all=router.listeners&&typeof router.listeners.get==='function'?router.listeners.get(name):null;return Array.isArray(all)&&all.some(listener=>listener&&listener.extensionId===id);},
+  userData:base.userData,storeKey:base.storeKey,persist:!base.sourceProfileId,log:base.log
+ });
  // Never throws: the engine calls addListener from an ipcMain.on handler, where a throw is an uncaught exception of the main process.
  const add=function(listener,extensionId,eventName){
   // An extension that is not loaded (its page outlived a disable or removal) would make the engine throw, which is an uncaught exception in the main process.
   let loaded=null;try{loaded=base.getExtension?.(extensionId)||null;}catch{loaded=null;}
   if(!loaded||!mayHear({...(listener||{}),extensionId},eventName))return undefined;
-  return addOriginal.call(this,listener,extensionId,eventName);
+  const result=addOriginal.call(this,listener,extensionId,eventName);
+  if(listener&&listener.type==='service-worker')lazy.registered(extensionId,eventName);
+  return result;
  };
+ const remove=typeof removeOriginal==='function'?function(listener,extensionId,eventName){
+  const result=removeOriginal.call(this,listener,extensionId,eventName);
+  try{if(listener&&listener.type==='service-worker'&&!lazyLive(extensionId,eventName))lazy.unregistered(extensionId,eventName);}catch{/* the record only */}
+  return result;
+ }:null;
+ const lazyLive=(id,name)=>{const all=router.listeners&&typeof router.listeners.get==='function'?router.listeners.get(name):null;return Array.isArray(all)&&all.some(listener=>listener&&listener.extensionId===id&&listener.type==='service-worker');};
  const send=function(target,eventName,...args){
   if(RETIRED_EVENTS.has(eventName))return undefined;
+  if(lazy.hold(target,eventName,args))return undefined;
   const all=this.listeners&&typeof this.listeners.get==='function'?this.listeners.get(eventName):null;
   if(!Array.isArray(all)||!all.length)return sendOriginal.call(this,target,eventName,...args);
   const allowed=all.filter(listener=>mayHear(listener,eventName));
@@ -127,26 +174,26 @@ function installEventGate(base){
   try{return sendOriginal.call(this,target,eventName,...args);}
   finally{if(this.listeners.get(eventName)===allowed)this.listeners.set(eventName,all);}
  };
- router.addListener=add;router.sendEvent=send;
- return {dispose(){if(router.addListener===add)router.addListener=addOriginal;if(router.sendEvent===send)router.sendEvent=sendOriginal;}};
+ router.addListener=add;router.sendEvent=send;if(remove)router.removeListener=remove;
+ return {forget:id=>lazy.forget(id),dispose(){lazy.dispose();if(router.addListener===add)router.addListener=addOriginal;if(router.sendEvent===send)router.sendEvent=sendOriginal;if(remove&&router.removeListener===remove)router.removeListener=removeOriginal;}};
 }
 
 /**
  * Main-process side: installs every package on one profile session's engine. `base` comes from extension-apis.cjs (installExtensionApis):
  * {session, runtime, router, userData, storeKey, getWindow, getExtension, emit, dialog, t, permissions, log}.
- * Returns {packages, forget(id), dispose()}.
+ * Returns {packages (the names installed), failed ([{name, message}]), forget(id), dispose()}.
  */
 function installPackages(base,{packages=loadPackages(),log=(...args)=>console.warn(...args)}={}){
- const installed=[];
+ const installed=[],failed=[];
  const gate=installEventGate(base);
  for(const pkg of packages){
   if(!pkg.install)continue;
   try{const result=pkg.install(packageApi(base,pkg))||{};installed.push({name:pkg.name,forget:result.forget,dispose:result.dispose});}
-  catch(error){log(`[ext-api] ${pkg.name} was not installed:`,messageOf(error));}
+  catch(error){failed.push({name:pkg.name,message:messageOf(error)});log(`[ext-api] ${pkg.name} was not installed:`,messageOf(error));}
  }
  return {
-  packages:installed.map(entry=>entry.name),
-  forget(id){for(const entry of installed)try{entry.forget?.(id);}catch{}},
+  packages:installed.map(entry=>entry.name),failed,
+  forget(id){for(const entry of installed)try{entry.forget?.(id);}catch{}try{gate.forget?.(id);}catch{/* the gate's record only */}},
   dispose(){for(const entry of installed)try{entry.dispose?.();}catch{}gate.dispose();}
  };
 }

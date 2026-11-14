@@ -21,6 +21,17 @@ const isPattern=value=>value==='<all_urls>'||/^[a-z*][a-z0-9+.*-]*:\/\//i.test(v
 function knownPermissions(){return surface().permissions||{};}
 const known=name=>Object.prototype.hasOwnProperty.call(knownPermissions(),name);
 
+// A manifest host pattern as Chromium holds it. PermissionsParser's ParseHostPermissions (extensions/common/manifest_handlers/permissions_parser.cc)
+// calls pattern.SetPath("/*") on every host pattern it parses from the manifest: "The path component is not used for host permissions, so we force
+// it to match all paths." So "https://*/" in a manifest gives every page of every https site, and a request or check for "https://*/*" asks for what
+// the extension already holds (Proton VPN writes its hosts this way). A pattern with no path ("https://example.com") is not a host pattern for
+// Chromium (URLPattern::Parse: "Empty path"); it is left as written and covers nothing. '<all_urls>' already covers every path.
+function hostPermission(pattern){
+ if(pattern==='<all_urls>')return pattern;
+ const m=/^([a-z*][a-z0-9+.-]*:\/\/[^/]*)\//i.exec(pattern);   // scheme://host[:port] up to the path's first '/'
+ return m?`${m[1]}/*`:pattern;
+}
+
 /** What a manifest asks for: required and optional, API permissions and host patterns (MV2 puts patterns in `permissions`). */
 function declared(manifest={}){
  const required=strings(manifest.permissions),optional=strings(manifest.optional_permissions);
@@ -28,9 +39,9 @@ function declared(manifest={}){
  const api=list=>unique(list.filter(name=>!isPattern(name)&&known(name)&&!(knownPermissions()[name].minManifestVersion>version)));
  return {
   permissions:api(required),
-  origins:unique([...strings(manifest.host_permissions),...required.filter(isPattern)]),
+  origins:unique([...strings(manifest.host_permissions),...required.filter(isPattern)].map(hostPermission)),
   optionalPermissions:api(optional),
-  optionalOrigins:unique([...strings(manifest.optional_host_permissions),...optional.filter(isPattern)])
+  optionalOrigins:unique([...strings(manifest.optional_host_permissions),...optional.filter(isPattern)].map(hostPermission))
  };
 }
 
@@ -130,4 +141,4 @@ function createPermissionTable({userData,storeKey='default',getExtension=()=>nul
  };
 }
 
-module.exports={createPermissionTable,declared,knownPermissions,isPattern,patternCovers,originsCoverUrl};
+module.exports={createPermissionTable,declared,hostPermission,knownPermissions,isPattern,patternCovers,originsCoverUrl};

@@ -251,7 +251,7 @@ function createThreatLists({ cachePath, download = downloadList, io = fs, now = 
         const text = await download(url, session, { maxBytes: MAX_BYTES, timeoutMs: 10 * 60 * 1000 }), parsed = await validateAsync(text, source);
         io.mkdirSync(cachePath, { recursive: true }); const tmp = file(source) + '.' + randomUUID().slice(0, 8); io.writeFileSync(tmp, text); io.renameSync(tmp, file(source));
         lists.set(source.id, parsed); meta.set(source.id, { updated: now(), listed: parsed.entries }); return true;
-      } catch (error) { failure = error; }
+      } catch (error) { failure = error; if (error && error.closing === true) break; /* 13.8 (background-work.cjs): a stopped download is not tried again on the other address */ }
     }
     throw failure || new Error('No source for ' + source.title + '.');
   }
@@ -259,7 +259,7 @@ function createThreatLists({ cachePath, download = downloadList, io = fs, now = 
   function refresh(session) {
     if (!refreshing) refreshing = (async () => {
       await load(); const errors = [];
-      for (const source of SOURCES) { try { await refreshOne(source, session); } catch (error) { errors.push(source.title + ': ' + String(error.message || error)); } }
+      for (const source of SOURCES) { try { await refreshOne(source, session); } catch (error) { if (error && error.closing === true) { writeMeta(); return; } /* 13.8: the quit began: no other list is started, nothing is recorded as a failure, and what this pass already swapped in keeps its time */ errors.push(source.title + ': ' + String(error.message || error)); } }
       lastError = errors.length ? errors.join(' ') : null; writeMeta();
     })().finally(() => { refreshing = null; });
     return refreshing.then(status);

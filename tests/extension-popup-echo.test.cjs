@@ -127,15 +127,15 @@ test('a page that first reports the minimum (nothing to show yet) is as before: 
   popup.destroy();
 });
 
-test('every real size is taken as before, also after an echo (the sizes other extensions ask: a side above the minimum)', async () => {
+test('every real size is taken as before, also after an echo (the sizes other extensions ask: both sides above 64)', async () => {
   const popup = await open();
   report(popup, 600, 430); report(popup, 25, 25);
   report(popup, 276, 580); assert.deepEqual(size(popup), [276, 580]);
   report(popup, 480, 600); assert.deepEqual(size(popup), [480, 600]);
   report(popup, 273, 375); assert.deepEqual(size(popup), [273, 375]);
-  report(popup, 28, 30); assert.deepEqual(size(popup), [28, 30], 'a side more than 2 above the minimum is a size');
+  report(popup, 66, 70); assert.deepEqual(size(popup), [66, 70], 'a size with both sides above ECHO_NEAR (64) is a size');
   await wait(40);
-  assert.deepEqual(size(popup), [28, 30], 'and the real size released the held report: it is not taken afterwards');
+  assert.deepEqual(size(popup), [66, 70], 'and the real size released the held report: it is not taken afterwards');
   popup.destroy();
 });
 

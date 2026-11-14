@@ -1,5 +1,6 @@
-import type { BookmarkNode } from '../runtime/types';
+import type { BookmarkNode,BrowserAction } from '../runtime/types';
 import { bookmarkMenuEvent,type BookmarkMenuRequest } from './pageActions';
+import { t } from '../i18n';
 
 /** The Bookmarks bar is a top-level folder named "Bookmarks bar" (core's placeFolder); it can't be renamed or deleted. */
 export const isBarFolder=(node:BookmarkNode)=>!node.url&&!node.parentId&&node.title.trim().toLowerCase()==='bookmarks bar';
@@ -15,7 +16,9 @@ export type BookmarkTarget=
  /** A sidebar section's own menu (`node:zone-<section id>`; a menu ref travels to the popup as a node id, and main accepts only word characters, dots and dashes there): Hide this section, Customize sidebar… */
  |{kind:'zone';section:string}
  /** The sidebar edge's own menu (`node:sidebar-size`, a word-and-dash id main accepts): Narrow, Standard, Wide with the current one ticked. */
- |{kind:'size'};
+ |{kind:'size'}
+ /** A folder's contents as a menu (a folder button on the bookmarks bar, `folderMenuRef`): its pages and folders, a folder opening in place. */
+ |{kind:'contents';node:BookmarkNode};
 
 export const bookmarkRef=(id:string)=>`node:${id}`;
 /** A sidebar section's own menu: `zoneRef('history')`. */
@@ -23,6 +26,10 @@ export const ZONE_REF='node:zone-';
 export const zoneRef=(section:string)=>ZONE_REF+section;
 /** The sidebar edge's size menu (right-click on the edge, or the menu key on it). */
 export const SIZE_REF='node:sidebar-size';
+/** A folder's contents menu: `node:open.<folder id>`. Main takes word characters, dots and dashes in a menu ref (validation.cjs), and
+ *  no bookmark id has a dot (core's uid and the importers make `<kind>-<uuid>`), so this never names a bookmark itself. */
+export const FOLDER_MENU_REF='node:open.';
+export const folderMenuRef=(id:string)=>FOLDER_MENU_REF+id;
 
 export function bookmarkTarget(ref:string,nodes:BookmarkNode[],profileId:string):BookmarkTarget|null{
  const mine=nodes.filter(node=>node.browserProfileId===profileId);
@@ -30,6 +37,7 @@ export function bookmarkTarget(ref:string,nodes:BookmarkNode[],profileId:string)
  if(ref===SIZE_REF)return {kind:'size'};
  if(ref.startsWith(ZONE_REF))return {kind:'zone',section:ref.slice(ZONE_REF.length)};
  if(ref.startsWith('node:new:')){const id=ref.slice(9);return {kind:'new',parentId:id!=='root'&&mine.some(node=>node.id===id&&!node.url)?id:null};}
+ if(ref.startsWith(FOLDER_MENU_REF)){const node=mine.find(item=>item.id===ref.slice(FOLDER_MENU_REF.length)&&!item.url);return node?{kind:'contents',node}:null;}
  if(ref.startsWith('node:')){const node=mine.find(item=>item.id===ref.slice(5));if(!node)return null;return node.url?{kind:'bookmark',node}:{kind:'folder',node,bar:isBarFolder(node)};}
  if(!ref)return null;
  const node=mine.find(item=>item.url===ref);
@@ -48,6 +56,37 @@ export function branchOf(node:BookmarkNode,nodes:BookmarkNode[]):BookmarkNode[]{
 /** Every page in a folder, folders included, once each, in tree order. */
 export function pagesIn(folder:BookmarkNode,nodes:BookmarkNode[]):string[]{
  return [...new Set(branchOf(folder,nodes).slice(1).filter(node=>node.url).map(node=>node.url!))];
+}
+
+/** The pages Open all opens: every page under the folder once, in tree order; a Tor bookmark is its own page beside an ordinary
+ *  bookmark of the same address. */
+export function folderPages(folder:BookmarkNode,nodes:BookmarkNode[]):BookmarkNode[]{
+ const seen=new Set<string>(),pages:BookmarkNode[]=[];
+ for(const node of branchOf(folder,nodes).slice(1)){const key=node.url&&(node.tor?'tor:':'')+node.url;if(key&&!seen.has(key)){seen.add(key);pages.push(node);}}
+ return pages;
+}
+/** Opening a whole folder stops at this many tabs, so one click can't bury the window. */
+export const OPEN_ALL_LIMIT=40;
+/** Open all (the folder menu's row, and a middle or Ctrl/Cmd click on a folder of the bookmarks bar, as in Chromium): every page
+ *  under the folder once, in tree order, in background tabs, up to OPEN_ALL_LIMIT, then a note saying how many of how many opened.
+ *  A Tor bookmark opens in a Tor tab, however it is opened. */
+export function openAllActions(folder:BookmarkNode,nodes:BookmarkNode[]):BrowserAction[]{
+ const pages=folderPages(folder,nodes);
+ const actions:BrowserAction[]=pages.slice(0,OPEN_ALL_LIMIT).map(node=>({type:'tab.new',url:node.url!,background:true,...(node.tor?{privacy:'tor' as const}:{})}));
+ if(pages.length>OPEN_ALL_LIMIT)actions.push({type:'toast',text:t('bookmarkmenu.openedFirst',{limit:OPEN_ALL_LIMIT,total:pages.length}),tone:'info'});
+ return actions;
+}
+
+/** A folder's children as its menu lists them: every page and folder, in their order (Chromium's BookmarkMenuDelegate::BuildMenu). */
+export function folderChildren(nodes:BookmarkNode[],profileId:string,folderId:string):BookmarkNode[]{
+ return childrenOf(nodes.filter(node=>node.browserProfileId===profileId),folderId);
+}
+/** The folders a contents menu has opened in place, under its own folder: the longest start of `path` that still runs folder by folder
+ *  from `rootId` (a folder moved elsewhere, or removed, while its menu is open takes the levels under it along). */
+export function drillPath(nodes:BookmarkNode[],profileId:string,rootId:string,path:string[]):string[]{
+ const out:string[]=[];let parent=rootId;
+ for(const id of path){const node=nodes.find(item=>item.id===id&&item.browserProfileId===profileId);if(!node||node.url||node.parentId!==parent)break;out.push(id);parent=id;}
+ return out;
 }
 
 /** "Sort by name": folders first, then pages, each A to Z the way people read them (numbers in order, case ignored). */

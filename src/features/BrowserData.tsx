@@ -2,6 +2,7 @@ import {ProfileCleanupSettings} from './profile-privacy/ProfileCleanupSettings';
 import {ProfileCleanupRecovery} from './ProfileCleanupRecovery';
 import {profileCleanupClient} from '../ui/profileCleanupClient';
 import {SiteInformation} from './SiteInformation';
+import {isWebsite} from '../runtime/newTabPage';
 import {ShieldsSummary} from './ShieldsSummary';
 import {isTorWindow} from './tor/torClient';
 import {Disclosure} from '../components/PanelParts';
@@ -18,7 +19,7 @@ export function SiteControls({state}:{state:BrowserSnapshot}){
  const [privacy,setPrivacy]=useState<ServiceResult['privacy']>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[changed,setChanged]=useState(false),tab=state.tabs.find(t=>t.id===state.activeTabId)!;
  useEffect(()=>{let alive=true;setPrivacy(undefined);setChanged(false);setError('');if(tab.loading||tab.error)return;void runtime.service({type:'privacy.status',tabId:tab.id}).then(result=>{if(alive)setPrivacy(result.privacy);}).catch(e=>alive&&setError(String(e)));return()=>{alive=false;};},[tab.id,tab.url,tab.loading,tab.error]);
  const set=async(blocking:boolean,scope:'site'|'temporary')=>{setBusy(true);setError('');try{const result=await runtime.service({type:'privacy.set',tabId:tab.id,blocking,scope});setPrivacy(result.privacy);setChanged(true);}catch(e){setError(String(e));}finally{setBusy(false);}};
- return <section className="site-controls" aria-label={tr("browserdata.siteControls")}><CertificateNotice tabId={tab.id} url={tab.url}/><ShieldsSummary tab={tab} tor={isTorWindow(state)||tab.privacy==='tor'}/>{tab.contentKind==="web"&&<hr className="acira-menu-sep"/>}<SiteInformation tab={tab}/><Disclosure className="site-content-filters" title={tr("cf.title")}><ContentFilterControls state={state} scope="site"/></Disclosure>{error&&<p role="alert">{error}</p>}</section>;
+ return <section className="site-controls" aria-label={tr("browserdata.siteControls")}><CertificateNotice tabId={tab.id} url={tab.url}/><ShieldsSummary tab={tab} tor={isTorWindow(state)||tab.privacy==='tor'}/>{isWebsite(tab)&&<hr className="acira-menu-sep"/>}<SiteInformation tab={tab}/><Disclosure className="site-content-filters" title={tr("cf.title")}><ContentFilterControls state={state} scope="site"/></Disclosure>{error&&<p role="alert">{error}</p>}</section>;
 }
 export function ProfilePrivacy({state}:{state:BrowserSnapshot}){
  const [enabled,setEnabled]=useState<boolean>(),[busy,setBusy]=useState(true),[error,setError]=useState('');

@@ -12,11 +12,12 @@ const handler = main.slice(main.indexOf("case 'extensions.toolbar-target':"), ma
 
 test('main.cjs: a private window on its New Tab page asks the toolbar for its own private session\'s buttons; Tor and a window without that profile do not', () => {
   assert.ok(handler.length > 500);
+  // (13.8: the New Tab's extension page is a page tab but not a website, so `siteTab` keeps it on this path)
   // the private branch exists, is for pages that are not websites, in a private window, never Tor, and only for this window's own private profile
-  assert.match(handler, /privateOwn=tab\.contentKind!=='web'&&privateMode&&!torMode&&tab\.browserProfileId===state\.activeBrowserProfileId\?state\.browserProfiles\.find\(p=>p\.id===tab\.browserProfileId&&p\.private\):null/);
+  assert.match(handler, /privateOwn=!siteTab\(tab\)&&privateMode&&!torMode&&tab\.browserProfileId===state\.activeBrowserProfileId\?state\.browserProfiles\.find\(p=>p\.id===tab\.browserProfileId&&p\.private\):null/);
   assert.match(handler, /privateOwn\?[^]*?extensionToolbar\.privateProfileTarget\(require\('electron'\)\.session\.fromPartition\(privateOwn\.partition\)\):direct\}/);
   // the ordinary window's path is as before
-  assert.match(handler, /tab\.contentKind!=='web'&&!privateMode&&tab\.browserProfileId===state\.activeBrowserProfileId\?extensionToolbar\.profileTarget\(tab\.browserProfileId\)/);
+  assert.match(handler, /!siteTab\(tab\)&&!privateMode&&tab\.browserProfileId===state\.activeBrowserProfileId\?extensionToolbar\.profileTarget\(tab\.browserProfileId\)/);
   // the toolbar is given the window, so a click with no website tab has one to open the popup in
   assert.match(main, /createExtensionToolbar\(\{manager:extensionManager,getWindow:\(\)=>mainWindow,/);
 });

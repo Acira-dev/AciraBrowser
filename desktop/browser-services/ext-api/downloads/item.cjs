@@ -227,7 +227,9 @@ function normalizeDownloadOptions(options) {
   let url;
   try { url = new URL(options.url); } catch { throw new Error(ERRORS.invalidURL); }
   if (!['http:', 'https:', 'data:', 'blob:'].includes(url.protocol)) throw new Error(ERRORS.invalidURL);
-  if (options.filename !== undefined && options.filename !== null && !isSafeRelativePath(options.filename)) throw new Error(ERRORS.invalidFilename);
+  // downloads_api.cc: "Strip % character as it affects environment variables", then the path must be a safe relative one.
+  const wanted = typeof options.filename === 'string' ? options.filename.replace(/%/g, '_') : options.filename;
+  if (wanted !== undefined && wanted !== null && !isSafeRelativePath(wanted)) throw new Error(ERRORS.invalidFilename);
   const headers = [];
   for (const header of Array.isArray(options.headers) ? options.headers : []) {
     if (!TOKEN.test(header.name)) throw new Error(ERRORS.invalidHeaderName);
@@ -242,7 +244,7 @@ function normalizeDownloadOptions(options) {
     method: options.method || 'GET',
     headers
   };
-  if (options.filename) out.filename = options.filename;
+  if (wanted) out.filename = wanted;
   if (options.body !== undefined && options.body !== null) out.body = String(options.body);
   return out;
 }

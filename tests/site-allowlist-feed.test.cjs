@@ -51,7 +51,7 @@ test('no file address keeps the beta.10 behaviour exactly; an empty list in the 
  const asked=[];const old=createSiteAllowlist({cachePath:'/a',endpoint:ENDPOINT,io:memoryIo(),fetchText:async url=>{asked.push(url);return answer(['acira-shop.top']);}});
  assert.equal((await old.refresh({})).source,'endpoint');assert.deepEqual(asked,[ENDPOINT]);
  const none=createSiteAllowlist({cachePath:'/a',io:memoryIo(),fetchText:async()=>{throw new Error('must not be called');}});assert.equal((await none.maybeRefresh({})).entries,0);
- const empty=make(async()=>JSON.stringify({schema:1,updated:'2026-11-06',hosts:[]}));const status=await empty.refresh({});assert.equal(status.entries,0);assert.equal(status.lastError,null,'the file the founder publishes first is empty, and that is fine');assert.equal(status.source,'file');
+ const empty=make(async()=>JSON.stringify({schema:1,updated:'2026-11-06',hosts:[]}));const status=await empty.refresh({});assert.equal(status.entries,0);assert.equal(status.lastError,null,'the file published first is empty, and that is fine');assert.equal(status.source,'file');
 });
 
 test('where the file is: beside the update feed of the release target; a test profile reaches only what QA names',()=>{
@@ -83,7 +83,7 @@ test('the feed folder comes from the installed app\'s app-update.yml, or the sou
 
 test('content-blocking hands the file address to the allow-list and the packaged app reads its own feed folder',()=>{
  const blocking=fs.readFileSync(path.join(__dirname,'../desktop/content-blocking.cjs'),'utf8');
- assert.match(blocking,/createSiteAllowlist\(\{cachePath:[^}]*,fileUrl:require\('\.\/browser-services\/site-allowlist\.cjs'\)\.allowlistFileURL\(\),endpoint:require\('\.\/browser-services\/site-reports\.cjs'\)\.endpoints\(\)\.allowlist\}\)/);
+ assert.match(blocking,/createSiteAllowlist\(\{cachePath:[^}]*,fileUrl:require\('\.\/browser-services\/site-allowlist\.cjs'\)\.allowlistFileURL\(\),endpoint:require\('\.\/browser-services\/site-reports\.cjs'\)\.endpoints\(\)\.allowlist(?:,\.\.\.\(backgroundNetwork\?\{fetchText:backgroundNetwork\.fetchText\}:\{\}\))?\}\)/);
  assert.match(fs.readFileSync(path.join(__dirname,'../desktop/test-hooks.cjs'),'utf8'),/'ACIRA_SITE_ALLOWLIST_FILE'/);
 });
 
@@ -97,5 +97,5 @@ test('the exporter writes the file the app reads: sorted, no repeats, a date, un
  assert.deepEqual(readFileText(buildFile([],{today:'2026-11-06'})).hosts,[],'an empty list is a valid file');
  for(const bad of ['https://evil.example.org/','Evil.example.org','192.168.1.1','localhost','x.onion'])assert.throws(()=>buildFile([bad]),bad);
  const published=path.join(__dirname,'..','previews','beta11-quiet-start','feed','site-allowlist.json');
- if(fs.existsSync(published))assert.doesNotThrow(()=>readFileText(fs.readFileSync(published,'utf8')),'the prepared file for the founder parses');
+ if(fs.existsSync(published))assert.doesNotThrow(()=>readFileText(fs.readFileSync(published,'utf8')),'the prepared file parses');
 });

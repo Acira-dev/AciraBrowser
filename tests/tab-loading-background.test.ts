@@ -1,4 +1,4 @@
-// Founder bug (27 Oct): the loading dot matrix showed only on the current tab's row. Every tab row — sidebar, horizontal
+// Reported bug (27 Oct): the loading dot matrix showed only on the current tab's row. Every tab row — sidebar, horizontal
 // strip, compact strip, tab viewer — shows it while that tab's page loads, current or not, and its icon after.
 // Native proof: qa/tab-loading-background.mjs (slow local server, three background tabs, capturePage per layout).
 import test from 'node:test';
@@ -72,10 +72,10 @@ test('main gives a requested background tab its page, without selecting it throu
   assert.match(main,/function requestedInBackground\(tab\)\{return tab\.loading&&tab\.contentKind==='web'&&!!tab\.requestedUrl&&tab\.requestedUrl===tab\.url/);
   // electron-chrome-extensions' observeTab calls onActivated for every added tab, which reached tab.select.
   assert.match(main,/selectTab\(wc\)\{if\(extensionSelectQuiet\)return;/);
-  // Only the shown CURRENT tab attaches the plain way; a visible split pane that is not the current tab is attached quietly too (tests/split-restore-active-pane.test.cjs).
-  assert.match(main,/function attachExtensionTab\(id,wc\)\{if\(!extensionManager\)return;(?:\/\*[^*]*\*\/)?if\(pageVisible\(id\)&&id===state\.activeTabId\)\{extensionManager\.attachTab\(wc,mainWindow\);return;\}extensionSelectQuiet=true;try\{/);
+  // Only the shown CURRENT tab attaches on its own (quietly since 13.8: the library's selectTab answer brought the window forward); a visible split pane that is not the current tab is attached quietly too (tests/split-restore-active-pane.test.cjs).
+  assert.match(main,/function attachExtensionTab\(id,wc\)\{if\(!extensionManager\)return;(?:\/\*[^*]*\*\/)?if\(pageVisible\(id\)&&id===state\.activeTabId\)\{(?:\/\*[^*]*\*\/)?extensionSelectQuiet=true;try\{extensionManager\.attachTab\(wc,mainWindow\);\}finally\{extensionSelectQuiet=false;\}return;\}extensionSelectQuiet=true;try\{/);
   // (A secured workspace's page is never handed to extensions: R3-38's guard may sit in front of the call.)
-  assert.match(main,/const wc=view\.webContents;(?:\/\*[^*]*\*\/)?(?:if\(tab\.privacy!=='secured'\))?attachExtensionTab\(tab\.id,wc\);/);
+  assert.match(main,/const wc=view\.webContents;(?:\/\*[^*]*\*\/)?(?:wc\.setMaxListeners\(32\);)?(?:\/\*[^*]*\*\/)?(?:if\(tab\.privacy!=='secured'\))?attachExtensionTab\(tab\.id,wc\);/);
   assert.match(read('desktop/rewind/rewind.cjs'),/type:'tab\.new',url:tab\.url,background:true,lazy:true/,'Rewind restores stay asleep');
 });
 

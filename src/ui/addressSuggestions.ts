@@ -12,9 +12,18 @@ export type AddressSuggestionKind='tab'|'bookmark'|'history'|'url'|'search'|'ans
 export interface AddressSuggestion {id:string;kind:AddressSuggestionKind;title:string;url:string;detail:string;tabId?:string;historyId?:string;copy?:string;commandId?:string;keys?:string}
 export const searchEngineName=(engine:SearchEngine)=>({google:'Google',duckduckgo:'DuckDuckGo',bing:'Bing'})[engine]||'Google';
 
+// Each address is resolved once, not at every keystroke (13.8: resolving every history visit again was about half of a 5000-visit ranking, which
+// ran per keystroke in the interface and again in the suggestion list). The answer depends on the address alone (default engine, no providers).
+const NORMALIZED_CACHE_LIMIT=20000;
+const normalizedCache=new Map<string,string|null>();
+/** How many addresses are remembered resolved (for tests: a ranking repeated over the same history resolves nothing again). */
+export const normalizedAddressCount=():number=>normalizedCache.size;
+export const NORMALIZED_ADDRESS_LIMIT=NORMALIZED_CACHE_LIMIT;
 function normalizedUrl(input:string):string|null{
- const target=resolveNavigation(input);
- return target.error||target.query?null:target.url;
+ const known=normalizedCache.get(input);if(known!==undefined)return known;
+ const target=resolveNavigation(input),value=target.error||target.query?null:target.url;
+ if(normalizedCache.size>=NORMALIZED_CACHE_LIMIT)normalizedCache.clear();
+ normalizedCache.set(input,value);return value;
 }
 export function addressDisplayUrl(url:string){return url.replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/$/,'');}
 function matchScore(query:string,title:string,url:string){
@@ -41,10 +50,11 @@ export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'
   const previous=candidates.get(valid),candidate={item,score:score+bonus,order:order++};
   if(!previous||candidate.score>previous.score)candidates.set(valid,candidate);
  };
- state.tabs.forEach((tab,index)=>{if(tab.browserProfileId===profile&&tab.id!==state.activeTabId&&tabVisibleFrom(state,viewer,tab))add('tab',tab.url,tab.customTitle||tab.title,220-index,t('addresssuggestions.alreadyOpen'),tab.id);});
+ const alreadyOpen=t('addresssuggestions.alreadyOpen'),bookmarkLabel=t('addresssuggestions.bookmark'),fromHistory=t('addresssuggestions.fromHistory');
+ state.tabs.forEach((tab,index)=>{if(tab.browserProfileId===profile&&tab.id!==state.activeTabId&&tabVisibleFrom(state,viewer,tab))add('tab',tab.url,tab.customTitle||tab.title,220-index,alreadyOpen,tab.id);});
  const historyTitles=new Map<string,string>();for(const visit of history)if(visit.browserProfileId===profile&&!historyTitles.has(visit.url))historyTitles.set(visit.url,visit.title);
- bookmarks.forEach((url,index)=>add('bookmark',url,historyTitles.get(url)||siteIdentity(url).label,150-index,t('addresssuggestions.bookmark')));
- history.forEach((visit,index)=>{if(visit.browserProfileId===profile)add('history',visit.url,visit.title,100-Math.min(index,99),t('addresssuggestions.fromHistory'),undefined,visit.id);});
+ bookmarks.forEach((url,index)=>add('bookmark',url,historyTitles.get(url)||siteIdentity(url).label,150-index,bookmarkLabel));
+ history.forEach((visit,index)=>{if(visit.browserProfileId===profile)add('history',visit.url,visit.title,100-Math.min(index,99),fromHistory,undefined,visit.id);});
  const local=[...candidates.values()].sort((a,b)=>b.score-a.score||a.order-b.order).map(candidate=>candidate.item);
  if(!query)return local.slice(0,limit);
  // Enter takes the first row, so it is always what was typed (Chromium: the default match "can always be predicted").

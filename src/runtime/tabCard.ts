@@ -9,12 +9,12 @@ import type { TabSession } from './types';
  * one using the camera, microphone or screen keeps its tooltip, which says so. */
 export function tabCardKind(
   settings: { tabHoverCard?: string } | null | undefined,
-  tab: Pick<TabSession, 'risk' | 'capturing' | 'privacy' | 'contentKind' | 'sleeping'> | null | undefined,
+  tab: Pick<TabSession, 'risk' | 'capturing' | 'privacy' | 'contentKind' | 'sleeping'> & { url?: string } | null | undefined,
   privateWindow = false,
 ): 'preview' | 'name' | null {
   const mode = settings?.tabHoverCard === 'name' || settings?.tabHoverCard === 'off' ? settings.tabHoverCard : 'preview';
   if (mode === 'off' || !tab || tab.risk || tab.capturing?.length) return null;
-  return mode === 'name' || tab.privacy || privateWindow || tab.contentKind !== 'web' ? 'name' : 'preview';
+  return mode === 'name' || tab.privacy || privateWindow || tab.contentKind !== 'web' || tab.url === 'acira://new' ? 'name' : 'preview';
 }
 
 /** The site line of a card: the host without "www.", or "Acira" for one of its own pages. */

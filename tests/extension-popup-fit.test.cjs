@@ -1,5 +1,5 @@
 'use strict';
-// Surfshark's toolbar popup was cut off on a Windows laptop (tester, Nov 2026). Chrome sizes a popup to its page, up to 800 x 600; Acira's window was
+// Surfshark's toolbar popup was cut off on a Windows laptop (reported Nov 2026). Chrome sizes a popup to its page, up to 800 x 600; Acira's window was
 // exactly the size the page asked for, so anything that takes room from the page cut it off: a scrollbar (15 px on Windows, an overlay that takes
 // none on a Mac) once the page is taller than 600 or wider than 800, and the whole-pixel rounding at 125 % and 150 % display scale. The window
 // now measures the page after each resize (extension-popup-fit.cjs) and grows by what is missing. These tests pin the rule, the fixture the
@@ -8,6 +8,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events'), fs = require('node:fs'), path = require('node:path');
 const {fitStep, METRICS_SCRIPT, LIMITS} = require('../desktop/browser-services/extension-popup-fit.cjs');
 const {ExtensionPopup, BOUNDS} = require('../desktop/browser-services/extension-popup-window.cjs');
+const {isFollowScript} = require('../desktop/browser-services/extension-popup-follow.cjs');
 
 const metrics = (iw, ih, cw, ch, sw, sh) => ({iw, ih, cw, ch, sw, sh});
 const size = (width, height) => ({width, height});
@@ -86,7 +87,7 @@ class FakeContents extends EventEmitter {
   getURL() { return this.urls[this.urls.length - 1] || ''; }
   getZoomFactor() { return 1; }
   // metrics of the page in the window it is in right now
-  async executeJavaScript(code) { this.executed++; assert.equal(code, METRICS_SCRIPT); return this.page(this.window.getBounds()); }
+  async executeJavaScript(code) { if (isFollowScript(code)) return null; /* the follower's own look at the page (extension-popup-follow.cjs), not the fit measure counted here */ this.executed++; assert.equal(code, METRICS_SCRIPT); return this.page(this.window.getBounds()); }
 }
 class FakeView {
   constructor(options) { this.options = options; this.webContents = new FakeContents(options.page || (() => ({}))); }

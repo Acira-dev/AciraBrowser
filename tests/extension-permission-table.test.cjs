@@ -21,6 +21,35 @@ test('declared: Chromium-known API permissions only (Electron\'s "unknown" ones 
   assert.deepEqual(declared({manifest_version: 2, permissions: ['tabs', '<all_urls>', 'tabGroups']}), {permissions: ['tabs'], origins: ['<all_urls>'], optionalPermissions: [], optionalOrigins: []}, 'tabGroups needs MV3');
 });
 
+// Proton VPN 1.3.6 (Chrome Web Store jplgfhpmjnbigmhklmmbgecoobifkmpa): host permissions written with a "/" path and no optional ones. Its popup and
+// onboarding page ask permissions.contains / permissions.request for PROTON_ASKS before they let the person sign in.
+const PROTON = {manifest_version: 3, name: 'Proton VPN: Fast & Secure', version: '1.3.6',
+  host_permissions: ['https://*/', 'http://*/', 'ftp://*/', 'wss://*/', 'ws://*/'],
+  permissions: ['idle', 'notifications', 'privacy', 'proxy', 'scripting', 'storage', 'tabs', 'webRequest', 'webRequestAuthProvider']};
+const PROTON_ASKS = {permissions: ['proxy'], origins: ['http://*/*', 'https://*/*', 'ftp://*/*', 'ws://*/*', 'wss://*/*', 'https://account.protonvpn.com/*', 'https://account.proton.me/*']};
+
+test('declared: a manifest host pattern covers every path of its hosts (PermissionsParser forces the path to "/*")', () => {
+  assert.deepEqual(declared(PROTON).origins, ['https://*/*', 'http://*/*', 'ftp://*/*', 'wss://*/*', 'ws://*/*']);
+  assert.deepEqual(declared({manifest_version: 3, host_permissions: ['https://a.example/app/', 'https://a.example/*', '<all_urls>', 'file:///home/*', '*://*.b.example:8080/x?y'],
+    optional_host_permissions: ['https://*.example.com/', 'https://c.example/only/this']}),
+  {permissions: [], origins: ['https://a.example/*', '<all_urls>', 'file:///*', '*://*.b.example:8080/*'], optionalPermissions: [], optionalOrigins: ['https://*.example.com/*', 'https://c.example/*']},
+  'required and optional alike; two patterns that differ only in path become one');
+  assert.deepEqual(declared({manifest_version: 2, permissions: ['tabs', 'http://a.example/one'], optional_permissions: ['https://b.example/two/*']}),
+    {permissions: ['tabs'], origins: ['http://a.example/*'], optionalPermissions: [], optionalOrigins: ['https://b.example/*']}, 'MV2 patterns in permissions too');
+  assert.deepEqual(declared({manifest_version: 3, host_permissions: ['https://no-path.example']}).origins, ['https://no-path.example'],
+    'not a host pattern for Chromium (Empty path): left as written, it covers nothing');
+});
+
+test('Proton VPN: its manifest\'s "https://*/" holds every page, so its own setup check (contains) is true', () => {
+  const table = createPermissionTable({getExtension: id => (id === ID ? {id: ID, manifest: PROTON} : null)});
+  assert.equal(table.contains(ID, PROTON_ASKS), true);
+  for (const origin of PROTON_ASKS.origins) assert.equal(table.contains(ID, {origins: [origin]}), true, origin);
+  assert.equal(table.hasOrigin(ID, 'https://account.proton.me/api/vpn/sessions?x=1'), true, 'a page below the root');
+  assert.equal(table.hasOrigin(ID, 'wss://example.org/socket'), true);
+  assert.equal(table.hasOrigin(ID, 'chrome://settings/'), false);
+  assert.deepEqual(table.grant(ID, PROTON_ASKS), {permissions: [], origins: []}, 'nothing optional to record');
+});
+
 test('grants are optional-only, persisted per profile, survive a restart, notify, and go on uninstall', () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-perm-'));
   const getExtension = id => (id === ID ? {id: ID, manifest} : null);
@@ -84,5 +113,22 @@ test('permissions.request: the prompt lists what is asked in words; yes grants, 
   assert.equal(createPermissionTable({userData, storeKey: 'p', getExtension: () => extension}).has(ID, 'history'), true, 'persisted');
   assert.equal(call('permissions.remove', {permissions: ['history']}), true);
   assert.equal(apis.permissions.has(ID, 'history'), false);
+  fs.rmSync(userData, {recursive: true, force: true});
+});
+
+test('with no ext-api packages (the packaged 13.7 apps): Proton VPN\'s three requests from one press are held, so no prompt and all true', async () => {
+  const {installExtensionApis} = require('../desktop/browser-services/extension-apis.cjs');
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-perm-proton-'));
+  const extension = {id: ID, name: PROTON.name, manifest: PROTON};
+  const handlers = new Map(), asked = [];
+  const router = {handlers, listeners: new Map(), handle(name, callback) { handlers.set(name, {callback, extensionContext: true}); }, sendEvent() {}};
+  // 13.7 showed this prompt three times and, after Allow, still answered false: the grant could not cover "https://*/*" with "https://*/".
+  const store = {requestPermissions: async (ext, request) => { asked.push(request); return true; }};
+  const session = {serviceWorkers: {getAllRunning: () => ({})}, extensions: {getExtension: id => (id === ID ? extension : null), on() {}}};
+  installExtensionApis({ctx: {router, store}}, {session, userData, storeKey: 'p', extApiDir: path.join(userData, 'none')});
+  const call = (name, ...args) => handlers.get(name).callback({type: 'frame', extension}, ...args);
+  assert.equal(call('permissions.contains', PROTON_ASKS), true);
+  assert.deepEqual(await Promise.all([1, 2, 3].map(() => call('permissions.request', PROTON_ASKS))), [true, true, true]);
+  assert.equal(asked.length, 0, 'no prompt: everything asked is already held');
   fs.rmSync(userData, {recursive: true, force: true});
 });

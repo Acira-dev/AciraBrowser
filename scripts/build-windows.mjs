@@ -16,8 +16,10 @@ const git=spawnSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'});i
 const head=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});if(head.status!==0)throw Error('Unable to identify the source commit.');
 const commit=head.stdout.trim(),candidate=path.join(root,'release','windows-'+pkg.version+'-'+commit.slice(0,8)+'-candidate');
 // Widevine: the EVS login and client, and the pinned ECS runtime, before any long work, so a missing piece stops the build in its first minutes.
-const widevine=process.argv.includes('--widevine'),sealing=widevine?require('../packaging/windows-widevine.cjs'):null;let evs=null,runtime=null;
-if(widevine){evs=await sealing.preflight();console.log('Widevine build: EVS client '+evs.client+' ('+evs.python+'), login refreshed');runtime=await (await import('./fetch-windows-widevine.mjs')).fetchWindowsWidevineRuntime();}
+const widevine=process.argv.includes('--widevine'),sealing=widevine?require('../packaging/windows-widevine.cjs'):null;let evs=null,runtime=null,guard=(held,work)=>work(held);/* guard: removes the extracted runtime however the build ends (fetch-windows-widevine.mjs); a build without Widevine has none */
+if(widevine){evs=await sealing.preflight();console.log('Widevine build: EVS client '+evs.client+' ('+evs.python+'), login refreshed');const fetcher=await import('./fetch-windows-widevine.mjs');runtime=await fetcher.fetchWindowsWidevineRuntime();guard=fetcher.guardWindowsWidevineRuntime;}
+// Everything from here is inside the guard: a failed check or a stopped step used to leave the 370 MB extracted runtime in release/runtime-cache (it was removed only after packaging succeeded).
+await guard(runtime,async()=>{
 const node=(file,...args)=>run(process.execPath,[path.join(root,file),...args]);
 for(const script of ['build','test'])run(process.env.ComSpec||'cmd.exe',['/d','/s','/c','npm run '+script]);
 node('qa/windows-browser-flows.mjs');node('qa/sidebar-hover-overlay.mjs');node('scripts/release-runtime-policy.mjs');node('scripts/release-build-head.mjs',candidate);
@@ -26,7 +28,7 @@ node('qa/release-profile-cleanup.mjs',candidate,'--committed-fixture');node('qa/
 node('qa/release-private-close.mjs',candidate);node('qa/release-private-close.mjs',candidate,'--last-window');
 run(process.execPath,[path.join(root,'qa/accounts-private-worker-source.mjs')],{ACIRA_PRIVATE_WORKER_SOURCE:candidate});
 const {packageWindows}=await import('./release-package.mjs'),portable=await packageWindows(candidate,{widevine:runtime});
-if(runtime)await fs.rm(runtime.runtime,{recursive:true,force:true}); // the extracted copy; the verified archive stays in the cache
+if(runtime)await (await import('./fetch-windows-widevine.mjs')).removeWindowsWidevineRuntime(runtime); // the extracted copy, as soon as it is in the package (the guard does it if a step fails first); the verified archive stays in the cache
 node('qa/release-fresh-profile.mjs',candidate,portable.output);
 for(const file of ['qa/release-package-launch.mjs','qa/release-packaged-filtering.mjs','qa/release-external-url.mjs'])node(file,portable.output);
 const reports=[];for(const name of await fs.readdir(path.join(root,'qa/artifacts'))){if(!/^release-package-\d+\.json$/.test(name))continue;const r=JSON.parse(await fs.readFile(path.join(root,'qa/artifacts',name),'utf8'));if(r.status==='PASS'&&r.sourceDigest===portable.sourceDigest)reports.push(name);}
@@ -50,3 +52,4 @@ const installer={output:installerDirectory,...JSON.parse(await fs.readFile(path.
 const result={version:pkg.version,commit,portable:product,installerDirectory:installer.output,installer:installer.installer,published:false,updateConfig:installer.updateConfig,nativeWindowsChecksPassed:true,installedIntoRealProfile:false,widevineQualified:false,
  ...(sealed?{widevine:{runtime:sealed.widevine.runtime.release,archiveSha256:sealed.widevine.runtime.archiveSha256,twin:portable.output,productionVmpSigned:true,signature:sealed.widevine.vmp.signature,authenticode:sealed.widevine.authenticode,sealedOpensAndCloses:true,playbackVerified:false}}:{})};
 await fs.writeFile(path.join(installer.output,'WINDOWS-BUILD-RESULT.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));
+});

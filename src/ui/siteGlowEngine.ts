@@ -8,9 +8,10 @@
  * old dark-mode line (10 ghost frames, up to 224 px ahead of the edge). A layer that never moves cannot do that.
  *
  * Inputs, from App: the active tab's `siteColor` (read by main from the page: site-colour.cjs), the setting `siteColor` (off|soft|rich), and
- * whether this window or tab keeps Acira's own colours (private, Tor, secured). Outputs: the layers, plus two things other glows read:
+ * whether this window or tab keeps Acira's own colours (private, Tor, secured). Outputs: the layers, plus the setting other glows read:
  *   <html data-site-color="off|soft|rich">   the setting, always set
- *   <html style="--site-rgb: r g b">         the active site's colour; absent when there is none (or Off, or a private window)
+ * (13.8, smoothness: the root no longer carries the site-rgb custom property. No stylesheet ever read it, and a custom property on the root is inherited by every element, so each
+ * new site colour (most tab switches and navigations) restyled the whole interface inside the switch's commit for nothing.)
  * Reduce motion: no fade. The washes are held to the finish's lightness band and gated at their peak (siteGlow.ts), so ink stays AA.
  */
 import { siteTintEnabled, type SiteTintBase } from './siteTint';
@@ -49,7 +50,6 @@ function ensureLayers() {
   return true;
 }
 const reducedMotion = () => app()?.getAttribute('data-reduced-motion') === 'true' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-const rgbTriple = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(' ');
 
 export interface SiteGlowInput { color?: string; level: SiteColorLevel; /** private/Tor window or tab, secured tab: Acira's own colours. */ blocked: boolean }
 /** Paint the glow for this input. Same colour and level as last time: nothing happens (a theme change alone re-derives at once, with no fade). */
@@ -69,7 +69,6 @@ export function syncSiteGlow(input: SiteGlowInput, options: { instant?: boolean 
   if (root.getAttribute('data-site-color') !== input.level) root.setAttribute('data-site-color', input.level);
   const wants = !input.blocked && input.level !== 'off' && !!input.color && /^#[\da-f]{6}$/i.test(input.color);
   const color = wants ? input.color!.toLowerCase() : '';
-  if (color) root.style.setProperty('--site-rgb', rgbTriple(color)); else root.style.removeProperty('--site-rgb');
   const key = color + '|' + input.level;
   if (!color && !painted) { lastKey = key; lastColour = ''; return; } // never had a glow: nothing to take away
   if (!ensureLayers()) return;

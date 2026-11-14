@@ -6,7 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {createPageFocus, interfaceKeepsFocus, INTERFACE_FOCUS_PROBE, ACTIVATE_DELAY_MS, RETRY_MS, RETRIES} = require('../desktop/page-focus.cjs');
 
-// Founder, 6 Nov: "I click a tab in the sidebar, go to another app, come back, press Space, and nothing happens". The keyboard stayed
+// Reported 6 Nov: "I click a tab in the sidebar, go to another app, come back, press Space, and nothing happens". The keyboard stayed
 // in the interface (reproduced on the Mac: pressing the row of the tab already on screen left getFocusedWebContents() on the
 // interface, and so did coming back from another app). Chrome puts it back on the page; so does Acira now, except while the interface
 // is being typed in or driven with the keyboard.
@@ -48,7 +48,10 @@ test('a press that chose a page: the tab on screen takes the keyboard at once', 
   w.focus.chose();
   await w.clk.drain();
   assert.deepEqual(w.calls.focus, [w.contents]);
-  assert.equal(w.calls.probe, 0, 'the first look does not ask the interface anything: the press itself just blurred any field');
+  // 13.8: the press itself blurred any field, so the first look asks only whether the person is typing for this very tab (a field entered
+  // after the press, before a busy main got to the look: tests/address-typing-wins.test.cjs), never the keep-focus question.
+  assert.equal(w.calls.probe, 1);
+  assert.ok(w.calls.source.includes('__aciraShownTab') && w.calls.source.includes('"tab-1"'), 'the typing question, for the tab on screen');
 });
 
 test('a tab still on its way to the screen: looks every 50 ms, up to 12 times, then stops', async () => {

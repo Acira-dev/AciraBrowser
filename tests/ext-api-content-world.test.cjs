@@ -10,7 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const {EventEmitter} = require('node:events');
-const {contentShim, createContentWorld, PREFIX, MAX_REQUEST} = require('../desktop/browser-services/ext-api/content/world.cjs');
+const {contentShim, createContentWorld, PREFIX, MAX_REQUEST, CLOSED_WHILE_PENDING} = require('../desktop/browser-services/ext-api/content/world.cjs');
 const relay = require('../desktop/browser-services/ext-api/content/relay.cjs');
 
 const ID = 'pkgejkfioihnchalojepdkefnpejomgn';
@@ -351,4 +351,154 @@ test('a private window\'s runtime (its own userData under Partitions) still find
   const world = createContentWorld({session: {}, userData: privateData, relays: {relayFor: () => ({call: async () => ({value: 1})})}, activeTab: {has: () => true}, hasPermission: () => true});
   assert.match(world.prepare(extension, fakePage(), 1_234_567), /^\(function contentShim\(/, 'a shim for the private session\'s page');
   assert.ok(fs.existsSync(path.join(folder, relay.PAGE)) && fs.existsSync(path.join(folder, relay.SCRIPT)));
+});
+
+// ---- 13.8, messages TO the world (Inspecta: its worker opens the panel with chrome.tabs.sendMessage(tab, TOGGLE_APP) and the injected bundle answers from chrome.runtime.onMessage).
+// This world is one more receiving context of the extension in the tab, so what it does with one message is Chromium's receiving side (extensions/renderer/api/messaging/
+// native_renderer_messaging_service.cc, one_time_message_handler.cc, messaging_util.cc; extensions/renderer/bindings/event_emitter.cc for how the listeners of an event run).
+function deliverScene(options = {}) {
+  const b = bridge(options);
+  const sandbox = {console: {debug() {}, error() { sandbox.reported.push([].slice.call(arguments).join(' ')); }}, reported: [], navigator: {language: 'en'}, Promise, JSON, Object, Array, String, Number, Error, TypeError, setTimeout, clearTimeout};
+  sandbox.self = sandbox;
+  const context = vm.createContext(sandbox);
+  vm.runInContext(b.world.prepare(b.extension, b.wc, 1_234_567), context);
+  b.wc.executeJavaScriptInIsolatedWorld = async (worldId, scripts) => { b.wc.executed.push([worldId, scripts[0].code]); return vm.runInContext(scripts[0].code, context); };
+  return {...b, run: code => vm.runInContext(code, context), context, sandbox};
+}
+const send = (d, message, details = {}) => d.world.deliver(d.extension, d.wc, {json: JSON.stringify(message === undefined ? null : message), url: 'chrome-extension://' + ID + '/service-worker.js', ...details});
+
+test('deliver: a listener answers at once, later (it returned true) or not at all; the sender is the extension (id, url, origin); no listener means this world is not a receiver', async () => {
+  const d = deliverScene();
+  assert.deepEqual(await send(d, {a: 1}), {delivered: false}, 'no listener: not a receiver (DispatchOnConnectToScriptContext), so the engine\'s own call is the whole answer');
+  d.run('globalThis.seen = []; chrome.runtime.onMessage.addListener(function (m, s, send) { seen.push([m, s]); if (m.type === "now") send({ok: m.type}); if (m.type === "later") { setTimeout(function () { send({late: true}); }, 15); return true; } })');
+  assert.deepEqual(await send(d, {type: 'now'}), {delivered: true, t: 'reply', v: '{"ok":"now"}'});
+  assert.deepEqual(await send(d, {type: 'later'}), {delivered: true, t: 'reply', v: '{"late":true}'});
+  assert.deepEqual(await send(d, {type: 'silent'}), {delivered: true, t: 'closed'}, 'every listener ran, none answered and none said it would: the port closes, no error');
+  assert.deepEqual(JSON.parse(d.run('JSON.stringify(seen[0])')), [{type: 'now'}, {id: ID, url: 'chrome-extension://' + ID + '/service-worker.js', origin: 'chrome-extension://' + ID}]);
+  assert.deepEqual(await send(d, {type: 'now'}, {url: 'https://evil.example/x'}), {delivered: true, t: 'reply', v: '{"ok":"now"}'});
+  assert.equal(JSON.parse(d.run('JSON.stringify(seen[seen.length - 1][1])')).url, 'chrome-extension://' + ID + '/', 'a sender url that is not one of the extension\'s own is not passed on');
+});
+
+test('deliver: every listener runs, the FIRST sendResponse wins and later ones are ignored, a listener that throws closes the channel with its error (Chromium: OnListenerThrowsError) unless a reply came first', async () => {
+  const d = deliverScene();
+  d.run('globalThis.order = []; chrome.runtime.onMessage.addListener(function (m, s, send) { order.push("one"); send({from: "one"}); });'
+    + 'chrome.runtime.onMessage.addListener(function (m, s, send) { order.push("two"); send({from: "two"}); return true; });');
+  assert.deepEqual(await send(d, 1), {delivered: true, t: 'reply', v: '{"from":"one"}'}, 'the first answer wins');
+  assert.deepEqual(JSON.parse(d.run('JSON.stringify(order)')), ['one', 'two'], 'and the second listener still ran, in order');
+  // a listener that throws first: the channel closes with the error's text, the rest still run
+  const t = deliverScene();
+  t.run('globalThis.order = []; chrome.runtime.onMessage.addListener(function () { order.push("a"); throw new TypeError("boom"); }); chrome.runtime.onMessage.addListener(function (m, s, send) { order.push("b"); send("late"); });');
+  assert.deepEqual(await send(t, 1), {delivered: true, t: 'error', e: 'Uncaught TypeError: boom'});
+  assert.deepEqual(JSON.parse(t.run('JSON.stringify(order)')), ['a', 'b']);
+  assert.match(t.sandbox.reported[0], /Error in event handler: TypeError: boom/);
+  // a reply first, then a throw: the reply stands
+  const r = deliverScene();
+  r.run('chrome.runtime.onMessage.addListener(function (m, s, send) { send("first"); }); chrome.runtime.onMessage.addListener(function () { throw new Error("after"); });');
+  assert.deepEqual(await send(r, 1), {delivered: true, t: 'reply', v: '"first"'});
+  // a thrown value that is not an Error carries no message
+  const n = deliverScene();
+  n.run('chrome.runtime.onMessage.addListener(function () { throw "plain text"; });');
+  assert.deepEqual(await send(n, 1), {delivered: true, t: 'error', e: 'Error message from listener couldn\'t be parsed or was empty.'});
+});
+
+test('deliver: a listener that returns a promise answers with what it resolves to or fails with what it rejects with; returning true keeps the channel open; a later answer after a first one is ignored', async () => {
+  const d = deliverScene();
+  d.run('chrome.runtime.onMessage.addListener(function (m) { if (m === "resolve") return new Promise(function (r) { setTimeout(function () { r({p: 1}); }, 10); }); if (m === "reject") return Promise.reject(new RangeError("nope")); if (m === "reject-plain") return Promise.reject(42); });');
+  assert.deepEqual(await send(d, 'resolve'), {delivered: true, t: 'reply', v: '{"p":1}'});
+  assert.deepEqual(await send(d, 'reject'), {delivered: true, t: 'error', e: 'Uncaught RangeError: nope'});
+  assert.deepEqual(await send(d, 'reject-plain'), {delivered: true, t: 'error', e: 'A runtime.onMessage listener\'s promise rejected without an Error'});
+  assert.deepEqual(await send(d, 'other'), {delivered: true, t: 'closed'}, 'a listener that returns nothing for this message');
+  // returned true, never answers: the delivery stays open until the page goes away
+  const h = deliverScene();
+  h.run('chrome.runtime.onMessage.addListener(function () { return true; });');
+  let done = false;
+  const pending = send(h, 'x').then(answer => { done = true; return answer; });
+  await settle(); await settle();
+  assert.equal(done, false, 'no answer yet: the channel is open (Chromium waits for the page to go away, no timer)');
+  h.wc.emit('did-navigate');
+  assert.deepEqual(await pending, {delivered: true, t: 'error', e: CLOSED_WHILE_PENDING}, 'the page navigated: extension_message_port.cc closes the channel with its "asynchronous response ... channel closed" text');
+});
+
+test('deliver: the answer is JSON as Chromium makes it: undefined is null, what JSON cannot hold is an error that also throws in the listener, 64 MiB is the limit', async () => {
+  const d = deliverScene();
+  d.run('chrome.runtime.onMessage.addListener(function (m, s, send) { if (m === "undef") send(); else if (m === "fn") { try { send(function () {}); } catch (e) { globalThis.caught = e instanceof TypeError ? e.message : "other"; } } else if (m === "circular") { var o = {}; o.o = o; send(o); } else if (m === "big") send("x".repeat(65 * 1024 * 1024)); else if (m === "date") send({d: new Date(0)}); });');
+  assert.deepEqual(await send(d, 'undef'), {delivered: true, t: 'reply', v: 'null'}, 'sendResponse() with nothing is null on the other side');
+  assert.deepEqual(await send(d, 'fn'), {delivered: true, t: 'error', e: 'Could not serialize message.'});
+  assert.equal(d.run('caught'), 'Could not serialize message.', 'the listener sees the TypeError');
+  assert.deepEqual(await send(d, 'circular'), {delivered: true, t: 'error', e: 'Could not serialize message.'});
+  assert.deepEqual(await send(d, 'big'), {delivered: true, t: 'error', e: 'Message exceeded maximum allowed size of 64MiB.'});
+  assert.deepEqual(await send(d, 'date'), {delivered: true, t: 'reply', v: '{"d":"1970-01-01T00:00:00.000Z"}'});
+  assert.deepEqual(await send(d, undefined), {delivered: true, t: 'closed'}, 'no message at all is null');
+  assert.deepEqual(await d.world.deliver(d.extension, d.wc, {json: 'x'.repeat(64 * 1024 * 1024 + 1)}), {delivered: false}, 'over 64 MiB: the engine refuses it first, nothing runs here');
+});
+
+test('deliver: frame targeting is Chromium\'s (CreateReceiverForTab): no frame or -1 is every frame (the main frame\'s world is one), 0 is the main frame, another frame or another document is not this world, both must agree', async () => {
+  const d = deliverScene();
+  d.wc.mainFrame = {name: 'main', processId: 5, routingId: 9};
+  d.run('chrome.runtime.onMessage.addListener(function (m, s, send) { send("here"); });');
+  const here = {delivered: true, t: 'reply', v: '"here"'}, no = {delivered: false};
+  assert.deepEqual(await send(d, 1), here);
+  assert.deepEqual(await send(d, 1, {frameId: -1}), here);
+  assert.deepEqual(await send(d, 1, {frameId: -7}), here, 'any negative id is -1');
+  assert.deepEqual(await send(d, 1, {frameId: 0}), here);
+  assert.deepEqual(await send(d, 1, {frameId: 3}), no, 'a subframe: this world is not in it');
+  assert.deepEqual(await send(d, 1, {documentId: '5:9'}), here, 'the main frame\'s document (the id Acira gives executeScript results)');
+  assert.deepEqual(await send(d, 1, {documentId: '5:10'}), no, 'another document');
+  assert.deepEqual(await send(d, 1, {documentId: '5:9', frameId: 0}), here);
+  assert.deepEqual(await send(d, 1, {documentId: '5:9', frameId: 3}), no, 'both given and they do not find the same frame');
+  assert.deepEqual(await send(d, 1, {documentId: ''}), here, 'an empty documentId is none');
+  assert.deepEqual(await send(d, 1, {documentId: 7}), here, 'only a string is a documentId');
+  d.wc.mainFrame.frameTreeNodeId = 5;
+  assert.deepEqual(await send(d, 1, {frameId: 5}), here, 'the main frame is also found by its frame tree node id (ExtensionApiFrameIdMap::GetRenderFrameHostById), as the engine\'s own call does');
+  assert.deepEqual(await send(d, 1, {frameId: 6}), no);
+  assert.deepEqual(await send(d, 1, {frameId: 5, documentId: '5:9'}), here);
+});
+
+test('deliver: nothing is delivered without a world, the click\'s grant, a live page or a listener; listeners can be removed; a second injection keeps them; an unusable answer is not a delivery', async () => {
+  const d = deliverScene();
+  d.run('globalThis.fn = function (m, s, send) { send(1); }; chrome.runtime.onMessage.addListener(fn); chrome.runtime.onMessage.addListener(fn)');
+  assert.equal(d.run('chrome.runtime.onMessage.hasListener(fn) && chrome.runtime.onMessage.hasListeners()'), true);
+  assert.deepEqual(await send(d, 1), {delivered: true, t: 'reply', v: '1'});
+  assert.equal(d.run('chrome.runtime.onMessage.addListener(fn); chrome.runtime.onMessage.removeListener(fn); chrome.runtime.onMessage.hasListeners()'), false, 'the same function twice is one listener');
+  assert.deepEqual(await send(d, 1), {delivered: false});
+  d.run('chrome.runtime.onMessage.addListener(fn)');
+  vm.runInContext(d.world.prepare(d.extension, d.wc, 1_234_567), d.context);
+  assert.deepEqual(await send(d, 1), {delivered: true, t: 'reply', v: '1'}, 'the world prepared again (a second click) keeps its listeners');
+  assert.deepEqual(await d.world.deliver({id: 'ponmlkjihgfedcbaponmlkjihgfedcba', manifest: {}}, d.wc, {json: '1'}), {delivered: false}, 'another extension has no world here');
+  assert.deepEqual(await d.world.deliver(d.extension, fakePage('https://example.com/a', 8), {json: '1'}), {delivered: false}, 'a page it never injected');
+  assert.deepEqual(await d.world.deliver(d.extension, d.wc, {}), {delivered: false}, 'no message text');
+  assert.deepEqual(await d.world.deliver(d.extension, d.wc, undefined), {delivered: false});
+  const gone = d.wc.isDestroyed;
+  d.wc.isDestroyed = () => true;
+  assert.deepEqual(await send(d, 1), {delivered: false}, 'a destroyed page');
+  d.wc.isDestroyed = gone;
+  d.revoke();
+  const before = d.wc.executed.length;
+  assert.deepEqual(await send(d, 1), {delivered: false}, 'the grant ended (another origin): nothing runs in the page');
+  assert.equal(d.wc.executed.length, before);
+  const e = deliverScene();
+  e.run('chrome.runtime.onMessage.addListener(function (m, s, send) { send(1); })');
+  e.wc.executeJavaScriptInIsolatedWorld = async () => { throw new Error('the world is gone'); };
+  assert.deepEqual(await send(e, 1), {delivered: false});
+  e.wc.executeJavaScriptInIsolatedWorld = async () => 'not json';
+  assert.deepEqual(await send(e, 1), {delivered: false});
+  e.wc.executeJavaScriptInIsolatedWorld = async () => undefined;
+  assert.deepEqual(await send(e, 1), {delivered: false});
+  e.wc.executeJavaScriptInIsolatedWorld = async () => JSON.stringify({created: true, t: 'something else'});
+  assert.deepEqual(await send(e, 1), {delivered: false});
+});
+
+test('deliver: a page that crashes or goes away ends every message still waiting for its answer, and only those', async () => {
+  const d = deliverScene();
+  d.run('chrome.runtime.onMessage.addListener(function (m) { return m === "wait" ? true : undefined; });');
+  const waiting = [send(d, 'wait'), send(d, 'wait')];
+  const answered = await send(d, 'quick');
+  assert.deepEqual(answered, {delivered: true, t: 'closed'});
+  await settle();
+  d.wc.emit('render-process-gone');
+  for (const answer of await Promise.all(waiting)) assert.deepEqual(answer, {delivered: true, t: 'error', e: CLOSED_WHILE_PENDING});
+  const later = send(d, 'wait'), second = send(d, 'wait');
+  await settle();
+  d.wc.emit('destroyed');
+  assert.deepEqual((await Promise.all([later, second])).map(answer => answer.t), ['error', 'error'], 'a destroyed page too');
 });

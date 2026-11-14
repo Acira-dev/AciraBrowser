@@ -165,6 +165,9 @@ function createIdentity({session,getWindow=()=>null,createWindow=defaultAuthWind
 
 function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
  const state=new Map();
+ /* The tab each open panel was opened for, by extension id ({tabId}; the host does not keep one: current() has none). Options are read for THAT tab, as Chromium's per-tab panels are: an extension that only has
+    per-tab options (an AI assistant extension: no manifest side_panel, setOptions({tabId, path, enabled}) on every click) had its open panel closed by its own next setOptions, which read the options without a tab and found no panel. */
+ const panelTabs=new Map();
  const of=id=>{let entry=state.get(id);if(!entry){entry={behavior:{openPanelOnActionClick:false},global:{},tabs:new Map()};state.set(id,entry);}return entry;};
  const manifestPath=id=>getExtension(id)?.manifest?.side_panel?.default_path;
  /** The page and switch for one tab: tab-specific options override the extension-wide ones, which start from the manifest. */
@@ -172,8 +175,11 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
  function urlFor(id,tabId){const found=options(id,tabId);if(!found.enabled||!found.path)return null;return extensionURL(id,found.path);}
  async function open(id,{windowId,tabId,sender}={}){
   if(!host)return failure(MESSAGES.panelHost);const url=urlFor(id,tabId);if(!url)return failure(MESSAGES.panelPath);
-  const extension=getExtension(id);let opened;const onClosed=details=>emit(id,'sidePanel.onClosed',{windowId:opened?.windowId??windowId??-1,path:details?.url||url});try{opened=await host.open({extensionId:id,name:String(extension?.name||extension?.manifest?.name||'Extension'),url,windowId,tabId,sender,onClosed});}catch(error){return failure(error?.message||MESSAGES.panelHost);}
+  const extension=getExtension(id);let opened;const mine={tabId};const onClosed=details=>{if(panelTabs.get(id)===mine)panelTabs.delete(id);emit(id,'sidePanel.onClosed',{windowId:opened?.windowId??windowId??-1,path:details?.url||url});};try{opened=await host.open({extensionId:id,name:String(extension?.name||extension?.manifest?.name||'Extension'),url,windowId,tabId,sender,onClosed});}catch(error){return failure(error?.message||MESSAGES.panelHost);}
   if(opened?.error)return failure(opened.error);
+  /* Already showing: Chromium's SidePanelCoordinator::Show does nothing then ("If the side panel is already showing, cancel all loads and do nothing"), so there is no new panel and no onOpened (ExtensionSidePanelCoordinator tells the extension once, on_opened_dispatched_). */
+  if(opened?.reused===true){const known=panelTabs.get(id);if(known&&tabId!==undefined)known.tabId=tabId;return undefined;}
+  panelTabs.set(id,mine);
   emit(id,'sidePanel.onOpened',{windowId:opened?.windowId??windowId??-1,path:extensionURL(id,options(id,tabId).path),...(tabId!==undefined?{tabId}:{})});
   return undefined;
  }
@@ -185,7 +191,7 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
    const entry=of(id),target=input.tabId!==undefined?(entry.tabs.get(pageOf(input.tabId))||{}):entry.global,tabKey=input.tabId!==undefined?pageOf(input.tabId):undefined;
    if(input.path!==undefined)target.path=input.path;if(input.enabled!==undefined)target.enabled=input.enabled;
    if(input.tabId!==undefined){if(entry.tabs.size>=1000&&!entry.tabs.has(tabKey))entry.tabs.delete(entry.tabs.keys().next().value);entry.tabs.set(tabKey,target);}
-   const now=host?.current?.(id);if(now&&!urlFor(id,now.tabId))void host.close({extensionId:id});else if(now&&input.path!==undefined){const url=urlFor(id,now.tabId);if(url&&url!==now.url)host.navigate?.({extensionId:id,url});}
+   const now=host?.current?.(id),at=now?(now.tabId??panelTabs.get(id)?.tabId):undefined;if(now&&!urlFor(id,at))void host.close({extensionId:id});else if(now&&input.path!==undefined){const url=urlFor(id,at);if(url&&url!==now.url)host.navigate?.({extensionId:id,url});}
    return undefined;
   },
   getOptions(event,input){const id=event.extension.id,tabId=input?.tabId,found=options(id,tabId);return {...(found.path!==undefined?{path:found.path}:{}),enabled:found.enabled,...(tabId!==undefined?{tabId}:{})};},
@@ -200,7 +206,7 @@ function createSidePanel({getExtension,host,emit,pageOf=tabId=>tabId}){
    if(host.current?.(id)){void host.close({extensionId:id});return true;}
    void open(id,{tabId,sender});return true;
   },
-  forget(id){state.delete(id);}
+  forget(id){state.delete(id);panelTabs.delete(id);}
  };
 }
 
@@ -510,8 +516,19 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',sourc
  let dnr=null;try{dnr=require('./dnr-host.cjs').attachDnrHost({session,router,userData,storeKey,emit,getExtension,log:(...args)=>console.warn('[dnr]',...args)});}catch(error){console.warn('[dnr] not attached',error?.message);}
  // Work packages (ext-api/*.cjs, docs/launch/EXTENSION_WORK_PACKAGES.md): installed last, so a package's handler replaces any above.
  let packages={packages:[],forget(){},dispose(){}};
- try{const extApi=require('./ext-api/index.cjs');packages=extApi.installPackages({session,runtime,router,userData,storeKey,sourceProfileId,getWindow,getExtension,emit,dialog,t,permissions,log:(...args)=>console.warn(...args)},extApiDir?{packages:extApi.loadPackages({dir:extApiDir})}:{});}
- catch(error){console.warn('[ext-api] packages not installed',error?.message);}
+ try{
+  const extApi=require('./ext-api/index.cjs'),list=extApiDir?extApi.loadPackages({dir:extApiDir}):extApi.loadPackages();
+  packages=extApi.installPackages({session,runtime,router,userData,storeKey,sourceProfileId,getWindow,getExtension,emit,dialog,t,permissions,log:(...args)=>console.warn(...args)},{packages:list});
+  /* ANY package that did not load or install is said LOUDLY, on stderr and in the local trace (<user data>/logs/extension-windows.log): one line per profile session. A build whose bundle bound ext-api/runtime.cjs to
+     the wrong module once left all 22 packages out of the packaged Mac and Windows apps without a word. A clean session writes "ext-api packages installed <profile> <n>"; a packaged launch check looks for that line. */
+  const problems=[...(list.problems||[]).map(item=>`${item.file}: ${item.message}`),...(packages.failed||[]).map(item=>`${item.name}: ${item.message}`)],wanted=list.filter(item=>item.install).length;
+  try{const trace=require('./ext-trace.cjs').trace;if(problems.length)trace('ext-api packages FAILED',storeKey,`${packages.packages.length} of ${wanted} installed`,problems.join(' | '));else trace('ext-api packages installed',storeKey,packages.packages.length);}catch{}
+  if(problems.length)console.error(`[ext-api] ${problems.length} package problem(s) on ${storeKey}, ${packages.packages.length} of ${wanted} installed: ${problems.join(' | ')}`);
+ }
+ catch(error){
+  console.error('[ext-api] packages not installed: '+(error&&error.message||error));
+  try{require('./ext-trace.cjs').trace('ext-api packages FAILED',storeKey,'0 installed',error&&error.message||error);}catch{}
+ }
  // The page preload is only registered while some extension of this profile may run user scripts, so other profiles pay nothing per page.
  let preloadId=null;
  const api={

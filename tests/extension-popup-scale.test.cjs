@@ -19,6 +19,7 @@ const {EventEmitter} = require('node:events');
 const {laidOutIn, fitStep, METRICS_SCRIPT} = require('../desktop/browser-services/extension-popup-fit.cjs');
 const {ExtensionPopup} = require('../desktop/browser-services/extension-popup-window.cjs');
 const {fitExtensionAction} = require('../desktop/browser-services/extension-action-sizing.cjs');
+const {isFollowScript} = require('../desktop/browser-services/extension-popup-follow.cjs');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const ID = 'nngceckbapebfimnlniiiahkandclblb';
@@ -55,6 +56,7 @@ class FakePage extends EventEmitter {
   catchUp() { this.layOut(); this.report(); }
   // What a script in the page reads: the page in the viewport it has now (whatever the view's bounds are).
   async executeJavaScript(code) {
+    if (isFollowScript(code)) return null;   // the follower's own look at the page (extension-popup-follow.cjs): it reads nothing these tests measure
     const m = this.layout(this.viewport);
     if (this.whileMeasuring) this.whileMeasuring();   // what happens in the window while the script runs (the page's ask arriving)
     this.measures.push({viewport: {...this.viewport}, code: code === METRICS_SCRIPT ? 'fit' : 'other'});

@@ -28,16 +28,51 @@ export function dayOf(value: string | number | undefined, now = new Date()) {
   return { label: days <= 0 ? t('lib.today') : days === 1 ? t('lib.yesterday') : dayFormat().format(date), key: startOfDay(date) };
 }
 
-/** Bookmarks that show on the bookmarks bar: the ones at the top level (starred pages) and the pages inside the bar folder. */
+/** What the bookmarks bar shows, in order: Chromium's bookmark bar folder as Acira keeps it (the list chrome.bookmarks calls "1",
+ *  desktop/browser-services/extension-bookmarks.cjs): the top-level pages (starred pages) and, where the folder named "Bookmarks bar"
+ *  sits among them, that folder's children, pages AND folders (Chromium's BookmarkBarView makes a button for every child of the bar
+ *  folder, a folder one opening its menu). The other top-level folders ("Other bookmarks", "Mobile bookmarks", a folder made at the top
+ *  level) are Chromium's Other bookmarks, which its bar does not list among its buttons; they stay off the bar. */
 export function barBookmarks(nodes: BookmarkNode[], profileId: string): BookmarkNode[] {
   const mine = nodes.filter(node => node.browserProfileId === profileId);
   const kids = (parent: string | null) => mine.filter(node => (node.parentId ?? null) === parent).sort((a, b) => a.position - b.position);
   const bar = mine.find(node => !node.url && !node.parentId && node.title.trim().toLowerCase() === 'bookmarks bar');
   const seen = new Set<string>(), out: BookmarkNode[] = [];
-  // A Tor bookmark is its own entry beside an ordinary one of the same page.
-  const add = (node: BookmarkNode) => { const key = (node.tor ? 'tor:' : '') + node.url; if (node.url && !seen.has(key)) { seen.add(key); out.push(node); } };
+  // A page shows once (a Tor bookmark is its own entry beside an ordinary one of the same page); a folder is its own entry.
+  const add = (node: BookmarkNode) => { const key = node.url ? (node.tor ? 'tor:' : '') + node.url : 'folder:' + node.id; if (!seen.has(key)) { seen.add(key); out.push(node); } };
   for (const node of kids(null)) { if (node.url) add(node); else if (node.id === bar?.id) kids(node.id).forEach(add); }
   return out;
+}
+
+/** Where a drop on the bookmarks bar lands (Chromium's BookmarkBarView::CalculateDropLocation): `buttons` are the bar's visible
+ *  buttons in order, each with its leading edge (left, or right in a right-to-left window) and width. Over a page the half decides
+ *  before or after it; over a folder the 5px at either edge (views::kDropBetweenPixels) mean before or after it and the rest means
+ *  INTO it. Past the last visible button (or over the overflow chevron) it lands after them. */
+export const DROP_BETWEEN_PIXELS = 5;
+export function barDropLocation(buttons: { lead: number; width: number; folder: boolean }[], x: number, rtl = false): { index: number; on: boolean } {
+  for (let index = 0; index < buttons.length; index++) {
+    const { lead, width, folder } = buttons[index], offset = rtl ? lead - x : x - lead;
+    if (offset >= width) continue;
+    if (folder) return offset <= DROP_BETWEEN_PIXELS ? { index, on: false } : offset < width - DROP_BETWEEN_PIXELS ? { index, on: true } : { index: index + 1, on: false };
+    return { index: offset < width / 2 ? index : index + 1, on: false };
+  }
+  return { index: buttons.length, on: false };
+}
+
+/** Where an item dropped before bar entry `at` (or at the end, `at` past the last) goes, as bookmark.move and bookmark.add take it.
+ *  The entry's own folder and its place there; the end of the bar is the end of the Bookmarks bar folder (made when missing).
+ *  A folder never lands at the top level, where it would leave the bar (barBookmarks): beside a top-level page it goes to the start
+ *  of the Bookmarks bar folder when that page is above the folder, to its end when below. */
+export function barPlace(nodes: BookmarkNode[], profileId: string, entries: Pick<BookmarkNode, 'id' | 'parentId'>[], at: number, moving?: Pick<BookmarkNode, 'id' | 'url'>): { parentId: string | null; index: number } {
+  const next = entries[at], end = { parentId: 'bookmarks-bar', index: 99999 };
+  if (!next) return end;
+  const mine = nodes.filter(node => node.browserProfileId === profileId), parentId = next.parentId ?? null;
+  if (moving && !moving.url && parentId === null) {
+    const bar = mine.find(node => !node.url && !node.parentId && node.title.trim().toLowerCase() === 'bookmarks bar'), page = mine.find(node => node.id === next.id);
+    return bar && page && page.position < bar.position ? { parentId: bar.id, index: 0 } : end;
+  }
+  const siblings = mine.filter(node => (node.parentId ?? null) === parentId && node.id !== moving?.id).sort((a, b) => a.position - b.position);
+  return { parentId, index: Math.max(0, siblings.findIndex(node => node.id === next.id)) };
 }
 
 const trackingParam = /^(utm_|fbclid$|gclid$|dclid$|msclkid$|mc_eid$|mc_cid$|igshid$|ref$|ref_src$|_hsenc$|_hsmi$)/i;

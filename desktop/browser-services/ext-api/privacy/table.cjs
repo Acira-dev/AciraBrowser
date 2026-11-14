@@ -1,9 +1,11 @@
-'use strict';
 // What chrome.privacy.network.* and chrome.privacy.services.* really are in Acira (docs/launch/EXTENSION_API_COVERAGE.md has the census).
-// An extension can take control of a setting only where Acira has the setting AND the extension's value does not weaken a default
-// (the address/card autofill settings are the exception that proves it: Acira has no such feature, so "off" is always true and may be held):
+// An extension's value is kept and answered the way Chromium does it (chrome/browser/extensions/api/preference/preference_api.cc:
+// SetPreferenceFunction stores any valid value as the extension's controlled pref, GetPreferenceFunction answers the effective value and the
+// levelOfControl, extensions/browser/extension_pref_value_map.cc picks the winner). What Acira then APPLIES is its own:
 //   webRTCIPHandlingPolicy        controllable, never looser than Acira's own floor (default_public_interface_only)
-//   passwordSavingEnabled         controllable towards "off" (a password manager extension switches the built-in offer off)
+//   passwordSavingEnabled         the extension's value is kept and answered; a winning false switches Acira's own save offer off (a password
+//                                 manager made the default); a true never switches the offer back on for someone who turned it off in Settings
+//   autofill / address / card     Acira has no address or card autofill: the extension's value is kept and answered, and changes nothing
 // Everything else Acira does not have, or fixes, so Chrome's answer is "not_controllable" with the value Acira really has. Nothing is
 // pretended: an extension that sets one of those gets a successful call and no effect, and get() says why (levelOfControl).
 const chromeSettings=require('../../extension-chrome-settings.cjs');
@@ -26,18 +28,19 @@ const FIXED=[
  ['services.translationServiceEnabled',false,'Acira has no translation service.']
 ];
 
-/** Settings whose real value in Acira is "off" because the feature does not exist here (no address or card autofill). An extension may hold the setting at
- *  false, exactly as it does in Chrome, and then reads back controlled_by_this_extension: password managers check that to know they are the default
- *  (Bitwarden's browserAutofillSettingsOverridden needs all three of address, card and password saving to say so). True is never used: there is nothing to switch on. */
-const OFF_ONLY=[
- ['services.autofillEnabled','Acira has no address or card autofill.'],
- ['services.autofillAddressEnabled','Acira has no address autofill.'],
- ['services.autofillCreditCardEnabled','Acira has no card autofill.']
+/** Settings for a feature Acira does not have (no address or card autofill): Acira's own value is "off". An extension may hold either value, as in Chrome
+ *  (Bitwarden's "default password manager" switch sets all three of address, card and password saving to false, and back to true when the person turns it
+ *  off; its check reads levelOfControl controlled_by_this_extension and value false). `also`: the deprecated autofillEnabled sets the card and address
+ *  prefs too (SetPreferenceFunction::Run, kAutofillEnabledDeprecated). */
+const NO_FEATURE=[
+ ['services.autofillEnabled','Acira has no address or card autofill.',['services.autofillCreditCardEnabled','services.autofillAddressEnabled']],
+ ['services.autofillAddressEnabled','Acira has no address autofill.',[]],
+ ['services.autofillCreditCardEnabled','Acira has no card autofill.',[]]
 ];
 
 function definitions(){
  const out=[];
- for(const [name] of OFF_ONLY)out.push({path:`privacy.${name}`,key:`privacy.${name}`,validate:boolean(name),accept:value=>value===false,resolve:()=>false});
+ for(const [name,,also] of NO_FEATURE)out.push({path:`privacy.${name}`,key:`privacy.${name}`,validate:boolean(name),also:also.map(item=>`privacy.${item}`),resolve:winner=>(winner===undefined?false:winner)});
  for(const [name,value] of FIXED)out.push({path:`privacy.${name}`,key:`privacy.${name}`,validate:boolean(name),fixed:true,resolve:()=>value});
  out.push({
   path:'privacy.network.webRTCIPHandlingPolicy',key:'privacy.network.webRTCIPHandlingPolicy',
@@ -50,9 +53,9 @@ function definitions(){
  out.push({
   path:'privacy.services.passwordSavingEnabled',key:'privacy.services.passwordSavingEnabled',
   validate:boolean('passwordSavingEnabled'),
-  // "off" is honoured; "on" means "as the person set it" (an extension cannot turn the offer back on for someone who switched it off)
-  accept:value=>value===false||chromeSettings.fact('passwordsEnabled')!==false,
-  resolve:winner=>(winner===false?false:chromeSettings.fact('passwordsEnabled')!==false)
+  // The extension's value is the setting's value, as in Chrome (an extension-controlled pref outranks the person's). Acira applies only a winning
+  // false (extension-chrome-settings.cjs passwordSavingOffByExtension, read by the save offer); the offer still needs the person's own switch on.
+  resolve:winner=>(winner===undefined?chromeSettings.fact('passwordsEnabled')!==false:winner)
  });
  return out;
 }
@@ -61,4 +64,4 @@ function baseFor(session){
  return choice&&choice.mode==='fixed_servers'?'disable_non_proxied_udp':FLOOR;
 }
 
-module.exports={definitions,FIXED,OFF_ONLY,POLICIES,FLOOR};
+module.exports={definitions,FIXED,NO_FEATURE,POLICIES,FLOOR};

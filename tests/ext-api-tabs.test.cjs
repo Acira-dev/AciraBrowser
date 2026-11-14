@@ -524,3 +524,107 @@ test('Acira\'s tab ids are unique per window only (every window starts with tab-
   assert.notEqual(tabs[0].id, tabs[1].id);
   assert.deepEqual(tabs.map(tab => tab.windowId), [one.id, two.id]);
 });
+
+// 13.8 (Inspecta): its worker opens the panel with chrome.tabs.sendMessage(tab, TOGGLE_APP); the script it injected after the toolbar click lives in a world Acira made, a receiving context
+// Chromium's own call does not know. One tabs.sendMessage goes to EVERY context that listens: the engine's call is always made (declared content scripts, every targeted frame), the main
+// process is asked at the same time to deliver to that world, and the two are joined as the receivers of one Chromium channel are (one_time_message_handler.cc, message_service.cc,
+// extension_message_port.cc): the first reply wins, an error closes the channel, nobody listening is "Receiving end does not exist", every port closed with no answer is undefined.
+const NO_RECEIVER = 'Could not establish connection. Receiving end does not exist.';
+function mergeScene({permissions = ['activeTab', 'tabs']} = {}) {
+  const calls = [], asked = [], engineAnswers = [], shimAnswers = [];
+  const native = {tabs: {sendMessage(tabId, message, ...rest) { calls.push([tabId, message, ...rest]); const next = engineAnswers.shift(); if (typeof next === 'function') return next(); return next instanceof Error ? Promise.reject(next) : Promise.resolve(next); }}};
+  const s = scene({native, manifest: {manifest_version: 3, permissions}});
+  s.rig.handlers.set('scripting.activeTab.deliver', {callback: (event, details) => { asked.push(plain(details)); const next = shimAnswers.shift(); if (typeof next === 'function') return next(); if (next instanceof Error) throw next; return next; }, extensionContext: true});
+  return {...s, calls, asked, engineAnswers, shimAnswers, tabs: s.rig.world.chrome.tabs, id: s.wcOf(s.one, s.docs).id};
+}
+const later = (ms, value) => () => new Promise(resolve => setTimeout(resolve, ms, value));
+const laterError = (ms, error) => () => new Promise((resolve, reject) => setTimeout(reject, ms, error));
+
+test('sendMessage: the engine\'s call is always made, the main process is asked in parallel, and the FIRST reply of either wins', async () => {
+  const m = mergeScene();
+  m.engineAnswers.push({declared: true}); m.shimAnswers.push({delivered: true, t: 'reply', v: '{"injected":true}'});
+  const first = plain(await m.tabs.sendMessage(m.id, {type: 'ping'}));
+  assert.ok(first.declared || first.injected, 'one of the two answers');
+  assert.equal(m.calls.length, 1, 'the engine\'s own call was made');
+  assert.equal(m.asked.length, 1, 'and the main process was asked too');
+  assert.deepEqual(m.asked[0], {tabId: m.id, json: '{"type":"ping"}', url: m.asked[0].url}, 'the message as Chromium serializes it, and the extension\'s tab id');
+  // the injected world answers first (the engine is slow): its reply wins and the engine's late one is dropped
+  m.engineAnswers.push(later(40, {declared: 'late'})); m.shimAnswers.push({delivered: true, t: 'reply', v: '"injected first"'});
+  assert.equal(await m.tabs.sendMessage(m.id, 'x'), 'injected first');
+  // the engine answers first (the main process is slow)
+  m.engineAnswers.push({declared: 'first'}); m.shimAnswers.push(later(40, {delivered: true, t: 'reply', v: '"injected late"'}));
+  assert.deepEqual(plain(await m.tabs.sendMessage(m.id, 'y')), {declared: 'first'});
+  // a reply of null is a reply
+  m.engineAnswers.push(null); m.shimAnswers.push(later(20, {delivered: true, t: 'reply', v: '"late"'}));
+  assert.equal(await m.tabs.sendMessage(m.id, 'z'), null);
+});
+
+test('sendMessage: the engine that answers nothing (every port closed) waits for the injected world, which may still reply; nobody answering is undefined; nobody listening is "Receiving end does not exist"', async () => {
+  const m = mergeScene();
+  // the declared script's port closed with no answer (undefined), the injected world replies: its reply wins (the channel was still open)
+  m.engineAnswers.push(undefined); m.shimAnswers.push(later(25, {delivered: true, t: 'reply', v: '{"opened":true}'}));
+  assert.deepEqual(plain(await m.tabs.sendMessage(m.id, 'toggle')), {opened: true});
+  // only the injected world exists: the engine says nobody listens
+  m.engineAnswers.push(new Error(NO_RECEIVER)); m.shimAnswers.push({delivered: true, t: 'reply', v: '{"only":"injected"}'});
+  assert.deepEqual(plain(await m.tabs.sendMessage(m.id, 'a')), {only: 'injected'}, 'the engine has no receiver, the injected world has: its answer is the answer');
+  m.engineAnswers.push(new Error(NO_RECEIVER)); m.shimAnswers.push({delivered: true, t: 'closed'});
+  assert.equal(await m.tabs.sendMessage(m.id, 'b'), undefined, 'the injected world had a listener that did not answer: the port closed, no error');
+  // the engine has listeners that did not answer and the world has none
+  m.engineAnswers.push(undefined); m.shimAnswers.push({delivered: false});
+  assert.equal(await m.tabs.sendMessage(m.id, 'c'), undefined);
+  m.engineAnswers.push(undefined); m.shimAnswers.push({delivered: true, t: 'closed'});
+  assert.equal(await m.tabs.sendMessage(m.id, 'd'), undefined, 'both closed without an answer');
+  // nobody listens anywhere
+  m.engineAnswers.push(new Error(NO_RECEIVER)); m.shimAnswers.push({delivered: false});
+  await assert.rejects(m.tabs.sendMessage(m.id, 'e'), {message: NO_RECEIVER});
+  m.engineAnswers.push(new Error(NO_RECEIVER)); m.shimAnswers.push(undefined);
+  await assert.rejects(m.tabs.sendMessage(m.id, 'f'), {message: NO_RECEIVER});
+  m.engineAnswers.push(new Error(NO_RECEIVER)); m.shimAnswers.push(new Error('the main process failed'));
+  await assert.rejects(m.tabs.sendMessage(m.id, 'g'), {message: NO_RECEIVER}, 'a failure of the main process is "nobody there", the engine\'s own answer stands');
+});
+
+test('sendMessage: an error closes the channel for everyone (a listener threw, a promise rejected); a reply that came first stays; a waiting side does not hold the other\'s reply back', async () => {
+  const m = mergeScene();
+  m.engineAnswers.push(new Error('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received'));
+  m.shimAnswers.push(later(30, {delivered: true, t: 'reply', v: '"too late"'}));
+  await assert.rejects(m.tabs.sendMessage(m.id, 'a'), {message: /asynchronous response/});
+  m.engineAnswers.push(later(30, {declared: 1})); m.shimAnswers.push({delivered: true, t: 'error', e: 'Uncaught Error: injected listener threw'});
+  await assert.rejects(m.tabs.sendMessage(m.id, 'b'), {message: 'Uncaught Error: injected listener threw'});
+  m.engineAnswers.push(laterError(40, new Error('Uncaught Error: declared listener threw'))); m.shimAnswers.push({delivered: true, t: 'reply', v: '"reply first"'});
+  assert.equal(await m.tabs.sendMessage(m.id, 'c'), 'reply first', 'the reply reached the channel before the error: the first one counts');
+  // a side that never answers (a listener returned true) does not hold the other side's reply back
+  m.engineAnswers.push(() => new Promise(() => {})); m.shimAnswers.push({delivered: true, t: 'reply', v: '"enough"'});
+  assert.equal(await m.tabs.sendMessage(m.id, 'd'), 'enough');
+  m.engineAnswers.push({declared: 'enough'}); m.shimAnswers.push(() => new Promise(() => {}));
+  assert.deepEqual(plain(await m.tabs.sendMessage(m.id, 'e')), {declared: 'enough'});
+});
+
+test('sendMessage: the main process is never asked for an invalid call, a missing tab, an extension without activeTab or a message JSON cannot hold; frameId and documentId go along', async () => {
+  const m = mergeScene();
+  // an invalid invocation: the engine refuses it at once (it throws before any message is sent), nothing is delivered
+  const throwing = scene({native: {tabs: {sendMessage() { throw new TypeError('Error in invocation of tabs.sendMessage(integer tabId, any message, optional object options, optional function callback): bad'); }}}, manifest: {manifest_version: 3, permissions: ['activeTab', 'tabs']}});
+  let askedWhenInvalid = 0;
+  throwing.rig.handlers.set('scripting.activeTab.deliver', {callback: () => { askedWhenInvalid++; return {delivered: true, t: 'reply', v: '1'}; }, extensionContext: true});
+  await assert.rejects(throwing.rig.world.chrome.tabs.sendMessage(throwing.wcOf(throwing.one, throwing.docs).id, 'x'), {message: /Error in invocation of tabs\.sendMessage/});
+  assert.equal(askedWhenInvalid, 0, 'a call the engine refused is not delivered anywhere');
+  // a circular message cannot be serialized: the engine refuses it; here nothing is asked either
+  const circular = {}; circular.self = circular;
+  m.engineAnswers.push({ok: true});
+  await m.tabs.sendMessage(m.id, circular).catch(() => {});
+  assert.equal(m.asked.length, 0, 'a message JSON cannot hold is not delivered');
+  m.engineAnswers.push({ok: 1}); m.shimAnswers.push({delivered: false});
+  await m.tabs.sendMessage(m.id, 'frame', {frameId: 3});
+  await m.tabs.sendMessage(m.id, 'doc', {documentId: 'abc'}).catch(() => {});
+  await m.tabs.sendMessage(m.id, 'both', {frameId: 0, documentId: 'abc'}).catch(() => {});
+  assert.deepEqual(m.asked.map(a => [a.frameId, a.documentId]), [[3, undefined], [undefined, 'abc'], [0, 'abc']], 'the main process decides what is in the frame it targets');
+  assert.equal(m.calls.find(call => call[1] === 'frame')[2].frameId, 3, 'and the engine got the options untouched');
+  // an extension without activeTab never asks
+  const plainExt = mergeScene({permissions: ['tabs']});
+  plainExt.engineAnswers.push({engine: 'x'});
+  assert.deepEqual(plain(await plainExt.tabs.sendMessage(plainExt.id, 'x')), {engine: 'x'});
+  assert.equal(plainExt.asked.length, 0);
+  // a tab with no page: the engine's own error, as before
+  const unknown = mergeScene();
+  await assert.rejects(unknown.tabs.sendMessage(424242, 'x'), {message: NO_RECEIVER});
+  assert.equal(unknown.asked.length, 0);
+});

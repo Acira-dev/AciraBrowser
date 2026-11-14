@@ -54,7 +54,7 @@ test('main asks with the in-window card and recovers Stop, Reload, the reload sh
  assert.ok(main.includes("pageHang.watch(wc,{host:()=>"),'every page is watched');
  assert.ok(main.includes('reload();pageHang.recover(wc,reload);')&&main.includes('reload();pageHang.recover(page,reload);'),'Reload, button and shortcut');
  assert.ok(main.includes("wc.stop();browserEvent(tab.id,{loading:false});pageHang.recover(wc,null);"),'Stop');
- assert.ok(main.includes("if(!first){const load=entry.loads=(entry.loads||0)+1;pageHang.recover(wc,()=>{if(entry.loads===load&&pages.get(tab.id)===entry){entry.loadedURL=tab.url;"),'a new address (not the first load of a tab), unless a newer one started; the stopped load had put the old address back');
+ assert.ok(main.includes("if(!first){const load=entry.loads=(entry.loads||0)+1;pageHang.recover(wc,()=>{if(entry.loads===load&&pages.get(tab.id)===entry){entry.loadedURL=targetURL;"),'a new address (not the first load of a tab), unless a newer one started; the stopped load had put the old address back');
 });
 
 test('a page waiting on its own alert() card is blocked on purpose: Stop, Reload or a new address never end it',async()=>{

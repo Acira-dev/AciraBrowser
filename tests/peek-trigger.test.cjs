@@ -10,7 +10,7 @@ function load({mainFrame=true}={}){
  class Area extends Anchor{}
  const window={addEventListener(name,fn,options){(listeners[name]??=[]).push({fn,options});}};
  const timers=[];
- const sandbox={document:{addEventListener(){},querySelectorAll:()=>[],querySelector:()=>null,pointerLockElement:null},require:name=>{if(name==='electron')return {ipcRenderer:{send:(...args)=>sent.push(JSON.parse(JSON.stringify(args))),on:(channel,fn)=>{handlers[channel]=fn;}}};throw new Error(name);},window,process:{isMainFrame:mainFrame},HTMLAnchorElement:Anchor,HTMLAreaElement:Area,Date,Math,Number,String,Object,Set,Array,
+ const sandbox={document:{addEventListener(){},querySelectorAll:()=>[],querySelector:()=>null,pointerLockElement:null},require:name=>{if(name==='electron')return {ipcRenderer:{send:(...args)=>{if(!String(args[0]).startsWith('acira:key-ack'))sent.push(JSON.parse(JSON.stringify(args)));},on:(channel,fn)=>{handlers[channel]=fn;}}};throw new Error(name);},window,process:{isMainFrame:mainFrame},HTMLAnchorElement:Anchor,HTMLAreaElement:Area,Date,Math,Number,String,Object,Set,Array,
   setTimeout:(fn,ms)=>{timers.push({fn,ms,live:true});return timers.length-1;},clearTimeout:id=>{if(timers[id])timers[id].live=false;}};
  vm.createContext(sandbox);
  vm.runInContext(fs.readFileSync(path.join(__dirname,'../desktop/page-input-preload.cjs'),'utf8'),sandbox);

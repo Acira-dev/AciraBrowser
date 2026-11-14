@@ -119,6 +119,41 @@ test('request: manifest-only, already-held resolves true without asking, a "no" 
   assert.equal(t.prompts.length, 2, 'and not asked again');
 });
 
+// Proton VPN 1.3.6's manifest and what its popup and onboarding page ask for (Chrome Web Store jplgfhpmjnbigmhklmmbgecoobifkmpa).
+const PROTON = {manifest_version: 3, name: 'Proton VPN: Fast & Secure', version: '1.3.6',
+  host_permissions: ['https://*/', 'http://*/', 'ftp://*/', 'wss://*/', 'ws://*/'],
+  permissions: ['idle', 'notifications', 'privacy', 'proxy', 'scripting', 'storage', 'tabs', 'webRequest', 'webRequestAuthProvider']};
+const PROTON_ASKS = {permissions: ['proxy'], origins: ['http://*/*', 'https://*/*', 'ftp://*/*', 'ws://*/*', 'wss://*/*', 'https://account.protonvpn.com/*', 'https://account.proton.me/*']};
+
+test('Proton VPN\'s setup: everything it asks is required and held, so contains is true and request answers true at once (no prompt, no onAdded)', async () => {
+  const t = setup({ext: {id: ID, manifest: PROTON}, prompt: async () => { throw new Error('Chromium shows no prompt here'); }});
+  assert.equal(await t.call('permissions.contains', PROTON_ASKS), true);
+  // One press of its popup's button sends three requests (it adds a click listener at each re-render).
+  assert.deepEqual(await Promise.all([1, 2, 3].map(() => t.call('permissions.request', PROTON_ASKS))), [true, true, true]);
+  assert.equal(t.prompts.length, 0);
+  assert.deepEqual(t.sent, []);
+  assert.deepEqual(await t.call('permissions.getAll'), {permissions: PROTON.permissions, origins: ['https://*/*', 'http://*/*', 'ftp://*/*', 'wss://*/*', 'ws://*/*']},
+    'getAll gives the patterns as Chromium holds them');
+});
+
+test('an optional host pattern written with a "/" path: Deny answers false and changes nothing; one Allow grants, onAdded tells, contains sees it', async () => {
+  const optional = {manifest_version: 3, name: 'Root path', version: '1', permissions: ['storage'], optional_permissions: ['history'], optional_host_permissions: ['https://*/']};
+  const answers = [false, true];
+  const t = setup({ext: {id: ID, manifest: optional}, prompt: async () => answers.shift()});
+  const ask = {permissions: ['history'], origins: ['https://*/*']};
+  assert.equal(await t.call('permissions.contains', ask), false);
+  assert.equal(await t.call('permissions.request', ask), false, 'Deny');
+  assert.deepEqual(t.sent, [], 'no onAdded for a refusal');
+  assert.equal(await t.call('permissions.contains', ask), false);
+  assert.equal(await t.call('permissions.request', ask), true, 'one Allow is enough');
+  assert.equal(t.prompts.length, 2);
+  assert.deepEqual(t.sent, [[ID, 'permissions.onAdded', {permissions: ['history'], origins: ['https://*/*']}]]);
+  assert.equal(await t.call('permissions.contains', ask), true);
+  assert.equal(await t.call('permissions.contains', {origins: ['https://www.example.com/deep/path/*']}), true);
+  assert.equal(await t.call('permissions.request', ask), true, 'held now');
+  assert.equal(t.prompts.length, 2, 'and not asked again');
+});
+
 test('request: a permission Chromium does not warn about is granted without a prompt', async () => {
   const t = setup({prompt: async () => { throw new Error('no prompt expected'); }});
   assert.equal(await t.call('permissions.request', {permissions: ['alarms']}), true);

@@ -78,7 +78,7 @@ test('the look-alike check skips an allow-listed name and its subdomains (conten
  const allowlist=await allowlistWith(['telegraf.rs','wal-mart.com']);
  assert.equal(allowlist.allows('telegraf.rs'),true);assert.equal(allowlist.allows('www.wal-mart.com'),true);assert.equal(allowlist.allows('wal-mart.com.evil.top'),false);assert.equal(allowlist.allows('rs'),false);
  const source=fs.readFileSync(path.join(__dirname,'../desktop/content-blocking.cjs'),'utf8');
- assert.match(source,/createThreatLists\(\{[^}]*allowlist:siteAllowlist\}\)/,'the lists get the allow-list');
+ assert.match(source,/createThreatLists\(\{[^}]*allowlist:siteAllowlist(?:,\.\.\.\(backgroundNetwork\?\{download:backgroundNetwork\.downloadText\}:\{\}\))?\}\)/,'the lists get the allow-list');
  assert.match(source,/lookalike:url=>\{if\(privacyPlus\.get\(\)\.pageWarnings===false\)return null;let host;try\{host=new URL\(url\)\.hostname;\}catch\{return null;\}if\(siteAllowlist\.allows\(host\)\)return null;/,'and the look-alike check');
 });
 

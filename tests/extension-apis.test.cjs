@@ -342,7 +342,7 @@ test('a chosen New Tab page shows only on ordinary New Tabs; private, Tor, split
  const {overrideFor}=require('../desktop/browser-services/extension-new-tab.cjs');
  const tab={id:'t',url:'acira://new',contentKind:'internal',browserProfileId:'p'},choice={extensionId:ID,url:`chrome-extension://${ID}/dashboard.html`};
  assert.deepEqual(overrideFor({tab,choice}),{tabId:'t',profileId:'p',extensionId:ID,url:choice.url});
- for(const blocked of [{privateMode:true},{torMode:true},{split:true},{visible:false},{setup:true},{choice:null}])assert.equal(overrideFor({tab,choice,...blocked}),null,JSON.stringify(blocked));
+ for(const blocked of [{privateMode:true},{torMode:true},{split:true},{setup:true},{choice:null},{baseline:new Set(['t'])}])assert.equal(overrideFor({tab,choice,...blocked}),null,JSON.stringify(blocked));
  assert.equal(overrideFor({tab:{...tab,url:'acira://settings'},choice}),null);assert.equal(overrideFor({tab:{...tab,url:'https://a.test/',contentKind:'web'},choice}),null);
  assert.equal(overrideFor({tab,choice:{extensionId:ID,url:'https://evil.test/'}}),null,'only an extension page');
  const profiles=[{id:'p'}];

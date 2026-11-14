@@ -4,6 +4,7 @@ import { urlDisplay } from '../ui/urlDisplay';
 import { glideGuardMs,glideLayout,hiddenPrefixLength,startsGlide,type Glide } from '../ui/addressGlide';
 import '../styles/address-glide.css';
 import { addressDisplayMap,hitDisplay,mapDisplayChar,mapDisplaySelection,stepAddressGesture,wordAt,type AddressGesture,type AddressGestureEffect } from '../ui/addressSelection';
+import { addressBlur,afterViewBlurGrace } from '../ui/addressEdit';
 
 import { t } from '../i18n';
 
@@ -52,10 +53,12 @@ function paintDisplay(nodes: readonly Text[], a: number, b: number) {
  * and drag on the at-rest text keeps that text (and paints the drag on it) until release, then shows the full address
  * with exactly the dragged characters selected; a double click selects the word under the first press, a triple click
  * everything. Once the field shows the full address, the pointer is left to the browser. */
-export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur, onModifiedEnter, suggestionOpen=false,popupTrigger=false,activeSuggestionId,suggestionListId='address-suggestions',onSuggestionKeyDown,placeholder=t('addressfield.placeholder'),label=t('addressfield.label')}: {
+export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur, onViewBlur, edited=true, onModifiedEnter, suggestionOpen=false,popupTrigger=false,activeSuggestionId,suggestionListId='address-suggestions',onSuggestionKeyDown,placeholder=t('addressfield.placeholder'),label=t('addressfield.label')}: {
   /** The address text at rest sits in the middle of the field and glides to the left edge while the field is in use (and back): its time and easing (ui/addressGlide.ts). `ms` 0 places it without a glide (Reduce motion, speed Off). Left out: the text stays at the left, as ever. */glide?: Glide;
   centerWithin?: string; label?: string; placeholder?: string; inputRef: RefObject<HTMLInputElement | null>; value: string; onChange: (value: string) => void;
   onFocus: () => void; onBlur: (event:FocusEvent<HTMLInputElement>) => void; style: BrowserStyle; reducedMotion: boolean; speed: number;
+  /** The interface's view has been without the keyboard for the suggestion list's grace while the field kept its edit (ui/addressEdit.ts): the list closes, nothing else. */onViewBlur?: () => void;
+  /** The person has typed in the field (Chromium's user_input_in_progress): only then does a blur of the view keep the field as it is. Left out: always (a field that only ever shows what was typed). */edited?: boolean;
   onModifiedEnter: (value: string, newTab: boolean) => void;
   searchEngine?:SearchEngine;suggestionOpen?:boolean;popupTrigger?:boolean;activeSuggestionId?:string;suggestionListId?:string;onSuggestionKeyDown?:(event:KeyboardEvent<HTMLInputElement>)=>boolean;
 }) {
@@ -100,8 +103,16 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
     return () => { watch.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
   }, [!!glide, value, placeholder, aligned, shownKey]);
 
-  const parked = useRef<{start:number|null;end:number|null;direction:'forward'|'backward'|'none'|null;timer:number}|null>(null);
+  // A blur that may not be the end of the edit: the field is still the document's focused element (ui/addressEdit.ts). `view`: only the
+  // interface's view lost the keyboard; the edit, its text and its selection wait for the focus to come back, however long that takes.
+  const parked = useRef<{start:number|null;end:number|null;direction:'forward'|'backward'|'none'|null;timer:number;event:FocusEvent<HTMLInputElement>;view:boolean}|null>(null);
   useEffect(() => () => window.clearTimeout(parked.current?.timer), []);
+  // The interface took the field away while its view was away (a click on the page, a tab change, Esc: they call blur(), which fires no
+  // blur in a document without focus): the edit ends now, as that blur would have ended it.
+  const leftWhileAway = useRef<() => void>(() => {});
+  leftWhileAway.current = () => { const p = parked.current; if (!p?.view || document.activeElement === inputRef.current) return; window.clearTimeout(p.timer); parked.current = null; finishBlur(p.event); };
+  useEffect(() => { leftWhileAway.current(); });
+  useEffect(() => { const back = () => leftWhileAway.current(); window.addEventListener('focus', back); return () => window.removeEventListener('focus', back); }, []);
   // The full address is shown from its start (the omnibox's way), so the field's text lines up with the shown text the whole glide: a narrow field would scroll to the end of a long address.
   const fromStart = (input: HTMLInputElement | null | undefined) => { if (glide && input) input.scrollLeft = 0; };
   const release = () => { held.current = false; measured.current = null; setHolding(false); highlights()?.delete(DRAG_HIGHLIGHT); };
@@ -183,17 +194,30 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
         onModifiedEnter(target, event.altKey); inputRef.current?.blur();
       }}
       onFocus={event => {
-        // Back from a press on the suggestion list: the field never lost the person's draft, so nothing restarts.
+        // Back after a blur of the view (a press on the suggestion list, a page or window that had the keyboard): the field never lost the
+        // person's draft, so nothing restarts and the selection comes back (OmniboxViewViews::OnFocus).
         const back = parked.current;
         if (back) { window.clearTimeout(back.timer); parked.current = null; if (back.start !== null && back.end !== null) event.target.setSelectionRange(back.start, back.end, back.direction ?? undefined); return; }
         setFocused(true); setKeyboard(!pointer.current); onFocus(); if(!focusClick.current&&!held.current){event.target.select();fromStart(event.target);}}}
       onBlur={event => {
-        // The open suggestion list is its own native view: a press on it (a row, a ×) takes focus for a moment and main hands
-        // it straight back. Until it is clear the field really lost focus, nothing closes and the text, caret and selection stay.
-        if (suggestionOpen && !event.relatedTarget && !document.hasFocus()) {
-          const input = event.currentTarget;
+        const input = event.currentTarget;
+        // Only the interface's view lost the keyboard (Chromium's omnibox keeps the edit through a blur and restores the selection when focus
+        // comes back: ui/addressEdit.ts). The open suggestion list is its own native view: a press on it (a row, a ×) takes focus for a moment
+        // and main hands it straight back; a page main gave the keyboard to, or another window, may keep it longer. The text, caret and
+        // selection stay; after the list's grace the list closes, and the edit waits for the focus (or ends if the field is taken away).
+        if (addressBlur({relatedTarget: event.relatedTarget, documentHasFocus: document.hasFocus(), fieldStillFocused: document.activeElement === input, edited}) === 'view') {
           window.clearTimeout(parked.current?.timer);
-          parked.current = {start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,timer:window.setTimeout(() => { parked.current = null; finishBlur(event); }, SUGGESTION_FOCUS_GRACE_MS)};
+          parked.current = {start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,event,view:true,timer:window.setTimeout(() => {
+            const p = parked.current; if (!p) return; p.timer = 0;
+            if (afterViewBlurGrace(document.activeElement === inputRef.current) === 'left') { parked.current = null; finishBlur(p.event); return; }
+            onViewBlur?.();
+          }, SUGGESTION_FOCUS_GRACE_MS)};
+          return;
+        }
+        // (Before 13.8, the only case kept: the list open and the document without focus, for the grace and no longer.)
+        if (suggestionOpen && !event.relatedTarget && !document.hasFocus()) {
+          window.clearTimeout(parked.current?.timer);
+          parked.current = {start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,event,view:false,timer:window.setTimeout(() => { parked.current = null; finishBlur(event); }, SUGGESTION_FOCUS_GRACE_MS)};
           return;
         }
         finishBlur(event);}}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Popup Follow Fixture: layout</title>
+<style>body { font: 14px system-ui, sans-serif; margin: 24px; max-width: 560px } select, button { font: inherit; margin: 6px 0 } code { background: #eee; padding: 1px 4px }</style></head>
+<body>
+<h3>Popup Follow Fixture</h3>
+<p>Pick the layout and the two sizes the popup page switches between, then press the toolbar button and press the page's <code>toggle</code> button (or wait: with <code>timer</code> it switches by itself).</p>
+<label>Layout <select id="layout">
+  <option value="natural">natural: explicit-size content (most extensions)</option>
+  <option value="vh">vh: html, body { height: 100% } (follows the window)</option>
+  <option value="vh100">vh100: an app block of 100vh</option>
+  <option value="minvh">minvh: min-height: 100vh</option>
+  <option value="winvars">winvars: Proton Pass's way (a CSS var set from the window)</option>
+  <option value="bodyh">bodyh: html, body with a px height</option>
+  <option value="fluid">fluid: content as wide as the window</option>
+  <option value="abs">abs: absolutely positioned content</option>
+  <option value="fixed">fixed: a bar fixed to the bottom</option>
+  <option value="flex">flex: a full-height flex column (not followed on a shrink; see the report)</option>
+</select></label><br>
+<label>Switch by <select id="trigger"><option>click</option><option>timer</option><option>none</option></select></label><br>
+<label>Sizes (A,B; width x height of the content) <input id="sizes" value="360x340,300x120" size="22"></label><br>
+<button id="save" type="button">Save</button> <span id="saved"></span>
+<script src="options.js"></script>
+</body>
+</html>

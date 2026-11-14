@@ -3,6 +3,9 @@
 // pane sits (6px gap, the page radius). The page views give up that width (trim), so nothing is covered. Two native views: an Acira frame
 // (side-panel-frame.html: the card, a 40px header with the extension's name and Close) and the extension's page in the extension's own
 // session. Links from the panel open as tabs; the panel never navigates away from its extension. Esc in the frame or Close ends it.
+// The panel page closing itself (window.close()) ends it exactly as Close does: ported from Chromium 152, extensions/browser/extension_host.cc (CloseContents -> Close(): the host's close
+// handler runs once) and chrome/browser/ui/views/side_panel/extensions/extension_side_panel_coordinator.cc (HandleCloseExtensionSidePanel: the panel is closed, the state is reset, and
+// OnClosed() tells the extension). Electron has no such handler: a page's window.close() DESTROYS its contents and takes its view out of the window, so the panel listens for that.
 const path=require('node:path');
 const FRAME=path.join(__dirname,'side-panel-frame.html'),FRAME_PRELOAD=path.join(__dirname,'side-panel-frame-preload.cjs');
 const GAP=6,HEADER=40,MIN_PAGE=360,MIN_WIDTH=320,MAX_WIDTH=420,REVEAL_CAP_MS=500;
@@ -41,6 +44,8 @@ function createSidePanelHost({WebContentsView,getWindow,pageBounds,radius=()=>8,
   if(at===others.length){win.contentView.addChildView(current.frame);win.contentView.addChildView(current.view);}else{win.contentView.addChildView(current.frame,at);win.contentView.addChildView(current.view,at+1);}
  }
  function reveal(){if(!current||current.revealed)return;current.revealed=true;clearTimeout(current.cap);place();}
+ /** The extension's page no longer exists (window.close() from the panel, the extension unloaded or reloaded). */
+ const gone=panel=>{try{return panel.view.webContents.isDestroyed();}catch{return true;}};
  function teardown(panel){
   clearTimeout(panel.cap);clearTimeout(panel.exit);const win=getWindow();
   for(const view of [panel.view,panel.frame]){try{if(win&&!win.isDestroyed())win.contentView.removeChildView(view);}catch{}try{if(!view.webContents.isDestroyed())view.webContents.close();}catch{}}
@@ -57,6 +62,8 @@ function createSidePanelHost({WebContentsView,getWindow,pageBounds,radius=()=>8,
  async function open({extensionId,name,url,session,onClosed}){
   const win=getWindow();if(!win||win.isDestroyed())throw new Error('The side panel is not available in this window.');
   if(!panelGeometry(pageBounds()))throw new Error('The window is too narrow for a side panel.');
+  /* A panel whose page is gone (it closed itself: see the 'destroyed' listener below) is not "already open": an open() that answered {reused:true} for it left an empty column and a button that did nothing. */
+  if(current&&current.extensionId===extensionId&&gone(current))await close({silent:true});
   if(current&&current.extensionId===extensionId){if(current.url!==url)navigate({extensionId,url});return {reused:true};}
   if(current)await close();
   const frame=new WebContentsView({webPreferences:{preload:FRAME_PRELOAD,sandbox:true,contextIsolation:true,nodeIntegration:false,spellcheck:false,transparent:true}});
@@ -69,6 +76,10 @@ function createSidePanelHost({WebContentsView,getWindow,pageBounds,radius=()=>8,
   view.webContents.setWindowOpenHandler(details=>{if(external(details.url))void openTab(details.url);return {action:'deny'};});
   view.webContents.on('will-navigate',(event,target)=>{const to=typeof target==='string'?target:event?.url;if(String(to||'').startsWith(origin))return;event.preventDefault?.();if(external(to))void openTab(to);});
   view.webContents.once('dom-ready',()=>{panel.loaded=true;if(current===panel&&panel.entered)reveal();});
+  /* The page closing itself (window.close(), as Image Downloader's own close button does; the extension being unloaded or reloaded does the same): Chromium's ExtensionHost::CloseContents runs the close
+     handler the side panel coordinator set, which closes the panel (HandleCloseExtensionSidePanel) and tells the extension (OnClosed). Here the contents are destroyed and the view taken out of the
+     window, which left Acira's card as an empty column and the panel "open" for good: the same close as the Close button, so the column goes, the state clears and the button opens it again. */
+  view.webContents.on('destroyed',()=>{if(current===panel)void close();});
   frame.webContents.once('did-finish-load',()=>{sendState('in');});
   panel.cap=setTimeout(()=>{if(current===panel)reveal();},REVEAL_CAP_MS);
   raise();relayout();place();

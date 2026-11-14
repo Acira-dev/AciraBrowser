@@ -11,6 +11,7 @@ import {createHash} from 'node:crypto';
 import {Readable,Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {fileURLToPath} from 'node:url';
+import {claimRuntimeFolder,removeRuntimeFolder,sweepRuntimeCache,WINDOWS_RUNTIME_FOLDER} from './runtime-cache.mjs';
 const require=createRequire(import.meta.url),PIN=require('../packaging/windows-widevine-runtime.json');
 const repo=path.resolve(import.meta.dirname,'..'),MB=1024*1024;
 export const archiveName=(arch,pin=PIN)=>`electron-v${pin.release}-win32-${arch}.zip`;
@@ -46,6 +47,8 @@ export async function fetchWindowsWidevineRuntime({arch='x64',cache=path.join(re
  const spec=pin.platforms[arch];if(!spec)throw Error('No Windows Widevine runtime is pinned for '+arch+'.');
  if(electron!==pin.electron)throw Error(`Electron is ${electron} but the Windows Widevine pin is for ${pin.electron}: qualify and update packaging/windows-widevine-runtime.json when Electron changes.`);
  await fs.mkdir(cache,{recursive:true});
+ // The extracted folders of builds that were stopped or failed (and of builds before this one cleaned up after themselves) go first: never one whose build is still running (runtime-cache.mjs).
+ await sweepRuntimeCache(cache,{match:WINDOWS_RUNTIME_FOLDER,log});
  const archive=cachedArchive(cache,arch,pin);
  try{await fs.access(archive);log('Using the cached ECS runtime '+archive);}catch(error){
   if(error.code!=='ENOENT')throw error;
@@ -61,11 +64,16 @@ export async function fetchWindowsWidevineRuntime({arch='x64',cache=path.join(re
  // Always a new folder from the verified archive: never a runtime an earlier build extracted (and may have changed).
  const extracted=await fs.mkdtemp(path.join(cache,'win32-'+arch+'-'));
  try{
+  await claimRuntimeFolder(extracted);   // `<folder>.owner` beside it: this build's process, for the next build's sweep
   extract(archive,extracted);
   const executable=path.join(extracted,'electron.exe'),version=(await fs.readFile(path.join(extracted,'version'),'utf8')).trim();
   if(version!==pin.release)throw Error(`The ECS archive says it is ${version}, not the pinned ${pin.release}.`);
   const developmentSignature=await fs.access(path.join(extracted,'electron.exe.sig')).then(()=>true,()=>false);
   return {runtime:extracted,arch,electron:pin.electron,release:pin.release,repository:pin.repository,archiveSha256:spec.sha256,executableSha256:await hash(executable),developmentSignature};
- }catch(error){await fs.rm(extracted,{recursive:true,force:true});throw error;}
+ }catch(error){await removeRuntimeFolder(extracted);throw error;}
 }
+/** The extracted runtime and its owner file, removed (the verified archive stays in the cache). Safe to call twice. */
+export async function removeWindowsWidevineRuntime(runtime){if(runtime&&runtime.runtime)await removeRuntimeFolder(runtime.runtime);}
+/** Runs `work(runtime)` and removes the extracted runtime however it ends: a build that throws (a failed check, a stopped step) used to leave 370 MB behind. A null runtime (a build without Widevine) just runs `work`. */
+export async function guardWindowsWidevineRuntime(runtime,work){try{return await work(runtime);}finally{await removeWindowsWidevineRuntime(runtime);}}
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))console.log(JSON.stringify(await fetchWindowsWidevineRuntime({arch:process.argv[2]||'x64'}),null,2));

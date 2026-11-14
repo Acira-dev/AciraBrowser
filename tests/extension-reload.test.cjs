@@ -29,7 +29,7 @@ test('Reload restarts the worker with the new code and reapplies content scripts
 test('the reload path waits for the old extension to unload and its worker to stop before loading again',()=>{
  const source=fs.readFileSync(path.join(__dirname,'..','desktop','browser-services','extension-manager.cjs'),'utf8');
  assert.match(source,/async function unloadFully\(/);
- assert.match(source,/if\(loaded\)await unloadFully\(session,api,loaded\.id[^)]*\);let extension;/,'Reload/Update/Enable unload fully before loading');
+ assert.match(source,/if\(loaded\)await unloadFully\(session,api,loaded\.id[^)]*\);(?:\/\*[^*]*\*\/if\(request\.type==='update'\|\|request\.type==='install'\)try\{require\('\.\/ext-api\/scripting\/persist\.cjs'\)\.clear\(session,request\.extensionId\);\}catch\{\})?let extension;/,'Reload/Update/Enable unload fully before loading');
  assert.match(source,/await unloadFully\(session,api,loaded\.id[^)]*\);await api\.loadExtension\(found\.path/,'so does the user scripts switch, which restarts the extension');
  assert.doesNotMatch(source,/if\(loaded\)api\.removeExtension\(loaded\.id\);let extension/,'no load straight after removeExtension');
 });

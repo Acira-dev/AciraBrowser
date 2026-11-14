@@ -4,6 +4,7 @@ import type {PageScripts,ServiceResult,TabSession} from '../runtime/types';
 import {Disclosure,SwitchRow} from '../components/PanelParts';
 import {Activity,Code2,Globe2,Info,PanelTop} from '../components/AppIcons';
 import {ProtectionIcon} from '../components/ProtectionIcon';
+import {isWebsite} from '../runtime/newTabPage';
 import '../styles/shields.css';
 
 import { currentLocale,t } from '../i18n';
@@ -16,7 +17,7 @@ const reason=(error:unknown)=>error instanceof Error?error.message.replace(/^Err
 export function ShieldsSummary({tab,blockingOnly=false,privateMode=false,tor=false}:{tab:TabSession;blockingOnly?:boolean;privateMode?:boolean;/** A Tor tab keeps its own security levels, so it has no script switch. */tor?:boolean}){
  const [privacy,setPrivacy]=useState<Privacy>(),[filters,setFilters]=useState<Filters>(),[cookies,setCookies]=useState<'block'|'allow'>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[changed,setChanged]=useState(false),[scripts,setScripts]=useState<PageScripts>();
  const generation=useRef(0),saving=useRef(false),requestVersion=useRef(0);
- const supported=tab.contentKind==='web'&&(!blockingOnly||/^https?:\/\//i.test(tab.url));
+ const supported=isWebsite(tab)&&(!blockingOnly||/^https?:\/\//i.test(tab.url));
  const ready=supported&&!tab.loading&&!tab.error;
  const load=useCallback(()=>{
   let alive=true;

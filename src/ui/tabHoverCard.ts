@@ -23,7 +23,7 @@ export const tabHoverCardMode = (): TabHoverCardMode => mode;
 export const useTabHoverCardMode = (): TabHoverCardMode => useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, () => mode, () => 'preview' as const);
 
 /** True when a card (not the tooltip) answers a pointer resting on this tab. Rows drop their `title` then. */
-export const cardAnswers = (cardMode: TabHoverCardMode, tab: Pick<TabSession, 'risk' | 'capturing' | 'privacy' | 'contentKind' | 'sleeping'>): boolean => tabCardKind({ tabHoverCard: cardMode }, tab) !== null;
+export const cardAnswers = (cardMode: TabHoverCardMode, tab: Pick<TabSession, 'risk' | 'capturing' | 'privacy' | 'contentKind' | 'sleeping' | 'url'>): boolean => tabCardKind({ tabHoverCard: cardMode }, tab) !== null;
 
 /** The rows of every tab surface: the horizontal strip, the sidebar's tabs, the compact strip. */
 export const TAB_ROW = '.browser-tab[data-tab-id],.sb-tab[data-tab-id],.acira-compact-tab[data-tab-id],.sb-bookmark[data-card-title]';

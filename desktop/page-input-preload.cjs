@@ -123,7 +123,12 @@ if(process.isMainFrame){
  const BAND=24,CONTROL='a[href],button,input,select,textarea,summary,video,audio,canvas,[role=slider],[role=scrollbar],[role=button],[role=link],[role=tab],[role=menuitem],[draggable=true],[contenteditable]:not([contenteditable=false]),[tabindex]:not([tabindex^="-"])';
  const sent={hover:false,drag:false,lock:false};let beat=0;
  const send=patch=>{let changed=false;for(const key in patch)if(sent[key]!==patch[key]){sent[key]=patch[key];changed=true;}if(changed)ipcRenderer.send('acira:edge-intent',patch);};
- const overControl=event=>{for(const node of event.composedPath?.()||[])if(node instanceof Element&&node.matches?.(CONTROL))return true;return false;};
+ // A control that covers most of the window is the page's surface, not something to use at its edge: a video player filling the window (YouTube's theater and
+ // "inline fullscreen" extensions make the player the whole page), a full-window canvas or wrapper. Every edge point of such a page counted as a control, so every rest
+ // at the edge needed the long wait for a control under the pointer (650 ms, 400 in Fast; 260/180 pressed to the edge) and the bars seemed not to come at all.
+ // Real controls (a seek bar, a link, a button, a slider) are small against the window.
+ const covers=node=>{try{const r=node.getBoundingClientRect(),w=window.innerWidth||document.documentElement.clientWidth,h=window.innerHeight||document.documentElement.clientHeight;return w>0&&h>0&&r.width>=w*0.5&&r.height>=h*0.5;}catch(e){return false;}};
+ const overControl=event=>{for(const node of event.composedPath?.()||[])if(node instanceof Element&&node.matches?.(CONTROL)&&!covers(node))return true;return false;};
  window.addEventListener('pointermove',event=>{if(event.isTrusted)send({hover:(event.clientX<=BAND||event.clientY<=BAND)&&overControl(event)});},{capture:true,passive:true});
  // Entering a frame: the page cannot see inside (the pointer leaves with no element to go to), so an unknown control is assumed
  // when a frame reaches the band; the next move in this document sets it again.
@@ -203,3 +208,25 @@ if(process.platform==='darwin'&&process.isMainFrame){
   setTimeout(()=>{try{ipcRenderer.send('acira:swipe-facts',{toward,prevented:event.defaultPrevented,chain});}catch{}},0);
  },{capture:true,passive:true});
 }
+// 13.8 keyboard routing (desktop/key-routing.cjs, a port of Chromium's): a browser shortcut that is not reserved goes to the PAGE first, and the browser runs it only if the page did not
+// consume the key. Electron does not tell the main process what the renderer did with a key, so this is the renderer's answer: once the page's own listeners have run for a keydown that
+// could be a shortcut (a modifier is held, or it is a key with a name: Escape, F5, Delete...; plain typing never is), the answer {key, code, modifiers, prevented} goes to the main process.
+// "prevented" is the event's defaultPrevented, which is what Chromium's input ack calls "consumed". It is registered in every frame (nodeIntegrationInSubFrames) before any script of the page runs (a preload
+// runs first), so no page script can stop the event before it is seen; the frame says once that it is ready, and a frame that never says it keeps the old behaviour
+// (the browser takes the key first). Everything is guarded: a failure here must never reach the page or the listeners below.
+try{
+ // The next task: the whole dispatch is over, so every listener of the page has had its say (a message to oneself is a task of its own, with no timer clamping).
+ const channel=new MessageChannel(),jobs=[];
+ channel.port1.onmessage=()=>{const job=jobs.shift();if(job)job();};
+ if(typeof channel.port1.unref==='function')channel.port1.unref();/* Node (the tests) would otherwise wait for this port to close; a browser has no such thing */
+ window.addEventListener('keydown',event=>{
+  try{
+   if(!event.isTrusted||event.isComposing)return;
+   if(!(event.ctrlKey||event.metaKey||event.altKey||String(event.key||'').length>1))return;
+   const answer={key:String(event.key||''),code:String(event.code||''),ctrl:!!event.ctrlKey,alt:!!event.altKey,shift:!!event.shiftKey,meta:!!event.metaKey,repeat:!!event.repeat};
+   jobs.push(()=>{try{answer.prevented=!!event.defaultPrevented;ipcRenderer.send('acira:key-ack',answer);}catch{/* the frame is gone */}});
+   channel.port2.postMessage(0);
+  }catch{/* never reaches the page */}
+ },true);
+ ipcRenderer.send('acira:key-ack-ready');
+}catch{/* no acknowledgement from this frame (no MessageChannel, no window): the main process keeps the key itself */}

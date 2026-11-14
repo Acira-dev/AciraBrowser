@@ -122,7 +122,7 @@ test('the sidebar, the tab menu and the desktop bridge all go through the one fu
   assert.equal((sidebar.match(/addFavorite\(/g) ?? []).length, 4, 'drag, Cmd+Shift+D / command / menu, the + form and a dropped link');
   assert.match(sidebar, /const asked=event\.type==='sidebar-pin-app'\?event\.tabId:event\.type==='ui'&&\(event as \{action\?:string\}\)\.action==='favorite-tab'/, 'the keyboard and the menu take one path');
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(app, /state\.settings\.verticalTabs && context\.contentKind === 'web' && !context\.privacy && row\(tr\("acirasidebar\.addToFavorites"\), LayoutGrid, \(\) => \{ void runtime\.browserCommand\(\{ type: 'ui', tabId: tab\.id, action: 'favorite-tab', targetTabId: context\.id \}\)/, 'the tab menu row: sidebar layout, websites, not private or Tor tabs');
+  assert.match(app, /state\.settings\.verticalTabs && isWebsite\(context\) && !context\.privacy && row\(tr\("acirasidebar\.addToFavorites"\), LayoutGrid, \(\) => \{ void runtime\.browserCommand\(\{ type: 'ui', tabId: tab\.id, action: 'favorite-tab', targetTabId: context\.id \}\)/, 'the tab menu row: sidebar layout, websites, not private or Tor tabs');
   assert.match(readFileSync(new URL('../desktop/validation.cjs', import.meta.url), 'utf8'), /'rename-tab','favorite-tab','preview-hold'/);
   assert.match(readFileSync(new URL('../src/runtime/types.ts', import.meta.url), 'utf8'), /'rename-tab' \| 'favorite-tab'/);
   const en = JSON.parse(readFileSync(new URL('../src/i18n/en.json', import.meta.url), 'utf8')) as Record<string, string>;

@@ -124,11 +124,11 @@ test('a bookmark can be sent to the bookmarks bar or Other bookmarks by name; th
   assert.equal(reduceBrowser(again, { type: 'bookmark.move', id: 'loose', parentId: 'other-bookmarks', index: 0 }).bookmarkNodes.filter(n => n.title === 'Other bookmarks').length, 1, 'one folder, not one per move');
 });
 
-test('the bar shows top-level pages and the bar folder, in tree order, and nothing from other folders', () => {
+test('the bar shows top-level pages and the bar folder\'s pages and folders, in tree order, and nothing from other folders', () => {
   const s = fixture();
-  assert.deepEqual(barBookmarks(s.bookmarkNodes, profile).map(n => n.id), ['a', 'b', 'c', 'loose']);
+  assert.deepEqual(barBookmarks(s.bookmarkNodes, profile).map(n => n.id), ['a', 'b', 'c', 'design', 'loose'], 'a folder in the bar folder is on the bar (13.8)');
   const moved = reduceBrowser(s, { type: 'bookmark.move', id: 'a', parentId: 'other', index: 0 });
-  assert.deepEqual(barBookmarks(moved.bookmarkNodes, profile).map(n => n.id), ['b', 'c', 'loose']);
+  assert.deepEqual(barBookmarks(moved.bookmarkNodes, profile).map(n => n.id), ['b', 'c', 'design', 'loose']);
   assert.deepEqual(barBookmarks(moved.bookmarkNodes, 'someone-else'), []);
 });
 

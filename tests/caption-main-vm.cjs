@@ -39,7 +39,7 @@ function fakeWindow({ minimizable = true, maximizable = true, maximized = false 
       get children() { return state.children.slice(); },
       addChildView(view, index) { state.children.splice(index === undefined ? state.children.length : index, 0, view); state.backingLog.push('add'); },
       removeChildView(view) { const at = state.children.indexOf(view); if (at >= 0) state.children.splice(at, 1); },
-    }, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen, isFocused: () => true,
+    }, isMinimized: () => state.minimized, isFullScreen: () => state.fullscreen, isFocused: () => state.focused !== false,
     getContentBounds: () => ({ ...state.bounds }),
     isMinimizable: () => state.minimizable, isMaximizable: () => state.maximizable, isMaximized: () => state.maximized,
     setMinimizable(on) { state.minimizable = on; note('setMinimizable(' + on + ')'); },
@@ -55,7 +55,7 @@ function fakeWindow({ minimizable = true, maximizable = true, maximized = false 
 /** What a person would see after a call: nothing (transparent or dropped), or the box with the buttons Windows draws for the flags at that moment. */
 const seen = s => !s.overlay || (alpha(s.overlay.color) === 0 && alpha(s.overlay.symbolColor) === 0) ? null : { buttons: 1 + (s.minimizable ? 1 : 0) + (s.maximizable ? 1 : 0) };
 
-function realMainCaption({ source, layout: layoutInit, flags, legacy = false, edge = null } = {}) {
+function realMainCaption({ source, layout: layoutInit, flags, legacy = false, edge = null, popupHold = null } = {}) {
   const text = fs.readFileSync(source || path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   const between = (a, b) => { const from = text.indexOf(a), to = text.indexOf(b, from); assert.ok(from >= 0 && to > from, 'the source still has ' + a + ' .. ' + b); return text.slice(from, to); };
   const decls = /let captionKey='',captionHiddenNow=false[^\n]*\n/.exec(text)[0];
@@ -66,6 +66,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
 
   const isShown = /notchIsShown:(\(\)=>captionNotchShown)/.exec(text)?.[1] || '()=>captionNotchShown';
   const { window, state } = fakeWindow(flags);
+  const emitted = [];   // what main's edge item tells the interface (13.8: the edge popup hold's tests read the 'chrome-edge' events)
   const layout = { appearance: 'light', viewport: { width: 1200, height: 800 }, captionHeight: NOTCH_HEIGHT, captionNotch: true, ...layoutInit };
   const clock = { t: 100000, timers: [] };
   const screen = { point: { x: 700, y: 500 }, getCursorScreenPoint() { return { ...this.point }; } };
@@ -93,7 +94,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
     const line = /const edgeHolds=\{top:false,side:false\},edgeKeys=[^\n]*\n/.exec(text);
     assert.ok(line, 'the source still has the edge item');
     const runtime = require('../desktop/runtime.cjs');
-    Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: () => {},
+    Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: event => emitted.push(event), popupHold: popupHold || { merge: base => base },
       effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen,
       // 13.7: main's pointer source (desktop/pointer-point.cjs), as a Windows window has it: the screen answer, never the events path (that is Wayland's)
       pointerSource: require('../desktop/pointer-point.cjs').createPointerSource({ platform: 'win32', env: {} }) });
@@ -112,7 +113,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
   };
   /** What the edge poller does for this window: every `step` ms (16 while an edge is active, 250 idle) it calls the item's captionTick. */
   const poll = (ms, step = 50) => { for (let left = ms; left > 0; left -= step) { advance(Math.min(step, left)); sandbox.__caption.watch?.tick(); } };
-  return { api: sandbox.__caption, window, state, layout, clock, screen, advance, poll, logged, setOverlayHost: host => { sandbox.overlayHost = host; } };
+  return { api: sandbox.__caption, window, state, layout, clock, screen, advance, poll, logged, emitted, setOverlayHost: host => { sandbox.overlayHost = host; } };
 }
 
 module.exports = { realMainCaption, fakeWindow, seen, alpha, NOTCH_HEIGHT };

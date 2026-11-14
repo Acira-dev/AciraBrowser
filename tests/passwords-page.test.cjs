@@ -240,3 +240,20 @@ test('anchored save prompts fit small window bounds even with a narrow split pag
   const b=placement({mode:'save',page,anchor,window});assert.ok(b.x>=0&&b.y>=0);assert.ok(b.width>0&&b.height>0);assert.ok(b.x+b.width<=window.width&&b.y+b.height<=window.height);
  }
 });
+
+test('a password manager extension that holds chrome.privacy.services.passwordSavingEnabled at false switches the save offer and the saved-login list off; clearing it brings them back',()=>{
+ // Chrome's password manager follows kCredentialsEnableService, which the extension controls (chrome/browser/extensions/api/preference/preference_api.cc).
+ const chromeSettings=require('../desktop/browser-services/extension-chrome-settings.cjs');
+ const store=chromeSettings.forProfile(P),key='privacy.services.passwordSavingEnabled',BW='nngceckbapebfimnlniiiahkandclblb';
+ try{
+  store.setValue(key,BW,false,'regular','Bitwarden Password Manager');
+  const h=harness();seed(h);
+  h.msg('acira:pw-focus',h.field());assert.equal(h.shows.length,0,'no saved-login list');
+  h.submit();h.msg('acira:pw-ready',{docId:'doc2',passwordFields:0});assert.equal(h.shows.length,0,'no save offer');
+  store.setValue(key,BW,true,'regular');
+  const on=harness();on.submit();on.msg('acira:pw-ready',{docId:'doc2',passwordFields:0});assert.equal(on.shows.at(-1)?.mode,'save','the extension\'s true leaves the offer to the person\'s switch (on here)');
+  const off=harness({enabled:false});off.submit();off.msg('acira:pw-ready',{docId:'doc2',passwordFields:0});assert.equal(off.shows.length,0,'and never turns it on against the person\'s "off"');
+  store.clearValue(key,BW);
+  const back=harness();back.submit();back.msg('acira:pw-ready',{docId:'doc2',passwordFields:0});assert.equal(back.shows.at(-1)?.mode,'save');
+ }finally{chromeSettings.reset();}
+});

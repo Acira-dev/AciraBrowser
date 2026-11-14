@@ -70,7 +70,7 @@ function createSiteAllowlist({ cachePath, endpoint = '', fileUrl = '', fetchText
         const next = parseAllowlist(text);
         hosts = next; updated = now(); lastError = null; source = from;
         try { io.mkdirSync(cachePath, { recursive: true }); const tmp = file + '.' + randomUUID().slice(0, 8); io.writeFileSync(tmp, JSON.stringify({ hosts: [...hosts].sort(), updated })); io.renameSync(tmp, file); } catch { /* A read-only profile keeps it in memory. */ }
-      } catch (error) { lastError = String(error?.message || error); }
+      } catch (error) { if (error && error.closing === true) return; /* 13.8: the quit began, not a failure */ lastError = String(error?.message || error); }
     })().finally(() => { refreshing = null; });
     await refreshing;
     return status();
@@ -82,13 +82,18 @@ function createSiteAllowlist({ cachePath, endpoint = '', fileUrl = '', fetchText
 }
 
 /** The real fetch: the profile's session (its proxy), GET, no cookies, no Referer, no cache, no redirects, 30 seconds, 512 KB at most. */
-async function electronFetchText(url, session) {
-  const response = await session.fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(30000) });
-  if (response.status !== 200) throw Object.assign(new Error('The allow-list answered HTTP ' + response.status + '.'), { status: response.status });
-  if (Number(response.headers.get('content-length') || 0) > MAX_BYTES) throw new Error('The allow-list is too large.');
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > MAX_BYTES) throw new Error('The allow-list is too large.');
-  return bytes.toString('utf8');
+async function electronFetchText(url, session, work = require('./background-work.cjs').shared()) {
+  // 13.8 (background-work.cjs): nothing starts once the quit has begun, and the request in flight is aborted with it.
+  const stopped = () => require('./background-work.cjs').closing();
+  if (!work.allowed()) throw stopped();
+  try {
+    const response = await session.fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.any([AbortSignal.timeout(30000), work.signal()]) });
+    if (response.status !== 200) throw Object.assign(new Error('The allow-list answered HTTP ' + response.status + '.'), { status: response.status });
+    if (Number(response.headers.get('content-length') || 0) > MAX_BYTES) throw new Error('The allow-list is too large.');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > MAX_BYTES) throw new Error('The allow-list is too large.');
+    return bytes.toString('utf8');
+  } catch (error) { if (!work.allowed()) throw stopped(); throw error; }   // an abort of the request is the stop, not a failure
 }
 
-module.exports = { createSiteAllowlist, parseAllowlist, between, allowlistFileURL, FILE_NAME, MAX_HOSTS, MAX_BYTES };
+module.exports = { createSiteAllowlist, parseAllowlist, between, allowlistFileURL, electronFetchText, FILE_NAME, MAX_HOSTS, MAX_BYTES };

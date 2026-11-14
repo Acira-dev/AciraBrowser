@@ -387,7 +387,7 @@ test('an extension\'s own download can be renamed by another extension: the sugg
     await f.willDownload(item);
     await started;
     assert.equal(asked.log[0].byExtensionId, extension.id);
-    assert.equal(asked.log[0].path, path.join(f.folder, 'original', 'o.bin'), 'it is told where the starting extension wanted it');
+    assert.equal(asked.log[0].path, path.join(f.folder, 'server.bin'), '13.8: it is told the name Chromium generated from the response (NotifyExtensions: virtual_path.BaseName()), not the folder or name the starting extension asked for: that is the lowest-priority suggestion');
     assert.equal(f.records[0].path, path.join(f.folder, 'moved.bin'));
     item.finish('newer');
     assert.equal(await waitFor(() => f.records[0].status === 'Ready'), true);

@@ -10,6 +10,8 @@ const host = require('../desktop/browser-services/extension-popup-host.cjs');
 const {popupHostFor, rimLayers} = host;
 const RIMS = rimLayers(false);
 const {GAP, MARGIN} = require('../desktop/browser-services/extension-popup-placement.cjs');
+const {isFollowScript} = require('../desktop/browser-services/extension-popup-follow.cjs');
+const {METRICS_SCRIPT} = require('../desktop/browser-services/extension-popup-fit.cjs');
 
 const WAYLAND = {XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0'}, X11 = {XDG_SESSION_TYPE: 'x11', DISPLAY: ':0'};
 
@@ -237,20 +239,20 @@ test('pressing the extension\'s own button while its popup is open: the press cl
     click();                                          // a new press and click opens it
     const second = engine.popup;
     assert.ok(second && second !== first && !second.destroyed);
-    second.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});
+    await second.whenReady(); second.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});   // (a popup is shown once its page has loaded)
     press(400, 300);                                  // a press elsewhere closes it, and is not half of a click on the button
     assert.equal(second.destroyed, true);
     assert.equal(second.closedByAnchorPressAt, undefined);
     click();
     assert.ok(engine.popup && engine.popup !== second && !engine.popup.destroyed, 'the next click on the button opens it');
     // the blur path (the keyboard moved by other means) is never a toggle either
-    const third = engine.popup; third.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});
+    const third = engine.popup; await third.whenReady(); third.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});   // (a popup is shown once its page has loaded)
     third.window.emit('blur');
     assert.equal(third.destroyed, true); assert.equal(third.closedByAnchorPressAt, undefined);
     click();
     assert.ok(engine.popup && engine.popup !== third && !engine.popup.destroyed);
     // a click long after the press (not the same one) opens it
-    const fourth = engine.popup; fourth.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});
+    const fourth = engine.popup; await fourth.whenReady(); fourth.webContents.emit('preferred-size-changed', {}, {width: 300, height: 200});
     press(965, 18); fourth.closedByAnchorPressAt -= 5000;
     click();
     assert.ok(engine.popup && engine.popup !== fourth && !engine.popup.destroyed);
@@ -333,4 +335,27 @@ test('the popup\'s edge follows Acira\'s menu tokens: a ring that is black at a 
   assert.deepEqual(grows(rimLayers(false)), [...grows(rimLayers(false))].sort((a, b) => b - a), 'outermost first, so each layer sits under the next');
   const alpha = layers => layers.slice(0, -2).reduce((sum, layer) => sum + Number(/,([\d.]+)\)$/.exec(layer[2])[1]), 0);
   assert.ok(alpha(rimLayers(true)) > alpha(rimLayers(false)) * 4, 'the dark shadow is much stronger, as --menu-e2 is');
+});
+
+test('13.8: a popup inside the browser window follows its page down too (the follower is the same; the browser window\'s own area is the limit)', async () => {
+  const f = setup(), popup = f.make();
+  await popup.whenReady();
+  const page = {content: 320};
+  popup.webContents.executeJavaScript = async script => {
+    const w = popup.size.width, h = popup.size.height;
+    if (isFollowScript(script)) return {iw: w, ih: h, ch: h, eh: page.content, pins: 3};
+    assert.equal(script, METRICS_SCRIPT);
+    return {iw: w, ih: h, cw: w, ch: h, sw: w, sh: Math.max(h, page.content), fh: h};
+  };
+  Object.assign(popup.follower, {pollMs: 5, quietPollMs: 5, nudgeMs: 3, settleMs: 0});
+  popup.webContents.emit('preferred-size-changed', {}, {width: 300, height: 320});
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.equal(popup.hostKind, 'parent');
+  assert.equal(popup.size.height, 320);
+  page.content = 100;   // the page follows its window (html { height: 100% }): no report, the window stays 320 tall on 13.7
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert.equal(popup.size.height, 100, 'the in-window popup comes down to its page');
+  assert.equal(popup.size.width, 300);
+  assert.equal(f.parent.stack.length > 1, true, 'and is still a view of the browser window');
+  popup.destroy();
 });

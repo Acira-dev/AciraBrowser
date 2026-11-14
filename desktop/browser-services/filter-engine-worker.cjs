@@ -5,6 +5,8 @@ const {parentPort,workerData}=require('node:worker_threads'),{FiltersEngine}=req
 try{
  const engine=FiltersEngine.parse(workerData.text,{enableCompression:true,loadNetworkFilters:true,loadCosmeticFilters:true,enableMutationObserver:true});
  if(workerData.resources)engine.updateResources(workerData.resources,workerData.checksum||'updated');
+ // The rule count goes with the bytes: main checks the engine has rules without expanding every filter on its own thread (filter-updates.cjs checkCounted).
+ const filters=engine.getFilters(),rules=filters.networkFilters.length+filters.cosmeticFilters.length;
  const serialized=engine.serialize(),bytes=new Uint8Array(serialized.length);bytes.set(serialized);
- parentPort.postMessage({bytes},[bytes.buffer]);
+ parentPort.postMessage({bytes,rules},[bytes.buffer]);
 }catch(error){parentPort.postMessage({error:String(error&&error.message||error)});}

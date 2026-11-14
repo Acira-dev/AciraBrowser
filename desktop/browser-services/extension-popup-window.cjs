@@ -19,6 +19,7 @@ const {placePopup, interfaceScale, anchorOnScreen, MARGIN} = require('./extensio
 const {popupHostFor, ParentSurface, interfaceOrigin, interfaceView, contentArea, learn, learned} = require('./extension-popup-host.cjs');
 const {trace} = require('./ext-trace.cjs');
 const {fitStep, laidOutIn, METRICS_SCRIPT} = require('./extension-popup-fit.cjs');
+const {PopupFollower} = require('./extension-popup-follow.cjs');
 const {attachPopupDiagnostics, placementFacts} = require('./extension-popup-diagnostics.cjs');
 
 // The library's limits for a popup's size.
@@ -54,8 +55,24 @@ const ECHO_MS = 1000;
 const ECHO_SLACK = 2;
 // A held report (holdEcho) is checked every ECHO_RECHECK_MS, at most ECHO_CHECKS times: laid out in the window it has twice in a row, with nothing else reported, it is taken.
 const ECHO_RECHECK_MS = 250, ECHO_CHECKS = 8;
+// What the window's own minimum leaves behind is not only 25 x 25 (plus a pixel or two of rounding at 125 % and 150 %): a page that sets its size from the window it is in lays out
+// narrower than its words (Proton Pass: 25 x 25, then 25 x 56, then 56 x 311, and at a display scale of 150 % once 56 x 56 in the window's second look), and every one of those is a size
+// of the page's layout in the load's own 25 px window, not of the page. A side this small, in the first ECHO_MS after the load, when the page had asked for a real size (both sides
+// above it), is refused whoever it comes from: a size report (held, holdEcho), the sizing measure, fit(), the follower. Nothing real is that small a second after a larger ask.
+// (A page that really wants it is taken after the page has been seen laid out in its window twice in a row, checkEcho: the same half second as for a minimum-size report.)
+const ECHO_NEAR = 64;
 // How many asked sizes a popup remembers the extra room of (a page asks for a handful of sizes: one for each of its screens).
 const LEARNED = 24;
+// The most room a remembered size gives back on top of the page's asked size, per axis: a scrollbar (15 DIPs) and the pixel or two of rounding. What fit() once had to add for
+// more than that was the page overflowing for a moment (an animation, a screen that was still being built), and giving it back to a later report for the same size grew a window
+// that had come down to its page again (Proton Pass: 430 asked, 115 learned once, 545 for ever after).
+const LEARNED_ROOM_MAX = 24;
+// A report that asks for a height this popup has just come down from is the page echoing the window it had, until the page shows it needs it (confirmGrowth): how long after a follow step.
+const STALE_ECHO_MS = 1500;
+// A popup is shown once the page has loaded and said how big it is after the load's reset to the minimum size (Chromium keeps it hidden until the first load is over): a window shown
+// at the size of an early report and then taken to 25 x 25 for the reset flashed a squashed page at every opening. If the page says nothing after the reset, or never finishes loading,
+// the size it asked first is shown anyway after this long.
+const SHOW_AFTER_LOAD_MS = 400, SHOW_AFTER_START_MS = 3000;
 // How long after a press on its own button closed an in-window popup the click that completes that press can still arrive (a slow click, a held button).
 const PRESS_MS = 1000;
 
@@ -95,6 +112,11 @@ class ExtensionPopup extends EventEmitter {
     this.size = undefined;                    // the size of the window as this class last set it
     this.fitTimer = undefined;
     this.echoRecheckMs = ECHO_RECHECK_MS;     // how long a held minimum-size report waits before the page is looked at again (holdEcho); a test's own
+    this.follower = new PopupFollower(this); // brings the window down to a page that has become shorter (extension-popup-follow.cjs)
+    this.left = [];                           // heights the window has just been brought down from by the follower: {height, at}
+    this.loadedAt = undefined;                // when the page finished loading (Blink lets a size shrink only after the load event)
+    this.showFallbackMs = SHOW_AFTER_LOAD_MS; this.showStartMs = SHOW_AFTER_START_MS;   // a test's own
+    this.sizedAt = 0;                         // when the window last changed size
     const {BaseWindow, WebContentsView} = electron;
     const scale = interfaceScale(opts.parent);
     this.platform = platform;
@@ -135,6 +157,11 @@ class ExtensionPopup extends EventEmitter {
       return {action: 'deny'};
     });
     this.webContents.on('preferred-size-changed', this.updatePreferredSize);
+    // A click or a key in the popup, or a change of its address, is usually followed by a change of its layout: the follower looks again soon.
+    // ('input-event', not before-mouse-event: the popup watches the presses on every OTHER view of the window and none on its own page.)
+    this.webContents.on('input-event', this.nudgeFollowerOnInput);
+    this.webContents.on('did-navigate-in-page', this.nudgeFollower);
+    this.webContents.on('did-finish-load', this.reloadFollower);   // (the first load is load() below)
     this.webContents.on('devtools-closed', this.maybeClose);
     this.webContents.on('render-process-gone', this.markGone);
     // The page closing itself (window.close(): uBlock Origin Lite's "Remove an element", Bitwarden after it fills a login, OneTab after it sends the tabs)
@@ -148,6 +175,7 @@ class ExtensionPopup extends EventEmitter {
     openPopups.add(this);
     // What this popup does on this computer goes to the local extension trace (extension-popup-diagnostics.cjs): it never changes what the popup does.
     try { diagnostics(this); } catch { /* a log that cannot be written is not a reason to lose the popup */ }
+    this.armShow(this.showStartMs);
     this.readyPromise = this.load(opts.url);
   }
 
@@ -163,13 +191,71 @@ class ExtensionPopup extends EventEmitter {
     return !this.destroyed && !this.gone && !this.loadFailed && Boolean(contents) && !contents.isDestroyed();
   }
 
+  nudgeFollower = () => { this.follower.nudge(); };
+  reloadFollower = () => { if (this.loadedAt) this.follower.reload(); };   // a page that loads again inside the popup: the follower's watch of the old document is gone
+  // (the engine names a key press rawKeyDown)
+  nudgeFollowerOnInput = (_event, input) => { const type = input && input.type; if (type === 'mouseDown' || type === 'mouseUp' || type === 'rawKeyDown' || type === 'keyDown' || type === 'keyUp' || type === 'char') this.follower.nudge(); };
+
   updatePreferredSize = (_event, size) => {
+    this.follower.observeReport();
+    this.verifying = undefined;   // whatever a report that was being checked would have done, this one is newer
     // The window keeps the size the page asked for while a report that may be the echo of the window that was shrunk before it is looked into (holdEcho).
     if (this.isMinimumEcho(size)) { this.holdEcho(size); return; }
+    // A report for a height the window has just come down from, on a page that follows its window, is the page echoing the old window: it is checked against the page before it grows
+    // the window back (confirmGrowth).
+    if (this.isStaleEcho(size)) { this.verifyGrowth(size); return; }
+    this.applyReport(size);
+  };
+
+  /** The size a report asks for is the window's, and the popup is shown (once the page has loaded and has had its reset to the minimum size: showWhenSized). */
+  applyReport(size) {
     this.releaseEcho();
     if (size && Number.isFinite(size.width) && Number.isFinite(size.height)) this.reported = {width: size.width, height: size.height};
-    this.setSize(size); if (this.hidden) this.show();
-  };
+    this.follower.reportBegin();
+    try { this.setSize(size); } finally { this.follower.reportEnd(); }
+    this.showWhenSized();
+    this.follower.look();   // a page whose root follows its window sends no report when it gets shorter: the follower looks at what this one left (and the watch has its own eyes on the page)
+  }
+
+  /** Shown at the first report the page makes after its load (Chromium shows the popup once it has loaded and sized itself, never before). */
+  showWhenSized() { if (this.hidden && this.loadedAt) this.show(); }
+
+  /**
+   * A popup that is still hidden is shown after `ms` with the size the page asked first, even if the page says nothing more (one whose size does not change with the window sends no
+   * second report; one whose load never ends has said nothing since its first).
+   */
+  armShow(ms) {
+    clearTimeout(this.showTimer);
+    this.showTimer = setTimeout(() => { this.showTimer = undefined; this.showAnyway(); }, ms);
+    this.showTimer.unref?.();
+  }
+
+  showAnyway() {
+    if (this.destroyed || !this.hidden || !this.window || !this.reported) return;
+    this.releaseEcho();
+    this.setSize(this.reported);
+    this.show();
+    this.follower.look();
+  }
+
+  /** Is this report a growth to a height this popup has just left, which is the page echoing the old window rather than needing it? */
+  isStaleEcho(size) {
+    if (!size || !this.size || !Number.isFinite(size.height) || !this.left.length) return false;
+    const now = Date.now();
+    this.left = this.left.filter(entry => now - entry.at < STALE_ECHO_MS);
+    if (size.height <= this.size.height + 1) return false;
+    return this.left.some(entry => Math.abs(entry.height - size.height) <= 1);
+  }
+
+  /** The page is asked whether it needs the bigger window; if it does not, the report is dropped. A newer report (or the popup closing) drops the answer. */
+  verifyGrowth(size) {
+    const token = this.verifying = {};
+    Promise.resolve(this.follower.confirmGrowth()).then(needs => {
+      if (this.verifying !== token || this.destroyed || !this.window) return;
+      this.verifying = undefined;
+      if (needs) this.applyReport(size);
+    }, () => { if (this.verifying === token) { this.verifying = undefined; this.applyReport(size); } });
+  }
 
   /**
    * A report that may be the window's own minimum size echoed back, in the moments after the page loaded. load() puts the window at the minimum (25 x 25) when the page
@@ -180,8 +266,33 @@ class ExtensionPopup extends EventEmitter {
    * load; a first report at the minimum is a size (the popup must show), and so is any later one.
    */
   isMinimumEcho(size) {
-    if (!size || !this.reported || !(Date.now() < this.echoUntil)) return false;
-    return (size.width <= BOUNDS.minWidth + ECHO_SLACK || size.height <= BOUNDS.minHeight + ECHO_SLACK) && this.reported.width > BOUNDS.minWidth + ECHO_SLACK && this.reported.height > BOUNDS.minHeight + ECHO_SLACK;
+    if (!size || !this.reported || !this.echoLive()) return false;
+    return (size.width <= BOUNDS.minWidth + ECHO_SLACK || size.height <= BOUNDS.minHeight + ECHO_SLACK) && this.reported.width > BOUNDS.minWidth + ECHO_SLACK && this.reported.height > BOUNDS.minHeight + ECHO_SLACK
+      || this.refusesMinimum(size);
+  }
+
+  /** Is the time after the load, in which the page's layout in the load's own minimum window can still be on its way, not over? (A report that is held keeps it open until it is settled.) */
+  echoLive() { return Date.now() < this.echoUntil || Boolean(this.echoPending); }
+
+  /**
+   * Is this size what the load's own minimum window left behind (a side no larger than ECHO_NEAR) at a time the page has asked for a real one? Then nothing may give it to the window,
+   * wherever the size was measured: not a report (isMinimumEcho holds it), nor the sizing measure (extension-action-sizing.cjs), fit() or the follower, which read the page
+   * in whatever window it has. The reports are one source of such a size; any of the others can land in the same moment, in either order (a display scale of 150 % made the 25 DIP
+   * window 37.5 pixels, the page's layout in it arrived a few milliseconds later than at 100 %, and a measure that ran in between left the popup 56 x 56).
+   */
+  refusesMinimum(size) {
+    if (!size || !this.reported || !this.echoLive()) return false;
+    return this.reported.width > ECHO_NEAR && this.reported.height > ECHO_NEAR && (size.width <= ECHO_NEAR || size.height <= ECHO_NEAR);
+  }
+
+  /** The local trace says which way a refused size came (a report, the sizing measure, fit(), the follower), once for each way and size: what a laptop's log is read for. */
+  noteRefused(size, source) {
+    if (!size) return;
+    const key = `${source}:${size.width}x${size.height}`;
+    this.refusedKeys = this.refusedKeys || new Set();
+    if (this.refusedKeys.has(key) || this.refusedKeys.size >= 24) return;
+    this.refusedKeys.add(key);
+    try { trace('toolbar popup refuses a size from its own minimum window', this.extensionId, {source, width: size.width, height: size.height, asked: this.reported && {width: this.reported.width, height: this.reported.height}}); } catch { /* a log that cannot be written */ }
   }
 
   /**
@@ -191,6 +302,7 @@ class ExtensionPopup extends EventEmitter {
    * a size only counts if the page was laid out in the window it is measured in (laidOutIn).
    */
   holdEcho(size) {
+    this.noteRefused(size, 'report');
     this.echoPending = {width: size.width, height: size.height};
     this.echoQuiet = false;
     this.setSize(this.reported);
@@ -219,6 +331,8 @@ class ExtensionPopup extends EventEmitter {
     this.echoPending = undefined; this.echoQuiet = false;
     this.reported = pending;
     this.setSize(pending);
+    this.showWhenSized();
+    this.follower.look();   // the hold is over: the page may be shorter than this window (the follower waited while the hold lasted)
   }
 
   maybeClose = () => {
@@ -239,6 +353,9 @@ class ExtensionPopup extends EventEmitter {
     openPopups.delete(this);
     clearTimeout(this.fitTimer);
     clearTimeout(this.echoTimer);
+    clearTimeout(this.showTimer);
+    this.verifying = undefined;
+    this.follower.stop();
     for (const [contents, handler] of this.pressWatch || []) { try { if (!contents.isDestroyed()) contents.off('before-mouse-event', handler); } catch { /* gone */ } }
     this.pressWatch = undefined;
     if (this.parent) {
@@ -264,6 +381,7 @@ class ExtensionPopup extends EventEmitter {
     if (contents && !contents.isDestroyed()) { try { contents.focus(); } catch { /* the window or page went away */ } }
     if (this.hostKind === 'parent' && !this.pressWatch) this.watchOutsidePresses();
     this.emit('shown');
+    this.follower.start();
     if (this.hostKind === 'window' && this.platform === 'linux') this.learnPositions();
   }
 
@@ -284,8 +402,11 @@ class ExtensionPopup extends EventEmitter {
   async load(url) {
     try { await this.webContents.loadURL(url); } catch (error) { this.loadFailed = true; console.error(error); }
     if (this.destroyed) return;
+    this.loadedAt = Date.now();
     this.echoUntil = Date.now() + ECHO_MS;
     this.setSize({width: BOUNDS.minWidth, height: BOUNDS.minHeight});
+    this.armShow(this.showFallbackMs);
+    this.follower.loaded();   // from here the page may shrink (Blink's rule): the follower's watch starts (at once if the popup is on screen already, else when it shows)
   }
 
   isDestroyed() { return this.destroyed; }
@@ -361,8 +482,36 @@ class ExtensionPopup extends EventEmitter {
     if (!this.window || !this.parent) return;
     const max = this.limits();
     const base = {width: clampSize(rect?.width, BOUNDS.minWidth, max.maxWidth), height: clampSize(rect?.height, BOUNDS.minHeight, max.maxHeight)};
-    if (!this.base || this.base.width !== base.width || this.base.height !== base.height) this.extra = {...(this.learned.get(`${base.width}x${base.height}`) || {width: 0, height: 0})};
+    if (!this.base || this.base.width !== base.width || this.base.height !== base.height) {
+      const room = this.learned.get(`${base.width}x${base.height}`) || {width: 0, height: 0};
+      this.extra = {width: Math.min(room.width, LEARNED_ROOM_MAX), height: Math.min(room.height, LEARNED_ROOM_MAX)};   // room for a scrollbar and rounding, not what a page once overflowed by
+    }
     this.base = base;
+    this.resize();
+    this.fitSoon(FIT_ROUNDS);
+  }
+
+  /**
+   * The page has become shorter than the window and its own size report did not change (extension-popup-follow.cjs): the window takes the page's height in one step,
+   * the width stays. fit() then measures the real layout and grows the window if the page turns out to overflow it, as after any size change.
+   */
+  followTo(step) {
+    if (this.destroyed || !this.window || !this.base || !step || !Number.isFinite(step.height)) return;
+    // The window gets exactly the height the follower asked for (it already holds the room a scrollbar needs): the room the window was given on top of the asked size is
+    // not added again (a window of 430 asked, 545 given, brought "down to 430" through setSize stayed at 545 whenever the room had been learned for that size). fit() measures
+    // the result as after any size change and grows it if the page turns out to need more.
+    const max = this.limits();
+    // The heights the window leaves are remembered for a moment: a report for one of them is the page echoing the window it had (isStaleEcho). And what the page asks for is
+    // now this height: a held minimum-size report that restores "what the page asked" (holdEcho) must not put the old, taller size back.
+    const now = Date.now();
+    this.left.push({height: this.base.height, at: now}, {height: this.size ? this.size.height : this.base.height, at: now});
+    if (this.left.length > 12) this.left.splice(0, this.left.length - 12);
+    // The room that was learned for the size the window comes down from, and for the one it comes down to, was for a page that was taller than this one: not given back to a later report.
+    this.learned.delete(`${this.base.width}x${this.base.height}`);
+    this.base = {width: this.base.width, height: clampSize(step.height, BOUNDS.minHeight, max.maxHeight)};
+    this.learned.delete(`${this.base.width}x${this.base.height}`);
+    this.extra = {width: this.extra.width, height: 0};
+    if (this.reported) this.reported = {width: this.reported.width, height: this.base.height};
     this.resize();
     this.fitSoon(FIT_ROUNDS);
   }
@@ -372,6 +521,8 @@ class ExtensionPopup extends EventEmitter {
     const max = this.limits();
     const size = {width: Math.min(max.maxWidth, this.base.width + this.extra.width), height: Math.min(max.maxHeight, this.base.height + this.extra.height)};
     this.size = size;
+    this.sizedAt = Date.now();
+    this.follower.observeResize(size);
     this.emit('will-resize', size);
     this.place(size);
     this.emit('resized');
@@ -407,6 +558,10 @@ class ExtensionPopup extends EventEmitter {
     const step = fitStep(metrics, measured, this.limits());   // measured, not getBounds(): Windows hands back whole pixels converted to DIPs, a value off by one at 125 % and 150 %
     if (!step.width && !step.height) return;
     const needed = {width: extra.width + step.width, height: extra.height + step.height};
+    // A page measured in the load's own 25 x 25 window overflows it by what its narrow layout needs: the window is not grown to that (it is put back to the size the page asked for
+    // when the page's report of that layout arrives, and measured again then).
+    const grown = {width: base.width + needed.width, height: base.height + needed.height};
+    if (this.refusesMinimum(grown)) { this.noteRefused(grown, 'fit'); this.fitSoon(rounds - 1); return; }
     // What that size of page needs is kept for the next time the page asks for it (setSize), even if the window is another one by now.
     const key = `${base.width}x${base.height}`;
     this.learned.delete(key); this.learned.set(key, {...needed});

@@ -134,7 +134,7 @@ test('onDeterminingFilename exists on chrome.downloads, and the manager can ask:
     r.deliver();
     assert.deepEqual(await result, {filename: 'invoices/2026/report.pdf', conflictAction: 'overwrite'});
     assert.equal(seen.length, 1);
-    assert.deepEqual([seen[0].state, seen[0].paused, seen[0].url, seen[0].mime, seen[0].filename, seen[0].incognito, seen[0].danger], ['in_progress', false, 'https://example.com/report.pdf', 'application/pdf', '/Users/x/Downloads/report.pdf', false, 'safe']);
+    assert.deepEqual([seen[0].state, seen[0].paused, seen[0].url, seen[0].mime, seen[0].filename, seen[0].incognito, seen[0].danger], ['in_progress', false, 'https://example.com/report.pdf', 'application/pdf', 'report.pdf' /* 13.8: the BASE name, as ChromeDownloadManagerDelegate::NotifyExtensions passes virtual_path.BaseName() */, false, 'safe']);
     assert.equal(typeof seen[0].id, 'number');
   } finally { r.close(); }
 });
