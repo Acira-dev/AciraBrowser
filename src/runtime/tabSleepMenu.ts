@@ -1,28 +1,38 @@
 import { groupForTab } from './tabGroups';
 import { workspaceIdOf } from './workspaces';
+import { unloadLanding } from './tabTrail';
 import type { BrowserAction, BrowserSnapshot, TabSession } from './types';
 
 /**
- * "Put to sleep" in the tab, group and workspace menus (beta.12 item 15). The sleep itself is main's (desktop/tab-sleep.cjs
- * `sleepNow`, the same protections as the automatic Memory Saver: sound, camera, microphone, screen, typed input, downloads,
- * notification sites, calls and music sites, the never-sleep list ...). This file only decides which tabs a menu has any reason
- * to offer, from what the interface already knows, so a row never appears for a tab that could not go to sleep anyway:
- * the tab on screen (the window's active tab or a pane of the split on screen), a pinned tab, a private, Tor or secured tab,
- * a page of Acira's own (nothing to free), a tab already asleep, and a tab in a private window. Whether a page is playing
- * something or holds typed input only the page can say; main checks that and tells the person with a toast.
+ * "Unload tab" in the tab, group and workspace menus (named "Put to sleep" up to 13.9; beta.12 item 15). The unloading itself is main's (desktop/tab-sleep.cjs
+ * `sleepNow`, the same engine as the automatic Memory Saver: the tab keeps its title, icon and place and its page loads again when it is opened). This file only
+ * decides which tabs a menu has any reason to offer, from what the interface already knows, so a row never appears for a tab that could not be unloaded anyway:
+ * a page of Acira's own (nothing to free), a tab already asleep, a private, Tor or secured tab, a tab in a private window, a pane of the split on screen.
+ *   - The tab menu (one tab the person named) also offers a pinned tab, and the tab on screen when there is an AWAKE tab to move to first (tabTrail.ts unloadLanding).
+ *   - The group and workspace menus (many tabs the person did not each choose) leave out the tab on screen and pinned tabs, and main keeps the Memory Saver's protections there.
+ * Whether a page is playing something or holds typed input only the page can say; main checks that and tells the person with a toast.
  */
 export type SleepScope = Pick<BrowserSnapshot, 'activeTabId' | 'windowUi' | 'browserProfiles'>;
+type MenuScope = SleepScope & Pick<BrowserSnapshot, 'tabs' | 'workspaces' | 'activeBrowserProfileId'>;
 
-/** Can this tab be put to sleep as far as the interface can tell? */
-export function mayOfferSleep(state: SleepScope, tab: TabSession): boolean {
+/** What no menu offers: no page to free, already asleep, never slept, or on screen in a split. */
+function unloadable(state: SleepScope, tab: TabSession): boolean {
   if (tab.contentKind !== 'web' || !/^https?:/i.test(tab.url)) return false;
-  if (tab.sleeping || tab.pinned || tab.privacy || tab.error) return false;
-  if (tab.id === state.activeTabId || state.windowUi.split?.tabIds.includes(tab.id)) return false;
+  if (tab.sleeping || tab.privacy || tab.error) return false;
+  if (state.windowUi.split?.tabIds.includes(tab.id)) return false;
   return !state.browserProfiles.find(profile => profile.id === tab.browserProfileId)?.private;
 }
 
+/** Does the tab's own menu offer Unload tab? A pinned tab yes; the tab on screen only if an awake tab can take its place. */
+export function mayOfferSleep(state: MenuScope, tab: TabSession): boolean {
+  return unloadable(state, tab) && (tab.id !== state.activeTabId || !!unloadLanding(state as BrowserSnapshot, tab));
+}
+
+/** Can a group's or workspace's Unload row act on this tab? Not the tab on screen, not a pinned one. */
+const mayBulkSleep = (state: SleepScope, tab: TabSession): boolean => unloadable(state, tab) && !tab.pinned && tab.id !== state.activeTabId;
+
 /** The tabs of `tabs` a "Put to sleep" row would act on. */
-export const sleepableTabs = (state: SleepScope, tabs: readonly TabSession[]): TabSession[] => tabs.filter(tab => mayOfferSleep(state, tab));
+export const sleepableTabs = (state: SleepScope, tabs: readonly TabSession[]): TabSession[] => tabs.filter(tab => mayBulkSleep(state, tab));
 
 /** The tabs of one group, as the group's menu counts them. */
 export const groupSleepTabs = (state: Pick<BrowserSnapshot, 'tabs' | 'tabGroups'> & SleepScope, groupId: string): TabSession[] =>

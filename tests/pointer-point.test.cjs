@@ -153,8 +153,9 @@ test('main wires it: the pages and the interface report their pointer events, th
   // (the mouse's back and forward buttons are taken first by desktop/mouse-nav.cjs: tests/mouse-nav.test.cjs)
   assert.match(main, /chromeView\.webContents\.on\('before-mouse-event',\(_e,mouse\)=>\{(?:if\(mouseNav\.ui\('interface',mouse,_e\)\)return;)?pointerHeld\.note\(mouse\);if\(chromeView\)notePointer\(chromeView\.webContents,mouse,chromeView\);/, 'the interface');
   assert.match(main, /pointerEvents:\(\)=>pointerSource\.eventsMode\(\)\?pointerSource:null,cursorRead:point=>pointerSource\.noteCursorRead\(point\)/, 'the poller\'s item');
-  assert.match(main, /wc\.on\('destroyed',\(\)=>pointerSource\.forget\(wc\)\);return entry;\}/, 'a closed page');
-  assert.match(main, /const notePointer=\(owner,mouse,view\)=>\{if\(!pointerSource\.listening\)return;try\{pointerSource\.note\(owner,mouse,view\.getBounds\(\)\);\}catch\{\}\};/, 'nothing is recorded where the source does not listen (Mac, Windows)');
+  assert.match(main, /wc\.on\('destroyed',\(\)=>\{pointerSource\.forget\(wc\);pointerWitness\.forget\(wc\);\}\);return entry;\}/, 'a closed page lets go of both (13.10: the witness too)');
+  // 13.10: the same hook also feeds the window's pointer witness on every platform (edge-reveal-unfocused.test.cjs); the Wayland SOURCE still records only where it listens (Linux): nothing is read from it on Mac and Windows.
+  assert.match(main, /const notePointer=\(owner,mouse,view\)=>\{try\{const origin=view\.getBounds\(\);pointerWitness\.note\(owner,mouse,origin\);if\(pointerSource\.listening\)pointerSource\.note\(owner,mouse,origin\);\}catch\{\}\};/, 'the source records only where it listens (Linux), the witness everywhere');
 });
 
 test('no screen coordinate is read anywhere in the new path: no globalX / globalY, no getCursorScreenPoint, no window x and y', () => {

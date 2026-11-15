@@ -259,13 +259,12 @@ test('closing a tab returns to the tab it was opened from until the person picks
  assert.equal(s.tabs[s.tabs.findIndex(t=>t.id===a)+1].id,child);
  s=run(s,{type:'tab.close',id:child});
  assert.equal(s.activeTabId,a);
- // once the person picks a tab by hand the opener is forgotten and the neighbour to the right is used
+ // once the person picks a tab by hand the opener is forgotten and the tab shown before it is used (13.10: it was the neighbour to the right up to 13.9)
  s=run(s,{type:'tab.new'});
  const other=s.activeTabId;
  s=run(s,{type:'tab.select',id:b},{type:'tab.select',id:other});
- const at=s.tabs.findIndex(t=>t.id===other);
  s=run(s,{type:'tab.close',id:other});
- assert.equal(s.activeTabId,s.tabs[Math.min(at,s.tabs.length-1)].id,'falls back to the neighbour');
+ assert.equal(s.activeTabId,b,'goes back to the tab shown before it');
  // a background tab never steals the way back, and a closed opener leaves no dangling reference
  s=run(s,{type:'tab.select',id:c},{type:'tab.new',url:'https://bg.test/',background:true});
  assert.equal(s.tabs.at(-1)!.openerId,undefined);

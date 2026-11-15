@@ -208,7 +208,9 @@ test('Seamless: a view switch sends the docked layout at once on the way out and
   const { readFileSync } = await import('node:fs');
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   // Out: the toolbar's float lingers until its hide has played, so outside Seamless only the sidebar's own peek counts as floating (it held the page at y=6, x=6).
-  assert.match(app, /const sideFloating = \(\) => isEdgeFloating\(\) && \(seamless \|\| edge\.side\);/);
+  // 13.10: read through a ref, because physicalLayout also runs from the page ResizeObserver's flush made in an earlier render (a stale `seamless` / `edge.side` counted a running float as none and laid the native page out beside the sidebar)
+  assert.match(app, /edgeNowRef\.current = \{ seamless, side: edge\.side \};\s*const sideFloating = \(\) => isEdgeFloating\(\) && \(edgeNowRef\.current\.seamless \|\| edgeNowRef\.current\.side\);/);
+  assert.equal(/const sideFloating = \(\) => isEdgeFloating\(\) && \(seamless \|\| edge\.side\);/.test(app), false, 'the closure form is the bug');
   assert.match(app, /const floatSide = sideFloating\(\) \|\|/);
   assert.doesNotMatch(app, /const floatSide = isEdgeFloating\(\)/);
   // Out: the first send of the switch is skipped while the header has not started to grow (the measured follow sends the real ones).
@@ -225,7 +227,7 @@ test('Seamless: a view switch sends the docked layout at once on the way out and
 });
 
 // Animation speed None (Reduce motion: the harness above runs with matchMedia matching): a reveal and a hide are cuts. No view transition, and no fade either
-// (Off used to fade what appeared in over 80ms; the founder, 6 Nov: None is no animation at all).
+// (Off used to fade what appeared in over 80ms; decided 6 Nov: None is no animation at all).
 test('None: the edge reveals and hides at once, with no view transition and no fade', async () => {
   edge.setEdgeFloatable(true, true); await reset();
   const seen = new Set<string>();

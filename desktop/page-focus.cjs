@@ -107,8 +107,9 @@ function createFocusGate({active, give, usable = () => true}) {
  * is nowhere. Chromium falls back to the contents' own initial focus (BrowserView::RestoreFocus -> WebContents::RestoreFocus /
  * SetInitialFocus). Here: whatever holds the keyboard after the platform's restore stays when it is live and on screen; else, in order, an
  * open Link preview, an open menu or panel, the interface when it held the keyboard as the window was left (the person was typing there: the
- * field keeps its text and caret), the page on screen, else the interface. Called synchronously from the window's own 'focus' event, so a
- * press that came with the activation (a click in the address field) lands after it and wins, as it does in Chromium.
+ * field keeps its text and caret), else whatever else held it then when it is still live and on screen (13.10: an extension's side panel,
+ * the other page of a split view: the keys land where they were), the page on screen, else the interface. Called synchronously from the
+ * window's own 'focus' event, so a press that came with the activation (a click in the address field) lands after it and wins, as it does in Chromium.
  * env: focused the web contents holding the keyboard now (null: nowhere), usable(contents) is it live and on screen in this window, preview,
  * popup, ui, page the candidates (null when absent), held who held the keyboard when the window was left.
  */
@@ -118,6 +119,7 @@ function activationTarget({focused = null, usable = () => true, preview = null, 
   if (live(preview)) return preview;
   if (live(popup)) return popup;
   if (live(ui) && held === ui) return ui;
+  if (live(held) && usable(held)) return held;
   if (live(page)) return page;
   return live(ui) ? ui : null;
 }

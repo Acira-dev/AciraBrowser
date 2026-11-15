@@ -6,7 +6,7 @@ import type { BrowserSnapshot } from '../src/runtime/types';
 import { addressCommandListed, matchCommands, type AddressCommand } from '../src/ui/addressCommands';
 import { addressCompletion, rankAddressSuggestions } from '../src/ui/addressSuggestions';
 
-// Founder (6 Nov, Zia research idea 5): the address list offers commands by strict word-start matching, also by initials, in the
+// Decided (6 Nov, Zia research idea 5): the address list offers commands by strict word-start matching, also by initials, in the
 // language in use and in English; the typed row stays first, so Enter on a URL or a search does what it always did.
 const catalog = (lang: string) => JSON.parse(readFileSync(new URL(`../src/i18n/${lang}.json`, import.meta.url), 'utf8')) as Record<string, string>;
 const en = catalog('en');
@@ -95,9 +95,10 @@ test('Tab never completes an answer or a command into the field', () => {
 
 test('the address field runs a command or copies an answer, and never navigates to one', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(app, /const chooseSuggestion = \(item: AddressSuggestion, switchToTab = false\) => \{ if \(runAddressRow\(item, dispatch\)\) \{ setOverlay\(null\); addressRef\.current\?\.blur\(\); return; \}/, 'Enter and a click in the toolbar');
+  assert.match(app, /const chooseSuggestion = \(item: AddressSuggestion, switchToTab = false\) => \{ if \(runAddressRow\(item, dispatch\)\) \{ setOverlay\(null\); leaveField\(true\); return; \}/, 'Enter and a click in the toolbar');
+  assert.match(app, /const leaveField = \(ranRow = false\) => \{ addressRef\.current\?\.blur\(\);/, 'the address field still lets go of the keyboard (13.10: the New Tab box too)');
   assert.match(app, /onChoose=\{\(item, switchToTab\) => \{ if \(!runAddressRow\(item, dispatch\)\)\s+dispatch\(addressSuggestionAction/, 'a click in the list the native overlay draws');
-  assert.match(app, /rankAddressSuggestions\(address, state, 8, \{ commands: addressCommands \}\)/);
+  assert.match(app, /rankAddressSuggestions\(suggestionText, state, 8, \{ commands: addressCommands \}\)/);
   assert.match(app, /rankAddressSuggestions\(query, state, 8, \{ commands \}\)/, 'the overlay ranks the same rows the field does, so the highlighted index means the same row in both');
   const rowsModule = readFileSync(new URL('../src/ui/addressRows.ts', import.meta.url), 'utf8');
   assert.match(rowsModule, /type: 'shortcuts\.run', id/, 'a command runs through the registry, as in the command bar');

@@ -19,9 +19,9 @@ import { restartToUpdate,useUpdateReady } from '../features/updates/useUpdateRea
 /** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter.
  * Its glyph says the state with the switch (founder after beta.7: both rows were shields, and on or off should show): the sparkles
  * (the AI mark) while AI is shown, the sparkle crossed out while AI-free mode hides it. */
-function AiFreeRow(){
+function AiFreeRow({ask=true}:{/** False in a private or Tor window (profileFilters.ts): the row draws disabled, as main's answer there would leave it, and main is never asked. */ask?:boolean}){
   const [on,setOn]=useState<boolean|null>(null),busy=useRef(false);
-  useEffect(()=>{let alive=true;const read=()=>runtime.service({type:'filters.profile-status'}).then(result=>{if(alive)setOn(!!result.filters?.aiContent);}).catch(()=>{});void read();const unsubscribe=runtime.subscribeBrowser?.(event=>{if(event.type==='filters-changed')void read();});return()=>{alive=false;unsubscribe?.();};},[]);
+  useEffect(()=>{if(!ask)return;let alive=true;const read=()=>runtime.service({type:'filters.profile-status'}).then(result=>{if(alive)setOn(!!result.filters?.aiContent);}).catch(()=>{});void read();const unsubscribe=runtime.subscribeBrowser?.(event=>{if(event.type==='filters-changed')void read();});return()=>{alive=false;unsubscribe?.();};},[ask]);
   // Flips at once (the switch's 140ms thumb) and the menu stays open; it reverts if the profile could not be updated.
   const toggle=()=>{if(on===null||busy.current)return;const next=!on;setOn(next);busy.current=true;void runtime.service({type:'filters.profile-set',patch:{aiContent:next}}).then(result=>setOn(!!result.filters?.aiContent)).catch(()=>setOn(!next)).finally(()=>{busy.current=false;});};
   return <MenuToggle icon={on?SparklesOff:Sparkles} label={t("browsermenu.aiFreeMode")} on={!!on} disabled={on===null} shortcut={formatShortcut('Ctrl Shift X')} onToggle={toggle}/>;
@@ -62,6 +62,8 @@ export interface MenuParts {
   /** "Report a problem…" under Settings: the menu turns into the report form (about this site or about Acira). Absent while this build
    * cannot send reports, and in Tor (App.tsx reportSubjects); the menu is then as before. */
   report?:()=>void;
+  /** A private or Tor window: AI-free mode (the profile's filter) is not asked for; its row draws disabled (App passes it from the live state). */
+  profileFiltersBlocked?:boolean;
 }
 const tool=(item:BrowserMenuTool)=><button type="button" className="menu-row" disabled={item.disabled} onClick={item.action}><item.Icon size={16}/><span>{item.label}</span>{item.hint&&<kbd>{formatShortcut(item.hint)}</kbd>}</button>;
 /** One node per menu row, so either list can draw any of them. */
@@ -78,7 +80,7 @@ function menuNodes(p:MenuParts):Record<MenuItemId,ReactNode>{
     zoom:p.zoom,
     split:row(t("browsermenu.splitView"),Columns2,()=>p.open('split'),'Ctrl Shift S'),
     protection:<button type="button" className="menu-row menu-row-more" aria-haspopup="dialog" onClick={()=>p.open('protection')}><ProtectionIcon/><span>{t('protection.title')}</span><ChevronRight size={14} aria-hidden="true"/></button>,
-    aiFree:<AiFreeRow/>,
+    aiFree:<AiFreeRow ask={!p.profileFiltersBlocked}/>,
     bookmarks:<button type="button" className="menu-row menu-row-more" aria-haspopup="dialog" onClick={()=>p.open('bookmarks')}><Star size={16}/><span>{t("browsermenu.bookmarks")}</span><kbd>{formatShortcut('Ctrl Shift O')}</kbd><ChevronRight size={14} aria-hidden="true"/></button>,
     history:row(t("browsermenu.history"),History,()=>p.navigate('acira://history'),'Ctrl H'),
     // Rewind's quick list (it replaced the "Reopen closed tab" row): a drill-in to the last closed tabs; Ctrl+Shift+T still reopens the latest.

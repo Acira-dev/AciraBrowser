@@ -97,7 +97,9 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
     Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: event => emitted.push(event), popupHold: popupHold || { merge: base => base },
       effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen,
       // 13.7: main's pointer source (desktop/pointer-point.cjs), as a Windows window has it: the screen answer, never the events path (that is Wayland's)
-      pointerSource: require('../desktop/pointer-point.cjs').createPointerSource({ platform: 'win32', env: {} }) });
+      pointerSource: require('../desktop/pointer-point.cjs').createPointerSource({ platform: 'win32', env: {} }),
+      // 13.10: and the pointer witness (the window's own views say the pointer is on it: an unfocused window under the pointer reveals its edges)
+      pointerWitness: require('../desktop/pointer-point.cjs').createPointerWitness() });
     vm.runInContext(line[0] + ';globalThis.__caption.edgeItem=edgeItem;', sandbox);
   }
   /** Run the fake clock forward, firing timers in order (the legacy 200 ms release, the watcher's 50 ms look, the refresh, a settle). */

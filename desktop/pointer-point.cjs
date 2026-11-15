@@ -96,4 +96,39 @@ function createPointerSource({ platform = process.platform, env = process.env, o
   return source;
 }
 
-module.exports = { createPointerSource, pointerSourceFor, waylandSession, learnedNow, forgetForTests, POSITIONED, LEARN_READS, LEARN_FAR, LEARN_FRESH };
+// 13.10 (Discord, several Windows users: "many times the sidebar does not appear when I go to the left, I have to click the window first"): the edge reveal stood down for every
+// window that did not hold the keyboard, however plainly the pointer was on it (a second monitor, a snapped pair, after a popup or a toast: the window is visible and under the
+// pointer but not the active one). The pointer's screen position cannot say whether ANOTHER window covers this one there, but the window's own views can: a pointer over the
+// window reaches its pages and its interface as pointer events, active or not, and one over a covering window does not. The witness keeps the last of those events (the same
+// ones the Wayland source above reads, plus the "a button is held" rule) and answers one question: is the pointer at this screen position over one of this window's views?
+const WITNESS = { tolerance: 3, fresh: 60, ahead: 24 };
+/**
+ * One per window, fed like the source above (`note(owner, event, origin)`: owner names the view, origin is that view's { x, y } in the window's content, DIPs) on every platform.
+ * `over(point, contentBounds)`: point is the screen position of the pointer (DIPs), contentBounds the window's content box on the screen. True when the last pointer event any of
+ * the window's views got, if the pointer has not left since, was at that same place: within WITNESS.tolerance DIPs, or WITNESS.ahead of an event under WITNESS.fresh ms old (a
+ * moving pointer is read from the screen a little before its event arrives). A pointer that rests stays witnessed for as long as it rests; one that moves away to a place no
+ * event of this window followed is not over it (another window has it).
+ */
+function createPointerWitness({ now = Date.now } = {}) {
+  let owner = null, last = null, stamp = 0;
+  return {
+    note(from, event, origin) {
+      if (!event || typeof event.type !== 'string') return;
+      if (event.type === 'mouseLeave') { if (from === owner) { owner = null; last = null; } return; }
+      if (!POSITIONED.has(event.type)) return;
+      const ox = origin && Number(origin.x), oy = origin && Number(origin.y), x = Number(event.x), y = Number(event.y);
+      if (!Number.isFinite(ox) || !Number.isFinite(oy) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      owner = from; last = { x: ox + x, y: oy + y }; stamp = now();
+    },
+    forget(from) { if (from === owner) { owner = null; last = null; } },
+    over(point, bounds) {
+      if (!last || !point || !bounds) return false;
+      const dx = Math.abs(point.x - bounds.x - last.x), dy = Math.abs(point.y - bounds.y - last.y);
+      const reach = now() - stamp <= WITNESS.fresh ? WITNESS.ahead : WITNESS.tolerance;
+      return dx <= reach && dy <= reach;
+    },
+    state() { return { owner: owner !== null, point: last ? { ...last } : null }; },
+  };
+}
+
+module.exports = { createPointerSource, createPointerWitness, pointerSourceFor, waylandSession, learnedNow, forgetForTests, POSITIONED, LEARN_READS, LEARN_FAR, LEARN_FRESH, WITNESS };

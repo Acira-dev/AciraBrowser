@@ -22,6 +22,7 @@ import { artworkSignature, dropStaleTabArtwork, shuffleTabArtwork, useTabArtwork
 import { useArtworkDay } from '../../ui/useArtworkDay';
 import { usePersonalArtwork } from '../../ui/usePersonalArtwork';
 import { useBufferedDraft } from '../../ui/useBufferedDraft';
+import type { NewTabField, NewTabSuggest } from '../../ui/newTabSuggest';
 import { openWorkspacePage, selectWorkspaceView } from '../../ui/workspaceView';
 import {runtime} from '../../runtime/client';
 import { useRemoteArtwork } from '../../ui/useRemoteArtwork';
@@ -34,7 +35,7 @@ import { DotMatrix } from '../../components/DotMatrix';
 import { inkFromColor, measureInks } from './labelInk';
 import { t, useT } from '../../i18n';
 
-type Props = { state: BrowserSnapshot; tab: TabSession; dispatch: (action: BrowserAction) => void; onNavigate: (url: string) => void };
+type Props = { state: BrowserSnapshot; tab: TabSession; dispatch: (action: BrowserAction) => void; onNavigate: (url: string) => void; /** The window's address suggestion list, for the search box (ui/newTabSuggest.ts). Left out: the box suggests nothing, as before 13.10. */ suggest?: NewTabSuggest };
 /** Position in the reveal sequence (search, frame, caption, modules); the stylesheet turns it into a delay. */
 const fallbackArt = '/artwork/dunes.svg';
 const step = (index: number): CSSProperties => ({ '--nt-i': Math.min(index, 3) } as CSSProperties);
@@ -52,7 +53,7 @@ function TileIcon({ url, title, favicon }: { url: string; title: string; favicon
   return letter ? <span className="nt-letter" aria-hidden="true">{letter}</span> : <Globe2 className="nt-globe" size={16} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />;
 }
 
-export function NewTabPage({ state, tab, dispatch, onNavigate }: Props) {
+export function NewTabPage({ state, tab, dispatch, onNavigate, suggest }: Props) {
   useT();
   useEffect(() => { performance.mark('acira-newtab-mounted'); requestAnimationFrame(() => requestAnimationFrame(() => performance.mark('acira-newtab-painted'))); }, []);
   const profileId = tab.browserProfileId || state.activeBrowserProfileId;
@@ -80,8 +81,12 @@ export function NewTabPage({ state, tab, dispatch, onNavigate }: Props) {
   // A page the user comes back to (its own tab's picture is known) or lands on through a workspace switch is not "opening": the reveal below (everything rising out of nothing, the frame included) would dip the crossfade to the bare ground, so it does not replay.
   const [resumed] = useState(() => decoded.seed === 'own' || (decoded.seed === 'carried' && document.documentElement.dataset.modeSwitch === 'workspace'));
   const draft = useBufferedDraft(tab.id, tab.searchDraft, dispatch, 'searchDraft');
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement>(null), box = useRef<HTMLFormElement>(null);
   const composing = useRef(false);
+  // The window's address suggestion list serves this box (13.10, ui/newTabSuggest.ts): the box is handed over when it takes the keyboard and at every edit, and let go of when the page goes.
+  const suggestRef = useRef(suggest); suggestRef.current = suggest;
+  useEffect(() => () => suggestRef.current?.leave(), []);
+  const searchField = (text: string): NewTabField | null => input.current && box.current ? { tabId: tab.id, text, input: input.current, box: box.current, setText: draft.edit } : null;
   const [artMounted, setArtMounted] = useState(artOn);
   const layout = useRef<HTMLDivElement>(null), pageRef = useRef<HTMLDivElement>(null), tilesRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -189,9 +194,9 @@ export function NewTabPage({ state, tab, dispatch, onNavigate }: Props) {
         {modules.mark && <BrandLogo mark size={24} className="nt-logo" />}
         {nameInHead && <h1 className="nt-title"><bdi>{profile!.name}</bdi></h1>}
       </header>}
-      {modules.search && <form className="nt-search nt-vapor" style={step(0)} onSubmit={submit} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
+      {modules.search && <form ref={box} className="nt-search nt-vapor" style={step(0)} onSubmit={submit} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
         <EditorGlyph name="search" />
-        <AddressField centerWithin=".nt-search" inputRef={input} label={t('nt.searchLabel')} value={draft.value} onChange={draft.edit} onFocus={draft.onFocus} onBlur={() => draft.onBlur()} style="acira" reducedMotion={reduced} speed={1} searchEngine={state.settings.searchEngine} placeholder={t('nt.placeholder')} onModifiedEnter={(value, newTab) => {
+        <AddressField centerWithin=".nt-search" inputRef={input} label={t('nt.searchLabel')} value={draft.value} onChange={value => { draft.edit(value); const field = searchField(value); if (field) suggest?.change(field); }} onFocus={() => { draft.onFocus(); const field = searchField(draft.value); if (field) suggest?.focus(field); }} onBlur={event => { draft.onBlur(); suggest?.blur(event); }} onViewBlur={suggest?.viewBlur} popupTrigger={Boolean(suggest?.enabled && draft.value.trim())} suggestionOpen={Boolean(suggest?.open)} suggestionListId={suggest?.listId} activeSuggestionId={suggest?.activeId} onSuggestionKeyDown={suggest?.enabled ? suggest.key : undefined} style="acira" reducedMotion={reduced} speed={1} searchEngine={state.settings.searchEngine} placeholder={t('nt.placeholder')} onModifiedEnter={(value, newTab) => {
           if (newTab) { const target = resolveNavigation(value, state.settings.searchEngine, state.settings.searchProviders ?? undefined, state.websiteLanguage); if (!target.error) dispatch({ type: 'tab.new', url: target.url, ...(carriesHttpsFirst(target, target.url) ? { httpsFirst: true } : {}) }); } else onNavigate(value);
         }} />
         {draft.value.trim()

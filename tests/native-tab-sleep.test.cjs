@@ -106,7 +106,7 @@ test('the sweep tells the adapter whether the machine is short of memory, so a p
  assert.ok(tight.contexts.length>0&&tight.contexts.every(([,context])=>context&&context.pressure===true),'short of memory: pressure true');
  // desktop/main.cjs: the pinned protection honours it, and nothing else in protectedReason changed shape
  const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','desktop','main.cjs'),'utf8');
- assert.ok(source.includes("async protectedReason(tab,choice,context)")&&source.includes("if(tab.pinned&&!context?.pressure)return 'pinned';"));
+ assert.ok(source.includes("async protectedReason(tab,choice,context)")&&source.includes("if(tab.pinned&&!context?.pressure&&!context?.explicit)return 'pinned';"));
 });
 
 test('the Memory Saver text in every language no longer says a pinned tab never sleeps; it says pinned tabs stay awake unless memory is low',()=>{

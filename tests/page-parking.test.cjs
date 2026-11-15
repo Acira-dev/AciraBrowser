@@ -41,3 +41,38 @@ test('page-owned placement methods retain their original descriptors after parki
  const original=Object.getOwnPropertyDescriptor(entry.view,'setBounds');parking.park(entry);parking.release();
  assert.deepEqual(Object.getOwnPropertyDescriptor(entry.view,'setBounds'),original);
 });
+
+// 13.10 (laptop, 15 Nov: after an unfocused reveal the page stayed at {0,72,1280x608} under an empty dark band, 13 of 24 launches, until a resize): the release put the page where the last swallowed call said,
+// which is not always where the last layout says (a rectangle asked for by something else while the page was parked). It lands on the last layout's rectangle.
+test('the release lands on the last layout\'s rectangle, not on a stray one asked for while the page was parked',()=>{
+ const parking=createPageParking(),entry=page(),card={x:6,y:6,width:1268,height:668};
+ parking.park(entry);
+ entry.view.setBounds(card);entry.targetBounds=card;            // the layout the interface sent
+ entry.view.setBounds({x:0,y:72,width:1280,height:608});         // something else asked for the Full geometry while parked (no layout behind it)
+ parking.release();
+ assert.deepEqual(entry.view.bounds,card,'the page is where the layout put it');
+});
+
+test('while a glide of the page is running the release keeps the glide\'s own rectangle (the glide goes on to its end by itself)',()=>{
+ const parking=createPageParking(),entry=page(),mid={x:120,y:6,width:1100,height:668};
+ parking.park(entry);
+ entry.targetBounds={x:240,y:6,width:1034,height:668};entry.boundsTimer={};entry.view.setBounds(mid);
+ parking.release();
+ assert.deepEqual(entry.view.bounds,mid,'not pulled to the glide\'s end early');
+});
+
+test('a page the caller says is not settled (HTML fullscreen) keeps what it was parked at',()=>{
+ const parking=createPageParking({settled:()=>false}),entry=page(),full={x:0,y:0,width:1280,height:800};
+ parking.park(entry);entry.targetBounds={x:6,y:6,width:1268,height:668};entry.view.setBounds(full);
+ parking.release();
+ assert.deepEqual(entry.view.bounds,full);
+});
+
+test('a differing release is logged when a log is given (ACIRA_EDGE_TRACE) and silent otherwise',()=>{
+ const lines=[],parking=createPageParking({log:(...parts)=>lines.push(parts.join(' '))}),entry=page(),card={x:6,y:6,width:1268,height:668};
+ parking.park(entry);entry.targetBounds=card;entry.view.setBounds({x:0,y:72,width:1280,height:608});parking.release();
+ assert.equal(lines.length,1);assert.match(lines[0],/parked at .*"y":72.*the last layout says .*"y":6/);
+ const quiet=createPageParking({log:(...parts)=>lines.push(parts.join(' '))}),same=page();
+ quiet.park(same);same.targetBounds=card;same.view.setBounds(card);quiet.release();
+ assert.equal(lines.length,1,'no line when the two agree');
+});

@@ -82,10 +82,12 @@ function createProfileLifecycle({controllers,database,electronSession,permission
   let closed=0;
   // R4-35: pages with unsaved changes are listed once, before the first tab closes; Cancel leaves every tab as it was.
   if(origin.confirmTabsClose&&targets.length&&!await origin.confirmTabsClose(targets))return {closed:0,skipped:targets.length};
+  // 13.10: closing the tabs around one (Close others / to the left / to the right) while the tab on screen is among them leaves the person on the tab they chose it from, not on whatever the trail or the strip would give.
+  if(targets.includes(origin.state.activeTabId)&&origin.state.tabs.some(t=>t.id===action.id))origin.dispatchAction?.({type:'tab.select',id:action.id});
   for(const id of targets){
    if(!origin.state.tabs.some(t=>t.id===id))continue;
    if(!await origin.closePage(id,{user:true}))break;
-   origin.commitAction({type:'tab.close',id});closed++;
+   origin.commitAction({type:'tab.close',id,soon:targets});closed++;
   }
   return {closed,skipped:targets.length-closed};
  }

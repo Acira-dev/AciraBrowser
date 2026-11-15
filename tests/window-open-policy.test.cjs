@@ -159,8 +159,10 @@ test('route: only web addresses open; about:blank is a pop-up with its opener, a
 test('a tab a page opened outlives that page and leaves no dead entry behind when its contents are destroyed', () => {
   const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8').replace(/\r\n/g, '\n');
   assert.ok(main.includes("return {action:'allow',outlivesOpener:true,overrideBrowserWindowOptions:{webPreferences:pageViewPreferences(profile,tab)},createWindow:"), 'Electron must not destroy the tab when its opener goes away');
-  const at = main.indexOf("if(fromPage)view.webContents.once('destroyed',");
+  // 13.10: every tab watches for it (a target=_blank link whose page calls window.close() left a blank tab), not only the ones a page opened
+  const at = main.indexOf("view.webContents.once('destroyed',()=>{/* A tab a page opened");
   assert.ok(at > 0, 'a tab a page opened watches for its contents being destroyed (window.close())');
+  assert.ok(!main.includes("if(fromPage)view.webContents.once('destroyed',"), 'and so does every other tab');
   const handler = main.slice(at, main.indexOf('mainWindow.contentView.addChildView(view,1);', at));
   // a view whose contents are gone has no webContents: the entry must leave `pages` at once, before anything walks them (closing the window does)
   assert.ok(handler.includes('removePageView(entry);pages.delete(tab.id);'), 'the page entry is dropped when its contents are destroyed');

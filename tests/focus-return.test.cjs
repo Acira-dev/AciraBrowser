@@ -145,6 +145,118 @@ test('main: the fallback reads what holds the keyboard now and offers the previe
     assert.ok(body.includes(part), part);
 });
 
+// ---- 13.10: the window's own views beside the interface and the pages (an extension's side panel and its card, a
+// site's question, the password prompt). 13.9 judged "live and on screen" with visibleContents, which knew only the interface, the overlay and the
+// pages: a keyboard in an extension's side panel was moved to the page when the person came back. main's shownInWindow counts the contents of any
+// shown view of the window; activationTarget gives a holder that is still on screen its keyboard back when the platform's restore found nothing.
+
+test('13.10: a side panel that held the keyboard keeps it on return (the platform restored it, or found nothing)', () => {
+  const ui = contents('ui'), page = contents('page'), panel = contents('extension side panel'), frame = contents('extension panel card');
+  const onScreen = new Set([ui, page, panel, frame]), usable = c => onScreen.has(c);
+  assert.equal(target({focused: panel, usable, ui, page, held: panel}), null, 'restored to the side panel: it stays there');
+  assert.equal(target({focused: frame, usable, ui, page, held: page}), null, 'restored to the card\'s header: it stays there');
+  assert.equal(target({focused: null, usable, ui, page, held: panel}), panel, 'the restore found nothing: back to the side panel, not the page');
+  onScreen.delete(panel);
+  assert.equal(target({focused: null, usable, ui, page, held: panel}), page, 'the panel closed while away: the page on screen');
+  const other = contents('another view'); onScreen.add(other);
+  assert.equal(target({focused: null, usable, ui, page, held: other}), other, 'any other view still on screen the same way');
+  const preview = contents('preview');
+  assert.equal(target({focused: null, usable, ui, page, preview, held: other}), preview, 'an open Link preview still comes first');
+  assert.equal(target({focused: null, usable, ui, page, held: ui}), ui, 'the interface as before (typing wins)');
+});
+
+// main's own functions, rebuilt from its source with stand-ins for the window (the shape tests/check-active-page-dead-view.test.cjs uses)
+const oneLine = name => { const at = main.indexOf(`function ${name}(`); assert.ok(at >= 0, `${name} is in main.cjs`); return main.slice(at, main.indexOf('\n', at)); };
+function stage({overlayOpen = false} = {}) {
+  const wc = (name, url = '') => ({name, gone: false, isDestroyed() { return this.gone; }, getURL: () => url});
+  const view = (contents, {visible = true, box = {x: 0, y: 0, width: 400, height: 600}} = {}) => ({webContents: contents, visible, box, getVisible() { return this.visible; }, getBounds() { return this.box; }});
+  const ui = wc('ui'), overlay = wc('overlay'), page = wc('page'), hiddenPage = wc('hidden page');
+  const panelPage = wc('a second panel page'), panelFrame = wc('a second panel card', 'file:///x/card.html');
+  const extPage = wc('extension side panel', 'chrome-extension://abc/panel.html'), extFrame = wc('extension card', 'file:///x/side-panel-frame.html');
+  const prompt = wc('site question'), stray = wc('not in this window');
+  const views = {ui: view(ui), overlay: view(overlay, {box: {x: 0, y: 0, width: 0, height: 0}}), page: view(page), hiddenPage: view(hiddenPage, {visible: false}),
+    panelPage: view(panelPage), panelFrame: view(panelFrame), extPage: view(extPage), extFrame: view(extFrame), prompt: view(prompt)};
+  const entries = new Map([['a', {view: views.page}], ['b', {view: views.hiddenPage}]]);
+  let focusedNow = null;
+  const env = {
+    chromeView: {webContents: ui}, overlayView: {webContents: overlay}, layout: {overlay: overlayOpen ? {kind: 'menu'} : null}, materialHosts: new Map(),
+    pages: entries, state: {activeTabId: 'a'}, peek: {focusTarget: () => null}, focusGate: {holder: () => env.heldNow},
+    mainWindow: {isDestroyed: () => false, contentView: {children: Object.values(views)}},
+    webContents: {getFocusedWebContents: () => focusedNow}, require: id => (id === './page-focus.cjs' ? pageFocusModule : require(id)),
+    focusedContents: null, heldNow: null,
+  };
+  const names = ['visibleContents', 'shownInWindow', 'activationFallback'];
+  const source = names.map(oneLine).join('\n');
+  const keys = Object.keys(env).filter(k => k !== 'heldNow' && k !== 'focusedContents');
+  const make = new Function('env', ...keys, `let focusedContents=null;${source}\nreturn {visibleContents, shownInWindow, activationFallback, focused: () => focusedContents};`);
+  const fns = make(env, ...keys.map(k => env[k]));
+  return {...fns, env, views, wcs: {ui, overlay, page, hiddenPage, panelPage, panelFrame, extPage, extFrame, prompt, stray}, focus: c => { focusedNow = c; }, hold: c => { env.heldNow = c; }};
+}
+
+test('main: a shown view of the window counts as live and on screen (an extension\'s side panel and its card, a site\'s question)', () => {
+  const s = stage();
+  for (const name of ['panelPage', 'panelFrame', 'extPage', 'extFrame', 'prompt']) assert.equal(s.visibleContents(s.wcs[name]), true, name);
+  assert.equal(s.visibleContents(s.wcs.ui), true, 'the interface as before');
+  assert.equal(s.visibleContents(s.wcs.page), true, 'the page on screen as before');
+  assert.equal(s.visibleContents(s.wcs.hiddenPage), false, 'a page no longer on screen as before');
+  assert.equal(s.visibleContents(s.wcs.stray), false, 'a web contents with no view in this window');
+  s.views.panelPage.visible = false; assert.equal(s.visibleContents(s.wcs.panelPage), false, 'a side panel that closed (its view hidden)');
+  s.views.extFrame.box = {x: 0, y: 0, width: 0, height: 0}; assert.equal(s.visibleContents(s.wcs.extFrame), false, 'an empty view is not on screen');
+  s.wcs.prompt.gone = true; assert.equal(s.visibleContents(s.wcs.prompt), false, 'destroyed contents');
+});
+
+test('main: the overlay keeps its own rule (no popup open = not on screen, whatever its view says)', () => {
+  const s = stage();
+  s.views.overlay.box = {x: 0, y: 0, width: 800, height: 600};
+  assert.equal(s.visibleContents(s.wcs.overlay), false, 'the overlay with no popup open');
+  const open = stage({overlayOpen: true});
+  assert.equal(open.visibleContents(open.wcs.overlay), true, 'an open popup');
+});
+
+test('main: coming back with the keyboard in a side panel leaves it there; with the restore finding nothing it goes back to the panel', () => {
+  for (const name of ['panelPage', 'panelFrame', 'extPage', 'extFrame', 'prompt']) {
+    const s = stage(); s.focus(s.wcs[name]); s.hold(s.wcs.page);
+    assert.equal(s.activationFallback(), null, `${name}: restored there by the platform, nothing moves`);
+  }
+  const s = stage(); s.focus(null); s.hold(s.wcs.panelPage);
+  assert.equal(s.activationFallback(), s.wcs.panelPage, 'the restore found nothing: the panel that held it');
+  assert.equal(s.focused(), s.wcs.panelPage);
+  s.views.panelPage.visible = false;
+  assert.equal(s.activationFallback(), s.wcs.page, 'the panel closed while away: the page on screen');
+  const t = stage(); t.focus(t.wcs.hiddenPage); t.hold(t.wcs.hiddenPage);
+  assert.equal(t.activationFallback(), t.wcs.page, '13.9\'s case unchanged: a page no longer on screen gives way to the one on screen');
+  const u = stage(); u.focus(null); u.hold(null);
+  assert.equal(u.activationFallback(), u.wcs.page, 'nothing held it: the page on screen');
+});
+
+test('main: a page entry whose view has no contents left is no page for the fallback (no TypeError inside the focus event)', () => {
+  const s = stage(); s.env.pages.get('a').view = {webContents: undefined, getVisible: () => true, getBounds: () => ({width: 10, height: 10})};
+  s.env.mainWindow.contentView.children.push(s.env.pages.get('a').view);
+  s.focus(null); s.hold(null);
+  assert.doesNotThrow(() => s.activationFallback());
+  assert.equal(s.activationFallback(), s.wcs.ui, 'no page on screen: the interface');
+});
+
+test('13.10: restoreVisibleFocus and page focus\'s page() treat a page whose view has no contents left as no page (no TypeError on the focus path)', () => {
+  // the shape 29d27bbed fixed in checkActivePage: a view whose contents are gone has no webContents at all
+  const ui = contents('ui'), page = contents('page');
+  const run = view => {
+    const given = [];
+    const env = {peek: {focusTarget: () => null}, pages: new Map([['a', {view}]]), state: {activeTabId: 'a'}, focusContents: c => given.push(c), chromeView: {webContents: ui}};
+    const fn = new Function(...Object.keys(env), `${oneLine('restoreVisibleFocus')}\nreturn restoreVisibleFocus;`)(...Object.values(env));
+    fn();
+    return given;
+  };
+  assert.deepEqual(run({webContents: undefined, getVisible: () => true}), [ui], 'no contents: the interface takes the keyboard, nothing throws');
+  assert.deepEqual(run({webContents: page, getVisible: () => true}), [page], 'a live page on screen: the page, as before');
+  assert.deepEqual(run({webContents: page, getVisible: () => false}), [ui], 'a page not on screen: the interface, as before');
+  const at = main.indexOf('page:()=>{const entry=pages.get(state.activeTabId);'), close = 'visible:entry.view.getVisible()};}';
+  assert.ok(at > 0, 'page focus\'s page() is in main.cjs');
+  const pageOf = view => new Function('pages', 'state', `return ${main.slice(at + 'page:'.length, main.indexOf(close, at) + close.length)};`)(new Map([['a', {view}]]), {activeTabId: 'a'})();
+  assert.equal(pageOf({webContents: undefined, getVisible: () => true}), null, 'no contents: no page (page-focus.cjs leaves the keyboard alone)');
+  assert.deepEqual(pageOf({webContents: page, getVisible: () => true}), {id: 'a', contents: page, visible: true}, 'a live page as before');
+});
+
 test('the test is registered with npm test', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   assert.ok(pkg.testSuites.node.includes('tests/focus-return.test.cjs'));

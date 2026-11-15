@@ -37,11 +37,11 @@ test('it is not offered while profiles are spaces (a group stays in its profile)
   assert.doesNotMatch(menu(grouped(2, 'profiles')), /Move to workspace/);
 });
 
-test('the other rows are still there, in order: Put to sleep sits before Move to workspace, Rename and Ungroup stay after it', () => {
+test('the other rows are still there, in order: Unload sits before Move to workspace, Rename and Ungroup stay after it', () => {
   const markup = menu(grouped(3));
   const at = (label: string) => markup.indexOf(`<span>${label}</span>`);
   assert.ok(at('New tab in group') >= 0 && at('Copy links') > at('New tab in group'));
-  assert.ok(at('Put group to sleep') > at('Copy links') && at('Move to workspace') > at('Put group to sleep'), 'Put to sleep, then Move to workspace');
+  assert.ok(at('Unload group') > at('Copy links') && at('Move to workspace') > at('Unload group'), 'Unload, then Move to workspace');
   assert.ok(at('Rename') > at('Move to workspace'), 'the group\'s own rows follow');
   assert.ok(at('Ungroup tabs') > at('Rename'));
 });

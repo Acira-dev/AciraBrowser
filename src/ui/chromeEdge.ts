@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import type { BrowserRuntime } from '../runtime/types';
-import { motionScale, motionSpeed, registerPageRiseSpring, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
+import { PAGE_FOLLOW_END, motionScale, motionSpeed, registerPageRiseSpring, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
 import { noteUse } from '../features/metrics/noteUse';
 import { mirrorSpan, rootSidebarSide } from './sidebarSide';
 
@@ -40,9 +40,10 @@ const bridge = (): BrowserRuntime | undefined => typeof window === 'undefined' ?
 export function bindEdgeTab(id: string, split = false): void {
   // A split opening or closing around the same tab changes what is pictured, too: the one page's picture stood over the whole split (and a pane's over the page) while the sidebar was out.
   const changed = id !== activeTab || split !== activeSplit; activeTab = id; activeSplit = split;
+  if (changed) dropPrepared();   // a picture taken for a rest at the edge is of the page that was showing
   // Another website chosen in the floating sidebar: main holds it outside the window from its first frame; picture it, keeping
   // the previous picture until the new one stands. (An internal page chosen instead ends the picture in setEdgeFloatable.)
-  if (!changed || !floating || !floatFrame || !floatNative) return;
+  if (!changed || !floating || !floatFrame || !floatNative || liveSeamless()) return;
   // The previous picture bridges one page to the next; a split's pictures, or one page's over a split, would show the wrong
   // page in the wrong place, so those leave at once (the newly shown sites wait outside the window meanwhile).
   const previous = picture?.map(shot => shot.img), single = !split && previous?.length === 1 && !picture![0].img.closest('.page-pane[data-pane]');
@@ -132,10 +133,10 @@ let desktopStart:{clip:{left:number;top:number};band:{right:number;bottom:number
  * lighter flash before the bar's own fade; the tint now stays on that band and the cut-out moves when the transition ends. */
 let holdVeil = false;
 /** The page card as it stood beside the sidebar: while the sidebar leaves, the frame keeps that cut-out (its bands stay tinted) and the
- * card's own edges grow back to the page's resting place on the slide's curve (founder, 30 Oct: the bottom band blinked out). */
+ * card's own edges grow back to the page's resting place on the slide's curve (reported 30 Oct: the bottom band blinked out). */
 let framedVisible: Hole[] | null = null;
 /** The sidebar, its corner pieces, the card's edge and its frame line slide together as separate layers. Between whole screen pixels
- * each one's soft edge met the next one's and left a faint seam down the sidebar's edge and around the corners (founder, 30 Oct: "it
+ * each one's soft edge met the next one's and left a faint seam down the sidebar's edge and around the corners (reported 30 Oct: "it
  * should be as if it's one"). The same curve taken in steps of one screen pixel of the slide (--edge-ease-px) puts every frame of
  * those layers on whole pixels, so they meet exactly; --px is one screen pixel, for edges moved by animated lengths instead. */
 let pixelEaseKey = '';
@@ -153,7 +154,7 @@ export function pixelSteps(bezier: readonly [number, number, number, number], st
 }
 /** An edge of the interface as the screen draws it: a box is painted on its nearest whole device pixel, so at 125% the 6px inset (7.5 device px) is drawn from the 8th. The frame's cut-out,
  * the sidebar's slide and the page's covered edge are measured from such edges; taken unsnapped, the cut-out and the picture (or the page) filling it met on half a pixel and left a
- * row or column of half-tinted glass along the card's edge (a thin bright line on Windows at 125% and 175%, founder, 5 Nov), and a slide of 292.5 device pixels moved the sidebar's edge
+ * row or column of half-tinted glass along the card's edge (a thin bright line on Windows at 125% and 175%, reported 5 Nov), and a slide of 292.5 device pixels moved the sidebar's edge
  * and the page's by different fractions each frame. Whole numbers at 100% and 200% for whole CSS lengths: unchanged there. */
 export const snapPx = (value: number): number => { const ratio = window.devicePixelRatio || 1; return Math.round(value * ratio) / ratio; };
 function syncPixelEase(): void {
@@ -202,12 +203,12 @@ function syncDesktopMaterial(app:HTMLElement,visible:Hole[]):void {
  * interface (mac-material.mm). So before the sidebar moves, main takes the page's picture; it stands in the page area exactly
  * over the page, the website steps just outside the window at its own size, and the float plays as for an internal page: the
  * picture is clipped with the sidebar on the compositor and the window's material shows beneath it. The site comes back as
- * the float ends. A split pictures each of its websites in its own pane (founder, 30 Oct: a split's sites showed through the
+ * the float ends. A split pictures each of its websites in its own pane (reported 30 Oct: a split's sites showed through the
  * sidebar); its interface pages stay as they are. A slow capture keeps (or returns to) the native float. */
 type Shot = { img: HTMLImageElement; tab: string };
 let picture: Shot[] | null = null, picturing = false, pictureSkipped = false;
 /** A recent still of a page (App's split stills): a split chosen in the floating sidebar shows it in each website pane at once,
- * while that pane's site waits outside the window for its fresh picture, so no pane is ever empty (founder, 30 Oct). */
+ * while that pane's site waits outside the window for its fresh picture, so no pane is ever empty (reported 30 Oct). */
 let stillOf: (tab: string) => string | undefined = () => undefined;
 /** Each page's latest picture (a few, most recent last): a page chosen in the floating sidebar shows it at once while its fresh
  * picture is taken, which a heavy page can make take a second; it never stands at another size than the page has now. */
@@ -219,7 +220,7 @@ function remember(tab: string, img: HTMLImageElement): void {
 export function setEdgeStills(lookup: (tab: string) => string | undefined): void { stillOf = lookup; }
 const clearStills = () => document.querySelectorAll('.page-area .edge-page-picture[data-provisional]').forEach(img => img.remove());
 function placeStills(tries = 12, single?: string): void {
-  if (!floating || !floatFrame) return;
+  if (!floating || !floatFrame || liveSeamless()) return;
   // One page: its latest picture over the page area, if it was taken at the size the page has now.
   if (single) {
     // Measured against the page's resting place (pageRect): a float that turned native lays the page area out beside the sidebar.
@@ -244,20 +245,39 @@ function placeStills(tries = 12, single?: string): void {
     img.style.top = `${label}px`; img.style.height = `calc(100% - ${label}px)`; pane.append(img);
   }
 }
-async function takePicture(shown?: () => void, budget = 220): Promise<'pictured' | 'not-a-site' | 'failed'> {
+/** 13.10 (Discord: "the graphics of the current tab freeze while the sidebar is out"): the picture is what keeps the page from being laid out beside the sidebar, and what shows the window's material under it,
+ * at the price of a frozen page for as long as the sidebar floats. The LIVE float keeps the page itself in place under the interface (raised over it, the page's rect a hole) and takes no picture at all:
+ * nothing freezes and the reveal has no capture to wait for. It changes how the sidebar looks over the page on a translucent window (the page's edge strip shows faintly through it instead of the window's
+ * material), so it is OFF until its pictures have been reviewed. A test can turn it on: window.__seamlessLive = true. */
+const SEAMLESS_LIVE_FLOAT = false;
+const liveSeamless = (): boolean => SEAMLESS_LIVE_FLOAT || (globalThis as unknown as { __seamlessLive?: boolean }).__seamlessLive === true;
+/** What the reveal's picture needs before it can be placed: every pane's still taken and decoded. */
+type Prepared = { tab: string; targets: string[]; shots: { tab: string; url: string; loading?: boolean }[]; imgs: HTMLImageElement[]; at: number; placed: boolean };
+/** 13.10 (Discord, "still kinda slow, responsive"): the picture used to be taken AFTER the dwell had run out, so every reveal paid the whole pipeline (capture, JPEG, decode, paint, park:
+ * 100 to 250 ms) before its first moving frame. Main now says a rest is about to reveal (`chrome-edge-prime`, desktop/edge-reveal.cjs PRIME_LEAD) and the picture is taken, decoded and
+ * painted under the page meanwhile; the reveal only parks the page. A prepared picture is used only while it is fresh and of the page that is showing; a rest that ends without a reveal lets it go. */
+let prepared: Prepared | null = null, preparing: Promise<Prepared | 'not-a-site' | 'failed'> | null = null, prepareTimer = 0, prepareToken = 0;
+const PREPARED_MAX_AGE = 700, PREPARED_KEEP = 900;
+const paneTabs = (tab: string): string[] => { const ids = [...document.querySelectorAll<HTMLElement>('.page-area .page-pane[data-pane]')].map(pane => pane.dataset.pane!).filter(Boolean); return ids.length > 1 ? ids : [tab]; };
+function dropPrepared(): void {
+  window.clearTimeout(prepareTimer); prepareToken++;
+  const gone = prepared; prepared = null;
+  gone?.imgs.forEach(img => img.remove());
+}
+/** Steps one to four of a picture: take every pane's still and decode it. Nothing is placed. */
+async function preparePicture(budget: number): Promise<Prepared | 'not-a-site' | 'failed'> {
   const native = bridge(), tab = activeTab;
   if (!native || !tab) return 'failed';
   // What to picture is read from the page area as drawn: a split's panes, or the one page. A tab chosen in the floating sidebar
   // (a split's row) may not be drawn yet when this starts; the targets are read again once pictured and the work redone if
   // they changed, or one pane's picture would stand stretched over the whole page.
-  const paneTabs = () => { const ids = [...document.querySelectorAll<HTMLElement>('.page-area .page-pane[data-pane]')].map(pane => pane.dataset.pane!).filter(Boolean); return ids.length > 1 ? ids : [tab]; };
   // The reveal waits on this, so every step is bounded: past the deadline the sidebar floats natively instead. With the
   // sidebar already out (a tab or page chosen in it), main holds the site meanwhile, so a page still loading is waited for longer.
   const deadline = performance.now() + budget, late = () => tab !== activeTab || performance.now() > deadline;
   const within = <T,>(work: Promise<T>, fallback: T) => Promise.race([work.catch(() => fallback), new Promise<T>(resolve => window.setTimeout(resolve, Math.max(0, deadline - performance.now()), fallback))]);
   const command = (still: string, id: string) => Promise.resolve(native.browserCommand({ type: 'edge', tabId: id, still } as never)) as unknown as Promise<unknown>;
   // After a tab change the new site may not be shown yet when this asks; it is asked again until the deadline.
-  let targets = paneTabs(), shots: { tab: string; url: string; loading?: boolean }[] = [];
+  let targets = paneTabs(tab), shots: { tab: string; url: string; loading?: boolean }[] = [];
   for (;;) {
     // Every pane is taken at once, so a split is pictured as quickly as one page.
     const take = async (id: string) => {
@@ -272,32 +292,81 @@ async function takePicture(shown?: () => void, budget = 220): Promise<'pictured'
     const taken = await Promise.all(targets.map(take));
     if (taken.some(item => !item?.none && !item?.url) || late()) return 'failed';
     shots = targets.flatMap((id, index) => taken[index]?.url ? [{ tab: id, url: taken[index]!.url!, loading: taken[index]!.loading }] : []);
-    const now = paneTabs();
+    const now = paneTabs(tab);
     if (now.join() === targets.join()) break;
     targets = now;
   }
   if (!shots.length) return 'not-a-site';
   const imgs = shots.map(shot => { const img = new Image(); img.className = 'edge-page-picture'; img.alt = ''; img.src = shot.url; return img; });
   if (!(await within(Promise.all(imgs.map(img => img.decode())).then(() => true), false)) || late()) return 'failed';
+  return { tab, targets, shots, imgs, at: performance.now(), placed: false };
+}
+/** Step five: the pictures go over the page area (a pane's below its title). False when the page area is no longer what they were taken of. */
+function placePictures(prep: Prepared): boolean {
   // Looked up now: after a tab change the page area has been redrawn for the new tab meanwhile. A pane's picture stands below
   // its title, over the website's own place.
-  const content = document.querySelector<HTMLElement>('.page-area .page-content'), split = targets.length > 1;
-  if (!content || paneTabs().join() !== targets.join()) return 'failed';
-  for (const [index, img] of imgs.entries()) {
-    remember(shots[index].tab, img);
+  const content = document.querySelector<HTMLElement>('.page-area .page-content'), split = prep.targets.length > 1;
+  if (!content || paneTabs(activeTab).join() !== prep.targets.join()) return false;
+  for (const [index, img] of prep.imgs.entries()) {
+    if (img.isConnected) continue;
+    remember(prep.shots[index].tab, img);
     if (!split) { content.append(img); content.querySelectorAll(':scope > .edge-page-picture[data-provisional]').forEach(still => still.remove()); continue; }
-    const pane = document.querySelector<HTMLElement>(`.page-area .page-pane[data-pane="${CSS.escape(shots[index].tab)}"]`);
-    if (!pane) { imgs.forEach(item => item.remove()); return 'failed'; }
+    const pane = document.querySelector<HTMLElement>(`.page-area .page-pane[data-pane="${CSS.escape(prep.shots[index].tab)}"]`);
+    if (!pane) { prep.imgs.forEach(item => item.remove()); return false; }
     const label = pane.querySelector<HTMLElement>('.split-label')?.offsetHeight || 0;
     img.style.top = `${label}px`; img.style.height = `calc(100% - ${label}px)`; pane.append(img);
     pane.querySelectorAll('.edge-page-picture[data-provisional]').forEach(still => still.remove());
   }
+  return true;
+}
+const paintWait = () => new Promise(resolve => { requestAnimationFrame(() => requestAnimationFrame(resolve)); window.setTimeout(resolve, 50); });
+/** Main says a rest at an edge is about to reveal: take the picture now (and place it under the page), or, when the rest ended, let it go. */
+export function primeEdge(on: { top: boolean; side: boolean }): void {
+  if (!on.top && !on.side) {
+    // A reveal that has just fired still needs it (the event order is: the edge, then the end of the rest): only what nothing has used in a moment is dropped.
+    window.clearTimeout(prepareTimer); const token = ++prepareToken;
+    prepareTimer = window.setTimeout(() => { if (token === prepareToken && !picturing) dropPrepared(); }, 300);
+    return;
+  }
+  window.clearTimeout(prepareTimer); prepareToken++;
+  if (liveSeamless() || !floatable || !connectedFrame || !floatNative || picture || pictureSkipped || floating || edgeBusy || picturing || preparing || !bridge() || !activeTab) return;
+  if (prepared && prepared.tab === activeTab && performance.now() - prepared.at < PREPARED_MAX_AGE) return;
+  dropPrepared();
+  const token = prepareToken, tab = activeTab;
+  const work = preparePicture(1200).then(async result => {
+    if (typeof result === 'string') return result;
+    // Let go (a reveal that did not come, a tab change) while the picture was being taken: nothing is placed.
+    if (token !== prepareToken || tab !== activeTab || result.shots.some(shot => shot.loading) || !placePictures(result)) { result.imgs.forEach(img => img.remove()); return 'failed' as const; }
+    prepared = result;
+    await paintWait();
+    if (prepared === result) { result.placed = true; result.at = performance.now(); window.clearTimeout(prepareTimer); prepareTimer = window.setTimeout(() => { if (prepared === result && !picturing) dropPrepared(); }, PREPARED_KEEP); }
+    return result;
+  });
+  preparing = work; void work.finally(() => { if (preparing === work) preparing = null; });
+}
+async function takePicture(shown?: () => void, budget = 220): Promise<'pictured' | 'not-a-site' | 'failed'> {
+  const native = bridge(), tab = activeTab;
+  if (!native || !tab) return 'failed';
+  const deadline = performance.now() + budget, late = () => tab !== activeTab || performance.now() > deadline;
+  const within = <T,>(work: Promise<T>, fallback: T) => Promise.race([work.catch(() => fallback), new Promise<T>(resolve => window.setTimeout(resolve, Math.max(0, deadline - performance.now()), fallback))]);
+  const command = (still: string, id: string) => Promise.resolve(native.browserCommand({ type: 'edge', tabId: id, still } as never)) as unknown as Promise<unknown>;
+  // The picture of a rest that is about to reveal: ready (it was taken while the dwell ran), or still being taken (waited for, within the same bound).
+  let prep: Prepared | 'not-a-site' | 'failed' | null = null;
+  if (!prepared && preparing) await within(preparing, 'failed' as const);
+  if (prepared && prepared.tab === tab && performance.now() - prepared.at < PREPARED_MAX_AGE && paneTabs(tab).join() === prepared.targets.join() && prepared.imgs.every(img => img.isConnected)) { prep = prepared; window.clearTimeout(prepareTimer); prepared = null; prepareToken++; }
+  else dropPrepared();
+  const wasPlaced = !!(prep && typeof prep !== 'string' && prep.placed);
+  if (!prep) prep = await preparePicture(Math.max(0, deadline - performance.now()));
+  if (typeof prep === 'string') return prep;
+  if (late() || !placePictures(prep)) { prep.imgs.forEach(img => img.remove()); return 'failed'; }
+  const {shots, imgs, targets} = prep;
   shown?.();
-  // The picture is painted (beneath the page, or over it when the interface is raised) before the page steps aside.
-  await new Promise(resolve => { requestAnimationFrame(() => requestAnimationFrame(resolve)); window.setTimeout(resolve, 50); });
+  // The picture is painted (beneath the page, or over it when the interface is raised) before the page steps aside. (A prepared one has been for as long as it has stood under the page.)
+  if (!wasPlaced) await paintWait();
   const parked = late() ? [] : await Promise.all(shots.map(shot => command('park', shot.tab).catch(() => false)));
   if (late() || parked.some(ok => !ok)) { imgs.forEach(img => img.remove()); send({ still: 'release' }); return 'failed'; }
   picture = shots.map((shot, index) => ({ img: imgs[index], tab: shot.tab }));
+  void targets;
   for (const [index, shot] of shots.entries()) if (shot.loading) window.setTimeout(refreshPicture, 300, picture[index], false);
   return 'pictured';
 }
@@ -329,7 +398,7 @@ function dropPicture(): void {
  * capture waits for its frame. If no picture can be made, the site is released to its place and the float turns native. */
 function repicture(previous?: HTMLImageElement[]): void {
   const clear = () => previous?.forEach(img => img.remove());
-  if (picture || !floating || !floatFrame || !floatNative) { clear(); return; }
+  if (picture || !floating || !floatFrame || !floatNative || liveSeamless()) { clear(); return; }
   // A slide in progress, or a picture still being made for the tab before, finishes first (that one ends once its tab is gone).
   if (edgeBusy || picturing) { window.setTimeout(() => repicture(previous), 60); return; }
   picturing = true;
@@ -349,19 +418,20 @@ function presentFloat(ready?: Promise<void>): void {
   // Every framed float is raised, so a website that appears while it lasts (a tab chosen in the sidebar, even from an internal
   // page) is placed beneath the sidebar instead of over it.
   // A framed float also asks main to hold such a website outside the window, for its picture (holdShownPage).
-  const present = () => { if (generation === floatGeneration && floating && (floatKind === 'native' || floatFrame) && !nativeFloatRaised) { nativeFloatRaised = true; if (floatFrame) send({ still: 'hold' }); send({ float: true }); } };
+  const present = () => { if (generation === floatGeneration && floating && (floatKind === 'native' || floatFrame) && !nativeFloatRaised) { nativeFloatRaised = true; if (floatFrame && !liveSeamless()) send({ still: 'hold' }); send({ float: true }); } };
   const afterPaint = () => requestAnimationFrame(() => requestAnimationFrame(present));
   if (ready) void ready.then(present, afterPaint); else afterPaint();
 }
 export function setEdgeFloatable(on: boolean, native = true, frame = false): void {
   floatable = on;
   if (picture && (!on || native !== floatNative || frame !== connectedFrame)) dropPicture();
+  if (prepared && (!on || native !== floatNative || frame !== connectedFrame)) dropPrepared();
   // Switching between a website and an internal tab changes the hole, not the visible frame's
   // stacking. Lowering and raising the whole interface here flashes it across the page.
   if (floating && on && frame === connectedFrame && native !== floatNative) {
     floatGeneration++;
     // A website chosen from an internal page keeps the page-area float: main holds the site outside the window and it is pictured.
-    floatNative = native; floatKind = native && !floatFrame ? 'native' : 'dom'; holes = [];
+    floatNative = native; floatKind = native && (!floatFrame || liveSeamless()) ? 'native' : 'dom'; holes = [];
     const root = document.documentElement;
     if (floatFrame) root.dataset.sidebarOverlay = floatKind; else root.dataset.edgeFloat = floatKind;
     refreshEdgeFloat();
@@ -393,7 +463,7 @@ function pageHoles(area: DOMRect): Hole[] {
   }).filter(h => h.w > 20 && h.h > 20);
 }
 /** The holes the native pages need. A split's interface panes (a new tab, Settings) stay drawn by the interface: cut out with the websites they
- * stood see-through, on the desktop, for as long as the float was native (founder, 31 Oct: "this glitched for a second"). */
+ * stood see-through, on the desktop, for as long as the float was native (reported 31 Oct: "this glitched for a second"). */
 function webHoles(list: Hole[]): Hole[] {
   const web = list.filter(hole => { const pane = document.querySelector(`.page-area .page-pane[data-pane="${CSS.escape(hole.tabId)}"]`); return !pane || pane.hasAttribute('data-web'); });
   return web.length ? web : list;
@@ -417,7 +487,7 @@ function paintPageHoles(app: HTMLElement, areaNow: DOMRect): void {
   });
   holes = resting.map(flipHole);
   // The card beside a floating sidebar is where its resting place and the page area now meet. Seamless insets the card 6px all round and the
-  // layout beside the sidebar drops that inset, so the current rect alone put the corner curve 6px above the page's real corner (founder, 31 Oct:
+  // layout beside the sidebar drops that inset, so the current rect alone put the corner curve 6px above the page's real corner (reported 31 Oct:
   // "its corner is a square"); the resting rect alone cut the glass 6px too deep where the docked card keeps its bottom inset, and the strip
   // shone through unveiled. Its left edge is where the sidebar meets it now.
   const rows = visible.map(hole => {
@@ -470,7 +540,7 @@ function paintPageHoles(app: HTMLElement, areaNow: DOMRect): void {
   // The card's frame line (its top, right and bottom; the docked card's ring) in two pieces, so the bottom can follow the card's
   // bottom edge while the top stays (sidebar-overlay.css). Both reach back to the page's resting left edge; at rest their holders
   // clip them where the left corners' curves end, and while the sidebar slides a clip travelling with its edge shows them from
-  // there, so the line stays joined to the sidebar and stretches or shortens with it (founder, 30 Oct: "it looks cut off").
+  // there, so the line stays joined to the sidebar and stretches or shortens with it (reported 30 Oct: "it looks cut off").
   const card = { top: Math.min(...rows.map(h => h.y)), right: Math.max(...rows.map(h => h.x + h.w)), bottom: Math.max(...rows.map(h => h.y + h.h)) };
   const reach = pr?.left ?? firstLeft, mid = Math.round((card.top + card.bottom) / 2), o = r + .5, root = document.documentElement;
   // The left end wears the card's curve and edge like the right (the lining used to stop where the curve began): a separate stroke up the sidebar's
@@ -563,6 +633,9 @@ function setFloat(on: boolean, deferPresentation = false): void {
   pictureSkipped = false; clearStills(); if (picture) dropPicture(); else send({ still: 'release' });
   delete root.dataset.sidebarOverlay;
   floatTimer = window.setTimeout(() => { if (!floating) delete root.dataset.edgeFloat; }, wasNative ? 120 : 0);
+  // 13.10 (laptop: the page could stay at the wrong rectangle after an unfocused reveal until a resize): when the float has ended the page is at its resting place, so the layout is measured and sent once more
+  // from that. The page area's own size observer only speaks when the area changes size, and a page that main left somewhere else while parked never made it. Main ignores a layout that is the one it has.
+  try { window.dispatchEvent?.(new Event(PAGE_FOLLOW_END)); } catch { /* a window that cannot dispatch */ }
 }
 function forwardInput(event: Event): void {
   if (!floating || !pageRect) return;
@@ -618,14 +691,14 @@ export function applyEdge(next: EdgeState): void {
   const shownBefore = { top: prev.top || asks.top, side: prev.side || asks.side }, shownAfter = { top: next.top || asks.top, side: next.side || asks.side };
   const reveal = (shownAfter.top && !shownBefore.top) || (shownAfter.side && !shownBefore.side), hide = (!shownAfter.top && shownBefore.top) || (!shownAfter.side && shownBefore.side);
   // The toolbar or sidebar entering or leaving the layout moves the page area under the pinned page: the pin (--sidebar-page-*) is read again in the
-  // same commit, or the page stood a frame or two where the layout put it before it "fixed itself" (founder, 31 Oct, Seamless top bar).
+  // same commit, or the page stood a frame or two where the layout put it before it "fixed itself" (reported 31 Oct, Seamless top bar).
   const before = glideLefts();
   const update = () => { flushSync(() => { edge = next; emit(); }); refreshEdgeFloat(); setGlide(before); };
   // The side floats when the pointer or a key reveals it; a pin docks it over the page's place as before (the page resizes once).
   // The toolbar floats the same way (R4-24: the page no longer glides down under it, so no strip of page background shows).
   const enteringFloat = floatable && ((next.side && !next.pinned.side && !prev.side) || (next.top && !next.pinned.top && !prev.top));
   // Over a website, the reveal waits (bounded) for the page's picture; a later edge change replaces the waiting one.
-  if (enteringFloat && connectedFrame && floatNative && !picture && !pictureSkipped) {
+  if (enteringFloat && connectedFrame && floatNative && !picture && !pictureSkipped && !liveSeamless()) {
     pendingEdge = next;
     if (picturing) return;
     picturing = true; edgeBusy = true;
@@ -645,7 +718,7 @@ export function applyEdge(next: EdgeState): void {
   // over the traffic lights and the arriving sidebar, and a leaving sidebar made the controls jump a caption's width at once.
   document.documentElement.dataset.edgeToolbar = shownBefore.top && shownAfter.top ? 'stays' : 'slab';
   // The stroke up the sidebar's edge (the left end of the card's ring) is not drawn while the sidebar slides in: held at its final place it stood alone ahead of the moving edge, a second
-  // rounded card outline for most of the slide (founder, 7 Nov, dark: "a line glitching on the lining of the sidebar"). It fades in once the sidebar has landed (sidebar-overlay.css).
+  // rounded card outline for most of the slide (reported 7 Nov, dark: "a line glitching on the lining of the sidebar"). It fades in once the sidebar has landed (sidebar-overlay.css).
   if (shownAfter.side && !shownBefore.side) document.documentElement.dataset.edgeRim = 'wait'; else delete document.documentElement.dataset.edgeRim;
   // Whether the top bar arrives or leaves: the page's top corner beside the sidebar rides the card's moving top edge (sidebar-overlay.css edge-corner-lift-*).
   // Only while the sidebar stays: when it comes or goes with the bar, the layout is measured again after the layout change (the bar's height lands a frame later), so the
@@ -675,6 +748,7 @@ export function applyEdge(next: EdgeState): void {
 export function installChromeEdge(): () => void {
   const off = bridge()?.subscribeBrowser?.(raw => {
     const event = raw as unknown as { type: string; top?: boolean; side?: boolean; pinned?: { top?: boolean; side?: boolean } };
+    if (event.type === 'chrome-edge-prime') { const prime = (raw as unknown as { prime?: { top?: boolean; side?: boolean } }).prime; primeEdge({ top: !!prime?.top, side: !!prime?.side }); return; }
     if (event.type !== 'chrome-edge') return;
     applyEdge({ top: !!event.top, side: !!event.side, pinned: { top: !!event.pinned?.top, side: !!event.pinned?.side } });
   });

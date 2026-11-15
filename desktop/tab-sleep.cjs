@@ -69,12 +69,13 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
  }
  /** Call when a tab is shown or touched so the idle clock restarts. */
  function touch(id){const item=record(id);item.lastVisible=now();item.retryAfter=0;}
- /** The user's own "Put to sleep" (a tab's menu, a group's, a workspace's): the same protections as the sweep and the same adapter.sleep, none of the waiting.
-  *  The tab on screen, anything protectedReason names (audio, capture, edits, pinned, never-sleep sites, ...) and a page that asks to stay all stay awake, each with its reason.
+ /** The user's own "Unload tab" (a tab's menu, a group's, a workspace's; named Put to sleep up to 13.9): the same adapter.sleep as the sweep, none of the waiting.
+  *  `explicit` (13.10) is the person's request itself: it also unloads a pinned tab and skips the sweep's own keep-awake reasons (the never-sleep list, notification sites, recent sound, background title changes); sound, camera, typed input and downloads still keep a tab.
+  *  The tab on screen, anything protectedReason names (audio, capture, edits, ...) and a page that asks to stay all stay awake, each with its reason.
   *  The Memory Saver switch does not matter: it governs the automatic sleep, this is a request. A tab with no native page is already asleep (or gone) and is listed apart.
   *  Returns {slept: ids, stayed: {id: reason}, asleep: ids}. */
- async function sleepNow(ids){
-  const choice=memorySaverChoice(settings()),report={slept:[],stayed:{},asleep:[]};
+ async function sleepNow(ids,options){
+  const choice=memorySaverChoice(settings()),report={slept:[],stayed:{},asleep:[]},context=options?.explicit?{explicit:true}:undefined;
   const byId=new Map(adapter.tabs().map(tab=>[tab.id,tab]));
   const one=async id=>{
    const tab=byId.get(id);
@@ -83,7 +84,7 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
    const item=records.get(id);
    // A frozen page cannot run the safety check (the sweep wakes it first too); the next sweep freezes it again if it stays.
    if(item?.frozen){item.frozen=false;try{await adapter.unfreeze(id);}catch{}}
-   const reason=await adapter.protectedReason(tab,choice);
+   const reason=await adapter.protectedReason(tab,choice,context);
    if(reason){report.stayed[id]=reason;return;}
    const result=await adapter.sleep(id);
    if(result?.slept){report.slept.push(id);records.delete(id);}else report.stayed[id]=result?.reason||'not-safe';
@@ -93,7 +94,15 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
   for(let at=0;at<wanted.length;at+=SLEEP_NOW_BATCH)await Promise.all(wanted.slice(at,at+SLEEP_NOW_BATCH).map(id=>one(id).catch(()=>{report.stayed[id]='not-safe';})));
   return report;
  }
- return {sweep,touch,sleepNow,frozen:id=>!!records.get(id)?.frozen};
+ /** Would `id` stay awake if it were unloaded now (13.10: asked of the tab on screen before the person is moved off it)? Null when it may go, else the reason. Changes nothing but a frozen page, woken for the check as sleepNow does. */
+ async function check(id,options){
+  const choice=memorySaverChoice(settings()),tab=adapter.tabs().find(item=>item.id===id);
+  if(!tab)return 'gone';
+  const item=records.get(id);
+  if(item?.frozen){item.frozen=false;try{await adapter.unfreeze(id);}catch{}}
+  return await adapter.protectedReason(tab,choice,options?.explicit?{explicit:true}:undefined)||null;
+ }
+ return {sweep,touch,sleepNow,check,frozen:id=>!!records.get(id)?.frozen};
 }
 const SLEEP_NOW_BATCH=4;
 /** Why a tab stayed awake, in the few kinds the toast can say plainly: 'screen' (it is the tab on screen), 'media' (sound, camera, microphone, screen, video, picture-in-picture),

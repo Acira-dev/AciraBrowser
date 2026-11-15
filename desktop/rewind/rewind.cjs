@@ -193,7 +193,7 @@ function createRewind({dir,now=Date.now,limits={},timers={setTimeout,clearTimeou
   const batch=undoable.get(request.token);if(!batch||batch.windowId!==ctx.windowId)return {ok:false,code:'unavailable',message:t('rewind.main.undoGone')};
   undoable.delete(request.token);
   const open=batch.tabIds.filter(id=>ctx.state().tabs.some(t=>t.id===id));
-  quiet=ctx.windowId;try{for(const id of open)ctx.dispatch({type:'tab.close',id});}finally{quiet=null;}
+  quiet=ctx.windowId;try{for(const id of open)ctx.dispatch({type:'tab.close',id,soon:open});}finally{quiet=null;}
   // Say it happened (it replaces the closed-tabs toast those closes raised: this was an undo, not a close).
   if(open.length)ctx.dispatch({type:'toast',text:t('rewind.main.restoreUndone'),tone:'status',icon:'check'});
   return {ok:true,closed:open.length};

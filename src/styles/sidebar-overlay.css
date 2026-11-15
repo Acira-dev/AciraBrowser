@@ -89,7 +89,7 @@
    paintPageHoles in two pieces that reach back to the page's resting left edge. At rest each holder clips its piece where the left
    corners' curves end (the low piece also above the card's middle, where the top piece's right edge ends). The ring itself is off
    while the sidebar floats: it lay in the frame's own picture during the slide and so stood still, cut off short of the moving
-   sidebar (founder, 30 Oct). */
+   sidebar (reported 30 Oct). */
 .sidebar-page-rim { display:none; }
 :root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim { display:block; position:fixed; inset:0; z-index:1; pointer-events:none; clip-path:polygon(var(--sf-rim-line-x,var(--sf-rim-x,0px)) 0,100% 0,100% 100%,var(--sf-rim-x,0px) 100%,var(--sf-rim-x,0px) var(--sf-rim-top,0px),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-top,0px)); }
 :root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim-low { clip-path:polygon(var(--sf-rim-x,0px) var(--sf-rim-mid,0px),100% var(--sf-rim-mid,0px),100% 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-bottom,0px),var(--sf-rim-x,0px) var(--sf-rim-bottom,0px)); }
@@ -102,7 +102,7 @@
 :root[data-sidebar-overlay] .app .browser-root .browser-body>.page-area { box-shadow:none!important; }
 /* The line's clip is two steps: its row (the one above the card's top, the one below its bottom) starts where the card's left corner curve ends, and everything else (the stroke up the
    sidebar's edge and round the corner) from the sidebar's edge. Both ride the sidebar's edge on the same clip, so the motion is what it was; only the straight line no longer runs over
-   the corner's curve and a pixel into the sidebar (founder, 5 Nov: "the line runs past the curve"). --sf-rim-line-x is the end of the curve, 2px short so the line overlaps the stroke's last bit. */
+   the corner's curve and a pixel into the sidebar (reported 5 Nov: "the line runs past the curve"). --sf-rim-line-x is the end of the curve, 2px short so the line overlaps the stroke's last bit. */
 /* While the sidebar slides, each piece is captured whole (a capture leaves out its holder's clip) and shown through a clip that
    travels with the sidebar's edge, on the same whole-pixel steps as the sidebar, while the line itself stays put: its left end
    stays on the corner, so the line stretches out with a leaving sidebar and shortens before an arriving one. Its right and bottom
@@ -158,13 +158,28 @@
  mask:linear-gradient(#000 0 0) 0 var(--sf-frame-top,0px) / 100% calc(100% - var(--sf-frame-top,0px) - var(--sf-frame-bottom,0px)) no-repeat;
 }
 /* Seamless's toolbar and sidebar float over the page itself (a website, or a page the interface draws), so no window glass can
-   show beneath them: the frame's veil alone read transparent over the page (founder, 30 Oct). They wear the frame's finish as
+   show beneath them: the frame's veil alone read transparent over the page (reported 30 Oct). They wear the frame's finish as
    Normal does where the glass cannot show (frame.css, transparency off): its colour, lifted at the top, opaque. */
 :root:root[data-edge-float] .app.style-acira :is(.acira-sidebar.is-peek,.browser-shell[data-seamless=shown]) {
  background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--sidebar-rgb,var(--chrome-rgb))) 96%,#fff),rgb(var(--sidebar-rgb,var(--chrome-rgb))) 120px),rgb(var(--sidebar-rgb,var(--chrome-rgb)))!important;
 }
+/* 13.10 live float (chromeEdge.ts liveSeamless, off by default): a float over the LIVE page (data-sidebar-overlay=native: no picture, the page stays under the interface) wears the same opaque finish as the
+   interface-page float above: no window material can show beneath it, and the page's own edge strip must not show faintly through a translucent surface. */
+:root:root[data-sidebar-overlay=native] .app.style-acira :is(.acira-sidebar.is-peek,.browser-shell[data-seamless=shown]) {
+ background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--sidebar-rgb,var(--chrome-rgb))) 96%,#fff),rgb(var(--sidebar-rgb,var(--chrome-rgb))) 120px),rgb(var(--sidebar-rgb,var(--chrome-rgb)))!important;
+}
 :root[data-desktop-material=ready]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background:transparent!important; }
 :root[data-desktop-material=ready][data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app :is(.page-area,.browser-body,.browser-root) { overflow:visible; }
+/* 13.10 (laptop, 15 Nov: "in a window that is not the active one the sidebar is all there in the first frame and only its rows slide in afterwards"; the same since 13.9 with Windows transparency effects
+   off): the two rules above are what lets the page's picture stand under the sliding sidebar for the whole transition. Where the window's material is not live (inactive window, transparency off) the page
+   area kept its opaque background and clipped the picture at the sidebar's new edge, so the sidebar's column was one flat dark from the very first frame, with nothing behind the sliding panel, and only
+   the rows moved. The same two rules for those states (any material that is not live: Windows inactive / transparency off, Linux, which has no window material at all, a Mac with reduced transparency), for the length of the transition only: at rest, and where the material is live, nothing changes. */
+:root:not([data-desktop-material=ready])[data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background:transparent!important; }
+:root:not([data-desktop-material=ready])[data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app :is(.page-area,.browser-body,.browser-root) { overflow:visible; }
+/* The same for the toolbar: its band is the shown toolbar's own background, which at rest is the window's flat finish (frost-preview.css) and in the live-glass state is the frame's veil carried by the
+   sliding layer. Here it is neither, so the sliding layer was the controls alone over the page and the band stood in at once when the transition ended (~0.38 s in, laptop Fault 1, top edge). The sliding layer wears the
+   window's finish (the same gradient as the flat one, from the window's top edge) for the length of the transition, old frame and new: a toolbar that comes or goes now carries its band. */
+:root:is([data-material=acrylic],[data-material=vibrancy]):not([data-desktop-material=ready])[data-mode-switch=edge]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app.style-acira .browser-shell[data-seamless=shown] { background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--chrome-rgb)) 96%,#fff),rgb(var(--chrome-rgb)) 120px)!important; }
 :root[data-desktop-material=ready][data-mode-switch=edge]:not([data-fr-finale])[data-sidebar-overlay=dom] .app:not(:has(>.setup-dialog)) .page-content,
 :root[data-desktop-material=ready][data-mode-switch=edge]:not([data-fr-finale])[data-edge-float=dom] .app:not(:has(>.setup-dialog)) .page-content { view-transition-name:acira-desktop-page; }
 /* The page's covered edge follows the sliding sidebar on the compositor: a clip-path animation runs on the main

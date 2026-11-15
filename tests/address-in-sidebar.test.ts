@@ -150,7 +150,7 @@ test('the field in use does not hide the pill: only the open suggestion list doe
   assert.match(more, /data-suggesting=\{suggesting \|\| undefined\}/);
   assert.match(more, /useEffect\(\(\) => \{ if \(suggesting\) dwell\.dismiss\(\); \}, \[suggesting, dwell\]\)/, 'a row open under the suggestion list closes with it');
   assert.match(more, /dwell\.enter\(sample\(event\)\)/); assert.match(more, /dwell\.move\(sample\(event\)\)/, 'the dwell is given the pointer\'s samples');
-  assert.match(app, /suggesting=\{overlay === 'suggestions'\}/);
+  assert.match(app, /suggesting=\{overlay === 'suggestions' && !ntpOn\}/, 'the pill steps aside for the address field\'s list, not for the New Tab box\'s (13.10)');
 });
 
 test('a click opens at once and closes an open pill; a missed enter is re-armed by a move', () => {

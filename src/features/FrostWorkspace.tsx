@@ -25,6 +25,7 @@ import '../styles/new-tab.css';
 import { openWorkspacePage,selectWorkspaceView as selectView,useWorkspaceView } from '../ui/workspaceView';
 import { BookmarksManager } from './BookmarksManager';
 import { NewTabPage } from './newtab/NewTabPage';
+import type { NewTabSuggest } from '../ui/newTabSuggest';
 import { TorNewTab } from './tor/TorNewTab';import { openSettings } from '../ui/settingsView';import { PrivateNewTab } from './newtab/PrivateNewTab';import { isPrivateNewTab } from './newtab/pages';import { isTorWindow, torDownloadsActive } from './tor/torClient';
 import { t } from '../i18n';
 type Dispatch = (action: BrowserAction) => void;
@@ -145,6 +146,8 @@ type Props = {
     onNavigate: (url: string) => void;
     /** acira://bookmarks opens straight on the library. */
     view?: 'bookmarks';
+    /** The window's address suggestion list, for the New Tab page's search box (ui/newTabSuggest.ts). */
+    suggest?: NewTabSuggest;
 };
 function PageRow({ url, name, detail, favicon, onOpen, onContextMenu, compact = false }: {
     compact?: boolean;
@@ -157,12 +160,12 @@ function PageRow({ url, name, detail, favicon, onOpen, onContextMenu, compact = 
 }) {
     return <button className={`ed-page-row ${compact ? 'ed-page-row-compact' : ''}`} title={`${name} · ${url}`} onClick={onOpen} onAuxClick={onOpen} onContextMenu={onContextMenu}><SiteIdentityIcon url={url} favicon={favicon} size={16}/><strong>{name}</strong><span>{detail || address(url)}</span><PreviewIcon icon={ArrowUpRight}/></button>;
 }
-export function GlassWorkspace({ state, dispatch, onNavigate, view: openOn }: Props) {
+export function GlassWorkspace({ state, dispatch, onNavigate, view: openOn, suggest }: Props) {
     const tab = state.tabs.find(item => item.id === state.activeTabId)!;
     const storedView = useWorkspaceView(tab.id), view = openOn ?? storedView;
     if (view === 'bookmarks') return <BookmarksManager state={state} dispatch={dispatch} onNavigate={onNavigate}/>;
     if (isTorWindow(state)) return <TorNewTab onNavigate={onNavigate} reducedMotion={state.settings.reducedMotion} downloading={torDownloadsActive(state)} onBridgeSettings={() => openSettings(state, dispatch, { section: 'Connection', setting: 'tor-bridges' })}/>;
     if (isPrivateNewTab(Boolean(state.browserProfiles.find(profile => profile.id === tab.browserProfileId)?.private), tab.privacy as string | undefined)) return <PrivateNewTab onNavigate={onNavigate} reducedMotion={state.settings.reducedMotion}/>;
-    return <NewTabPage state={state} tab={tab} dispatch={dispatch} onNavigate={onNavigate}/>;
+    return <NewTabPage state={state} tab={tab} dispatch={dispatch} onNavigate={onNavigate} suggest={suggest}/>;
 }
 

@@ -60,7 +60,7 @@ test('every place that opens what was typed tells the reducer: address field, ch
  const {readFileSync}=await import('node:fs');
  const app=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8'),newTab=readFileSync(new URL('../src/features/newtab/NewTabPage.tsx',import.meta.url),'utf8');
  assert.ok(app.includes("carriesHttpsFirst(typed === undefined ? target : resolveNavigation(typed"),'navigate(): the typed text, or the text a chosen row stands for');
- assert.ok(app.includes("navigate(item.url, tab.id, address)"),'a chosen row says what was typed');
+ assert.ok(app.includes("navigate(item.url, tab.id, suggestionText)"),'a chosen row says what was typed (13.10: in the address field or in the New Tab box, whichever the list served)');
  assert.ok(app.includes("type: 'tab.new', url: target.url, ...(carriesHttpsFirst(target, target.url)"),'Alt+Enter');
  assert.ok(app.includes("addressSuggestionAction(item, switchToTab, state.activeTabId, query)"),'a row clicked in the popup list');
  assert.ok(/else\s+onNavigate\(query\);/.test(app),'the command palette hands on what was typed, not its resolved address');

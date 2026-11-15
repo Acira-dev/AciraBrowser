@@ -89,6 +89,6 @@ test('each address is resolved once: a ranking repeated over the same history re
 });
 
 test('the window ranks only while the field is in use or its list is open', () => {
-  assert.ok(app.includes("const suggestionsWanted = addressFocused || overlay === 'suggestions';"));
-  assert.ok(app.includes("const suggestions = suggestionsWanted ? rankAddressSuggestions(address, state, 8, { commands: addressCommands }) : []"));
+  assert.ok(app.includes("const suggestionsWanted = addressFocused || overlay === 'suggestions' || ntpOn;"), '13.10: or the New Tab page\'s search box is the field the list serves');
+  assert.ok(app.includes("const suggestions = suggestionsWanted ? rankAddressSuggestions(suggestionText, state, 8, { commands: addressCommands }) : []"));
 });
