@@ -295,8 +295,8 @@ test('edgeDistance: zero in the zone, the inward distance beyond it, mirrored fo
 test('the page area lets the picture stand under the sliding sidebar in every material state, the live one and the others (Windows inactive, transparency off, Linux)', () => {
   const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/styles/sidebar-overlay.css'), 'utf8');
   const rules = css.split('\n').filter(line => /^:root/.test(line));
-  for (const declaration of ['.page-area { background:transparent!important; }', ':is(.page-area,.browser-body,.browser-root) { overflow:visible; }']) {
-    const carrying = rules.filter(line => line.endsWith(declaration));
+  for (const declaration of [/\.app \.page-area \{[^}]*transparent!important;\s*\}$/, /:is\(\.page-area,\.browser-body,\.browser-root\) \{ overflow:visible; \}$/]) {
+    const carrying = rules.filter(line => declaration.test(line));
     assert.ok(carrying.some(line => line.startsWith(':root[data-desktop-material=ready]')), 'the live state keeps its rule: ' + declaration);
     assert.ok(carrying.some(line => line.startsWith(':root:not([data-desktop-material=ready])')), 'and every other state has the same rule, for any material (Linux is data-material=none): ' + declaration);
   }

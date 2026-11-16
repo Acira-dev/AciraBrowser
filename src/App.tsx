@@ -146,6 +146,7 @@ import { toolbarItemLabels,useToolbarItems,type ToolbarItemId } from './ui/toolb
 import { AiFreeButton } from './components/AiFreeButton';
 import { profileFiltersBlocked } from './features/profileFilters';
 import './styles/sidebar-overlay.css';
+import { placeFloat, restFrom, type RestSent } from './ui/floatHold';
 import { consumeLegacyAutoHide,hideToolbarTipSeen,rememberHideToolbarTip,rememberSeamlessTip,seamlessTipSeen } from './ui/chromePrefs';import { bindEdgeTab,setEdgeStills,currentEdge,dismissEdge,installChromeEdge,pinEdge,sendEdgeFlags,setEdgeAsks,setEdgeHeaderHeight,edgePageSpring,noteSeamlessEntry,noteToolbarReturn,seamlessEntrySpring,useChromeEdge,useChromePress,setEdgeFloatable,isEdgeFloating,refreshEdgeFloat } from './ui/chromeEdge';import { effectiveView,hideToolbarOn,migrateAutoHide,sidebarHeldOpenIn,toggleView,windowViews,type WindowView } from './runtime/windowView';import { MenuChoice } from './components/MenuChoice';import { SeamlessRow } from './components/AppIcons';import { windowViewName } from './ui/windowViewText';
 import { BookmarkEditor } from './features/BookmarkEditor';
 import { ProtectedMediaNotice } from './features/ProtectedMediaNotice';
@@ -1186,6 +1187,7 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
     useLayoutEffect(() => { if (!topSeam && toolbarWasSeamless.current && !s.reducedMotion) toolbarEasingUntil.current = performance.now() + TOOLBAR_EASE_HOLD_MS; toolbarWasSeamless.current = topSeam; }, [topSeam]);
     useLayoutEffect(() => { if (headerHeight !== toolbarWasHeight.current && !s.reducedMotion) toolbarEasingUntil.current = performance.now() + TOOLBAR_EASE_HOLD_MS; toolbarWasHeight.current = headerHeight; }, [headerHeight]);
     const liveLayout = useRef<BrowserLayout | null>(null), lastPageBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null), unsentSlide = useRef<{ page: { x: number; y: number; width: number; height: number }; fields: Partial<BrowserLayout> } | null>(null), sentShape = useRef({ shape: '', look: '' });
+    const restSentRef = useRef<RestSent | null>(null);
     const edgeNowRef = useRef({ seamless: false, side: false }), edgeFloatRef = useRef({ side: false, top: false }), edgeRestRef = useRef<{ page: { x: number; y: number; width: number; height: number }; views: Map<string, { x: number; y: number; width: number; height: number }> } | null>(null);
     // R4-54: every page kind floats: a website or a split (native views under a hole), or a page the interface draws itself.
     // All views share the connected frame. A closed sidebar overlays the page; only explicitly docking it changes the viewport.
@@ -1211,6 +1213,7 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
         const rect = (r: DOMRect, topOffset = 0) => ({ x: Math.round(r.left), y: Math.round(r.top + topOffset), width: Math.max(0, Math.round(r.right) - Math.round(r.left)), height: Math.max(0, Math.round(r.bottom) - Math.round(r.top + topOffset)) });
         let views = target.views.flatMap(item => { const node = paneRefs.current.get(item.tabId); if (!node)
             return []; const r = node.getBoundingClientRect(), label = node.querySelector<HTMLElement>('.split-label')?.offsetHeight || 0; return [{ ...item, bounds: rect(r, label) }]; });
+        const measuredViews = views;   // the panes as the DOM has them now: a pane keeps its resting place under a floating sidebar or toolbar, whatever the page area does (src/ui/floatHold.ts)
         let page = rect(outer);
         // R4-24 Seamless: an edge the pointer (or a key) reveals moves the page aside but never resizes it, so the page does not
         // reflow or repaint blank mid-reveal (measured at 150%: 400ms of blank page after the old resize). Its right (or bottom)
@@ -1258,7 +1261,26 @@ function Browser({ state, dispatch, dark,setupVisible=false }: {
             const headerNow = document.querySelector<HTMLElement>('.browser-root .browser-shell')?.getBoundingClientRect().height, rise = headerNow === undefined ? 0 : Math.max(0, Math.round(headerNow - headerHeight)), eased = easingHolds.current.sizes;
             views = views.map(view => { let goal = pageFollowSize(view.tabId); if (!goal) { goal = eased.get(view.tabId) ?? { width: view.bounds.width, height: view.bounds.height + rise }; eased.set(view.tabId, goal); } return goal.width > 0 && goal.height > 0 ? { ...view, hold: { width: Math.round(goal.width), height: Math.round(goal.height) } } : view; });
         }
-        const placed = { ...target, views, pageBounds: page, ...fields };
+        let placed = { ...target, views, pageBounds: page, ...fields };
+        // 13.10 rounds 3 + 4 (laptop traces, Windows and Linux): while a Seamless float is out the interface asked main for the Full view's page rectangle {x0,y72,..} and the page really moved there (a window never
+        // activated since launch: the first reveal; Linux: every reveal). The page card does not move while a float is out: the rest this window remembers, else the pane's own rectangle, never a measure the toolbar's
+        // row pushed down and never an old Full rest (src/ui/floatHold.ts).
+        const floatInput = { floating: isEdgeFloating(), seamless: edgeNowRef.current.seamless, edgeTransition: document.documentElement.dataset.modeSwitch === 'edge', flags: float, pinned: edge.pinned.side || edge.pinned.top, split: !!split, morph: !!morph, pageBounds: placed.pageBounds, views: placed.views, measuredView: measuredViews.length === 1 ? measuredViews[0].bounds : undefined, viewport: target.viewport };
+        const remembered = restFrom(floatInput);
+        if (remembered === 'forget') restSentRef.current = null; else if (remembered) restSentRef.current = remembered;
+        const held = placeFloat(floatInput, restSentRef.current);
+        if (held) {
+            placed = { ...placed, pageBounds: held.pageBounds, views: held.views, pageImmediate: true };
+            delete (placed as { pageMotion?: unknown }).pageMotion; delete (placed as { pageSpring?: unknown }).pageSpring; delete (placed as { pageEdgeLag?: unknown }).pageEdgeLag; delete (placed as { pageHold?: unknown }).pageHold;
+        }
+        // ACIRA_EDGE_TRACE (main sets data-edge-trace; desktop/main.cjs forwards these two lines to its stdout as `[tag] <epoch> {json}`): '[layout-fixed]' = this layout was put right (the page rectangle the render
+        // measured did not hold its pane, or a rest was held while a float is out); '[layout-odd]' = a layout that still puts the page's card below its view, the {0,72,..} of the laptop's traces. Both say what the interface knew.
+        try {
+            if (document.documentElement.dataset.edgeTrace === 'on') {
+                const odd = (!!placed.views[0] && placed.pageBounds.y > placed.views[0].bounds.y + 8) || (!!measuredViews[0] && placed.pageBounds.y > measuredViews[0].bounds.y + 8);   // below the view it sends, or below the pane the DOM has (a stale Full rest also puts the SENT view at y=72: the trace that did not fire)
+                if (odd || (held && held.kind === 'card') || (held && placed.pageBounds.y !== page.y)) console.warn(odd ? '[layout-odd]' : '[layout-fixed]', JSON.stringify({ kind: held?.kind || '', sent: placed.pageBounds, view: placed.views[0]?.bounds, card: measuredViews[0]?.bounds, measured: page, outer: rect(outer), floating: isEdgeFloating(), remembered: restSentRef.current ? restSentRef.current.pageBounds : null, edgeRest: edgeRestRef.current ? edgeRestRef.current.page : null, flags: float, seamless: edgeNowRef.current.seamless, topSeam, headerHeight, topBarHidden, askTop, addressFocused, edgeTop: edge.top, edgeSide: edge.side, shell: document.querySelector('.browser-shell')?.getAttribute('data-seamless') || '', modeSwitch: document.documentElement.dataset.modeSwitch || '' }));
+            }
+        } catch { /* trace */ }
         if (morph) sidebarMorphPin(placed);
         return placed;
     };

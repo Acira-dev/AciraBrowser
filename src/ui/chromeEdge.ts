@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import type { BrowserRuntime } from '../runtime/types';
-import { PAGE_FOLLOW_END, motionScale, motionSpeed, registerPageRiseSpring, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
+import { PAGE_FOLLOW_END, motionPace, motionScale, motionSpeed, registerPageRiseSpring, springEasing, springFor, startModeTransition, type MotionTokenId } from './sharedMotion';
 import { noteUse } from '../features/metrics/noteUse';
 import { mirrorSpan, rootSidebarSide } from './sidebarSide';
 
@@ -83,7 +83,7 @@ export function seamlessEntrySpring(): { duration: number; bounce: number } | nu
 
 /** Plays `update` (which must apply the change synchronously) as the reveal or hide of an edge. The spring's perceptual duration
  * already carries the speed setting (Premium stretches it); None (Animation speed "None", the Reduce motion switch) applies the change at once: a cut, no fade. */
-export function startEdgeTransition(kind: 'reveal' | 'hide', update: () => void, headerHeight = 72): number {
+export function startEdgeTransition(kind: 'reveal' | 'hide', update: () => void, headerHeight = 72, sidebarAlone = false): number {
   if (kind === 'reveal') noteUse('seamlessReveals'); // R4-60: counted only while usage sharing is on, as a daily bucket
   const token: MotionTokenId = kind === 'reveal' ? 'seamless.reveal' : 'seamless.hide', spec = springFor(token, motionSpeed());
   const root = document.documentElement;
@@ -94,8 +94,12 @@ export function startEdgeTransition(kind: 'reveal' | 'hide', update: () => void,
   }
   // R4-24 (founder: "moves at a linear speed"): a strong ease-out for the reveal (fast start, gentle landing, no overshoot) and an
   // ease-in-out a little quicker for the hide; 200 / 170ms at Fast, stretched by the speed setting (Premium 340 / 289ms).
-  const scale = motionScale() || 1, duration = Math.round((kind === 'reveal' ? 200 : 170) * scale);
-  const easing = kind === 'reveal' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : 'cubic-bezier(0.65, 0, 0.35, 1)';
+  const scale = motionScale() || 1;
+  // 13.10 round 3: a sidebar that comes or goes ALONE slides on values of its own (280 ms x pace, opening cubic-bezier(.4,0,.2,1), closing its reverse
+  // cubic-bezier(.8,0,.6,1)). The old reveal curve (0.16, 1, 0.3, 1) is nearly all in its first frames (80 % after 40 ms), so any hitch at the start of the slide showed as a jump; the new curve starts
+  // from rest. The top bar keeps its own (the laptop's strips: smooth).
+  const duration = sidebarAlone ? Math.round(280 * motionPace()) : Math.round((kind === 'reveal' ? 200 : 170) * scale);
+  const easing = sidebarAlone ? (kind === 'reveal' ? 'cubic-bezier(0.4, 0, 0.2, 1)' : 'cubic-bezier(0.8, 0, 0.6, 1)') : kind === 'reveal' ? 'cubic-bezier(0.16, 1, 0.3, 1)' : 'cubic-bezier(0.65, 0, 0.35, 1)';
   void springEasing;
   root.style.setProperty('--edge-ms', `${duration}ms`);
   root.style.setProperty('--edge-ease', easing);
@@ -363,8 +367,17 @@ async function takePicture(shown?: () => void, budget = 220): Promise<'pictured'
   shown?.();
   // The picture is painted (beneath the page, or over it when the interface is raised) before the page steps aside. (A prepared one has been for as long as it has stood under the page.)
   if (!wasPlaced) await paintWait();
-  const parked = late() ? [] : await Promise.all(shots.map(shot => command('park', shot.tab).catch(() => false)));
-  if (late() || parked.some(ok => !ok)) { imgs.forEach(img => img.remove()); send({ still: 'release' }); return 'failed'; }
+  // 13.10 round 3 (laptop, Windows and WSLg: "the rail strip for 1-5 samples, then the panel jumps"; WSLg: the panel in ONE displayed frame ~130 ms after the picture): the interface used to be raised over the
+  // pages by an IPC sent at the view transition's READY, a frame into the slide, and re-adding the interface view stalls presentation for tens of ms on Windows and WSLg while the slide's clock runs on:
+  // the first frame at 11 %, the next one at 80 %. The reveal's own picture (the page goes off the window anyway, the picture under it is the whole page) now raises the interface together with the park,
+  // before the slide starts, so the stall falls into the transition's set-up and the first frame of the slide is the first frame of the slide.
+  const early = !floating && connectedFrame && floatNative && !liveSeamless() && !nativeFloatRaised;
+  const results = late() ? [] : await Promise.all([...shots.map(shot => command('park', shot.tab).catch(error => { edgeCommandFailed({ still: 'park' }, error); return false; })), ...(early ? [command('hold', tab).catch(error => { edgeCommandFailed({ still: 'hold' }, error); return false; }), Promise.resolve(native.browserCommand({ type: 'edge', tabId: tab, float: true } as never)).then(() => true, error => { edgeCommandFailed({ float: true }, error); return false; })] : [])]);
+  const parked = results.slice(0, shots.length);
+  if (late() || parked.length < shots.length || parked.some(ok => !ok)) { imgs.forEach(img => img.remove()); send(early ? { float: false } : { still: 'release' }); return 'failed'; }
+  // (The view transition's own set-up, the old frame, the update, the new frame, takes a few frames: what the raise stalls falls into that, not into the slide.)
+  // Only a raise main accepted counts as done: a refused one leaves the raise to the transition's ready, as before round 3.
+  if (early && results[shots.length] !== false && results[shots.length + 1] === true) nativeFloatRaised = true;
   picture = shots.map((shot, index) => ({ img: imgs[index], tab: shot.tab }));
   void targets;
   for (const [index, shot] of shots.entries()) if (shot.loading) window.setTimeout(refreshPicture, 300, picture[index], false);
@@ -706,7 +719,7 @@ export function applyEdge(next: EdgeState): void {
       picturing = false; edgeBusy = false; if (!picture) pictureSkipped = true;
       const requested = pendingEdge; pendingEdge = null;
       if (requested) applyEdge(requested);
-      if (!floating) { pictureSkipped = false; dropPicture(); }
+      if (!floating) { pictureSkipped = false; if (nativeFloatRaised) { nativeFloatRaised = false; send({ float: false }); } dropPicture(); }
     });
     return;
   }
@@ -727,7 +740,7 @@ export function applyEdge(next: EdgeState): void {
   if (shownAfter.top !== shownBefore.top) document.documentElement.dataset.edgeTop = shownBefore.side && shownAfter.side ? (shownAfter.top ? 'in' : 'out') : 'diag'; else delete document.documentElement.dataset.edgeTop;
   holdVeil = shownBefore.top && !shownAfter.top && floatFrame;
   if (shownBefore.side && !shownAfter.side) dropRimEdge();
-  const ms = startEdgeTransition(reveal ? 'reveal' : 'hide', update, headerPx);
+  const ms = startEdgeTransition(reveal ? 'reveal' : 'hide', update, headerPx, shownBefore.top === shownAfter.top && shownBefore.side !== shownAfter.side);
   if (!edgeTransition) { delete document.documentElement.dataset.edgeToolbar; delete document.documentElement.dataset.edgeTop; delete document.documentElement.dataset.edgeRim; holdVeil = false; }
   if (edgeTransition) {
     edgeBusy = true;
@@ -757,7 +770,9 @@ export function installChromeEdge(): () => void {
   return () => { off?.(); for (const name of names) window.removeEventListener(name, forwardInput, { capture: true }); setFloat(false); edge = rest; emit(); };
 }
 
-const send = (patch: Record<string, unknown>) => { const native = bridge(); if (activeTab && native) void Promise.resolve(native.browserCommand({ type: 'edge', tabId: activeTab, ...patch } as never)).catch(() => {}); };
+/** Main refuses an edge command that does not pass its validation ("Invalid browser command") and the interface used to drop that answer: round 3's early raise was refused for want of a tab id and nobody knew. A refusal is now said in the console (main forwards it under ACIRA_EDGE_TRACE). */
+function edgeCommandFailed(patch: Record<string, unknown>, error: unknown): void { try { console.warn('[edge-command-failed]', Object.keys(patch).join(','), String((error as { message?: string })?.message ?? error)); } catch { /* console */ } }
+const send = (patch: Record<string, unknown>) => { const native = bridge(); if (activeTab && native) void Promise.resolve(native.browserCommand({ type: 'edge', tabId: activeTab, ...patch } as never)).catch(error => edgeCommandFailed(patch, error)); };
 const sent = { holds: '', keys: '' };
 /** What keeps a showing edge open, and what asks for one (only when they change). */
 export function sendEdgeFlags(holds: { top: boolean; side: boolean }, keys: { top: boolean; side: boolean }): void {

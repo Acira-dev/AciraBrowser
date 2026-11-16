@@ -16,6 +16,7 @@ const pathStub = (selector: string) => ({ setAttribute: (name: string, value: st
 const app = { style: style(), querySelector: (selector: string) => selector.includes('.sidebar-page-rim') ? pathStub(selector) : null };
 const g = globalThis as Record<string, unknown>;
 let finish: (() => void) | undefined;
+let commandsAtTransition = -1;
 
 // The page area: one website, its content box takes the pictures.
 class Picture {
@@ -32,7 +33,7 @@ const content = {
 };
 g.Image = Picture;
 const commands: { still?: string; float?: unknown; tab?: string }[] = [];
-let loading = false, serial = 0;
+let loading = false, serial = 0, refuseFloat = 0;
 g.CSS = { escape: (value: string) => value };
 g.window = Object.assign(globalThis, {
   innerWidth: 1280, innerHeight: 820, devicePixelRatio: 1,
@@ -40,6 +41,7 @@ g.window = Object.assign(globalThis, {
     subscribeBrowser: (fn: (event: unknown) => void) => { listener = fn; return () => {}; },
     browserCommand: (command: { type: string; still?: string; float?: unknown; tabId?: string }) => {
       commands.push({ still: command.still, float: command.float, tab: command.tabId });
+      if (command.float === true && refuseFloat > 0) { refuseFloat--; return Promise.reject(new Error('Invalid browser command')); }
       if (command.still === 'take') return Promise.resolve({ url: 'data:image/jpeg;base64,' + (++serial), loading });
       return Promise.resolve(true);
     },
@@ -56,7 +58,7 @@ g.document = {
   documentElement: root, visibilityState: 'visible',
   querySelector: (selector: string) => selector === '.app' ? app : selector === '.page-area' ? { getBoundingClientRect: () => areaRect } : selector === '.page-area .page-content' ? content : null,
   querySelectorAll: (selector: string) => selector.includes('.sidebar-page-rim .rim-edge') ? [pathStub('.sidebar-page-rim-top .rim-edge'), pathStub('.sidebar-page-rim-low .rim-edge')] : [],
-  startViewTransition(update: () => void) { update(); const done = new Promise<void>(resolve => { finish = resolve; }); return { ready: Promise.resolve(), finished: done, skipTransition() {} } as never; },
+  startViewTransition(update: () => void) { commandsAtTransition = commands.length; update(); const done = new Promise<void>(resolve => { finish = resolve; }); return { ready: Promise.resolve(), finished: done, skipTransition() {} } as never; },
 };
 
 const require = createRequire(import.meta.url);
@@ -158,4 +160,53 @@ test('when a reveal has been taken down the interface asks for one fresh layout 
   assert.equal(dispatched.filter(type => type === 'acira-page-follow-end').length, 0, 'not while the sidebar is out');
   await say(false); finish?.(); await paint(); await wait(200);
   assert.ok(dispatched.filter(type => type === 'acira-page-follow-end').length >= 1, 'once the float has ended: ' + JSON.stringify(dispatched));
+});
+
+// 13.10 round 3 (laptop, Windows and WSLg): the interface used to be raised over the pages by an IPC sent when the slide's view transition was READY, a frame into the slide; re-adding the interface view
+// stalls presentation for tens of ms there while the slide's clock runs on (the rail strip at 11 %, then 80 %; on WSLg the panel in one displayed frame). The picture's reveal raises it with the park, before the slide.
+test('the reveal raises the interface together with the park, before the slide starts, and holds the other pages with it', async () => {
+  await ready();
+  await prime(true);
+  commandsAtTransition = -1;
+  await say(true);
+  const before = commands.slice(0, commandsAtTransition);
+  assert.ok(commandsAtTransition >= 0, 'the slide started');
+  assert.ok(before.some(c => c.still === 'park'), 'the page was parked before the slide');
+  assert.ok(before.some(c => c.float === true), 'and the interface raised before the slide: ' + JSON.stringify(commands));
+  assert.ok(before.find(c => c.float === true)?.tab, 'with the tab id main validates every edge command against (without it main answers "Invalid browser command" and the raise never happens)');
+  assert.ok(before.some(c => c.still === 'hold'), 'with the other pages held');
+  assert.equal(commands.filter(c => c.float === true).length, 1, 'raised once, not again at the transition\'s ready');
+  finish?.(); await paint(); await say(false); finish?.(); await wait(80);
+  assert.ok(commands.some(c => c.float === false), 'and lowered when the sidebar has gone');
+});
+
+// (When a src/ui/edgeVars.ts exists, the edge's variables are read from it.)
+const readVar = (name: string): string => { const own = root.style.getPropertyValue(name); if (own) return own; try { return (require('../src/ui/edgeVars.ts') as { edgeVar: (n: string) => string }).edgeVar(name) || ''; } catch { return ''; } };
+test('a sidebar that comes or goes alone slides on values of its own; the top bar keeps its own', async () => {
+  const {motionPace} = require('../src/ui/sharedMotion.ts') as typeof import('../src/ui/sharedMotion');
+  await ready();
+  await say(true);
+  assert.equal(readVar('--edge-ease'), 'cubic-bezier(0.4, 0, 0.2, 1)', 'opening: a curve that starts from rest');
+  assert.equal(readVar('--edge-ms'), Math.round(280 * motionPace()) + 'ms');
+  finish?.(); await paint(); await say(false);
+  assert.equal(readVar('--edge-ease'), 'cubic-bezier(0.8, 0, 0.6, 1)', 'closing: its reverse');
+  finish?.(); await wait(80);
+  listener?.({ type: 'chrome-edge', side: false, top: true, pinned: { side: false, top: false } }); await paint(); await wait(40);
+  assert.equal(readVar('--edge-ease'), 'cubic-bezier(0.16, 1, 0.3, 1)', 'the toolbar: its own curve');
+  finish?.(); await paint(); listener?.({ type: 'chrome-edge', side: false, top: false, pinned: { side: false, top: false } }); await paint(); await wait(40); finish?.(); await wait(80);
+});
+
+// Main answers "Invalid browser command" to an edge command it does not accept (round 3's early raise had no tab id) and the interface used to drop the answer. Now it says so, and a refused raise is not taken for a done one.
+test('a raise main refuses is said in the console and left to the transition\'s ready, as before', async () => {
+  const warns: string[] = [], warn = console.warn; console.warn = (...parts: unknown[]) => { warns.push(parts.join(' ')); };
+  try {
+    await ready();
+    await prime(true);
+    refuseFloat = 1;
+    commands.length = 0;
+    await say(true);
+    assert.ok(warns.some(line => line.includes('[edge-command-failed]') && line.includes('float') && line.includes('Invalid browser command')), 'the refusal is said: ' + JSON.stringify(warns));
+    assert.equal(commands.filter(c => c.float === true).length, 2, 'the early raise was refused, so the raise at the transition\'s ready is still sent: ' + JSON.stringify(commands));
+    finish?.(); await paint(); await say(false); finish?.(); await wait(80);
+  } finally { console.warn = warn; refuseFloat = 0; }
 });
