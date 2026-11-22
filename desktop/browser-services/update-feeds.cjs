@@ -42,6 +42,11 @@ function usableDocument(doc){
  return Array.isArray(doc.files)||typeof doc.path==='string';
 }
 const coded=(code,message)=>Object.assign(new Error(message),{code});
+/** 13.11, the INSIDER feed only (a feed that says `quietWhenEmpty`): a channel document with no files (the placeholder the Insider server keeps until the founders fill it) and the server's `missing` answer (HTTP 404) both mean "nothing to install yet",
+ *  never an error and never an offer: the answer is "the version already running", so electron-updater finds nothing newer, the Updates row reads as up to date, and the next look asks again. A document WITH files, and every other failure
+ *  (a refusal, a fault, no connection), behave as for any feed. The public feeds never say it, so their behaviour is exactly what it was. */
+const nothingYet=(current,info)=>({version:isVersion(current)?String(current).trim():'0.0.0',files:[],...(Number.isFinite(info?.nextCheckSeconds)?{nextCheckSeconds:info.nextCheckSeconds}:{})});
+const emptyDocument=info=>Array.isArray(info?.files)&&info.files.length===0&&typeof info?.path!=='string';
 /** Runs run(token) and gives up after ms (the token is cancelled so the request is aborted; a late answer is ignored). */
 function within(run,ms,makeToken){
  return new Promise((resolve,reject)=>{
@@ -54,7 +59,7 @@ function within(run,ms,makeToken){
 const channelUrl=(feedUrl,channelFile)=>new URL(channelFile,feedUrl.endsWith('/')?feedUrl:feedUrl+'/').href;
 
 /**
- * Reads one channel document by the rules above. feeds: [{name,url}], in order. request(url, token) resolves the body text (or throws); parse(text, file, url)
+ * Reads one channel document by the rules above. feeds: [{name,url,headers?,onError?}], in order (`headers(url)` gives the request headers of that address alone: the Insider feed signs each request for its own path; `onError(error)` hears that address's failure: the Insider feed's `revoked`). request(url, token, feed) resolves the body text (or throws); parse(text, file, url)
  * returns the document (electron-updater's parseUpdateInfo, or JSON.parse). current: the running version; floor(): the version of any update already found or
  * downloaded (or null). Resolves {info, feed, failures}; throws one error when no address gave a usable, acceptable answer (code ERR_UPDATE_FEEDS_UNAVAILABLE
  * when there was more than one address, otherwise the address's own error).
@@ -64,15 +69,18 @@ async function readChannel({feeds,channelFile,request,parse,current,floor=()=>nu
  for(let index=0;index<feeds.length;index++){
   const feed=feeds[index],url=channelUrl(feed.url,channelFile);
   try{
-   const text=await within(token=>request(url,token),index===0?primaryWithin:fallbackWithin,makeToken);
+   const text=await within(token=>request(url,token,feed),index===0?primaryWithin:fallbackWithin,makeToken);
    const info=parse(text,channelFile,url);
    if(!usableDocument(info))throw coded('ERR_UPDATER_INVALID_UPDATE_INFO',url+' is not a channel document.');
+   if(feed.quietWhenEmpty===true&&emptyDocument(info))return {info:nothingYet(current,info),feed,failures,nothingYet:true};
    if(index>0){ // rule 3
     const known=highestOf(current,floor?.());
     if(!lowerThan(known,info.version))throw coded('ERR_UPDATE_FEED_NOT_NEWER',url+' offers '+info.version+', which is not newer than '+known+'.');
    }
    return {info,feed,failures};
-  }catch(error){failures.push({feed:feed.name,url,error});}
+  }catch(error){
+   if(feed.quietWhenEmpty===true&&Number(error?.statusCode??error?.status)===404)return {info:nothingYet(current),feed,failures,nothingYet:true};
+   try{feed.onError?.(error);}catch{/* the feed's own reading of its failure is never the updater's problem */}failures.push({feed:feed.name,url,error});}
  }
  if(failures.length===1)throw failures[0].error;
  const first=failures[0].error;
@@ -107,9 +115,11 @@ function createFeedProviderClass(deps={}){
   async getLatestVersion(){
    const channelFile=getChannelFilename(this.channel);
    const current=this.updater?.currentVersion?.version||this.options.current||null;
+   // The list is asked again at every look when the updater gave a function for it (the Insider channel can be turned on or lost between two looks); the first list builds the provider.
+   const feeds=(typeof this.options.feedsNow==='function'?this.options.feedsNow():null)||this.feeds;
    const {info,feed}=await readChannel({
-    feeds:this.feeds,channelFile,current,floor:this.options.floor,
-    request:(url,token)=>this.httpRequest(new URL(url),undefined,token),
+    feeds,channelFile,current,floor:this.options.floor,
+    request:(url,token,feed)=>this.httpRequest(new URL(url),typeof feed?.headers==='function'?feed.headers(url)||undefined:undefined,token),
     parse:(text,file,url)=>parseUpdateInfo(text,file,url),
     primaryWithin:this.options.primaryWithin,fallbackWithin:this.options.fallbackWithin,
     makeToken:CancellationToken?()=>new CancellationToken():null,

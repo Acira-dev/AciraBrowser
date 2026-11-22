@@ -26,6 +26,7 @@ const HOOK_ENV = Object.freeze([
   // These already need a test profile where they are read; dropped too, so a later change that forgets that check stays safe.
   'ACIRA_TEST_QUIET_NETWORK', 'ACIRA_TEST_TOR_SIMULATE_BLOCK', 'ACIRA_TEST_PASSKEY_STUB', 'ACIRA_TEST_DATABASE_CHOICE', 'ACIRA_TEST_SERVICES_DELAY_MS',
   'ACIRA_TEST_LIVE_PRS', 'ACIRA_TEST_LIVE_PRS_TRACE', 'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT',
+  'ACIRA_INSIDER_ENDPOINT', 'ACIRA_INSIDER_FEED', 'ACIRA_INSIDER_PUBLIC_KEY', 'ACIRA_INSIDER_AUTO_ENROLL', 'ACIRA_INSIDER_INVITES_OPEN', // the Insider server's address, the Insider feed and the test public key(s): read only on a test profile (insider-config.cjs), dropped in real builds
   'ACIRA_SITE_ALLOWLIST_ENDPOINT', 'ACIRA_SITE_ALLOWLIST_FILE', 'ACIRA_EXT_NOTIFICATIONS_NATIVE', 'ACIRA_WINDOWS_BUILD',
   'ACIRA_BOOKMARK_TRACE', // logs each extension bookmark-store change (extension-bookmark-buffer.cjs), for rigs only
   'ACIRA_QA_FAST_SWITCH', // keeps an in-memory audit of every fast tab switch (fast-switch.cjs): what main presented against what the interface then sent; rigs only

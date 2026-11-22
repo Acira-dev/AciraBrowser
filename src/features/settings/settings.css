@@ -262,6 +262,13 @@ textarea, .st-textarea { width: 100%; min-height: 72px; padding: 6px 10px; resiz
 .st-source-form { display: flex; gap: 8px; width: 100%; }
 .st-source-form .st-input { flex: 1; width: auto; min-width: 0; } /* R4-39: an input's default minimum width kept this row wider than a narrow pane */
 .st-source-form .st-button { flex: 0 0 auto; }
+/* Insider code (13.11): the sources row's field and buttons in a stacked row; a code of 32 characters fits the field, and in a narrow pane the buttons drop under it. The message is the site list's: the red line under the field, and the field's edge red with it. */
+.st-insider { width: 100%; max-width: 520px; }
+.st-insider .st-source-form { flex-wrap: wrap; }
+.st-insider .st-source-form .st-input { flex: 1 1 280px; }
+.st-insider-swap { display: inline-grid; } .st-insider-swap > span { grid-area: 1 / 1; } .st-insider-swap > span[data-hide] { visibility: hidden; } /* Activate / Checking…: both laid in one cell, so the button keeps the longer one's width and the field never changes width */
+.st-insider .st-input[aria-invalid='true'] { border-color: var(--danger-text, #b3261e); }
+.st-insider .st-input[aria-invalid='true']:focus-visible { border-color: var(--danger-text, #b3261e); box-shadow: inset 0 0 0 1px var(--danger-text, #b3261e); } /* a failed code keeps the field focused: one red ring, not red over the blue one */
 .st-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .st-chips li { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 3px 0 8px; border-radius: 4px; background: var(--st-field); border: 1px solid var(--st-edge); font-size: 12.5px; }
 .st-chips li button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; color: var(--st-muted); font-size: 15px; line-height: 1; }

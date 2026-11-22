@@ -1,6 +1,6 @@
 {
   "name": "acira-browser",
-  "version": "0.1.0-beta.13.10",
+  "version": "0.1.0-beta.13.11",
   "description": "An independent, calm consumer browser",
   "license": "AGPL-3.0-only",
   "main": "desktop/main.cjs",
@@ -495,6 +495,7 @@
       "tests/tor-linux.test.cjs",
       "tests/update-feeds.test.cjs",
       "tests/update-feeds-real-updater.test.cjs",
+      "tests/acira-signing.test.cjs",
       "tests/update-pickup.test.cjs",
       "tests/release-publish.test.cjs",
       "tests/release-publish-flow.test.mjs",

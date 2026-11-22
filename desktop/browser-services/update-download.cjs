@@ -204,7 +204,7 @@ async function download({url,mirrors=[],first=0,firstByte=FIRST_BYTE,onSource=()
    try{
     const asked=!whole||have>0,ifRange=meta.etag&&meta.src===src&&!/^W\//.test(meta.etag)?{'if-range':meta.etag}:{}; // (another address has its own etag: no If-Range, the hash decides)
     arm(tryNext?firstByte:stall);
-    response=await fetch(src,{headers:{...headers,...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
+    response=await fetch(src,{headers:{...(typeof headers==='function'?headers(src):headers),...(asked?{range:`bytes=${have}-${whole?'':seg.end-1}`,...ifRange}:{})},signal:controller.signal,redirect:'follow'});
     const range=response.status===206?contentRange(response.headers.get('content-range')):null;
     // a web page where the file should be (a captive portal's sign-in, an error page served with 200): refused before a byte is kept
     if(response.ok&&/^\s*(?:text\/html|application\/xhtml)/i.test(String(response.headers.get('content-type')||'')))throw new DownloadError('A web page came back instead of the update (a sign-in page on this network?).','ERR_UPDATE_PORTAL');

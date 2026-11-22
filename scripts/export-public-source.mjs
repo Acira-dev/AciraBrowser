@@ -63,6 +63,8 @@ export function allowedSource(file) {
   if (/^resources\/(?:brand|filters)\//.test(file)) return /\.(?:mjs|json|txt|md)$/.test(file);
   if (/^packaging\//.test(file)) return !/-preview\.png$/i.test(file)
     && /\.(?:json|cjs|cs|manifest|nsh|plist|txt|md|ico|png|jpg|bmp)$/i.test(file);
+  // 13.11: the Insider tests run against a private QA stand-in server (qa/insider-fake.cjs) that is never exported, so they are not either.
+  if (/^tests\/insider-/.test(file)) return false;
   if (/^tests\//.test(file)) return code.test(file);
   if (/^qa\//.test(file)) return /^qa\/(?:release-|accounts-)[^/]+\.(?:mjs|cjs|tsx|ps1)$/.test(file)
     || ['qa/native-helpers.mjs', 'qa/browser-smoke.mjs', 'qa/window-lifecycle.mjs',

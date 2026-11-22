@@ -220,7 +220,10 @@ function closeUpdaterConnections(){try{const {session}=require('electron');void 
 /** Replacing an AppImage removes it and moves the new one in: both need its folder (and the file) to be writable. null when they are. */
 function appImageProblem(file){try{fs.accessSync(path.dirname(file),fs.constants.W_OK);fs.accessSync(file,fs.constants.W_OK);return null;}catch(error){return error?.code==='ENOENT'?null:'Move the Acira AppImage to a folder you can write to to use automatic updates.';}} // (a path that is not there cannot be judged: left to electron-updater)
 function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,holdBypassEvery=HOLD_BYPASS_EVERY,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
+/** The Insider feed's answer for an Insider who was removed (or moved to another key): 403 with {"result":"revoked"}. electron-updater keeps the body in the error's description (and quotes it
+ *  into the message); the read-only look puts it in the message. */
+function insiderRevokedAnswer(error){const status=Number(error?.statusCode??error?.status);return status===403&&/\\?"result\\?"\s*:\s*\\?"revoked\\?"/.test(String(error?.description??'')+'\n'+String(error?.message??''));}
+function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevoked=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,holdBypassEvery=HOLD_BYPASS_EVERY,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -436,6 +439,11 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    return list;
   }
   if(stubbed)return [];
+  // While the profile holds a valid Insider certificate (insider-service.cjs feedAuth: only after a code was accepted), the Insider feed is the one address asked, and EACH request is signed by that
+  // profile as rule 3 says (Acira-Key, Acira-Ts, Acira-Sig over that request's own path, and Acira-Cert), for addresses on the Insider feed's own origin only. No extra request: it is the update check
+  // that already happens. When the feed answers `revoked` (403 {"result":"revoked"}) the certificate goes and the next look asks the ordinary list below. A profile with no certificate never gets here.
+  const insider=(()=>{try{return insiderAuth();}catch{return null;}})();
+  if(insider&&typeof insider.url==='string'&&/^https?:\/\//.test(insider.url))return [{name:'insider',quietWhenEmpty:true,url:insider.url.endsWith('/')?insider.url:insider.url+'/',headers:url=>{try{const now=insiderAuth();return now&&typeof now.headers==='function'&&url?now.headers(String(url),'GET'):undefined;}catch{return undefined;}},onError:error=>{if(insiderRevokedAnswer(error))try{insiderRevoked(insider.profileId);}catch{/* the next look asks again */}}}];
   let text=null;
   try{text=readConfig?readConfig():fs.readFileSync(path.join(resources||'','app-update.yml'),'utf8');}catch{/* no app-update.yml: electron-updater's own default */}
   return hosts.feedsFor({primary:hosts.feedUrlFromConfig(text),testers:testersFeed});
@@ -448,7 +456,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   let updateProvider=null;
   if(!stubbed){try{updateProvider=feedProvider||feedRules.createFeedProviderClass();}catch{return;}}
   // floor: what this computer already knows (an update found or downloaded): a later address only counts when it offers something newer than that
-  updater.setFeedURL({provider:'custom',updateProvider,feeds,current:version,floor:()=>state.available,primaryWithin:within(env.ACIRA_UPDATE_TEST_PRIMARY_WITHIN_MS),fallbackWithin:within(env.ACIRA_UPDATE_TEST_FALLBACK_WITHIN_MS)});
+  updater.setFeedURL({provider:'custom',updateProvider,feeds,feedsNow:feedList,current:version,floor:()=>state.available,primaryWithin:within(env.ACIRA_UPDATE_TEST_PRIMARY_WITHIN_MS),fallbackWithin:within(env.ACIRA_UPDATE_TEST_FALLBACK_WITHIN_MS)});
  }
  /** Update traffic says only "AciraUpdater" (no version, no system). */
  function tidyUpdateSession(){try{if(tidySession)tidySession();else updaterSession();}catch{/* outside Electron */}}
@@ -538,7 +546,8 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   const at=now();if(state.progress!==shownPercent&&(at-shownAt>=PROGRESS_EVERY||state.progress===100||shownPercent<0)){shownPercent=state.progress;shownAt=at;changed();}
  }
  const cacheOf=async()=>{try{const helper=await updater.getOrCreateDownloadHelper?.();return helper?.cacheDir&&helper.cacheDirForPendingUpdate&&typeof helper.clear==='function'?{cache:helper.cacheDir,dir:path.join(helper.cacheDir,fetched.DIR_NAME),pending:helper.cacheDirForPendingUpdate,helper}:null;}catch{return null;}};
- const requestHeaders=()=>{try{const provider=updater.updateInfoAndProvider?.provider;return provider&&typeof updater.computeRequestHeaders==='function'?{...updater.computeRequestHeaders(provider)}:{accept:'*/*'};}catch{return {accept:'*/*'};}};
+ /** The headers of one request for the update's files. From the Insider feed each request is signed for its OWN address (the signature covers the path; an address off the Insider feed's origin gets none), so callers pass the URL; a download asks again for every request it makes (update-download.cjs takes a function). */
+ const requestHeaders=url=>{try{const provider=updater.updateInfoAndProvider?.provider,base=provider&&typeof updater.computeRequestHeaders==='function'?{...updater.computeRequestHeaders(provider)}:{accept:'*/*'};if(provider?.answeredBy==='insider'&&url){const now=insiderAuth();const signed=now&&typeof now.headers==='function'?now.headers(String(url),'GET'):null;if(signed)Object.assign(base,signed);}return base;}catch{return {accept:'*/*'};}};
  // Windows: only what changed since the installed version's setup. The NSIS installer keeps a copy of itself in electron-updater's cache
  // (installer.exe), and the blockmap published with each setup says which of its blocks the new one shares. The installed version's blockmap is looked
  // for where electron-updater keeps it (current.blockmap, left by the download that brought this version, checked against installer.exe's size), then
@@ -552,7 +561,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),within);timer.unref?.();
   try{
    net??=updaterFetch();
-   const response=await net(url,{headers:requestHeaders(),signal:controller.signal,redirect:'follow'});
+   const response=await net(url,{headers:requestHeaders(url),signal:controller.signal,redirect:'follow'});
    if(!response.ok)throw new Error('HTTP '+response.status);
    const raw=Buffer.from(await response.arrayBuffer());
    if(!raw.length||raw.length>fetched.MAP_MAX)throw new Error('Not a blockmap.');
@@ -653,7 +662,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
     // the file's addresses: its own, then its mirrors (update-download.cjs); those that supplied a file that failed its hash go last of all, and the one that worked last goes first
     const addresses=[target.url,...(target.mirrors||[])],skip=suspect.get(target.sha512),usable=skip&&addresses.some(address=>!skip.has(address))?addresses.filter(address=>!skip.has(address)):addresses;
     const lean=leaning.get(target.sha512),first=lean&&now()-lean.at<LEANS_FOR?Math.max(0,usable.indexOf(lean.url)):0;
-    const run=way=>fetched.download({url:usable[0],mirrors:usable.slice(1),first,firstByte,onSource:address=>leaning.set(target.sha512,{url:address,at:now()}),sha512:target.sha512,size:target.size,dir:where.dir,plan:way?.plan||null,oldFile:way?.oldFile||null,headers:requestHeaders(),fetch:net,signal:controller.signal,now,stall,onProgress:progressed});
+    const run=way=>fetched.download({url:usable[0],mirrors:usable.slice(1),first,firstByte,onSource:address=>leaning.set(target.sha512,{url:address,at:now()}),sha512:target.sha512,size:target.size,dir:where.dir,plan:way?.plan||null,oldFile:way?.oldFile||null,headers:src=>requestHeaders(src),fetch:net,signal:controller.signal,now,stall,onProgress:progressed});
     // a download that goes quiet (no byte for `stall`) or whose connection drops goes on at once from the byte it had, a few times, before it fails
     const attempt=async way=>{for(let tries=0;;tries++){try{return await run(way);}catch(error){if(id!==round||tries>=RESUMES||!resumable(error))throw error;}}};
     let result;
@@ -751,7 +760,7 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
    net??=updaterFetch();
    const channelFile=(channel==='beta'?'beta':'latest')+(platform==='darwin'?'-mac':platform==='linux'?'-linux':'')+'.yml';
    const read=await feedRules.readChannel({feeds,channelFile,current:version,floor:()=>null,
-    request:async url=>{const response=await net(url,{redirect:'follow'});if(!response.ok)throw Object.assign(new Error('HTTP '+response.status),{code:'ERR_UPDATE_HTTP'});return response.text();},
+    request:async(url,_token,feed)=>{const headers=typeof feed?.headers==='function'?feed.headers(url):undefined;const response=await net(url,{redirect:'follow',...(headers?{headers}:{})});if(!response.ok){let body='';try{body=(await response.text()).slice(0,200);}catch{}throw Object.assign(new Error('HTTP '+response.status+(body?'\n'+body:'')),{code:'ERR_UPDATE_HTTP',statusCode:response.status});}return response.text();},
     parse:text=>{try{return JSON.parse(text);}catch{return require('js-yaml').load(text);}}});
    const info=read.info,offered=!(info.stagingPercentage!==undefined&&Number(info.stagingPercentage)<100)&&lowerThan(version,info.version);
    state.available=offered?info.version:null;state.notes=offered?notesText(info.releaseNotes):'';state.lastChecked=now();changed();
@@ -801,6 +810,13 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
   channel=value;persist();if(wasPaused||['available','current','error'].includes(state.status)){state.available=null;state.status='idle';}
   if(wasPaused)changed();
   if(updater){updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false;}return status();
+ }
+ /** The Insider channel was turned on (a code was accepted), or the certificate that held it was lost (insider-service.cjs): what was found on the other feed is forgotten and the next look asks the feed that is now the right one. */
+ function insiderChanged(){
+  const wasPaused=state.status==='paused';stopBehind();
+  if(wasPaused){fetched.discard(held?.dir);held=null;Object.assign(state,{progress:null,transferred:null,total:null,speed:null,notes:'',pausable:false,error:null});}
+  if(wasPaused||['available','current','error'].includes(state.status)){state.available=null;state.status='idle';}
+  changed();return status();
  }
  /** Restart to update: the open tabs and windows are saved first (beforeInstall: the same save a normal quit does), then quitAndInstall, which quits the ordinary graceful way. */
  async function install(){
@@ -891,6 +907,6 @@ function createAppUpdater({app,onChange=()=>{},beforeInstall=async()=>{},autoUpd
  }
  // and while an update waits (Windows; a Mac's waits with Squirrel.Mac and is not looked at again), every READY_RECHECK, so a pulled build is dropped
  function start(){if(started||unsupported&&!checkOnly)return;started=true;const first=schedule(()=>{firstRan=true;void check();armNext();},stubbed?1500:CHECK_DELAY);first?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
- return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,installCancelled,claimPrompt,claimWelcome,start,whatsNewInfo,atQuit};
+ return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,installCancelled,claimPrompt,claimWelcome,start,whatsNewInfo,insiderChanged,atQuit};
 }
-module.exports={createAppUpdater,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
+module.exports={createAppUpdater,insiderRevokedAnswer,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
