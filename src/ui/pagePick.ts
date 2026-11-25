@@ -5,9 +5,10 @@
 // navigating, and so do modified clicks (background tab, new window), the second click of a double-click (a rename follows) and
 // controls inside a tab (close, mute, a rename field).
 
-/** What a page-choosing control looks like: the vertical sidebar's tabs, favorites, bookmarks, groups and media card; the tab strips'
- * tabs (`role="tab"`, horizontal and compact); the rail's rows. */
-export const PAGE_PICK_SELECTOR = '[role="tab"], .sb-tab-main, .sb-app, .sb-bookmark, .sb-group-header, .sb-media-main, .ed-rail-tab, .ed-rail-app, .ed-rail-tab-group-name';
+/** What a page-choosing control looks like: the vertical sidebar's tabs, favorites, bookmarks, groups and the now-playing card's artwork and Go to tab button (the card itself stays open: NowPlaying's onGo holds its fold-on-blur); the tab strips'
+ * tabs (`role="tab"`, horizontal and compact); the rail's rows. The Favorites stack tile (`.sb-app-stack`, Beta 14) is a `.sb-app` too but chooses no page, it opens the panel that holds the folded Favorites:
+ * handing the keyboard to the page on its press blurred the interface in the same breath and the panel (which folds when the interface loses the keyboard, FavoritesPanel `away`) shut as it opened. */
+export const PAGE_PICK_SELECTOR = '[role="tab"], .sb-tab-main, .sb-app:not(.sb-app-stack), .sb-bookmark, .sb-group-header, .np-art, .np-gotab, .ed-rail-tab, .ed-rail-app, .ed-rail-tab-group-name';
 const NESTED_CONTROL = 'button, [role="button"], a, input, select, textarea, [contenteditable=""], [contenteditable="true"]';
 
 export interface PickEvent { detail: number; button: number; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; target: unknown }

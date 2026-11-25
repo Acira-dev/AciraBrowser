@@ -136,6 +136,10 @@ module.exports = {
         if (after.state === 'in_progress') told.set(record.id, after); else told.delete(record.id);
         const delta = items.deltaOf(before, after);
         if (delta) api.broadcast('downloads.onChanged', delta);
+      } else if (event.type === 'erased') {
+        // records taken out by another path than downloads.erase (chrome.browsingData.removeDownloads): the same news and the same forgetting
+        const id = ids.idFor(record.id);
+        api.broadcast('downloads.onErased', id); ids.forget(record.id); told.delete(record.id);
       }
     });
     return {dispose() { off(); unsetDeterminer(); determiner.dispose(); try { api.session?.extensions?.removeListener?.('extension-unloaded', unloaded); } catch { /* gone with the session */ } ids.flush(); }};

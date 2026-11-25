@@ -60,7 +60,7 @@ function violations(state: BrowserSnapshot): string[] {
     if (spaces.has(undefined)) out.push('a split names a tab that is gone'); else if (spaces.size > 1) out.push('a split spans two Spaces');
   }
   for (const [space, id] of Object.entries(state.windowUi.lastTabs ?? {})) if (spaceOf(id) !== space) out.push(`remembered tab ${id} of ${space} is elsewhere`);
-  // What "the favorite's tab lives only in its tile" means, however the window got here (13.9): the list and Close other tabs leave it out, but it is still a
+  // What "the favorite's tab lives only in its tile" means, however the window got here (Beta 14, H): the list and Close other tabs leave it out, but it is still a
   // tab: the keys walk it (after the rows), the shown counts include it and the page counts as open (Delete workspace asks by pages). In the list mode every tab is a row.
   const tileOnly = state.settings.favoriteTabsInList !== true && !!state.settings.verticalTabs, counts = workspaceCounts(state);
   const listed = listedTabs(state), rows = rowTabs(state);

@@ -12,14 +12,14 @@ test('a new profile shows Favorites, pinned tabs, Tabs and Bookmarks; Downloads,
 
 test('a saved layout keeps its order, drops unknown ids and gains sections added later',()=>{
  const layout=sectionLayout({sections:{order:['bookmarks','nope','tabs','bookmarks'],hidden:['favorites','bogus']}});
- assert.deepEqual(layout.order,['bookmarks','tabs','downloads','history','reading']);
+ assert.deepEqual(layout.order,['bookmarks','pinned','tabs','downloads','history','reading','extensions','sidepanel'],'Pinned tabs, a block of its own, stands before Tabs when the saved order is older than the block');
  assert.deepEqual(layout.hidden,['favorites'],'a saved choice means only what was saved is hidden');
 });
 
 test('moving and hiding',()=>{
  const start=sectionLayout({});
- assert.deepEqual(moveSection(start,'bookmarks',0).order.slice(0,2),['bookmarks','tabs']);
- assert.equal(moveSection(start,'tabs',0),start,'no move returns the same layout');
+ assert.deepEqual(moveSection(start,'bookmarks',0).order.slice(0,2),['bookmarks','pinned']);
+ assert.equal(moveSection(start,'pinned',0),start,'no move returns the same layout');
  assert.equal(moveSection(start,'favorites',3),start,'Favorites does not move');
  assert.deepEqual(moveSection(start,'tabs',99).order.at(-1),'tabs','clamped to the end');
  const off=toggleSection(start,'bookmarks');

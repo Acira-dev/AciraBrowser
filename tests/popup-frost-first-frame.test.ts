@@ -30,6 +30,6 @@ test('the popup snapshot context identifies a popup by its id, not by the layout
 });
 
 test('a snapshot discarded by a second layout is asked for once more before the slower glass', () => {
-  assert.ok(backdrop.includes('let snapshot=await runtime.popupBackdropSnapshot(id);'));
-  assert.ok(backdrop.includes('if(!cancelled&&!snapshot.sources.length)snapshot=await runtime.popupBackdropSnapshot(id);'));
+  assert.ok(backdrop.includes('let asked=latestKey.current,snapshot=await runtime.popupBackdropSnapshot(id);'));
+  assert.ok(backdrop.includes('if(!cancelled&&!snapshot.sources.length){asked=latestKey.current;snapshot=await runtime.popupBackdropSnapshot(id);}'));   // slim overlay: each ask also records the box it was made for, and a refused one is asked again (usePopupBackdrop.ts)
 });

@@ -1,7 +1,7 @@
 'use strict';
 // When the live folder asks its source for pull requests, and when it stops asking. One refresher per profile that has the folder.
 //
-// The policy (previews/beta12/live-prs/README.md, "Recommendation"):
+// The policy (the design notes, "Recommendation"):
 //  - only while Acira is open AND a window of the profile is on screen (`visible()`); a timer that fires with no window showing waits
 //    for the next time one does;
 //  - on creation, on coming back after more than two minutes away, every five minutes while visible, on "Refresh now", and a few

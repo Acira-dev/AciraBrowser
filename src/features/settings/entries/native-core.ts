@@ -2,6 +2,7 @@ import { defineSettings } from '../model';
 
 import { t, translateText, type MessageId } from '../../../i18n';
 import en from '../../../i18n/en.json';
+import { WORKSPACE_KEYS } from '../../../runtime/workspaces';
 /** Everyday-browser controls owned by the native core. Each id is a `data-setting` anchor in settings/panels/*.tsx. */
 const shortcuts: [id: string, title: string, aliases?: string[]][] = [
   ['new-tab', 'New tab', ['open tab', 'ctrl t']], ['reopen-tab', 'Reopen closed tab', ['undo close tab', 'restore tab', 'ctrl shift t']], ['private-tab', 'New private tab', ['incognito tab', 'private browsing tab', 'private tab']], ['close-tab', 'Close tab', ['ctrl w']],
@@ -14,12 +15,12 @@ const shortcuts: [id: string, title: string, aliases?: string[]][] = [
   ['address', 'Focus address bar', ['url bar', 'omnibox', 'location', 'ctrl l']], ['command-palette', 'Command search', ['palette', 'commands']],
   ['find', 'Find in page', ['search page', 'ctrl f']], ['find-next', 'Find next', []], ['find-prev', 'Find previous', []], ['print', 'Print', ['ctrl p']], ['save-page', 'Save page as', ['download page']],
   ['save-pdf', 'Save page as PDF', ['export pdf']], ['zoom-in', 'Zoom in', ['bigger', 'ctrl plus']], ['zoom-out', 'Zoom out', ['smaller', 'ctrl minus']], ['zoom-reset', 'Actual size', ['reset zoom', 'ctrl 0']],
-  ['devtools', 'Developer tools', ['inspect', 'f12', 'console']], ['reader-mode', 'Reader mode', ['reading view']], ['bookmark', 'Bookmark this page', ['favorite', 'ctrl d']], ['bookmark-all', 'Bookmark all tabs', []],
+  ['devtools', 'Developer tools', ['inspect', 'f12', 'console']], ['task-manager', 'Task manager', ['processes', 'memory', 'cpu', 'activity monitor', 'what uses memory', 'shift esc']], ['reader-mode', 'Reader mode', ['reading view']], ['zap', 'Zap element', ['zap', 'remove element', 'hide element', 'block element', 'ctrl alt z']], ['bookmark', 'Bookmark this page', ['favorite', 'ctrl d']], ['bookmark-all', 'Bookmark all tabs', []],
   ['toggle-bookmarks-bar', 'Show or hide bookmarks bar', ['favorites bar']], ['bookmarks-manager', 'Bookmarks', ['all bookmarks']], ['history', 'History', ['ctrl h']], ['downloads', 'Downloads', ['ctrl j']],
   ['clear-data', 'Clear browsing data', ['delete history', 'clear cookies']], ['settings', 'Settings', ['preferences', 'options']], ['menu', 'Open menu', ['main menu']], ['focus-toolbar', 'Focus the toolbar', ['f10', 'keyboard toolbar']], ['open-file', 'Open a file', ['ctrl o', 'open local file']],
 ];
 /** Alt+1 to Alt+8 (Ctrl on a Mac) open workspaces: found by "workspace", "workspaces" and "spaces". */
-const workspaceShortcuts: typeof shortcuts = Array.from({ length: 8 }, (_, index) => [`switch-workspace-${index + 1}`, t('nativeCore.switchToWorkspace', { n: index + 1 }), ["workspaces", "workspace", "spaces", "switch workspace", `alt ${index + 1}`]]);
+const workspaceShortcuts: typeof shortcuts = Array.from({ length: WORKSPACE_KEYS }, (_, index) => [`switch-workspace-${index + 1}`, t('nativeCore.switchToWorkspace', { n: index + 1 }), ["workspaces", "workspace", "spaces", "switch workspace", `alt ${index + 1}`]]);
 /** A command's name in the interface language: the shortcut registry's own name when it reads the same in English, else this title's. */
 const commandName = (id: string, title: string) => {
   const key = `shortcutCmd.${id}` as MessageId;
@@ -28,16 +29,20 @@ const commandName = (id: string, title: string) => {
 
 export default [
   ...defineSettings('Shortcuts', [
-    { id: 'shortcuts-extensions', title: t("shortcutGroup.extensions"), description: t("nativeCore.changeTheKeyCombinationFor"), aliases: ['extension shortcuts', 'extension keys', 'extension commands', 'extension hotkeys', 'bitwarden shortcut', 'extensions keyboard shortcuts'], when: 'desktop' },
+    { id: 'shortcuts-extensions', title: t("settings.extensionShortcuts"), description: t("nativeCore.extensionShortcutsDetail"), aliases: ['extension shortcuts', 'extension keys', 'extension commands', 'extension hotkeys', 'bitwarden shortcut', 'extensions keyboard shortcuts'], when: 'desktop' },
     { id: 'shortcuts-editor', title: t("nativeCore.keyboardShortcuts"), description: t("nativeCore.changeClearResetAndExport"), aliases: ['hotkeys', 'key bindings', 'keybindings', 'remap', 'customize shortcuts', 'rebind', 'accelerator'], when: 'desktop' },
     ...[...shortcuts, ...workspaceShortcuts].map(([id, title, aliases = []]) => ({ id: `shortcut-${id}`, title: t("nativeCore.shortcutTitle", { title: commandName(id, title) }), description: t("nativeCore.changeTheKeyCombinationFor"), group: 'Shortcuts', aliases: ['hotkey', 'key', 'shortcut', ...aliases], when: 'desktop' as const })),
   ]),
   ...defineSettings('Downloads', [
     { id: 'downloads-folder', title: t("nativeCore.downloadLocation"), group: 'Save files', description: t("nativeCore.folderWhereDownloadsAreSaved"), aliases: ['downloads folder', 'save to', 'download directory', 'where files go'], when: 'desktop' },
+    { id: 'downloads-screenshots-folder', title: t("downloads.screenshotsFolder"), group: 'Save files', description: t("downloads.screenshotsFolderDetail"), aliases: ['screenshot', 'screenshots', 'screenshot folder', 'where screenshots go', 'screen capture', 'save screenshots', 'ask each time'], when: 'desktop' },
     { id: 'downloads-ask', title: t("nativeCore.askWhereToSaveEach"), group: 'Save files', description: t("nativeCore.showTheSaveDialogFor"), aliases: ['save as', 'prompt', 'choose location', 'always ask'], when: 'desktop' },
+    { id: 'downloads-offer-files', title: t("downloads.offerFiles"), group: 'Upload files', description: t("downloads.offerFilesDetail"), aliases: ['easy files', 'recent files', 'upload', 'attach', 'attach file', 'file picker', 'file chooser', 'screenshots', 'clipboard picture', 'upload button'], when: 'desktop' },
+    { id: 'downloads-offer-files-private', title: t("downloads.offerFilesPrivate"), group: 'Upload files', description: t("downloads.offerFilesPrivateDetail"), aliases: ['easy files', 'recent files', 'private window', 'incognito', 'upload', 'attach', 'file picker'], when: 'desktop' },
   ]),
   ...defineSettings('Privacy', [
-    { id: 'site-permissions', title: t("nativeCore.sitePermissions"), group: 'Site permissions', description: t("nativeCore.cameraMicrophoneLocationNotificationsAnd"), aliases: ['camera', 'microphone', 'mic', 'location', 'geolocation', 'notifications', 'clipboard', 'allow', 'block', 'revoke', 'reset permissions'], when: 'regular-profile' },
+    { id: 'site-notifications', title: t("sitenotes.showTitle"), description: t("sitenotes.showDetail"), aliases: ['notifications', 'notification', 'bell', 'notification center', 'notification centre', 'system notifications', 'silent', 'mute site', 'site notifications', 'alerts'], group: 'Site permissions' },
+    { id: 'site-permissions', title: t("nativeCore.sitePermissions"), description: t("nativeCore.cameraMicrophoneLocationNotificationsAnd"), aliases: ['popups', 'pop-ups', 'pop ups', 'block popups', 'allow popups', 'camera', 'microphone', 'mic', 'location', 'geolocation', 'notifications', 'clipboard', 'allow', 'block', 'revoke', 'reset permissions'], when: 'regular-profile', group: 'Site permissions' },
   ]),
   ...defineSettings('Search', [
     { id: 'search-default-engine', title: t("nativeCore.defaultSearchEngine"), group: 'Search engines', description: t("nativeCore.usedForAnythingTypedIn"), aliases: ['google', 'duckduckgo', 'bing', 'search provider'], when: 'custom-search' },

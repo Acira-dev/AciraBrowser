@@ -5,6 +5,13 @@
 /* ── Sidebar: one row of icons above the profile footer, closed by the same fade-ended rule the footer used. ── */
 /* Only with two or more workspaces (R4-48 D1). Cells are 28px; the open one grows to carry its name while the row holds four or fewer. */
 .app.style-acira .acira-sidebar .sb-workspaces { position: relative; flex: none; display: flex; align-items: center; gap: 0; height: 40px; margin-top: auto; padding: 6px 8px; overflow: hidden; }
+/* Past what the column holds (5 at Narrow, 8 at Standard, 10 at Wide, up to 16 workspaces) the cells scroll inside their own strip: the + stays at the end, the open workspace is scrolled into view
+   (WorkspaceSwitcher.tsx revealOpen) and a soft fade at an edge says there is more. The 4px of padding, cancelled by the margin, keeps a focus ring or a drop outline inside the strip's clip. */
+.app.style-acira .acira-sidebar .sb-ws-strip { position: relative; flex: 0 1 auto; min-width: 0; display: flex; align-items: center; padding: 4px; margin: -4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: none; --ws-fade-l: 0px; --ws-fade-r: 0px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--ws-fade-l), #000 calc(100% - var(--ws-fade-r)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--ws-fade-l), #000 calc(100% - var(--ws-fade-r)), transparent 100%); }
+.app.style-acira .acira-sidebar .sb-ws-strip::-webkit-scrollbar { display: none; }
+.app.style-acira .acira-sidebar .sb-ws-strip[data-more-start] { --ws-fade-l: 22px; }
+.app.style-acira .acira-sidebar .sb-ws-strip[data-more-end] { --ws-fade-r: 22px; }
 .sb-ws-icon { position: relative; flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
 .sb-ws-icon > svg { width: 16px; height: 16px; }
 .sb-ws-identity { display: grid; place-items: center; width: 16px; height: 16px; }
@@ -23,9 +30,13 @@
 .app.style-acira .acira-sidebar .sb-workspaces::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--sb-line) var(--divider-fade, 24px), var(--sb-line) calc(100% - var(--divider-fade, 24px)), transparent); pointer-events: none; }
 .app.style-acira .acira-sidebar .sb-workspaces + .sb-foot::before { display: none; }
 /* The open workspace's raised pill: one element that glides between cells (translate on the spring, set from script). */
-.app.style-acira .acira-sidebar .sb-ws-pill { position: absolute; left: 0; top: 6px; z-index: 0; border-radius: 6px; background: var(--sb-current); box-shadow: var(--sb-current-shadow); pointer-events: none; opacity: 0; transition: width calc(160ms * var(--motion-scale, 1)) cubic-bezier(.16, 1, .3, 1); }
+.app.style-acira .acira-sidebar .sb-ws-pill { position: absolute; left: 0; top: 4px; z-index: 0; border-radius: 6px; background: var(--sb-current); box-shadow: var(--sb-current-shadow); pointer-events: none; opacity: 0; transition: width calc(160ms * var(--motion-scale, 1)) cubic-bezier(.16, 1, .3, 1); }
 .app.style-acira .acira-sidebar .sb-ws { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--sb-muted); -webkit-app-region: no-drag; transition: background-color var(--sb-dur, 120ms) var(--sb-ease), color var(--sb-dur, 120ms) var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws > svg { width: 16px; height: 16px; }
+/* 14.3 (Move left / right): the pill covers the icons it passes while it travels with the open workspace (a neighbour crossing it showed through); the open workspace's own icon and name stay on top of it. At rest nothing overlaps the pill, so nothing changes there. */
+.app.style-acira .acira-sidebar .sb-ws-pill { z-index: 1; }
+.app.style-acira .acira-sidebar .sb-ws:not([aria-checked=true]) { z-index: 0; }
+.app.style-acira .acira-sidebar .sb-ws[aria-checked=true] { z-index: 2; }
 .app.style-acira .acira-sidebar .sb-ws:hover { background: var(--sb-hover); color: var(--sb-fg); }
 .app.style-acira .acira-sidebar .sb-ws[aria-checked=true] { background: none; color: var(--sb-current-fg, var(--sb-fg)); }
 /* A tab, split or group dragged over an icon lights it and rings it in the workspace's colour (sidebar drag, ui/workspaceDrop.ts); a refused drop (locked workspace, secured tab) dims it instead. */
@@ -42,6 +53,7 @@
 .app.style-acira .acira-sidebar .sb-ws:active { transform: scale(.97); transition: transform 80ms var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws:focus-visible { outline: 2px solid var(--sb-ring); outline-offset: -2px; }
 .app.style-acira .acira-sidebar .sb-ws-add { color: var(--sb-faint); }
+.app.style-acira .acira-sidebar .sb-ws-add[data-workspace-limit] { opacity: .5; }
 .app.style-acira .acira-sidebar .sb-ws-add[aria-expanded=true] { background: var(--sb-selected); color: var(--sb-fg); }
 /* A glyph, or one letter or emoji set in the same 16px box. */
 .ws-char { display: grid; place-items: center; width: 16px; height: 16px; font: 500 13px/16px var(--font-ui, inherit); letter-spacing: 0; text-align: center; overflow: hidden; }
@@ -62,7 +74,7 @@
 .app.style-acira .acira-sidebar .sb-ws-title-main:active { transform: scale(.98); transition: transform 80ms var(--sb-ease); }
 .app.style-acira .acira-sidebar :is(.sb-ws-title-main, .sb-ws-title-more):focus-visible { outline: 2px solid var(--sb-ring); outline-offset: -2px; }
 .sb-ws-title-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Founder (28 Oct): the count lines up with the New tab row's count (same size, colour and right edge); the ⋯ button sits in its place and swaps in on hover.
+/* Decided (28 Oct): the count lines up with the New tab row's count (same size, colour and right edge); the ⋯ button sits in its place and swaps in on hover.
    Its colour is that row's: the sidebar's quiet ink (sidebar.css), 52% on light finishes so it keeps 3:1. */
 .sb-ws-title-count { flex: none; margin-left: auto; margin-right: 2px; color: var(--sb-quiet, rgb(var(--ink) / .44)); font: 450 var(--text-12, 12px)/16px var(--font-ui, inherit); font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity var(--sb-dur, 120ms) var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws-title:is(:hover, :focus-within) .sb-ws-title-count, .app.style-acira .acira-sidebar .sb-ws-title:has(.sb-ws-title-more[aria-expanded=true]) .sb-ws-title-count { opacity: 0; }
@@ -146,6 +158,36 @@ html[dir='rtl'] .ws-menu-cycle > .acira-menu-icon { transform: scaleX(-1); }
 /* The outgoing website leaves as a still that fades on this same length and curve (desktop/page-still.cjs), and the new-tab art arrives
    with it instead of 600ms behind it (new-tab-page.css fades the picture in on its own), so the page area never sits empty and dark. */
 :root:root[data-mode-switch='workspace'] .nt-art > img { transition-duration: calc(130ms * var(--motion-scale, 1)); }
+
+/* The list a workspace brings is never on screen together with the list it replaces (Beta 14.0, earlier work; the three-widths sweep's F5 = D66). The sidebar is one picture in the crossfade above, and the
+   new list slides in 16 px from the side (ui/workspaceMotion.ts): from +17 to +92 ms the last workspace's list, fading in the old picture, and the new one, arriving in the new picture, stood 6 to 12 pt apart
+   (the workspace's name twice, "New tab" twice, "Bookmarks" twice; hidden stepped frames, every width, left and right). For the length of a workspace switch the sidebar's sections (the workspace's title
+   line, the list, the rows under it) are a picture of their own, so they are in neither picture of the sidebar: the sidebar's colour and glass crossfade as before, without a list in them. The old sections
+   fade where they stand (50 ms x the speed, no slide). Their layer keeps the box they had until that fade is done, then takes the new one: a strip's container starts after the switcher chip, whose name is
+   wider or narrower, and the last tabs stood 20 pt aside on the first frame; the strip's new tabs, which ride their container, are not drawn in that old box either. The new sections are the live sidebar
+   at full strength, whose title and list wait 85 % of the fade and then slide in (workspaceListHold): the last list is under 12 % before the new one reaches 12 %, so the two lists hand over and are never
+   drawn together. The new picture is cut at the column's sides (a list still 16 px aside would stand past the sidebar's edge, over the page: the sidebar's own picture clips it, this one is drawn above it).
+   The tabs of a strip along the top are the same case. One name each, with the setup guard every name carries (view-morph.css). */
+:root[data-mode-switch='workspace']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) > .ed-rail.acira-sidebar.is-expanded .sb-sections-wrap { view-transition-name: acira-ws-list; }
+:root[data-mode-switch='workspace']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell > .acira-tab-row .tab-strip-container { view-transition-name: acira-ws-strip; }
+:root:root:root[data-mode-switch='workspace']::view-transition-group(acira-ws-list),
+:root:root:root[data-mode-switch='workspace']::view-transition-group(acira-ws-strip) { animation-duration: calc(50ms * var(--motion-scale, 1)); animation-timing-function: steps(1, end); }
+:root:root:root[data-mode-switch='workspace']::view-transition-image-pair(acira-ws-list),
+:root:root:root[data-mode-switch='workspace']::view-transition-image-pair(acira-ws-strip) { isolation: auto; overflow-x: clip; }
+:root:root:root[data-mode-switch='workspace']::view-transition-old(acira-ws-list),
+:root:root:root[data-mode-switch='workspace']::view-transition-old(acira-ws-strip) { mix-blend-mode: normal; animation: calc(50ms * var(--motion-scale, 1)) linear both ws-list-out; }
+:root:root:root[data-mode-switch='workspace']::view-transition-new(acira-ws-list) { mix-blend-mode: normal; animation: none; opacity: 1; }
+:root:root:root[data-mode-switch='workspace']::view-transition-new(acira-ws-strip) { mix-blend-mode: normal; animation: calc(50ms * var(--motion-scale, 1)) steps(1, end) both ws-step-in; }
+@keyframes ws-list-out { to { opacity: 0; } }
+/* The strip's switcher chip (its icon and name) is a control, like the sidebar's workspace row: it changes at once, never the two names over each other (they crossfaded in place for 2 to 3 frames,
+   "Space 2" over "Main"). It changes when the last tabs are gone, not before: a longer name lands wider, over the place the last tabs still fade in (the strip's container starts after it), so the chip
+   keeps the last name and box for the tabs' 50 ms x the speed, then shows the new one in one frame, as the new tabs start in. */
+:root[data-mode-switch='workspace']:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell > .acira-tab-row .ws-chip { view-transition-name: acira-ws-chip; }
+:root:root:root[data-mode-switch='workspace']::view-transition-group(acira-ws-chip) { animation-duration: calc(50ms * var(--motion-scale, 1)); animation-timing-function: steps(1, end); }
+:root:root:root[data-mode-switch='workspace']::view-transition-image-pair(acira-ws-chip) { isolation: auto; }
+:root:root:root[data-mode-switch='workspace']::view-transition-old(acira-ws-chip) { mix-blend-mode: normal; animation: calc(50ms * var(--motion-scale, 1)) steps(1, end) both ws-list-out; }
+:root:root:root[data-mode-switch='workspace']::view-transition-new(acira-ws-chip) { mix-blend-mode: normal; animation: calc(50ms * var(--motion-scale, 1)) steps(1, end) both ws-step-in; }
+@keyframes ws-step-in { from { opacity: 0; } }
 
 /* ── R3-38 Secured workspaces: lock badge, Beta chip, create-sheet row and the lock screen. Tokens only; radii 4/6/8. */
 .ws-lock-badge { position: absolute; right: -4px; bottom: -3px; display: grid; place-items: center; width: 13px; height: 13px; border-radius: 4px; background: var(--surface, Canvas); color: var(--text-1, currentColor); box-shadow: 0 0 0 1px var(--sb-line, rgb(0 0 0 / .12)); pointer-events: none; }

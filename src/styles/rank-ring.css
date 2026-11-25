@@ -1,0 +1,33 @@
+/* Beta 14 (decided 14 Nov): the ring around a profile picture, by rank (Contributor and up; Early Member has none). A flat, solid line: one colour per rank, no gradient, no metal or gold look, no light sweep.
+   It is on the picture on the NEW TAB PAGE only (src/features/newtab): the toolbar button, the sidebar row and every panel stay plain, so ProfileAvatar draws it only when it is given `showRank`.
+   About 2 px wide with a 3 px gap from the picture at an 84 px picture (the reference sheet `rings_options`, set P2); below 72 px it is 1.5 px with a 2 px gap.
+   The four colours, dark theme / light theme (the same hues, the light ones darker): Contributor green #3FB663 / #008D3C · Trusted Contributor blue #509DFC / #2474CF · Insider purple #A980F5 / #8258C9 ·
+   Founding Contributor red #FA6349 / #CC361E. Each is at least 6:1 on the dark page and 3.7:1 on the light one (3:1 is the minimum for a non-text line). The seal and the rank word always carry the rank: colour is never the only cue.
+   They are variables on `.app` so the one place that needs the colour in a script (the aura, AuraTrigger.tsx ringColor) reads the same value the ring is drawn with. */
+.app {
+  --acira-rank-ring-contributor: #008d3c;
+  --acira-rank-ring-trusted: #2474cf;
+  --acira-rank-ring-insider: #8258c9;
+  --acira-rank-ring-founding: #cc361e;
+}
+.app[data-theme='dark'] {
+  --acira-rank-ring-contributor: #3fb663;
+  --acira-rank-ring-trusted: #509dfc;
+  --acira-rank-ring-insider: #a980f5;
+  --acira-rank-ring-founding: #fa6349;
+}
+/* The ring appears AT ONCE (no colour transition) while motion is on: it is the finished ring the moment it exists. Motion Off fades it in (below), from transparent. */
+.profile-avatar:not([data-rank]) { outline-color: transparent; }
+.profile-avatar[data-rank] {
+  outline: var(--acira-rank-ring-stroke, 2px) solid var(--acira-rank-ring-color, transparent);
+  outline-offset: var(--acira-rank-ring-gap, 3px);
+}
+.profile-avatar[data-rank='contributor'] { --acira-rank-ring-color: var(--acira-rank-ring-contributor); }
+.profile-avatar[data-rank='trusted'] { --acira-rank-ring-color: var(--acira-rank-ring-trusted); }
+.profile-avatar[data-rank='insider'] { --acira-rank-ring-color: var(--acira-rank-ring-insider); }
+.profile-avatar[data-rank='founding'] { --acira-rank-ring-color: var(--acira-rank-ring-founding); }
+/* Motion set to Off (the setting, or the system's): no aura, the ring simply fades in. */
+.app[data-motion-speed='off'] .profile-avatar[data-rank],
+.app[data-reduced-motion='true'] .profile-avatar[data-rank] { transition: outline-color 160ms linear; }
+@media (prefers-reduced-motion: reduce) { .profile-avatar[data-rank] { transition: outline-color 160ms linear; } }
+.profile-avatar[data-rank][data-aura-pending] { outline-color: transparent; transition: none; }

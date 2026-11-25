@@ -78,6 +78,13 @@ function closePrompt({scope,confirm=false,unsaved=[],tabs=0,windows=0,sites=[]},
     return {type:'warning',message:say('closeGuard.quitTitle'),detail:say('closeGuard.quitDetail',{tabs,windows}),buttons,defaultId:1,cancelId:1,
       site:{...site,caption:count>1?say('closeGuard.leaveMany'):''}};
   }
+  // Beta 14: one unsaved site is the reference design's sample "Leave without saving?" card (a file tile, the sentence naming the site, Leave in red,
+  // Keep editing primary; a tab or a window asks up by the tab strip). Several sites keep the list card (the sample does not show that case).
+  if(count===1){
+    const host=unsaved[0].host;
+    return {type:'warning',message:say('closeGuard.leaveTitle'),detail:host?say('main.leaveSiteDetail',{site:host}):say('closeGuard.leaveBody'),buttons:[say('main.leave'),buttons[1]],defaultId:1,cancelId:1,
+      site:{centered:true,host:host||'',icon:'file',...(scope==='quit'?{}:{top:true})}};
+  }
   return {type:'warning',message:say(count>1?'closeGuard.leaveMany':'closeGuard.leaveTitle'),detail:'',buttons,defaultId:1,cancelId:1,
     site:scope==='quit'?site:{...site,top:true}};
 }

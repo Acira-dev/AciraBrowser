@@ -1,0 +1,11 @@
+/* 14.3 Tab size (src/runtime/tabSize.ts). Standard sets no attribute and is exactly today's drawing; only Small and Large have rules here.
+   Sidebar: the list's row (--sb-row: tabs, New tab, group headers, bookmarks), one rhythm. Same element and higher weight than sidebar.css's definition. */
+:root[data-tab-size=small] .app.style-acira .ed-rail.acira-sidebar{--sb-row:28px}
+:root[data-tab-size=large] .app.style-acira .ed-rail.acira-sidebar{--sb-row:38px}
+/* Along the top: the strip's row and its tabs (3 px of air above and below, as at Standard). The window's geometry (App.tsx, tabRowHeight) reads the same numbers, so the page starts under the row. */
+:root[data-tab-size=small] .app.style-acira .acira-tab-row{height:32px}
+:root[data-tab-size=large] .app.style-acira .acira-tab-row{height:40px}
+:root[data-tab-size=small] .app.style-acira .browser-tab{height:26px}
+:root[data-tab-size=large] .app.style-acira .browser-tab{height:34px}
+:root[data-tab-size=small] .app.style-acira :is(.browser-tab[data-tab-group],.tab-group-header:not(.compact)){height:22px}
+:root[data-tab-size=large] .app.style-acira :is(.browser-tab[data-tab-group],.tab-group-header:not(.compact)){height:30px}

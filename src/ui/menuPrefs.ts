@@ -5,7 +5,7 @@ import {t} from '../i18n';
  * menu and More tools, hide, reset), stored like the toolbar buttons so the popup renderer and Settings stay in step.
  * "More tools" and "Settings" are fixed at the foot of the main menu: Settings is the recovery route, and More tools is
  * where the person's moved rows live (it hides itself while empty). */
-export type MenuItemId='newTab'|'newPrivateTab'|'newTorTab'|'newWindow'|'newPrivateWindow'|'newTorWindow'|'find'|'zoom'|'split'|'protection'|'aiFree'|'bookmarks'|'history'|'recentlyClosed'|'rewind'|'downloads'|'allTabs'|'commands'|'print'|'savePage'|'copyAddress'|'devtools'|'clearData'|'focus'|'seamless'|'extensions'|'vpn';
+export type MenuItemId='newTab'|'newPrivateTab'|'newTorTab'|'newWindow'|'newPrivateWindow'|'newTorWindow'|'find'|'zoom'|'split'|'protection'|'aiFree'|'bookmarks'|'history'|'recentlyClosed'|'rewind'|'downloads'|'transfer'|'allTabs'|'commands'|'print'|'savePage'|'screenshot'|'zap'|'copyAddress'|'devtools'|'taskManager'|'clearData'|'focus'|'seamless'|'extensions'|'vpn';
 export type MenuList='main'|'more';
 export interface MenuLayout{main:MenuItemId[];more:MenuItemId[];hidden:MenuItemId[]}
 
@@ -14,14 +14,14 @@ export const menuItemGroups:Record<MenuItemId,string>={
  newTab:'tabs',newPrivateTab:'tabs',newTorTab:'tabs',
  newWindow:'windows',newPrivateWindow:'windows',newTorWindow:'windows',
  find:'page',zoom:'page',split:'page',protection:'page',aiFree:'page',
- bookmarks:'library',history:'library',recentlyClosed:'library',rewind:'library',downloads:'library',
+ bookmarks:'library',history:'library',recentlyClosed:'library',rewind:'library',downloads:'library',transfer:'library',
  allTabs:'find',commands:'find',
- print:'tools',savePage:'tools',copyAddress:'tools',devtools:'tools',clearData:'tools',
+ print:'tools',savePage:'tools',screenshot:'tools',zap:'tools',copyAddress:'tools',devtools:'tools',taskManager:'tools',clearData:'tools',
  focus:'view',seamless:'view',extensions:'view',vpn:'view',
 };
 export const defaultMenuLayout:MenuLayout=Object.freeze({
- main:['newTab','newPrivateTab','newTorTab','newWindow','newPrivateWindow','newTorWindow','find','zoom','split','protection','aiFree','bookmarks','history','recentlyClosed','rewind','downloads'],
- more:['allTabs','commands','print','savePage','copyAddress','devtools','clearData','focus','seamless','extensions','vpn'],
+ main:['newTab','newPrivateTab','newTorTab','newWindow','newPrivateWindow','newTorWindow','find','zoom','split','protection','aiFree','bookmarks','history','recentlyClosed','rewind','downloads','transfer'],
+ more:['allTabs','commands','print','savePage','screenshot','zap','copyAddress','devtools','taskManager','clearData','focus','seamless','extensions','vpn'],
  hidden:[],
 }) as MenuLayout;
 const everyItem=[...defaultMenuLayout.main,...defaultMenuLayout.more] as MenuItemId[];
@@ -31,9 +31,9 @@ export const menuItemLabel=(id:MenuItemId):string=>({
  newTab:()=>t('browsermenu.newTab'),newPrivateTab:()=>t('browsermenu.newPrivateTab'),newTorTab:()=>t('browsermenu.newTorTab'),
  newWindow:()=>t('browsermenu.newWindow'),newPrivateWindow:()=>t('browsermenu.newPrivateWindow'),newTorWindow:()=>t('browsermenu.newTorWindow'),
  find:()=>t('browsermenu.findInPage'),zoom:()=>t('app.zoom'),split:()=>t('browsermenu.splitView'),protection:()=>t('protection.title'),aiFree:()=>t('browsermenu.aiFreeMode'),
- bookmarks:()=>t('browsermenu.bookmarks'),history:()=>t('browsermenu.history'),recentlyClosed:()=>t('rewind.recentlyClosed'),rewind:()=>t('browsermenu.rewind'),downloads:()=>t('browsermenu.downloads'),
- allTabs:()=>t('browsermenu.allOpenTabs'),commands:()=>t('browsermenu.searchAndCommands'),print:()=>t('browsermenu.print'),savePage:()=>t('browsermenu.savePageAs'),copyAddress:()=>t('browsermenu.copyPageAddress'),
- devtools:()=>t('browsermenu.developerTools'),clearData:()=>t('browsermenu.clearBrowsingData'),focus:()=>t('browsermenu.focusMode'),seamless:()=>t('browsermenu.seamless'),extensions:()=>t('browsermenu.extensions'),vpn:()=>t('vpn.control.title'),
+ bookmarks:()=>t('browsermenu.bookmarks'),history:()=>t('browsermenu.history'),recentlyClosed:()=>t('rewind.recentlyClosed'),rewind:()=>t('browsermenu.rewind'),downloads:()=>t('browsermenu.downloads'),transfer:()=>t('transfer.menu'),
+ allTabs:()=>t('browsermenu.allOpenTabs'),commands:()=>t('browsermenu.searchAndCommands'),print:()=>t('browsermenu.print'),savePage:()=>t('browsermenu.savePageAs'),screenshot:()=>t('shortcutCmd.screenshot'),zap:()=>t('zap.menu'),copyAddress:()=>t('browsermenu.copyPageAddress'),
+ devtools:()=>t('browsermenu.developerTools'),taskManager:()=>t('browsermenu.taskManager'),clearData:()=>t('browsermenu.clearBrowsingData'),focus:()=>t('browsermenu.focusMode'),seamless:()=>t('browsermenu.seamless'),extensions:()=>t('browsermenu.extensions'),vpn:()=>t('vpn.control.title'),
 }[id])();
 
 /** Rows a saved layout may still name by an older id: "Reopen closed tab" became "Recently closed" (Rewind's quick list,
@@ -116,5 +116,10 @@ export function resetMenuLayout(profile=''){
 function subscribe(listener:()=>void){window.addEventListener(EVENT,listener);window.addEventListener('storage',listener);return()=>{window.removeEventListener(EVENT,listener);window.removeEventListener('storage',listener);};}
 export function useMenuLayout(profile=''){return useSyncExternalStore(subscribe,()=>read(profile));}
 
-/** Existing platform support: unavailable Tor actions never draw or count in Mac/Linux menus. */
-export function platformMenuLayout(layout:MenuLayout):MenuLayout{if(isTorSupported())return layout;const supported=(id:MenuItemId)=>id!=='newTorTab'&&id!=='newTorWindow';return {main:layout.main.filter(supported),more:layout.more.filter(supported),hidden:layout.hidden.filter(supported)};}
+/** Existing platform support: unavailable Tor actions never draw or count in Mac/Linux menus. A private or Tor window (`blocked`, see
+ * features/transfer/entryPoints.ts transferBlocked) never draws or counts the row that moves the profile to another computer. */
+export function platformMenuLayout(layout:MenuLayout,blocked=false):MenuLayout{
+ const tor=isTorSupported(),supported=(id:MenuItemId)=>(tor||(id!=='newTorTab'&&id!=='newTorWindow'))&&(!blocked||id!=='transfer');
+ if(tor&&!blocked)return layout;
+ return {main:layout.main.filter(supported),more:layout.more.filter(supported),hidden:layout.hidden.filter(supported)};
+}

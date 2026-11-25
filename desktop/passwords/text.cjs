@@ -32,6 +32,8 @@ const frameStrings = () => ({
   save: tr('pw.frame.save', 'Save'),
   update: tr('pw.frame.update', 'Update'),
   noUsername: tr('pw.frame.noUsername', 'No username'),
+  show: tr('pw.frame.show', 'Show password'),
+  hide: tr('pw.frame.hide', 'Hide password'),
 });
 
 module.exports = { setTranslator, tr, frameStrings };

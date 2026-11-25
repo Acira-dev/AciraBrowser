@@ -1,6 +1,6 @@
 import { isWindows } from '../../../ui/platform';
 import './privacy.css';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { runtime } from '../../../runtime/client';
 import type { BrowsingDataCategory, BrowsingDataRange, BrowsingDataStatus, HttpsOnlyStatus, ProtectionRow, ProxyChoice, ProxyStatus } from '../../../runtime/nativeNetwork';
 import type { NativeNetworkStatus } from '../../../runtime/nativeNetwork';
@@ -9,7 +9,7 @@ import { useT, t as tr } from '../../../i18n';
 import { USAGE_COPY, useMetrics } from '../../metrics/useMetrics';
 import {UsageOffNotice} from '../../metrics/UsageOffNotice';
 import {UsageSent} from '../../metrics/UsageSent';
-import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
+import { Select, SettingCrossLink, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import { SecuredSettings } from '../../workspaces/SecuredSettings';
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
 
@@ -31,17 +31,16 @@ function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
   return { value, setValue, error, reload };
 }
 
-function Overview() {
+export function Overview({ bare }: { bare?: boolean } = {}) {
   const { value, error } = useAsync(async () => (await runtime.service({ type: 'protection.status' })).protection, []);
   const active = value?.rows.filter((row) => row.state === 'on').length ?? 0;
-  return (
-    <SettingGroup>
-      <SettingRow id="protection-overview" title={value ? (active ? tr("privacy.protectionIsOn") : tr("privacy.protectionIsOff")) : tr("privacy.protection")} detail={error || (value ? tr("privacy.protectionsActive", { count: active }) : tr("privacy.readingProtection"))} />
-    </SettingGroup>
-  );
+  const row = <SettingRow id="protection-overview" title={value ? (active ? tr("privacy.protectionIsOn") : tr("privacy.protectionIsOff")) : tr("privacy.protection")} detail={error || (value ? tr("privacy.protectionsActive", { count: active }) : tr("privacy.readingProtection"))} />;
+  // Beta 14.4: `bare` puts the row in Privacy › Protection, under Block ads and trackers (it was an untitled block of its own).
+  return bare ? row : <SettingGroup>{row}</SettingGroup>;
 }
 
-function Cookies({ disabled }: { disabled: boolean }) {
+/** Beta 14.4: Privacy › Cookies and banners: third-party cookies, then the two cookie-banner rows (children, from ContentFilters part="banners"). */
+export function Cookies({ disabled, children }: { disabled: boolean; children?: ReactNode }) {
   const { value, setValue, error } = useAsync(async () => (await runtime.service({ type: 'network.status' })).network, []);
   const [problem, setProblem] = useState('');
   const mode = value?.saved.cookies ?? 'block';
@@ -55,34 +54,37 @@ function Cookies({ disabled }: { disabled: boolean }) {
   };
   const running = value?.engine?.thirdPartyCookies;
   return (
-    <SettingGroup title={tr("privacy.cookies")}>
+    <SettingGroup title={tr("settings.cookiesBannersGroup")}>
       <SettingRow id="third-party-cookies" title={tr("protection.cookies.title")} detail={tr("privacy.cookiesDetail")}>
         <Select label={tr("protection.cookies.title")} value={mode} disabled={disabled || !value} onChange={(next) => void change(next)} options={[{ value: 'block', label: tr("permission.block") }, { value: 'allow', label: tr("permission.allow") }]} />
       </SettingRow>
       {(error || problem) && <SettingNote>{error || problem}</SettingNote>}
       {value && running && running !== mode && <SettingNote>{tr(running === 'block' ? "privacy.restartCookiesBlocked" : "privacy.restartCookiesAllowed")}</SettingNote>}
+    {children}
     </SettingGroup>
   );
 }
 
-function ListUpdates({ disabled }: { disabled: boolean }) {
+/** Beta 14.4: `bare` gives the row alone, for the one Protection lists fold (there were two groups with that title). */
+export function ListUpdates({ disabled, bare }: { disabled: boolean; bare?: boolean }) {
   const { value, setValue, error } = useAsync(async () => (await runtime.service({ type: 'filters.lists-status' })).filterLists, []);
   const [problem, setProblem] = useState('');
   const toggle = async (enabled: boolean) => {
     setProblem('');
     try { setValue((await runtime.service({ type: 'filters.lists-auto', enabled })).filterLists); } catch (reason) { setProblem(message(reason)); }
   };
-  return (
-    <SettingGroup title={tr("privacy.protectionLists")} fold>
+  const rows = (
+    <>
       <SettingRow id="filter-lists-auto" title={tr("privacy.updateListsAutomatically")} detail={tr("privacy.listsDetail")}>
         <Switch label={tr("privacy.updateProtectionListsAutomatically")} checked={value?.automatic ?? true} disabled={disabled || !value} onChange={(next) => void toggle(next)} />
       </SettingRow>
       {(error || problem) && <SettingNote>{error || problem}</SettingNote>}
-    </SettingGroup>
+    </>
   );
+  return bare ? rows : <SettingGroup title={tr("privacy.protectionLists")} fold>{rows}</SettingGroup>;
 }
 
-function Https({ disabled }: { disabled: boolean }) {
+export function Https({ disabled }: { disabled: boolean }) {
   const { value, setValue, error } = useAsync(async () => (await runtime.service({ type: 'https.status' })).https as HttpsOnlyStatus | undefined, []);
   const [problem, setProblem] = useState('');
   const toggle = async (enabled: boolean) => {
@@ -129,8 +131,8 @@ export function ProxySettings({ disabled: profileLocked }: { disabled: boolean }
             <Select label={tr("privacy.proxyType")} value={c.scheme} disabled={disabled} onChange={c.setScheme} options={[{ value: 'http', label: tr("privacy.httpOrHttps") }, { value: 'socks5', label: 'SOCKS5' }]} />
           </SettingRow>
           <SettingRow title={tr("acirasidebar.address")} detail={tr("privacy.addressDetail")}>
-            <input className="st-input" aria-label={tr("privacy.proxyHost")} placeholder="proxy.example.com" value={c.host} disabled={disabled} onChange={(event) => c.setHost(event.target.value)} />
-            <input className="st-input" style={{ width: 84, marginLeft: 8 }} aria-label={tr("privacy.proxyPort")} inputMode="numeric" placeholder="8080" value={c.port} disabled={disabled} onChange={(event) => c.setPort(event.target.value)} />
+            <input className="st-input ab-input" aria-label={tr("privacy.proxyHost")} placeholder="proxy.example.com" value={c.host} disabled={disabled} onChange={(event) => c.setHost(event.target.value)} />
+            <input className="st-input ab-input" style={{ width: 84, marginLeft: 8 }} aria-label={tr("privacy.proxyPort")} inputMode="numeric" placeholder="8080" value={c.port} disabled={disabled} onChange={(event) => c.setPort(event.target.value)} />
           </SettingRow>
           <SettingRow title={tr("privacy.test")} detail={tr("privacy.testDetail")}>
             <button type="button" className="st-button" disabled={disabled || c.busy || !c.valid} onClick={() => void c.runTest()}>{tr("privacy.testProxy")}</button>
@@ -165,7 +167,7 @@ const RANGES: { value: BrowsingDataRange; label: string }[] = [
   { value: 'hour', label: tr("privacy.lastHour") }, { value: 'day', label: tr("privacy.last24Hours") }, { value: 'week', label: tr("privacy.last7Days") }, { value: 'month', label: tr("privacy.last4Weeks") }, { value: 'all', label: tr("privacy.allTime") },
 ];
 
-function ClearData({ disabled }: { disabled: boolean }) {
+export function ClearData({ disabled }: { disabled: boolean }) {
   const { value } = useAsync(async () => (await runtime.service({ type: 'data.status' })).dataClear as BrowsingDataStatus | undefined, []);
   const [picked, setPicked] = useState<Set<BrowsingDataCategory>>(new Set(['history']));
   const [range, setRange] = useState<BrowsingDataRange>('all');
@@ -185,7 +187,7 @@ function ClearData({ disabled }: { disabled: boolean }) {
     } catch (reason) { setResult(message(reason)); } finally { setBusy(false); setConfirming(false); }
   };
   return (
-    <SettingGroup title={tr("privacy.clearBrowsingData")} fold>
+    <SettingGroup title={tr("privacy.clearBrowsingData")} id="clear-browsing-data-group">
       <SettingRow id="clear-browsing-data" title={tr("privacy.whatToClear")} detail={tr("privacy.clearNote")} />
       {CATEGORIES.map((category) => (
         <SettingRow key={category.id} title={category.title} detail={category.detail}>
@@ -195,6 +197,7 @@ function ClearData({ disabled }: { disabled: boolean }) {
       <SettingRow id="clear-browsing-data-range" title={tr("privacy.timeRange")} detail={tr(allTimeOnly ? "privacy.timeRangeAllOnly" : "privacy.timeRangeShort")}>
         <Select label={tr("privacy.timeRange")} value={effective} disabled={disabled || !value || allTimeOnly} onChange={(next) => { setRange(next); setConfirming(false); }} options={RANGES} />
       </SettingRow>
+      <SettingCrossLink to="rewind-clear" section="Tabs" title={tr("rewind.deleteHistory")} />
       <SettingRow title={confirming ? tr("privacy.clearTheseNowThisCannot") : tr("privacy.clear")}>
         {confirming && <button type="button" className="st-button" disabled={busy} onClick={() => setConfirming(false)}>{tr("dialog.cancel")}</button>}
         <button type="button" className="st-button primary" style={{ marginLeft: confirming ? 8 : 0 }} disabled={disabled || busy || !chosen.length} onClick={() => (confirming ? void clear() : setConfirming(true))}>{confirming ? tr("privacy.clearData2") : tr("privacy.clearData")}</button>
@@ -204,25 +207,25 @@ function ClearData({ disabled }: { disabled: boolean }) {
   );
 }
 
-function Usage({ disabled }: { disabled: boolean }) {
+/** Beta 14 (brief section C): the switch with the same two links as the notice, and when the last message was sent. The exact message and what each field means are on acira://usage. */
+export function Usage({ disabled, dispatch }: { disabled: boolean; dispatch: SettingsPanelProps['dispatch'] }) {
   const t = useT();
   const m = useMetrics();
-  const [shown, setShown] = useState(false);
+  const lastSentAt = m.status?.lastSentAt || 0;
+  const lastSent = lastSentAt ? t('usage.settings.lastSent', { when: new Date(lastSentAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) }) : t('usage.settings.neverSent');
+  const openPage = () => { void runtime.service({ type: 'metrics.notice', act: 'link' }).catch(() => undefined); dispatch({ type: 'tab.new', url: 'acira://usage' }); };
   return (
     <SettingGroup title={t('usage.title')} fold>
-      <SettingRow id="usage-metrics" title={USAGE_COPY.fact(m.enabled)} detail={USAGE_COPY.ask} info={t('help.usage')}>
-        <Switch label={t('usage.switchLabel')} checked={m.enabled} disabled={disabled || !m.ready || m.busy} onChange={(next) => void m.set(next)} />
+      <SettingRow id="usage-metrics" title={t('usage.switchLabel')} detail={m.enabled ? t('usage.settings.detail') : t('usage.offDetail')} info={t('help.usage')}>
+        <Switch label={t('usage.switchLabel')} checked={m.enabled} disabled={disabled || !m.ready || m.busy} onChange={(next) => void m.set(next, 'settings')} />
       </SettingRow>
       {m.status && !m.status.configured && <SettingNote>{t('usage.notConfigured')}</SettingNote>}
       {m.offNotice && <UsageOffNotice onClose={m.dismissOffNotice}/>}
       {m.enabled && <SettingRow id="usage-ratings" title={t('usage.askRatings')} detail={t('usage.askRatingsDetail')}>
         <Switch label={t('usage.askRatings')} checked={m.askRatings} disabled={disabled || !m.ready || m.busy} onChange={(next) => void m.setAskRatings(next)} />
       </SettingRow>}
-      <SettingRow id="usage-metrics-payload" title={t('usage.seeSent')} detail={m.status ? (m.enabled ? USAGE_COPY.detail : t('usage.offDetail')) : undefined} stacked>
-        <button type="button" className="st-button" aria-expanded={shown} onClick={() => setShown(!shown)}>{shown ? t('usage.hide') : t('usage.show')}</button>
-        {shown && m.status && <UsageSent status={m.status}/>}
-        {shown && <pre className="st-payload" aria-label={t('usage.payloadLabel')}>{m.payloadText}</pre>}
-        {shown && m.status && !m.status.configured && <SettingNote>{t('usage.notConfigured')}</SettingNote>}
+      <SettingRow id="usage-metrics-payload" title={t('usage.notice.see')} detail={m.status ? lastSent : undefined}>
+        <button type="button" className="st-button" onClick={openPage}>{t('app.open')}</button>
       </SettingRow>
       {m.problem && <SettingNote>{m.problem}</SettingNote>}
     </SettingGroup>
@@ -239,11 +242,11 @@ function PrivacyExtras({ state, dispatch }: SettingsPanelProps) {
       <Https disabled={disabled} />
       <SecuredSettings state={state} dispatch={dispatch} disabled={disabled} />
       <ListUpdates disabled={disabled} />
-      <Usage disabled={disabled} />
+      <Usage disabled={disabled} dispatch={dispatch} />
       <ClearData disabled={disabled} />
     </>
   );
 }
 
-const panel: SettingsPanel = { section: 'Privacy', order: 20, Component: PrivacyExtras };
+const panel: SettingsPanel = { section: 'Privacy', order: 20, placed: true, Component: PrivacyExtras };
 export default panel;

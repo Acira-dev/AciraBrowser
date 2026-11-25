@@ -1,4 +1,4 @@
-import { groupForTab } from '../runtime/tabGroups';
+import { canNest,familyTabs,groupForTab,innerGroupsInOrder,topGroupOf } from '../runtime/tabGroups';
 import type { BrowserAction,TabGroup,TabSession } from '../runtime/types';
 import { splitDropAt } from '../ui/splitDropTarget';
 
@@ -181,7 +181,8 @@ export function groupDropAtPoint(root:HTMLElement|null,point:Point,from:string,t
  const source=tabs.find(tab=>tab.id===from),group=source&&groupForTab({tabGroups:groups},source);if(!root||!group)return null;
  const splitDrop=splitDropAt(root.ownerDocument,point,from,vertical);
  if(splitDrop)return {type:'split.group.add',id:splitDrop.groupId,tabId:from,wholeGroup:true,index:splitDrop.index};
- const members=new Set(tabs.filter(tab=>groupForTab({tabGroups:groups},tab)?.id===group.id).map(tab=>tab.id));
+ // A top-level group moves with its whole family (Beta 14, AE: its inner groups), an inner group by itself.
+ const members=new Set(familyTabs({tabs,tabGroups:groups},group).map(tab=>tab.id));
  if(tabs.every(tab=>members.has(tab.id))||!contains(root.getBoundingClientRect(),point))return null;
  const nodes=[...root.querySelectorAll<HTMLElement>('[data-tab-id],[data-group-header]')].filter(node=>!node.hasAttribute('inert'));
  const nodeTab=(node:HTMLElement)=>node.dataset.tabId||node.dataset.groupTab||'';
@@ -189,6 +190,8 @@ export function groupDropAtPoint(root:HTMLElement|null,point:Point,from:string,t
  const axis=vertical?point.y:point.x,start=(bounds:DOMRect)=>vertical?bounds.top:bounds.left,end=(bounds:DOMRect)=>vertical?bounds.bottom:bounds.right;
  const own=nodes.filter(node=>members.has(nodeTab(node))).map(node=>node.getBoundingClientRect()).filter(bounds=>bounds.width>0&&bounds.height>0);
  if(own.length&&axis>=Math.min(...own.map(start))&&axis<=Math.max(...own.map(end)))return null;
+ // The top strip (Beta 14, AE): over another group's tray, away from its ends, the group goes INSIDE it (one level); over an inner group's tray it takes a place among that group's siblings.
+ const nest=vertical?null:nestDropAt(root,point,from,group,tabs,groups);if(nest)return nest;
  const distance=(bounds:DOMRect)=>Math.max(start(bounds)-axis,axis-end(bounds),0);
  const measured=candidates.map(node=>({node,bounds:node.getBoundingClientRect()})).filter(item=>item.bounds.width>0&&item.bounds.height>0);
  if(!measured.length)return null;
@@ -196,12 +199,50 @@ export function groupDropAtPoint(root:HTMLElement|null,point:Point,from:string,t
  return {type:'tab.drop',from,to:nodeTab(target.node),wholeGroup:true,position:axis>(start(target.bounds)+end(target.bounds))/2?'after':'before'};
 }
 
-/** Keyboard group movement relocates the block, preserving profile and pins. */
+/** The strip's nesting drop: the group tray under the pointer, innermost first. The outer quarter (at most 28px) of a tray at either end is a place before or after it, not a nest. Null: no nesting here. */
+export function nestDropAt(root:HTMLElement,point:Point,from:string,group:TabGroup,tabs:TabSession[],groups:TabGroup[]):BrowserAction|null{
+ const trays=[...root.querySelectorAll<HTMLElement>('[data-group-tray]')].filter(node=>!node.hasAttribute('inert')).map(node=>({box:node.getBoundingClientRect(),target:groups.find(item=>item.id===node.dataset.groupTray)}))
+  .filter(item=>item.target&&item.target.id!==group.id&&item.target.parentGroupId!==group.id&&item.box.width>0&&contains(item.box,point)).sort((a,b)=>a.box.width*a.box.height-b.box.width*b.box.height);
+ const hit=trays[0];if(!hit)return null;
+ const target=hit.target!,edge=Math.min(28,hit.box.width*.25);
+ if(point.x<hit.box.left+edge||point.x>hit.box.right-edge)return null;
+ if(target.parentGroupId){
+  const parent=groups.find(item=>item.id===target.parentGroupId);if(!parent||!canNest({tabGroups:groups},group,parent))return null;
+  const own=tabs.filter(tab=>groupForTab({tabGroups:groups},tab)?.id===target.id),before=point.x<(hit.box.left+hit.box.right)/2,anchor=before?own[0]:own.at(-1);
+  return anchor?{type:'tab.drop',from,wholeGroup:true,parentGroupId:parent.id,to:anchor.id,position:before?'before':'after'}:null;
+ }
+ if(group.parentGroupId===target.id||!canNest({tabGroups:groups},group,target))return null;
+ return {type:'tab.drop',from,wholeGroup:true,parentGroupId:target.id};
+}
+
+/** Keyboard group movement relocates the block, preserving profile and pins. A top-level group moves with its whole family (Beta 14, AE: its inner groups); an inner group
+ *  moves among its siblings, one place at a time, and stays inside its parent. */
 export function groupKeyboardDrop(tabs:TabSession[],groups:TabGroup[],groupId:string,key:string):BrowserAction|null{
- const group=groups.find(group=>group.id===groupId),members=tabs.filter(tab=>!tab.pinned&&groupForTab({tabGroups:groups},tab)?.id===groupId);if(!group||!members.length)return null;
- const others=tabs.filter(tab=>!tab.pinned&&tab.browserProfileId===group.browserProfileId&&!members.includes(tab)),backward=['ArrowLeft','ArrowUp','Home'].includes(key);
+ const group=groups.find(group=>group.id===groupId);if(!group)return null;
  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(key))return null;
+ const state={tabs,tabGroups:groups},backward=['ArrowLeft','ArrowUp','Home'].includes(key);
+ if(group.parentGroupId){
+  const parent=groups.find(item=>item.id===group.parentGroupId);if(!parent)return null;
+  const siblings=innerGroupsInOrder(state,parent).filter(item=>familyTabs(state,item).length>0),at=siblings.findIndex(item=>item.id===group.id);
+  const target=key==='Home'?siblings[0]:key==='End'?siblings.at(-1):siblings[at+(backward?-1:1)];
+  return target&&target.id!==group.id?{type:'tab.group.move',id:group.id,parentId:parent.id,to:target.id,position:backward?'before':'after'}:null;
+ }
+ const members=familyTabs(state,group).filter(tab=>!tab.pinned);if(!members.length)return null;
+ const others=tabs.filter(tab=>!tab.pinned&&tab.browserProfileId===group.browserProfileId&&!members.includes(tab));
  const first=tabs.indexOf(members[0]),last=tabs.indexOf(members.at(-1)!);
  const target=key==='Home'?others[0]:key==='End'?others.at(-1):backward?others.filter(tab=>tabs.indexOf(tab)<first).at(-1):others.find(tab=>tabs.indexOf(tab)>last);
  return target?{type:'tab.drop',from:members[0].id,to:target.id,wholeGroup:true,position:backward?'before':'after'}:null;
+}
+
+/** Nesting and un-nesting from the keyboard in the sidebar (Alt+Shift+Right / Left): Right puts the group inside the top-level group just above it in the list, Left takes an inner group out
+ *  to the top level, right after the group it left. Nothing happens when the move is not allowed (one level only: runtime/groupNesting.ts). */
+export function groupKeyboardNest(tabs:TabSession[],groups:TabGroup[],groupId:string,key:string):BrowserAction|null{
+ const group=groups.find(item=>item.id===groupId);if(!group)return null;
+ if(key==='ArrowLeft')return group.parentGroupId?{type:'tab.group.move',id:group.id,parentId:null}:null;
+ if(key!=='ArrowRight'||group.parentGroupId)return null;
+ const state={tabs,tabGroups:groups},mine=tabs.find(tab=>!tab.pinned&&groupForTab(state,tab)?.id===group.id)??tabs.find(tab=>!tab.pinned&&groupForTab(state,tab)&&topGroupOf(state,groupForTab(state,tab)!).id===group.id);
+ if(!mine)return null;
+ const above=tabs.slice(0,tabs.indexOf(mine)).reverse().map(tab=>groupForTab(state,tab)).find(item=>item&&topGroupOf(state,item).id!==group.id);
+ const parent=above&&topGroupOf(state,above);
+ return parent&&canNest(state,group,parent)?{type:'tab.group.move',id:group.id,parentId:parent.id}:null;
 }

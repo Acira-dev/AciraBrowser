@@ -351,7 +351,7 @@ test('a person\'s own click or key press in the page between two downloads means
     assert.equal(asked.length, 2, 'input in another tab changes nothing here');
   } finally { f.cleanup(); }
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
-  assert.match(main, /wc\.on\('input-event',\(_e,input\)=>\{pointerHeld\.note\(input\);(?:if\(input\.type==='mouseWheel'\)tabNumberHold\.interrupt\(\);)?if\(input\.type==='mouseDown'\|\|input\.type==='rawKeyDown'\|\|input\.type==='touchStart'\)downloads\?\.userActed\(tab\.id\);\}\);/, 'each page tells downloads about the person\'s clicks and key presses');
+  assert.match(main, /wc\.on\('input-event',\(_e,input\)=>\{pointerHeld\.note\(input\);(?:pageFullscreen\.noteInput\(input\);)?(?:if\(input\.type==='mouseWheel'\)tabNumberHold\.interrupt\(\);)?if\(input\.type==='mouseDown'\|\|input\.type==='rawKeyDown'\|\|input\.type==='touchStart'\)downloads\?\.userActed\(tab\.id\);\}\);/, 'each page tells downloads about the person\'s clicks and key presses');
 });
 
 test('a just-finished file held for a moment (a Windows antivirus scan) still moves to the chosen place, not the fallback', async () => {
@@ -367,4 +367,57 @@ test('a just-finished file held for a moment (a Windows antivirus scan) still mo
     assert.equal(fs.readFileSync(chosen, 'utf8'), 'held a moment');
     assert.equal(f.toasts.at(-1).text, 'scan.bin downloaded', 'no "couldn’t be saved where you chose"');
   } finally { fs.promises.rename = rename; f.cleanup(); }
+});
+
+// ── Beta 14 (D2): every save the person starts asks where; ordinary web downloads keep following the setting ──
+const {shared: rescueShared} = require('../desktop/browser-services/navigation-rescue.cjs');
+test('a download the person chose with "Save … as…" opens the Save dialog although "Ask where to save" is off, starts in the last folder used, and remembers the folder it was answered in; a plain link download asks nothing', async () => {
+  const dialogsAnswer = [];
+  const f = setup({askWhere: false, answer: options => { dialogsAnswer.push(options.defaultPath); return {canceled: false, filePath: path.join(f.dir, 'Picked', 'mine.bin')}; }});
+  try {
+    // an ordinary download: no question
+    const plain = f.begin(new Item('plain.bin')); await tick(); await tick();
+    assert.equal(f.dialogs.length, 0, 'a plain link download follows the setting (off): no dialog');
+    assert.equal(plain.saved, path.join(f.folder, 'plain.bin'));
+    // "Save … as…": the person said so, so it asks (and starts in the download folder: no folder remembered yet)
+    fs.mkdirSync(path.join(f.dir, 'Picked'), {recursive: true});   // the Save dialog only ever answers with a folder that exists
+    f.clock.now += 20000;   // not a burst of downloads
+    rescueShared.markSaveAs('https://files.example/as.bin');
+    const marked = f.begin(new Item('as.bin')); await tick(); await tick(); await wait(30);
+    assert.equal(f.dialogs.length, 1, 'the Save dialog opened');
+    assert.equal(dialogsAnswer[0], path.join(f.folder, 'as.bin'));
+    await until(() => !marked.paused, 'resumed after the answer');
+    assert.equal(marked.finish('marked'), true); await until(() => f.records.some(r => r.name === 'mine.bin' && r.status === 'Ready'), 'Ready');
+    assert.equal(fs.readFileSync(path.join(f.dir, 'Picked', 'mine.bin'), 'utf8'), 'marked');
+    // the folder it was answered in is where the next one starts
+    f.clock.now += 20000;
+    rescueShared.markSaveAs('https://files.example/again.bin');
+    f.begin(new Item('again.bin')); await tick(); await tick(); await wait(30);
+    assert.equal(dialogsAnswer[1], path.join(f.dir, 'Picked', 'again.bin'), 'starts in the last folder used');
+    // the mark is for that one download: the next plain one asks nothing
+    f.clock.now += 20000;
+    f.begin(new Item('after.bin')); await tick(); await tick();
+    assert.equal(f.dialogs.length, 2);
+  } finally { f.cleanup(); }
+});
+test('a "Save … as…" in a private or Tor window asks too, but its folder is never remembered; Cancel saves nothing', async () => {
+  for (const ownerPatch of [{private: true, profileId: 'private-1'}, {tor: true, private: true}]) {
+    const f = setup({owner: ownerPatch, answer: () => ({canceled: true})});
+    try {
+      rescueShared.markSaveAs('https://files.example/p.bin');
+      const item = f.begin(new Item('p.bin')); await tick(); await tick(); await wait(30);
+      assert.equal(f.dialogs.length, 1, 'asked');
+      await until(() => item.nativePanel === false && f.records.length >= 0, 'settled');
+      assert.equal(stagedFiles(f).length, 0, 'Cancel leaves nothing');
+      assert.deepEqual(fs.readdirSync(f.folder), []);
+    } finally { f.cleanup(); }
+  }
+  const g = setup({owner: {private: true, profileId: 'private-1'}, answer: () => ({canceled: false, filePath: path.join(g.dir, 'Elsewhere', 'x.bin')})});
+  try {
+    rescueShared.markSaveAs('https://files.example/q.bin');
+    const item = g.begin(new Item('q.bin')); await tick(); await tick(); await wait(30); await until(() => !item.paused, 'resumed');
+    assert.equal(g.records.length >= 1, true);
+    const prefs = createDownloadPreferences({file: path.join(g.userData, 'download-preferences.json'), defaultFolder: g.folder});
+    assert.equal(prefs.lastSaveFolder(), '', 'a private window never leaves a folder behind');
+  } finally { g.cleanup(); }
 });

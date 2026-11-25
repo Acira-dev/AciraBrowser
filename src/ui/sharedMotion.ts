@@ -1,3 +1,6 @@
+import { liveRangeActive } from './liveRange';
+import { stripBoxOf, stripGlides, stripStartOffset } from './stripGlide';
+import { ADDRESS_BAR, addressLeadOf, addressStartOffset } from './addressLead';
 import { blockSlideOf, type BlockSlide } from './addressInSidebar';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { springAt, springEasing, springs, type SpringSpec } from './springs';
@@ -351,12 +354,34 @@ function followPage(before: DOMRect | null | undefined): { start: () => void; st
  * keeps a 6 px margin below). The layout switch's glass veil (view-morph.css) tints the band and the strip across the sidebar's column for the whole slide, which the sliding
  * sidebar leaves bare ahead of its edge (founder, 5 Nov, Windows), and keeps the frame's old or new picture off the column's middle, where the sidebar's own veil lies. Read
  * before the switch (the frame it leaves) and after its update (the frame it shows): a docked sidebar in either one sets them, the frame with none leaves them as they were. */
+/** D54 (c)'s mark, the classic Sidebar layout only: in Sidebar + address (`data-m-sbmode`, the address block's layout) the bar is another construction (with the sidebar on the right the
+ * window buttons' strip over the page), and the standing light seen through a travelling window there cut the bar's light out over most of the window's width (lossless frames, 19 Nov: the top rows
+ * 57 levels under both rests where 3.6 before); it keeps its morphing group as it always had. */
+const railSlides = (): boolean => document.documentElement.dataset?.mSbmode === undefined;
 function measureFrameBands(before: boolean): void {
   const style = document.documentElement.style, rail = document.querySelector<HTMLElement>('.app > .ed-rail.is-expanded:not(.is-peek)')?.getBoundingClientRect?.();
-  if (!rail || !rail.width) { if (before) style.setProperty('--frame-rail-width', '0px'); return; }
+  // D13 (view-morph.css): the frame WITHOUT a docked sidebar says how far in the page card rests on the sidebar's side. That margin is the frame's own and the frame's picture keeps it through the switch
+  // (`--frame-card-margin`); when it is the frame the switch LEAVES, the sidebar is arriving and the kept margin follows the sidebar's edge (`--frame-edge-in`, the keyframes' name). Both are cleared when a
+  // switch starts, so a switch with the sidebar docked in both frames keeps nothing. A Mini rail stands in its own column: no margin then.
+  if (before) { style.setProperty('--frame-card-margin', '0px'); style.setProperty('--frame-edge-in', 'none'); style.setProperty('--frame-edge-out', 'none'); delete document.documentElement.dataset.railSlide; }
+  if (!rail || !rail.width) {
+    if (before) style.setProperty('--frame-rail-width', '0px');
+    const rest = document.querySelector<HTMLElement>('.browser-body > .page-area')?.getBoundingClientRect?.(), slim = document.querySelector<HTMLElement>('.app > .ed-rail:not(.is-peek)')?.getBoundingClientRect?.();
+    if (rest && rest.width && !(slim && slim.width)) {
+      const width = typeof window === 'undefined' ? 0 : window.innerWidth || 0, margin = document.documentElement.dataset?.sidebarSide === 'right' ? (width ? width - rest.right : 0) : rest.left;
+      style.setProperty('--frame-card-margin', `${Math.max(0, Math.round(margin * 100) / 100)}px`);
+      if (before) style.setProperty('--frame-edge-in', 'frame-edge-in');
+      // D54 (D72 / D73): ...and when it is the frame the switch LANDS on and the one it left had a docked sidebar, the sidebar is LEAVING: the page content's live picture, which stands at its final
+      // box from the first frame, is clipped at the sidebar's travelling edge (`--frame-edge-out`, the keyframes' name; view-morph.css), so its opaque fill never lies under the sliding sidebar.
+      // (`data-rail-slide`, D54 (c): the same two cases as a mark CSS can select on. The bar's light then stands still and is seen through a window that travels with the sidebar's edge: styles/ambient.css.)
+      else if (parseFloat(style.getPropertyValue('--frame-rail-width')) > 0) { style.setProperty('--frame-edge-out', document.documentElement.dataset?.sidebarSide === 'right' ? 'frame-edge-out-right' : 'frame-edge-out'); if (railSlides()) document.documentElement.dataset.railSlide = 'out'; }
+    }
+    return;
+  }
   const card = document.querySelector<HTMLElement>('.browser-body > .page-area')?.getBoundingClientRect?.(), height = typeof window === 'undefined' ? 0 : window.innerHeight;
   if (!card || !card.width || !height) return;
   style.setProperty('--frame-rail-width', `${rail.width}px`);
+  if (!before && style.getPropertyValue('--frame-edge-in') === 'frame-edge-in' && railSlides()) document.documentElement.dataset.railSlide = 'in';   // the frame the switch left had no rail and this one has: the sidebar ARRIVES
   style.setProperty('--frame-band-top', `${Math.max(0, card.top)}px`);
   style.setProperty('--frame-band-bottom', `${Math.max(0, height - card.bottom)}px`);
 }
@@ -369,12 +394,48 @@ export const registerPageRiseSpring = (source: () => { duration: number; bounce:
 function measurePageRise(before: DOMRect | null | undefined): void {
   const root = document.documentElement, after = document.querySelector('.page-content')?.getBoundingClientRect?.();
   if (!before || !after) return;
-  const rise = Math.round(before.top - after.top); if (rise < 8) return;
+  const rise = Math.round(before.top - after.top);
+  // The page goes DOWN (the toolbar comes back): seen here only where the update already shows it; as a rule it is measured a frame after the transition is ready (markPageDrop).
+  if (rise <= -8) { markPageDrop(-rise, sidesStand(before as DOMRect, after)); return; }
+  if (rise < 8) return;
   const spec = pageRiseSpring?.(), fallback = { duration: PAGE_GLIDE_MS * motionPace(), easing: PAGE_SPRING }, spring = spec ? springEasing(spec, 1) : fallback;
   root.style.setProperty('--page-rise', `${rise}px`); root.style.setProperty('--page-rise-ms', `${Math.round(spring.duration)}ms`); root.style.setProperty('--page-rise-ease', spring.easing);
-  root.dataset.pageRise = '';
+  // D92b: when main's page REACHES its top. Main draws the rising edge at its nearest whole point and in its place once within one point of it (desktop/page-motion.cjs, D74), on this same spring and
+  // from this transition's first frame (hidden runs, one clock, 19 Nov: Sidebar -> Hide the toolbar, main's first move 1 ms before the transition's, the page in its place at 231 ms); the curve's own
+  // length is the spring's settle (0.4 % of the travel), 80 to 125 ms later. The bar's glass over the window's top margin, which the page never covers, goes while the page covers its last 2.5
+  // points and is gone as it lands (view-morph.css): it stood at full for those 125 ms over the new layout's own margin, the top rows 20 levels brighter than either rest (real frames).
+  const reach = (left: number) => { for (let ms = 0; ms < spring.duration; ms += 2) if (rise * (1 - curveAt(spec, spring.duration, ms)) <= left) return ms; return Math.round(spring.duration); };
+  const cover = reach(2.5), landed = Math.max(cover + 17, reach(1));
+  root.style.setProperty('--page-cover-ms', `${cover}ms`); root.style.setProperty('--page-cover-len', `${landed - cover}ms`);
+  // The speck: what stands at the page's corner (the card's picture, the corner light and each corner piece, view-morph.css) rose on the whole spring, whose last point takes the 80 to 125 ms
+  // main does not wait for: for the two frames after main had put the page in its place the pieces were still a point under it, and the corner behind the page's curve read 31 levels
+  // under its rest (real frames, 20 Nov: Sidebar -> Hide the toolbar, 61 against 92 at 333 and 350 ms). They follow the same curve up to main's landing and are in their place with it.
+  const land = reach(1), steps = Math.max(2, Math.round(land / 8)), stops: string[] = [];
+  for (let i = 0; i <= steps; i++) stops.push(i === steps ? '1' : curveAt(spec, spring.duration, land * i / steps).toFixed(4));
+  root.style.setProperty('--page-land-ms', `${land}ms`); root.style.setProperty('--page-land-ease', `linear(${stops.join(',')})`);
+  root.dataset.pageRise = ''; if (sidesStand(before as DOMRect, after)) root.dataset.pagePlain = '';
 }
-const clearPageRise = (): void => { const root = document.documentElement; if (!('pageRise' in root.dataset)) return; delete root.dataset.pageRise; for (const name of ['--page-rise', '--page-rise-ms', '--page-rise-ease']) root.style.removeProperty(name); };
+/** D101 / D92b: the page's drop, measured a frame after the transition is ready: when the update returns the header still has the old layout's height (its height lands a frame later, App.tsx)
+ * and the page's top reads 1 pt (hidden runs, 19 Nov: Hide the toolbar -> Tabs on top + sidebar, 6 -> 1 at the update, 72 a frame after ready), so a drop measured in the update was never seen.
+ * `plain`: only the page's top changes (its sides stand): the card and the corner light then stand where main's page stands (view-morph.css). */
+function markPageDrop(drop: number, plain: boolean): void {
+  const root = document.documentElement; if ('pageDrop' in root.dataset || 'pageRise' in root.dataset) return;
+  root.style.setProperty('--page-drop', `${drop}px`); root.dataset.pageDrop = ''; if (plain) root.dataset.pagePlain = '';
+}
+/** Do the page's sides stand between the two boxes (a move of its top edge only)? */
+const sidesStand = (before: DOMRect, after: DOMRect): boolean => Math.abs(before.left - after.left) < 1 && Math.abs(before.right - after.right) < 1;
+function measureLateDrop(before: DOMRect | null | undefined): void {
+  const after = document.querySelector('.page-content')?.getBoundingClientRect?.();
+  if (before && after && after.top - before.top >= 8) markPageDrop(Math.round(after.top - before.top), sidesStand(before, after));
+}
+const clearPageRise = (): void => { const root = document.documentElement; if (!('pageRise' in root.dataset) && !('pageDrop' in root.dataset)) return; delete root.dataset.pageRise; delete root.dataset.pageDrop; delete root.dataset.pagePlain; for (const name of ['--page-rise', '--page-rise-ms', '--page-rise-ease', '--page-drop', '--page-cover-ms', '--page-cover-len', '--page-land-ms', '--page-land-ease']) root.style.removeProperty(name); };
+/** Where the page's rise is at `ms` (0 to 1): its spring, or the sidebar's curve (PAGE_SPRING, evenly spaced stops over `duration`). */
+const SPRING_STOPS = PAGE_SPRING.slice(7, -1).split(',').map(Number);
+function curveAt(spec: SpringSpec | null | undefined, duration: number, ms: number): number {
+  if (spec) return springAt(spec, 0, 1, ms / 1000).value;
+  const x = Math.min(1, Math.max(0, ms / duration)) * (SPRING_STOPS.length - 1), i = Math.floor(x);
+  return i >= SPRING_STOPS.length - 1 ? 1 : SPRING_STOPS[i] + (SPRING_STOPS[i + 1] - SPRING_STOPS[i]) * (x - i);
+}
 type ModeTransition = { ready: Promise<void>; finished: Promise<void> };
 /** The transition that is playing now, as a promise that settles once its layers are gone and `data-mode-switch` has been cleared. A layout switch asked for while one is playing
  * cannot start its own (a view transition replaces the running one, and without one the new layout would show at once under the old one's layers, the page jumping to its end state
@@ -406,7 +467,46 @@ type ViewTransitionStart = (update: () => void) => ModeTransition;
  * switch can't stop halfway while the page is busy. `update` must apply the change synchronously (flushSync). Its
  * duration is `240ms × --motion-scale` (transient.css). `edge` is Seamless's reveal and hide (ui/chromeEdge.ts): the spring comes from
  * `--edge-ms` and `--edge-ease`, set just before (seamless.css). */
+/** F7 (D68): is the toolbar drawn (its row has a height)? Hide the toolbar keeps the element at 0 x 0: a switch from a frame without it to one with it brings the whole toolbar (data-bar-arrive). */
+const barShown = (): boolean => (document.querySelector('.browser-shell > .acira-persistent-toolbar')?.getBoundingClientRect?.().height ?? 0) >= 1;
+/** What the toolbar's fill and the strip's tone band look like now (a string to compare): a layout switch that changes either fades it (data-tone-fade). */
+function toneOf(): string {
+  const toolbar = document.querySelector('.browser-shell > .acira-persistent-toolbar'), tone = document.querySelector('.browser-shell > .acira-tab-row > .acira-strip-tone');
+  return (toolbar ? getComputedStyle(toolbar).backgroundColor : '') + '|' + (tone ? getComputedStyle(tone).backgroundImage : '');
+}
+function settleAddressText(root: HTMLElement, kind: string, before: number | null) {
+  const bar = document.querySelector(ADDRESS_BAR);
+  if (!bar) return;
+  let done = false, seen = before, timer = 0;
+  const finish = () => { done = true; watcher.disconnect(); sizes?.disconnect(); window.clearTimeout(timer); };
+  // Each time the field places its text somewhere new, the picture's offset is set so that the text is where it was a moment ago: the jump is cancelled, and what is left of it settles with the animation (visible = lead + from * (1 - progress)).
+  const check = () => {
+    if (done) return;
+    if (root.dataset.modeSwitch !== kind) { finish(); return; }
+    const lead = addressLeadOf();
+    if (lead === null || seen === null || Math.abs(lead - seen) < 1) return;
+    seen = lead;
+    const shift = addressStartOffset(before, lead);
+    const animation = document.getAnimations().find(item => (item.effect as KeyframeEffect | null)?.pseudoElement === '::view-transition-new(acira-addr-text)' && (item as CSSAnimation).animationName === 'sb-addr-settle');
+    const progress = Math.min(.9, Math.max(0, Number(animation?.effect?.getComputedTiming().progress) || 0));
+    const from = shift ? -shift / (1 - progress) : 0;
+    // D172: on the text's own animation, not on the root. A custom property written on the root after layout makes the next reader restyle every element of the window (the app's trace, 40 tabs, a collapse: the
+    // Ambient's size watcher paid it, 10 ms in the first moving frame); the animation's keyframes restyle its one picture. The root's property is the way when the animation cannot be found.
+    if (animation?.effect instanceof KeyframeEffect) animation.effect.setKeyframes([{ objectPosition: `calc(0% + ${from}px) center` }, { objectPosition: '0% center' }]);
+    else if (shift) root.style.setProperty('--addr-off', `${from}px`); else root.style.removeProperty('--addr-off');
+  };
+  // The field places its text from a style change (its glide layout); watching for that change sets the offset in the same task, before the frame that shows the jump is painted. A frame loop is the fallback.
+  const watcher = new MutationObserver(check);
+  watcher.observe(bar, { attributes: true, subtree: true, attributeFilter: ['style', 'class', 'data-aligned', 'data-glide', 'data-display'] });
+  // D172 (2c): the fallback is a size observer on the field, not a frame loop. The loop read the field's place on each of the switch's first 15 frames (the app's trace: about 2 ms a frame of forced style and layout
+  // in every expand); the observer speaks only when the field's box changes, after layout, so it forces nothing. The same span: about 15 frames (250 ms), then it lets go.
+  const sizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
+  sizes?.observe(bar);
+  timer = window.setTimeout(finish, 250);
+}
+const clearStripVars = (root: HTMLElement) => { for (const name of ['--strip-at', '--strip-off', '--addr-off']) root.style?.removeProperty?.(name); };
 export function startModeTransition(update: () => void, kind: 'appearance' | 'layout' | 'edge' = 'appearance', slideHint?: BlockSlide): ModeTransition | null {
+  try { document.dispatchEvent(new Event('acira-transition-start')); } catch { /* no document */ }   // the warm-up transition (edgeWarm.ts) lets go before a real one captures its old frame
   const start = (document as Document & { startViewTransition?: ViewTransitionStart }).startViewTransition;
   const root = document.documentElement;
   if (!start || reducedMotion() || document.visibilityState !== 'visible' || root.hasAttribute('data-fr-switch') || root.hasAttribute('data-mode-switch')) { update(); return null; }
@@ -415,6 +515,12 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   // tokens land in one commit, so nothing has to be found and finished afterwards (F04).
   const before = kind === 'layout' ? document.querySelector('.page-content')?.getBoundingClientRect() : null;
   const blockBefore = kind === 'layout' ? document.querySelector<HTMLElement>('.browser-shell[data-sbmode]')?.dataset.sbmode : undefined;
+  // Beta 14: where the tab strip stands now, so a switch that moves its box (the Shelf's slide) can put it on the column's clock (stripGlide.ts, sidebar.css).
+  const stripBefore = kind === 'layout' ? stripBoxOf() : null;
+  // Beta 14 (Shelf collapse, frame by frame): the toolbar's fill and the strip's recess band differ between the open Shelf (flat) and the closed one (a band each): they fade over the slide instead of stepping in the first frame (sidebar.css `data-tone-fade`).
+  const toneBefore = kind === 'layout' ? toneOf() : '';
+  const addressBefore = kind === 'layout' ? addressLeadOf() : null;
+  const barBefore = kind === 'layout' ? barShown() : true;
   // The picture of the old state is taken when the switch starts, so a block that is about to leave with the sidebar must already be one layer (its controls un-named) then.
   if (slideHint === 'out' && blockBefore === 'block') root.dataset.blockSlide = 'out';
   if (kind === 'layout') measureFrameBands(true);
@@ -422,7 +528,7 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   const run = () => {
     if(kind === 'appearance') root.dataset.themeSettle = '';
     update();
-    if(kind === 'layout') { const slide = blockSlideOf(blockBefore, document.querySelector<HTMLElement>('.browser-shell[data-sbmode]')?.dataset.sbmode); if (slide) root.dataset.blockSlide = slide; else delete root.dataset.blockSlide; measureFrameBands(false); measurePageRise(before); follow = followPage(before); if (follow) root.dataset.pageFollow = ''; }
+    if(kind === 'layout') { const slide = blockSlideOf(blockBefore, document.querySelector<HTMLElement>('.browser-shell[data-sbmode]')?.dataset.sbmode); if (slide) root.dataset.blockSlide = slide; else delete root.dataset.blockSlide; { const stripAfter = stripBoxOf(); if (stripGlides(stripBefore, stripAfter)) { root.dataset.stripGlide = ''; const shift = stripStartOffset(stripBefore, stripAfter); root.style.setProperty('--strip-at', stripAfter!.rtl ? '100%' : '0%'); root.style.setProperty('--strip-off', `${stripAfter!.rtl ? shift : -shift}px`); } else { delete root.dataset.stripGlide; clearStripVars(root); } if (toneOf() !== toneBefore) root.dataset.toneFade = ''; else delete root.dataset.toneFade; } if (!barBefore && barShown()) root.dataset.barArrive = ''; else delete root.dataset.barArrive; measureFrameBands(false); measurePageRise(before); follow = followPage(before); if (follow) root.dataset.pageFollow = ''; }
   };
   const transition = start.call(document, run);
   if (kind === 'layout' && transition.ready) {
@@ -432,8 +538,12 @@ export function startModeTransition(update: () => void, kind: 'appearance' | 'la
   }
   // A newer reveal or workspace selection can skip this snapshot. Its update still
   // completes; consuming ready's rejection avoids an uncaught animation-only error.
+  // The address field's new picture starts where the old text was. The field's text is placed by a measure the field runs a frame or two after its width changes (the glide layout, AddressField.tsx), so the new picture's text stands at the old
+  // place for those frames and then jumps to the centre of the wider field: the offset is taken when it has jumped, and set so that it cancels that jump (the animation is already `progress` of the way: from = -shift / (1 - progress)), then settles to 0.
+  if (kind === 'layout') void transition.ready?.then(() => settleAddressText(root, kind, addressBefore), () => {});
+  if (kind === 'layout' && typeof requestAnimationFrame === 'function') void transition.ready?.then(() => requestAnimationFrame(() => { if (root.dataset.modeSwitch === kind) measureLateDrop(before); }), () => {});
   void transition.ready?.then(() => follow?.start(), () => {});
-  transition.finished.finally(() => { follow?.stop(); if (kind === 'layout') clearPageRise(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.pageFollow; delete root.dataset.blockSlide; delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
+  transition.finished.finally(() => { follow?.stop(); if (kind === 'layout') clearPageRise(); if (root.dataset.modeSwitch === kind) delete root.dataset.modeSwitch; delete root.dataset.pageFollow; delete root.dataset.miniDock; root.style?.removeProperty?.('--mini-dock-dx'); delete root.dataset.railSlide; delete root.dataset.blockSlide; delete root.dataset.stripGlide; delete root.dataset.barArrive; delete root.dataset.toneFade; clearStripVars(root); delete root.dataset.themeSettle; if(kind==='edge')delete root.dataset.edgeSnapshot; });
   const mine: Promise<void> = transition.finished.then(() => {}, () => {}).then(() => { if (playing === mine) playing = null; });
   playing = mine;
   return transition;
@@ -445,4 +555,16 @@ export function appearanceChanged(previous: { settings?: object } | null | undef
   const a = previous?.settings as Record<string, unknown> | undefined, b = next?.settings as Record<string, unknown> | undefined;
   if (!a || !b) return false;
   return appearanceKeys.some(key => a[key] !== b[key]);
+}
+
+/** D145 (Beta 14.2): a range control that is being DRAGGED (the Window opacity slider, ui/liveRange.ts) holds its snapshots out of that crossfade. Each step of a drag used to start
+ *  one: the page showed the picture of the old frame (the handle where the drag had begun) fading into the new one for a quarter of a second, again and again, so the handle trailed
+ *  the pointer by half the slider. The Appearance popup's slider never did (its page applies every snapshot as it comes). Only the glass density's own keys are let through, and only
+ *  while the hold is on: a theme, a finish, a colour or the Reduce transparency switch still crossfade. */
+const liveRangeKeys: readonly string[] = ['glassOpacity', 'reducedTransparency'];
+export function appearanceCrossfades(previous: { settings?: object } | null | undefined, next: { settings?: object } | null | undefined): boolean {
+  if (!appearanceChanged(previous, next)) return false;
+  if (!liveRangeActive()) return true;
+  const a = previous?.settings as Record<string, unknown>, b = next?.settings as Record<string, unknown>;
+  return appearanceKeys.some(key => a[key] !== b[key] && !liveRangeKeys.includes(key));
 }

@@ -1,4 +1,5 @@
 import { addSidebarApp, normalizeAppUrl, readSidebarApps, removeSidebarApp } from './sidebarApps';
+import { undoUiPrefs } from './profileUiPrefs';
 
 /** Arc's Favorites arrive with an import batch (`batch.favorites`). The sidebar's Favorites live in the UI's own storage,
  *  so the UI adds them and remembers which apps each batch added; Undo (the setup toast's `import.undo`, or Settings →
@@ -21,7 +22,7 @@ function write(value: Added) {
 }
 
 /** Adds a batch's favorites to the profile's sidebar (skipping ones already there); returns how many were added. */
-export function applyImportedFavorites(profileId: string, batchId: string, favorites: readonly { url: string; title?: string }[] | undefined) {
+export function applyImportedFavorites(profileId: string, batchId: string, favorites: readonly { url: string; title?: string; icon?: string }[] | undefined) {
   if (!favorites?.length) return 0;
   const added = read();
   if (added[batchId]) return added[batchId].appIds.length;
@@ -30,7 +31,7 @@ export function applyImportedFavorites(profileId: string, batchId: string, favor
   for (const favorite of favorites) {
     const url = normalizeAppUrl(favorite.url);
     if (!url || present.has(url)) continue;
-    const app = addSidebarApp(profileId, false, { url, title: favorite.title });
+    const app = addSidebarApp(profileId, false, { url, title: favorite.title, icon: favorite.icon });
     if (typeof app === 'string') break; // the sidebar is full
     present.add(app.url);
     appIds.push(app.id);
@@ -60,5 +61,6 @@ export async function undoImportBatches(batchIds: readonly string[], undo: (batc
     const result = await undo(batchId);
     if (!result.undone) throw new Error('The import could not be undone. Try again.');
     undoImportedFavorites([batchId]);
+    undoUiPrefs(batchId); // a profile transfer's other interface preferences (their previous values are saved in this renderer)
   }
 }

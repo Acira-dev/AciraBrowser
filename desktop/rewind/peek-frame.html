@@ -17,6 +17,7 @@
  --glass:rgb(32 32 35/.74);--line:rgb(255 255 255/.10);--highlight:inset 0 1px 0 rgb(255 255 255/.06);--ring:#6ea8ff;--accent:#3b6eea;--on-accent:#fff;--danger:#f0867d;
  --e2:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 8px 24px -4px rgb(0 0 0/.32),0 24px 64px -12px rgb(0 0 0/.36);
  --e3:var(--e2),0 32px 80px -16px rgb(0 0 0/.42);
+ --lift:0 8px 24px -4px rgb(0 0 0/.32),0 24px 64px -12px rgb(0 0 0/.36),0 32px 80px -16px rgb(0 0 0/.42),0 0 10px 0 rgb(0 0 0/.55);
  --strong:cubic-bezier(.23,1,.32,1);--out:cubic-bezier(.2,0,0,1);
  color-scheme:dark;
 }
@@ -25,6 +26,7 @@ body.light{
  --glass:rgb(255 255 255/.78);--line:rgb(0 0 0/.08);--highlight:inset 0 1px 0 rgb(255 255 255/.7);--ring:#2563eb;--danger:#b3261e;
  --e2:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.12),0 24px 56px -16px rgb(0 0 0/.16);
  --e3:var(--e2),0 32px 80px -16px rgb(0 0 0/.28);
+ --lift:0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.12),0 24px 56px -16px rgb(0 0 0/.16),0 32px 80px -16px rgb(0 0 0/.28),0 0 24px 1px rgb(255 255 255/.12);
  color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -32,8 +34,14 @@ body.light{
 html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
 #scrim{position:fixed;inset:0;background:var(--scrim);opacity:0}
 /* The card: the surface (hairline ring, soft shadow) the page view sits on. Its header is 44px; the page view starts below it. */
-#card{position:absolute;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--e3);opacity:0;transform-origin:50% 50%}
-#fill{position:absolute;inset:44px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink-quiet);font-size:13px;letter-spacing:.01em;padding:0 16px;text-align:center}
+#card,#shade,#extras{position:absolute;opacity:0;transform-origin:50% 50%}
+/* The card is clipped to the box that grows out of the link (an aperture that ends exactly on the card's box and its curve, so every frame reads as one rounded card); its shadow (#shade) grows with that same box;
+   the chip and the column (#extras) ride the box's corners on the same spring and fade in as it nears the card. Nothing is drawn ahead of the card. */
+#shade{pointer-events:none}
+#shadow{position:absolute;inset:0;border-radius:12px;box-shadow:var(--lift)}
+#extras{pointer-events:none}#extras>*{pointer-events:auto}
+#surface{position:absolute;inset:2px;border-radius:10px;background:var(--card)}
+#fill{position:absolute;inset:var(--header,44px) 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink-quiet);font-size:13px;letter-spacing:.01em;padding:0 16px;text-align:center}
 /* While the page loads: the dot-matrix loader (the app's "Working" lights, a square grid lighting up only) over the site's name. */
 #matrix{width:32px;height:32px;flex:none;color:var(--ink-2)}
 #fill span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -47,8 +55,9 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 1
 #fill #st-code:empty,#fill #st-reason:empty{display:none}
 #st-actions{display:flex;gap:8px;margin-top:14px}
 body.stated #matrix,body.stated #host{display:none}
-#bar{position:absolute;inset:0 0 auto;height:44px;display:flex;align-items:center;gap:8px;padding:0 8px;container-type:inline-size;opacity:0}
+#bar{position:absolute;inset:0 0 auto;height:var(--header,44px);display:flex;align-items:center;gap:8px;padding:0 8px;container-type:inline-size;opacity:0}
 #bar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+body.slim #bar::after{display:none}
 .group{display:flex;align-items:center;gap:2px;flex:none}
 .group.right{gap:6px}
 button{display:grid;place-items:center;flex:none;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink);cursor:default;font:inherit;
@@ -75,24 +84,55 @@ svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:
 #addr em:empty{display:none}
 #copy .done{color:var(--accent)}
 /* Loading: a hairline sweeps under the header (transform only); still and quiet with reduced motion. */
-#load{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;opacity:0;transition:opacity calc(160ms * var(--pace, 1)) var(--out);pointer-events:none}
-#load::before{content:'';position:absolute;inset:0 auto 0 0;width:34%;background:var(--accent);animation:sweep 1.15s cubic-bezier(.4,0,.2,1) infinite}
-body.loading #load{opacity:1}
-body.reduced #load::before{width:100%;opacity:.4;animation:none}
+#bar .load,#chip .load{position:absolute;left:0;right:0;bottom:0;height:2px;overflow:hidden;opacity:0;transition:opacity calc(160ms * var(--pace, 1)) var(--out);pointer-events:none}
+#bar .load::before,#chip .load::before{content:'';position:absolute;inset:0 auto 0 0;width:34%;background:var(--accent);animation:sweep 1.15s cubic-bezier(.4,0,.2,1) infinite}
+body.loading .load{opacity:1}
+body.reduced .load::before{width:100%;opacity:.4;animation:none}
 @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+/* PROTOTYPE b145: the slim bar (icons only), the column beside the card (rail) and the small chip over the card (C). One material for the rail and the chip: the card's own colour,
+   mostly opaque, no ring and no line; a soft shadow only. */
+body{--plate:color-mix(in srgb,var(--card) 84%,transparent);--soft:0 10px 24px -8px rgb(0 0 0/.34)}
+body.icons button.act{width:28px;padding:0;justify-content:center}
+body.icons button.act>span,body.icons button.act>kbd{display:none}
+body.icons button.act.ghost{box-shadow:none}
+body.slim #id{flex-direction:row;align-items:baseline;justify-content:flex-start;gap:10px;overflow:hidden}
+body.slim #ttl{flex:0 1 auto}body.slim #addr{flex:0 1 auto;min-width:0;max-width:46%}
+body[data-layout=rail] #bar{display:none}
+body[data-layout=bar] #side,body[data-layout=bar] #chip{display:none}
+#rail,#more,#chip{background:var(--plate);box-shadow:var(--soft)}
+#side{position:absolute;top:0;inset-inline-start:calc(100% + 8px);display:flex;flex-direction:column;gap:8px}
+#rail,#more{width:38px;padding:3px;border-radius:11px;display:flex;flex-direction:column;gap:2px}
+#more{opacity:0;visibility:hidden;transition:opacity calc(160ms * var(--pace, 1)) var(--out)}#more.on{opacity:1;visibility:visible}
+button.rail{width:32px;height:32px;border-radius:8px}
+button.rail.primary{background:var(--accent);color:var(--on-accent)}
+button.rail.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--on-accent))}
+button.rail.primary:active{background:color-mix(in srgb,var(--accent) 80%,var(--on-accent))}
+button.rail.primary:focus-visible{outline-color:var(--ink);outline-offset:1px}
+#rail svg,#more svg{width:17px;height:17px}
+#chip{position:absolute;top:-36px;inset-inline-start:0;height:32px;padding:2px;padding-inline-end:12px;border-radius:11px;display:flex;align-items:center;gap:2px;overflow:hidden;max-width:calc(100% - 16px)}
+#chip button.icon{width:28px;height:28px;border-radius:8px}
+#chip .where{min-width:0;padding-inline:8px 2px;font-size:12px;line-height:16px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:8px}
+#chip .where b{font-weight:500;color:var(--ink);flex:none}#chip .where span{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-quiet)}
+#chip .where em{flex:none;font-style:normal;color:var(--danger)}#chip .where em:empty{display:none}
+[dir=rtl] #back svg,[dir=rtl] #back2 svg,[dir=rtl] #back3 svg{transform:scaleX(-1)}
+/* An address stays left to right inside a right-to-left interface (its slashes and dots keep their places); a title follows its own letters. */
+#addr,#chip .where{direction:ltr}
+#ttl{unicode-bidi:plaintext}
 @container (max-width:760px){#split>span{display:none}#split{width:28px;padding:0;justify-content:center}}
 @container (max-width:520px){#tab>span,#tab>kbd{display:none}#tab{width:28px;padding:0;justify-content:center}}
-#notice{position:absolute;max-width:420px;padding:9px 14px;border-radius:6px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+#notice{position:absolute;z-index:3;max-width:420px;padding:9px 14px;border-radius:6px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
  box-shadow:0 0 0 1px var(--line),var(--e2);color:var(--ink);opacity:0;transform:translateY(4px);transition:opacity calc(220ms * var(--pace, 1)) var(--strong),transform calc(220ms * var(--pace, 1)) var(--strong);pointer-events:none}
 #notice.show{opacity:1;transform:none}
-body.formed #scrim,body.formed #card,body.formed #bar{opacity:1}
-body.gone #scrim,body.gone #card,body.gone #bar,body.gone #notice{opacity:0}
-@media (forced-colors:active){#scrim{background:Canvas;opacity:.6}#card{border:1px solid CanvasText}button:focus-visible{outline-color:Highlight}button.act.primary{background:ButtonText;color:ButtonFace}}
+body.formed #scrim,body.formed #card,body.formed #shade,body.formed #extras,body.formed #bar{opacity:1}
+body.gone #scrim,body.gone #card,body.gone #shade,body.gone #extras,body.gone #bar,body.gone #notice{opacity:0}
+@media (forced-colors:active){#scrim{background:Canvas;opacity:.6}#surface{border:1px solid CanvasText}button:focus-visible{outline-color:Highlight}button.act.primary{background:ButtonText;color:ButtonFace}}
 </style>
 </head>
 <body>
 <div id="scrim"></div>
+<div id="shade"><div id="shadow"></div></div>
 <div id="card" role="dialog" aria-modal="false">
+<div id="surface"></div>
  <div id="fill"><canvas id="matrix" aria-hidden="true"></canvas><span id="host"></span>
   <div id="state" role="status" hidden><strong id="st-title"></strong><span id="st-addr"></span><span id="st-reason"></span><span id="st-code"></span>
    <div id="st-actions"><button id="retry" class="act ghost" type="button" hidden></button><button id="dl" class="act primary" type="button" hidden></button><button id="dl-tab" class="act ghost" type="button" hidden></button></div></div>
@@ -109,8 +149,25 @@ body.gone #scrim,body.gone #card,body.gone #bar,body.gone #notice{opacity:0}
    <button id="tab" class="act primary" type="button"><svg viewBox="0 0 16 16"><path d="M9.5 2.75h3.75V6.5M13 3L8 8M11.25 9.25v3.5a.5.5 0 0 1-.5.5h-7.5a.5.5 0 0 1-.5-.5v-7.5a.5.5 0 0 1 .5-.5h3.5"/></svg><span></span><kbd></kbd></button>
    <button id="close" class="icon" type="button"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
   </div>
-  <div id="load"></div>
+  <div class="load"></div>
  </div>
+</div>
+<div id="extras">
+<div id="side">
+<div id="rail" role="toolbar" aria-orientation="vertical">
+ <button id="r-close" data-cmd="close" class="rail" type="button"><svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+ <button id="r-tab" data-cmd="tab" class="rail primary" type="button"><svg viewBox="0 0 16 16"><path d="M9.5 2.75h3.75V6.5M13 3L8 8M11.25 9.25v3.5a.5.5 0 0 1-.5.5h-7.5a.5.5 0 0 1-.5-.5v-7.5a.5.5 0 0 1 .5-.5h3.5"/></svg></button>
+ <button id="r-split" data-cmd="split" class="rail" type="button"><svg viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M8 3v10"/></svg></button>
+ <button id="r-copy" data-cmd="copy" class="rail" type="button"><svg class="g-copy" viewBox="0 0 16 16"><path d="M6.75 9.25a2.75 2.75 0 0 0 3.9 0l2.1-2.1a2.75 2.75 0 0 0-3.9-3.9l-.7.7M9.25 6.75a2.75 2.75 0 0 0-3.9 0l-2.1 2.1a2.75 2.75 0 0 0 3.9 3.9l.7-.7"/></svg><svg class="g-done done" viewBox="0 0 16 16" hidden><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+</div>
+<div id="more" role="toolbar"><button id="back3" data-cmd="back" class="rail" type="button"><svg viewBox="0 0 16 16"><path d="M13 8H3.5M7.5 3.75 3.25 8l4.25 4.25"/></svg></button></div>
+</div>
+<div id="chip" role="toolbar">
+ <button id="back2" data-cmd="back" class="icon" type="button"><svg viewBox="0 0 16 16"><path d="M13 8H3.5M7.5 3.75 3.25 8l4.25 4.25"/></svg></button>
+ <button id="reload2" data-cmd="reload" class="icon" type="button"><svg class="g-reload" viewBox="0 0 16 16"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71M13.25 2.75v2.75H10.5"/></svg><svg class="g-stop" viewBox="0 0 16 16" hidden><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+ <div class="where"><b id="c-host"></b><span id="c-rest"></span><em id="c-warn"></em></div>
+ <div class="load"></div>
+</div>
 </div>
 <div id="notice" role="status"></div>
 <script>
@@ -137,15 +194,20 @@ const TOKENS={'popover.grow':['S',.210,0],'menu.content':['E',.130,0],'materiali
 const SCALES={premium:{S:1.7,E:1.4,L:1},fast:{S:.6,E:.6,L:1}},KICK={fast:.15,premium:.4};
 const tokenSpring=(id,speed)=>{const [cls,duration,bounce]=TOKENS[id],scale=SCALES[speed][cls];return {duration:Math.round(duration*scale*200)/200,bounce};};
 //#endspring
-const APERTURE_END='inset(-128px -128px -128px -128px round 8px)';
+const APERTURE_END='inset(0px 0px 0px 0px round 12px)';
 let entered=false,started=false,leaving=false,speed='premium',latest=null,anim=[];
 const play=(el,keyframes,spec,{opening=false,delay=0,fill='both'}={})=>{
  const velocity=opening?KICK[speed]*TAU/spec.duration:0,{duration,easing}=springEasing(spec,1,velocity);
  const a=el.animate(keyframes,{duration,easing,fill,delay});anim.push(a);return a;
 };
 const timeTo=(spec,velocity,target)=>{for(let t=0;t<2;t+=1/240)if(springAt(spec,0,1,t,velocity).value>=target)return t*1000;return 0;};
-const apertureAt=(link,g)=>link?`inset(${link.y}px ${g.width-link.x-link.width}px ${g.height-link.y-link.height}px ${link.x}px round 4px)`:`inset(${Math.round(g.height/2)}px ${Math.round(g.width/2)}px ${Math.round(g.height/2)}px ${Math.round(g.width/2)}px round 4px)`;
+const apertureBox=(link,g)=>link?{t:link.y,r:g.width-link.x-link.width,b:g.height-link.y-link.height,l:link.x}:{t:Math.round(g.height/2),r:Math.round(g.width/2),b:Math.round(g.height/2),l:Math.round(g.width/2)};
+const apertureAt=(link,g)=>{const b=apertureBox(link,g);return `inset(${b.t}px ${b.r}px ${b.b}px ${b.l}px round 4px)`;};
 
+/* What rides the card: the shadow grows with the aperture's box, the chip rides its top corner on the start side and the column its top corner on the end side (translate), and both fade in only as the box nears the card.
+   All on the card's own spring; they are told by the same insets, so they cannot be ahead of the card. */
+const px=n=>Math.round(n*100)/100+'px';
+const rideAt=(b,rtl)=>({chip:`${px(rtl?-b.r:b.l)} ${px(b.t)}`,side:`${px(rtl?b.l:-b.r)} ${px(b.t)}`});
 const originAt=(link,g)=>link?`${Math.round(link.x+link.width/2)}px ${Math.round(link.y+link.height/2)}px`:'50% 50%';
 //#matrix — the "Working" lights of src/components/DotMatrix.tsx (loader preset), ported: 7x7 round dots on a square grid, unlit dots faint.
 const bezier=(x1,y1,x2,y2)=>x=>{let t=x;for(let i=0;i<6;i++){const cx=3*x1*t*(1-t)*(1-t)+3*x2*t*t*(1-t)+t*t*t-x,dx=3*x1*(1-t)*(1-3*t)+3*x2*t*(2-3*t)+3*t*t;if(Math.abs(cx)<1e-4||!dx)break;t=Math.max(0,Math.min(1,t-cx/dx));}return 3*y1*t*(1-t)*(1-t)+3*y2*t*t*(1-t)+t*t*t;};
@@ -172,17 +234,23 @@ $('copy').addEventListener('click',()=>peekFrame.command('copy'));
 $('retry').addEventListener('click',()=>peekFrame.command('retry'));
 $('dl').addEventListener('click',()=>peekFrame.command('download'));
 $('dl-tab').addEventListener('click',()=>peekFrame.command('tab'));
+for(const el of document.querySelectorAll('#rail [data-cmd],#more [data-cmd],#chip [data-cmd]'))el.addEventListener('click',()=>{const c=el.dataset.cmd;peekFrame.command(c==='reload'&&body.classList.contains('loading')?'stop':c);});
 
 function enter(state){
  started=true;
  const g=state.geometry.card;
  if(speed==='off'||state.reducedMotion){body.classList.add('formed');entered=true;peekFrame.command('entered');return;}
  const grow=tokenSpring('popover.grow',speed),velocity=KICK[speed]*TAU/grow.duration;
- card.style.opacity='1';
- // Scrim and material arrive on the effects spring; the card's aperture opens from the link; the header's content follows (bible §4).
+ for(const el of [card,$('shade'),$('extras')])el.style.opacity='1';
+ // Scrim and material arrive on the effects spring; the card's aperture opens from the link and ends on the card's own box and curve; the header's content follows (bible §4).
  play($('scrim'),[{opacity:0},{opacity:1}],tokenSpring('materialize',speed));
- card.style.transformOrigin=originAt(state.link,g);
+ card.style.transformOrigin=originAt(state.link,g);for(const el of [$('shade'),$('extras')])el.style.transformOrigin=card.style.transformOrigin;
+ const box=apertureBox(state.link,g),rtl=state.dir==='rtl',ride=rideAt(box,rtl);
  const aperture=play(card,[{clipPath:apertureAt(state.link,g),transform:'scale(.94)'},{clipPath:APERTURE_END,transform:'none'}],grow,{opening:true});
+ play($('shade'),[{transform:'scale(.94)'},{transform:'none'}],grow,{opening:true});
+ play($('shadow'),[{inset:`${px(box.t)} ${px(box.r)} ${px(box.b)} ${px(box.l)}`,borderRadius:'4px',opacity:0},{inset:'0px',borderRadius:'12px',opacity:1}],grow,{opening:true});
+ play($('extras'),[{transform:'scale(.94)'},{transform:'none'}],grow,{opening:true});
+ for(const [id,at] of [['chip',ride.chip],['side',ride.side]]){play($(id),[{translate:at},{translate:'0px 0px'}],grow,{opening:true});play($(id),[{opacity:0,offset:0},{opacity:0,offset:.6},{opacity:1,offset:1}],grow,{opening:true});}
  const content=speed==='premium'?50:30*SCALES[speed].S,rise=speed==='premium'?4:3;
  play($('bar'),[{opacity:0,transform:`translateY(${rise}px)`},{opacity:1,transform:'none'}],tokenSpring('menu.content',speed),{delay:content});
  // The page view appears once the card is ~95% open, on a card that is already there.
@@ -195,10 +263,15 @@ function leave(state){
  if(speed==='off'||state.reducedMotion||!g){body.classList.add('gone');setTimeout(()=>peekFrame.command('gone'),0);return;}
  for(const a of anim.splice(0))a.cancel();
  const grow=tokenSpring('popover.grow',speed),exit={duration:grow.duration*.7,bounce:0},fade=tokenSpring('materialize',speed);
- card.style.opacity='1';
- // Exit is ~two thirds of the enter, critically damped: the card shrinks back into the link and the scrim lets go.
- card.style.transformOrigin=originAt(link,g);
+ for(const el of [card,$('shade'),$('extras')])el.style.opacity='1';
+ // Exit is ~two thirds of the enter, critically damped: the card shrinks back into the link, the shadow, the chip and the column with its box, and the scrim lets go.
+ card.style.transformOrigin=originAt(link,g);for(const el of [$('shade'),$('extras')])el.style.transformOrigin=card.style.transformOrigin;
+ const box=apertureBox(link,g),rtl=(state.dir||latest?.dir)==='rtl',ride=rideAt(box,rtl);
  const aperture=play(card,[{clipPath:APERTURE_END,transform:'none'},{clipPath:apertureAt(link,g),transform:'scale(.96)'}],exit);
+ play($('shade'),[{transform:'none'},{transform:'scale(.96)'}],exit);
+ play($('shadow'),[{inset:'0px',borderRadius:'12px',opacity:1},{inset:`${px(box.t)} ${px(box.r)} ${px(box.b)} ${px(box.l)}`,borderRadius:'4px',opacity:0}],exit);
+ play($('extras'),[{transform:'none'},{transform:'scale(.96)'}],exit);
+ for(const [id,at] of [['chip',ride.chip],['side',ride.side]]){play($(id),[{translate:'0px 0px'},{translate:at}],exit);play($(id),[{opacity:1,offset:0},{opacity:0,offset:.4},{opacity:0,offset:1}],exit);}
  play($('bar'),[{opacity:1},{opacity:0}],{duration:fade.duration*.5,bounce:0});
  play($('scrim'),[{opacity:1},{opacity:0}],{duration:fade.duration*.8,bounce:0});
  aperture.finished.then(()=>peekFrame.command('gone'),()=>peekFrame.command('gone'));
@@ -208,17 +281,26 @@ function leave(state){
 const local=host=>host==='localhost'||host.endsWith('.localhost')||host==='[::1]'||/^127\./.test(host)||/\.onion$/i.test(host)||/^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host);
 const parts=url=>{try{const u=new URL(url);return {host:u.host.replace(/^www\./,''),rest:(u.pathname==='/'?'':u.pathname)+u.search+u.hash,insecure:u.protocol==='http:'&&!local(u.hostname)};}catch{return {host:'',rest:'',insecure:false};}};
 peekFrame.onState(state=>{
+ const layout=state.layout||'bar',header=state.header??44,slim=layout==='bar'&&header<44;
+ body.dataset.layout=layout;root.style.setProperty('--header',header+'px');body.classList.toggle('slim',slim);body.classList.toggle('icons',slim);root.dir=state.dir==='rtl'?'rtl':'ltr';
  body.classList.toggle('light',state.dark===false);body.classList.toggle('reduced',!!state.reducedMotion||state.speed==='off');
  if(state.accent){root.style.setProperty('--accent',state.accent);const n=parseInt(state.accent.slice(1),16),lum=(.2126*(n>>16&255)+.7152*(n>>8&255)+.0722*(n&255))/255;root.style.setProperty('--on-accent',lum>.62?'#111214':'#ffffff');}
  speed=state.speed==='fast'?'fast':state.speed==='off'?'off':'premium';root.style.setProperty('--pace',String(speed==='fast'?SCALES.fast.S:1));
  if(state.leaving){leave({...latest,...state});return;}
  latest=state;const g=state.geometry;
- if(g){Object.assign(card.style,{left:g.card.x+'px',top:g.card.y+'px',width:g.card.width+'px',height:g.card.height+'px'});Object.assign($('notice').style,{left:(g.card.x+g.card.width/2)+'px',top:Math.max(8,g.card.y-48)+'px',translate:'-50% 0'});}
+ if(g){for(const el of [card,$('shade'),$('extras')])Object.assign(el.style,{left:g.card.x+'px',top:g.card.y+'px',width:g.card.width+'px',height:g.card.height+'px'});Object.assign($('notice').style,{left:(g.card.x+g.card.width/2)+'px',top:Math.max(8,g.card.y-48)+'px',translate:'-50% 0'});}
  const labels=state.labels||{},keys=state.keys||{},{host,rest,insecure}=parts(state.url||'');
  $('host').textContent=host;$('ttl').textContent=state.title||host;$('domain').textContent=host;$('rest').textContent=rest;$('warn').textContent=insecure?(labels.notSecure||''):'';
  document.title=state.title||host||'Peek';card.setAttribute('aria-label',labels.frameLabel||'');card.setAttribute('aria-busy',state.loading?'true':'false');body.classList.toggle('loading',!!state.loading);
  const loading=!!state.loading,name={back:labels.back||'',reload:loading?labels.stop||'':labels.reload||'',split:labels.openInSplit||'',tab:labels.openAsTab||'',close:labels.close||'',copy:state.copied?labels.copied||'':labels.copy||''};
  const tip=(id,text,key)=>{const el=$(id);el.setAttribute('aria-label',text);el.title=key?`${text}  ${key}`:text;};
+ const tipAll=(cmd,text,key)=>{for(const el of document.querySelectorAll(`[data-cmd=${cmd}]`)){el.setAttribute('aria-label',text);el.title=key?`${text}  ${key}`:text;}};
+ tipAll('back',name.back,keys.back);tipAll('reload',name.reload,keys.reload);tipAll('split',name.split,keys.split);tipAll('tab',name.tab,keys.tab);tipAll('close',name.close,keys.close);tipAll('copy',name.copy);
+ for(const el of document.querySelectorAll('[data-cmd=back]'))el.disabled=!state.canGoBack;$('more').classList.toggle('on',!!state.canGoBack);
+ for(const el of document.querySelectorAll('.g-copy'))el.hidden=!!state.copied;for(const el of document.querySelectorAll('.g-done'))el.hidden=!state.copied;
+ $('reload2').querySelector('.g-reload').hidden=loading;$('reload2').querySelector('.g-stop').hidden=!loading;
+ $('c-host').textContent=state.notice||host;$('c-rest').textContent=state.notice?'':rest;$('c-warn').textContent=!state.notice&&insecure?(labels.notSecure||''):'';$('chip').title=state.title||host;
+ $('notice').hidden=layout==='rail';
  tip('back',name.back,keys.back);tip('reload',name.reload,keys.reload);tip('split',name.split,keys.split);tip('tab',name.tab,keys.tab);tip('close',name.close,keys.close);tip('copy',name.copy);$('copy-glyph').hidden=!!state.copied;$('done-glyph').hidden=!state.copied;
  $('back').disabled=!state.canGoBack;$('reload-glyph').hidden=loading;$('stop-glyph').hidden=!loading;
  $('split').querySelector('span').textContent=name.split;$('tab').querySelector('span').textContent=name.tab;$('tab').querySelector('kbd').textContent=keys.tab||'';

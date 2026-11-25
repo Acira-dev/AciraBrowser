@@ -9,7 +9,9 @@ const {createAutoconsentRules,CONFIG,HIDE_ONLY}=require('../desktop/browser-serv
 const {createOptionalFiltering}=require('../desktop/browser-services/optional-filtering.cjs');
 const CASES=[
  {name:'reject',case:'onetrust',steps:[{at:7000,name:'after'}]},
- {name:'pay',case:'onetrust-pay',steps:[{at:1000,name:'early'},{at:7000,name:'after'}]}
+ {name:'pay',case:'onetrust-pay',steps:[{at:1000,name:'early'},{at:7000,name:'after'}]},
+ {name:'late',case:'onetrust-late',steps:[{at:2000,name:'before'},{at:9000,name:'after'}]},
+ {name:'none',case:'none',steps:[{at:7000,name:'after'}]}
 ];
 let results=null,problem=null;
 if(electron){
@@ -31,6 +33,16 @@ test('a banner that offers a paid subscription instead of a reject is left as th
  assert.deepEqual(after.clicked,[],'nothing clicked');assert.equal(after.banner,true,'the banner is shown');
  assert.ok(!events.some(event=>event.startsWith('optOutResult')),'no opt-out ran: '+events.join(', '));
 });
+test('lazy answering: a page\'s main frame is handed the lazy list and asks for the rules only once its look finds a consent tool, then answers as before',{skip},()=>{
+ for(const name of ['reject','pay','late']){const {asked}=results[name];assert.equal(asked[0],'lazy',name+': '+asked.join(', '));assert.equal(asked.filter(what=>what==='rules-asked').length,1,name+': '+asked.join(', '));}
+ assert.deepEqual(results.none.asked,['lazy'],'a page with no consent tool never asks for the rules');assert.deepEqual(results.none.events,[],'and nothing is reported');
+});
+test('a banner drawn seconds after the page has loaded is found by the lazy look and answered "Reject all", as the library alone would',{skip},()=>{
+ const {steps:{before,after},events}=results.late;
+ assert.equal(before.banner,false,'not drawn yet at 2 s');
+ assert.deepEqual(after.clicked,['onetrust-reject-all-handler'],'events: '+events.join(', '));assert.equal(after.banner,false);
+ assert.ok(events.includes('popupFound:Onetrust'),events.join(', '));
+});
 test('the settings handed to every frame never opt in, run no hide-only rule and guess nothing from text',()=>{
  const rules=createAutoconsentRules(),config=rules.config();
  assert.equal(config.autoAction,null,'the frame asks for opt-out itself, after reading the banner');assert.equal(config.enableCosmeticRules,false);assert.equal(config.heuristicMode,'off');assert.equal(config.enableHeuristicDetection,false);
@@ -48,7 +60,7 @@ test('answering is on by default, can be turned off for the profile or one site,
  optional.attach(session,'profile-1',false,{useBefore(){}});
  const frame=url=>({url,isDestroyed:()=>false}),setup=(url,top=true)=>{const event={sender:wc,senderFrame:top?Object.assign(main,frame(url)):frame(url)};handlers['acira:autoconsent-setup'](event);return event.returnValue;};
  assert.equal(optional.status(wc).rejectCookies,true,'on by default');
- const got=setup(wc.url);assert.equal(got.config.autoAction,null);assert.ok(got.rules.length>1000);
+ const got=setup(wc.url);assert.equal(got.config.autoAction,null);/* Beta 14 lazy answering (autoconsent-lazy.cjs): a page's main frame gets the library's prehide list and what its rules look for first, a frame the rules; the rules for a page come when it asks (acira:autoconsent-rules) */assert.ok(got.lazy&&got.lazy.prehide.length>1000&&got.lazy.detect.length>100&&!got.rules,'main frame: lazy');assert.ok(setup(wc.url,false).rules.length>1000,'a frame: the rules');{const event={sender:wc,senderFrame:Object.assign(main,frame(wc.url))};handlers['acira:autoconsent-rules'](event);assert.ok(typeof event.returnValue==='string'&&event.returnValue.length>1000,'the rules when the page asks');}
  optional.set(wc,{rejectCookies:false},'site');assert.equal(setup(wc.url),null,'off for this site');
  wc.url='https://other.example/';assert.ok(setup(wc.url),'still on elsewhere');
  optional.setProfile('profile-1',{rejectCookies:false});wc.url='https://third.example/';assert.equal(setup(wc.url),null,'off for the profile');

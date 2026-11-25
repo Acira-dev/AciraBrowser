@@ -44,5 +44,6 @@ test('Reload keeps the extension\'s place in the saved list and in the list the 
 test('the toolbar puts its buttons in the list\'s order, whatever order the engine created them in',()=>{
  const source=fs.readFileSync(path.join(__dirname,'..','src','components','BrowserExtensionActions.tsx'),'utf8');
  assert.match(source,/rank=new Map\(target\.pinnedIds\.map\(/,'a rank per extension from the list');
- assert.match(source,/button\.style\.order!==order\)button\.style\.order=order/,'written to the button only when it differs');
+ const list=fs.readFileSync(path.join(__dirname,'..','src','ui','extensionButtonList.ts'),'utf8');// (Beta 14: the dressing of the buttons lives with the kept list)
+ assert.match(list,/button\.style\.order!==order\)button\.style\.order=order/,'written to the button only when it differs');
 });

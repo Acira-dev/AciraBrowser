@@ -8,9 +8,9 @@ const path = require('node:path');
 const { helperPath, runHelper } = require('../windows-helper.cjs');
 
 /** Browsers the importers can read, in the order the interface lists them. */
-const BROWSERS = Object.freeze(['Chrome', 'Edge', 'Brave', 'Helium', 'Firefox', 'Zen', 'Arc']);
+const BROWSERS = Object.freeze(['Chrome', 'Edge', 'Brave', 'Helium', 'Firefox', 'Zen', 'Arc', 'Opera', 'Opera GX', 'Vivaldi', 'Safari', 'LibreWolf', 'Waterfox', 'Floorp']);
 /** Windows "App Paths" registration names, for a browser installed outside the usual folders. */
-const APP_PATHS = Object.freeze({ Chrome: 'chrome.exe', Edge: 'msedge.exe', Brave: 'brave.exe', Firefox: 'firefox.exe', Zen: 'zen.exe' });
+const APP_PATHS = Object.freeze({ Chrome: 'chrome.exe', Edge: 'msedge.exe', Brave: 'brave.exe', Firefox: 'firefox.exe', Zen: 'zen.exe', Vivaldi: 'vivaldi.exe', LibreWolf: 'librewolf.exe', Waterfox: 'waterfox.exe', Floorp: 'floorp.exe' });
 /** Larger icons are scaled down to this before they cross to the interface (2x of the 32px 'large' icon). */
 const MAX_SIDE = 64;
 /** An icon crosses the IPC boundary as a small PNG data URL and nothing else. */
@@ -41,6 +41,14 @@ function browserExecutables(env = process.env, { platform = process.platform, ho
       Firefox: bundle('Firefox.app'),
       Zen: bundle('Zen.app'),
       Arc: bundle('Arc.app'),
+      Opera: bundle('Opera.app'),
+      'Opera GX': bundle('Opera GX.app'),
+      Vivaldi: bundle('Vivaldi.app'),
+      // Safari is part of the system: its bundle sits in the sealed system volume's Cryptex on current macOS (outside every protected folder), in /Applications on older ones.
+      Safari: [...bundle('Safari.app'), '/System/Cryptexes/App/System/Applications/Safari.app', '/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app'],
+      LibreWolf: bundle('LibreWolf.app'),
+      Waterfox: bundle('Waterfox.app'),
+      Floorp: bundle('Floorp.app'),
     };
   }
   if (platform !== 'win32') return {};
@@ -56,6 +64,12 @@ function browserExecutables(env = process.env, { platform = process.platform, ho
     Helium: perUser('imput', 'Helium', 'Application', 'chrome.exe'),
     Firefox: [join(pf, 'Mozilla Firefox', 'firefox.exe'), join(pf86, 'Mozilla Firefox', 'firefox.exe'), ...perUser('Mozilla Firefox', 'firefox.exe')],
     Zen: [join(pf, 'Zen Browser', 'zen.exe'), ...perUser('Zen Browser', 'zen.exe')],
+    Opera: [...perUser('Programs', 'Opera', 'opera.exe'), ...perUser('Programs', 'Opera', 'launcher.exe'), join(pf, 'Opera', 'opera.exe'), join(pf, 'Opera', 'launcher.exe')],
+    'Opera GX': [...perUser('Programs', 'Opera GX', 'opera.exe'), ...perUser('Programs', 'Opera GX', 'launcher.exe'), join(pf, 'Opera GX', 'opera.exe'), join(pf, 'Opera GX', 'launcher.exe')],
+    Vivaldi: [...perUser('Vivaldi', 'Application', 'vivaldi.exe'), join(pf, 'Vivaldi', 'Application', 'vivaldi.exe'), join(pf86, 'Vivaldi', 'Application', 'vivaldi.exe')],
+    LibreWolf: [join(pf, 'LibreWolf', 'librewolf.exe'), ...perUser('LibreWolf', 'librewolf.exe')],
+    Waterfox: [join(pf, 'Waterfox', 'waterfox.exe'), ...perUser('Waterfox', 'waterfox.exe')],
+    Floorp: [join(pf, 'Ablaze Floorp', 'floorp.exe'), join(pf, 'Floorp', 'floorp.exe'), ...perUser('Floorp', 'floorp.exe')],
     // Arc is a Store (MSIX) app: its install folder is locked, but its app execution alias carries its icon.
     Arc: [...perUser('Microsoft', 'WindowsApps', 'Arc.exe'), ...perUser('Microsoft', 'WindowsApps', 'TheBrowserCompany.Arc_ttt1ap7aakyb4', 'Arc.exe')],
   };

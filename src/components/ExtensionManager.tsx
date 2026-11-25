@@ -49,7 +49,7 @@ export function ExtensionManager({profileId,profileName,tab,privateMode=false,on
    {onGetExtensions&&<ActionRow label={t("extensionmanager.getExtensions")} onClick={onGetExtensions}/>}
    <MenuFormFlyout title={t("extensionmanager.addFromAWebStore")}>
     {close=><form className="menu-form-fields" aria-busy={busy} onSubmit={event=>{event.preventDefault();addFromLink();}}>
-     <label>{t("extensionmanager.chromeWebStoreLink")}<input autoFocus value={storeInput} maxLength={4096} placeholder="https://chromewebstore.google.com/…" spellCheck={false} autoComplete="off" aria-invalid={!!storeError||undefined} aria-describedby={storeError?'extension-link-error':undefined} onChange={event=>{setStoreInput(event.target.value);setStoreError('');}} disabled={busy||!ready}/></label>
+     <label>{t("extensionmanager.chromeWebStoreLink")}<input className="ab-input" autoFocus value={storeInput} maxLength={4096} placeholder="https://chromewebstore.google.com/…" spellCheck={false} autoComplete="off" aria-invalid={!!storeError||undefined} aria-describedby={storeError?'extension-link-error':undefined} onChange={event=>{setStoreInput(event.target.value);setStoreError('');}} disabled={busy||!ready}/></label>
      {storeError&&<p id="extension-link-error" className="menu-form-error" role="alert">{storeError}</p>}
      {!ready&&<p role="status">{snapshot?.supportNote||t("extensionmanager.readingExtensions")}</p>}
      {busy&&<p role="status">{t("extensionmanager.pleaseWait")}</p>}
@@ -79,7 +79,7 @@ export function ExtensionManager({profileId,profileName,tab,privateMode=false,on
   </article>)}</div>
   <div className="extension-get">
    {onGetExtensions&&Boolean(snapshot?.extensions.length)&&<button type="button" className="btn extension-get-btn" onClick={onGetExtensions}>{t("extensionmanager.getExtensions")}</button>}
-   <form className="extension-store-form" onSubmit={event=>{event.preventDefault();addFromLink();}}><label>{t("extensionmanager.addFromALink")}<input value={storeInput} maxLength={4096} placeholder={t("extensionmanager.chromeWebStoreLink")} onChange={event=>setStoreInput(event.target.value)} disabled={busy||!ready}/></label><button className="btn" disabled={busy||!ready||!storeInput.trim()}>{t("searchEngines.add")}</button></form>
+   <form className="extension-store-form" onSubmit={event=>{event.preventDefault();addFromLink();}}><label>{t("extensionmanager.addFromALink")}<input className="ab-input" value={storeInput} maxLength={4096} placeholder={t("extensionmanager.chromeWebStoreLink")} onChange={event=>setStoreInput(event.target.value)} disabled={busy||!ready}/></label><button className="btn" disabled={busy||!ready||!storeInput.trim()}>{t("searchEngines.add")}</button></form>
   </div>
   <details className="extension-dev"><summary>{t("main.developer")}</summary><p>{t("extensionmanager.loadAnExtensionYouAre")}</p><button className="btn extension-load" disabled={busy||!ready} onClick={()=>void request({type:'load',profileId})}><FolderOpen size={17}/>{busy?t("extensionmanager.pleaseWait"):t("extensionmanager.loadFromFolder")}</button></details>
   <p className="extension-support">{t("extensionmanager.extensionsAreKeptSeparatelyFor")}</p>

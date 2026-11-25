@@ -1,5 +1,5 @@
 /* Settings › Appearance › Menu (R3-43): the Customize toolbar rows, two lists and a live preview of the menu they make. */
-.menu-customize{gap:10px;padding:2px 0 4px}
+.menu-customize{gap:8px;padding:2px 0 4px}
 .menu-customize-grid{display:grid;grid-template-columns:minmax(0,1fr) 248px;gap:20px;align-items:start}
 @container (max-width:700px){.menu-customize-grid{grid-template-columns:minmax(0,1fr)}.menu-customize-previews{position:static;flex-direction:row;flex-wrap:wrap;align-items:flex-start}.menu-customize-previews>.menu-preview{flex:1 1 200px;min-width:0}}
 .menu-customize-lists{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -8,7 +8,7 @@
 .menu-customize-empty{margin:2px 8px 8px;font-size:12px;line-height:1.5;color:var(--muted)}
 .menu-customize-row .menu-customize-switch{opacity:.7}
 .menu-customize-row .menu-customize-switch:not(:disabled):hover{opacity:1}
-.menu-customize-previews{display:flex;flex-direction:column;gap:10px;position:sticky;top:8px}
+.menu-customize-previews{display:flex;flex-direction:column;gap:8px;position:sticky;top:8px;/* off screen it is not drawn (and its rows' entrance animations do not run): a sticky column of animated rows beside the sidebar's edge light, which breathes while Site color is on, made the main thread restyle on every frame on the Settings page (Beta 14). On screen it looks the same. */content-visibility:auto;contain-intrinsic-block-size:auto 460px}
 .menu-preview{display:flex;flex-direction:column;padding:6px 4px 6px;border-radius:8px;background:var(--sheet,transparent);box-shadow:0 0 0 1px var(--line),0 1px 2px rgb(0 0 0 / .05);transition:height calc(.2s * var(--motion-pace, 1))}
 .menu-preview-title{margin:0 0 4px;padding:0 8px;font:500 11px/16px var(--font-ui);color:var(--muted)}
 .menu-preview-group{display:flex;flex-direction:column;margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}

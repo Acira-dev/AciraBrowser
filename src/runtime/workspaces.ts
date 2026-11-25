@@ -4,7 +4,7 @@ import { navigationTitle } from './navigation';
 import { settleSpaces } from './profileSpaces';
 import { leaveSplit, normalizeSplitGroups } from './splitGroups';
 import { normalizeSplit } from './splitLayout';
-import { TAB_GROUP_COLORS } from './tabGroups';
+import { TAB_GROUP_COLORS, groupFolded, innerGroupsOf, openGroup } from './tabGroups';
 import { restoreClosedBatch } from './undoClose';
 import type { BrowserAction, BrowserSnapshot, ClosedTabSession, StatusIcon, TabGroup, TabSession, Workspace } from './types';
 
@@ -19,7 +19,10 @@ import type { BrowserAction, BrowserSnapshot, ClosedTabSession, StatusIcon, TabG
  * workspace: someone who never makes a second workspace has data exactly as before. Naming: "workspace" also means the
  * sidebar / page host inside the code (`workspaceOpen`, `openWorkspacePage`); those names are older and unrelated.
  */
-export const MAX_WORKSPACES = 8;
+/** Workspaces per profile (Beta 14.0: 16, up from 8, a Discord member's ask). Every reader follows this one number: the reducer, the menus, the palette, the Arc import and profile transfer. */
+export const MAX_WORKSPACES = 16;
+/** How many workspaces have a number key (Alt+1-8 on Windows and Linux, Ctrl+1-8 on a Mac): the digits 1-8; 9 stays the last tab's. The 9th to 16th workspace are reached from the row, the menu, the command bar, the cycle keys and the mouse buttons or a swipe over the sidebar. */
+export const WORKSPACE_KEYS = 8;
 export const WORKSPACE_NAME_MAX = 40;
 /** The glyph choices: ids the interface draws from its own icon family (WorkspaceGlyph.tsx). Anything else stored in `icon` is one letter or emoji. */
 export const WORKSPACE_GLYPHS = ['workspace', 'home', 'code', 'palette', 'book', 'flask', 'bag', 'globe', 'users', 'headphones', 'video', 'mail', 'star', 'bolt', 'terminal', 'file'] as const;
@@ -83,7 +86,7 @@ export const FIRST_WORKSPACE_NAME = 'Main';
 export const workspaceName = (workspace: Pick<Workspace, 'name'>, unnamed: string = FIRST_WORKSPACE_NAME): string => workspace.name || unnamed;
 const macLike = (): boolean => { try { return /Mac/i.test(globalThis.navigator?.platform ?? '') || (typeof process !== 'undefined' && process.platform === 'darwin'); } catch { return false; } };
 /** The default key of the Nth workspace as a toast writes it (Alt+1 on Windows and Linux, ⌃1 on a Mac); the interface shows the live key where it can. */
-export const workspaceKeyLabel = (index: number): string => index >= 0 && index < MAX_WORKSPACES ? (macLike() ? `⌃${index + 1}` : `Alt+${index + 1}`) : '';
+export const workspaceKeyLabel = (index: number): string => index >= 0 && index < WORKSPACE_KEYS ? (macLike() ? `⌃${index + 1}` : `Alt+${index + 1}`) : '';
 /** R4-48 P0-6: the first workspace ("Main") wears the profile's colour unless it was given its own; the others only their own. */
 export function workspaceColorOf(state: Pick<BrowserSnapshot, 'browserProfiles' | 'settings'> & Scoped, workspace: Workspace): string | undefined {
   if (workspace.color) return workspace.color;
@@ -98,10 +101,10 @@ export function workspaceCounts(state: Pick<BrowserSnapshot, 'tabs' | 'workspace
   for (const workspace of windowWorkspaces(state)) counts[workspace.id] = { tabs: 0, pages: 0 };
   for (const tab of state.tabs) {
     // Every tab counts in its own profile's workspace (with profiles as spaces, every profile's), a favorite's tab as any, also when Settings keep it only in its
-    // tile (the default since 13.9): the tab is open, so a Space whose only page is a favorite says "1 tab", never "0 tabs". `pages` is every open page of the
+    // tile (the default since Beta 14): the tab is open, so a Space whose only page is a favorite says "1 tab", never "0 tabs". `pages` is every open page of the
     // Space, because Delete workspace asks by it and a tile-only page closes with the Space all the same.
     const entry = counts[workspaceIdOf(state, tab)];
-    if (!entry) continue;
+    if (!entry || tab.blank === true) continue; // 14.1: the empty page is no tab (runtime/emptyPage.ts)
     if (tab.url !== 'acira://new') entry.pages++;
     entry.tabs++;
   }
@@ -192,7 +195,7 @@ const openHome = (s: BrowserSnapshot, profile: string): string | undefined => wo
 function entryTab(s: BrowserSnapshot, workspace: string, fresh: MakeTab, mine: TabSession[] = s.tabs.filter(tab => workspaceIdOf(s, tab) === workspace)): TabSession {
   const last = mine.find(tab => tab.id === s.windowUi.lastTabs?.[workspace]);
   if (last) return last;
-  const open = mine.find(tab => !s.tabGroups.some(group => group.name === tab.group && group.browserProfileId === tab.browserProfileId && (group.workspaceId ?? '') === (tab.workspaceId ?? '') && group.collapsed)) ?? mine[0];
+  const open = mine.find(tab => !groupFolded(s, s.tabGroups.find(group => group.name === tab.group && group.browserProfileId === tab.browserProfileId && (group.workspaceId ?? '') === (tab.workspaceId ?? '')))) ?? mine[0];
   if (open) return open;
   const own = s.workspaces.find(item => item.id === workspace);
   if (own && securedLocked(own)) return lockedTab(s, own, fresh);
@@ -201,7 +204,7 @@ function entryTab(s: BrowserSnapshot, workspace: string, fresh: MakeTab, mine: T
 const activate = (s: BrowserSnapshot, tab: TabSession) => {
   s.activeTabId = tab.id; for (const other of s.tabs) delete other.openerId;
   const group = s.tabGroups.find(item => item.name === tab.group && item.browserProfileId === tab.browserProfileId && (item.workspaceId ?? '') === (tab.workspaceId ?? ''));
-  if (group) { group.collapsed = false; group.lastActiveTabId = tab.id; }
+  if (group) { openGroup(s, group); group.lastActiveTabId = tab.id; }
   // A tab that belongs to a saved split opens it again, as a split shows in the workspace it was made in.
   const saved = s.windowUi.splitGroups?.find(item => item.tabIds.includes(tab.id));
   s.windowUi.split = saved ? normalizeSplit(saved, s.tabs.map(item => item.id), tab.id) : null;
@@ -224,7 +227,7 @@ export function moveBlock(s: Pick<BrowserSnapshot, 'tabs' | 'workspaces'>, tabs:
   return null;
 }
 /** Moves `asked` tabs (and the whole of any split among them) into `target`; a group's own tabs keep the group (`keepGroup` goes along), any other tab leaves its group. Returns the tabs moved and the workspace they left; null when nothing moves. */
-function relocateTabs(s: BrowserSnapshot, asked: Set<string>, target: Workspace, profile: string, fresh: MakeTab, keepGroup?: TabGroup): { moving: TabSession[]; from: string } | null {
+function relocateTabs(s: BrowserSnapshot, asked: Set<string>, target: Workspace, profile: string, fresh: MakeTab, keepGroups: TabGroup[] = []): { moving: TabSession[]; from: string } | null {
   // A split moves whole: its panes live in one workspace.
   // (Linked copies stay in their groups: they leave the split instead of travelling with it.)
   for (const group of [...(s.windowUi.splitGroups ?? [])]) {
@@ -235,8 +238,8 @@ function relocateTabs(s: BrowserSnapshot, asked: Set<string>, target: Workspace,
   const moving = s.tabs.filter(tab => asked.has(tab.id) && tab.browserProfileId === profile && workspaceIdOf(s, tab) !== target.id && movable(tab));
   if (!moving.length) return null;
   const from = workspaceIdOf(s, moving[0]), movedIds = new Set(moving.map(tab => tab.id)), wasActive = movedIds.has(s.activeTabId), order = s.tabs.map(tab => tab.id), anchor = order.indexOf(s.activeTabId);
-  for (const tab of moving) { tab.workspaceId = target.id; if (!keepGroup || tab.group !== keepGroup.name) tab.group = ''; }
-  if (keepGroup) keepGroup.workspaceId = target.id;
+  for (const tab of moving) { tab.workspaceId = target.id; if (!keepGroups.some(keep => tab.group === keep.name)) tab.group = ''; }
+  for (const keep of keepGroups) keep.workspaceId = target.id;
   if (wasActive) {
     const left = s.tabs.filter(tab => workspaceIdOf(s, tab) === from && !movedIds.has(tab.id) && tab.browserProfileId === profile);
     const next = left.find(tab => order.indexOf(tab.id) > anchor) ?? left.at(-1);
@@ -261,6 +264,18 @@ export function bringTabHere(s: BrowserSnapshot, id: string, fresh: MakeTab): bo
 }
 
 /** The workspace actions. Returns true when it handled the action (the reducer then finishes), 'ignore' when nothing changed, false when the action is not a workspace one. */
+/** 14.3 (a member's "Organised workspaces": a new Study workspace lands at the far right, away from the first one): put a workspace at place `to` among the window's listed workspaces
+ *  (windowWorkspaces: its profile's, parked ones left out). Only the places those workspaces hold in `state.workspaces` are rewritten, in the new order, so other profiles' and parked
+ *  workspaces keep theirs. Everything that walks the list follows: the switcher, Ctrl/Alt + 1..8, the cycle keys, side buttons and swipes, Command search, a profile move. False: nothing to do
+ *  (unknown id, a place outside the list, the place it already has). */
+export function moveWorkspace(s: Pick<BrowserSnapshot, 'workspaces' | 'activeBrowserProfileId'> & Partial<Pick<BrowserSnapshot, 'settings' | 'browserProfiles'>>, id: string, to: number): boolean {
+  const list = windowWorkspaces(s), at = list.findIndex(item => item.id === id);
+  if (at < 0 || !Number.isInteger(to) || to < 0 || to >= list.length || to === at) return false;
+  const places = list.map(item => s.workspaces.indexOf(item)), order = list.slice();
+  order.splice(to, 0, ...order.splice(at, 1));
+  places.forEach((place, i) => { s.workspaces[place] = order[i]; });
+  return true;
+}
 export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, fresh: MakeTab): boolean | 'ignore' {
   const profile = s.activeBrowserProfileId, owner = s.browserProfiles.find(item => item.id === profile);
   if (action.type === 'tab.restore') {
@@ -343,6 +358,10 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
       activate(s, entryTab(s, workspace.id, fresh));
       return true;
     }
+    case 'workspace.move': {
+      const to = moveWorkspace(s, action.id, action.to ?? (action.by === -1 || action.by === 1 ? windowWorkspaces(s).findIndex(item => item.id === action.id) + action.by : NaN));
+      return to ? true : 'ignore';
+    }
     case 'workspace.update': {
       const workspace = s.workspaces.find(item => item.id === action.id && item.browserProfileId === profile);
       if (!workspace) return 'ignore';
@@ -419,7 +438,7 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
       // Its tab groups and splits come back exactly as they were sealed (the reducer's reconcile and windowUiState check them).
       for (const raw of Array.isArray(action.groups) ? action.groups : []) {
         if (!raw || typeof raw.id !== 'string' || !ID.test(raw.id) || typeof raw.name !== 'string' || !raw.name.trim() || s.tabGroups.some(group => group.id === raw.id || (group.name === raw.name && group.browserProfileId === profile && group.workspaceId === workspace.id))) continue;
-        s.tabGroups.push({ id: raw.id, name: raw.name, color: typeof raw.color === 'string' ? raw.color as TabGroup['color'] : 'none', collapsed: raw.collapsed === true, browserProfileId: profile, workspaceId: workspace.id, ...(typeof raw.lastActiveTabId === 'string' && back.some(tab => tab.id === raw.lastActiveTabId) ? { lastActiveTabId: raw.lastActiveTabId } : {}) });
+        s.tabGroups.push({ id: raw.id, name: raw.name, color: typeof raw.color === 'string' ? raw.color as TabGroup['color'] : 'none', ...(typeof raw.auto === 'boolean' ? { auto: raw.auto } : {}), ...(typeof raw.parentGroupId === 'string' && ID.test(raw.parentGroupId) ? { parentGroupId: raw.parentGroupId } : {}), collapsed: raw.collapsed === true, browserProfileId: profile, workspaceId: workspace.id, ...(typeof raw.lastActiveTabId === 'string' && back.some(tab => tab.id === raw.lastActiveTabId) ? { lastActiveTabId: raw.lastActiveTabId } : {}) });
       }
       const splits = normalizeSplitGroups(Array.isArray(action.splits) ? action.splits : [], back), present = s.windowUi.splitGroups ?? [];
       if (splits.length) s.windowUi.splitGroups = [...present, ...splits.filter(split => !present.some(item => item.id === split.id))];
@@ -489,7 +508,8 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
       if (!target || !group || group.browserProfileId !== profile) return 'ignore';
       const from = workspaceIdOf(s, group);
       if (from === target.id) return 'ignore';
-      const members = groupMembers(s, group);
+      // Beta 14 (AE): a parent goes with its inner groups; an inner group goes alone and comes out as a top-level group of the workspace it lands in.
+      const family = [group, ...innerGroupsOf(s, group)], members = family.flatMap(item => groupMembers(s, item));
       if (!members.length) return 'ignore';
       const block = moveBlock(s, members, target);
       if (block === 'private') return 'ignore';
@@ -497,14 +517,25 @@ export function applyWorkspaceAction(s: BrowserSnapshot, action: BrowserAction, 
       if (block === 'secured') { say(s, 'workspaces.securedStays', undefined, { tone: 'info' }); return true; }
       // Groups are unique by name inside a workspace: a group of the same name already there keeps its name and this one comes as "Name 2".
       const wanted = typeof action.name === 'string' && action.name.trim() ? action.name.trim().slice(0, 64) : group.name, original = group.name;
-      const taken = (name: string) => s.tabGroups.some(item => item.id !== group.id && item.browserProfileId === profile && workspaceIdOf(s, item) === target.id && item.name === name);
-      let name = wanted;
-      for (let n = 2; taken(name); n++) name = `${wanted.slice(0, 64 - String(n).length - 1)} ${n}`;
+      const claimed = new Set<string>();
+      const taken = (name: string, own: TabGroup) => claimed.has(name) || s.tabGroups.some(item => item.id !== own.id && !family.includes(item) && item.browserProfileId === profile && workspaceIdOf(s, item) === target.id && item.name === name);
+      const names = new Map<string, string>();
+      for (const item of family) {
+        const base = item === group ? wanted : item.name;
+        let name = base;
+        for (let n = 2; taken(name, item); n++) name = `${base.slice(0, 64 - String(n).length - 1)} ${n}`;
+        claimed.add(name); names.set(item.id, name);
+      }
       const count = members.length;
-      const moved = relocateTabs(s, new Set(members.map(tab => tab.id)), target, profile, fresh, group);
+      const moved = relocateTabs(s, new Set(members.map(tab => tab.id)), target, profile, fresh, family);
       if (!moved) return 'ignore';
-      if (name !== group.name) { for (const tab of s.tabs) if (tab.group === group.name && tab.browserProfileId === profile && moved.moving.includes(tab)) tab.group = name; group.name = name; }
-      say(s, 'runtime.workspaceGroupMoved', { group: name, count, name: workspaceName(target) }, { action: undoAction({ type: 'workspace.move-group', groupId: group.id, workspaceId: moved.from, name: original }) });
+      for (const item of family) {
+        const name = names.get(item.id)!;
+        if (name !== item.name) { for (const tab of s.tabs) if (tab.group === item.name && tab.browserProfileId === profile && moved.moving.includes(tab)) tab.group = name; item.name = name; }
+      }
+      // An inner group moved alone leaves its parent behind and stands at the top level of the workspace it lands in.
+      delete group.parentGroupId;
+      say(s, 'runtime.workspaceGroupMoved', { group: names.get(group.id)!, count, name: workspaceName(target) }, { action: undoAction({ type: 'workspace.move-group', groupId: group.id, workspaceId: moved.from, name: original }) });
       return true;
     }
     default: return false;
@@ -619,7 +650,7 @@ export function scopeToWorkspace(state: BrowserSnapshot): BrowserSnapshot {
     // And how many tabs each holds (the switcher's counts, the delete confirmation).
     // R4-48 P1-2: tab search (the command bar, the tab viewer) also looks in the other workspaces, so it needs their tabs (the same objects, not copies).
     // Only this profile's: another profile's tab titles never show in this one.
-    const elsewhere = state.tabs.filter(tab => tab.browserProfileId === profile && !inside(tab) && !tab.privacy);
+    const elsewhere = state.tabs.filter(tab => tab.browserProfileId === profile && !inside(tab) && !tab.privacy && tab.blank !== true);
     scoped = { ...state, tabs, tabGroups: state.tabGroups.filter(inside), closedTabs: state.closedTabs.filter(inside), windowUi: { ...ui, split: ui.split && ui.split.tabIds.every(id => ids.has(id)) ? ui.split : null, ...(groups ? { splitGroups: groups } : {}) }, ...(audible.length ? { audibleWorkspaces: audible } : {}), ...(elsewhere.length ? { otherWorkspaceTabs: elsewhere } : {}), workspaceTabCounts: workspaceCounts(state) };
   }
   scopedCache.set(state, scoped);

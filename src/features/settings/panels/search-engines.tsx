@@ -18,10 +18,20 @@ const slug = (name: string, taken: readonly string[]) => {
   return id;
 };
 
+/** The suggestion address the site of this search address advertises (OpenSearch), if its own search address is on the same host; '' for anything else, silently. */
+async function siteSuggestAddress(tabId: string, template: string): Promise<string> {
+  try {
+    const search = new URL(template.replace('%s', 'x'));
+    if (search.protocol !== 'https:') return '';
+    const found = (await runtime.service({ type: 'search.opensearch', tabId, url: search.origin + '/' })).opensearch;
+    return found?.suggest && new URL(found.template.replace('%s', 'x')).hostname === search.hostname ? found.suggest : '';
+  } catch { return ''; }
+}
+
 function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(action:BrowserAction)=>void }) {
   const providers = currentSearchProviders(state);
   const [error, setError] = useState(''), [showAll, setShowAll] = useState(false);
-  const [form, setForm] = useState({ name: '', keyword: '', template: '' });
+  const [form, setForm] = useState({ name: '', keyword: '', template: '', suggest: '' });
   const save = async (next: SearchProviders | null) => {
     setError('');
     try { await runtime.dispatch({ type: 'settings.update', patch: { searchProviders: next } }); return true; } catch (failure) { setError(readable(failure)); return false; }
@@ -31,8 +41,11 @@ function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(a
     // Two engines with one name read the same in the default-engine menu and the list: the second is refused.
     const taken = takenName(form.name, providers.engines.map((item) => item.name));
     if (taken) { setError(t("searchEngines.nameTaken", { name: taken })); return; }
-    const engine: SearchProvider = { id: slug(form.name, providers.engines.map((item) => item.id)), name: form.name.trim(), keyword: form.keyword.trim().replace(/^!/, '').toLowerCase(), template: form.template.trim() };
-    if (await save(sharedProviderList(state,[...providers.engines, engine]))) setForm({ name: '', keyword: '', template: '' });
+    let suggest = form.suggest.trim();
+    // Beta 14: with suggestions on, a site that advertises its own suggestion address (OpenSearch) hands it over when the person adds it as an engine. Only then, only that site.
+    if (!suggest && state.settings.engineSuggestions) suggest = await siteSuggestAddress(state.activeTabId, form.template.trim());
+    const engine: SearchProvider = { id: slug(form.name, providers.engines.map((item) => item.id)), name: form.name.trim(), keyword: form.keyword.trim().replace(/^!/, '').toLowerCase(), template: form.template.trim(), ...(suggest ? { suggest } : {}) };
+    if (await save(sharedProviderList(state,[...providers.engines, engine]))) setForm({ name: '', keyword: '', template: '', suggest: '' });
   };
   const remove = (id: string) => {
     const engines = providers.engines.filter((item) => item.id !== id);
@@ -55,17 +68,18 @@ function SearchEngines({ state,dispatch }: { state: BrowserSnapshot; dispatch:(a
             <div className="nc-engine" key={engine.id}>
               <span>{engine.name}{engine.id === providers.defaultId ? t("searchEngines.default") : ''}</span>
               <span className="nc-mono">{engine.keyword ? `!${engine.keyword}` : '—'}</span>
-              <span className="nc-mono" title={engine.template}>{engine.template.replace(/^https:\/\//, '')}</span>
+              <span className="nc-mono" title={engine.template}>{engine.template.replace(/^https:\/\//, '')}{engine.suggest && <small className="nc-engine-suggest" title={engine.suggest}>{engine.suggest.replace(/^https:\/\//, '')}</small>}</span>
               <button type="button" className="nc-link" disabled={providers.engines.length < 2} aria-label={t("extensionmanager.removeNamed", { name: engine.name })} onClick={() => remove(engine.id)}>{t("acirasidebar.remove")}</button>
             </div>
           ))}
         </div>
         {providers.engines.length > 1 && <div className="nc-actions" style={{ marginTop: 8 }}><button type="button" className="st-button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? t("searchEngines.showOnlyTheOneIn") : t('searchEngines.moreEngines', { count: providers.engines.length - 1 })}</button></div>}
         <form className="nc-form" data-setting="search-engine-add" onSubmit={add}>
-          <input className="st-input" aria-label={t("searchEngines.engineName")} placeholder={t("acirasidebar.name")} maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-          <input className="st-input" aria-label={t("searchEngines.shortcutKeyword")} placeholder={t("searchEngines.keyword")} maxLength={25} value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} />
-          <input className="st-input" aria-label={t("searchEngines.searchAddressWithS")} placeholder="https://example.com/search?q=%s" value={form.template} onChange={(event) => setForm({ ...form, template: event.target.value })} />
+          <input className="st-input ab-input" aria-label={t("searchEngines.engineName")} placeholder={t("acirasidebar.name")} maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+          <input className="st-input ab-input" aria-label={t("searchEngines.shortcutKeyword")} placeholder={t("searchEngines.keyword")} maxLength={25} value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} />
+          <input className="st-input ab-input" aria-label={t("searchEngines.searchAddressWithS")} placeholder="https://example.com/search?q=%s" value={form.template} onChange={(event) => setForm({ ...form, template: event.target.value })} />
           <button type="submit" className="st-button primary" disabled={!form.name.trim() || !form.template.trim()}>{t("searchEngines.add")}</button>
+          <input className="st-input nc-form-suggest" dir="ltr" aria-label={t("searchsuggest.engineAddress")} placeholder={t("searchsuggest.engineAddress")} value={form.suggest} onChange={(event) => setForm({ ...form, suggest: event.target.value })} />
         </form>
         {error && <p className="nc-message" data-bad role="alert">{error}</p>}
         <div className="nc-actions" style={{ marginTop: 12 }}>

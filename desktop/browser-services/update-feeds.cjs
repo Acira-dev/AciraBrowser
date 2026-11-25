@@ -42,11 +42,6 @@ function usableDocument(doc){
  return Array.isArray(doc.files)||typeof doc.path==='string';
 }
 const coded=(code,message)=>Object.assign(new Error(message),{code});
-/** 13.11, the INSIDER feed only (a feed that says `quietWhenEmpty`): a channel document with no files (the placeholder the Insider server keeps until the founders fill it) and the server's `missing` answer (HTTP 404) both mean "nothing to install yet",
- *  never an error and never an offer: the answer is "the version already running", so electron-updater finds nothing newer, the Updates row reads as up to date, and the next look asks again. A document WITH files, and every other failure
- *  (a refusal, a fault, no connection), behave as for any feed. The public feeds never say it, so their behaviour is exactly what it was. */
-const nothingYet=(current,info)=>({version:isVersion(current)?String(current).trim():'0.0.0',files:[],...(Number.isFinite(info?.nextCheckSeconds)?{nextCheckSeconds:info.nextCheckSeconds}:{})});
-const emptyDocument=info=>Array.isArray(info?.files)&&info.files.length===0&&typeof info?.path!=='string';
 /** Runs run(token) and gives up after ms (the token is cancelled so the request is aborted; a late answer is ignored). */
 function within(run,ms,makeToken){
  return new Promise((resolve,reject)=>{
@@ -72,15 +67,12 @@ async function readChannel({feeds,channelFile,request,parse,current,floor=()=>nu
    const text=await within(token=>request(url,token,feed),index===0?primaryWithin:fallbackWithin,makeToken);
    const info=parse(text,channelFile,url);
    if(!usableDocument(info))throw coded('ERR_UPDATER_INVALID_UPDATE_INFO',url+' is not a channel document.');
-   if(feed.quietWhenEmpty===true&&emptyDocument(info))return {info:nothingYet(current,info),feed,failures,nothingYet:true};
    if(index>0){ // rule 3
     const known=highestOf(current,floor?.());
     if(!lowerThan(known,info.version))throw coded('ERR_UPDATE_FEED_NOT_NEWER',url+' offers '+info.version+', which is not newer than '+known+'.');
    }
    return {info,feed,failures};
-  }catch(error){
-   if(feed.quietWhenEmpty===true&&Number(error?.statusCode??error?.status)===404)return {info:nothingYet(current),feed,failures,nothingYet:true};
-   try{feed.onError?.(error);}catch{/* the feed's own reading of its failure is never the updater's problem */}failures.push({feed:feed.name,url,error});}
+  }catch(error){try{feed.onError?.(error);}catch{/* the feed's own reading of its failure is never the updater's problem */}failures.push({feed:feed.name,url,error});}
  }
  if(failures.length===1)throw failures[0].error;
  const first=failures[0].error;

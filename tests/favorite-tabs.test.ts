@@ -327,7 +327,7 @@ test('Ctrl+1…9 and Ctrl+PageDown/PageUp walk every tab: the favorite\'s tab is
   state = run(state, { type: 'settings.update', patch: { verticalTabs: true, favoriteTabsInList: true } });
   assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'Ctrl+9 (the last tab) is the favorite\'s, the last row of the list');
   state = run(state, { type: 'settings.update', patch: { verticalTabs: true, favoriteTabsInList: false } });
-  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'tiles only: no row, but the keys still reach it (13.9)');
+  assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'tiles only: no row, but the keys still reach it (Beta 14, H)');
   state = run(state, { type: 'settings.update', patch: { verticalTabs: false } });
   assert.deepEqual(listedTabs(state).map(tab => tab.id), ['a', 'b', own], 'the strip lists it too');
   // Only the open workspace's tabs, as before.

@@ -1,5 +1,5 @@
 'use strict';
-// Live pull requests, option A of the research note (previews/beta12/live-prs/README.md): read the profile's own github.com sign-in.
+// Live pull requests, option A of the research note: read the profile's own github.com sign-in.
 // No Acira server, no token kept: the request leaves the main process through the profile's own session (its cookies, its proxy, its
 // content blocking) and asks github.com's search page for JSON, the same answer the page's own script gets. Signed out, GitHub answers
 // 200 with `logged_in: false` (checked 7 Nov 2026), which is how this tells "not signed in" from "nothing waiting".

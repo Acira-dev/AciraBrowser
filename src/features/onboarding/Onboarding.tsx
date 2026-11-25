@@ -27,8 +27,10 @@ import { Welcome } from "./Welcome";
 import { showMakeItYours } from "./MakeItYours";
 import { VaporText } from "./vapor";
 import { isSkipped, nativeMoves, nextStep, visibleSteps, type Direction, type FlowFacts, type SetupStep } from "./flow";
-import { AppearanceStep, DefaultStep, ImportStep, PrivacyStep, ProfileStep, SearchStep, listOf, useImporter, useProtectionFacts, type ImportRun, type StepApi, type StepContext } from "./steps";
+import { AppearanceStep, DefaultStep, ImportStep, PrivacyStep, ProfileStep, SearchStep, listOf, spacesCount, useImporter, useProtectionFacts, type ImportRun, type StepApi, type StepContext } from "./steps";
 import { CoverStep, coverSamples } from "./CoverStep";
+import { SetupReceive, transferUndoToast } from "./TransferSetup";
+import type { AppliedResult } from "../transfer/ReceiveApply";
 import { t, useT, type MessageId } from "../../i18n";
 import { effectiveReducedMotion } from "../../runtime/motion";
 import { useSoftwareDrawing } from "../../ui/softwareDrawing";
@@ -131,6 +133,9 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
   const leavingRef = useRef(false);
   const [welcomeReady, setWelcomeReady] = useState(false);
   const [settle, setSettle] = useState(false);
+  // "Coming from another computer? Bring your Acira over." (Welcome and the import step): the receive flow replaces the card; Back returns to where it was offered.
+  const [receiving, setReceiving] = useState(false);
+  const transferred = useRef<AppliedResult | null>(null);
   const generation = useRef(0),
     onDoneRef = useRef(onDone),
     stageRef = useRef<HTMLElement>(null);
@@ -273,6 +278,10 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
       })
       .catch(() => {});
   }, [client, progress, sources]);
+  // Beta 14 setup funnel (usage schema 4): how setup ended, the step it ended on and how long it was open, sent once in the install's first message. A setup that was already
+  // part way through when this launch started (the person quit and came back) counts as abandoned once; nothing else about it is kept.
+  const resumedSetup = useRef<boolean | undefined>(undefined);
+  useEffect(() => { if (resumedSetup.current === undefined && progress) resumedSetup.current = progress.step !== "welcome"; }, [progress]);
   const moving = useRef(false);
   /** One native move per step passed, so resume always lands on a step that is really shown. The short setup moves
    * locally (nothing to resume: it simply starts again if it is closed half way). */
@@ -299,6 +308,13 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
       moving.current = false;
     }
   };
+  /** A finished setup counts as an installation in the anonymous usage counts (the team decision, METRICS.md): Use defaults,
+   * Skip setup and Escape initialize a choice nobody made yet, the same call as the Privacy step's. An unset choice is the only
+   * thing it ever changes: a saved on or off, including an opt-out made in Privacy, always wins. Native sends about 3 s later. */
+  const countInstall = (path: "completed" | "defaults" | "skipped") =>
+    void runtime
+      .service({ type: "metrics.set", enabled: true, onlyIfUnset: true, where: "setup", setup: { path: resumedSetup.current ? "abandoned" : path, step, seconds: Math.round((performance.now() - born.current) / 1000) } })
+      .catch(() => {});
   /** Setup ends with the browser arriving (finale.ts): from the click, the live browser, already laid out and painted
    * underneath, rises out of the setup light in a view transition. Setup closes (`close`) one frame in, or at once on
    * a key or click during that first frame. */
@@ -307,8 +323,11 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
     leavingRef.current = true;
     const offerImportUndo = importUndo(importer.run, dispatch);
     const offerSignIn = signInOffer(importer.run, dispatch);
+    // A profile brought over from another computer: the same toast with Undo, from the transfer's own batch.
+    const transferToast = transferUndoToast(transferred.current);
+    const offerTransferUndo = transferToast ? () => dispatch(transferToast) : undefined;
     // Over the arriving browser: what was imported (with Undo), then, if there is anything to sign in to, a nudge to do it.
-    const offerUndo = offerImportUndo || offerSignIn ? () => { offerImportUndo?.(); void offerSignIn?.(); } : undefined;
+    const offerUndo = offerImportUndo || offerTransferUndo || offerSignIn ? () => { offerImportUndo?.(); offerTransferUndo?.(); void offerSignIn?.(); } : undefined;
     // Synchronous, so a key that closes it finds the browser's own key handling already in place.
     const close = () =>
       flushSync(() => {
@@ -324,6 +343,7 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
     // The first setup is over (finished, skipped or with the defaults): the profile's name is the person's from now on, so a later
     // language or "Run setup again" never renames it.
     if (ownProfile?.defaultName) settleProfileName(dispatch, ownProfile.id);
+    countInstall(skip ? "skipped" : defaults ? "defaults" : "completed");
     if (skip) {
       // Skipping is never blocked on the native write; a failed write only means setup is offered again next launch.
       void client.request({ type: "skip" }).catch(() => {});
@@ -396,6 +416,7 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
     artwork,
     reducedMotion,
     importer,
+    onBringOver: () => setReceiving(true),
   };
 
   const presented = useRef(new Set<SetupStep>());
@@ -404,7 +425,7 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
   const shown: readonly SetupStep[] = quick ? quickSteps : visibleSteps(facts, presented.current),
     index = shown.indexOf(step);
   const quickProfile = quick ? profiles.find((profile) => profile.id === profileId) : undefined;
-  const stage = step === "welcome" ? "welcome" : "dialog";
+  const stage = !receiving && step === "welcome" ? "welcome" : "dialog";
   // If opening stalls for a second, offer Skip setup anyway. Not from the first frame, so a stall that clears at once
   // never flashes it. (The setup host focuses the dialog itself, App.tsx, so Enter never lands on Skip.)
   const [stalled, setStalled] = useState(false);
@@ -599,9 +620,9 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
         tone={tone}
         strength={1}
         clearCenter={stage === "welcome"}
-        swing={lightPoses[step][0]}
-        shiftX={lightPoses[step][1]}
-        shiftY={lightPoses[step][2]}
+        swing={lightPoses[receiving ? "import" : step][0]}
+        shiftX={lightPoses[receiving ? "import" : step][1]}
+        shiftY={lightPoses[receiving ? "import" : step][2]}
         reducedMotion={reducedMotion}
         className="fr-stage-light"
       />
@@ -654,6 +675,27 @@ function ProfileOnboarding({ client, profileId, onDone }: OnboardingProps) {
                 onReady={() => setWelcomeReady(true)}
                 language={settings.language ?? "system"}
                 onLanguage={(language) => dispatch({ type: "settings.update", patch: { language } })}
+                onBringOver={() => setReceiving(true)}
+              />
+            </motion.div>
+          ) : receiving ? (
+            <motion.div
+              key="receive"
+              className="fr-center"
+              // The same condensing as every step's card: the receive card forms out of the light where the step (or the welcome) was.
+              initial={quietMotion ? { opacity: 0 } : { opacity: 0, filter: "blur(8px)", scale: 0.97 }}
+              animate={{ opacity: 1, filter: "blur(0px)", scale: 1, transitionEnd: { filter: "none" } }}
+              exit={quietMotion ? { opacity: 0, transition: { duration: 0.08 } } : { opacity: 0, filter: "blur(6px)", scale: 0.98, transition: { type: "spring", duration: 0.3 * cardScale, bounce: 0 } }}
+              transition={quietMotion ? { duration: 0.12 } : { type: "spring", duration: 0.55 * cardScale, bounce: 0 }}
+            >
+              <SetupReceive
+                onBack={() => setReceiving(false)}
+                onApplied={(result) => {
+                  // Everything came over, look and layout, privacy and search included: setup's remaining steps are skipped and it ends through its normal completion.
+                  // The card stays up (it is what the finale lifts away); the rows have all ticked.
+                  transferred.current = result ?? null;
+                  void leave(false, true);
+                }}
               />
             </motion.div>
           ) : (
@@ -730,7 +772,7 @@ function importUndo(run: ImportRun | null, dispatch: StepContext["dispatch"]) {
   // Arc: "Imported 3 Spaces, 8 favorites and history from Arc" (its bookmarks are the Spaces' pinned tabs).
   const what =
     spaces || favorites
-      ? listOf([spaces ? t("setup.count.spaces", { count: spaces }) : "", favorites ? t("setup.count.favorites", { count: favorites }) : "", history ? t("setup.kindLower.history") : ""].filter(Boolean))
+      ? listOf([spaces ? spacesCount(spaces, run.spacesBrowser) : "", favorites ? t("setup.count.favorites", { count: favorites }) : "", history ? t("setup.kindLower.history") : ""].filter(Boolean))
       : bookmarks
         ? listOf([t("setup.count.bookmarks", { count: bookmarks }), history ? t("setup.kindLower.history") : ""].filter(Boolean))
         : history

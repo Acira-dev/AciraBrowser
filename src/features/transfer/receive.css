@@ -1,0 +1,139 @@
+/* The receiving screens (agent R): only what the pictures need and transfer.css lacks. Tokens only; Inter only. The sheet's own classes (.tx-*) come from transfer.css;
+   the setup's from onboarding.css (.fr-*). */
+
+/* ───── the flow's wrapper: it never takes part in layout (setup places its card in .fr-center; the sheet places its body) ───── */
+.rx-flow{display:contents}
+
+/* ───── R1: the code field (pictures 11, 12) ───── */
+.tx-field-chips{display:contents}
+/* Chips inside the field: the fill is the chip's ::before, so its fade and its width spring (CodeInput) never stretch the word. */
+.tx-field .tx-chip{position:relative;isolation:isolate;background:none;box-shadow:none;transform-origin:0 50%}
+.tx-field .tx-chip::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--surface-content);box-shadow:var(--shadow-ring);transform-origin:0 50%}
+/* the ring of the focused field (transfer.css draws it for [data-focus]; the field itself has real focus now) */
+.tx-field:focus-within{outline:2px solid var(--focus-ring);outline-offset:-1px;background:var(--surface-content)}
+.tx-typed{flex:none}
+.tx-sizer{position:relative;display:inline-block;min-width:2px;height:30px}
+.tx-mirror{display:inline-block;min-width:2px;white-space:pre;visibility:hidden}
+.tx-input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;outline:0;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;caret-color:var(--focus-ring);-webkit-appearance:none;appearance:none;cursor:text}
+.tx-input:disabled{opacity:1;cursor:default}
+/* a whole code: the input stays for Backspace and Enter, but takes no room */
+.tx-typed[data-whole]{width:1px;padding:0;overflow:hidden}
+/* a word that is not on the list: the underline draws in from the left in 150 ms (instead of transfer.css's static one) */
+.tx-typed[data-bad]{text-decoration:none}
+.tx-typed[data-bad]::after{content:'';position:absolute;left:4px;right:4px;bottom:3px;height:2px;border-radius:1px;background:var(--danger);transform-origin:0 50%;animation:rx-underline calc(150ms * var(--motion-pace,1)) var(--motion-ease-expo,cubic-bezier(.16,1,.3,1)) both}
+@keyframes rx-underline{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+:root[data-reduced-motion] .tx-typed[data-bad]::after,.app[data-reduced-motion=true] .tx-typed[data-bad]::after{animation:none}
+.tx-fix{min-height:16px}
+:where(.tx-fix) button.tx-fix-btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:2px}
+/* R2: the field waits, calm like the ended code of picture 27 */
+.rx-quiet[data-calm] .tx-field{margin-top:16px}
+.rx-quiet[data-calm] .tx-chip{opacity:.4;filter:blur(.6px)}
+.rx-status{margin-top:14px}
+.rx-flow[data-variant=setup] .rx-status{justify-content:center}
+.tx-input-idle{position:absolute;opacity:0}
+
+/* ───── R3 to R7 ───── */
+.rx-parts{margin-top:2px}
+.rx-parts .tx-rows{margin-top:14px}
+/* rows as controls (R5): a part can be left out */
+button.tx-row{appearance:none;-webkit-appearance:none;width:100%;border:0;background:none;text-align:left;color:inherit;font:inherit;cursor:default;box-sizing:border-box}
+button.tx-row:hover{background:var(--input-hover,rgb(var(--ink) / .04))}
+button.tx-row:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.tx-row[data-off] .nm{color:var(--text-2);text-decoration:line-through;text-decoration-color:var(--text-3)}
+.tx-row[data-live] .tk{color:var(--text-1)}
+.tx-row[data-live] :where(.tk) canvas.tx-live-grid{display:block}
+/* the notes of picture 15b: a warning line, its hint under it, the second warning a little lower */
+.rx-notes{margin-top:12px}
+.rx-notes .tx-warn{margin-top:0}
+.rx-notes .tx-warn + .tx-warn{margin-top:8px}
+.rx-notes .tx-note.rx-hint{margin:2px 0 8px 14px}
+.tx-box .tx-note.rx-boxnote{margin:0 0 4px}
+.tx-box .tx-note.rx-ask-again{margin:6px 0 0}
+.tx-box .tx-item{cursor:default}
+.tx-every,.rx-every{margin-top:10px}
+.tx-note.rx-signin{margin-top:10px}
+.rx-fu-head{margin:6px 8px 0;font-weight:500}
+.tx-fu .acira-button[disabled]{opacity:1}
+.tx-follow .tx-fu :where(.nm) small.tx-fu-sub{margin-top:1px}
+
+/* ───── setup (pictures 20, 21): the receive card wears the setup's own tokens ───── */
+.rx-setup-card{--text-1:var(--fr-text);--text-2:var(--fr-text-2);--text-3:var(--fr-text-3);--accent:var(--fr-accent);--focus-ring:var(--fr-accent);--line:var(--fr-line);--danger:var(--fr-error,#f07178);
+  --input-fill:var(--fr-group);--input-edge:var(--fr-line-2);--input-hover:var(--fr-hover);--surface-content:var(--fr-selected);--shadow-ring:inset 0 0 0 1px var(--fr-line-2);--link:var(--fr-accent)}
+.fr-stage[data-tone=dark] .rx-setup-card{--ink:255 255 255}
+.fr-stage[data-tone=light] .rx-setup-card{--ink:17 17 19}
+.rx-setup-card .tx-field{margin-top:0;min-height:56px;padding:12px;background:var(--fr-group);box-shadow:inset 0 0 0 1px var(--fr-line-2)}
+.fr-stage[data-tone=light] .rx-setup-card .tx-field{box-shadow:0 0 0 1px rgb(0 0 0 / .08),0 4px 8px -4px #0000000a,0 16px 24px -8px #0000000f}
+.rx-setup-card .tx-field:focus-within{outline:2px solid var(--fr-accent);outline-offset:1px;background:var(--fr-group)}
+.rx-setup-card .tx-chip{color:var(--fr-text)}
+.rx-setup-card :where(.tx-chip) i.tx-chip-n{color:var(--fr-text-3)}
+.rx-setup-card .tx-field .tx-chip::before{background:var(--fr-selected);box-shadow:inset 0 0 0 1px var(--fr-line-2)}
+.rx-setup-card .tx-typed{color:var(--fr-text)}
+.rx-setup-card .tx-fix{justify-content:center;color:var(--fr-error,#f07178)}
+.rx-setup-card .tx-fix span.d{color:var(--fr-text-3)}
+.rx-setup-card :where(.tx-fix) button.tx-fix-btn{color:var(--fr-accent)}
+.rx-setup-card .tx-progress,.rx-setup-card .tx-sub{color:var(--fr-text-3)}
+.rx-setup-card .tx-number{color:var(--fr-text)}
+.rx-setup-card .tx-pair{margin-top:6px}
+.rx-setup-card :where(.tx-dev) small.tx-dev-name{color:var(--fr-text-3)}
+.rx-setup-card .tx-rows{margin:14px 0 0}
+.rx-setup-card :where(.tx-row) small.tx-row-sub{color:var(--fr-text-3)}
+.rx-setup-card .tx-row .tk{color:var(--fr-accent)}
+.rx-setup-card .tx-row[data-wait] .nm{color:var(--fr-text-3)}
+.rx-setup-card .rx-content{text-align:left}
+.rx-setup-card .rx-content .tx-center,.rx-setup-card .tx-pair,.rx-setup-card .tx-number{text-align:center}
+.rx-setup-card .rx-setup-group{margin:0}
+.rx-setup-card .rx-summary{grid-template-columns:minmax(0,1fr) auto}
+.rx-setup-card :where(.rx-summary) small.rx-summary-sub{display:block;font:400 12px/16px var(--font-ui);color:var(--fr-text-3);font-variant-numeric:tabular-nums}
+.rx-setup-card .rx-review{padding:3px 8px;margin:0 -8px}
+.rx-setup-card .rx-glabel{margin-top:20px}
+.rx-setup-card .rx-note{margin-top:12px;text-align:center}
+.rx-setup-card .rx-fact :where(.fr-row-text) b.rx-fact-name{font-weight:400}
+.rx-setup-card .rx-fact{min-height:40px}
+.rx-setup-card .tx-status{margin-top:14px;color:var(--fr-text-3)}
+
+/* ───── the reveal (reveal.ts, spec 5.3): a circle from the Bring it over button ─────
+   While the transition runs the document carries data-transfer-reveal and data-mode-switch=reveal (every other transition then plays as a plain update).
+   Every view-transition-name under .app is lifted for that time, so the whole chrome is one picture and the circle reveals it (the R4-50 rule: no name may
+   lift chrome over anything while it runs). The list below names the elements that CAN carry a name (a rule ending in `*` would be tried on every element at every style
+   recalculation, the smoothness rule of scripts/costly-selectors.mjs); tests/transfer-reveal-names.test.mjs fails when a stylesheet gives a name to an element that is not on it. The new frame starts as a point; reveal.ts grows the circle (700 ms Premium, 420 Fast, --motion-ease-expo). */
+:root[data-transfer-reveal][data-mode-switch] .app,
+:root[data-transfer-reveal][data-mode-switch] .app .acira-bookmarks-row,
+:root[data-transfer-reveal][data-mode-switch] .app .acira-compact-tabs,
+:root[data-transfer-reveal][data-mode-switch] .app .acira-focus-row,
+:root[data-transfer-reveal][data-mode-switch] .app .acira-strip-tone,
+:root[data-transfer-reveal][data-mode-switch] .app .acira-tab-row,
+:root[data-transfer-reveal][data-mode-switch] .app .address-bar,
+:root[data-transfer-reveal][data-mode-switch] .app .address-field,
+:root[data-transfer-reveal][data-mode-switch] .app .address-security,
+:root[data-transfer-reveal][data-mode-switch] .app .address-star,
+:root[data-transfer-reveal][data-mode-switch] .app .address-zoom-indicator,
+:root[data-transfer-reveal][data-mode-switch] .app .browser-shell[data-seamless],
+:root[data-transfer-reveal][data-mode-switch] .app .browser-toolbar.acira-persistent-toolbar,
+:root[data-transfer-reveal][data-mode-switch] .app .ed-rail.acira-sidebar,
+:root[data-transfer-reveal][data-mode-switch] .app .fs-lights,
+:root[data-transfer-reveal][data-mode-switch] .app .icon-button,
+:root[data-transfer-reveal][data-mode-switch] .app .native-extension-actions,
+:root[data-transfer-reveal][data-mode-switch] .app .page-area,
+:root[data-transfer-reveal][data-mode-switch] .app .page-content,
+:root[data-transfer-reveal][data-mode-switch] .app .sidebar-page-corners,
+:root[data-transfer-reveal][data-mode-switch] .app .sidebar-toggle-control,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-corner,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-corners,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-head-in,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-side,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-strip,
+:root[data-transfer-reveal][data-mode-switch] .app .st-amb-top,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-aifree,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-menu-control,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-overflow,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-overflow-profile,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-private-chip,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-tab-overview,
+:root[data-transfer-reveal][data-mode-switch] .app .update-pill,
+:root[data-transfer-reveal][data-mode-switch] .app .toolbar-actions>[data-toolbar-item],
+:root[data-transfer-reveal][data-mode-switch] .app svg.sidebar-page-rim-svg,
+:root[data-transfer-reveal][data-mode-switch] .app .edge-warm-layer{view-transition-name:none!important}
+:root[data-transfer-reveal][data-mode-switch]::view-transition-group(root){animation:none}
+:root[data-transfer-reveal][data-mode-switch]::view-transition-old(root),
+:root[data-transfer-reveal][data-mode-switch]::view-transition-new(root){animation:none;mix-blend-mode:normal}
+:root[data-transfer-reveal][data-mode-switch]::view-transition-new(root){z-index:2;clip-path:circle(0 at 50% 50%)}

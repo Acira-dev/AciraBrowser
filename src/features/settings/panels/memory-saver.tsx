@@ -28,5 +28,5 @@ function MemorySaver({ state, dispatch }: SettingsPanelProps) {
   );
 }
 
-const panel: SettingsPanel = { section: 'Tabs', order: 60, Component: MemorySaver };
+const panel: SettingsPanel = { section: 'Tabs', order: 60, placed: true, Component: MemorySaver };
 export default panel;

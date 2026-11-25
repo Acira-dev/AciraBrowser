@@ -1,0 +1,7 @@
+/* 14.4 live wallpaper (LiveVideo.tsx): the person's own video in the picture's layer, over its still, under the page's own shade and glass (nothing new
+   drawn: no line, no border). It shows only once a frame of it has been presented, with the picture's own fade; a frozen frame (the video's decoder
+   released after a long pause) sits between the still and the video, drawn like the picture itself. No pointer: a click or right-click lands on the page. */
+.nt-art > .nt-art-video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: var(--nt-art-position, 50% 50%); opacity: 0; pointer-events: none; user-select: none; background: transparent; transition: opacity calc(600ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); }
+.nt-art > .nt-art-video[data-shown] { opacity: 1; }
+.nt-art > .nt-art-video[data-instant] { transition: none; }
+.nt-art[data-reduced] > .nt-art-video { transition: opacity 90ms linear; }

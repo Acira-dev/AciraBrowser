@@ -91,7 +91,8 @@ test('over an icon: it is marked (plain when the drop would move, "refused" when
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 test('the wiring: the sidebar carries a group by its header to a workspace, the menu has the row, main knows the action', () => {
   const sidebar = read('src/components/sidebar/AciraSidebar.tsx'), menu = read('src/components/TabGroupControls.tsx');
-  assert.match(sidebar, /type:'workspace\.move-group',groupId:current\.group\.id,workspaceId:target/);
+  assert.match(sidebar, /type:'workspace\.move-group',groupId,workspaceId:target/, 'groupId is current.group.id (AE: the carry ends with the move, groupCarry.ts abort)');
+  assert.match(sidebar, /const groupId=current\.group\.id,reopen=/);
   assert.match(sidebar, /startDrag\(event,lead,undefined,false,'group:'\+entry\.group\.id,entry\.group\)/);
   assert.match(sidebar, /markWorkspaceDrop\(point,dropNote\(\{kind:'group'/);
   assert.match(sidebar, /markWorkspaceDrop\(point,dropNote\(\{kind:'tabs',ids:\[current\.id\]\}\)\)/);

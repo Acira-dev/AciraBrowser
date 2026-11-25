@@ -68,3 +68,38 @@ test('every locale has every message (nothing falls back to English by accident)
     assert.deepEqual(missing.slice(0,10),[],`${code} is missing ${missing.length} messages: node scripts/i18n-missing.mjs --batches <dir>`);
   }
 });
+
+// QA walk QW-3: the Shelf's empty-state lines ("No downloads yet", "No history yet", "Add pages with + to read later", "Nothing is kept in a private window"), the Downloads / History list buttons,
+// "Untitled folder" and "Unnamed group" were English in every language. scripts/i18n-scan.mjs looks at JSX text and attributes; these were arguments of a local helper and `||` fallbacks, so this
+// test reads every string literal of the sidebar's files and refuses one that reads as English prose unless it goes through the catalog (t / tr / tm / translateText / controlTitle).
+test('the sidebar shows no English literal in any language: empty states, list buttons and fallback names are catalog messages',async()=>{
+  const ts=(await import('typescript')).default;
+  const files=['src/components/sidebar/AciraSidebar.tsx','src/components/sidebar/groupCarry.ts','src/components/CompactTabs.tsx','src/components/BrowserTabsHorizontal.tsx'];
+  const quietCalls=new Set(['t','tr','tm','translateText','controlTitle','require','querySelector','querySelectorAll','closest','matches','getElementById','setAttribute','getAttribute','dispatchEvent','CustomEvent','addEventListener','removeEventListener','formatShortcut']);
+  const found:string[]=[];
+  for(const file of files){
+    const source=readFileSync(root+file,'utf8'),sf=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,file.endsWith('x')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
+    const quiet=(node:import('typescript').Node):boolean=>{
+      for(let p=node.parent;p;p=p.parent){
+        if(ts.isCallExpression(p)){const e=p.expression,name=ts.isIdentifier(e)?e.text:ts.isPropertyAccessExpression(e)?e.name.text:'';if(quietCalls.has(name))return true;}
+        if(ts.isImportDeclaration(p)||ts.isTypeNode(p))return true;
+        if(ts.isJsxAttribute(p)&&['className','data-flip','key','role','type','id','data-app-id','data-sb-focus'].includes(p.name.getText()))return true;
+      }
+      return ts.isPropertyAssignment(node.parent)&&node.parent.name===node;
+    };
+    const walk=(node:import('typescript').Node)=>{
+      if((ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node))&&!quiet(node)){
+        const text=node.text;
+        if(/^[A-Z][a-z]+( [A-Za-z+.,'’-]+)+[.…!?]?$/.test(text)&&!/^(Ctrl|Shift|Alt|Cmd|Mod|Meta)\b/.test(text))found.push(`${file}:${sf.getLineAndCharacterOfPosition(node.getStart()).line+1} ${text}`);
+      }
+      ts.forEachChild(node,walk);
+    };
+    walk(sf);
+  }
+  assert.deepEqual(found,[],'English literals shown to people: use t(\'…\') and add the id to src/i18n/en.json and the 12 catalogs');
+  const en=catalog('en');
+  for(const [id,text] of Object.entries({'acirasidebar.readingEmpty':'Add pages with + to read later','acirasidebar.historyPrivate':'Nothing is kept in a private window','acirasidebar.allDownloads':'All downloads','acirasidebar.allHistory':'All history','acirasidebar.unnamedGroup':'Unnamed group','dl.emptyTitle':'No downloads yet','history.emptyTitle':'No history yet','bm.untitled':'Untitled folder'})){
+    assert.equal(en[id],text,id);
+    for(const {code} of LOCALES){if(code==='en')continue;const value=catalog(code)[id];assert.ok(value&&value!==text,`${code}: ${id} is translated`);}
+  }
+});

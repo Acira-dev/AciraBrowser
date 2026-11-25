@@ -1,0 +1,30 @@
+/* acira://usage: the Library page's own shell, with the exact message in a mono block and one line per field. Flat, hairlines only, the app's tokens. */
+.us-page-facts { display: grid; gap: 6px; padding: 4px 0 8px; font-size: var(--text-13, 13px); line-height: 18px; color: var(--text-secondary); }
+:where(.us-page-facts) p.us-page-fact { margin: 0; max-width: 72ch; text-wrap: pretty; }
+.us-page-json { margin: 4px 0 8px; padding: 14px 16px; overflow: auto; max-height: 420px; border: 1px solid var(--line, rgb(var(--ink) / .1)); border-radius: 8px; background: rgb(var(--ink) / .035);
+  color: var(--text-primary); font: 400 12px/18px var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace); white-space: pre; tab-size: 2; user-select: text; }
+.us-page-json:focus-visible { outline: 2px solid var(--focus-ring-color, var(--focus-ring)); outline-offset: 1px; }
+.us-page-json-small { max-height: none; }
+.us-page-fields { display: grid; gap: 22px; padding: 4px 0 8px; }
+:where(.us-page-group) h3.us-page-group-title { margin: 0 0 6px; font-size: var(--text-12, 12px); line-height: 16px; font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--text-secondary); }
+:where(.us-page-group) dl.us-page-group-list { margin: 0; display: grid; }
+:where(.us-page-group) dl > div.us-page-field { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 4px 16px; padding: 7px 0; border-top: 1px solid var(--line, rgb(var(--ink) / .08)); }
+:where(.us-page-group) dt.us-page-field-name { margin: 0; font: 500 12px/18px var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace); color: var(--text-primary); overflow-wrap: anywhere; }
+:where(.us-page-group) dd.us-page-field-line { margin: 0; font-size: var(--text-13, 13px); line-height: 18px; color: var(--text-secondary); text-wrap: pretty; }
+@media (max-width: 560px) { :where(.us-page-group) dl > div.us-page-field { grid-template-columns: 1fr; } }
+
+/* The switch and the button are this page's own (the Settings stylesheet is scoped to Settings): the same 28 x 16 pill and hairline button, from the app's tokens. */
+.us-switch { position: relative; flex: 0 0 auto; width: 28px; height: 16px; padding: 0; border: 0; border-radius: 8px; background: var(--input-fill, rgb(var(--ink) / .08)); box-shadow: inset 0 0 0 1px var(--line-emphasis, rgb(var(--ink) / .3)); cursor: pointer; transition: background-color 140ms cubic-bezier(.45, .05, .55, .95), box-shadow 140ms cubic-bezier(.45, .05, .55, .95); }
+:where(.us-switch) > span.us-switch-knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary, rgb(var(--ink) / .6)); transition: transform 140ms cubic-bezier(.45, .05, .55, .95), background-color 140ms cubic-bezier(.45, .05, .55, .95); }
+.us-switch[aria-checked='true'] { background: var(--toggle-on, var(--accent, #3b6fd8)); box-shadow: none; }
+:where(.us-switch)[aria-checked='true'] > span.us-switch-knob { transform: translateX(12px); background: var(--toggle-thumb, #fff); }
+.us-switch:disabled { opacity: .5; cursor: default; }
+.us-switch:focus-visible, .us-page-button:focus-visible { outline: 2px solid var(--focus-ring-color, var(--focus-ring)); outline-offset: 2px; }
+.us-page-button { height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; box-shadow: inset 0 0 0 1px var(--line-emphasis, rgb(var(--ink) / .2)); color: var(--text-primary); font: inherit; font-size: var(--text-13, 13px); cursor: pointer; transition: background-color 120ms cubic-bezier(.2, 0, 0, 1); }
+.us-page-button:hover { background: rgb(var(--ink) / .05); }
+.us-page-button:active { background: rgb(var(--ink) / .08); }
+@media (prefers-reduced-motion: reduce) { .us-switch, :where(.us-switch) > span.us-switch-knob { transition: none; } }
+
+.us-page-section { margin-top: 28px; }
+.us-page-section:first-of-type { margin-top: 12px; }
+:where(.us-page-section) > h2.us-page-section-title { margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--sep-line, rgb(var(--ink) / .1)); font: 560 13px/18px var(--font-ui); color: var(--text-secondary); }

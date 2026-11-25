@@ -8,7 +8,8 @@
 //
 // The rule now never depends on a memory being fresh: the card is the PANE's own rectangle, which the DOM keeps in its resting place under a floating sidebar or toolbar (the page area is the window
 // onto it) and which every layout measures anew. While a Seamless float is out the page rectangle sent is
-//   1. the rest this window remembers, when it is a Seamless one (at the window's edge, holding the card) for the same window size and page; else
+//   1. the rest this window remembers, when it is a Seamless one (at the window's edge, holding the card) for the same window size; a page it has no rest for yet (D128: chosen while the float was out, no layout
+//      at rest ever followed) takes the place of the page it does remember; else
 //   2. the card itself, when the measured page rectangle does not hold it (the toolbar's row pushed the page area down, or an old Full rest came back) - at rest too; else
 //   3. as measured (nothing odd).
 // `restFrom` says whether a layout is a rest to remember (or that the window is no longer Seamless and the memory goes); `placeFloat` says what to send (App.tsx physicalLayout calls both).
@@ -44,14 +45,18 @@ export function restFrom(input: FloatLayoutInput): RestSent | 'forget' | null {
   if (input.pageBounds.x > SEAMLESS_EDGE || input.pageBounds.y > SEAMLESS_EDGE || !holds(input.pageBounds, card) || !holds(input.pageBounds, view.bounds)) return null;
   return { pageBounds: { ...input.pageBounds }, views: new Map([[view.tabId, { ...view.bounds }]]), width: input.viewport!.width, height: input.viewport!.height };
 }
+/** Where a page rests: its own remembered place, else - a page chosen while a float was out has none, no layout without a float flag ever followed (D128) - the place of the one page the memory holds. `restFrom` only
+ *  ever remembers ONE whole-page view of a Seamless window, so "where the page rested" is where any single page of that window rests; a memory of several pages (never made by `restFrom`) says nothing. */
+const restOf = (rest: RestSent, tabId: string): Box | undefined => rest.views.get(tabId) ?? (rest.views.size === 1 ? [...rest.views.values()][0] : undefined);
 /** What to send in a Seamless window with one page, or null (not Seamless, a split, a morph, a pinned edge, or nothing odd and nothing to hold: the layout goes as measured). While an edge is out the Seamless rest is held;
  *  at any time a page rectangle that does not hold its pane (the toolbar's row pushed the page area down and the pane stayed, an old Full rest) is the pane's own rectangle. */
 export function placeFloat(input: FloatLayoutInput, rest: RestSent | null): Placed | null {
   if (!single(input)) return null;
   const out = input.floating || input.flags.side || input.flags.top || input.edgeTransition;   // an edge is out (or its transition is playing): the rest is held
   const card = input.measuredView!, [view] = input.views, viewport = input.viewport!;
-  if (out && rest && rest.width === viewport.width && rest.height === viewport.height && rest.views.has(view.tabId) && rest.pageBounds.x <= SEAMLESS_EDGE && rest.pageBounds.y <= SEAMLESS_EDGE && holds(rest.pageBounds, card))
-    return { pageBounds: { ...rest.pageBounds }, views: input.views.map(item => ({ ...item, bounds: { ...rest.views.get(item.tabId)! } })), kind: 'rest' };
+  const place = out && rest && rest.width === viewport.width && rest.height === viewport.height && rest.pageBounds.x <= SEAMLESS_EDGE && rest.pageBounds.y <= SEAMLESS_EDGE && holds(rest.pageBounds, card) ? restOf(rest, view.tabId) : undefined;
+  if (rest && place)
+    return { pageBounds: { ...rest.pageBounds }, views: input.views.map(item => ({ ...item, bounds: { ...place } })), kind: 'rest' };
   if (!holds(input.pageBounds, card) || !holds(input.pageBounds, view.bounds))
     return { pageBounds: { ...card }, views: input.views.map(item => ({ ...item, bounds: { ...card } })), kind: 'card' };
   return null;

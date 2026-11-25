@@ -2,9 +2,9 @@
    is a 52px row: its favicon on a 32px tile, the title at 13/500 over the page's address at 12px (the tab you are on wears
    the accent ring, not a check, so every host ends on one edge), and its close button always within reach (quiet at rest, full on hover). Compact keeps A's one-line rows. */
 :root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] :is(.tab-result,.tab-result-row){height:52px;min-height:52px}
-:root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] .tab-result{gap:12px;padding:0 40px 0 10px}
+:root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] .tab-result{gap:12px;padding:0 40px 0 8px}
 /* R4-48 P1-2: the other workspaces' matches while searching, each group under its workspace's name (the command bar's section label, on the header's x = 32 edge). */
-:root:root:root .browser-popup.popup-content-tabs .tab-result-group-head{height:28px;padding:10px 8px 0 32px;box-sizing:border-box;font:500 12px/18px var(--font-ui,inherit);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:root:root:root .browser-popup.popup-content-tabs .tab-result-group-head{height:28px;padding:8px 8px 0 32px;box-sizing:border-box;font:500 12px/18px var(--font-ui,inherit);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 :root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] .tab-result-tile{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,currentColor 6%,transparent);box-shadow:inset 0 0 0 .5px color-mix(in srgb,currentColor 10%,transparent)}
 :root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] .tab-result-label{flex-direction:column;align-items:stretch;justify-content:center;gap:2px}
 :root:root:root .browser-popup.popup-content-tabs .tab-result-list[data-density=comfortable] .tab-result-label>strong{flex:none;font:500 13px/18px var(--font-ui,inherit)}

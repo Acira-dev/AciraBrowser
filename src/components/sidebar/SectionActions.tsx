@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { BrowserMenuIcon } from '../BrowserMenu';
 import { Eye,SlidersHorizontal } from '../AppIcons';
-import { requestSidebar,SECTION_NAMES,type SectionId } from '../../ui/sidebarSections';
+import { requestSidebar,SECTION_NAMES,sectionLocked,type SectionId } from '../../ui/sidebarSections';
 
 import { t } from '../../i18n';
 type Row=(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string)=>ReactNode;
@@ -13,13 +13,13 @@ const sep=<hr className="acira-menu-sep"/>;
 export function sectionActions(row:Row,windowId:string|undefined,section:SectionId,close:()=>void):ReactNode{
  const ask=(request:Parameters<typeof requestSidebar>[1])=>()=>{requestSidebar(windowId,request);close();};
  return <>
-  {row(t("sidebarmenu.hideSection"),Eye,ask({kind:'hide',section}))}
+  {!sectionLocked(section)&&row(t("sidebarmenu.hideSection"),Eye,ask({kind:'hide',section}))}
   {row(t("sidebarmenu.customize"),SlidersHorizontal,ask({kind:'customize'}))}
  </>;
 }
 
 /** The right-click menu of a section that has no menu of its own (Downloads, History, Reading list, Favorites' free space): just those two rows. */
-export function SectionMenu({row,windowId,section,close}:{row:Row;windowId?:string;section:SectionId;close:()=>void}){
- return <div role="group" aria-label={SECTION_NAMES[section]}>{sectionActions(row,windowId,section,close)}</div>;
+export function SectionMenu({row,windowId,section,close,before}:{row:Row;windowId?:string;section:SectionId;close:()=>void;/** Rows of this section's own, above the two common ones (Favorites: "Favorites' tabs in the tab list", Beta 14, H: easy to find where the Favorites are). */before?:ReactNode}){
+ return <div role="group" aria-label={SECTION_NAMES[section]}>{before&&<>{before}{sep}</>}{sectionActions(row,windowId,section,close)}</div>;
 }
 export {sep as sectionSeparator};

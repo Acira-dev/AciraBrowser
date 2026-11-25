@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState,type KeyboardEvent} from 'react';
+import {useOwnVideo} from '../ui/ownVideo';
 import {Check} from './AppIcons';
 import {useNewTabPreferences,selectedArtwork,artworkCatalog as workspaceCovers,type CatalogArtwork} from '../ui/newTabPreferences';
 import {usePersonalArtwork} from '../ui/usePersonalArtwork';
@@ -9,16 +10,20 @@ import {artworkCollectionChoice,artworkCollectionOptions,coverView,personalCover
 import {useRemoteArtwork} from '../ui/useRemoteArtwork';
 import {t,translateText} from '../i18n';
 import {DotMatrix} from './DotMatrix';
+import {EdgeThumb} from './EdgeThumb';
 import './WorkspaceCoverPicker.css';
 
 /** Settings › Accessibility › reduce motion, as the app root carries it (this picker also lives in the overlay, outside App's state). */
 const reducedMotion=()=>document.querySelector('.app')?.getAttribute('data-reduced-motion')==='true';
 
 export function WorkspaceCoverPicker({profileId,privateMode=false,compact=false,showVisibility=true,personalAssets,personalPending=false}:{profileId:string;privateMode?:boolean;compact?:boolean;showVisibility?:boolean;personalAssets?:PersonalArtwork[];personalPending?:boolean}){
+ const grid=useRef<HTMLDivElement>(null);
  const [prefs,update]=useNewTabPreferences(profileId,privateMode),visible=prefs.modules.artwork;
  const personal=usePersonalArtwork(profileId,privateMode,personalAssets===undefined&&Boolean(runtime.platform)),assets=personalAssets??personal.assets;
  const day=useArtworkDay(prefs.daily||prefs.hourly,prefs.hourly),selected=selectedArtwork(prefs,profileId,day,assets);
  const pending=personalAssets===undefined?personal.pending:personalPending;
+ /* 14.4 live wallpaper: the profile's own video, when it has one, is a choice here too; choosing a picture turns it off */
+ const ownVideo=useOwnVideo(profileId,privateMode,Boolean(runtime.platform)).video;
  const [gallery]=useState(()=>crypto.randomUUID());
  const mine=personalCovers(assets),listed=showMyArtworks(assets.length,prefs.artwork,privateMode),[browsingMine,setBrowsingMine]=useState(false),view:CoverView=coverView(prefs.collection,prefs.artwork,browsingMine,listed);
  const options:{value:CoverView;label:string}[]=[...artworkCollectionOptions().filter(item=>!privateMode||item.value==='built-in'),...(listed?[{value:'personal' as const,label:t('ntp.personal')}]:[])];
@@ -27,10 +32,10 @@ export function WorkspaceCoverPicker({profileId,privateMode=false,compact=false,
  const coverName=(cover:CatalogArtwork)=>view==='personal'?cover.name:translateText(cover.name);
  const choose=(value:CoverView)=>{
   if(value==='personal'){setBrowsingMine(true);if(!prefs.artwork.startsWith('personal:')&&mine[0])setImage(mine[0].id);return;}
-  setBrowsingMine(false);update({...artworkCollectionChoice(value,prefs.artwork),modules:{...prefs.modules,artwork:true}});
+  setBrowsingMine(false);update({...artworkCollectionChoice(value,prefs.artwork),ownVideo:false,modules:{...prefs.modules,artwork:true}});
  };
  const setVisible=(artwork:boolean)=>update({modules:{...prefs.modules,artwork}});
- const setImage=(artwork:string)=>update({artwork,daily:false,perTab:false,hourly:false,collection:'built-in',modules:{...prefs.modules,artwork:true}});
+ const setImage=(artwork:string)=>update({artwork,daily:false,perTab:false,hourly:false,collection:'built-in',ownVideo:false,modules:{...prefs.modules,artwork:true}});
  const keyboard=(event:KeyboardEvent<HTMLDivElement>)=>{
   if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
   const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]'));
@@ -41,14 +46,16 @@ export function WorkspaceCoverPicker({profileId,privateMode=false,compact=false,
  };
  return <div className={`workspace-cover-picker${compact?' is-compact':''}`}>
   <label className="workspace-cover-collection"><span>{t('ntp.collection')}</span><select aria-label={t('ntp.collection')} value={view} onChange={event=>choose(event.target.value as CoverView)}>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-  {showVisibility&&<label className="workspace-cover-visibility"><span>{t('local.showWorkspaceCover')}</span><input type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/></label>}
-  {view==='built-in'||view==='personal'?<div className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={keyboard}>
+  {ownVideo&&!privateMode&&<label className="workspace-cover-visibility" data-own-video=""><span>{t('ntp.video')}</span><input className="popup-check" type="checkbox" checked={prefs.ownVideo} onChange={event=>update({ownVideo:event.target.checked,modules:{...prefs.modules,artwork:true}})}/></label>}
+  {showVisibility&&<label className="workspace-cover-visibility"><span>{t('local.showWorkspaceCover')}</span><input className="popup-check" type="checkbox" checked={visible} onChange={event=>setVisible(event.target.checked)}/></label>}
+  {view==='built-in'||view==='personal'?<div ref={grid} className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={keyboard}>
    {choices.map((cover,index)=><button key={cover.id} type="button" role="radio" aria-checked={selected.id===cover.id} aria-label={t('local.namedWorkspaceCover', { name: coverName(cover) })} tabIndex={(choices.some(item=>item.id===selected.id)?selected.id===cover.id:index===0)?0:-1} onClick={()=>setImage(cover.id)}>
     <CoverThumbnail src={cover.src} position={cover.objectPosition||cover.position} selected={selected.id===cover.id} eager={index<12}/><span>{coverName(cover)}</span>
    </button>)}
-  </div>:<div className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]:not(:disabled)')];if(!buttons.length)return;event.preventDefault();const at=buttons.indexOf(document.activeElement as HTMLButtonElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(at+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+buttons.length)%buttons.length;buttons[next]?.focus();buttons[next]?.click();}}>
+  </div>:<div ref={grid} className="workspace-cover-grid" role="radiogroup" aria-label={t('local.workspaceCover')} onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]:not(:disabled)')];if(!buttons.length)return;event.preventDefault();const at=buttons.indexOf(document.activeElement as HTMLButtonElement),next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(at+(['ArrowLeft','ArrowUp'].includes(event.key)?-1:1)+buttons.length)%buttons.length;buttons[next]?.focus();buttons[next]?.click();}}>
    {Array.from({length:6},(_,index)=>{const seed=`cover-${gallery}-${index}`;return <RemoteCover key={prefs.collection+seed} collection={prefs.collection} seed={seed} profileId={profileId} selected={prefs.collectionSeed===seed} enabled={!privateMode} onChoose={()=>update({collectionSeed:seed,collectionExcludeId:'',daily:false,perTab:false,hourly:false,modules:{...prefs.modules,artwork:true}})}/>;})}
   </div>}
+  <EdgeThumb scroller={grid}/>
   {prefs.artwork.startsWith('personal:')&&!assets.some(item=>'personal:'+item.id===prefs.artwork)&&<p className="workspace-cover-notice" role="status">{pending?t('local.personalCoverLoading'):t('local.personalCoverMissing')}</p>}
   {personalAssets===undefined&&personal.error&&<p className="workspace-cover-notice" role="alert">{personal.error}</p>}
  </div>;
@@ -71,7 +78,7 @@ const tileSource=(src:string)=>{
 };
 
 /** One thumbnail. The dot matrix stands in it at once, with nothing behind the dots, and the picture fades in over it as soon as it has decoded; a picture that is already cached skips straight to itself. */
-function CoverThumbnail({src:full,position,failed=false,selected,eager=false}:{src?:string;position?:string;failed?:boolean;selected:boolean;eager?:boolean}){
+export function CoverThumbnail({src:full,position,failed=false,selected,eager=false}:{src?:string;position?:string;failed?:boolean;selected:boolean;eager?:boolean}){
  const src=full?tileSource(full):undefined;
  const [decoded,setDecoded]=useState(''),[gone,setGone]=useState(false),[near,setNear]=useState(eager),box=useRef<HTMLSpanElement>(null),ready=Boolean(src)&&decoded===src,waiting=!failed&&!gone;
  /* Dots are drawn for the tiles in view (the first rows, then any scrolled near): 84 canvases mounting with the popup cost its first frame ~15ms. */

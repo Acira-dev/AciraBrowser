@@ -8,20 +8,15 @@ import { createInitialState,reduceBrowser } from '../src/runtime/core';
 import { groupForTab } from '../src/runtime/tabGroups';
 
 // R3-49 / R3-50: the sidebar's hover "+" on a group header and the actions of its split header menu.
-test('the "+" on a group adds a tab after its last tab and joins it to the group, naming the tab once', () => {
+test('the "+" on a group is ONE action: a new tab that names the group, after its last tab (14.1: no loose frame before the join)', () => {
   const actions = newTabInGroupActions({ id: 'group-1' }, 'tab-last', 'profile-1', 'tab-new');
-  assert.deepEqual(actions, [
-    { type: 'tab.new', id: 'tab-new', browserProfileId: 'profile-1', afterId: 'tab-last' },
-    { type: 'tab.group.assign', tabIds: ['tab-new'], groupId: 'group-1' },
-  ]);
+  assert.deepEqual(actions, [{ type: 'tab.new', id: 'tab-new', browserProfileId: 'profile-1', afterId: 'tab-last', groupId: 'group-1' }]);
 });
 
-test('the "+" on a collapsed group opens it first, so the new tab shows', () => {
+test('the "+" on a collapsed group is the same one action: the join opens the group, so the new tab shows', () => {
   const actions = newTabInGroupActions({ id: 'group-1', collapsed: true }, undefined, 'profile-1', 'tab-new');
-  assert.equal(actions[0].type, 'tab.group.update');
-  assert.deepEqual((actions[0] as { patch: object }).patch, { collapsed: false });
-  assert.deepEqual(actions.map(action => action.type), ['tab.group.update', 'tab.new', 'tab.group.assign']);
-  assert.ok(!('afterId' in actions[1]), 'with no member to follow the tab is appended');
+  assert.deepEqual(actions.map(action => action.type), ['tab.new']);
+  assert.ok(!('afterId' in actions[0]), 'with no member to follow the tab is appended');
 });
 
 test('split group actions keep the contract names and fields and are in the reducer union (split.unsplit, split.close, split.rename, split.addTab)', () => {
@@ -98,4 +93,58 @@ test('the tab menu offers Move to tab group only to tabs that can be grouped', (
   assert.equal(privateTab.privacy, 'private');
   const grouped = reduceBrowser(withPrivate, { type: 'tab.group.create', tabId: privateTab.id, name: 'G' } as BrowserAction);
   assert.equal(grouped.tabGroups.length, 0, 'the reducer refuses a group for a private tab, so the row could never work');
+});
+
+// 14.1 (reported 21 Nov, Windows): pressing a folder's "+" drew the new "New tab" row ABOVE the folder's header for a frame or two, then it jumped to the end
+// of the group. The interface draws tab.new on the press frame (runtime/client.ts OPTIMISTIC) but drew the join only when main answered: in between the
+// tab was loose at the end of the list, and "new tabs at the top" shows such a tab under the New tab row. Now the one state after the press has it inside.
+const NEW_ID = 'tab-33333333-3333-4333-8333-333333333333';
+const groupScene = (collapsed = false) => {
+  let state = createInitialState();
+  const first = state.tabs[0];
+  state = reduceBrowser(state, { type: 'tab.new', url: 'https://example.com/b', id: 'tab-11111111-1111-4111-8111-111111111111' });
+  state = reduceBrowser(state, { type: 'tab.group.create', tabId: first.id, name: 'trying', color: 'red' });
+  const group = state.tabGroups[0];
+  state = reduceBrowser(state, { type: 'tab.group.assign', tabIds: ['tab-11111111-1111-4111-8111-111111111111'], groupId: group.id });
+  if (collapsed) state = reduceBrowser(state, { type: 'tab.group.update', id: group.id, patch: { collapsed: true }, keepActive: true });
+  return { state, group, first };
+};
+test('the "+" puts the new tab inside the group in the very first state: never a loose tab, never before the header', () => {
+  const { state, group, first } = groupScene();
+  const members = state.tabs.filter(tab => groupForTab(state, tab)?.id === group.id), last = members.at(-1)!;
+  const [action] = newTabInGroupActions(group, last.id, first.browserProfileId, NEW_ID);
+  const next = reduceBrowser(state, action);
+  const made = next.tabs.find(tab => tab.id === NEW_ID)!;
+  assert.equal(groupForTab(next, made)?.id, group.id, 'in the group in the one state the press makes');
+  const order = next.tabs.map(tab => tab.id), inGroup = next.tabs.filter(tab => groupForTab(next, tab)?.id === group.id).map(tab => tab.id);
+  assert.deepEqual(inGroup.at(-1), NEW_ID, 'it is the group\'s last tab');
+  assert.deepEqual(order.slice(order.indexOf(inGroup[0]), order.indexOf(inGroup[0]) + inGroup.length), inGroup, 'the group stays one block');
+  assert.equal(next.activeTabId, NEW_ID, 'and it is the current tab');
+  assert.equal(next.tabGroups.find(item => item.id === group.id)?.lastActiveTabId, NEW_ID, 'the group remembers it as its last used tab');
+  assert.equal(next.tabGroups.length, state.tabGroups.length, 'no second group of the same name was made');
+  assert.equal(next.revision, state.revision + 1, 'one step');
+});
+test('the "+" on a collapsed group opens it in the same state as the new tab', () => {
+  const { state, group, first } = groupScene(true);
+  assert.equal(state.tabGroups[0].collapsed, true);
+  const members = state.tabs.filter(tab => groupForTab(state, tab)?.id === group.id);
+  const next = reduceBrowser(state, newTabInGroupActions({ ...group, collapsed: true }, members.at(-1)!.id, first.browserProfileId, NEW_ID)[0]);
+  assert.equal(next.tabGroups[0].collapsed, false, 'opened');
+  assert.equal(groupForTab(next, next.tabs.find(tab => tab.id === NEW_ID)!)?.id, group.id);
+});
+test('a tab.new naming a group that is gone, or asking for a private tab, opens a plain tab and never makes a group', () => {
+  const { state, first } = groupScene();
+  const gone = reduceBrowser(state, { type: 'tab.new', id: NEW_ID, browserProfileId: first.browserProfileId, groupId: 'group-missing' });
+  assert.equal(gone.tabs.find(tab => tab.id === NEW_ID)?.group, '');
+  assert.equal(gone.tabGroups.length, state.tabGroups.length);
+  const privateTab = reduceBrowser(state, { type: 'tab.new', id: NEW_ID, browserProfileId: first.browserProfileId, privacy: 'private', groupId: state.tabGroups[0].id });
+  assert.equal(privateTab.tabs.find(tab => tab.id === NEW_ID)?.group, '', 'a private tab never joins a group');
+});
+test('main accepts tab.new with a known group and refuses an unknown one', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const { validateAction } = require('../desktop/validation.cjs');
+  const { state, first } = groupScene();
+  assert.doesNotThrow(() => validateAction({ type: 'tab.new', id: NEW_ID, browserProfileId: first.browserProfileId, groupId: state.tabGroups[0].id }, state));
+  assert.throws(() => validateAction({ type: 'tab.new', id: NEW_ID, groupId: 'group-missing' }, state));
 });

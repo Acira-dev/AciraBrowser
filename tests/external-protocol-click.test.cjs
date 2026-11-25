@@ -43,7 +43,7 @@ async function click(url,{apps={},answer=true}={}){const asked=[],toasts=[],open
 test('a link an installed app handles asks "Open <App>?" by name, and Open hands it on',async()=>{
  const apps={'zoommtg:':'zoom.us.app','slack:':'Slack','spotify:':'Spotify','sms:':'Messages','facetime:':'FaceTime','msteams:':'Microsoft Teams','mailto:':'Mail'};
  for(const [url,name] of [['zoommtg://zoom.us/join?confno=1','zoom.us'],['slack://open','Slack'],['spotify:track:1','Spotify'],['sms:+15550100','Messages'],['facetime:+15550100','FaceTime'],['msteams:/l/meetup-join/x','Microsoft Teams'],['mailto:a@example.com','Mail']]){
-  const r=await click(url,{apps});assert.equal(r.result,'opened',url);assert.deepEqual(r.asked,[{message:`Open ${name}?`,detail:url}]);assert.deepEqual(r.opened,[url]);assert.deepEqual(r.toasts,[]);
+  const r=await click(url,{apps});assert.equal(r.result,'opened',url);assert.deepEqual(r.asked,[{message:`Open ${name}?`,detail:url,scheme:url.split(':')[0],always:!/^(mailto|tel):/.test(url)}]);/* Beta 14: the prompt also gets the link type and whether it offers "Always for this site" (never for mailto: and tel:) */assert.deepEqual(r.opened,[url]);assert.deepEqual(r.toasts,[]);
  }
  const cancelled=await click('slack://open',{apps,answer:false});assert.equal(cancelled.result,'cancelled');assert.deepEqual(cancelled.opened,[],'Cancel opens nothing');
 });

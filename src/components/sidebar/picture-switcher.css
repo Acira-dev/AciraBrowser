@@ -1,0 +1,158 @@
+/* Beta 14 section AG: the Ctrl+Tab viewer with page pictures (PictureSwitcher.tsx).
+ *
+ * EXACT SAMPLE PARITY (reported 14 Nov): every rule below is the approved sample's (the reference sample: b14-switcher.css, b14-r3.css, b14-r4.css), value for value,
+ * in the sample's own order, with the rules of the dropped variants (strip, grid, large + row, the floating pill, the hint line) left out. The class names are the sample's too, so a
+ * rule here can be laid next to its sample line. The only changes, each named:
+ *  1. the arrival and leave animations sit on the surface through its data-r3 / data-r3-leaving attributes (the sample used :has(), which the interface no longer allows);
+ *  2. `.tab-switcher.sw:has(.r3){overflow:visible}` reads `.tab-switcher.sw{overflow:visible}` (the viewer is the only thing the class holds).
+ * Interface px. --r4-hair / --r4-line are one device pixel (set by the component). */
+
+/* ---- b14-switcher.css ---- */
+/* Beta 14 item 21 SAMPLE ONLY: the Ctrl+Tab recent list with page pictures (B14PictureSwitcher.tsx). */
+@property --sw-c { syntax: '<color>'; inherits: true; initial-value: transparent; }
+.tab-switcher.sw{padding:0;overflow:hidden;gap:0;display:flex;flex-direction:column}
+.sw-pic{position:relative;display:block;width:100%;aspect-ratio:16/10;border-radius:7px;overflow:hidden;
+ background:color-mix(in oklab,var(--sw-tile) 14%,rgb(var(--ink) / .04));box-shadow:inset 0 0 0 1px rgb(var(--ink) / .08)}
+:where(.sw-pic)>img.sw-pic-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.sw-pic::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgb(var(--ink) / .08);pointer-events:none}
+:where(.sw-pic)[data-state=sleeping]>img.sw-pic-image{opacity:.5;filter:saturate(.55)}
+.sw-pic-icon{position:absolute;inset:0;display:grid;place-items:center}
+.sw-private{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:rgb(var(--ink) / .6);font-size:var(--text-11,11px)}
+.sw-pic[data-state=private]{background:rgb(var(--ink) / .05)}
+.sw-moon,.sw-audio{position:absolute;top:6px;right:6px;display:grid;place-items:center;height:20px;min-width:20px;padding:0 4px;border-radius:10px;
+ background:color-mix(in oklab,var(--chrome-bg,#202020) 82%,transparent);color:rgb(var(--ink) / .8);box-shadow:0 0 0 1px rgb(var(--ink) / .08)}
+.sw-moon+.sw-audio{right:30px}
+/* the equaliser (TabSoundMeter, the tab strip's own) shown inside the chip */
+.sw-audio .tab-sound-meter{display:block;color:rgb(var(--ink) / .85)}
+:where(.sw-private)>.sw-private-icon:first-child{flex:none}
+
+/* ---- b14-r3.css ---- */
+/* Beta 14 item 21 round 3 SAMPLE ONLY (B14R3Switcher.tsx). Interface px. */
+/* The pop-up's glass (captured page, blurred 32 px, saturated 1.7x, tinted) is kept only inside the sections' shapes. Its own
+ * rim and float shadow go: each section draws its own rim and its own shadow. The tint is thinner than the menus' so the page's
+ * colour reads through: glass, not grey. */
+.app .acira-popup-surface[data-r3] .popup-sheet-material{-webkit-mask:var(--r3-mask) 0 0 / 100% 100% no-repeat;mask:var(--r3-mask) 0 0 / 100% 100% no-repeat}
+.app .acira-popup-surface[data-r3] .popup-material{box-shadow:none}
+.app .acira-popup-surface[data-r3] .popup-backdrop-tint{background:rgb(24 24 28 / .58)}
+.app .acira-popup-surface[data-r3=light] .popup-backdrop-tint{background:rgb(248 248 250 / .74)}
+.app .acira-popup-surface[data-r3] .popup-backdrop-base{background:transparent}
+.r3{--r3-fg:var(--ts-fg);--r3-muted:var(--ts-muted);--r3-faint:var(--ts-faint);
+ display:flex;flex-direction:column;align-items:center;margin:0 auto;font-family:var(--font-ui,inherit)}
+.r3-glass{position:relative;flex:none;box-sizing:border-box;
+ box-shadow:inset 0 0 0 .5px rgb(255 255 255 / .16),inset 0 1px 0 rgb(255 255 255 / .10),
+  0 0 0 .5px rgb(0 0 0 / .35),0 1px 2px rgb(0 0 0 / .18),0 10px 24px -8px rgb(0 0 0 / .38),0 28px 60px -20px rgb(0 0 0 / .50)}
+.r3[data-theme=light] .r3-glass{box-shadow:inset 0 0 0 .5px rgb(255 255 255 / .75),inset 0 1px 0 rgb(255 255 255 / .9),
+  0 0 0 .5px rgb(0 0 0 / .10),0 1px 2px rgb(0 0 0 / .08),0 10px 24px -8px rgb(0 0 0 / .16),0 28px 60px -20px rgb(0 0 0 / .24)}
+/* a soft sheen from the top edge, like light on glass */
+.r3-glass::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgb(255 255 255 / .07),transparent 38%)}
+.r3[data-theme=light] .r3-glass::before{background:linear-gradient(180deg,rgb(255 255 255 / .45),transparent 40%)}
+/* A: upper section. The page bleeds to 10 px of its edges; inner radius 16 + 10 = outer 26. */
+.r3-upper{border-radius:26px;padding:10px 10px 0}
+.r3-preview{position:relative;flex:none;border-radius:16px}
+.r3-preview .sw-pic{width:100%;height:100%;aspect-ratio:auto;border-radius:inherit;box-shadow:0 1px 2px rgb(0 0 0 / .22)}
+.r3-preview .sw-pic::after{border-radius:inherit}
+.r3-name-slot{position:relative;height:66px}
+.r3-layer{position:absolute;inset:0;border-radius:inherit}
+.r3-layer[data-top]{animation:r3-fade 120ms cubic-bezier(.4,0,.2,1) both}
+@keyframes r3-fade{from{opacity:0}to{opacity:1}}
+.r3-name-layer{transition:opacity 80ms cubic-bezier(.4,0,.2,1)}
+.r3-name-layer[data-under]{opacity:0;transition:opacity 60ms cubic-bezier(.8,0,.6,1)}
+.r3-name-layer[data-top]{animation:r3-fade 100ms cubic-bezier(.4,0,.2,1) 40ms both}
+.r3-name{display:flex;align-items:center;gap:12px;height:100%;padding:0 18px 0 8px;min-width:0}
+.r3-name-icon{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:rgb(var(--ink) / .07);box-shadow:inset 0 0 0 .5px rgb(var(--ink) / .10)}
+.r3-name-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.r3-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:21px;font-weight:600;letter-spacing:-.01em;color:var(--r3-fg)}
+.r3-site{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;line-height:16px;color:var(--r3-faint)}
+.r3-count{flex:none;font-size:12px;color:var(--r3-faint);font-variant-numeric:tabular-nums}
+/* lower section (A) and dock (B): narrower and rounder than the section above, so the pair has a shape */
+.r3-lower{margin-top:12px;border-radius:28px;padding:0 4px 10px}
+/* the row: whole items 14 px apart, 14 px padding each side; the item past an end starts exactly at the edge */
+.r3-row{position:relative;flex:none;overflow:hidden;box-sizing:border-box;padding:14px 14px 6px;
+ -webkit-mask:linear-gradient(90deg,transparent 0,#000 var(--r3-fs,0px),#000 calc(100% - var(--r3-fe,0px)),transparent 100%)}
+.r3-row[data-more-s]{--r3-fs:14px}
+.r3-row[data-more-e]{--r3-fe:14px}
+.r3-track{display:flex;gap:14px;transition:transform 180ms cubic-bezier(.2,0,0,1)}
+.r3-item{flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;width:96px;cursor:default}
+.r3-item-icon{display:grid;place-items:center;width:14px;height:14px}
+.r3-thumb{position:relative;display:block;width:96px;height:60px;border-radius:9px}
+.r3-thumb .sw-pic{width:100%;height:100%;aspect-ratio:auto;border-radius:9px}
+.r3-thumb .sw-pic::after{border-radius:9px}
+.r3-thumb .sw-moon,.r3-thumb .sw-audio{top:4px;right:4px;height:16px;min-width:16px;padding:0 3px}
+.r3-thumb .sw-private-word{display:none}
+.r3-thumb>.sw-pic{position:relative;z-index:1}
+/* the sections' shadows reach past the pop-up's box: nothing may clip them */
+.app .acira-popup-surface[data-r3] :is(.popup-contents,.popup-sheet-plane),.tab-switcher.sw{overflow:visible}
+/* Dark glass over a white page must still read dark: the captured page is dimmed a little before the tint (colour stays);
+ * light glass over a dark page is lifted the same way. */
+.app .acira-popup-surface[data-r3=dark] .popup-backdrop-sources{filter:blur(var(--frost-blur,32px)) saturate(1.8) brightness(.7)}
+.app .acira-popup-surface[data-r3=light] .popup-backdrop-sources{filter:blur(var(--frost-blur,32px)) saturate(1.6) brightness(1.12)}
+.app .acira-popup-surface[data-r3=dark] .popup-backdrop-tint{background:rgb(22 22 26 / .68)}
+
+/* ---- b14-r4.css ---- */
+/* Beta 14 item 21 round 4 SAMPLE ONLY (B14R4Switcher.tsx). On top of b14-r3.css. Interface px; --r4-hair / --r4-line = one device pixel. */
+/* preview + name follow every step */
+.r3-layer.r4-layer{animation:none}
+.r3-layer.r4-layer[data-top]{animation:r3-fade var(--r4-dur,120ms) cubic-bezier(.4,0,.2,1) both}
+.r4-name-layer[data-under]{opacity:0}
+/* the dock: only the row, the same 14 px above the pictures as below their icons */
+.r3-lower.r4-dock{padding:0 4px;border-radius:24px}
+.r3-row.r4-row{padding:14px}
+/* thumbnails: a one-device-pixel hairline like the address field's, and a soft shadow; never a frame */
+.r4-thumb .sw-pic{box-shadow:0 1px 3px rgb(0 0 0 / .18)}
+.r4-thumb .sw-pic::after{box-shadow:inset 0 0 0 var(--r4-hair,1px) rgb(var(--ink) / .07)}
+.r3[data-theme=light] .r4-thumb .sw-pic{box-shadow:0 1px 3px rgb(0 0 0 / .10)}
+/* the highlight: thin Divider-fade lines on the picture's own top and bottom edges (one device pixel, strongest in the middle,
+ * running out into the corners) and a low halo. In 65 ms; the item just left fades in 85 ms; anything older snaps off. */
+.r4-lines,.r4-halo{position:absolute;inset:0;border-radius:9px;pointer-events:none;opacity:0;transition:none}
+.r4-lines{z-index:2;box-sizing:border-box;border:var(--r4-line,1px) solid transparent;
+ border-top-color:color-mix(in oklab,var(--sw-c) 96%,white);border-bottom-color:color-mix(in oklab,var(--sw-c) 96%,white);
+ -webkit-mask:linear-gradient(90deg,transparent 0%,#000 30%,#000 70%,transparent 100%)}
+/* the halo is a soft glow BEHIND the picture, strongest at its middle, peeking out above and below; it never outlines the sides */
+.r4-halo{z-index:0;inset:6px 18px;border-radius:12px;box-shadow:0 0 16px 4px color-mix(in oklab,var(--sw-c) 55%,transparent)}
+.r4-thumb[data-on] :is(.r4-lines,.r4-halo){opacity:1;transition:opacity 65ms cubic-bezier(.4,0,.2,1)}
+.r4-thumb[data-leaving] :is(.r4-lines,.r4-halo){opacity:0;transition:opacity 85ms cubic-bezier(.8,0,.6,1)}
+/* closing: nothing is left mid-fade; the lit picture leaves with the panel */
+.tab-switcher[data-leaving] .r4-thumb[data-leaving] :is(.r4-lines,.r4-halo){transition:none}
+@media(prefers-reduced-motion:reduce){.r4-thumb :is(.r4-lines,.r4-halo){transition:none!important}}
+/* the row moves by whole items in 120 ms, quicker than a held key steps, so it is settled before the next step */
+.r4-row .r3-track{transition:transform 120ms cubic-bezier(.2,0,0,1)}
+/* where you are, at a glance: the other pictures sit slightly back (dimmed), the current one is at full strength. Same
+ * timing as the lines: 65 ms up, 85 ms down for the one just left, an instant step back for anything older. */
+.r4-thumb>.sw-pic{filter:brightness(.74) saturate(.85);transition:none}
+.r3[data-theme=light] .r4-thumb>.sw-pic{filter:brightness(.9) saturate(.8) opacity(.82)}
+.r4-thumb[data-on]>.sw-pic{filter:none;transition:filter 65ms cubic-bezier(.4,0,.2,1)}
+.r4-thumb[data-leaving]>.sw-pic{transition:filter 85ms cubic-bezier(.8,0,.6,1)}
+.tab-switcher[data-leaving] .r4-thumb[data-leaving]>.sw-pic{transition:none}
+
+/* Arrival (sample b14-switcher.css): the menu's blur-and-fade, 140 ms. The surface and its pictures come in together; nothing slides. Leaving is the exact reverse (sample: data-leaving, 140 ms, closed after 150 ms). */
+@keyframes sw-arrive{from{opacity:0;filter:blur(8px);transform:scale(.985)}to{opacity:1;filter:none;transform:none}}
+.native-popup-surface[data-r3]{animation:sw-arrive 140ms cubic-bezier(.2,0,0,1) both}
+@keyframes sw-leave{from{opacity:1;filter:none;transform:none}to{opacity:0;filter:blur(8px);transform:scale(.985)}}
+.native-popup-surface[data-r3][data-r3-leaving]{animation:sw-leave 140ms cubic-bezier(1,0,.8,1) both}
+
+/* ---- not in the sample (named in the report) ---- */
+/* The glass is never see-through (brief section AG, found 13 Nov; the team: "why is it transparent and not frosted?"). The sample paints the sections only from the blurred page
+   snapshot (.popup-backdrop-sources) over a TRANSPARENT base, so wherever there is no snapshot the live page shows through a thin tint: at glass opacity 100 (the app takes no snapshot:
+   provider "opaque"), while the snapshot is still being decoded (also "opaque"), when it never comes (the "native" fallback, whose own rectangle is not section-shaped), and with the
+   system's reduce transparency / more contrast / forced colours (the captured layer is hidden whatever the provider says). The base is therefore ALWAYS a solid in the popup's own
+   surface colour: under the frost it is invisible (the snapshot canvases are opaque and reach 64 px past the sections), and in every state without frost it is what the sections are.
+   Real-app check (14 Nov, alpha over the sections' padding): 0.07-0.43 before at glass 100 and in the native fallback, 1.00 after in every state. */
+.app .acira-popup-surface[data-r3] .popup-backdrop-base{background:rgb(var(--native-material-tint-rgb))}
+.app .acira-popup-surface[data-r3][data-material-provider=native] .popup-sheet-material{background:rgb(var(--native-material-tint-rgb))}
+@media(prefers-reduced-transparency:reduce),(prefers-contrast:more),(forced-colors:active){
+ .app .acira-popup-surface[data-r3] .popup-backdrop-tint{background:transparent}
+}
+/* Motion Off (Settings > Appearance > Animation speed, .app[data-reduced-motion=true]): the sample's notes, section 5.6: the highlight jumps, arrival and leaving become an 80 ms fade; the page and the row just change. */
+@keyframes sw-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes sw-fade-out{from{opacity:1}to{opacity:0}}
+.app[data-reduced-motion=true] .native-popup-surface[data-r3]{animation:sw-fade-in 80ms linear both}
+.app[data-reduced-motion=true] .native-popup-surface[data-r3][data-r3-leaving]{animation:sw-fade-out 80ms linear both}
+.app[data-reduced-motion=true] .r4-row .r3-track{transition:none}
+.app[data-reduced-motion=true] .r3-layer.r4-layer[data-top]{animation:none}
+.app[data-reduced-motion=true] .r4-thumb :is(.r4-lines,.r4-halo),.app[data-reduced-motion=true] .r4-thumb>.sw-pic{transition:none}
+/* Right-to-left (named deviation 3). The app keeps its frame physically left-to-right (rtl.css: html[dir='rtl'] .app { direction: ltr }) and lists the surfaces that read right-to-left; the sheet's tab viewer was not on that list,
+   so in Arabic the info row, the dock and the "n of N" string stayed left-to-right (found in the real-app stills, 14 Nov). The viewer reads right-to-left itself: the info row mirrors (its padding too), the dock row flows from the right
+   (the track's translate and the edge fades are mirrored in PictureSwitcher.tsx), and a page's own title and address keep their own direction. */
+html[dir='rtl'] .tab-switcher.sw{direction:rtl}
+html[dir='rtl'] .tab-switcher.sw .r3-name{padding:0 8px 0 18px}
+html[dir='rtl'] .tab-switcher.sw :is(.r3-title,.r3-site){unicode-bidi:plaintext}

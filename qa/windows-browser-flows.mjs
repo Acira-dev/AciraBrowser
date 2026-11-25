@@ -16,6 +16,9 @@ const db=new BrowserDatabase(path.join(root,'browser.sqlite'));db.saveWindow('ma
 const report={passed:false,nativeWindows:process.platform==='win32',rendererOnly,checks:[],errors:[],canonicalAppUntouched:true};
 let app,server;
 const save=()=>fs.writeFile(path.join(out,'result.json'),JSON.stringify(report,null,2)+'\n');
+// A window that was just resized and rescaled (and, the first time, taken from Seamless back to Full) may still be laying itself out: the sidebar and the Mini rail change places.
+// A popup opened in that moment hangs on a control that is about to move away. Wait until the layout has held still for half a second (8 s at most), then open it.
+const settled=async()=>{let last='',same=0;for(let i=0;i<80&&same<5;i++){const now=JSON.stringify(await app.ui.evaluate(async()=>{const l=await window.acira.getBrowserLayout();return l&&{...l,overlay:undefined};}));same=now===last?same+1:0;last=now;await sleep(100);}};
 const closePopup=async()=>{const layout=await app.ui.evaluate(()=>window.acira.getBrowserLayout());if(layout?.overlay)await app.ui.evaluate(id=>window.acira.closeOverlay(id),layout.overlay.id);await poll(()=>app.ui.evaluate(()=>window.acira.getBrowserLayout()),l=>!l?.overlay,'Popup dismissed');};
 const mainWindow=fn=>app.main(({BaseWindow},fn)=>{const w=BaseWindow.getAllWindows().find(w=>w.contentView.children.some(v=>v.webContents?.getURL()==='acira-browser-ui://ui/index.html'));return {size:w.getContentSize(),pages:w.contentView.children.filter(v=>v.webContents?.getURL().startsWith('http://127.0.0.1:')&&v.getVisible()).map(v=>({url:v.webContents.getURL(),bounds:v.getBounds()}))};});
 async function check(name,fn){try{const detail=await fn();report.checks.push({name,passed:true,...(detail?{detail}:{})});console.log('PASS '+name);await save();}catch(error){report.checks.push({name,passed:false,error:String(error.stack||error)});throw error;}}
@@ -80,7 +83,7 @@ try{
  });
  await app.act({type:'settings.update',patch:{windowView:'full',verticalTabs:true}});await app.act({type:'ui.update',patch:{view:'full',workspaceOpen:true,webWorkspaceOpen:true}});
  for(const [width,height,scale]of [[900,600,100],[900,600,125],[900,600,150],[1280,800,150]])await check(`Workspace form remains reachable at ${width}x${height}, ${scale}%`,async()=>{
-  await app.main(({BaseWindow},size)=>BaseWindow.getAllWindows().find(w=>w.contentView.children.some(v=>v.webContents?.getURL()==='acira-browser-ui://ui/index.html')).setSize(...size),[width,height]);await app.act({type:'settings.update',patch:{interfaceScale:scale}});await sleep(200);
+  await app.main(({BaseWindow},size)=>BaseWindow.getAllWindows().find(w=>w.contentView.children.some(v=>v.webContents?.getURL()==='acira-browser-ui://ui/index.html')).setSize(...size),[width,height]);await app.act({type:'settings.update',patch:{interfaceScale:scale}});await sleep(200);await settled();
   await openWorkspace();const overlay=await poll(()=>app.context.pages().find(p=>p.url().includes('view=overlay')),Boolean,'Workspace overlay');await overlay.locator('#ws-edit-name').waitFor();
   const l=await app.ui.evaluate(()=>window.acira.getBrowserLayout());if(report.nativeWindows)assert(l.overlay.bounds.y>=Math.max(l.captionHeight||0,l.pageBounds?.y||0)+7);
   await overlay.locator('#ws-edit-name').fill('Reachable workspace');const create=overlay.locator('form.ws-edit button[type=submit]');await create.scrollIntoViewIfNeeded();assert(await create.isVisible());assert(await create.isEnabled());

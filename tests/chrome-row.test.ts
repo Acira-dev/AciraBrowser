@@ -19,11 +19,15 @@ test('R3-65 every combination: tab layout x Toolbar setting x Focus keeps the ad
       assert.equal(row.menu, true, `${label}: the menu`);
       assert.equal(row.sidebarToggle, layout.sidebarTabs, `${label}: the sidebar button follows the tab layout, in Focus too`);
       assert.equal(row.tabStrip && row.miniTabs, false, `${label}: never a strip and chips together`);
-      assert.equal(row.tabStrip || row.miniTabs || layout.sidebarTabs, true, `${label}: tabs stay reachable`);
+      assert.equal(row.tabStrip || row.miniTabs || row.currentTab || layout.sidebarTabs, true, `${label}: tabs stay reachable`);
+      assert.equal(row.currentTab && row.miniTabs, false, `${label}: never the one chip and the row of chips together`);
+      assert.equal(row.currentTab, focus && !layout.sidebarTabs, `${label}: the one chip is Focus with tabs on top, nothing else`);
+      assert.equal(row.miniTabs, mode === 'compact' && !layout.sidebarTabs, `${label}: the row of chips is Compact's`);
       if (focus) {
         assert.equal(mode, 'focus', label);
         assert.equal(row.exitFocus, true, `${label}: Focus always shows its way out`);
-        assert.deepEqual([row.bookmarksBar, row.extensions, row.optionalButtons, row.overflow, row.tabOverview, row.tabStrip], [false, false, false, false, false, false], `${label}: secondary chrome hides`);
+        assert.deepEqual([row.bookmarksBar, row.extensions, row.optionalButtons, row.overflow, row.tabStrip], [false, false, false, false, false], `${label}: secondary chrome hides`);
+        assert.equal(row.tabOverview, !layout.sidebarTabs, `${label}: Focus keeps the tab-list button when its tabs are on top (it is the only way to the other tabs there), and drops it when the tabs are in the sidebar`);
         assert.equal(row.height, compactRowHeight, `${label}: one slim row`);
       } else {
         assert.equal(row.exitFocus, false, label);
@@ -73,4 +77,33 @@ test('Seamless has no sidebar button: the left edge (or Ctrl+Shift+E) brings the
   assert.equal(sidebarControl(state(true, 'full', 'seamless')).visible, true, 'a window of its own view wins over the default');
   assert.equal(sidebarControl(state(true, 'seamless', 'full')).visible, false);
   assert.equal(sidebarControl(state(false, 'seamless')).visible, false, 'horizontal tabs never had one');
+});
+
+/** What chromeRow answered before Beta 14 (13.8), kept here as the "before" of the table below. */
+function before(mode: 'standard' | 'compact' | 'focus', sidebarTabs: boolean) {
+  const standard = mode === 'standard', focus = mode === 'focus';
+  return { tabStrip: standard && !sidebarTabs, miniTabs: !standard && !sidebarTabs, tabOverview: standard ? sidebarTabs : !focus };
+}
+
+test('AA: the before and after of chromeRow for every combination: only Focus with tabs on top changes, and only in what stands for the tabs', () => {
+  const table: string[] = [];
+  for (const layout of layouts) for (const mode of ['standard', 'compact', 'focus'] as const) {
+    const was = before(mode, layout.sidebarTabs), now = chromeRow(mode, layout.sidebarTabs, TOOLBAR, TAB_ROW);
+    const changed = mode === 'focus' && !layout.sidebarTabs;
+    table.push(`${layout.name.padEnd(7)} ${mode.padEnd(8)} strip ${now.tabStrip ? 'Y' : '-'} chips ${was.miniTabs ? 'Y' : '-'}>${now.miniTabs ? 'Y' : '-'} one chip ${now.currentTab ? 'Y' : '-'} list ${was.tabOverview ? 'Y' : '-'}>${now.tabOverview ? 'Y' : '-'}`);
+    assert.equal(now.tabStrip, was.tabStrip, `${layout.name} ${mode}: the strip`);
+    assert.equal(now.miniTabs, changed ? false : was.miniTabs, `${layout.name} ${mode}: the row of chips`);
+    assert.equal(now.tabOverview, changed ? true : was.tabOverview, `${layout.name} ${mode}: the tab-list button`);
+    assert.equal(now.currentTab, changed, `${layout.name} ${mode}: the one chip`);
+    // everything else, and the height the page geometry is built from, is as it was
+    assert.equal(now.height, mode === 'standard' ? TOOLBAR + (layout.sidebarTabs ? 0 : TAB_ROW) : compactRowHeight, `${layout.name} ${mode}: the row height`);
+  }
+  assert.deepEqual(table, [
+    'strip   standard strip Y chips ->- one chip - list ->-',
+    'strip   compact  strip - chips Y>Y one chip - list Y>Y',
+    'strip   focus    strip - chips Y>- one chip Y list ->Y',
+    'sidebar standard strip - chips ->- one chip - list Y>Y',
+    'sidebar compact  strip - chips ->- one chip - list Y>Y',
+    'sidebar focus    strip - chips ->- one chip - list ->-',
+  ]);
 });

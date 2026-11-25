@@ -14,6 +14,8 @@ const VERSION = 1, SAFE_PROFILE = /^[A-Za-z0-9_.:-]{1,120}$/;
 /** The welcome's steps, in order (kept as they were: the welcome is section AL's, see insider-service.cjs). */
 const WELCOME_STEPS = Object.freeze(['welcome', 'new', 'something', 'seal', 'card']);
 const WELCOME_STATES = Object.freeze([null, 'owed', 'done']);
+/** How a welcome came to be `done` (D146): 'person' = the person finished it or closed it themselves; 'carried' = the profile copy came from a computer where it was seen. A `done` with neither is a Beta 14.0 / 14.1 record, which was written the moment the welcome OPENED (so a welcome that vanished a second later counts as seen): it proves nothing about what the person saw. */
+const WELCOME_ENDS = Object.freeze(['person', 'carried']);
 
 /** A profile that has never touched the programme. */
 // `enroll` (automatic enrollment, 16 Nov): when this profile first asked (ms) and whether it must never ask again (it got its number, or enrollment was closed or full).
@@ -30,6 +32,7 @@ function clean(raw) {
   const state = raw.welcome?.state ?? null;
   local.welcome.state = WELCOME_STATES.includes(state) ? state : null;
   local.welcome.step = local.welcome.state === 'owed' && WELCOME_STEPS.includes(raw.welcome?.step) ? raw.welcome.step : null;
+  if (local.welcome.state === 'done' && WELCOME_ENDS.includes(raw.welcome?.by)) local.welcome.by = raw.welcome.by;
   if (Number.isSafeInteger(raw.enroll?.firstTry) && raw.enroll.firstTry > 0) local.enroll.firstTry = raw.enroll.firstTry;
   local.enroll.stopped = raw.enroll?.stopped === true;
   return local;

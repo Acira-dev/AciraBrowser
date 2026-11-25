@@ -48,7 +48,7 @@ NEW_PRIVATE_WINDOW={'en':'New private window','es':'Nueva ventana privada','fr':
 DESKTOP_ACTIONS=[('NewWindow','--acira-new-window',NEW_WINDOW),('NewPrivateWindow','--acira-new-private-window',NEW_PRIVATE_WINDOW)]
 def desktop_names(names):return ''.join('Name'+('' if code=='en' else '['+code+']')+'='+text+'\n' for code,text in names.items())
 def desktop_entry(name,slug,target):
- head='[Desktop Entry]\nType=Application\nName='+name+'\nComment=An independent browser\nExec='+desktop_quote(target)+' %U\nIcon='+slug+'\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;\nStartupWMClass='+slug+'.desktop\nActions='+''.join(action+';' for action,_,_ in DESKTOP_ACTIONS)+'\n'
+ head='[Desktop Entry]\nType=Application\nName='+name+'\nComment=An independent browser\nExec='+desktop_quote(target)+' %U\nIcon='+slug+'\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;'+('' if slug.endswith('-qa') else 'x-scheme-handler/acira;')+'\nStartupWMClass='+slug+'.desktop\nActions='+''.join(action+';' for action,_,_ in DESKTOP_ACTIONS)+'\n'
  return head+''.join('\n[Desktop Action '+action+']\n'+desktop_names(names)+'Exec='+desktop_quote(target)+' '+flag+'\nIcon='+slug+'\n' for action,flag,names in DESKTOP_ACTIONS)
 desktop.write_text(desktop_entry(name,slug,target),encoding='utf-8')  # the launcher actions' names are Japanese, Arabic, Hindi...: never the locale's encoding (a Latin-1 locale raised UnicodeEncodeError after the AppImage was copied)
 receipt.write_text(json.dumps({'schema':1,'product':name,'sha256':image_hash,'updatableFile':str(target),'profilePreserved':True},indent=2)+'\n')

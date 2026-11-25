@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { runtime } from '../../../runtime/client';
+import { insiderCall, useFeedbackView } from '../../../runtime/feedback';
 import type { UpdateStatus } from '../../../runtime/nativeNetwork';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import type { SettingsPanel } from '../panels';
@@ -16,6 +17,8 @@ const message = (error: unknown) => (error instanceof Error ? error.message.repl
 function Updates() {
   const [status, setStatus] = useState<UpdateStatus>();
   const [problem, setProblem] = useState('');
+  // Beta 14: "Insider builds" is offered only to a profile with a valid Insider pass (and an Insider feed): while the programme is hidden or there is no pass, there is no row.
+  const insider = useFeedbackView('updates').insider;
   const refresh = useCallback(async () => { try { setStatus((await runtime.service({ type: 'update.status' })).update); } catch (reason) { setProblem(message(reason)); } }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   // Every change, wherever it came from (the toolbar panel's ring, a look in the background, a failure): without this a download resumed from
@@ -68,6 +71,9 @@ function Updates() {
       <SettingRow id="app-updates-channel" title={t("updates.updateChannel")} detail={status?.channel === 'beta' ? t('updates.betaDetail') : t('updates.stableDetail')}>
         <Select label={t("updates.updateChannel")} value={status?.channel ?? 'stable'} disabled={!status?.supported} options={[{ value: 'stable', label: t("updates.stable") }, { value: 'beta', label: t("updates.beta") }]} onChange={(next) => void channel(next)} />
       </SettingRow>
+      {insider.channel.offered && <SettingRow id="app-updates-insider" title={t('insider.settings.title')} detail={t('insider.settings.detail')}>
+        <Switch label={t('insider.settings.title')} checked={insider.channel.on} disabled={!status?.supported} onChange={(next) => void insiderCall({ type: 'insider.channel', on: next }).then(() => refresh())} />
+      </SettingRow>}
       {problem && <SettingNote>{problem}</SettingNote>}
       {(status?.status === 'error' || status?.status === 'paused') && status.error && <SettingNote>{t('import.technicalDetails')}: {status.error}</SettingNote>}
       {lastResortUrl(status) && <SettingNote><button type="button" className="acira-button acira-button-quiet" onClick={() => void runtime.dispatch({ type: 'tab.new', url: lastResortUrl(status)! })}>{t('update.lastResort')}</button></SettingNote>}

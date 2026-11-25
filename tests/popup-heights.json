@@ -10,7 +10,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -63,7 +63,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 154
+  "measured": 204
  },
  {
   "kind": "downloads",
@@ -214,7 +214,7 @@
    "workspaces": 1,
    "recent": 0
   },
-  "measured": 279
+  "measured": 318
  },
  {
   "kind": "split-context",
@@ -280,7 +280,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -333,7 +333,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 310
+  "measured": 268
  },
  {
   "kind": "downloads",
@@ -374,7 +374,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 648
+  "measured": 678
  },
  {
   "kind": "tabs",
@@ -427,7 +427,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 280
+  "measured": 238
  },
  {
   "kind": "downloads",
@@ -455,7 +455,7 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 436
+  "measured": 334
  },
  {
   "kind": "profile",
@@ -499,7 +499,7 @@
  },
  {
   "kind": "more-tools",
-  "label": "5 tabs",
+  "label": "5 tabs (b14 integration: 392 measured on 13.8 + Take screenshot and Zap element, 30 px each; + the Task manager row, 30 px: 482 measured in the app by qa/task-manager/matrix.mjs, 19 Nov)",
   "state": {
    "tabs": 5,
    "web": true,
@@ -510,7 +510,7 @@
    "recent": 0,
    "parent": "menu"
   },
-  "measured": 392
+  "measured": 482
  },
  {
   "kind": "toolbar-context",
@@ -599,7 +599,7 @@
  },
  {
   "kind": "update",
-  "label": "ready (English note)",
+  "label": "ready (English; Beta 14: the sample's Update ready prompt, 352 wide)",
   "state": {
    "tabs": 1,
    "web": true,
@@ -608,7 +608,20 @@
    "profiles": 1,
    "recent": 0
   },
-  "measured": 124
+  "measured": 133
+ },
+ {
+  "kind": "dialog",
+  "label": "Close Acira? (the app's mark, a row of site icons, the checkbox row; Beta 14, measured in the real app)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 196
  },
  {
   "kind": "whats-new",
@@ -636,5 +649,100 @@
    "recent": 0
   },
   "measured": 497
+ },
+ {
+  "kind": "feedback",
+  "label": "bug tab, empty, grouped blocks, the 'what it adds' hint shown, one footer row (measured in the real app, 17 Nov 2026, a QA rig)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 480
+ },
+ {
+  "kind": "ranks",
+  "label": "the person's own rank highlighted, with the 48 px seals, the title and its two-line sentence and the Early Member chip under the cards (measured in the real app, 17 Nov 2026, a QA rig)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 504
+ },
+ {
+  "kind": "easy-files",
+  "label": "a clipboard picture, 5 screenshots and 3 downloads, one file (measured in the real app, 14 Nov 2026: native popup height, the panel itself 325 + 12 of chrome)",
+  "state": {
+   "easyFiles": {
+    "pictures": 6,
+    "downloads": 3
+   },
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 337
+ },
+ {
+  "kind": "transfer",
+  "label": "first screen (ESTIMATE until qa/b-popup-heights.mjs measures it in the app)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 420
+ },
+ {
+  "kind": "insider",
+  "label": "the code screen, the typical case (292 measured on 15 Nov 2026, +2 for the equal bottom padding, 17 Nov: derived)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 294
+ },
+ {
+  "kind": "member-card",
+  "label": "a profile with a rank: the card at 264 x 396, three buttons and the line under them (measured in the real app, 16 Nov 2026)",
+  "state": {
+   "tabs": 1,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 620
+ },
+ {
+  "kind": "favorite-context",
+  "label": "open Favorite (9 rows); a closed one measured 233, dark and light, 100% and 150%",
+  "state": {
+   "tabs": 5,
+   "web": true,
+   "bookmarks": 0,
+   "downloads": 0,
+   "profiles": 1,
+   "recent": 0
+  },
+  "measured": 332
  }
 ]

@@ -6,7 +6,8 @@ export function clampPanel(width:number,windowWidth:number,sidebar:number){retur
 /** R4-22 (founder: "whenever I click away I want the menu to close ... fix it for all menus"): what an open popup outlives when
  * the tab changes under it. Only the tab viewer (it is the way you switch tabs) and the address suggestions while
  * that tab's field is being edited; every menu and panel (main menu, profile, accounts, extensions ...) closes. */
-export const overlayOutlivesTabChange=(kind:string|null,editingSameTab=false):boolean=>kind==='tabs'||kind==='suggestions'&&editingSameTab;
+/* D188: the Ctrl+Tab viewer ('switcher') survives it too: in Next tab every Tab step switches the page and the viewer only follows, so a tab change that closed it ended it at the second step (it showed for one step, then Ctrl+Tab switched silently). Its own release closes it. */
+export const overlayOutlivesTabChange=(kind:string|null,editingSameTab=false):boolean=>kind==='tabs'||kind==='switcher'||kind==='suggestions'&&editingSameTab;
 /** Layout controls stay mounted during live previews, even when their toolbar moves. Tab navigation still dismisses them. */
 export const overlayOutlivesLayoutChange=(kind:string|null):boolean=>kind==='menu'||kind==='more-tools'||kind==='toolbar-context'||kind==='suggestions'||overlayOutlivesTabChange(kind);
 export function overlayPointerDismiss(input:{popup:boolean;trigger:boolean;address:boolean;suggestions:boolean}){return !input.popup&&!input.trigger&&!(input.address&&input.suggestions);}
@@ -14,7 +15,7 @@ let overlaySequence=Date.now()*1000;
 export const nextOverlayId=()=>++overlaySequence;
 /** The popups that belong to one tab (their `contextId` is its id): they close when that tab is gone from the window, whichever tab is current.
  *  A page menu is one of them: a tab closed from outside (a page closing itself, an extension) or a preview's source tab leaves no page for it to act on. */
-export const overlayTiedToTab=(kind:string|null):boolean=>kind==='group-preview'||kind==='group-context'||kind==='split-context'||kind==='tab-context'||kind==='page-context';
+export const overlayTiedToTab=(kind:string|null):boolean=>kind==='group-preview'||kind==='group-context'||kind==='split-context'||kind==='tab-context'||kind==='page-context'||kind==='easy-files'/* Easy Files: it belongs to the page that asked */;
 /** Two popup layouts are the same popup only when both carry an id and it is the same one. A popup without an id is the leftover of a
  *  close (its id was cleared while its kind was still in state): `undefined===undefined` must never count as a match, or the echo of that
  *  stale layout is written back into the live layout, which then re-sends the closed popup (the New workspace form stayed open). */

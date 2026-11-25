@@ -221,8 +221,17 @@ function arcWorkspaces(spaces, room, limit = MAX_TABS) {
       let name = node.name.slice(0, 64);
       for (let n = 2; names.has(name); n++) name = node.name.slice(0, 58) + ' ' + n;
       names.add(name);
-      const tabs = take(flatten(node.children));
-      if (tabs.length) groups.push({ name, tabs });
+      // Beta 14, pinned folders: Arc's folders of the pinned section come over as PINNED folders; a folder inside one stays an inner folder (one level), deeper folders flatten into it.
+      const tabs = take(node.children.filter((child) => child.type === 'url').map((child) => ({ url: child.url, title: child.name })));
+      const inner = [];
+      for (const child of node.children.filter((item) => item.type === 'folder')) {
+        let innerName = child.name.slice(0, 64);
+        for (let n = 2; names.has(innerName); n++) innerName = child.name.slice(0, 58) + ' ' + n;
+        names.add(innerName);
+        const innerTabs = take(flatten(child.children));
+        if (innerTabs.length) inner.push({ name: innerName, tabs: innerTabs, parent: name });
+      }
+      if (tabs.length || inner.length) groups.push({ name, tabs, pinned: true }, ...inner);
     }
     return { key: space.id, title: space.title, ...(space.icon ? { icon: space.icon } : {}), ...(space.color ? { color: space.color } : {}), pinned, groups };
   });

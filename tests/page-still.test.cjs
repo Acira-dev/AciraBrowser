@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test'); const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { createPageStill, presentPage, uiAtRest, HOLD_MAX_MS, FADE_MS, DISSOLVE_STRETCH, NAV_HOLD_MS, SHOWN_SETTLE_MS } = require('../desktop/page-still.cjs');
+const { createPageStill, presentPage, uiAtRest, HOLD_MAX_MS, FADE_MS, DISSOLVE_STRETCH, NAV_HOLD_MS, SHOWN_SETTLE_MS, COVER_UP_MS } = require('../desktop/page-still.cjs');
 
 class FakeContents extends EventEmitter {
   constructor() { super(); this.destroyed = false; this.css = new Map(); this.next = 0; this.captures = 0; this.captureMs = 0; this.empty = false; }
@@ -126,7 +126,10 @@ test('a primed new tab picture waits parked outside the window, then covers the 
   assert.deepEqual(layer.bounds, h.rect, 'covers the page area in the same call (no capture on the switch path)');
   assert.equal(h.children.indexOf(layer), h.children.indexOf(h.popup) - 1, 'over the pages and the interface, under the popup layer');
   const shown = []; h.still.flip({ id: 'web' }, () => shown.push('web'), true);
-  assert.deepEqual(shown, ['web'], 'the website appears beneath the picture at once');
+  // D159 (Windows, "screen flash"): the website's view waits until the picture has been on screen COVER_UP_MS (it reached the screen a frame late there)
+  assert.deepEqual(shown, [], 'not in the picture\'s first frames');
+  await wait(COVER_UP_MS + 10);
+  assert.deepEqual(shown, ['web'], 'the website appears beneath the picture once it is up');
   const fadeCss = () => [...layer.webContents.css.values()].some(text => text.includes('opacity:0') && text.includes(`${Math.round(FADE_MS * 1.7)}ms`));
   assert.equal(fadeCss(), false, 'held until the shown page has had its frames');
   await wait(SHOWN_SETTLE_MS + 20);

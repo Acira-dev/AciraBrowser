@@ -54,8 +54,9 @@ const within = (value, expected, slack = STEP * 2) => assert.ok(value !== null &
 
 test('the numbers are the spec\'s', () => {
   assert.deepEqual(EDGE, { top: 8, side: 10 });
-  assert.deepEqual(DWELL, { top: 90, side: 90 });
-  assert.deepEqual(DWELL_PUSH, { top: 40, side: 40 });
+  // 14.2 (D144): the side's plain waits are Fast's floors at every speed (60 / 30); the top keeps the spec's 90 / 40.
+  assert.deepEqual(DWELL, { top: 90, side: 60 });
+  assert.deepEqual(DWELL_PUSH, { top: 40, side: 30 });
   assert.deepEqual(EXIT, { top: 100, side: 160 });
   assert.equal(EXIT_DWELL, 50);
   assert.deepEqual(GRACE, { top: 300, side: 200 });
@@ -67,9 +68,9 @@ test('the numbers are the spec\'s', () => {
 });
 
 // ---- B. zones and timing -------------------------------------------------------------------------------------------------
-test('9: crossing the left zone in under the dwell does not reveal; resting 90ms does; the top too', () => {
+test('9: crossing the left zone in under the dwell does not reveal; resting 60ms does (90 at the top); the top too', () => {
   const quick = rig();
-  quick.hold(at(3, 300), 64);                          // 4 samples, ~64ms in the zone
+  quick.hold(at(3, 300), 48);                          // 4 samples, ~48ms in the zone (the side's wait is 60 since 14.2, D144)
   assert.deepEqual([quick.last.side, quick.last.top], [false, false]);
   quick.hold(away, 200);
   assert.equal(quick.last.side, false, 'nothing appears afterwards either');
@@ -131,6 +132,42 @@ test('11: leaving the revealed chrome hides it after the grace (200 side, 300 to
   assert.equal(back.last.side, true, 'the first exit\'s timer does not hide it');
 });
 
+test('Beta 14 (reported 16 Nov: "the search URL is disappearing later than the sidebar"): a sidebar and a toolbar the pointer leaves together hide in the same sample', () => {
+  for (const speed of ['premium', 'fast']) {
+    const r = rig({ speed });
+    r.hold(at(3, 300), 200);                            // the sidebar
+    r.hold(at(100, 3), 200);                            // up its column into the top zone: the toolbar too
+    assert.deepEqual([r.last.side, r.last.top], [true, true], speed + ': both shown');
+    r.wait(500);
+    let sideGone = null, topGone = null;
+    for (let elapsed = 0; elapsed <= 1000 && (sideGone === null || topGone === null); elapsed += STEP) {
+      const s = r.controller.sample({ ...base, speed, point: away });
+      if (!s.side && sideGone === null) sideGone = elapsed;
+      if (!s.top && topGone === null) topGone = elapsed;
+      r.clock.t += STEP;
+    }
+    within(sideGone, speed === 'fast' ? 120 : GRACE.side);   // the earlier grace (the sidebar's) decides, as before for the sidebar
+    assert.equal(topGone, sideGone, speed + ': the toolbar leaves in the same sample as the sidebar (one hide, one clock)');
+  }
+  // Leaving the sidebar for the toolbar still lets the sidebar go alone; the toolbar stays while the pointer is on it.
+  const r = rig();
+  r.hold(at(3, 300), 200); r.hold(at(100, 3), 200); r.wait(500);
+  const moved = r.hold(at(600, 20), 600);
+  assert.deepEqual([moved.side, moved.top], [false, true]);
+  // A toolbar a key asked for keeps its own (keyboard) grace: only a pointer reveal is taken along.
+  const k = rig();
+  k.hold(at(3, 300), 200); k.wait(500);
+  k.hold(at(100, 300), 100, { keys: { top: true, side: false } });
+  let side = null, top = null;
+  for (let elapsed = 0; elapsed <= 1000 && (side === null || top === null); elapsed += STEP) {
+    const s = k.controller.sample({ ...base, point: away });
+    if (!s.side && side === null) side = elapsed;
+    if (!s.top && top === null) top = elapsed;
+    k.clock.t += STEP;
+  }
+  within(side, GRACE.side);
+  within(top, KEY_GRACE);
+});
 test('11: jitter outside the chrome never restarts a running grace', () => {
   const r = rig();
   r.hold(at(3, 300), 200); r.wait(500);
@@ -273,6 +310,39 @@ test('pins: Ctrl+Shift+E pins the floating sidebar without the pointer, and it i
   other.hold(away, 200);
   assert.equal(other.hold(away, 200, { view: 'full', docked: true }).side, false, 'leaving Seamless drops the pin');
   assert.equal(other.controller.pinned('side'), false);
+});
+
+// 14.1 (reported 21 Nov): with Seamless's "Show the sidebar at the left edge" OFF, Ctrl+Shift+E did nothing: the side was disabled and a disabled zone is reset on
+// every sample, pin included. The switch turns off the POINTER's reveal only; the shortcut's pin still shows the sidebar and holds it, as with "Never".
+test('pins: with Seamless\'s side switch off the pointer never reveals the sidebar, but Ctrl+Shift+E still pins it until pressed again', () => {
+  const off = { edges: { top: true, side: false } };
+  const r = rig(off);
+  assert.equal(r.until('side', at(2, 400), 1500), null, 'a rest against the edge reveals nothing');
+  assert.equal(r.until('side', at(5, 400), 1500), null, 'nor a rest in the zone');
+  r.hold(away, 400);
+  r.controller.pin('side', true);
+  assert.equal(r.hold(away, 50).side, true, 'the shortcut shows it');
+  assert.equal(r.hold(away, 3000).side, true, 'and it stays with the pointer on the page');
+  assert.equal(r.controller.pinned('side'), true);
+  r.controller.pin('side', false);
+  within(r.untilHidden('side', away, 1500), KEY_GRACE, STEP * 3);
+  // a push out across the edge (the monitor beside) and a carried tab reveal nothing either with the switch off
+  const out = rig(off);
+  out.hold(at(30, 400), 200);
+  assert.equal(out.hold(p => (p < 40 ? at(2, 400) : { x: win.x - 40, y: win.y + 400 }), 600).side, false, 'no push-out reveal');
+  assert.equal(rig(off).until('side', at(2, 400), 800, { carrying: true }), null, 'no carried-tab reveal');
+  // the switch on: unchanged
+  const on = rig();
+  assert.ok(on.until('side', at(2, 400), 600) !== null, 'with the switch on the edge still reveals');
+});
+
+test('pins: the side switch is Seamless\'s only: Full, Compact and Focus keep their own rule for the closed sidebar', () => {
+  for (const view of ['full', 'compact', 'focus']) {
+    const r = rig({ view, docked: false, peek: { full: false, compact: false, focus: false }, edges: { top: true, side: false } });
+    assert.equal(r.until('side', at(2, 400), 800), null, view + ': its own switch off: nothing');
+    const p = rig({ view, docked: false, peek: { full: true, compact: true, focus: true }, edges: { top: true, side: false } });
+    assert.ok(p.until('side', at(2, 400), 800) !== null, view + ': its own switch on: the edge reveals (the Seamless switch does not count here)');
+  }
 });
 
 test('dismiss (Esc, a click in the page) hides at once and clears a pin; the zone stays quiet until the pointer has left and the lockout is over', () => {
@@ -665,7 +735,7 @@ test('a held button keeps the edge down: a drag reaching the side does not bring
 // ---- R8 edge intent: the pointer is busy, or over something the page can use ---------------------------------------------------
 const { ENGAGED_DWELL, ENGAGED_PUSH } = require('../desktop/edge-reveal.cjs');
 test('R8: over a control the page draws (a seek bar, a slider, text) a rest at the edge is not yet a request for the sidebar', () => {
-  assert.deepEqual([ENGAGED_DWELL.side, ENGAGED_DWELL.top], [650, 650]);
+  assert.deepEqual([ENGAGED_DWELL.side, ENGAGED_DWELL.top], [500, 650], '14.2 (D144): the side waits 500 at Premium (was 650), the top 650');
   const calm = rig();
   within(calm.until('side', at(5, 300), 400), DWELL.side, 40);           // empty page: unchanged, instant
   const control = rig();
@@ -717,13 +787,13 @@ test('speed: Premium keeps every wait exactly, Fast and None share the shorter o
   assert.equal(WAITS.premium.keyGrace, KEY_GRACE);
   assert.equal(WAITS.premium.minVisible, MIN_VISIBLE);
   assert.equal(WAITS.premium.lockout, LOCKOUT);
-  assert.deepEqual(WAITS.fast, { dwell: { top: 60, side: 60 }, push: { top: 30, side: 30 }, engaged: { top: 400, side: 400 }, engagedPush: { top: 180, side: 180 }, grace: { top: 180, side: 120 }, keyGrace: 250, minVisible: 250, lockout: 150 });
+  assert.deepEqual(WAITS.fast, { dwell: { top: 60, side: 60 }, push: { top: 30, side: 30 }, engaged: { top: 300, side: 300 }, engagedPush: { top: 90, side: 90 }, grace: { top: 180, side: 120 }, keyGrace: 250, minVisible: 250, lockout: 150 });
   assert.strictEqual(WAITS.off, WAITS.fast, 'None waits as Fast does: the waits are about intent, not motion');
   for (const speed of [undefined, null, '', 'slow', 'constructor', '__proto__', 1]) assert.strictEqual(waitsFor(speed), WAITS.premium, `${String(speed)} is Premium`);
 });
 
 for (const speed of ['fast', 'off']) {
-  test(`speed ${speed}: a rest shows after 60ms, an arrival or a press after 30ms (Premium 90 and 40)`, () => {
+  test(`speed ${speed}: a rest shows after 60ms, an arrival or a press after 30ms (Premium: the same at the side since 14.2, 90 and 40 at the top)`, () => {
     within(rig({ speed }).until('side', at(5, 300), 400), 60);
     within(rig({ speed }).until('side', at(0, 300), 400), 30);
     within(rig({ speed }).until('top', at(400, 5), 400), 60);
@@ -731,13 +801,21 @@ for (const speed of ['fast', 'off']) {
     within(rig({ speed: 'premium' }).until('side', at(5, 300), 400), DWELL.side);
     within(rig({ speed: 'premium' }).until('side', at(0, 300), 400), DWELL_PUSH.side);
     within(rig().until('side', at(5, 300), 400), DWELL.side, STEP * 2);
+    // 14.2 (D144): at the side Premium waits as Fast and None do; at the top it keeps 90 / 40
+    within(rig({ speed: 'premium' }).until('side', at(5, 300), 400), 60);
+    within(rig({ speed: 'premium' }).until('side', at(0, 300), 400), 30);
+    within(rig({ speed: 'premium' }).until('top', at(400, 5), 400), 90);
+    within(rig({ speed: 'premium' }).until('top', at(400, 0), 400), 40);
   });
 
-  test(`speed ${speed}: a control under the pointer waits 400ms (180 pressed against the edge); Premium 650 / 260`, () => {
-    within(rig({ speed }).until('side', at(5, 300), 900, { engaged: true }), 400, STEP * 2);
-    within(rig({ speed }).until('side', at(0, 300), 900, { engaged: true }), 180, STEP * 2);
-    within(rig({ speed }).until('top', at(400, 5), 900, { engaged: true }), 400, STEP * 2);
-    assert.equal(rig({ speed }).until('side', at(5, 300), 300, { engaged: true }), null, 'no reveal before the click window is mostly over');
+  // 14.1 (P1, P2: decided by the release owner, 21 Nov): Fast and None 300 (was 400) and 90 pressed (was 180); Premium 650 and 120 pressed (was 260).
+  test(`speed ${speed}: a control under the pointer waits 300ms (90 pressed against the edge); Premium 650 / 120`, () => {
+    within(rig({ speed }).until('side', at(5, 300), 900, { engaged: true }), 300, STEP * 2);
+    within(rig({ speed }).until('side', at(0, 300), 900, { engaged: true }), 90, STEP * 2);
+    within(rig({ speed }).until('top', at(400, 5), 900, { engaged: true }), 300, STEP * 2);
+    within(rig({ speed }).until('top', at(400, 0), 900, { engaged: true }), 90, STEP * 2);
+    assert.equal(rig({ speed }).until('side', at(5, 300), 250, { engaged: true }), null, 'no reveal before most of the click window is over');
+    assert.deepEqual([ENGAGED_PRESSED.side, ENGAGED_PRESSED.top], [120, 120], 'Premium pressed against the edge: 120');
     within(rig({ speed: 'premium' }).until('side', at(5, 300), 900, { engaged: true }), ENGAGED_REST.side, STEP * 2);
     within(rig({ speed: 'premium' }).until('side', at(0, 300), 900, { engaged: true }), ENGAGED_PRESSED.side, STEP * 2);
   });
@@ -802,7 +880,8 @@ const LEFT = win.x, MID = win.y + 400;
 /** Arrives at `v` px/ms, stays `stay` ms in the zone's inner third, then goes back at `v`. */
 const touch = (stay, v) => elapsed => { const arrive = 120 / v, x = elapsed < arrive ? LEFT + 124 - v * elapsed : elapsed < arrive + stay ? LEFT + 4 : LEFT + 4 + v * (elapsed - arrive - stay); return { x: Math.max(LEFT + 4, x), y: MID }; };
 
-for (const speed of ['fast', 'off']) {
+// 14.2 (D144): Premium too, now that the side waits 60 / 30 there.
+for (const speed of ['premium', 'fast', 'off']) {
   test(`speed ${speed}: touching the edge for 30ms or less, sliding along it faster than 0.4px/ms, crossing it on to another screen: all passes`, () => {
     for (const v of [0.4, 1, 3]) for (const stay of [0, 10, 20, 30]) assert.equal(reveals(speed, touch(stay, v), 120 / v + stay + 300), false, `a ${stay}ms touch arriving at ${v}px/ms`);
     for (const v of [0.4, 0.5, 0.7, 1, 2]) assert.equal(reveals(speed, elapsed => ({ x: LEFT + 5, y: win.y + 200 + v * elapsed }), 400 / v), false, `a slide at ${v}px/ms`);
@@ -835,3 +914,43 @@ test('the poller reads the speed from the window and the shorter waits reach the
     within(fast, 60, STEP * 3); within(off, 60, STEP * 3);
   });
 });
+
+// 14.1 (P1, P2; the team's guard): the shorter waits over a control must keep the reason the wait exists. A pointer travelling down a left menu of links
+// along the edge (every point over a link: engaged) never opens the sidebar: 10 slow passes (0.1 to 0.5 px/ms = 100 to 500 px/s, up and down, a pixel of
+// sideways jitter), resting in the zone (x 4-6) and pressed against the very edge (x 0-1), at Premium, Fast and None: 0 reveals. The same pointer stopping
+// on a link at the end of the pass does open it (the rig is not blind), after the speed's wait.
+const { ENGAGED_PUSH_SWEEP } = require('../desktop/edge-reveal.cjs');
+function menuPass({ speed, xs, v, down, stopMs = 0 }) {
+  let t = 50_000; const c = createEdgeController({ now: () => t });
+  const sample = point => c.sample({ ...base, speed, engaged: true, point });
+  const top = 120, bottom = 620, start = down ? top : bottom, travel = bottom - top, ms = travel / v;
+  // the pointer comes in from the page onto the menu's first link at the edge
+  for (let x = 200; x > xs[0]; x -= 12) { if (sample(at(x, start)).side) return { revealedAt: 'approach' }; t += STEP; }
+  let revealedAt = null;
+  for (let e = 0; e <= ms; e += STEP) {
+    const y = start + (down ? 1 : -1) * Math.min(travel, v * e), x = xs[Math.floor(e / 37) % xs.length];
+    if (sample(at(x, Math.round(y))).side && revealedAt === null) revealedAt = Math.round(e);
+    t += STEP;
+  }
+  let stopReveal = null;
+  for (let e = 0; e <= stopMs; e += STEP) { if (sample(at(xs[0], down ? bottom : top)).side) { stopReveal = e; break; } t += STEP; }
+  return { revealedAt, stopReveal };
+}
+for (const speed of ['premium', 'fast', 'off']) {
+  test(`edge menu (${speed}): 10 slow passes down a menu of links along the edge never open the sidebar, resting in the zone or pressed against the edge`, () => {
+    assert.equal(ENGAGED_PUSH_SWEEP, 4);
+    const speeds = [0.1, 0.12, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
+    for (const [where, xs] of [['in the zone', [5, 4, 6]], ['pressed against the edge', [0, 1, 0]]]) {
+      const reveals = speeds.map((v, i) => menuPass({ speed, xs, v, down: i % 2 === 0 }).revealedAt).filter(r => r !== null);
+      assert.deepEqual(reveals, [], `${where}: 0 reveals in 10 passes`);
+    }
+  });
+  test(`edge menu (${speed}): stopping on a link at the edge after a pass does open it, after the wait`, () => {
+    const waits = require('../desktop/edge-reveal.cjs').waitsFor(speed);
+    for (const [xs, wait] of [[[5], waits.engaged.side], [[0], waits.engagedPush.side]]) {
+      const r = menuPass({ speed, xs, v: 0.3, down: true, stopMs: 1200 });
+      assert.equal(r.revealedAt, null);
+      within(r.stopReveal, wait, STEP * 3);
+    }
+  });
+}

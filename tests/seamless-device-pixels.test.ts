@@ -37,12 +37,14 @@ g.document = {
 
 const require = createRequire(import.meta.url);
 const edge = require('../src/ui/chromeEdge.ts') as typeof import('../src/ui/chromeEdge');
+// Beta 14 smoothness (B3): the float's values live in their own rule for the pictures and the overlay pieces (src/ui/edgeVars.ts), not on <html> or .app.
+const edgeVars = require('../src/ui/edgeVars.ts') as typeof import('../src/ui/edgeVars');
 edge.installChromeEdge(); edge.bindEdgeTab('active');
 const paint = async () => { for (let frame = 0; frame < 8; frame++) await Promise.resolve(); };
 const say = async (side: boolean, top = false) => { listener?.({ type: 'chrome-edge', side, top, pinned: { side: false, top: false } }); await paint(); };
 const reset = async () => { await say(false); await new Promise(resolve => setTimeout(resolve, 75)); };
 const onGrid = (n: number, ratio: number) => Math.abs(n * ratio - Math.round(n * ratio)) < 1e-6;
-const maskEdges = () => { const path = /d='([^']*)'/.exec(decodeURIComponent(app.style.getPropertyValue('--sf-mask')))?.[1] ?? ''; return { path, edges: (path.match(/[MHV][^MHVAZ]*/g) ?? []).flatMap(part => part.slice(1).trim().split(/\s+/).map(Number)) }; };
+const maskEdges = () => { const path = /d='([^']*)'/.exec(decodeURIComponent(edgeVars.edgeVar('--sf-mask')))?.[1] ?? ''; return { path, edges: (path.match(/[MHV][^MHVAZ]*/g) ?? []).flatMap(part => part.slice(1).trim().split(/\s+/).map(Number)) }; };
 
 test('an edge of the interface is the nearest whole device pixel: 6px is drawn from the 8th at 125%, and whole lengths are untouched at 100%, 150% and 200%', () => {
   g.devicePixelRatio = 1.25; assert.equal(edge.snapPx(6), 6.4); assert.equal(edge.snapPx(240), 240); assert.equal(edge.snapPx(6.1), 6.4);
@@ -60,8 +62,8 @@ test('Seamless at 125%: the frame\'s cut-out and the sidebar\'s slide sit on who
   assert.ok(edges.length > 6, 'the cut-out is drawn');
   for (const n of edges) assert.ok(onGrid(n, 1.25), `${n} is on the device pixel grid (${path})`);
   assert.ok(path.includes('M0 6.4H240V814.4H0Z') && path.includes('M240 6.4H1266.4'), `the card's top edge is the 8th device pixel row (6.4) and its bottom 814.4: ${path}`);
-  assert.equal(root.style.getPropertyValue('--sf-sidebar-travel'), '233.6px', 'the sidebar travels from the card\'s drawn edge (6.4) to its own (240): 292 device pixels, not 292.5');
-  assert.ok(onGrid(parseFloat(app.style.getPropertyValue('--sf-frame-top')), 1.25) && onGrid(parseFloat(app.style.getPropertyValue('--sf-frame-bottom')), 1.25), 'the sidebar\'s own copy starts and stops on whole device pixels');
+  assert.equal(edgeVars.edgeVar('--sf-sidebar-travel'), '233.6px', 'the sidebar travels from the card\'s drawn edge (6.4) to its own (240): 292 device pixels, not 292.5');
+  assert.ok(onGrid(parseFloat(edgeVars.edgeVar('--sf-frame-top')), 1.25) && onGrid(parseFloat(edgeVars.edgeVar('--sf-frame-bottom')), 1.25), 'the sidebar\'s own copy starts and stops on whole device pixels');
 });
 
 test('Seamless at 200%: the cut-out is what it was (6 and 240 are whole device pixels there)', async () => {
@@ -70,5 +72,5 @@ test('Seamless at 200%: the cut-out is what it was (6 and 240 are whole device p
   await say(true);
   areaRect = rect(240, 6, 1034, 808); edge.refreshEdgeFloat();
   const { path } = maskEdges();
-  assert.ok(path.includes('M0 6H240V814H0Z') && path.includes('M240 6H1266'), path); assert.equal(root.style.getPropertyValue('--sf-sidebar-travel'), '234px');
+  assert.ok(path.includes('M0 6H240V814H0Z') && path.includes('M240 6H1266'), path); assert.equal(edgeVars.edgeVar('--sf-sidebar-travel'), '234px');
 });

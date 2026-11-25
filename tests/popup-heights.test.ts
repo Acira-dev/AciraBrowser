@@ -2,13 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { BrowserSnapshot } from '../src/runtime/types';
+import { setShownOffer } from '../src/features/easyFiles/layout';
 import { measuredPopupKinds, menuDense, menuDenseFor, popupGeometry, popupContentHeight, popupNaturalHeight } from '../src/ui/popup';
 
 // The checked-in measured menu includes the Windows-only Tor row.
 Object.assign(globalThis, { window: { acira: { platform: 'win32' } } });
+// The measured 'switcher' cases are the names list (Settings > Tabs > While switching, show > Names only); the viewer with pictures has its own layout, checked below (tests/picture-switcher.test.ts).
+Object.assign(globalThis, { localStorage: { getItem: (key: string) => key === 'acira-ctrl-tab-show' ? JSON.stringify('names') : null, setItem() {}, removeItem() {} } });
 
 // Heights measured in the real app by qa/b-popup-heights.mjs (re-run it after changing a popup's rows, padding or content).
-interface MeasuredCase { kind: string; label: string; measured: number; state: { tabs: number; web: boolean; bookmarks: number; downloads: number; profiles: number; recent: number; target?: string; workspaces?: number; parent?: string; /** R3-38: the newest workspace is secured and locked (its switcher shows Unlock). */ locked?: boolean } }
+interface MeasuredCase { kind: string; label: string; measured: number; state: { easyFiles?: { pictures: number; downloads: number; multiple?: boolean }; tabs: number; web: boolean; bookmarks: number; downloads: number; profiles: number; recent: number; target?: string; workspaces?: number; parent?: string; /** R3-38: the newest workspace is secured and locked (its switcher shows Unlock). */ locked?: boolean } }
 const cases: MeasuredCase[] = JSON.parse(fs.readFileSync(new URL('./popup-heights.json', import.meta.url), 'utf8'));
 
 const snapshot = (state: MeasuredCase['state']) => ({
@@ -27,7 +30,10 @@ const snapshot = (state: MeasuredCase['state']) => ({
 test('every popup estimate matches the height measured in the app, so its first frame opens at its final size', () => {
   assert.ok(cases.length >= 30, 'the measured set covers every popup kind in several states');
   for (const { kind, label, measured, state } of cases) {
+    // Easy Files counts its height from the offer main sent (the number of picture tiles and download rows, one extra row when several files are allowed).
+    if (state.easyFiles) setShownOffer({ multiple: Boolean(state.easyFiles.multiple), items: [...Array.from({ length: state.easyFiles.pictures }, (_, index) => ({ id: `p${index}`, section: index ? 'screenshots' : 'clipboard', name: `p${index}`, bytes: 1, modified: 0 })), ...Array.from({ length: state.easyFiles.downloads }, (_, index) => ({ id: `d${index}`, section: 'downloads', name: `d${index}`, bytes: 1, modified: 0 }))] as never });
     const estimate = popupContentHeight(kind, popupNaturalHeight(kind, snapshot(state), { recent: state.recent, target: state.target ? { contentKind: state.target } : undefined, parent: state.parent }));
+    setShownOffer(null);
     assert.ok(Math.abs(estimate - measured) <= 1, `${kind} (${label}): estimated ${estimate}px, measured ${measured}px`);
   }
 });
@@ -40,7 +46,7 @@ test('every kind trusted over a remembered height has been measured', () => {
 test('the Mac menu estimate includes both supported Tor rows and View/Tabs rows', () => {
   const win = (globalThis as any).window;
   win.acira.platform = 'darwin';
-  try { assert.equal(popupNaturalHeight('menu', snapshot(cases[0].state)), 648); }
+  try { assert.equal(popupNaturalHeight('menu', snapshot(cases[0].state)), 678); }
   finally { win.acira.platform = 'win32'; }
 });
 
@@ -57,14 +63,14 @@ test('menu density and geometry use the supported platform rows at short heights
   try {
     win.acira.platform='darwin';
     assert.equal(menuDenseFor(state,650,anchor),true,'Mac Tor rows require compact density in the558px drop');
-    assert.equal(popupGeometry('menu',state,{width:900,height:650},anchor).contentHeight,568);
+    assert.equal(popupGeometry('menu',state,{width:900,height:650},anchor).contentHeight,594);
     assert.equal(menuDenseFor(state,600,anchor),true);
-    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,568,'compact Mac includes both Tor rows and View/Tabs');
+    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,594,'compact Mac includes both Tor rows and View/Tabs');
     win.acira.platform='win32';
-    assert.equal(menuDenseFor(state,600,anchor),true,'648px Windows menu needs compact rows in508px');
-    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,568);
-    // The full rows need 740px of window under this anchor (Sidebar mode is a Tabs answer now, not a row, so the menu is the 30px shorter it was before); shorter windows take the compact rows.
-    assert.equal(menuDenseFor(state,730,anchor),true);
-    assert.equal(menuDenseFor(state,760,anchor),false);
+    assert.equal(menuDenseFor(state,600,anchor),true,'678px Windows menu needs compact rows in508px');
+    assert.equal(popupGeometry('menu',state,{width:900,height:600},anchor).contentHeight,594);
+    // The full rows need 770px of window under this anchor (678px of menu: Sidebar mode is a Tabs answer, not a row; the transfer row added 30px); shorter windows take the compact rows.
+    assert.equal(menuDenseFor(state,760,anchor),true);
+    assert.equal(menuDenseFor(state,790,anchor),false);
   } finally { win.acira.platform='win32'; }
 });

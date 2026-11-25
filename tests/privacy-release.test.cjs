@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {configureEngineFeatures,engineFeatureStatus,AD_API_FEATURES}=require('../desktop/browser-services/engine-features.cjs');
+const {configureEngineFeatures,engineFeatureStatus,AD_API_FEATURES,RAM_FEATURES}=require('../desktop/browser-services/engine-features.cjs');
 const {validate,CAPABILITIES}=require('../desktop/browser-services/clear-browsing-data.cjs');
 const {protectionSummary}=require('../desktop/browser-services/protection-summary.cjs');
 const {choice}=require('../desktop/native-network-preferences.cjs');
@@ -16,6 +16,12 @@ test('third-party cookie blocking and ad-API removal are applied by default and 
   for(const feature of AD_API_FEATURES)assert.ok(disabled.includes(feature),feature);
   assert.ok(disabled.includes('Other'));
   assert.deepEqual(engineFeatureStatus(app),{thirdPartyCookies:'block',adApis:'removed'});
+});
+
+test('the engine\'s scalable frame eviction is switched off, in both cookie modes: hidden tabs\' frames stay bounded as page-frames.cjs expects (Chromium 156 raised the cap from 5 to 10)',()=>{
+  assert.deepEqual([...RAM_FEATURES],['ScalableFrameEviction']);
+  for(const mode of ['block','allow']){const app=fakeApp({'enable-features':'ScalableFrameEviction'});configureEngineFeatures({app,thirdPartyCookies:mode});
+    assert.ok(app.switches.get('disable-features').split(',').includes('ScalableFrameEviction'),mode);assert.ok(!app.switches.get('enable-features').split(',').includes('ScalableFrameEviction'),mode+': an enable of it is replaced');}
 });
 
 test('allowing third-party cookies removes the forced blocking feature',()=>{

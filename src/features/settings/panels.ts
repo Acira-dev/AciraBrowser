@@ -22,6 +22,8 @@ export interface SettingsPanel {
   icon?: EditorIconName;
   /** Lower first. Default 100. */
   order?: number;
+  /** Beta 14.4: BrowserSettings puts this panel in its place among the page's groups itself, so it is not appended after them. */
+  placed?: boolean;
   Component: ComponentType<SettingsPanelProps>;
 }
 

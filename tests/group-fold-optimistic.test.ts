@@ -81,7 +81,7 @@ test('what the interface draws is what main will answer: the same reducer, the s
 test('the client draws a group fold on the click\'s frame: it asks isGroupFold with the state on screen, next to the actions that were already optimistic', () => {
   const client = readFileSync(new URL('../src/runtime/client.ts', import.meta.url), 'utf8');
   assert.match(client, /import \{ isGroupFold \} from '\.\/tabGroups';/);
-  assert.match(client, /if\(native&&\(OPTIMISTIC\.has\(action\.type\)\|\|isGroupFold\(latest\.current,action\)\)&&!location\.search\.includes\('view=overlay'\)/, 'the optimistic branch takes a group fold; the overlay (the group menu) still waits for main');
+  assert.match(client, /if\(native&&(?:!lastTabClose&&)?\(OPTIMISTIC\.has\(action\.type\)\|\|isGroupFold\(latest\.current,action\)\)&&!location\.search\.includes\('view=overlay'\)/, 'the optimistic branch takes a group fold (the last tab\'s close alone waits for main, 8f457c476); the overlay (the group menu) still waits for main');
   assert.match(client, /const OPTIMISTIC=new Set<string>\(\['tab\.select','tab\.new','tab\.close','workspace\.select','split\.resize','sidebar\.mode'\]\);/, 'the set itself is unchanged');
   const sidebar = readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx', import.meta.url), 'utf8');
   assert.match(sidebar, /dispatch\(\{type:'tab\.group\.update',id:group\.id,keepActive:true,patch:\{collapsed:!group\.collapsed\}\}\)/, 'the header click sends exactly the action the predicate knows');

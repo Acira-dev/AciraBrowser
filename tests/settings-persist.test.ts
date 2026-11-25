@@ -17,13 +17,26 @@ const different: Record<string, (value: any) => unknown> = {
   animationSpeed: v => (v === 'fast' ? 'premium' : 'fast'),
   glassOpacity: () => 61,
   siteColor: () => 'rich',
+  screenshotButton: v => (v === 'off' ? 'top' : 'off'),
+  screenshotLast: v => (v === 'area' ? 'full' : 'area'),
+  activeBorder: () => 'lit-edge',
   websiteAppearance: v => (v === 'system' ? 'always-dark' : 'system'),
   surfaceColor: () => '#112233',
   sidebarColor: () => '#223344',
   tabColor: () => '#334455',
   searchEngine: v => (v === 'duckduckgo' ? 'google' : 'duckduckgo'),
+  imageSearch: v => (v === 'lens' ? 'tineye' : 'lens'),
+  imageSearchCustom: () => 'https://images.example.test/find?src=%s',
+  imageSearchCustomPost: () => 'q=%s',
+  imageSearchUploadOk: () => ['lens'],
+  engineSuggestionsFrom: v => (v === 'engine' ? 'custom' : 'engine'),
+  engineSuggestionsService: v => (v === 'duckduckgo' ? 'brave' : 'duckduckgo'),
+  engineSuggestionsAddress: () => 'https://kagisuggest.com/api/autosuggest?q=%s',
   sidebarWidth: () => 312, // one of the three sizes (runtime/sidebarSizes.ts): the reducer snaps anything else
   sidebarSide: v => (v === 'left' ? 'right' : 'left'),
+  sidebarReveal: v => (v === 'edge' ? 'handle' : 'edge'), // Beta 14 T
+  sidebarHandleAt: () => 0.25, // Beta 14: a fraction of the window's height
+  sidebarClosed: v => (v === 'mini' ? 'hidden' : 'mini'), // Beta 14 AJ
   panelWidth: () => 333,
   zoom: () => 125,
   workspace: () => 'research',

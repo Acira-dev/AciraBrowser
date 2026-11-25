@@ -55,6 +55,29 @@ test('a failed check keeps its sentence; a download that stopped names its versi
   assert.equal(describe(stopped({ interrupted: false, cause: 'network' }), now), 'Could not check for updates.', 'an old updater that does not say (no interrupted flag) reads as before');
 });
 
+// D141 (22 Nov 2026): an error that arrives while Install now is under way (the setup could not be started) left the row saying the version
+// "didn't download", with the file whole on disk. The updater says which it was (installFailed) and the row has a sentence for it.
+test('a setup that could not be started is not a download that failed: its own sentence, the same retry and the same Try again', () => {
+  const now = 1_000_000_000_000;
+  assert.match(describe(stopped({ installFailed: true, interrupted: true, cause: 'other', retry: { failures: 1, at: now + 2 * 60_000 } }), now), /^Version 0\.1\.0-beta\.14 is downloaded but could not be installed\. Acira tries again in 2\s?min/);
+  assert.equal(describe(stopped({ installFailed: true, interrupted: true, cause: 'other', retry: { failures: 4, at: null } }), now), 'Version 0.1.0-beta.14 is downloaded but could not be installed. Acira tries again later.');
+  assert.equal(describe(stopped({ installFailed: true, interrupted: true, cause: 'file', retry: { failures: 1, at: null } }), now), "This update couldn't be verified, so it wasn't installed.", 'a refused file keeps its own sentence');
+  assert.match(describe(stopped({ installFailed: false, interrupted: true, cause: 'network', retry: { failures: 1, at: now + 60_000 } }), now), /didn't download/, 'a download that stopped is still a download that stopped');
+  assert.equal(describe(status({ status: 'error', error: 'x', installFailed: true } as Partial<UpdateStatus>), now), 'Could not check for updates.', 'no version known: nothing to name');
+  assert.deepEqual(rowAction(stopped({ installFailed: true, interrupted: true, cause: 'other' })), { action: 'update.check', disabled: false, retry: true });
+  const read = (locale: string) => JSON.parse(readFileSync(`src/i18n/${locale}.json`, 'utf8')) as Record<string, string>;
+  for (const locale of ['en', 'ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh-CN']) {
+    const catalog = read(locale);
+    for (const [id, parameters] of Object.entries({ 'updates.installFailedRetry': ['{version}', '{time}'], 'updates.installFailedLater': ['{version}'] })) {
+      assert.ok(catalog[id] && catalog[id].length > 1, `${locale}: ${id}`);
+      for (const parameter of parameters) assert.ok(catalog[id].includes(parameter), `${locale}: ${id} keeps ${parameter}`);
+      if (locale !== 'en') assert.notEqual(catalog[id], read('en')[id], `${locale}: ${id} is translated`);
+      assert.notEqual(catalog[id], catalog[id.replace('installFailed', 'downloadFailed')], `${locale}: ${id} is not the download sentence`);
+    }
+    assert.ok(!catalog['updates.installFailedLater'].includes('{time}'), `${locale}: the later sentence names no time`);
+  }
+});
+
 test('Try again: only for a download that stopped, the same press as Check for updates (a manual check resumes the held bytes); a refused file offers nothing new', () => {
   assert.deepEqual(rowAction(stopped({ interrupted: true, cause: 'network' })), { action: 'update.check', disabled: false, retry: true });
   assert.deepEqual(rowAction(stopped({ interrupted: true, cause: 'other' })), { action: 'update.check', disabled: false, retry: true });

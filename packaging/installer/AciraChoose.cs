@@ -78,8 +78,17 @@ class ChooseForm : Form {
     }
     return p.Length.CompareTo(q.Length);
   }
+  // The installed exe carries Windows' four-part version (scripts/release-windows-resources.mjs windowsFileVersion): 0.1.0-beta.13.10 is 0.1.0.13 there, and a
+  // stable 1.0.0 is 1.0.0.0. Read a.b.c.N (N > 0) back as a.b.c-beta.N. As a plain 0.1.0 every installed beta sorted after every beta setup, so the Beta 14
+  // setup said "A newer Acira is installed" over 13.x and changed nothing (17 Nov 2026). The fix number is not in that form: 0.1.0-beta.13.10 reads as
+  // 0.1.0-beta.13, which is older than 0.1.0-beta.13.11 and 0.1.0-beta.14.
+  internal static string FromFileVersion(string v) {
+    v = (v ?? "").Trim(); var parts = v.Split('.'); int n;
+    if (v.IndexOf('-') < 0 && parts.Length == 4 && int.TryParse(parts[3], out n) && n > 0) return parts[0] + "." + parts[1] + "." + parts[2] + "-beta." + n;
+    return v;
+  }
   static string InstalledVersion(string exe) {
-    try { var v = FileVersionInfo.GetVersionInfo(exe); string f = (v.FileVersion ?? "").Trim(); return f.Length > 0 ? f : (v.ProductVersion ?? "").Trim(); } catch { return ""; }
+    try { var v = FileVersionInfo.GetVersionInfo(exe); string f = (v.FileVersion ?? "").Trim(); return FromFileVersion(f.Length > 0 ? f : (v.ProductVersion ?? "").Trim()); } catch { return ""; }
   }
 
   // ---- the running Acira from this folder (every process whose image is in it)

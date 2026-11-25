@@ -10,7 +10,7 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const entry = fs.readFileSync(path.join(root, 'desktop/browser-services/autoconsent-preload-entry.cjs'), 'utf8');
 const library = fs.readFileSync(require.resolve('@duckduckgo/autoconsent', {paths: [root]}), 'utf8');
-const override = entry.slice(entry.indexOf('consent.domActions.prehide=function'), entry.indexOf('};', entry.indexOf('consent.domActions.prehide=function')) + 2);
+const override = entry.slice(entry.indexOf('const prehideWrite=selector=>{'), entry.indexOf('};', entry.indexOf('const prehideWrite=selector=>{')) + 2);
 
 test('the library still prehides the way the override copies: one <style id="autoconsent-prehide">, the opacity rule, undone by removing that element', () => {
   assert.match(library, /prehide\(selector\) \{\s*const styleEl = getStyleElement\("autoconsent-prehide"\);[\s\S]{0,200}return hideElements\(styleEl, selector, "opacity"\);/);
@@ -24,8 +24,9 @@ test('the override writes that rule through textContent and reads nothing from l
   assert.ok(override.length > 100, 'the override is in the preload');
   assert.doesNotMatch(override, /innerText|offset|getBoundingClientRect|getComputedStyle/);
   assert.match(override, /textContent\+=`\$\{selector\} \{ opacity: 0 !important; z-index: -1 !important; pointer-events: none !important; \} `/);
-  // installed right after the instance exists, before DOMContentLoaded (when the library calls it)
-  assert.ok(entry.indexOf('consent.domActions.prehide=function') > entry.indexOf('consent=new AutoConsent('));
+  // installed right after each instance exists, before the library calls it (at DOMContentLoaded, or later for a library loaded by the lazy look)
+  assert.match(entry, /consent=new \(library\(\)\)\(send,config,\{compact:JSON\.parse\(rulesText\)\}\);\}catch\{[^}]*\}\n   if\(consent&&consent\.domActions&&typeof consent\.domActions\.prehide==='function'\)consent\.domActions\.prehide=prehideWrite;/);
+  assert.match(entry, /consent=new \(library\(\)\)\(send,null,\{compact:JSON\.parse\(rules\)\}\);\n     if\(consent\.domActions&&typeof consent\.domActions\.prehide==='function'\)consent\.domActions\.prehide=prehideWrite;\n     consent\.initialize\(/);
 });
 
 test('the override builds the same element and text as the library, on a page with and without a head', () => {
@@ -36,7 +37,7 @@ test('the override builds the same element and text as the library, on a page wi
     const document = {head: withHead ? head : null, documentElement: html, getElementsByTagName: () => [], createElement: () => new HTMLStyleElement(),
       querySelector: sel => made.map(m => m[1]).find(el => sel === 'style#' + el.id) || null};
     const consent = {domActions: {prehide: () => { throw new Error('the library one'); }}};
-    vm.runInNewContext('if(consent&&consent.domActions&&typeof consent.domActions.prehide===\'function\')' + override, {consent, document, HTMLStyleElement});
+    vm.runInNewContext(override + ';consent.domActions.prehide=prehideWrite;', {consent, document, HTMLStyleElement});
     assert.equal(consent.domActions.prehide('#a,.b'), true);
     assert.equal(consent.domActions.prehide(''), false);
     assert.equal(made.length, 1, 'one element, reused');

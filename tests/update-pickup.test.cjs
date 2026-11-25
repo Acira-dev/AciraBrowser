@@ -2,7 +2,7 @@
 // Beta.11's updater inside createAppUpdater: which addresses it hands to electron-updater, how the testers opt-in is kept, the faster pickup (2 hours with
 // jitter, a look on wake or focus, nextCheckSeconds) and the user agent. The fallback rules themselves are in update-feeds.test.cjs.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),http=require('node:http'),{EventEmitter}=require('node:events');
-const {createAppUpdater,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT}=require('../desktop/browser-services/app-updater.cjs');
+const {createAppUpdater,CHECK_EVERY,CHECK_JITTER,FIRST_SETTLE,FIRST_CAP,FIRST_CAP_TEST,ROUTE_WAIT,ROUTE_POLL,NUDGE_QUIET,UPDATE_USER_AGENT}=require('../desktop/browser-services/app-updater.cjs');
 
 const NEW='https://update.acirabrowser.com/',GITHUB='https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/';
 const MIN=60*1000;
@@ -82,27 +82,97 @@ test('test mode: a local feed, and a second one to rehearse the fallback; outsid
   await n.updater.check();assert.deepEqual(b.feeds[0].feeds,[{name:'primary',url:NEW},{name:'fallback',url:GITHUB}],'a real run ignores them');assert.equal(b.feeds[0].primaryWithin,undefined);
 });
 
-test('the first look is 20 s after launch, then every 2 hours plus up to 10 minutes of jitter; a regular look re-arms itself', async () => {
-  assert.equal(CHECK_EVERY,2*60*MIN);assert.equal(CHECK_JITTER,10*MIN);assert.equal(CHECK_DELAY,20*1000);
+test('the first look comes as soon as the first window is on screen, then every 2 hours plus up to 10 minutes of jitter; a regular look re-arms itself', async () => {
+  assert.equal(CHECK_EVERY,2*60*MIN);assert.equal(CHECK_JITTER,10*MIN);assert.ok(FIRST_SETTLE<=500,'the first look is a fraction of a second after the window shows, not 20 s');
   const t=timers(),autoUpdater=fake(),{updater}=make({autoUpdater,schedule:t.schedule,cancel:t.cancel});
-  updater.start();assert.deepEqual(t.list.map(x=>x.delay),[CHECK_DELAY]);
-  t.fire(CHECK_DELAY);await settle();await settle();
+  updater.start({after:null});assert.deepEqual(t.list.map(x=>x.delay),[FIRST_SETTLE]);
+  t.fire(FIRST_SETTLE);await settle();await settle();
   assert.equal(autoUpdater.checks,1);
   assert.deepEqual(t.list.map(x=>x.delay),[CHECK_EVERY+300000],'random()=0.5 gives half of the 10 minutes');
   t.fire(CHECK_EVERY+300000);await settle();await settle();
   assert.equal(autoUpdater.checks,2);assert.equal(t.list.length,1,'the next regular look is already waiting');
   // the jitter stays inside its bound whatever random says
   for (const [r,expected] of [[0,CHECK_EVERY],[0.999999,CHECK_EVERY+CHECK_JITTER-1]]) {
-    const u=timers(),x=make({autoUpdater:fake(),schedule:u.schedule,cancel:u.cancel,random:()=>r});x.updater.start();u.fire(CHECK_DELAY);await settle();await settle();
+    const u=timers(),x=make({autoUpdater:fake(),schedule:u.schedule,cancel:u.cancel,random:()=>r});x.updater.start({after:null});u.fire(FIRST_SETTLE);await settle();await settle();
     assert.ok(Math.abs(u.last().delay-expected)<=1,'random '+r+' -> '+u.last().delay);
   }
+});
+
+const until=async(check,ms=3000)=>{const end=Date.now()+ms;while(!check()){if(Date.now()>end)throw new Error('timed out');await new Promise(resolve=>setTimeout(resolve,5));}};
+
+test('Beta 14 A1: the first look waits for the first window, then comes FIRST_SETTLE later (13.8 waited a fixed 20 s from start)', async () => {
+  const t=timers(),autoUpdater=fake();let shown;const window=new Promise(resolve=>{shown=resolve;});
+  const {updater}=make({autoUpdater,schedule:t.schedule,cancel:t.cancel});
+  updater.start({after:window});
+  assert.deepEqual(t.list.map(x=>x.delay),[FIRST_CAP],'before the window shows only the cap waits');
+  await settle();await settle();assert.equal(autoUpdater.checks,0,'nothing is asked while the app is still starting');assert.equal(updater.nudge(),false,'and a focus does not start one earlier');
+  shown();await settle();await settle();
+  assert.deepEqual(t.list.map(x=>x.delay).sort((a,b)=>a-b),[FIRST_SETTLE,FIRST_CAP],'the window is on screen: the look is FIRST_SETTLE away');
+  t.fire(FIRST_SETTLE);await settle();await settle();
+  assert.equal(autoUpdater.checks,1,'one look');assert.ok(!t.list.some(x=>x.delay===FIRST_CAP),'the cap is gone: the look is not asked twice');
+  assert.deepEqual(t.list.map(x=>x.delay),[CHECK_EVERY+300000],'the regular round is armed as before');
+});
+
+test('Beta 14 A1: when no window ever shows, the first look still comes at FIRST_CAP, once', async () => {
+  const t=timers(),autoUpdater=fake(),{updater}=make({autoUpdater,schedule:t.schedule,cancel:t.cancel});
+  updater.start({after:new Promise(()=>{})});
+  assert.ok(FIRST_CAP<=20*1000&&FIRST_CAP>FIRST_SETTLE);
+  t.fire(FIRST_CAP);await settle();await settle();assert.equal(autoUpdater.checks,1);
+  assert.ok(!t.list.some(x=>x.delay===FIRST_SETTLE||x.delay===FIRST_CAP));
+});
+
+test('Beta 14 A1: a window that failed (a rejected promise) does not hold the look back either; the stand-in updater follows the same rule (it had its own 1.5 s)', async () => {
+  const t=timers(),{updater}=make({autoUpdater:fake(),schedule:t.schedule,cancel:t.cancel});
+  updater.start({after:Promise.reject(new Error('no window'))});await settle();await settle();
+  assert.ok(t.list.some(x=>x.delay===FIRST_SETTLE));
+  const u=timers(),stub=make({schedule:u.schedule,cancel:u.cancel,env:{ACIRA_UPDATE_TEST:'1',ACIRA_UPDATE_STUB:'1'}});
+  stub.updater.start({after:null});assert.deepEqual(u.list.map(x=>x.delay),[FIRST_SETTLE],'a rig sees the real rule, not a shortcut');
+  // a test run whose window is hidden never says it is shown: its cap is short (2 s, where the stand-in used to look at 1.5 s), a real run's is not
+  const hidden=timers(),rig=make({schedule:hidden.schedule,cancel:hidden.cancel,env:{ACIRA_UPDATE_TEST:'1',ACIRA_UPDATE_STUB:'1'}});
+  rig.updater.start({after:new Promise(()=>{})});assert.deepEqual(hidden.list.map(x=>x.delay),[FIRST_CAP_TEST]);assert.ok(FIRST_CAP_TEST<=3000);
+});
+
+test('Beta 14 A1: the updater waits on startup-trace\'s shown, which done() settles when the first window is on screen; main.cjs still calls done() there', async () => {
+  const trace=require('../desktop/startup-trace.cjs');
+  assert.equal(typeof trace.shown.then,'function');
+  const before=await Promise.race([trace.shown.then(()=>'shown'),new Promise(resolve=>setTimeout(()=>resolve('waiting'),20))]);assert.equal(before,'waiting','not settled before a window is shown');
+  trace.done();assert.equal(await Promise.race([trace.shown.then(()=>'shown'),new Promise(resolve=>setTimeout(()=>resolve('late'),200))]),'shown');
+  const source=fs.readFileSync(path.join(__dirname,'..','desktop','browser-services','app-updater.cjs'),'utf8');
+  assert.match(source,/shown=require\('\.\.\/startup-trace\.cjs'\)\.shown/);
+  const main=fs.readFileSync(path.join(__dirname,'..','desktop','main.cjs'),'utf8');
+  assert.match(main,/startupTrace\.mark\('window-show'\);startupTrace\.done\(\);/,'main settles it when the window is shown');
+  assert.match(main,/setupGate\.after\(\(\)=>appUpdater\.start\(\)\)/,'and starts the updater behind the setup gate as before (a first run asks nothing until setup is done)');
+});
+
+test('Beta 14 A1: the launch look waits for a route that is still being confirmed instead of failing into the 2-minute retry; the person\'s own look does not wait', async () => {
+  let confirmed=false,asked=0;
+  const route=async()=>{asked++;if(!confirmed)throw Object.assign(new Error('The connection settings are not confirmed yet.'),{code:'ERR_UPDATE_ROUTE'});};
+  const t=timers(),autoUpdater=fake(),{updater}=make({autoUpdater,route,schedule:t.schedule,cancel:t.cancel,routePoll:5,routeWait:5000});
+  updater.start({after:null});t.fire(FIRST_SETTLE);
+  await until(()=>asked>=4);assert.equal(autoUpdater.checks,0,'nothing is sent while the route is unconfirmed');assert.notEqual(updater.status().status,'error','and it is not a failure yet');
+  confirmed=true;await until(()=>autoUpdater.checks===1);await until(()=>updater.status().status==='current');
+  assert.ok(!t.list.some(x=>x.delay===2*MIN),'no retry rung was used: '+t.list.map(x=>x.delay));
+  // a look the person started (or any later one) fails at once, as before
+  confirmed=false;asked=0;const person=make({autoUpdater:fake(),route,schedule:t.schedule,cancel:t.cancel,routePoll:5,routeWait:5000});
+  await person.updater.check({manual:true});assert.equal(asked,1,'one ask, no waiting');assert.equal(person.updater.status().status,'error');assert.match(person.updater.status().error,/not confirmed/);
+});
+
+test('Beta 14 A1: a launch look whose route never confirms gives up after routeWait and takes the retry ladder as before; another route error is not waited for', async () => {
+  let asked=0;const route=async()=>{asked++;throw Object.assign(new Error('x'),{code:'ERR_UPDATE_ROUTE'});};
+  const t=timers(),{updater}=make({autoUpdater:fake(),route,schedule:t.schedule,cancel:t.cancel,routePoll:10,routeWait:60});
+  updater.start({after:null});t.fire(FIRST_SETTLE);
+  await until(()=>updater.status().status==='error');assert.ok(asked>=3&&asked<=8,'asked about '+asked+' times in routeWait');
+  assert.ok(t.list.some(x=>x.delay===2*MIN),'the 2-minute rung is armed: '+t.list.map(x=>x.delay));
+  assert.ok(ROUTE_WAIT>=ROUTE_POLL*10&&ROUTE_WAIT<=15000);
+  let other=0;const odd=make({autoUpdater:fake(),route:async()=>{other++;throw new Error('boom');},schedule:()=>null,routePoll:5,routeWait:5000});
+  odd.updater.start({after:null});await odd.updater.check({launch:true});assert.equal(other,1,'only ERR_UPDATE_ROUTE is waited for');assert.equal(odd.updater.status().status,'error');
 });
 
 test('nextCheckSeconds: a document sets the pace between 10 minutes and 24 hours; absent or nonsense means the usual 2 hours', async () => {
   const cases=[[900,900*1000+90000],[5,10*MIN+60000],[86400*10,24*60*MIN+CHECK_JITTER/2],[undefined,CHECK_EVERY+300000],['soon',CHECK_EVERY+300000],[-30,CHECK_EVERY+300000],[0,CHECK_EVERY+300000]];
   for (const [hint,delay] of cases) {
     const t=timers(),autoUpdater=fake({version:'0.1.0-beta.11',...(hint===undefined?{}:{nextCheckSeconds:hint})}),{updater}=make({autoUpdater,schedule:t.schedule,cancel:t.cancel});
-    updater.start();t.fire(CHECK_DELAY);await settle();await settle();
+    updater.start({after:null});t.fire(FIRST_SETTLE);await settle();await settle();
     assert.equal(t.list.length,1,'one regular look waits (the answer re-armed it)');assert.equal(t.last().delay,delay,'nextCheckSeconds '+hint);
   }
 });
@@ -110,8 +180,8 @@ test('nextCheckSeconds: a document sets the pace between 10 minutes and 24 hours
 test('a look on wake or focus: only when the feed\'s last answer is older than 2 hours, never within 5 minutes of the last look, never while busy or before the first look', async () => {
   let clock=1e12;const t=timers(),autoUpdater=fake(),{updater}=make({autoUpdater,schedule:t.schedule,cancel:t.cancel,now:()=>clock});
   assert.equal(updater.nudge(),false,'not started');
-  updater.start();assert.equal(updater.nudge(),false,'the first look (20 s after launch) has not happened: a focus at launch does not start one earlier');
-  t.fire(CHECK_DELAY);await settle();await settle();assert.equal(autoUpdater.checks,1);
+  updater.start({after:null});assert.equal(updater.nudge(),false,'the first look has not happened: a focus at launch does not start one earlier');
+  t.fire(FIRST_SETTLE);await settle();await settle();assert.equal(autoUpdater.checks,1);
   clock+=CHECK_EVERY-MIN;assert.equal(updater.nudge(),false,'the answer is not 2 hours old');
   clock+=2*MIN;assert.equal(updater.nudge(),true,'now it is');await settle();await settle();assert.equal(autoUpdater.checks,2);
   assert.equal(updater.nudge(),false,'just looked');clock+=NUDGE_QUIET+1;assert.equal(updater.nudge(),false,'and the answer is fresh again');
@@ -120,7 +190,7 @@ test('a look on wake or focus: only when the feed\'s last answer is older than 2
   clock+=1000;assert.equal(updater.nudge(),false,'within 5 minutes of the failed look');
   clock+=NUDGE_QUIET;autoUpdater.reply={version:'0.1.0-beta.11'};assert.equal(updater.nudge(),true,'later it looks again');await settle();await settle();assert.equal(updater.status().status,'current');
   // Squirrel.Mac holds a downloaded update: nothing looks again until it is installed
-  const mac=make({autoUpdater:fake(),platform:'darwin',macAvailability:()=>null});mac.updater.start();assert.equal(mac.updater.nudge(),false);
+  const mac=make({autoUpdater:fake(),platform:'darwin',macAvailability:()=>null});mac.updater.start({after:null});assert.equal(mac.updater.nudge(),false);
 });
 
 test('main.cjs asks for a look when the computer wakes and when a window gets focus', () => {

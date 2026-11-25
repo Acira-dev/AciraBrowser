@@ -5,6 +5,9 @@
 .cc-card { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 8px 8px 12px; border: 0; border-radius: 14px; background: transparent; color: var(--st-text, var(--text-1)); font: inherit; text-align: left; cursor: pointer; -webkit-appearance: none; appearance: none; transition: background-color 120ms ease, box-shadow 120ms ease; }
 .cc-card:hover { background: color-mix(in srgb, var(--st-text, var(--text-1, #1f2328)) 4%, transparent); }
 .cc-card[aria-checked='true'] { box-shadow: inset 0 0 0 2px var(--accent, #3b6eea); }
+.cc-card[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+.cc-card[aria-disabled='true']:hover { background: transparent; }
+.cc-card[aria-disabled='true']:not([aria-checked='true']):hover .cc-radio { box-shadow: inset 0 0 0 1.5px var(--st-edge-strong, rgb(0 0 0 / .3)); }
 .cc-card:focus { outline: 0; }
 .cc-card:focus-visible { outline: 2px solid var(--st-ring, var(--accent, #3b6eea)); outline-offset: 2px; }
 
@@ -49,12 +52,12 @@
   [data-group='layout'] .st-row[data-stacked]:has(> .st-control > .cc-group) { padding-bottom: 8px; gap: 6px; }
   [data-group='layout'] .cc-group { gap: 8px; }
   [data-group='layout'] .cc-card { gap: 6px; padding: 6px 8px 8px; }
-  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-group { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px 6px 8px; }
   [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: 0 0 72px; width: 72px; border-radius: 7px; }
   [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-label { flex: 1 1 auto; min-width: 0; }
-  /* side-by-side needs about 200px a card (72px miniature + a label that may wrap to two lines, in German "In einer Seitenleiste"); in a narrower pane the cards go back to a miniature over its label */
-  @container (max-width: 620px) {
+  /* side-by-side needs about 200px a card (72px miniature + a label that may wrap to two lines, in German "In einer Seitenleiste"); in a narrower pane the cards go back to a miniature over its label. Four cards (Beta 14: Top + sidebar) need 860px. */
+  @container (max-width: 860px) {
     [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-card { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 8px 8px; }
     [data-group='layout'] [data-setting='sidebar-only-tabs'] .cc-art { flex: none; width: auto; }
   }

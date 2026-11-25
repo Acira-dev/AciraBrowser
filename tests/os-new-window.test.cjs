@@ -498,7 +498,7 @@ test('Linux installer: the .desktop file it writes has both launcher actions, in
   checkActions(groups, { exec: value => value.startsWith(quoted + ' --acira-new-') });
   assert.equal(groups.get('Desktop Entry').get('Exec'), quoted + ' %U', 'the launcher itself starts as before');
   assert.equal(groups.get('Desktop Entry').get('Name'), 'Acira Browser');
-  assert.equal(groups.get('Desktop Entry').get('MimeType'), 'text/html;x-scheme-handler/http;x-scheme-handler/https;');
+  assert.equal(groups.get('Desktop Entry').get('MimeType'), 'text/html;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/acira;', 'web addresses and acira:// (the Insider link)');
   assert.equal(groups.get('Desktop Entry').get('StartupWMClass'), 'acira-browser.desktop');
   assert.deepEqual(out.actions, [['NewWindow', os.NEW_WINDOW_ARG], ['NewPrivateWindow', os.NEW_PRIVATE_WINDOW_ARG]]);
   // the installer's own words are the catalog's: nothing to drift
@@ -562,7 +562,7 @@ test('Linux AppImage: the builder config puts the same two actions in the .deskt
     const groups = parseDesktop(text);
     checkActions(groups, { exec: value => value.startsWith('AppRun --no-sandbox --acira-new-') });
     assert.equal(groups.get('Desktop Entry').get('Exec'), 'AppRun --no-sandbox %U', 'the launcher itself is unchanged');
-    assert.equal(groups.get('Desktop Entry').get('MimeType'), 'text/html;x-scheme-handler/http;x-scheme-handler/https;');
+    assert.equal(groups.get('Desktop Entry').get('MimeType'), 'text/html;x-scheme-handler/http;x-scheme-handler/https;' + (identity === 'qa' ? '' : 'x-scheme-handler/acira;'), 'acira:// (the Insider link) for the real Acira only');
   }
   delete require.cache[require.resolve('../packaging/electron-builder-linux.cjs')];
 });

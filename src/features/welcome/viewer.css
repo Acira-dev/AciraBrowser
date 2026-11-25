@@ -1,0 +1,20 @@
+/* Beta 14: the seal / member-card close-up on the Welcome's glass (Viewer.tsx). It is a `.b14w6` like the Welcome (welcome.css: the frame, the tokens, the entrance, the exit, the buttons, the card's own rise), so the only rules
+   here are the ones for what it holds: one centred column (the close-up, its label under it, the card's three actions) and the close control in the frame's top corner. Interface px, no scale. */
+.b14v { --v-gap: clamp(20px, 3.4vh, 32px); }
+.b14v .v-col { display: flex; flex-direction: column; align-items: center; max-width: 100%; }
+.b14v .v-seal, .b14v .v-card { display: block; }
+.b14v .v-seal-box { position: relative; display: grid; place-items: center; }
+.b14v .v-card-box { display: block; }
+.b14v .v-label-wrap { display: block; max-width: min(36em, calc(100vw - 96px)); }
+.b14v .v-label { margin: var(--v-gap) 0 0; font-size: clamp(26px, 4.4vh, 40px); line-height: 1.1; letter-spacing: -.04em; text-align: center; text-wrap: balance; outline: none; }
+.b14v .v-actions { margin-top: clamp(16px, 2.8vh, 24px); display: flex; justify-content: center; }
+.b14v .v-actions-row { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: calc(100vw - 96px); }
+.b14v .v-actions .wpb { padding: 0 16px; }
+.b14v .v-note { margin: 12px 0 0; font: 450 13px/20px var(--font-ui); color: var(--t2); text-align: center; text-shadow: var(--tsh); }
+.b14v .v-note[data-bad] { color: var(--ink); }
+/* the close control: the house quiet button, a circle, in the frame's top corner (the end side in a right-to-left language) */
+.b14v .v-close-wrap { position: absolute; top: 12px; inset-inline-end: 12px; z-index: 6; }
+.b14v .v-close { width: 40px; padding: 0; border-radius: 50%; color: var(--t2); }
+.b14v .v-close:is(:hover) { color: var(--ink); }
+/* the seal is the supplied picture itself (seal-closer.css): nothing is put behind it; its box only gives it room */
+.b14v .seal-closer { display: grid; place-items: center; }

@@ -5,21 +5,29 @@ import { formatShortcut, isMac, isTorSupported } from '../ui/platform';
 import { menuShortcut } from '../ui/shortcutKeys';
 import {runtime} from '../runtime/client';
 import { defaultMenuLayout,platformMenuLayout,menuSections,type MenuItemId,type MenuLayout } from '../ui/menuPrefs';
-import { ChevronLeft,Code2,FocusRow,PanelLeft,SeamlessRow,Link2,MessageSquare,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Sparkles,SparklesOff,Star,Undo2 } from './AppIcons';
+import { ArrowLeftRight } from 'lucide-react';
+import { Activity,ChevronLeft,Code2,FocusRow,Monitor,PanelLeft,SeamlessRow,Link2,MessageSquare,Printer,Trash2,MoreHorizontal,ChevronRight,Columns2,Command,Download,History,Layers3,LayoutGrid,PanelTop,Plus,PrivateWindow,Search,Settings2,Sparkles,SparklesOff,Star,Undo2,Zap } from './AppIcons';
 import { ExtensionsIcon } from './ToolbarIcon';
 import { TorCircuitGlyph, TorGlyph } from '../features/tor/TorChip';
 import { copyText } from '../ui/pageActions';
-import type { BrowserAction,TabSession } from '../runtime/types';
+import { screenshotMenuCommand } from '../ui/screenshotKinds';
+import { isWebsite } from '../runtime/newTabPage';
+import type { BrowserAction,BrowserSnapshot,TabSession } from '../runtime/types';
 
 import '../styles/submenu.css';import './Segmented.css';import '../styles/menu-layout.css';
-import type { WindowView } from '../runtime/windowView';import { shownView,viewsOfLayout,type TabsLayout } from '../ui/sidebarMode';import { windowViewName } from '../ui/windowViewText';import { shortcutFor } from '../ui/shortcutKeys';
-import { t } from '../i18n';
+import type { WindowView } from '../runtime/windowView';import { setTabsLayout,shownView,tabsLayoutOf,viewsOfLayout,type TabsLayout } from '../ui/sidebarMode';import { windowViewName } from '../ui/windowViewText';import { shortcutFor } from '../ui/shortcutKeys';
+import { t, type MessageId } from '../i18n';
+import type { SidebarChoice, SidebarRow } from '../ui/sidebarClosedChoice';
 import { LockKeyhole } from './AppIcons';
 import { restartToUpdate,useUpdateReady } from '../features/updates/useUpdateReady';
+import { openTransferSheet } from '../features/transfer/client';
+import { profileFiltersBlocked, transferBlocked } from '../features/transfer/entryPoints';
+import { useSendLive } from '../features/transfer/useSendLive';
+import '../features/transfer/transfer.css';
 /** AI-free mode: one switch in the menu. On hides AI answers and AI buttons on websites; the choice is the profile's `aiContent` filter.
  * Its glyph says the state with the switch (founder after beta.7: both rows were shields, and on or off should show): the sparkles
  * (the AI mark) while AI is shown, the sparkle crossed out while AI-free mode hides it. */
-function AiFreeRow({ask=true}:{/** False in a private or Tor window (profileFilters.ts): the row draws disabled, as main's answer there would leave it, and main is never asked. */ask?:boolean}){
+function AiFreeRow({ask=true}:{/** False in a private or Tor window (entryPoints profileFiltersBlocked): the row draws disabled, as main's answer there would leave it, and main is never asked. */ask?:boolean}){
   const [on,setOn]=useState<boolean|null>(null),busy=useRef(false);
   useEffect(()=>{if(!ask)return;let alive=true;const read=()=>runtime.service({type:'filters.profile-status'}).then(result=>{if(alive)setOn(!!result.filters?.aiContent);}).catch(()=>{});void read();const unsubscribe=runtime.subscribeBrowser?.(event=>{if(event.type==='filters-changed')void read();});return()=>{alive=false;unsubscribe?.();};},[ask]);
   // Flips at once (the switch's 140ms thumb) and the menu stays open; it reverts if the profile could not be updated.
@@ -36,9 +44,28 @@ function UpdateRow({row}:{row:MenuParts['row']}){
   if(!version)return null;
   return <>{row(t("update.restartRow"),UpdateGlyph,()=>{void restartToUpdate();},undefined,t("update.pillTip",{version}))}<hr/></>;
 }
+/** "Move to another computer…" (spec 4.1), the last row of the library group: lucide ArrowLeftRight at the 1.5 stroke the design pictures use, no key. While a send is waiting (its code is out) a small
+ * accent dot follows the label, in the slot the menu's trailing marks use. A private or Tor window never draws the row (menuPrefs platformMenuLayout). */
+export function TransferMenuRowView({live,onClick}:{live:boolean;onClick:()=>void}){
+  return <button type="button" className="menu-row" onClick={onClick}><ArrowLeftRight size={16} strokeWidth={1.5} aria-hidden="true"/><span>{t('transfer.menu')}</span>{live&&<i className="tx-live" role="img" aria-label={t('transfer.live')}/>}</button>;
+}
+/** Leaves the menu, then asks main for the sheet (it opens on the two-card choice). Closing first keeps main's own popup from being the one an id-less close takes down. */
+export function openTransferFromMenu(close?:()=>void){
+  if(close)close();else runtime.closeOverlay();
+  void openTransferSheet('choice').catch(()=>{});
+}
+/** Its own component, so a status nudge re-renders this row and not the menu around it. */
+function TransferRow({close}:{close?:()=>void}){
+  const live=useSendLive();
+  return <TransferMenuRowView live={live} onClick={()=>openTransferFromMenu(close)}/>;
+}
+/** App says it with `transferHidden`; without it the window's own first snapshot does (a window never turns from ordinary to private), and a Tor window or tab always hides it. */
+const transferHiddenIn=(p:{transferHidden?:boolean;torActive?:boolean}):boolean=>p.transferHidden??(!!p.torActive||transferBlocked(runtime.initialSnapshot));
+/** App says it with `profileFiltersBlocked`; without it the window's own first snapshot does, as for the transfer row. */
+const filtersBlockedIn=(p:{profileFiltersBlocked?:boolean}):boolean=>p.profileFiltersBlocked??profileFiltersBlocked(runtime.initialSnapshot);
 export type BrowserMenuIcon = ComponentType<{size?:number}>;
 /** One command of the "More tools" panel: power-user actions that have a key but are rarely reached by mouse. */
-export interface BrowserMenuTool {label:string;Icon:BrowserMenuIcon;action:()=>void;hint?:string;disabled?:boolean}
+export interface BrowserMenuTool {label:string;Icon:BrowserMenuIcon;action:()=>void;hint?:string;/** The key as it reads now (the shortcut registry's, a changed one included), already in its final spelling; `hint` is the written one it falls back to. */shown?:string;disabled?:boolean}
 
 /** The Acira menu (critique rounds 2–3; V02, 25 Oct: it never scrolls at usual window heights): no header, 18 rows in
  * five groups — new tabs, new windows (each plain, private and Tor: one mask, one onion), this page, your library, the
@@ -46,10 +73,12 @@ export interface BrowserMenuTool {label:string;Icon:BrowserMenuIcon;action:()=>v
  * Save, Install as app) live in the site popover; Bookmark this tab sits at the top of Bookmarks.
  * R3-43: which rows sit here, in what order, is the person's choice (menuPrefs.ts, Settings › Appearance › Menu); this is
  * the default. */
-export type MenuToolId='print'|'savePage'|'copyAddress'|'devtools'|'clearData';
+export type MenuToolId='print'|'savePage'|'screenshot'|'zap'|'copyAddress'|'devtools'|'clearData';
 export interface MenuParts {
   row:(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string,tip?:string)=>ReactNode;
   newTab:()=>void;/** New window, private window, Tor window: opens it and closes the menu like every other row that leaves it. */openWindow?:(kind:'normal'|'private'|'tor')=>void;restore:()=>void;open:(kind:string)=>void;navigate:(url:string)=>void;find:()=>void;focus:()=>void;
+  /** Beta 14.4: open Settings on a page or a setting (ui/settingsView.ts openSettings), and close the menu. */
+  openSettingsAt?:(target:{section?:string;setting?:string})=>void;
   focusActive?:boolean;focusEnabled?:boolean;/** R3-68: Seamless is a second toggle beside Focus. */seamless?:()=>void;seamlessActive?:boolean;zoom:ReactNode;tools:Record<MenuToolId,BrowserMenuTool>;
   /** In a Tor tab or window (R3-61): a "New Tor identity" row joins the new-window group; it asks before it does anything. */
   torActive?:boolean;torIdentity?:()=>void;
@@ -59,15 +88,21 @@ export interface MenuParts {
    * Settings › Window view and Make it yours. Absent (tests, the preview) means no rows. The Tabs choice is one of three layouts (ui/sidebarMode.ts), and
    * the View row lists only the views that look different in it. */
   view?:WindowView;setView?:(view:WindowView)=>void;tabsLayout?:TabsLayout;setTabsLayout?:(layout:TabsLayout)=>void;
+  /** Beta 14: the "Sidebar: Open · Mini · Hidden" row of the Layout group (ui/sidebarClosedChoice.ts). Absent, or null where the layout has no sidebar: no row. */
+  sidebarRow?:SidebarRow|null;setSidebarState?:(choice:SidebarChoice)=>void;
   /** "Report a problem…" under Settings: the menu turns into the report form (about this site or about Acira). Absent while this build
    * cannot send reports, and in Tor (App.tsx reportSubjects); the menu is then as before. */
   report?:()=>void;
-  /** A private or Tor window: AI-free mode (the profile's filter) is not asked for; its row draws disabled (App passes it from the live state). */
+  /** "Move to another computer…" leaves through this when it runs (App's close of this popup); absent, the overlay in front is closed. */
+  close?:()=>void;
+  /** A private or Tor window: the transfer row is not drawn (and the popup's height does not count it). Absent, BrowserMenu reads it from the window's first snapshot. */
+  transferHidden?:boolean;
+  /** A private or Tor window: AI-free mode (the profile's filter) is not asked for; its row draws disabled. Absent, BrowserMenu reads it from the window's first snapshot. */
   profileFiltersBlocked?:boolean;
 }
-const tool=(item:BrowserMenuTool)=><button type="button" className="menu-row" disabled={item.disabled} onClick={item.action}><item.Icon size={16}/><span>{item.label}</span>{item.hint&&<kbd>{formatShortcut(item.hint)}</kbd>}</button>;
+const tool=(item:BrowserMenuTool)=><button type="button" className="menu-row" disabled={item.disabled} onClick={item.action}><item.Icon size={16}/><span>{item.label}</span>{item.hint&&<kbd>{item.shown??formatShortcut(item.hint)}</kbd>}</button>;
 /** One node per menu row, so either list can draw any of them. */
-function menuNodes(p:MenuParts):Record<MenuItemId,ReactNode>{
+export function menuNodes(p:MenuParts):Record<MenuItemId,ReactNode>{
   const row=p.row;
   return {
     newTab:row(t("browsermenu.newTab"),Plus,p.newTab,'Ctrl T'),
@@ -80,16 +115,19 @@ function menuNodes(p:MenuParts):Record<MenuItemId,ReactNode>{
     zoom:p.zoom,
     split:row(t("browsermenu.splitView"),Columns2,()=>p.open('split'),'Ctrl Shift S'),
     protection:<button type="button" className="menu-row menu-row-more" aria-haspopup="dialog" onClick={()=>p.open('protection')}><ProtectionIcon/><span>{t('protection.title')}</span><ChevronRight size={14} aria-hidden="true"/></button>,
-    aiFree:<AiFreeRow ask={!p.profileFiltersBlocked}/>,
+    aiFree:<AiFreeRow ask={!filtersBlockedIn(p)}/>,
     bookmarks:<button type="button" className="menu-row menu-row-more" aria-haspopup="dialog" onClick={()=>p.open('bookmarks')}><Star size={16}/><span>{t("browsermenu.bookmarks")}</span><kbd>{formatShortcut('Ctrl Shift O')}</kbd><ChevronRight size={14} aria-hidden="true"/></button>,
     history:row(t("browsermenu.history"),History,()=>p.navigate('acira://history'),'Ctrl H'),
     // Rewind's quick list (it replaced the "Reopen closed tab" row): a drill-in to the last closed tabs; Ctrl+Shift+T still reopens the latest.
     recentlyClosed:<button type="button" className="menu-row menu-row-more" aria-haspopup="dialog" title={t("browsermenu.reopenClosedTab")} onClick={()=>p.open('recent-closed')}><Undo2 size={16}/><span>{t("rewind.recentlyClosed")}</span><kbd>{menuShortcut(t("browsermenu.reopenClosedTab"),'Ctrl Shift T')}</kbd><ChevronRight size={14} aria-hidden="true"/></button>,
     rewind:row(t("browsermenu.rewind"),Layers3,()=>p.navigate('acira://rewind'),'Ctrl Shift H',t("shortcuthints.rewind")),
     downloads:row(t("browsermenu.downloads"),Download,()=>p.open('downloads'),'Ctrl J'),
+    transfer:<TransferRow close={p.close}/>,
     allTabs:row(t("browsermenu.allOpenTabs"),LayoutGrid,()=>p.open('tabs'),'Alt T'),
     commands:row(t("browsermenu.searchAndCommands"),Command,()=>p.open('palette'),'Ctrl Shift K'),
-    print:tool(p.tools.print),savePage:tool(p.tools.savePage),copyAddress:tool(p.tools.copyAddress),devtools:tool(p.tools.devtools),clearData:tool(p.tools.clearData),
+    print:tool(p.tools.print),savePage:tool(p.tools.savePage),screenshot:tool(p.tools.screenshot),zap:tool(p.tools.zap),copyAddress:tool(p.tools.copyAddress),devtools:tool(p.tools.devtools),clearData:tool(p.tools.clearData),
+    // Next to Developer tools in More tools (Chrome keeps both in its More tools); Shift+Esc opens it, as in Chrome.
+    taskManager:row(t("browsermenu.taskManager"),Activity,()=>p.open('task-manager'),'Shift Esc'),
     focus:<MenuToggle icon={FocusRow} label={t("browsermenu.focusMode")} on={!!p.focusActive} disabled={p.focusEnabled===false} shortcut={formatShortcut('Ctrl Shift F')} onToggle={p.focus}/>,
     seamless:<MenuToggle icon={SeamlessRow} label={t("browsermenu.seamless")} on={!!p.seamlessActive} disabled={!p.seamless} shortcut={formatShortcut('Ctrl Shift L')} onToggle={p.seamless??(()=>{})}/>,
     extensions:row(t("browsermenu.extensions"),ExtensionsIcon,()=>p.open('extensions')),
@@ -103,26 +141,40 @@ const ViewCompactGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx=
 const TabsTopGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M2 6.25h12M6.5 2.75v3.5"/></>);
 /** The window with its sidebar and the address field drawn inside the sidebar: the third Tabs answer. */
 const TabsSideAddressGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M6.25 2.75v10.5M3.5 5.1h1.4"/></>);
+/** Beta 14: the window with a top band and a left column: Top + sidebar, the second Tabs answer (between Along the top and In a sidebar). */
+const TabsTopSideGlyph=glyph(<><rect x="2" y="2.75" width="12" height="10.5" rx="2"/><path d="M6.25 2.75v10.5M6.25 6.25H14M9.5 2.75v3.5"/></>);
+/** The four Tabs answers as the segments of a MenuSegment: the main menu's Tabs row and the Layout row of the sidebar's and the tab bar's right-click menus draw the same options, so the three always agree. */
+export const tabsLayoutOptions=(choose:(layout:TabsLayout)=>void)=>[{id:'top' as const,tip:t("yours.tabsTop"),Icon:TabsTopGlyph,choose:()=>choose('top')},{id:'top-sidebar' as const,tip:t("yours.tabsTopSide"),Icon:TabsTopSideGlyph,choose:()=>choose('top-sidebar')},{id:'sidebar' as const,tip:t("yours.tabsSide"),Icon:PanelLeft,choose:()=>choose('sidebar')},{id:'sidebar-address' as const,tip:t("yours.tabsSideAddress"),Icon:TabsSideAddressGlyph,choose:()=>choose('sidebar-address')}] as const;
 export const menuLayoutViews=['full','compact','seamless'] as const;
 const viewGlyph:Record<(typeof menuLayoutViews)[number],BrowserMenuIcon>={full:ViewFullGlyph,compact:ViewCompactGlyph,seamless:SeamlessRow};
 const viewShortcut:Record<(typeof menuLayoutViews)[number],[string,string]>={full:['view-full',''],compact:['compact-toolbar',''],seamless:['seamless-mode','Ctrl Shift L']};
 /** One joined segmented control on the menu grid (the shared .acira-seg track and sliding thumb, sized for a 30px row). Also the report
  * form's "About" row (SiteReport.tsx), with words and no glyphs. */
-export function MenuSegment<T extends string>({label,value,options}:{label:string;value:T|undefined;options:readonly {id:T;text?:string;tip:string;Icon?:BrowserMenuIcon;choose:()=>void}[]}){
+export function MenuSegment<T extends string>({label,value,options}:{label:string;value:T|undefined;options:readonly {id:T;text?:string;tip:string;Icon?:BrowserMenuIcon;choose:()=>void;/** Not available in this setup (Beta 14): dimmed, never chosen, and its tooltip says why. */disabled?:boolean}[]}){
   const index=options.findIndex(option=>option.id===value);
   return <div className={`acira-seg menu-seg${options.some(option=>option.text)?' menu-seg-labelled':''}`} role="radiogroup" aria-label={label} data-empty={index<0||undefined} style={{'--seg-count':options.length,'--seg-index':Math.max(0,index)} as CSSProperties}>
     <span className="acira-seg-thumb" aria-hidden="true"/>
-    {options.map(option=><button key={option.id} type="button" role="radio" aria-checked={option.id===value} aria-label={option.text?undefined:option.tip.split(' · ')[0]} title={option.tip} onClick={option.choose}>{option.Icon&&<option.Icon size={16}/>}{option.text&&<span>{option.text}</span>}</button>)}
+    {options.map(option=><button key={option.id} type="button" className="menu-seg-option" role="radio" aria-checked={option.id===value} aria-label={option.text?undefined:option.tip.split(' · ')[0]} title={option.tip} aria-disabled={option.disabled||undefined} onClick={option.disabled?undefined:option.choose}>{option.Icon&&<option.Icon size={16}/>}{option.text&&<span>{option.text}</span>}</button>)}
   </div>;
 }
 /** R4-16 + R4-19: two short rows in the page group, no divider of their own. View keeps the menu open so the change is seen; a Tabs pick moves the sidebar and the address bar, so
  * the menu closes with it (App.tsx). With the address bar in the sidebar Compact and Focus are the same window as Full, so the View row lists Full and Seamless only (ui/sidebarMode.ts). */
-function LayoutRows({view,setView,tabsLayout='top',setTabsLayout}:Required<Pick<MenuParts,'setView'|'setTabsLayout'>>&{view?:WindowView;tabsLayout?:TabsLayout}){
+function LayoutRows({view,setView,tabsLayout='top',setTabsLayout,sidebarRow,setSidebarState,openSettings}:Required<Pick<MenuParts,'setView'|'setTabsLayout'>>&{view?:WindowView;tabsLayout?:TabsLayout;sidebarRow?:SidebarRow|null;setSidebarState?:(choice:SidebarChoice)=>void;/** Beta 14.4: Settings › Layout, the page these rows come from. */openSettings?:()=>void}){
   const tip=(mode:(typeof menuLayoutViews)[number])=>{const [id,written]=viewShortcut[mode],key=shortcutFor(id,written||undefined);return key?`${windowViewName(mode)} · ${key}`:windowViewName(mode);};
   const views=viewsOfLayout(tabsLayout,menuLayoutViews) as readonly (typeof menuLayoutViews)[number][];
   return <div className="menu-layout" role="group" aria-label={`${t("browsermenu.view")} · ${t("yours.tabs")}`}>
     <div className="menu-layout-row"><span>{t("browsermenu.view")}</span><MenuSegment label={t("browsermenu.view")} value={view&&shownView(tabsLayout,view)} options={views.map(mode=>({id:mode,tip:tip(mode),Icon:viewGlyph[mode],choose:()=>setView(mode)}))}/></div>
-    <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={tabsLayout} options={[{id:'top',tip:t("yours.tabsTop"),Icon:TabsTopGlyph,choose:()=>setTabsLayout('top')},{id:'sidebar',tip:t("yours.tabsSide"),Icon:PanelLeft,choose:()=>setTabsLayout('sidebar')},{id:'sidebar-address',tip:t("yours.tabsSideAddress"),Icon:TabsSideAddressGlyph,choose:()=>setTabsLayout('sidebar-address')}] as const}/></div>
+    <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={tabsLayout} options={tabsLayoutOptions(setTabsLayout)}/></div>
+    {sidebarRow&&setSidebarState&&<div className="menu-layout-row"><span>{t("acirasidebar.sidebar")}</span><MenuSegment<SidebarChoice> label={t("acirasidebar.sidebar")} value={sidebarRow.value} options={sidebarChoices.map(([id,text])=>{const why=sidebarRow.reasons[id];return {id,text:t(text),tip:why?`${t(text)} · ${t(why)}`:t(text),disabled:!!why,choose:()=>setSidebarState(id)};})}/></div>}
+    {openSettings&&<button type="button" className="menu-row" onClick={openSettings}><Settings2 size={16}/><span>{t('settings.layoutSettingsRow')}</span></button>}
+  </div>;
+}
+const sidebarChoices:readonly (readonly [SidebarChoice,MessageId])[]=[['open','app.open'],['mini','sidebar.closedMini'],['hidden','sidebar.closedHidden']];
+/** The Tabs row on its own (Beta 14): "Tabs" and the four answers as icons, for the right-click menus of the sidebar and of the tab bar (the main menu has the same row inside LayoutRows). The change moves the sidebar and the tab strip,
+ * so the menu closes with it, as the main menu does. */
+export function TabsLayoutRow({state,dispatch,close}:{state:BrowserSnapshot;dispatch:(action:BrowserAction)=>void;close:()=>void}){
+  return <div className="menu-layout" role="group" aria-label={t("yours.tabs")}>
+    <div className="menu-layout-row"><span>{t("yours.tabs")}</span><MenuSegment label={t("yours.tabs")} value={tabsLayoutOf(state.settings)} options={tabsLayoutOptions(layout=>{setTabsLayout(state,dispatch,layout);close();})}/></div>
   </div>;
 }
 /** Where the Layout rows sit: after Split view (or Zoom, or Find) in the person's main list; nowhere when the page group is gone. */
@@ -132,13 +184,13 @@ function MenuList({ids,nodes,extra,after,insert}:{ids:readonly MenuItemId[];node
   return <>{menuSections(ids).map((section,index)=><Fragment key={section[0]}>{index>0&&<hr/>}{section.map(id=><Fragment key={id}>{nodes[id]}{id===after&&extra}{id===insert?.after&&insert.node}</Fragment>)}</Fragment>)}{!after&&extra}</>;
 }
 export function BrowserMenu({layout=defaultMenuLayout,torActive=false,torIdentity,torCircuit,torCircuitKey,...parts}:MenuParts&{layout?:MenuLayout}) {
-  layout=platformMenuLayout(layout);
+  layout=platformMenuLayout(layout,transferHiddenIn({transferHidden:parts.transferHidden,torActive}));
   const nodes=menuNodes(parts),row=parts.row;
   // R3-61: the identity row sits with the new-window group (after New Tor window); with that row moved or hidden it closes the list. Popup height counts it in a Tor context (popup.ts).
   const identity=torActive&&torIdentity&&row(t("tornewtab.newTorIdentity"),TorIdentityGlyph,torIdentity,'Ctrl Shift U'),circuit=identity&&torCircuit&&row(t("tor.circuit.new"),TorCircuitGlyph,torCircuit,torCircuitKey),torRows=identity&&<>{identity}{circuit}</>;
-  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setTabsLayout?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} tabsLayout={parts.tabsLayout} setTabsLayout={parts.setTabsLayout}/>}:undefined;
+  const anchor=menuLayoutAnchor(layout.main),layoutRows=anchor&&parts.setView&&parts.setTabsLayout?{after:anchor,node:<LayoutRows view={parts.view} setView={parts.setView} tabsLayout={parts.tabsLayout} setTabsLayout={parts.setTabsLayout} sidebarRow={parts.sidebarRow} setSidebarState={parts.setSidebarState} openSettings={parts.openSettingsAt&&(()=>parts.openSettingsAt!({section:'Layout'}))}/>}:undefined;
   return <>
-    {import.meta.env.DEV&&<><div className="menu-preview-label">{t('menu.localPreview')}</div><button type="button" className="menu-row" onClick={()=>{const channel=new BroadcastChannel('acira-live-preview');channel.postMessage('refresh');channel.close();}}><UpdateGlyph size={16}/><span>{t('menu.refreshPreview')}</span></button><hr/></>}
+    {import.meta.env?.DEV&&<><div className="menu-preview-label">{t('menu.localPreview')}</div><button type="button" className="menu-row" onClick={()=>{const channel=new BroadcastChannel('acira-live-preview');channel.postMessage('refresh');channel.close();}}><UpdateGlyph size={16}/><span>{t('menu.refreshPreview')}</span></button><hr/></>}
     <UpdateRow row={row}/>
     <MenuList ids={layout.main} nodes={nodes} extra={torRows} after={identity&&layout.main.includes('newTorWindow')?'newTorWindow':undefined} insert={layoutRows}/>
     {layout.main.length>0&&<hr/>}
@@ -150,7 +202,7 @@ export function BrowserMenu({layout=defaultMenuLayout,torActive=false,torIdentit
 
 /** More tools: what the Acira menu keeps one step away (finding tabs, Focus mode, Extensions), in the same rows and columns. */
 export function MoreToolsMenu({layout=defaultMenuLayout,...parts}:MenuParts&{layout?:MenuLayout}) {
-  layout=platformMenuLayout(layout);
+  layout=platformMenuLayout(layout,transferHiddenIn(parts));
   return <MenuList ids={layout.more} nodes={menuNodes(parts)}/>;
 }
 
@@ -163,10 +215,14 @@ export function SubmenuBack({title,onBack}:{title:ReactNode;onBack:()=>void}){
 
 /** The page commands in More tools. Each runs on the tab the menu was opened for and closes the menu. */
 export function menuTools(tab:TabSession,close:()=>void,dispatch:(action:BrowserAction)=>unknown):Record<MenuToolId,BrowserMenuTool>{
-  const page=/^(https?|file):/i.test(tab.url),run=(type:'print'|'save-page'|'devtools'|'clear-data')=>()=>{void runtime.browserCommand({type,tabId:tab.id});close();};
+  const zapKey=shortcutFor('zap','Ctrl Alt Z'),page=/^(https?|file):/i.test(tab.url),run=(type:'print'|'save-page'|'devtools'|'clear-data')=>()=>{void runtime.browserCommand({type,tabId:tab.id});close();};
   return {
     print:{label:t("browsermenu.print"),Icon:Printer,action:run('print'),hint:'Ctrl P',disabled:!page},
     savePage:{label:t("browsermenu.savePageAs"),Icon:Download,action:run('save-page'),disabled:!page},
+    /* Beta 14: opens the small menu the shortcut opens (Area, Visible page, Full page) */
+    screenshot:{label:t("shortcutCmd.screenshot"),Icon:Monitor,action:()=>{void runtime.browserCommand(screenshotMenuCommand(tab.id));close();},hint:'Ctrl Shift 7'},
+    // Beta 14: Zap element starts picking a part of this page to remove for good; only a website has parts. The key is the registry's, so a changed one shows here.
+    zap:{label:t('zap.menu'),Icon:Zap,action:()=>{void dispatch({type:'zap.start'});close();},hint:zapKey&&'Ctrl Alt Z',shown:zapKey,disabled:!isWebsite(tab)||!!tab.error},
     copyAddress:{label:t("browsermenu.copyPageAddress"),Icon:Link2,hint:'Ctrl Shift C',disabled:!page,action:()=>{void copyText(tab.url).then(()=>dispatch({type:'toast',text:t("browsermenu.linkCopied")}),()=>dispatch({type:'toast',text:t("browsermenu.couldNotCopyTheLink"),tone:'error'}));close();}},
     devtools:{label:t("browsermenu.developerTools"),Icon:Code2,action:run('devtools'),hint:'F12',disabled:!page},
     clearData:{label:t("browsermenu.clearBrowsingData"),Icon:Trash2,action:run('clear-data'),hint:'Ctrl Shift Delete'},

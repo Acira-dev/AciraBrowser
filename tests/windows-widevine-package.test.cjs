@@ -14,14 +14,14 @@ test('the Windows pin is the same ECS release as the Mac one, for the Electron t
  const pkg=require('../package.json'),pin=require('../packaging/windows-widevine-runtime.json'),mac=require('../packaging/macos/widevine-runtime.json');
  assert.equal(pin.electron,pkg.devDependencies.electron);assert.equal(pin.release,mac.release);assert.equal(pin.repository,'castlabs/electron-releases');
  assert.deepEqual(Object.keys(pin.platforms),['x64']);
- // castlabs/electron-releases v44.9.3+wvcus: electron-v44.9.3+wvcus-win32-x64.zip, GitHub asset digest = castlabs SHASUMS256.txt
- assert.deepEqual(pin.platforms.x64,{sha256:'1ab1e5aa4566f218873d272af1a57c6162ad83911a69bbd4b0e341c37c6c40fc',bytes:158806556});
+ // castlabs/electron-releases v45.2.1+wvcus: electron-v45.2.1+wvcus-win32-x64.zip, GitHub asset digest = castlabs SHASUMS256.txt
+ assert.deepEqual(pin.platforms.x64,{sha256:'a17f87a95a62e8f336d6fa18e57b9bc83d513b02211e4e5771a45cfd7482740e',bytes:158442491});
 });
 
 test('the runtime URL and cache name follow the release asset, and the fetch refuses outside Windows or for another Electron',async()=>{
  const {archiveName,archiveUrl,fetchWindowsWidevineRuntime}=await fetchModule();
- assert.equal(archiveName('x64'),'electron-v44.9.3+wvcus-win32-x64.zip');
- assert.equal(archiveUrl('x64'),'https://github.com/castlabs/electron-releases/releases/download/v44.9.3%2Bwvcus/electron-v44.9.3%2Bwvcus-win32-x64.zip');
+ assert.equal(archiveName('x64'),'electron-v45.2.1+wvcus-win32-x64.zip');
+ assert.equal(archiveUrl('x64'),'https://github.com/castlabs/electron-releases/releases/download/v45.2.1%2Bwvcus/electron-v45.2.1%2Bwvcus-win32-x64.zip');
  await assert.rejects(fetchWindowsWidevineRuntime({platform:'darwin'}),/prepared on Windows/);
  await assert.rejects(fetchWindowsWidevineRuntime({platform:'win32',electron:'45.0.0'}),/update packaging\/windows-widevine-runtime\.json/);
  await assert.rejects(fetchWindowsWidevineRuntime({platform:'win32',arch:'arm64'}),/No Windows Widevine runtime is pinned for arm64/);

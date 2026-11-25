@@ -45,7 +45,7 @@ export function SiteListEditor({ sites, onChange, label, disabled }: { sites: st
 
   return <div ref={block} className="sl" data-disabled={disabled || undefined}>
     <form className="sl-add" onSubmit={add} noValidate>
-      <input className="st-input sl-input" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-label={t('sitelist.addSite')} aria-invalid={problem ? true : undefined} aria-describedby={message ? messageId : undefined}
+      <input className="st-input sl-input ab-input" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-label={t('sitelist.addSite')} aria-invalid={problem ? true : undefined} aria-describedby={message ? messageId : undefined}
         placeholder="mail.example.com" value={draft} disabled={disabled} onChange={(event) => { setDraft(event.target.value); if (problem) setProblem(''); }} />
       <button type="submit" className="st-button" disabled={disabled || !draft.trim()}>{t('sitelist.add')}</button>
     </form>

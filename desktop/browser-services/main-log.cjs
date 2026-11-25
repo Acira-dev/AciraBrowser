@@ -5,9 +5,12 @@
 // It was logs/main.log until beta.10, a second file of that name beside <user data>/main.log (main-process errors, process-errors.cjs); a profile's
 // old logs/main.log becomes blocked.log the first time a line is written, so one name means one file.
 const fs = require('node:fs'), path = require('node:path');
+// A profile transfer's code (five words) never lands in a log line, however it got into the text (transfer/code.cjs maskCodes).
+const { maskCodes } = require('../transfer/code.cjs');
 function createMainLog({ directory, io = fs, now = () => new Date(), maxBytes = 1024 * 1024, echo = line => console.warn(line) }) {
   const file = path.join(directory, 'blocked.log'); let moved = false;
-  return function log(line) {
+  return function log(raw) {
+    const line = maskCodes(raw);
     const text = `${now().toISOString()} ${String(line).replace(/[\r\n]+/g, ' ').slice(0, 1000)}\n`;
     try { echo(line); } catch { /* the console may be gone at quit */ }
     try {

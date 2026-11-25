@@ -13,7 +13,7 @@ test('a tab is offered Unload tab unless the Memory Saver could never unload it'
   const state = scope();
   assert.equal(mayOfferSleep(state, tab('a')), true);
   assert.equal(mayOfferSleep(scope({ windowUi: { split: { tabIds: ['a', 'active'] } } }), tab('a')), false, 'a pane of the split on screen is on screen too');
-  assert.equal(mayOfferSleep(state, tab('a', { pinned: true })), true, '13.10: the person\'s own Unload also unloads a pinned tab (the automatic sleep still keeps it)');
+  assert.equal(mayOfferSleep(state, tab('a', { pinned: true })), false, 'Beta 14: a pinned tab\'s menu has its own Unload tab row (its close puts it to sleep in place, pinnedClose.ts), so this one is not offered twice');
   assert.equal(mayOfferSleep(state, tab('a', { sleeping: true })), false, 'already unloaded');
   assert.equal(mayOfferSleep(state, tab('a', { url: 'acira://settings', contentKind: 'internal' })), false, 'Acira\'s own pages have nothing to free');
   assert.equal(mayOfferSleep(state, tab('a', { url: 'file:///tmp/x.html' })), false);

@@ -45,8 +45,8 @@ const rule = (needle: string) => css.split('\n').find(line => line.includes(need
 
 test('the stroke is its own path in both pieces of the frame line, after the line\'s own', () => {
   const app_ = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.ok(app_.includes('<div className="sidebar-page-rim sidebar-page-rim-top" aria-hidden="true"><svg><path/><path className="rim-edge"/></svg></div>'));
-  assert.ok(app_.includes('<div className="sidebar-page-rim sidebar-page-rim-low" aria-hidden="true"><svg><path/><path className="rim-edge"/></svg></div>'));
+  assert.ok(app_.includes('<div className="sidebar-page-rim sidebar-page-rim-top" aria-hidden="true"><svg className="sidebar-page-rim-svg"><path/><path className="rim-edge"/></svg></div>'));
+  assert.ok(app_.includes('<div className="sidebar-page-rim sidebar-page-rim-low" aria-hidden="true"><svg className="sidebar-page-rim-svg"><path/><path className="rim-edge"/></svg></div>'));
 });
 
 test('the line\'s own path no longer carries the stroke; the stroke path does, and is empty with no sidebar edge', async () => {
@@ -84,9 +84,9 @@ test('with no transition to play (Off, or the browser cannot) the stroke is neve
   await say(false); finish?.(); await paint();
 });
 
-test('the stylesheet keeps the line\'s colour and width, hides the waiting stroke at once during an edge transition and fades it in; the end state is the same line', () => {
-  assert.ok(css.includes('.sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:rgb(0 0 0 / .08); stroke-width:1; }'));
-  assert.ok(css.includes('.app[data-chrome=dark] .sidebar-page-rim>svg { stroke:rgb(255 255 255 / .06); }'));
+test('the stylesheet: the peek\'s rim draws nothing any more (frame at rest, no ring), and still hides the waiting stroke at once during an edge transition and fades it in', () => {
+  assert.ok(css.includes('.sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:transparent; stroke-width:1; }'), 'the rim is transparent in a light frame');
+  assert.ok(!css.includes('.app[data-chrome=dark] .sidebar-page-rim>svg { stroke:'), 'and in a dark one: no second colour for it');
   assert.equal(rule('.sidebar-page-rim .rim-edge {'), '.sidebar-page-rim .rim-edge { transition:opacity calc(140ms * var(--motion-scale,1)) ease-out; }');
   assert.equal(rule(':root[data-mode-switch=edge][data-edge-rim=wait] .sidebar-page-rim .rim-edge {'), ':root[data-mode-switch=edge][data-edge-rim=wait] .sidebar-page-rim .rim-edge { opacity:0; transition:none; }');
   assert.ok(!css.includes('.rim-ink'), 'no group opacity: two paths each at the stroke\'s own alpha, which do not overlap');

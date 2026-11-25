@@ -1,10 +1,10 @@
 import {WorkspaceCoverPicker} from './WorkspaceCoverPicker';
 import {colorToCommit,completeHexColor,parseHexColor} from '../ui/hexColor';
 import {toolbarLayout,toolbarLayoutPatch} from '../runtime/toolbarLayout';
-import { useEffect,useId,useState,type CSSProperties,type KeyboardEvent } from 'react';
+import { useEffect,useId,useState,type CSSProperties,type KeyboardEvent,useRef} from 'react';
 import { appearancePalettes,palettePreference } from '../runtime/appearancePalettes';
 import type { Settings } from '../runtime/types';
-import { useRafChange } from '../ui/useRafChange';
+import { useRangeDraft } from '../ui/useRangeDraft';
 import { frameChromeOf } from '../ui/theme';
 import './AppearanceControls.css';
 import { ChevronRight,Contrast,Moon,Sun } from './AppIcons';
@@ -12,6 +12,9 @@ import { MenuToggle } from './MenuToggle';
 
 import { t } from '../i18n';
 import { paletteName } from '../features/onboarding/MakeItYours';
+import { OWN_FINISH,isOwnFinish,ownFinishPatch } from '../runtime/ownColours';
+import { auraColourName } from './AuraColourPicker';
+import { AuraColourPopover } from './AuraColourPopover';
 const modes=[{value:'light',label:t("appearancecontrols.light"),Icon:Sun},{value:'dark',label:t("appearancecontrols.dark"),Icon:Moon},{value:'system',label:t("appearancecontrols.auto"),Icon:Contrast}] as const;
 
 /** An immediate, single-choice control. Arrow navigation stays inside its group. */
@@ -46,13 +49,18 @@ export function FinishSwatch({finish,selected,onSelect,size=24,showName=false,ta
 }
 
 /** The finishes as one radio group of FinishSwatches, one row by default (12 × 24 + 11 × 8 = 376px). Arrow keys move
- * focus; a finish applies only on click, Enter or Space. */
-export function GlassFinishPicker({settings,onChange,size=24,columns=appearancePalettes.length}:{settings:Settings;onChange:(patch:Partial<Settings>)=>void;size?:number;columns?:number}){
- const selected=appearancePalettes.find(palette=>palette.name===settings.colorPreset&&palette.tint.toLowerCase()===settings.browserTint.toLowerCase());
+ * focus; a finish applies only on click, Enter or Space.
+ * 14.1 Your colours: the colours the person added (settings.ownColours) follow the 12 as swatches of the same kind, one more row; the one in use
+ * wears the ring; a remove mark shows on hover or focus. `onAddColour` adds the dashed + tile that opens Acira's own picker (Settings; the
+ * Appearance popup sends it to Settings). */
+export function GlassFinishPicker({settings,onChange,size=24,columns=appearancePalettes.length,onAddColour,onRemoveColour}:{settings:Settings;onChange:(patch:Partial<Settings>)=>void;size?:number;columns?:number;onAddColour?:(anchor:HTMLElement)=>void;onRemoveColour?:(hex:string)=>void}){
+ const own=isOwnFinish(settings)?settings.browserTint.toLowerCase():null;
+ const selected=own?undefined:appearancePalettes.find(palette=>palette.name===settings.colorPreset&&palette.tint.toLowerCase()===settings.browserTint.toLowerCase());
+ const owned=settings.ownColours??[];
  const choose=(palette:AppearanceFinish)=>onChange(palettePreference(palette));
  function keyboard(event:KeyboardEvent<HTMLDivElement>){
   if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
-  const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button')),current=buttons.indexOf(document.activeElement as HTMLButtonElement);if(current<0)return;
+  const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=radio]')),current=buttons.indexOf(document.activeElement as HTMLButtonElement);if(current<0)return;
   event.preventDefault();event.stopPropagation();
   const top=buttons[0].getBoundingClientRect().top;
   const visibleColumns=buttons.filter(button=>Math.abs(button.getBoundingClientRect().top-top)<1).length;
@@ -63,46 +71,62 @@ export function GlassFinishPicker({settings,onChange,size=24,columns=appearanceP
   }
   buttons[next]?.focus();
  }
+ const ownName=(hex:string)=>t('owncolours.yourColourNamed',{name:auraColourName(hex)});
  return <div className="glass-finish">
-  <div className="glass-finish-grid" role="radiogroup" aria-label={t("appearancecontrols.finish")} onKeyDown={keyboard} style={{'--swatch-size':`${size}px`,'--swatch-columns':columns} as CSSProperties}>{appearancePalettes.map((palette,index)=>{const on=palette===selected;return <FinishSwatch key={palette.name} finish={palette} selected={on} size={size} tabIndex={on||!selected&&index===0?0:-1} onSelect={()=>choose(palette)}/>;})}</div>
-  <span className="glass-finish-name">{(selected&&paletteName(selected))||'Custom'}</span>
+  <div className="glass-finish-grid" role="radiogroup" aria-label={t("appearancecontrols.finish")} onKeyDown={keyboard} style={{'--swatch-size':`${size}px`,'--swatch-columns':columns} as CSSProperties}>
+   {appearancePalettes.map((palette,index)=>{const on=palette===selected;return <FinishSwatch key={palette.name} finish={palette} selected={on} size={size} tabIndex={on||!selected&&!own&&index===0?0:-1} onSelect={()=>choose(palette)}/>;})}
+   {owned.map(hex=>{const on=own===hex.toLowerCase();return <span key={hex} className="own-swatch-item" data-own={hex}>
+    <button type="button" role="radio" className="finish-swatch own-swatch" aria-checked={on} aria-label={ownName(hex)} title={ownName(hex)} tabIndex={on?0:-1}
+     style={{'--swatch-light':frameChromeOf({colorPreset:OWN_FINISH,browserTint:hex},false),'--swatch-dark':frameChromeOf({colorPreset:OWN_FINISH,browserTint:hex},true),'--swatch-size':`${size}px`} as CSSProperties}
+     onClick={()=>onChange(ownFinishPatch(hex))}/>
+    {onRemoveColour&&<button type="button" className="own-swatch-remove" aria-label={t('owncolours.remove',{name:auraColourName(hex)})} title={t('owncolours.remove',{name:auraColourName(hex)})} onClick={event=>{event.stopPropagation();onRemoveColour(hex);}}><span aria-hidden="true">×</span></button>}
+   </span>;})}
+   {onAddColour&&<button type="button" className="finish-swatch own-swatch-add" aria-label={t('owncolours.addAColour')} title={t('owncolours.addAColour')} style={{'--swatch-size':`${size}px`} as CSSProperties} onClick={event=>onAddColour(event.currentTarget)}>
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+   </button>}
+  </div>
+  <span className="glass-finish-name">{own?ownName(own):(selected&&paletteName(selected))||'Custom'}</span>
  </div>;
 }
 
-/** Retains the system color picker; the well and editable hex value share one value. "ff0000" and " #ff0000 " are taken as #ff0000;
- *  text that is still not a colour stays in the field with a short message (Escape puts the colour back), never a silent revert. */
+/** A colour well (Settings > Appearance > Colors): the colour and its hex. 14.1: the well opens ACIRA'S OWN picker (components/AuraColourPicker.tsx),
+ *  never the system one. "ff0000" and " #ff0000 " are taken as #ff0000; text that is still not a colour stays in the field with a short message
+ *  (Escape puts the colour back), never a silent revert. */
 export function AppearanceColorWell({label,value,onChange}:{label:string;value:string;onChange:(value:string)=>void}){
- const [input,setInput]=useState(value),[invalid,setInvalid]=useState(false),picker=useRafChange(onChange),messageId=useId();useEffect(()=>{setInput(value);setInvalid(false);},[value]);
+ const [input,setInput]=useState(value),[invalid,setInvalid]=useState(false),[anchor,setAnchor]=useState<HTMLElement|null>(null),messageId=useId();useEffect(()=>{setInput(value);setInvalid(false);},[value]);
  function commit(){
   if(!parseHexColor(input)){if(input.trim())setInvalid(true);else setInput(value);return;}
   const next=colorToCommit(input,value);if(next)onChange(next);setInput(next||value);setInvalid(false);
  }
  return <div className="appearance-color-field" role="group" aria-label={label}>
-  <span className="appearance-color-well" style={{'--well-color':value} as CSSProperties}><input type="color" aria-label={t("appearancecontrols.labelPicker", { label: label })} value={completeHexColor(input)||value} onChange={event=>{setInput(event.target.value);setInvalid(false);picker.change(event.target.value);}} onPointerUp={picker.flush} onBlur={picker.flush}/><span aria-hidden="true"/></span>
-  <input className="appearance-hex" aria-label={t("appearancecontrols.labelHexCode", { label: label })} aria-invalid={invalid||undefined} aria-describedby={invalid?messageId:undefined} value={input} maxLength={16} autoComplete="off" spellCheck={false} onChange={event=>{const text=event.target.value,next=completeHexColor(text);setInput(text);setInvalid(false);if(next)onChange(next);}} onBlur={commit} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();commit();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setInput(value);setInvalid(false);}}}/>
+  <span className="appearance-color-well" style={{'--well-color':value} as CSSProperties}><button type="button" className="appearance-color-pick" aria-label={t("appearancecontrols.labelPicker", { label: label })} aria-haspopup="dialog" aria-expanded={!!anchor} onClick={event=>setAnchor(anchor?null:event.currentTarget)}/><span aria-hidden="true"/></span>
+  <input className="appearance-hex ab-input" aria-label={t("appearancecontrols.labelHexCode", { label: label })} aria-invalid={invalid||undefined} aria-describedby={invalid?messageId:undefined} value={input} maxLength={16} autoComplete="off" spellCheck={false} onChange={event=>{const text=event.target.value,next=completeHexColor(text);setInput(text);setInvalid(false);if(next)onChange(next);}} onBlur={commit} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();commit();}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setInput(value);setInvalid(false);}}}/>
   {invalid&&<p id={messageId} className="appearance-hex-message" role="alert">{t("appearancecontrols.hexInvalid")}</p>}
+  {anchor&&<AuraColourPopover anchor={anchor} initial={value} title={label} addLabel={t('owncolours.useColour')} onAdd={hex=>onChange(hex)} onClose={()=>setAnchor(null)}/>}
  </div>;
 }
 
 /** Glass opacity 40–100 (round 2). 100 is the opaque endpoint and turns Reduce transparency on; the store restores the last
  * translucent value when it is turned off again, so Settings and this popup always show one value. */
 export function GlassOpacitySlider({value,onChange}:{value:number;onChange:(value:number)=>void}){
- const [draft,setDraft]=useState(value),change=useRafChange(onChange);useEffect(()=>setDraft(value),[value]);
- return <label className="appearance-opacity"><span>{t("appearancecontrols.windowOpacity")}</span><input type="range" min={40} max={100} step={1} value={draft} aria-label={t("appearancecontrols.windowOpacity")} aria-valuetext={draft===100?t('appearancecontrols.opaqueValue'):`${draft}%`} style={{'--opacity-progress':`${(draft-40)/60*100}%`} as CSSProperties} onChange={event=>{const next=Number(event.target.value);setDraft(next);change.change(next);}} onPointerUp={change.flush} onKeyUp={change.flush} onBlur={change.flush}/><output>{draft}%</output></label>;
+ const {value:draft,bind}=useRangeDraft(value,onChange);   // D145: the same algorithm as the Settings row's slider (ui/useRangeDraft.ts)
+ return <label className="appearance-opacity"><span>{t("appearancecontrols.windowOpacity")}</span><input type="range" min={40} max={100} step={1} value={draft} aria-label={t("appearancecontrols.windowOpacity")} aria-valuetext={draft===100?t('appearancecontrols.opaqueValue'):`${draft}%`} style={{'--opacity-progress':`${(draft-40)/60*100}%`} as CSSProperties} {...bind}/><output>{draft}%</output></label>;
 }
 
-export function AppearancePanel({settings,onChange,onMore,profileId,privateMode}:{settings:Settings;profileId?:string;privateMode?:boolean;onChange:(patch:Partial<Settings>)=>void;onMore:()=>void}){
+/** Beta 14.4: "Open settings" lands where the person was: on Appearance › Transparency after the opacity slider or Reduce transparency was touched here, else on Appearance. */
+export function AppearancePanel({settings,onChange,onMore,profileId,privateMode}:{settings:Settings;profileId?:string;privateMode?:boolean;onChange:(patch:Partial<Settings>)=>void;onMore:(target?:{section?:string;setting?:string})=>void}){
+ const transparency=useRef(false);
  return <div className="appearance-panel study-appearance">
   <section className="appearance-section" aria-label={t("app.appearance")}><AppearanceModePicker value={settings.appearance} onChange={appearance=>onChange({appearance})}/></section>
-  <section className="appearance-section"><div className="appearance-section-heading"><h3>{t("appearancecontrols.finish")}</h3></div><p>{t("appearancecontrols.colorsTheWindowFrameTabs")}</p><GlassFinishPicker settings={settings} onChange={onChange} columns={6}/></section>
+  <section className="appearance-section"><div className="appearance-section-heading"><h3>{t("appearancecontrols.finish")}</h3></div><p>{t("appearancecontrols.colorsTheWindowFrameTabs")}</p><GlassFinishPicker settings={settings} onChange={onChange} columns={6} onAddColour={()=>onMore()}/></section>
   {profileId&&<section className="appearance-section"><div className="appearance-section-heading"><h3>{t('local.workspaceCover')}</h3></div><WorkspaceCoverPicker profileId={profileId} privateMode={privateMode} compact/></section>}
   <div className="appearance-preferences">
-   <GlassOpacitySlider value={settings.reducedTransparency?100:settings.glassOpacity} onChange={glassOpacity=>onChange({glassOpacity})}/>
+   <GlassOpacitySlider value={settings.reducedTransparency?100:settings.glassOpacity} onChange={glassOpacity=>{transparency.current=true;onChange({glassOpacity});}}/>
    {/* The house switch (MenuToggle), like every other popup (R3-B03). */}
    <MenuToggle label={t("appearancecontrols.compactAutomatically")} on={toolbarLayout(settings)==='automatic'} onToggle={()=>onChange(toolbarLayoutPatch(settings,toolbarLayout(settings)==='automatic'?'expanded':'automatic'))}/>
-   <MenuToggle label={t("appearancecontrols.reducedTransparency")} on={settings.reducedTransparency} onToggle={()=>onChange({reducedTransparency:!settings.reducedTransparency})}/>
+   <MenuToggle label={t("appearancecontrols.reducedTransparency")} on={settings.reducedTransparency} onToggle={()=>{transparency.current=true;onChange({reducedTransparency:!settings.reducedTransparency});}}/>
    <MenuToggle label={t("appearancecontrols.reducedMotion")} on={settings.reducedMotion} onToggle={()=>onChange({reducedMotion:!settings.reducedMotion})}/>
   </div>
-  <button type="button" className="appearance-more" onClick={onMore}><span>{t("appearancecontrols.openSettings")}</span><ChevronRight size={15}/></button>
+  <button type="button" className="appearance-more" onClick={()=>onMore(transparency.current?{setting:'glass-opacity'}:{section:'Appearance'})}><span>{t("appearancecontrols.openSettings")}</span><ChevronRight size={15}/></button>
  </div>;
 }

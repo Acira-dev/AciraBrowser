@@ -81,7 +81,7 @@ test('inUseByOthers: no debugger attached, or only the Website appearance sessio
   assert.equal(inUseByOthers(wc), false, 'no debugger at all');
   const dark = acquire(wc, 'appearance');
   assert.equal(debug.attached, true); assert.equal(inUseByOthers(wc), false, 'Always dark / Light / Dark: our session, a passive lease');
-  assert.deepEqual(PASSIVE, ['appearance']);
+  assert.deepEqual(PASSIVE, ['appearance', 'easy-files']); // Easy Files (Beta 14) holds its file-chooser watch for as long as a page is in use
   dark.release(); assert.equal(debug.attached, false); assert.equal(inUseByOthers(wc), false);
 });
 
@@ -108,4 +108,30 @@ test('inUseByOthers: our session ends under the lease and somebody else attaches
 test('inUseByOthers: a named list can widen what does not count', () => {
   const {wc} = fakePage(), a = acquire(wc, 'appearance'), z = acquire(wc, 'zoom-glide');
   assert.equal(inUseByOthers(wc), true); assert.equal(inUseByOthers(wc, ['appearance', 'zoom-glide']), false); z.release(); a.release();
+});
+
+// Easy Files (Beta 14) shares the page's session with Website appearance and tab sleep.
+const {wantsFrames} = require('../desktop/page-debugger.cjs');
+
+test('Easy Files is a passive lease: a page it watches can still be put to sleep, a page held by anything else cannot', () => {
+  assert.ok(PASSIVE.includes('easy-files'));
+  const {wc} = fakePage();
+  const watch = acquire(wc, 'easy-files');
+  assert.equal(inUseByOthers(wc), false, 'a file-chooser watch alone does not block sleep');
+  const zoom = acquire(wc, 'zoom-glide');
+  assert.equal(inUseByOthers(wc), true, 'a brief lease of another kind still does');
+  zoom.release(); watch.release();
+});
+
+test('while Easy Files follows frames, a lease letting go does not switch auto-attach off for it', () => {
+  const {wc} = fakePage();
+  const dark = acquire(wc, 'appearance');
+  assert.equal(wantsFrames(wc, dark), false);
+  const watch = acquire(wc, 'easy-files'); watch.frames = true;
+  assert.equal(wantsFrames(wc, dark), true, 'Website appearance leaving must keep Target.setAutoAttach');
+  assert.equal(wantsFrames(wc, watch), false, 'the watch itself is not "another" lease');
+  watch.release();
+  assert.equal(wantsFrames(wc, dark), false, 'once it is gone the others may switch it off');
+  dark.release();
+  assert.equal(wantsFrames({}, null), false, 'a page nobody holds');
 });

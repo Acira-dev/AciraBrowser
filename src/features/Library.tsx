@@ -60,7 +60,7 @@ export function LibraryPage({ title, description, count, search, actions, wide, 
     {(search || count) && <div className="lib-toolbar">
       {search && <label className="lib-search">
         <Search size={14} />
-        <input ref={field} aria-label={search.label} placeholder={search.placeholder} value={search.value} spellCheck={false}
+        <input className="ab-input" ref={field} aria-label={search.label} placeholder={search.placeholder} value={search.value} spellCheck={false}
           onChange={event => search.onChange(event.target.value)}
           onKeyDown={event => { if (event.key === 'Escape' && search.value) { event.preventDefault(); event.stopPropagation(); search.onChange(''); } }} />
         {search.value ? <button type="button" className="lib-icon" aria-label={t('lib.clearSearch')} onClick={() => { search.onChange(''); field.current?.focus({ preventScroll: true }); }}><X size={14} /></button> : <kbd>/</kbd>}

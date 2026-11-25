@@ -115,9 +115,10 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;   /* Beta 14: icon, text and action are ONE group with equal room either side */
   gap: 8px;
   height: 100%;
-  padding: 0 8px 0 12px;
+  padding: 0 12px;
   border-radius: 8px;
   background: var(--t-surface);
   box-shadow: var(--menu-rim), var(--t-shadow);
@@ -131,10 +132,72 @@
   place-items: center;
   width: 16px;
   height: 16px;
-  color: var(--text-2, var(--text-secondary));
+  /* Beta 14: a plain line icon in the text colour (white on dark, dark on light), no coloured chip: the icon's shape and the words say success or error. */
+  color: var(--text-1, var(--text-primary));
 }
-:root:root:root .t-toast[data-tone='error'] .t-glyph {
-  color: var(--t-error);
+/* ── Beta 14: the toast's surface is the reference design's frosted glass (the reference sample, rig/tglass.js): the picture of what is under the toast, blurred once, lies under
+   a tint, an inner light and a hairline rim. Only the surface changes: shape, size, place, stack, motion and content are today's. The picture is one image on the pop-up surface (--tf-img,
+   built once per snapshot, ui/toastFrost.ts), shifted per card (--tf-x/--tf-y) so it stays fixed to the window while a card moves. Without it (the page's own slot, a snapshot that has not
+   arrived, glass at 0 or 100, reduced transparency) the card is his solid colour: never see-through. Every selector ends in a class. ── */
+.app {
+  --tf-tint: 16 18 28;
+  --tf-a: .32;
+  --tf-base: 22 23 27;
+  --tf-solid: #1c1d22;
+  --tf-rim: rgb(255 255 255 / .12);
+  --tf-rim-top: rgb(255 255 255 / .26);
+  --tf-rim-bottom: rgb(0 0 0 / .18);
+  --tf-inner: linear-gradient(180deg, rgb(255 255 255 / .08), rgb(255 255 255 / 0) 70%);
+}
+.app[data-theme='light'] {
+  --tf-tint: 250 250 252;
+  --tf-a: .36;
+  --tf-base: 240 240 243;
+  --tf-solid: #f7f7f9;
+  --tf-rim: rgb(0 0 0 / .07);
+  --tf-rim-top: rgb(255 255 255 / .95);
+  --tf-rim-bottom: rgb(0 0 0 / .04);
+  --tf-inner: linear-gradient(180deg, rgb(255 255 255 / .5), rgb(255 255 255 / 0) 70%);
+}
+:root:root:root .t-toast {
+  position: relative;
+  isolation: isolate;
+  background: var(--tf-solid);
+}
+:root:root:root .t-toast::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: transparent;
+}
+:root:root:root .acira-popup-surface[data-frost='glass'] .t-toast {
+  background: transparent;
+}
+/* Until the snapshot has been decoded (about 30ms) the card is not drawn at all: neither a solid flash nor a see-through one; the glass then fades in with the card's own entrance. */
+:root:root:root .acira-popup-surface[data-frost] .t-toast {
+  transition: opacity 80ms linear;
+}
+:root:root:root .acira-popup-surface[data-frost='pending'] .t-toast {
+  opacity: 0;
+  transition: none;
+}
+:root:root:root .acira-popup-surface[data-frost='glass'] .t-toast::before {
+  background:
+    var(--tf-inner),
+    linear-gradient(rgb(var(--tf-tint) / var(--tf-a)), rgb(var(--tf-tint) / var(--tf-a))),
+    var(--tf-img, none) var(--tf-x, 0px) var(--tf-y, 0px) / var(--tf-w, 100%) var(--tf-h, 100%) no-repeat,
+    rgb(var(--tf-base));
+}
+:root:root:root .t-toast::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--tf-rim), inset 0 1px 0 var(--tf-rim-top), inset 0 -1px 0 var(--tf-rim-bottom);
 }
 /* The leading spot (founder, 27 Oct, macOS Notification Center): the status glyph at rest; with the pointer on the card or
    keyboard focus inside it, the glyph cross-fades into a close × of the same 16px drawing in the same place. The button's
@@ -188,7 +251,7 @@
   pointer-events: none;
 }
 :root:root:root .t-text {
-  flex: 1;
+  flex: 0 1 auto;   /* Beta 14: the text takes its own width (a two-line message is narrowed to its longest line by ToastCard), so the group can centre */
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -204,6 +267,57 @@
   -webkit-line-clamp: 2;
   white-space: normal;
 }
+/* Beta 14 (screenshot): a toast with a picture. Two lines high (60px): the picture in the leading spot, the title and a quieter detail line beside it, one or two text actions at the end.
+   Classes only, so no rule here is tried on an element that is not part of one of these toasts. */
+:root:root:root .t-thumb {
+  flex: 0 0 44px;
+  display: block;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--menu-hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong, var(--line));
+}
+:root:root:root .t-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+:root:root:root .t-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+:root:root:root .t-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 500 13px/18px var(--font-ui);
+}
+:root:root:root .t-detail {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;   /* a note about a long page or a protected video is worth two lines */
+  font: 400 12px/16px var(--font-ui);
+  color: var(--text-2, var(--text-secondary));
+}
+:root:root:root .t-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+:root:root:root .t-toast .t-actions .toast-action {
+  margin: 0 0 0 4px;   /* Beta 14: his sample's rule reaches these too (:root[data-tgc] .t-toast .toast-action{margin:0 0 0 4px!important}): each action carries the 4px */
+}
 /* The one text action (ToastAction) and its key cap. */
 :root:root:root .t-toast .toast-action {
   flex: none;
@@ -211,7 +325,7 @@
   align-items: center;
   gap: 8px;
   height: 28px;
-  margin: 0 0 0 auto;
+  margin: 0 0 0 4px;   /* Beta 14: 4px after the text (it was pushed to the far edge) */
   padding: 0 8px;
   border: 0;
   border-radius: 4px;
@@ -246,15 +360,16 @@
   color: var(--text-3, var(--text-secondary));
 }
 :root:root:root .t-text + .t-dismiss {
-  margin-left: auto;
+  margin-left: 4px;
 }
 :root:root:root .t-dismiss:hover {
   background: var(--menu-hover);
   color: var(--text-1, var(--text-primary));
 }
 :root:root:root :is(.t-toast .toast-action, .t-dismiss, .t-close):focus-visible {
-  outline: 2px solid var(--focus-ring-color, var(--accent));
-  outline-offset: -2px;
+  /* Beta 14: the dialogs' ring (the reference design's sample): thin and quiet, 2px outside, the accent at 72% */
+  outline: 1.5px solid color-mix(in srgb, var(--focus-ring-color, var(--accent)) 72%, transparent);
+  outline-offset: 2px;
 }
 
 /* ── Status pill: a compact, actionless toast. ── */

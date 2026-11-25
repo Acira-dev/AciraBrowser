@@ -126,7 +126,7 @@ function createSiteAppearance({database, mode, nativeDark = () => false, isTor =
       try {
         for (const sessionId of frames) await clear(lease, sessionId).catch(() => {});
         await clear(lease);
-        await send(lease, 'Target.setAutoAttach', {autoAttach: false, waitForDebuggerOnStart: false, flatten: true}).catch(() => {});
+        if (!pageDebugger.wantsFrames(wc, lease)) await send(lease, 'Target.setAutoAttach', {autoAttach: false, waitForDebuggerOnStart: false, flatten: true}).catch(() => {}); // Easy Files may still be following frames
       } catch { /* the page did not answer: letting go ends the session's own overrides if it was the only holder */ }
     }
     lease.release();

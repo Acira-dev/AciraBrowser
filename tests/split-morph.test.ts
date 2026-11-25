@@ -38,7 +38,8 @@ const box = (tabId: string, x: number, y: number, width: number, height: number)
 
 test('R3-26: a morph runs when the panes change and one page is on screen before and after; never for an unrelated tab', () => {
   assert.equal(shouldMorph(['a'], ['a', 'b']), true, 'a tab dropped next to the page you were on');
-  assert.equal(shouldMorph(['a', 'b'], ['a']), true, 'Unsplit');
+  assert.equal(shouldMorph(['a', 'b'], ['a']), false, 'D191: Unsplit / closing a pane is a cut: the live page takes the room, no still is grown over it');
+  assert.equal(shouldMorph(['a', 'b', 'c'], ['a', 'c']), false, 'D191: closing one of three panes too');
   assert.equal(shouldMorph(['a', 'b'], ['b', 'a']), true, 'a pane swap');
   assert.equal(shouldMorph(['a', 'b'], ['a', 'b']), false, 'nothing changed');
   assert.equal(shouldMorph(['a'], ['c']), false, 'switching to another tab is a cut by design');
@@ -87,7 +88,7 @@ test('R3-26: the picker remembers where a tab was released only after a drop on 
 test('R3-26: App holds the native pages off in the same commit as the pane change, plays the morph, and fades the layer over their return', () => {
   const app = fs.readFileSync(path.resolve('src/App.tsx'), 'utf8'), layer = fs.readFileSync(path.resolve('src/components/SplitMorphLayer.tsx'), 'utf8'), css = fs.readFileSync(path.resolve('src/styles/split-picker.css'), 'utf8');
   assert.match(app, /const morphPending = lastPane\.current\.key !== paneKey && morphWanted\(lastPane\.current\.ids(?:, lastPane\.current\.layout !== splitPair\?\.layout)?\)/, 'decided while rendering, so views step aside with the new layout');
-  assert.match(app, /splitPreview = Boolean\(splitPicker\) \|\| morphPending \|\| Boolean\(morphRun && !morphRun\.done\)/);
+  assert.match(app, /splitPreview = carryPreview \|\| \(pickerShown && \(pickerAside \|\| pickerStills\)\) \|\| morphPending \|\| Boolean\(morphRun && !morphRun\.done\)/, 'a carried group over the page yields the page the same way (Beta 14, AE); the picker waits for the stills (D191)');
   assert.match(app, /motionScaleOf\(s\) > 0/, 'Off cuts, by the user\'s choice (the speed is read from the settings, the value App writes into --motion-scale, not from the document)');
   assert.match(app, /takeDropPoint\(\)/, 'the dropped tab flies in from its release point');
   assert.match(layer, /scaleX: sx, scaleY: sy/, 'boxes move and reshape with transforms');

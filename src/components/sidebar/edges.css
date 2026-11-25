@@ -1,0 +1,19 @@
+/* ===== Beta 14: the sidebar's blocks where Customize sidebar put them ===== */
+/* The default arrangement draws exactly what the sidebar always drew (Favorites and the pinned extensions at the top, the side panel sites and the icon row at the bottom); these rules are for the places a block can be moved to. Class-led only. */
+/* the icon row at the top edge: the same row (profile, Bookmarks, Downloads, History, Settings), its hairline closes it instead of opening it, and it does not push itself to the bottom */
+.app.style-acira .acira-sidebar .sb-foot[data-edge=top]{margin-top:0}
+.app.style-acira .acira-sidebar .sb-foot[data-edge=top]::before{top:auto;bottom:0}
+/* the side panel sites' row away from the bottom edge: no push to the bottom, its hairline is the divider on the side that faces the list */
+.app.style-acira .acira-sidebar .sb-sp-row[data-place]{margin-top:0}
+.app.style-acira .acira-sidebar .sb-sp-row[data-place=top]{padding-block:4px;padding-inline:8px 12px}
+.app.style-acira .acira-sidebar .sb-sp-row[data-place=top]::before{top:auto;bottom:0}
+.app.style-acira .acira-sidebar .sb-sp-row[data-place=list]{padding-block:6px;padding-inline:8px 12px}
+.app.style-acira .acira-sidebar .sb-sp-row[data-place=list]::before{display:none}
+/* the pinned extensions' row in the list: a row of the list, between two sections */
+.app.style-acira .acira-sidebar .sb-ext-row[data-place=list]:not([hidden]){padding:2px 14px 2px}
+/* the side panel row last on the sidebar (the icon row is at the top): it closes the bottom edge with room under its icons */
+.app.style-acira .acira-sidebar .sb-sp-row[data-place=end]{padding-block:4px 8px;padding-inline:8px 12px}
+/* the icon row first on the sidebar: in the Mini rail its closing line is the rail's own ::after (miniRail.css), which moves to the row's bottom edge too; the side panel row before it keeps its line; on Windows and Linux it drags the window like the band above it (its buttons are no-drag) */
+.app.style-acira .acira-sidebar.is-mini .sb-foot[data-edge=top]::after{top:auto;bottom:0}
+.app.style-acira .acira-sidebar .sb-sp-row+.sb-foot[data-edge=top]::before{display:block}
+.app.style-acira .acira-sidebar .sb-foot[data-edge=top]{-webkit-app-region:drag}

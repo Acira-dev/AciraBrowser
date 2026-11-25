@@ -26,9 +26,7 @@ test('resting in the side zone primes from the first sample, and stops priming w
   const arrival = r.go(at(6, 400), 16);
   assert.equal(arrival.prime.side, false, 'the arrival sample itself is a fast move: not yet a rest');
   const first = r.go(at(6, 400), 16);
-  assert.equal(first.prime.side, true, 'the next one is: the wait (90 ms) is inside PRIME_LEAD (140 ms), primed at once');
-  const mid = r.go(at(6, 400), 16);
-  assert.equal(mid.prime.side, true);
+  assert.equal(first.prime.side, true, 'the next one is: the wait (30 ms after a fast arrival, 60 at rest since 14.2) is inside PRIME_LEAD (140 ms), primed at once');
   const shown = r.go(at(6, 400), 64);
   assert.equal(shown.side, true);
   assert.equal(shown.prime.side, false, 'shown: nothing left to prepare');
@@ -63,10 +61,10 @@ test('over a control (engaged) the long wait primes only PRIME_LEAD ms before it
   const r = rig();
   r.go(at(600, 400), 64);
   r.go(at(8, 400), 16, { engaged: true });
-  const early = r.go(at(8, 400), 400, { engaged: true });
+  const early = r.go(at(8, 400), ENGAGED_DWELL.side - PRIME_LEAD - 100, { engaged: true });
   assert.equal(early.prime.side, false, 'long before the wait ends: nothing taken yet, the control may be about to be used');
   assert.equal(early.side, false);
-  const late = r.go(at(8, 400), ENGAGED_DWELL.side - PRIME_LEAD - 400 + 16, { engaged: true });
+  const late = r.go(at(8, 400), 100 + 16, { engaged: true });
   assert.equal(late.prime.side, true);
   assert.equal(late.side, false);
   const done = r.go(at(8, 400), PRIME_LEAD + 32, { engaged: true });
@@ -119,7 +117,7 @@ test('the poller emits chrome-edge-prime when a rest starts to prime and when it
   return Promise.resolve().then(() => {
     timeout(); run(64);
     assert.deepEqual(emitted.filter(e => e.type === 'chrome-edge-prime'), [], 'nothing while the pointer is in the page');
-    screen.point = at(6, 400); run(48);
+    screen.point = at(6, 400); run(32);   // two looks: the arrival (a jump: fast, the 30 ms wait) and the first rest, which primes (14.2: the side's waits are 60 / 30)
     const primes = () => emitted.filter(e => e.type === 'chrome-edge-prime');
     assert.deepEqual(primes(), [{ type: 'chrome-edge-prime', prime: { top: false, side: true } }]);
     run(160);

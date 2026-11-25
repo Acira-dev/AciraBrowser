@@ -21,6 +21,7 @@ import {
 import { Switch } from "../settings/controls";
 import { useT, type MessageId } from "../../i18n";
 import "./profile-cleanup.css";
+import { revealInScroller } from "../../ui/scrollReveal";
 
 export type {
   CleanupCategory,
@@ -40,7 +41,7 @@ function keepCleanupFocusVisible(event: FocusEvent<HTMLElement>) {
   const control = event.target;
   if (!(control instanceof HTMLElement)) return;
   const group = control.closest<HTMLElement>(".st-row");
-  (group ?? control).scrollIntoView({ block: "nearest", inline: "nearest" });
+  revealInScroller(group ?? control);
 }
 
 export function ProfileCleanupSettings(props: ProfileCleanupSettingsProps) {
@@ -193,7 +194,7 @@ function CleanupForm({ client, profileId }: ProfileCleanupSettingsProps) {
   useLayoutEffect(() => {
     if (!failureSerial) return;
     errorFeedback.current?.focus({ preventScroll: true });
-    errorFeedback.current?.scrollIntoView({ block: "nearest" });
+    revealInScroller(errorFeedback.current);
   }, [failureSerial]);
 
   const locked =
@@ -444,7 +445,7 @@ function CleanupForm({ client, profileId }: ProfileCleanupSettingsProps) {
               <div className="st-control">
                 <textarea
                   id={`${id}-origins`}
-                  className="st-textarea"
+                  className="st-textarea ab-input"
                   rows={3}
                   value={draft.originsText}
                   placeholder="https://mail.example.com"

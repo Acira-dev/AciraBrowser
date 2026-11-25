@@ -1,6 +1,7 @@
 import type { BrowserAction,BrowserSnapshot,TabSession } from './types';
 import { validProfileEmail,validProfilePicture } from './browserProfiles';
 import { tabListed } from './favoriteTabsRule';
+import { tabIsPinned } from './pinnedFolders';
 
 /** Pure reducer helpers for profile lifecycle and bulk tab closing. Native side effects (closing pages, wiping the
  *  partition) are run by desktop/profile-lifecycle.cjs before/after these state changes are committed. */
@@ -73,5 +74,5 @@ export function bulkCloseTargets(s:BrowserSnapshot,action:BulkCloseAction):strin
   const anchor=s.tabs[index];
   // Never another profile's tabs, and never another workspace's (R3-57: a workspace's tabs are its own). A favorite's tab that lives only in its tile (Settings ›
   // Tabs › Sidebar › Favorites) is not in the list you are looking at, so like a pinned tab it stays (favoriteTabsRule.ts).
-  return s.tabs.filter((tab,i)=>tab.id!==anchor.id&&!tab.pinned&&tabListed(tab,s.settings)&&tab.browserProfileId===anchor.browserProfileId&&(tab.workspaceId??'')===(anchor.workspaceId??'')&&(action.type==='tab.close.others'||(action.type==='tab.close.left'?i<index:i>index))).map(tab=>tab.id);
+  return s.tabs.filter((tab,i)=>tab.id!==anchor.id&&!tabIsPinned(s,tab)&&tabListed(tab,s.settings)&&tab.browserProfileId===anchor.browserProfileId&&(tab.workspaceId??'')===(anchor.workspaceId??'')&&(action.type==='tab.close.others'||(action.type==='tab.close.left'?i<index:i>index))).map(tab=>tab.id);
 }

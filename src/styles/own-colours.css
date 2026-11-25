@@ -1,0 +1,58 @@
+/* 14.1 Your colours (ui/frameField.ts): an own colour paints the frame's ONE field top to bottom, a gradient of up to three colours
+   and, with Glossy, a fixed shine from the top. The glass rules read the field themselves through --frame-top-rgb / --frame-mid-veil /
+   --frame-bottom-rgb (frame.css, view-morph.css, sidebar-right.css, frost-preview.css), so every piece a layout switch paints (the
+   sliding sidebar's own veil, the band above, the strip below) is a slice of the same window-high field. A top-to-bottom field is
+   exact under a horizontal slide at every frame. Unset, those variables fall back to today's strings: nothing changes for anyone else.
+   Here: the SOLID paints (no window material; Windows' inactive or transparency-off acrylic) take the same field, and the surfaces
+   that would paint a flat colour over it are clear. Static: no animation. The repeated attribute is specificity, so these settle the
+   frame.css / frost-preview.css rules they replace without !important. */
+:root[data-frame-field][data-frame-field][data-frame-field]:not(:is([data-material=acrylic],[data-material=vibrancy])):not([data-edge-float]) .app.style-acira:not(.native-layer) { background: var(--frame-solid); }
+:root[data-frame-field][data-frame-field][data-frame-field][data-material=acrylic]:is([data-window-active=false],[data-system-transparency=off]):not([data-edge-float]) .app.style-acira:not(.native-layer) { background: var(--frame-solid); }
+:root[data-frame-field][data-frame-field][data-frame-field]:not(:is([data-material=acrylic],[data-material=vibrancy])):not([data-edge-float]) .app.style-acira:not(.native-layer) :is(.ed-rail, .browser-root, .browser-shell, .acira-tab-row) { background: transparent; }
+:root[data-frame-field][data-frame-field][data-frame-field]:not(:is([data-material=acrylic],[data-material=vibrancy])):not([data-edge-float]) .app.style-acira:not(.native-layer):not([data-toolbar-color]) .acira-persistent-toolbar { background: transparent; }
+/* The sidebar's stuck section header hides the rows under it with the frame's colour (sidebar.css): on a field it shows its own slice of
+   the field (fixed to the window, so it lines up with what is round it), and the 12 px fade under it is the same slice through a mask. */
+:root[data-frame-field] .app.style-acira .acira-sidebar .sb-zone[data-stuck] > .sb-zone-head { background: var(--frame-solid) fixed; }
+:root[data-frame-field] .app.style-acira .acira-sidebar .sb-zone[data-stuck] > .sb-zone-head::after { background: var(--frame-solid) fixed; -webkit-mask: linear-gradient(#000, transparent); mask: linear-gradient(#000, transparent); }
+/* The live float (14.1, sidebar-overlay.css): a peeking sidebar over the LIVE page wears its own glass (a blurred copy of the page under a
+   fill of the theme's colour), and the two pieces that round the page's corners beside it are that glass's tone at their height. On a
+   field the fill IS the field: every stop (Glossy's rim and shine, the middle colours) at the float's own strength (ui/frameField.ts
+   `--frame-float`; real frames, 21 Nov: a fill from the first colour to the last left the shine out and the float's top stood darker than
+   the toolbar beside it), and the low corner piece takes the foot's colour, so the float's foot is never the top's hue on a frame whose foot
+   is another. The piece's own rules
+   (opaque, or its glass tone over the one neutral) read --sidebar-rgb: here it is the foot's colour for that piece alone. */
+:root[data-frame-field][data-frame-field][data-frame-field][data-sidebar-overlay=native] .app.style-acira>.acira-sidebar.is-peek[data-live-glass] { --live-fill:var(--frame-float); }
+:root[data-frame-field][data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira .sidebar-page-corners.sidebar-page-corners-low { --sidebar-rgb:var(--frame-bottom-rgb); }
+/* 14.3, C (the team's pick: "b tonight then c in 14.3"): two colours or more lie on ONE diagonal field across the window (ui/frameField.ts
+   diagTokens), so a layout with no sidebar shows every colour too. A diagonal is not the same under a sideways slide, as 14.1's top-to-bottom field
+   was, so the field is painted ONCE, on the window's own layer, which never moves, and nothing that slides carries it: at every frame of a layout
+   switch each point of the frame is the same point of the one field. The direction follows the sidebar's side (to bottom right; the mirror with the
+   sidebar on the right), the float's fill is placed from its own corner. The repeated attribute is specificity over frame.css, frost-preview.css,
+   sidebar-right.css and view-morph.css, without !important. */
+:root[data-frame-diag] { --frame-dir: to bottom right; --frame-anchor: left 0 top 0; }
+:root[data-frame-diag][data-sidebar-side=right] { --frame-dir: to bottom left; --frame-anchor: right 0 top 0; }
+/* Glass: ONE window-sized veil (today's two side-by-side layers, and the column the switch carves out, would not line up on a diagonal). */
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag]:is([data-material=acrylic],[data-material=vibrancy]):not([data-edge-float]):not([data-material=acrylic]:is([data-window-active=false],[data-system-transparency=off])) .app.style-acira:not(.native-layer) { background: var(--frame-veil); }
+/* A layout switch over glass (view-morph.css): the sidebar's own copy of the veil, the band and strip pieces beside it and the cut in the window's old
+   and new pictures are off; the window's veil above stays still under the sliding sidebar. Nothing doubles: the sidebar carries no veil of its own. */
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-mode-switch=layout] .app.style-acira:not(.native-layer)>.ed-rail.is-expanded:not(.is-peek) { background: none; }
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-mode-switch=layout] .app.style-acira:not(.native-layer)>.ed-rail.is-expanded:not(.is-peek)::after { background: none; }
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag]:is([data-material=acrylic],[data-material=vibrancy])[data-mode-switch=layout] .app.style-acira:not(.native-layer):has(>.ed-rail.is-expanded:not(.is-peek))::before,
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag]:is([data-material=acrylic],[data-material=vibrancy])[data-mode-switch=layout] .app.style-acira:not(.native-layer):has(>.ed-rail.is-expanded:not(.is-peek))::after { background-image: none; }
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-mode-switch=layout]::view-transition-image-pair(root) { clip-path: none; }
+/* The stuck section header's slice: every layer of the field fixed to the window (Glossy's shine is a layer of its own). */
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag] .app.style-acira .acira-sidebar .sb-zone[data-stuck] > .sb-zone-head, :root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag] .app.style-acira .acira-sidebar .sb-zone[data-stuck] > .sb-zone-head::after { background: var(--frame-solid); background-attachment: fixed; }
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag] .app.style-acira .acira-sidebar .sb-zone[data-stuck] > .sb-zone-head::after { -webkit-mask: linear-gradient(#000, transparent); mask: linear-gradient(#000, transparent); }
+/* The low corner piece beside the float's foot: the field's colour there. */
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira .sidebar-page-corners.sidebar-page-corners-low { --sidebar-rgb: var(--frame-corner-low-rgb); }
+/* 14.3, C: WINDOWS' CAPTION BOX. Without the window material Windows paints the minimise / maximise / close buttons on a FLAT box in the colour the
+   layout sends (main.cjs setCaption: `tone`; with acrylic or mica the box is clear and the field shows through). Under a diagonal the field beside a
+   flat box changes colour, so the box stood 3 to 11 levels off it (the Mac stand-in, 23 Nov). Here the field is held flat under the box in that very
+   colour (--caption-c, published by App with the layout, Windows only, only while the box is drawn), and blends into the diagonal over 16 px to its
+   left, below it and round its corner: the box's edge is 0 levels from the field by construction. Unset (no box), every layer is clear. The box's
+   width is the buttons' own (138 DIP at the interface's scale), not --caption-width, which the layout sets to 0 over a sidebar on the right. */
+:root[data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-frame-diag][data-platform=win32]:not(:is([data-material=acrylic],[data-material=vibrancy])):not([data-edge-float]) .app.style-acira:not(.native-layer) { background:
+  linear-gradient(to right, transparent, var(--caption-c, transparent) 16px) right 0 top 0 / calc(var(--geometry-caption, 138px) / var(--interface-scale, 1) + 16px) var(--caption-h, 0px) no-repeat,
+  linear-gradient(var(--caption-c, transparent), transparent) right 0 top var(--caption-h, 0px) / calc(var(--geometry-caption, 138px) / var(--interface-scale, 1)) 16px no-repeat,
+  radial-gradient(circle 16px at 100% 0, var(--caption-c, transparent), transparent) right calc(var(--geometry-caption, 138px) / var(--interface-scale, 1)) top var(--caption-h, 0px) / 16px 16px no-repeat,
+  var(--frame-solid); }

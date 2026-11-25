@@ -1,14 +1,15 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {runtime} from '../runtime/client';
 import type {FilterListsStatus} from '../runtime/connectedServices';
 import {SettingGroup,SettingNote,SettingRow} from './settings/controls';
 
 import { t } from '../i18n';
-export function FilterListSettings({profileId,privateMode=false}:{profileId:string;privateMode?:boolean}){
+export function FilterListSettings({profileId,privateMode=false,fold,children}:{profileId:string;privateMode?:boolean;fold?:boolean;children?:ReactNode}){
  const [status,setStatus]=useState<FilterListsStatus>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),generation=useRef(0);
  useEffect(()=>{const version=++generation.current;setStatus(undefined);setBusy(false);setError('');if(privateMode)return;void runtime.service({type:'filters.lists-status'}).then(result=>{if(version===generation.current)setStatus(result.filterLists);}).catch(error=>{if(version===generation.current)setError(error instanceof Error?error.message:t('filterlistsettings.statusUnavailable'));});return()=>{generation.current++;};},[profileId,privateMode]);
  const update=async(type:'filters.lists-update'|'filters.lists-rollback')=>{const version=generation.current;setBusy(true);setError('');try{const result=await runtime.service({type});if(version===generation.current)setStatus(result.filterLists);}catch(error){if(version===generation.current){setError(error instanceof Error?error.message:t('filterlistsettings.existingListActive'));const result=await runtime.service({type:'filters.lists-status'}).catch(()=>null);if(version===generation.current&&result)setStatus(result.filterLists);}}finally{if(version===generation.current)setBusy(false);}};
- return <SettingGroup title={t("privacy.protectionLists")}>
+ return <SettingGroup title={t("privacy.protectionLists")} fold={fold}>
+  {children}
   <SettingNote>{t("filterlistsettings.bundledListsWorkOfflineAnd")}</SettingNote>
   {privateMode?<p className="st-muted">{t("filterlistsettings.manageListUpdatesFromAn")}</p>:<>
    <SettingRow id="filter-lists-update" title={t("core.updateListsNow")} detail={status?status.updatedAt?t('filterlistsettings.lastUpdate',{date:new Date(status.updatedAt).toLocaleString()}):t('filterlistsettings.usingBundled'):t('filterlistsettings.readingStatus')}><button type="button" className="st-button" aria-busy={busy} disabled={busy||!status} onClick={()=>void update('filters.lists-update')}>{busy?t('filterlistsettings.updating'):t("pw.frame.update")}</button></SettingRow>

@@ -1,0 +1,231 @@
+/* The now-playing card (Beta 14, approved look 13 Nov), in Acira's sidebar tokens (--sb-fg, --sb-muted, --sb-line, --ink). Every size is
+   CSS px at 100% on a 240 sidebar (card 224 wide), measured against the Zen reference:
+   full 122 tall = header 54 + 9 + seek row 18 + 5 + control row 28 + 8; compact 48. Header: artwork 44 at 10/10 (compact 32 at 8),
+   gap 10, title 13/16 500, artist 11.5/14; ONE dot matrix at the right end, its right edge on the 10 px line, centred on the artwork.
+   Seek row centred 72 from the top: times 11 tabular, rail 4 px. Control row centred 100: a left pair [volume, go to tab], the centred
+   transport [previous, play / pause, next] (16 px glyphs, 28 px targets, 2 apart, play on a quiet round plate) and a right pair
+   [picture in picture, close] (14 px glyphs at stroke 1.4, 24 px targets); the pairs are pushed to the edges so the speaker's ink
+   starts on the artwork's left edge and the cross's ink ends on the dot matrix's right edge. */
+@property --np-c1{syntax:'<color>';inherits:true;initial-value:transparent}
+@property --np-c2{syntax:'<color>';inherits:true;initial-value:transparent}
+@property --np-c3{syntax:'<color>';inherits:true;initial-value:transparent}
+@property --np-c4{syntax:'<color>';inherits:true;initial-value:transparent}
+.np-list{display:flex;flex-direction:column;gap:6px;max-height:min(330px,48vh);overflow-x:clip;overflow-y:auto;padding-bottom:14px;margin-bottom:-14px;scrollbar-width:none}
+.np-block{position:relative;--edge-thumb:rgb(var(--ink) / .3)}
+/* A new track's palette: the four lights ease to their new colours in 900ms (registered colours interpolate in OKLab, no jump). */
+.np-wrap{--np-fallback:rgb(var(--ink) / .35);position:relative;flex:none;isolation:isolate;
+  transition:--np-c1 900ms cubic-bezier(.4,0,.2,1),--np-c2 900ms cubic-bezier(.4,0,.2,1),--np-c3 900ms cubic-bezier(.4,0,.2,1),--np-c4 900ms cubic-bezier(.4,0,.2,1)}
+.np-card{position:relative;z-index:1;overflow:clip;container-type:inline-size;border-radius:8px;background:rgb(var(--ink) / .045);box-shadow:inset 0 0 0 1px var(--sb-line);
+  color:var(--sb-fg);cursor:default;-webkit-app-region:no-drag;transition:background-color var(--sb-dur,.12s) var(--sb-ease,ease)}
+.np-card:hover{background:rgb(var(--ink) / .065)}
+.np-card[data-current]{background:var(--sb-selected)}
+.app[data-appearance=light] .np-card{background:rgb(255 255 255 / .55)}
+.app[data-appearance=light] .np-card:hover{background:rgb(255 255 255 / .72)}
+.np-card:not([data-full]){cursor:pointer}
+
+/* Head: artwork, the two lines, the right end. */
+.np-head{position:relative;z-index:1;display:flex;align-items:center;gap:10px;box-sizing:border-box;height:48px;padding:8px 10px 8px 8px}
+.np-card[data-full] .np-head{height:54px;padding:10px 10px 0 10px;cursor:pointer}
+.np-art{position:relative;flex:none;display:block;width:32px;height:32px;margin:0;padding:0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;transform-origin:0 0;cursor:pointer}
+.np-card[data-full] .np-art{width:44px;height:44px}
+.np-art-face{position:absolute;inset:0;overflow:hidden;border-radius:6px;background:rgb(var(--ink) / .08);box-shadow:inset 0 0 0 1px rgb(var(--ink) / .1)}
+.np-card:not([data-full]) .np-art-face{border-radius:5px}
+:where(.np-art-face) img.np-face-img{display:block;width:100%;height:100%;object-fit:cover;user-select:none}
+.np-art-img{position:absolute;inset:0;animation:np-img-in calc(220ms * var(--np-k,1)) cubic-bezier(.23,1,.32,1) backwards}   /* backwards, not both: once it has faded in nothing is left running on the picture (a forwards fill kept it a composited layer, and the open/fold flight then scaled it differently from the sample's plain picture) */
+@keyframes np-img-in{from{opacity:0}}
+.np-art-site{transition:opacity calc(220ms * var(--np-k,1)) var(--sb-ease,ease)}
+.np-art-site[data-covered]{opacity:0}
+.np-art-face::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgb(255 255 255 / .08);pointer-events:none}
+.app[data-appearance=light] .np-art-face::after{box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08)}
+.np-art-site{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in oklab,var(--np-c2) 18%,rgb(var(--ink) / .06))}
+/* The site's own icon rides the artwork's corner (the card is the tab: you know where it plays). */
+.np-art-site-badge{position:absolute;z-index:4;right:-3px;bottom:-3px;display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:var(--sb-bg,#1d1d1f);box-shadow:0 0 0 1px var(--sb-line),0 1px 2px rgb(0 0 0 / .3);opacity:0;transform:scale(.6);transition:opacity 160ms var(--sb-ease,ease),transform 220ms cubic-bezier(.22,1,.36,1)}
+.app[data-appearance=light] .np-art-site-badge{background:#fff}
+.np-card[data-full] .np-art[data-art] .np-art-site-badge{opacity:1;transform:none}
+
+.np-text-wrap{position:relative;flex:1;min-width:0;align-self:stretch;display:flex;align-items:center;margin:0;padding:0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:start;cursor:inherit}
+.np-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;transform-origin:0 50%}
+.np-title{display:flex;overflow:hidden;white-space:nowrap;font-size:var(--text-13,13px);line-height:16px;font-weight:500;color:var(--sb-fg)}
+/* A title that does not fit fades over its last 18px (never an ellipsis, never cut mid-letter); it runs while open and playing.
+   The fades are one STATIC mask: the left one sits over 10px of blank padding (the title box starts 10px to the left of the text
+   column and its text 10px in), so at rest the first letter is untouched and, once the run scrolls, letters fade as they leave.
+   Nothing about the mask or the text is ever animated: the run moves by transform alone (compositor only). An earlier version
+   animated a registered custom property inside the mask, which repainted the text (an emoji too) every frame; see the report. */
+.np-title-run{flex:none;max-width:none}
+.np-card:not([data-long]) .np-title-run{overflow:hidden;max-width:100%}
+.np-card[data-long] .np-title{margin-left:-12px;padding-left:12px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent)}
+.np-card[data-long] .np-title-run{padding-right:32px}
+.np-card[data-full][data-long] .np-title-run{animation:np-marquee 16s linear 1.4s infinite}
+.np-wrap:not([data-playing]) .np-title-run{animation-play-state:paused}
+@keyframes np-marquee{0%,8%{transform:none}100%{transform:translateX(-100%)}}
+.np-artist{display:flex;align-items:center;min-width:0;font-size:11.5px;line-height:14px;color:var(--sb-muted)}
+/* one rule for both lines (the sidebar's rows use it): a line that does not fit fades out at its end, no ellipsis (the title's fade is 18px; the artist's is the same) */
+.np-artist-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+
+/* The right end. The ONE dot matrix, in a 28px-tall box centred on the header (compact: on the row), its right edge on the 10px
+   line. Only while audio really plays (A10): paused, it fades with a small blur and its box stays, so nothing reflows. */
+.np-right{position:relative;flex:none;display:flex;align-items:center;height:28px}
+.np-dots{display:grid;place-items:center;width:auto;min-width:14px;height:28px;color:var(--sb-muted);transition:opacity 200ms var(--sb-ease,ease),filter 200ms var(--sb-ease,ease)}
+.np-dots:not([data-on]){opacity:0;filter:blur(2px)}
+/* A compact card under the pointer offers its play / pause in the dots' place; the open card has it in the transport row. */
+.np-right .np-hplay{position:absolute;left:50%;top:0;margin-left:-14px}
+.np-card:not([data-full]) .np-hplay{opacity:0;pointer-events:none;transition:opacity 160ms var(--sb-ease,ease)}
+.np-card:not([data-full])[data-hover] .np-hplay{opacity:1;pointer-events:auto}
+.np-card:not([data-full])[data-hover] .np-dots{opacity:0;filter:blur(2px)}
+.np-card[data-full] .np-hplay{visibility:hidden}
+
+/* Buttons: the footer's 28px targets, radius 6, today's hover and press. */
+.np-btn{position:relative;flex:none;display:grid;place-items:center;width:28px;height:28px;margin:0;padding:0;border:0;border-radius:6px;background:none;color:var(--sb-muted);-webkit-app-region:no-drag;cursor:default;
+  transition:background-color var(--sb-dur,.12s) var(--sb-ease,ease),color var(--sb-dur,.12s) var(--sb-ease,ease)}
+.np-btn:hover{background:rgb(var(--ink) / .07);color:var(--sb-fg)}
+.np-btn:active{background:rgb(var(--ink) / .11);color:var(--sb-fg)}
+/* Rules here name their rightmost element with a class, never `*` or an :is() list (those land in the engine's universal bucket and
+   are matched against every element on every style recalc, card on screen or not); tests/now-playing-ui.test.ts keeps it so. */
+.np-btn:focus-visible,.np-art:focus-visible,.np-text-wrap:focus-visible,.np-rail-hit:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-2px}
+.np-play{color:var(--sb-fg)}
+.np-ic{display:block;overflow:visible}
+.np-ic{overflow:visible}
+:where(.np-pp) path.li-rest,:where(.np-pp) path.li-p{stroke-width:1.4}
+.np-spk{display:grid;place-items:center}
+:where(.np-spk) path.li-rest,:where(.np-spk) path.li-p{transition:opacity 120ms var(--sb-ease,ease)}
+/* One wave below half: the same drawing with the outer wave faded out. */
+.np-spk[data-level=low] :where(.li-g) path.li-p:nth-child(3){opacity:0}
+
+/* More: the seek row and the control row; absent in a compact card. */
+.np-more{position:relative;z-index:1;display:none;padding:9px 10px 8px;direction:ltr}
+.np-card[data-full] .np-more{display:block}
+.np-seek{display:flex;align-items:center;gap:10px;height:18px;padding:0 3px}
+.np-time{flex:none;min-width:28px;font-size:11px;line-height:14px;font-variant-numeric:tabular-nums;color:var(--sb-muted);transition:color 120ms var(--sb-ease,ease)}
+.np-time-r{text-align:right}
+.np-seek[data-scrub] .np-time{color:var(--sb-fg)}
+/* The seek bar is today's volume slider: a 4px rail in ink 14%, the fill in the sidebar's ink, a 12px white knob; held, the rail thickens 1.5x and the knob grows. */
+.np-rail-hit,.np-vol-track{position:relative;flex:1;min-width:0;display:flex;align-items:center;height:18px;outline:none;touch-action:none}
+.np-rail-hit[aria-disabled]{opacity:.45}
+.np-rail{position:relative;flex:1;height:4px;border-radius:2px;overflow:hidden;background:rgb(var(--ink) / .14);transition:transform 115ms var(--sb-ease,ease)}
+.np-fill{position:absolute;inset:0;border-radius:inherit;background:var(--sb-fg);transform:translateX(calc((var(--np-pos,0) - 1) * (100% - 12px) - 6px))}
+.np-knob{position:absolute;left:0;right:12px;top:50%;height:0;transform:translateX(calc(var(--np-pos,0) * 100%));pointer-events:none}
+.np-knob::before{content:'';position:absolute;left:0;top:-6px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 .5px rgb(0 0 0 / .14),0 1px 3px rgb(0 0 0 / .26);transform:scale(.84);transition:transform 115ms var(--sb-ease,ease)}
+.np-card:hover .np-knob::before{transform:none}
+/* Between two answers the position glides on a line (the next second's value is the target); a drag or a new track does not. */
+.np-wrap[data-playing] .np-seek:not([data-scrub]) .np-fill,.np-wrap[data-playing] .np-seek:not([data-scrub]) .np-knob{transition:transform 1000ms linear}
+.np-seek[data-scrub] .np-rail,.np-vol[data-pressing] .np-rail{transform:scaleY(1.5)}
+.np-seek[data-scrub] .np-knob::before,.np-vol[data-pressing] .np-knob::before{transform:scale(1.15)}
+.np-rail-hit:focus-visible,.np-vol-track:focus-visible{outline:2px solid var(--sb-ring);outline-offset:0;border-radius:4px}
+/* Live: no position to show; the rail fades into a small LIVE label, the way our dividers fade. */
+.np-live{justify-content:center;gap:10px}
+.np-live-rail{flex:1;height:2px;border-radius:1px;background:linear-gradient(90deg,transparent,rgb(var(--ink) / .2))}
+.np-live-rail:last-child{background:linear-gradient(270deg,transparent,rgb(var(--ink) / .2))}
+.np-live-label{flex:none;font-size:10.5px;line-height:14px;font-weight:600;letter-spacing:.1em;color:var(--sb-muted)}
+/* Letter-spacing breaks the joins of Arabic and the shapes of Indic and CJK scripts: only the Latin and Cyrillic LIVE is spaced. */
+:is(:lang(ar),:lang(hi),:lang(ja),:lang(ko),:lang(zh)) .np-live-label,[dir=rtl] .np-live-label{letter-spacing:0}
+
+/* Control row: [volume, go to tab] ... [previous, play / pause, next] centred on the card ... [picture in picture, close]. */
+.np-ctrl{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:28px;margin:5px -5px 0}
+.np-ctrl-main{display:contents}
+.np-lg{grid-column:1;justify-self:start;display:flex}
+.np-tg{grid-column:2;display:flex;gap:2px}
+.np-rg{grid-column:3;justify-self:end;display:flex}
+.np-play{border-radius:50%;background:rgb(var(--ink) / .075)}
+.np-play:hover{background:rgb(var(--ink) / .11)}
+.np-play:active{background:rgb(var(--ink) / .15)}
+.np-hplay{border-radius:6px;background:none}
+.np-hplay:hover{background:rgb(var(--ink) / .07)}
+/* The pairs are secondary: 14px glyphs at stroke 1.4 (the same weight as the 16px ones), 24px targets. */
+:is(.np-lg,.np-rg) .np-btn{width:24px}
+:is(.np-lg,.np-rg) .np-ic{width:14px;height:14px}
+:is(.np-lg,.np-rg) :where(.np-ic) path.li-rest,:is(.np-lg,.np-rg) :where(.np-ic) path.li-p{stroke-width:1.4}
+.np-card[data-vol] .np-volbtn{color:var(--sb-fg);background:rgb(var(--ink) / .07)}
+.np-vol{position:absolute;left:29px;right:0;top:0;bottom:0;display:flex;align-items:center;gap:10px;padding:0 1px 0 4px;opacity:0;pointer-events:none;touch-action:none;user-select:none;--np-pos:var(--np-vol)}
+.np-card[data-vol] .np-vol{opacity:1;pointer-events:auto}
+.np-card:not([data-vol]) .np-vol{clip-path:inset(-6px 100% -6px -6px)}
+.np-card[data-vol] .np-ctrl .np-btn:not(.np-volbtn){opacity:0}
+.np-vol-value{flex:none;min-width:22px;text-align:right;font-size:11px;line-height:14px;font-variant-numeric:tabular-nums;color:var(--sb-muted)}
+.np-vol .np-fill,.np-vol .np-knob,.np-vol .np-knob::before{transition:transform 120ms var(--sb-ease,ease)}
+.np-vol[data-pressing] .np-fill,.np-vol[data-pressing] .np-knob{transition:none}
+/* Optical alignment (measured on the glyph ink, stroke included): each glyph draws a different share of its 16 grid, so the buttons
+   are nudged until the speaker's ink starts exactly on the artwork's left edge (10px), the cross's ink ends exactly on the dot
+   matrix's right edge (10px), and the gap between the two glyphs is 14.4px in both pairs. Hit areas move with them (24 x 28). */
+.np-volbtn{translate:-1.36px 0}
+.np-rg .np-pipbtn{translate:1.68px 0}
+.np-rg .np-closebtn{translate:2.58px 0}
+/* Picture in picture: available = the outline with the small window bottom-right; active (the video is popped out) = the small
+   window fills and the button holds a quiet pressed fill; audio only = shown but dimmed and inert, so the row never reflows. */
+.np-pipbtn{transition:opacity 220ms var(--sb-ease,ease),background-color var(--sb-dur,.12s) var(--sb-ease,ease),color var(--sb-dur,.12s) var(--sb-ease,ease)}
+.np-pipbtn[data-pip=active]{background:rgb(var(--ink) / .1);color:var(--sb-fg)}
+.np-pipbtn[data-pip=active] :where(.np-ic) path.li-rest:nth-child(2),.np-pipbtn[data-pip=active] :where(.np-ic) path.li-p:nth-child(2){fill:currentColor}
+.np-pipbtn[data-pip=none]{opacity:.32;cursor:default}
+.np-pipbtn[data-pip=none]:hover{background:none;color:var(--sb-muted)}
+
+/* The glow, "aura waves" (the team's approved version B, 13 Nov; src/ui/nowPlayingAura.ts, drawn by src/ui/useAura.ts): two tiny canvases
+   inside the card (overflow: clip, radius 8), so no light ever reaches outside its outline: the waves (the card's bottom 72px, fading
+   out over their top 30) and the lit 1px bottom border. The pause sink and dim live in the script (one eased value, played backwards on
+   play). The script writes only the canvases' pixels; the browser scales them. No rule here ends on `*` or an :is() list. */
+.np-glow{position:absolute;z-index:0;inset:0;pointer-events:none;border-radius:inherit}
+.np-card:not([data-full]) .np-glow{opacity:0}
+.np-dim{position:absolute;inset:0}
+.np-aura{position:absolute;left:0;bottom:0;width:100%;height:72px;mix-blend-mode:plus-lighter}
+.np-edge{position:absolute;left:0;right:0;bottom:0;height:1px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+.np-aura-edge{position:absolute;left:0;top:0;width:100%;height:1px;mix-blend-mode:plus-lighter}
+/* Fail-safe (no 2D canvas): a still band of the four colours, soft at the top and both ends. */
+.np-aura-css{display:none;position:absolute;left:0;right:0;bottom:0;height:34px;opacity:.5;mix-blend-mode:plus-lighter;
+  background:linear-gradient(90deg,transparent,var(--np-c1,var(--np-fallback)) 20%,var(--np-c2,var(--np-fallback)) 40%,var(--np-c3,var(--np-fallback)) 60%,var(--np-c4,var(--np-fallback)) 80%,transparent);
+  -webkit-mask-image:linear-gradient(0deg,#000,rgb(0 0 0 / .4) 40%,transparent);mask-image:linear-gradient(0deg,#000,rgb(0 0 0 / .4) 40%,transparent)}
+.np-wrap[data-aura=css] .np-aura-css{display:block}
+.np-wrap[data-aura=css] .np-aura,.np-wrap[data-aura=css] .np-aura-edge{display:none}
+.np-wrap[data-aura=css]:not([data-playing]) .np-aura-css{opacity:.25}
+/* Light: the same light laid normally (adding light to white does nothing), a little softer. */
+.app[data-appearance=light] .np-aura,.app[data-appearance=light] .np-aura-edge,.app[data-appearance=light] .np-aura-css{mix-blend-mode:normal}
+.app[data-appearance=light] .np-glow .np-dim{opacity:.8}
+.np-wrap[data-noart] .np-glow .np-dim{opacity:.75}
+@media (prefers-reduced-motion:reduce){.np-title-run,.np-title{animation:none!important}}
+.app[data-reduced-motion=true] .np-title-run,.app[data-reduced-motion=true] .np-title{animation:none!important}
+
+/* Narrow sidebar (168): 24px targets, the row widened 4px each side, artwork 38, so the controls fit the 148px row with no overlap. The
+   go-to-tab button folds away there (the artwork still goes to the tab). */
+@container (max-width:170px){
+  .np-ctrl .np-btn{width:24px;height:24px}.np-ctrl{margin-left:-8px;margin-right:-8px}.np-tg{gap:0}.np-vol{left:26px}
+  .np-gotab{display:none}
+  .np-card[data-full] .np-art{width:38px;height:38px}.np-card[data-full] .np-head{height:48px;gap:8px;padding-right:8px}
+  .np-head{padding-right:8px}.np-more{padding-left:8px;padding-right:8px}
+  .np-time{min-width:26px;font-size:10.5px}.np-seek{gap:6px}.np-vol-value{display:none}
+  .np-volbtn{translate:3.64px 0}.np-rg .np-pipbtn{translate:0 0}.np-rg .np-closebtn{translate:-.42px 0}
+}
+/* Track change: the old artwork and lines vapor out (blur 6 / 3px, fade, a touch of scale on the artwork) while the new ones form
+   90ms later. Premium 220 + 340ms; Fast x.7; Off: no animation (the old track is never kept). */
+.np-art-face.np-out{z-index:1;pointer-events:none}
+.np-text.np-out{position:absolute;left:0;right:0;top:50%;translate:0 -50%;pointer-events:none}
+.np-card[data-swap] .np-art-face.np-out{animation:np-out-art calc(220ms * var(--np-k,1)) cubic-bezier(.4,0,1,1) both}
+.np-card[data-swap] .np-text.np-out{animation:np-out-text calc(220ms * var(--np-k,1)) cubic-bezier(.4,0,1,1) both}
+.np-card[data-swap] .np-art-face.np-in{animation:np-in-art calc(340ms * var(--np-k,1)) cubic-bezier(.23,1,.32,1) calc(90ms * var(--np-k,1)) both}
+.np-card[data-swap] .np-text.np-in{animation:np-in-text calc(340ms * var(--np-k,1)) cubic-bezier(.23,1,.32,1) calc(90ms * var(--np-k,1)) both}
+@keyframes np-out-art{to{opacity:0;filter:blur(6px);transform:scale(1.05)}}
+@keyframes np-in-art{from{opacity:0;filter:blur(6px);transform:scale(.95)}}
+@keyframes np-out-text{to{opacity:0;filter:blur(3px)}}
+@keyframes np-in-text{from{opacity:0;filter:blur(3px)}}
+.np-time{display:grid}
+/* The two children of a time are .np-in (the current text) and .np-out (the one leaving on a track change): named, not `>*`. */
+.np-time>.np-in,.np-time>.np-out{grid-area:1/1;justify-self:start}
+.np-time-r>.np-in,.np-time-r>.np-out{justify-self:end}
+.np-card[data-swap] .np-time .np-out{animation:np-out-text calc(220ms * var(--np-k,1)) cubic-bezier(.4,0,1,1) both}
+.np-card[data-swap] .np-time .np-in{animation:np-in-text calc(340ms * var(--np-k,1)) cubic-bezier(.23,1,.32,1) calc(90ms * var(--np-k,1)) both}
+.np-text.np-out .np-title-run{overflow:visible;max-width:none}
+.np-text.np-out .np-title{-webkit-mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent)}
+.np-card[data-swap] .np-seek:not([data-scrub]) .np-fill,.np-card[data-swap] .np-seek:not([data-scrub]) .np-knob{transition:transform calc(420ms * var(--np-k,1)) cubic-bezier(.22,1,.36,1)}
+
+/* Artwork hover (compact and open): a soft dark backdrop and the go-to-tab glyph drawing itself in; leaving runs it back. A click goes to the tab. */
+.np-art-go{position:absolute;z-index:3;inset:0;display:grid;place-items:center;border-radius:6px;background:radial-gradient(closest-side,rgb(0 0 0 / .5),rgb(0 0 0 / .36));color:#fff;opacity:0;pointer-events:none;transition:opacity 160ms var(--sb-ease,ease)}
+.np-card:not([data-full]) .np-art-go{border-radius:5px}
+.np-art-go .np-ic{transform:translate(-1px,1px) scale(.9);transition:transform 220ms cubic-bezier(.22,1,.36,1)}
+.np-art-go :where(.np-ic) path.li-rest,.np-art-go :where(.np-ic) path.li-p{stroke-width:1.5;stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 240ms cubic-bezier(.22,1,.36,1)}
+.np-art-go :where(.np-ic) path.li-rest:nth-child(2),.np-art-go :where(.np-ic) path.li-p:nth-child(2){transition-delay:40ms}.np-art-go :where(.np-ic) path.li-rest:nth-child(3),.np-art-go :where(.np-ic) path.li-p:nth-child(3){transition-delay:70ms}
+.np-art:hover .np-art-go,.np-art:focus-visible .np-art-go{opacity:1}
+.np-art:hover .np-art-go .np-ic,.np-art:focus-visible .np-art-go .np-ic{transform:none}
+.np-art:hover .np-art-go :where(.np-ic) path.li-rest,.np-art:hover .np-art-go :where(.np-ic) path.li-p,.np-art:focus-visible .np-art-go :where(.np-ic) path.li-rest,.np-art:focus-visible .np-art-go :where(.np-ic) path.li-p{stroke-dashoffset:0}
+.np-art:active .np-art-go{background:rgb(0 0 0 / .56)}
+/* The closed Mini rail's play / pause (NowPlaying.tsx, miniRail.css "Now Playing"): drawn only in the rail; everywhere else it is not there (not seen, not focusable). */
+.np-rail-play{display:none}
+@media (forced-colors:active){
+  .np-card{outline:1px solid ButtonText}
+  .np-fill{background:Highlight}.np-rail{background:GrayText}.np-knob::before{forced-color-adjust:none;background:ButtonText}
+  .np-glow{display:none}
+}

@@ -31,7 +31,8 @@ test('turning the mode on: the top and bottom edges wait, the left edge starts a
  assert.ok(early.some(b=>b.x>20),'the left edge is already travelling');
  assert.deepEqual(r.bounds.at(-1),to,'it lands on the target');
  const last=r.times.at(-1);
- assert.ok(last>=settle+180-20&&last<=settle+180+40,`it ends when the lagging pair has settled: ${last} ms (settle ${settle} + lag 180)`);
+ // (D74, 19 Nov: an edge is in its place once it is within one point of it, so the last frame that MOVES the page comes up to 60 ms before the spring's own settle time on a 66 pt travel; never after it)
+ assert.ok(last>=settle+180-60&&last<=settle+180+40,`it ends when the lagging pair has settled: ${last} ms (settle ${settle} + lag 180)`);
  const tops=r.bounds.map(b=>b.y);
  assert.ok(tops.every((y,i)=>i===0||y<=tops[i-1]),'the top edge only rises');
 });

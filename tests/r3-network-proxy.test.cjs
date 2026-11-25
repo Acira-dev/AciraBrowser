@@ -137,5 +137,5 @@ test('VPN app control drives a real command-line client: connect, disconnect, st
     timeout = undefined; misbehave = 'stdin'; assert.equal((await find('mullvad')).state, 'disconnected', 'stdin is closed, so a client that waits for input cannot stall status');
     // 5. busy lock is released after failures
     misbehave = ''; assert.equal((await service.status()).busy, false);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });

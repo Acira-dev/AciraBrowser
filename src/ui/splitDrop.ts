@@ -30,7 +30,7 @@ export interface SplitZone { layout: SplitLayout; index: number }
 export interface SplitPickerState { tabId: string; zone: SplitZone | null; layouts: SplitLayout[]; current: string[]; width: number; height: number; lift?: number; pane?: { zone: PaneZone; rect: { x: number; y: number; width: number; height: number } } | null; /** False while a pane drag's card is put away (ui/paneDrag.paneCardOut); absent: shown. */ card?: boolean;
   /** A pane drag: how near the pointer is to the "Drag up here for layouts" pill, 0 (180px or more away) to 1 (on it); the pill lights by it. */ reach?: number;
   /** False when another layer draws the result (a pane drag's live frames): the picker shows no preview of its own. */ preview?: boolean }
-interface DropContext { visible: readonly string[]; activeId: string; tabIds: readonly string[]; /** The open split's layout (for the in-place pane zones). */ layout?: SplitLayout; onEnterPage?: (visible: readonly string[]) => void }
+interface DropContext { visible: readonly string[]; activeId: string; tabIds: readonly string[]; /** The open split's layout (for the in-place pane zones). */ layout?: SplitLayout; onEnterPage?: (visible: readonly string[], dragged?: string) => void }
 
 let context: DropContext = { visible: [], activeId: '', tabIds: [] };
 let drag: { tabId: string; armed: boolean; zone: SplitZone | null; lift: number; panes: PaneBox[]; paneZone: PaneZone | null } | null = null, page: DOMRect | null = null, timer: ReturnType<typeof setTimeout> | undefined;
@@ -49,6 +49,10 @@ export function setSplitDropContext(next: DropContext) { context = next; }
 export const splitDropLayout = (): { layout: SplitLayout; tabIds: readonly string[] } | null => context.layout && context.visible.length > 1 ? { layout: context.layout, tabIds: context.visible } : null;
 /** Asks the page to take stills of these panes and step the native views aside (the picker and the pane-ribbon drag both need the website sharp while the UI draws above it). */
 export function requestSplitStills(ids: readonly string[]) { context.onEnterPage?.(ids); }
+/** D191 (reported 24 Nov: the page went flat grey under the picker): a tab lifted in the sidebar takes the stills of the panes at once, while the pages are still live, instead of when the pointer first reaches the page
+ *  (the picker's dwell is 90 ms; a capture that started then was not in when the page stepped aside). `started` is the tab the stills were taken for: the first move over the page then takes none again. */
+let primed = '';
+export function primeSplitStills(tabId: string) { if (primed === tabId) return; primed = tabId; context.onEnterPage?.(context.visible.length ? context.visible : [context.activeId], tabId); }
 
 /** The panes the dragged tab joins: the split on screen, or the current tab (the last one used when the current tab is
  * the one being dragged). */
@@ -139,7 +143,7 @@ export function moveSplitDrag(tabId: string, point: { x: number; y: number }, en
     return;
   }
   // First time over the page in this drag: App takes sharp stills while native views step aside for pointer capture.
-  if (started !== tabId) { started = tabId; context.onEnterPage?.(context.visible.length ? context.visible : [context.activeId]); }
+  if (started !== tabId) { started = tabId; if (primed !== tabId) context.onEnterPage?.(context.visible.length ? context.visible : [context.activeId], tabId); }
   clearTimeout(timer); drag = { tabId, armed: false, zone: null, lift: 0, panes: [], paneZone: null };
   timer = setTimeout(() => {
     if (drag?.tabId !== tabId || !page) return;
@@ -158,7 +162,7 @@ export function endSplitDrag(tabId: string) {
   cancelSplitDrag();
   return choice !== null;
 }
-export function cancelSplitDrag() { clearTimeout(timer); timer = undefined; page = null; started = ''; halted = false; const armed = drag?.armed; drag = null; markSplitGroups(null); if (armed) publish(); }
+export function cancelSplitDrag() { clearTimeout(timer); timer = undefined; page = null; started = ''; primed = ''; halted = false; const armed = drag?.armed; drag = null; markSplitGroups(null); if (armed) publish(); }
 
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 /** The tab id whose picker is showing, or null. */

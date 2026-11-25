@@ -20,7 +20,8 @@ const good = () => ({
 const snake = (name) => name.replace(/[A-Z]/g, (letter) => '_' + letter.toLowerCase());
 
 test('schema 2 is the frozen Round 3 shape, and every list of it is still inside the app\'s schema-3 lists', () => {
-  for (const [field, list] of Object.entries(ENUMS)) assert.deepEqual(client.ENUMS[field], list, field);
+  // Beta 14 (B7, B8): a list may have grown since schema 2 (tabLayout gained 'shelf', importSource 'zen') and `toolbar` is no longer sent (windowView says the same): every value of schema 2 is still on the app's list, or the field is gone from it.
+  for (const [field, list] of Object.entries(ENUMS)) { if (field === 'toolbar') { assert.equal(client.ENUMS.toolbar, undefined, 'toolbar is not sent by Beta 14'); continue; } assert.ok(list.every((value) => client.ENUMS[field].includes(value)), field); }
   for (const field of USES) assert.ok(client.USES.includes(field), field);
   assert.equal(Object.keys(good()).length, 9 + 14 + 8, 'nine base fields, 14 choices, 8 use buckets');
   assert.ok(validate(good(), NOW));
@@ -44,7 +45,7 @@ test('any value outside its closed list, any extra key and any wrong type is ref
   const longest = good();
   for (const [field, list] of Object.entries(ENUMS)) longest[field] = list.reduce((a, b) => (b.length > a.length ? b : a));
   for (const field of USES) longest[field] = '6-20';
-  longest.appVersion = '1.2.3-' + 'a'.repeat(16);
+  longest.appVersion = '9999.9999.9999-beta.999'; // the longest a real release can be (B9: anything else is dropped)
   assert.ok(validate(longest, NOW), 'the longest allowed values validate');
   assert.ok(new TextEncoder().encode(JSON.stringify(longest)).length < MAX_BYTES, 'and fit the size limit');
 });

@@ -1,4 +1,5 @@
-import type { Appearance, BrowserProfile, BrowserSnapshot, SearchEngine, Settings } from './types';
+import type { Appearance, BrowserProfile, BrowserSnapshot, FrameMaterial, SearchEngine, Settings } from './types';
+import { GRADIENT_EXTRA, OWN_LIMIT, cleanHexList, cleanMaterial } from './ownColours';
 import {effectiveProviders} from './searchProviders';
 
 /**
@@ -20,6 +21,11 @@ export interface ProfileLook {
   sidebarColor?: string;
   toolbarColor?: string;
   tabColor?: string;
+  /** 14.1 Your colours (runtime/ownColours.ts): the swatches added with Acira's picker, the gradient's extra colours, the still glow, the material. */
+  ownColours?: string[];
+  frameGradient?: string[];
+  frameGlow?: boolean;
+  frameMaterial?: FrameMaterial;
 }
 export interface ProfileSettings {
   appearance?: Appearance;
@@ -36,13 +42,23 @@ const engines: readonly SearchEngine[] = ['google', 'duckduckgo', 'bing'];
 const hex = /^#[0-9a-f]{6}$/i;
 /** The settings a profile's look owns. A change to any of these goes to the profile's `look` while the profile is on
  *  "This profile" (core.ts routes settings.update), and to the settings for all profiles otherwise. */
-export const LOOK_KEYS = ['colorPreset', 'accentColor', 'browserTint', 'surfaceColor', 'sidebarColor', 'toolbarColor', 'tabColor'] as const;
+export const LOOK_KEYS = ['colorPreset', 'accentColor', 'browserTint', 'surfaceColor', 'sidebarColor', 'toolbarColor', 'tabColor', 'ownColours', 'frameGradient', 'frameGlow', 'frameMaterial'] as const;
 const CUSTOM_COLOR_KEYS = ['surfaceColor', 'sidebarColor', 'toolbarColor', 'tabColor'] as const;
+/** 14.1: the look's Your-colours keys, each cleaned by its own rule; one left out is not set. */
+const OWN_KEYS = ['ownColours', 'frameGradient', 'frameGlow', 'frameMaterial'] as const;
+type OwnKey = typeof OWN_KEYS[number];
+function cleanOwn(key: OwnKey, value: unknown): unknown {
+  if (key === 'ownColours') return cleanHexList(value, OWN_LIMIT);
+  if (key === 'frameGradient') return cleanHexList(value, GRADIENT_EXTRA);
+  if (key === 'frameGlow') return value === true ? true : undefined;
+  return cleanMaterial(value);
+}
 
 /** The look of some settings (the shared ones, or what a window shows): what a profile starts with when it takes its own. */
-export function lookOf(settings: Pick<Settings, 'colorPreset' | 'accentColor' | 'browserTint'> & Partial<Pick<Settings, 'surfaceColor' | 'sidebarColor' | 'toolbarColor' | 'tabColor'>>): ProfileLook {
+export function lookOf(settings: Pick<Settings, 'colorPreset' | 'accentColor' | 'browserTint'> & Partial<Pick<Settings, 'surfaceColor' | 'sidebarColor' | 'toolbarColor' | 'tabColor' | OwnKey>>): ProfileLook {
   const look: ProfileLook = { colorPreset: settings.colorPreset, accentColor: settings.accentColor, browserTint: settings.browserTint };
   for (const key of CUSTOM_COLOR_KEYS) if (hex.test(settings[key] || '')) look[key] = settings[key];
+  for (const key of OWN_KEYS) { const value = cleanOwn(key, settings[key]); if (value !== undefined) (look as unknown as Record<string, unknown>)[key] = value; }
   return look;
 }
 
@@ -96,6 +112,7 @@ export function effectiveSettings(settings: Settings, own?: ProfileSettings): Se
     next.browserTint = own.look.browserTint;
     // a colour the profile did not set is not set: the shared custom colours never show through
     for (const key of CUSTOM_COLOR_KEYS) if (own.look[key]) next[key] = own.look[key]; else delete next[key];
+    for (const key of OWN_KEYS) if (own.look[key] !== undefined) (next as unknown as Record<string, unknown>)[key] = own.look[key]; else delete next[key];
   }
   const id = own.searchProviderId ?? own.searchEngine;
   const providers = effectiveProviders(settings.searchProviders ?? undefined,settings.searchEngine);
@@ -124,7 +141,8 @@ export function takeProfileLook(profile: BrowserProfile | undefined, shared: Set
     for (const key of LOOK_KEYS) {
       if (!Object.hasOwn(patch, key)) continue;
       const value = patch[key];
-      if ((CUSTOM_COLOR_KEYS as readonly string[]).includes(key)) { if (typeof value === 'string' && hex.test(value)) look[key] = value; else delete look[key]; }
+      if ((OWN_KEYS as readonly string[]).includes(key)) { const clean = cleanOwn(key as OwnKey, value); if (clean !== undefined) look[key] = clean; else delete look[key]; }
+      else if ((CUSTOM_COLOR_KEYS as readonly string[]).includes(key)) { if (typeof value === 'string' && hex.test(value)) look[key] = value; else delete look[key]; }
       else if (key === 'colorPreset' ? typeof value === 'string' && value && value.length <= 160 : typeof value === 'string' && hex.test(value)) look[key] = value;
     }
     own.look = look as unknown as ProfileLook;

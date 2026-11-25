@@ -16,7 +16,7 @@ test('the Passwords search keeps room for its whole placeholder, and Add passwor
   const css = read('src/features/settings/panels/passwords.css');
   assert.match(css, /\.pw-bar\{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;/, 'the bar wraps');
   assert.match(css, /\.pw-search\{display:grid;grid-template-columns:14px minmax\(0,1fr\);[^}]*flex:1 1 auto;min-width:0;/, 'the field asks for its content width and fills the line');
-  assert.match(css, /\.pw-search::after\{content:attr\(data-placeholder\);grid-area:1\/2;height:0;[^}]*visibility:hidden;white-space:pre;font-size:13px\}/, 'its content width is the placeholder (never painted)');
+  assert.match(css, /\.pw-search::before\{content:attr\(data-placeholder\);grid-area:1\/2;height:0;[^}]*visibility:hidden;white-space:pre;font-size:13px\}/, 'its content width is the placeholder (never painted)');
   assert.match(css, /:root:root \.pw-search input\{grid-area:1\/2;width:0;min-width:100%;height:100%;[^}]*font-size:13px;/, 'the input adds no width of its own and fills the field');
 });
 

@@ -5,11 +5,15 @@ import { t } from '../../i18n';
 import './choice-cards.css';
 import './personal-artwork-library.css';
 
+/** How many own pictures a profile keeps (desktop/workspace-artwork.cjs MAX_ASSETS; 14.1: 12, was 5). */
+export const MAX_OWN_IMAGES = 12;
 /** The profile's existing local image store, presented with the same picture
- * cards as the built-in collections. Removing a copy never removes its source. */
-export function PersonalArtworkLibrary({ id, assets, selected, busy, canImport, privateMode, onImport, onSelect, onRemove }: {
+ * cards as the built-in collections. Removing a copy never removes its source.
+ * 14.1: several pictures are added at once, up to 12; the cards draw a 480 px copy (never twelve full pictures); while the New Tab cycles through
+ * them (`cycling`) no card is the chosen one, and choosing one keeps that picture. */
+export function PersonalArtworkLibrary({ id, assets, selected, cycling = false, busy, canImport, privateMode, onImport, onSelect, onRemove }: {
   id: string;
-  assets: PersonalArtwork[]; selected: string; busy: boolean; canImport: boolean; privateMode: boolean;
+  assets: PersonalArtwork[]; selected: string; cycling?: boolean; busy: boolean; canImport: boolean; privateMode: boolean;
   onImport: () => void; onSelect: (id: string) => void; onRemove: (id: string) => void;
 }) {
   const details = useRef<HTMLDetailsElement>(null), group = useRef<HTMLDivElement>(null);
@@ -35,11 +39,11 @@ export function PersonalArtworkLibrary({ id, assets, selected, busy, canImport, 
         <span className="st-fold-chevron" aria-hidden="true"><ChevronDown size={15}/></span>
       </summary>
       <div className="st-group-body">
-        <div className="nt-personal-toolbar"><button type="button" className="st-button" disabled={busy || !canImport || assets.length >= 5} onClick={onImport}>{t(busy ? 'ntp.wait' : 'ntp.chooseImage')}</button></div>
+        <div className="nt-personal-toolbar"><button type="button" className="st-button" disabled={busy || !canImport || assets.length >= MAX_OWN_IMAGES} onClick={onImport}>{t(busy ? 'ntp.wait' : 'ntp.addImages')}</button>{assets.length > 0 && <span className="nt-personal-count">{t(cycling ? 'ntp.ownCycling' : 'ntp.ownCount', { count: assets.length, max: MAX_OWN_IMAGES })}</span>}</div>
         {assets.length > 0 && <div ref={group} className="cc-group nt-personal-grid" role="radiogroup" aria-label={t('ntp.personal')} onKeyDown={keyboard}>
           {assets.map((asset, index) => <div className="nt-personal-item" key={asset.id}>
             <button type="button" role="radio" className="cc-card" aria-checked={selected === 'personal:' + asset.id} tabIndex={index === selectedIndex ? 0 : -1} disabled={busy} onClick={() => onSelect(asset.id)}>
-              <span className="cc-art" aria-hidden="true"><img className="nt-collection-img" src={asset.url} alt="" draggable={false} decoding="async" loading="lazy"/></span>
+              <span className="cc-art" aria-hidden="true"><img className="nt-collection-img" src={asset.thumb ?? asset.url} alt="" draggable={false} decoding="async" loading="lazy"/></span>
               <span className="cc-label"><span className="cc-radio" aria-hidden="true"/><span className="cc-name">{asset.name}<small>{asset.width} × {asset.height}</small></span></span>
             </button>
             <button type="button" className="nt-personal-remove" disabled={busy} aria-label={t('ntp.removeImageAria', { name: asset.name })} title={t('ntp.remove')} onClick={() => onRemove(asset.id)}><Trash2 size={15}/></button>

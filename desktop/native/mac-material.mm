@@ -422,6 +422,109 @@ static napi_value UnwatchScroll(napi_env env, napi_callback_info info) {
     napi_value answer; napi_get_boolean(env, view != nil, &answer); return answer;
   }
 }
+// Beta 14 (picture in picture over a fullscreen Space): every NSWindow this process holds, read only (class, level, collection behaviour, Space, size, owner).
+// Chromium's own small video window is not an Electron window, so only AppKit can say what it is and which Spaces it may join.
+static NSDictionary *WindowRow(NSWindow *w) {
+  NSRect r = w.frame;
+  return @{@"class": NSStringFromClass(w.class), @"level": @(w.level), @"behavior": @((unsigned long)w.collectionBehavior), @"styleMask": @((unsigned long)w.styleMask),
+           @"visible": @(w.isVisible), @"onActiveSpace": @(w.isOnActiveSpace), @"alpha": @(w.alphaValue), @"x": @(r.origin.x), @"y": @(r.origin.y), @"width": @(r.size.width), @"height": @(r.size.height),
+           @"title": w.title ?: @"", @"canBecomeKey": @(w.canBecomeKeyWindow), @"key": @(w.isKeyWindow), @"main": @(w.isMainWindow), @"hasParent": @(w.parentWindow != nil), @"fullscreen": @((w.styleMask & NSWindowStyleMaskFullScreen) != 0), @"number": @(w.windowNumber)};
+}
+static napi_value NativeWindows(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be read on the main thread"); return nullptr; }
+    NSMutableArray *rows = [NSMutableArray array]; for (NSWindow *w in NSApp.windows) [rows addObject:WindowRow(w)];
+    NSData *json = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil]; napi_value value; napi_create_string_utf8(env, (const char *)json.bytes, json.length, &value); return value;
+  }
+}
+// Beta 14 (picture in picture over a fullscreen Space): Chromium's small video window must be allowed on the Space of a fullscreen window, as Chrome's is.
+// Measured on the real window (Electron 44, a video's requestPictureInPicture): class NativeWidgetMacFramelessNSWindow, level 3 (NSFloatingWindowLevel), collection behaviour
+// CanJoinAllSpaces | Managed | ParticipatesInCycle, so it already follows every desktop Space and lacks FullScreenAuxiliary, the one flag that lets a window share a fullscreen window's Space.
+// It is not an Electron window (no handle reaches JavaScript), so AppKit is asked: a window of this process whose class is Chromium's own views window (NativeWidgetMac*, not Electron's, not AppKit's NS*),
+// that floats at exactly NSFloatingWindowLevel, has no parent window and no title bar, is Chromium's small video window. Its collection behaviour gets CanJoinAllSpaces and FullScreenAuxiliary (and loses the flags
+// that exclude them: MoveToActiveSpace, FullScreenPrimary, FullScreenNone). Level, size, place, content, focus, alpha and visibility are never touched. A hidden one is set too: the next entry shows it already right.
+// Returns what it changed: [{number, class, before, after, nudged}].
+static BOOL IsChromiumFloatingWindow(NSWindow *w) {
+  if (![NSStringFromClass(w.class) hasPrefix:@"NativeWidgetMac"]) return NO;
+  return w.level == NSFloatingWindowLevel && w.parentWindow == nil && !(w.styleMask & (NSWindowStyleMaskTitled | NSWindowStyleMaskFullScreen));
+}
+static napi_value PipSpaces(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be changed on the main thread"); return nullptr; }
+    NSMutableArray *rows = [NSMutableArray array];
+    const NSWindowCollectionBehavior want = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+    const NSWindowCollectionBehavior drop = NSWindowCollectionBehaviorMoveToActiveSpace | NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorFullScreenNone;
+    for (NSWindow *w in NSApp.windows) {
+      if (!IsChromiumFloatingWindow(w)) continue;
+      NSWindowCollectionBehavior before = w.collectionBehavior, after = (before & ~drop) | want;
+      BOOL changed = after != before; if (changed) w.collectionBehavior = after;
+      // The window may already have been shown on a Space that is not the one on screen (a fullscreen window's Space is active, the window went to the desktop Space): it is visible yet not on the active Space.
+      // Only then is it ordered in again, at its own level, so the window server places it where it may be now. orderFrontRegardless never activates the app or changes which window is key or main.
+      // In every ordinary case (a normal window, a desktop Space: the window follows every Space) it is already on the active Space and nothing is ordered.
+      BOOL nudged = w.isVisible && !w.isOnActiveSpace; if (nudged) [w orderFrontRegardless];
+      if (!changed && !nudged) continue;
+      [rows addObject:@{@"number": @(w.windowNumber), @"class": NSStringFromClass(w.class), @"before": @((unsigned long)before), @"after": @((unsigned long)w.collectionBehavior), @"nudged": @(nudged)}];
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil]; napi_value value; napi_create_string_utf8(env, (const char *)json.bytes, json.length, &value); return value;
+  }
+}
+// Beta 14.0 (the pop-out window remembers where it was left): Chromium's small video window is not an Electron window, so its place and size are read and set through AppKit, the same window PipSpaces
+// finds. pipFrame(any) answers the visible one (any = true: one not on screen yet too) as JSON {number, x, y, width, height, visible, alpha, class, styleMask, nonactivating, panel, floatingPanel, canBecomeKey, canBecomeMain, level} in AppKit points (origin at the bottom left of the primary display) or "null"; pipPlace(x, y, width, height)
+// moves and resizes it the way a person dragging it would, nothing else about it (level, content, focus, Spaces) is touched. Both on the main thread only.
+static NSWindow *PipWindow(BOOL any = NO) {
+  for (NSWindow *w in NSApp.windows) if (IsChromiumFloatingWindow(w) && (any || w.isVisible)) return w;
+  return nil;
+}
+static napi_value PipFrame(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be read on the main thread"); return nullptr; }
+    size_t argc = 1; napi_value args[1]; napi_get_cb_info(env, info, &argc, args, nullptr, nullptr); bool any = false; if (argc) napi_get_value_bool(env, args[0], &any);
+    NSWindow *w = PipWindow(any); NSString *text = @"null";
+    if (w) {
+      NSRect r = w.frame; NSUInteger mask = w.styleMask;
+      NSDictionary *row = @{@"number": @(w.windowNumber), @"x": @(r.origin.x), @"y": @(r.origin.y), @"width": @(r.size.width), @"height": @(r.size.height),
+        @"visible": @(w.isVisible), @"alpha": @(w.alphaValue), @"class": NSStringFromClass(w.class), @"styleMask": @((unsigned long)mask), @"nonactivating": @((mask & NSWindowStyleMaskNonactivatingPanel) != 0),
+        @"panel": @([w isKindOfClass:NSPanel.class]), @"floatingPanel": @([w isKindOfClass:NSPanel.class] && ((NSPanel *)w).isFloatingPanel), @"canBecomeKey": @(w.canBecomeKeyWindow), @"canBecomeMain": @(w.canBecomeMainWindow), @"level": @((long)w.level)};
+      NSData *json = [NSJSONSerialization dataWithJSONObject:row options:0 error:nil]; text = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+    }
+    napi_value value; napi_create_string_utf8(env, text.UTF8String, NAPI_AUTO_LENGTH, &value); return value;
+  }
+}
+static napi_value PipPlace(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be changed on the main thread"); return nullptr; }
+    size_t argc = 4; napi_value args[4]; napi_get_cb_info(env, info, &argc, args, nullptr, nullptr); double v[4] = {0, 0, 0, 0};
+    for (size_t i = 0; i < argc && i < 4; i++) napi_get_value_double(env, args[i], &v[i]);
+    int moved = 0; NSWindow *w = PipWindow(YES);
+    if (w && v[2] >= 100 && v[3] >= 60) { [w setFrame:NSMakeRect(v[0], v[1], v[2], v[3]) display:YES animate:NO]; moved = 1; }
+    napi_value value; napi_create_int32(env, moved, &value); return value;
+  }
+}
+// pipHold(): the pop-out window is made fully transparent from now until it has been placed, so a window shown at Chromium's default place is never SEEN there. Never left at 0: it is put back by
+// pipRelease() and, whatever happens, by a timer here 250 ms after the hold (the previous alpha is restored, so a window that was at 0 for another reason stays so). One hold at a time.
+static __weak NSWindow *HeldWindow = nil; static CGFloat HeldAlpha = 1; static unsigned long HoldToken = 0;
+static int ReleaseHold(unsigned long token) {
+  NSWindow *w = HeldWindow; if (!w || (token && token != HoldToken)) return 0;
+  if (w.alphaValue == 0) w.alphaValue = HeldAlpha;
+  HeldWindow = nil; return 1;
+}
+static napi_value PipHold(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be changed on the main thread"); return nullptr; }
+    int held = 0; NSWindow *w = PipWindow(YES);
+    if (w && !HeldWindow) {
+      HeldAlpha = w.alphaValue; if (HeldAlpha > 0) { w.alphaValue = 0; HeldWindow = w; held = 1; unsigned long token = ++HoldToken;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{ ReleaseHold(token); }); }
+    }
+    napi_value value; napi_create_int32(env, held, &value); return value;
+  }
+}
+static napi_value PipRelease(napi_env env, napi_callback_info info) {
+  @autoreleasepool {
+    if (![NSThread isMainThread]) { napi_throw_error(env, nullptr, "Windows can only be changed on the main thread"); return nullptr; }
+    napi_value value; napi_create_int32(env, ReleaseHold(0), &value); return value;
+  }
+}
 NAPI_MODULE_INIT() {
   InstallMacPasskeys(env,exports);
   { napi_value watch, unwatch; napi_create_function(env, "watchScroll", NAPI_AUTO_LENGTH, WatchScroll, nullptr, &watch); napi_set_named_property(env, exports, "watchScroll", watch); napi_create_function(env, "unwatchScroll", NAPI_AUTO_LENGTH, UnwatchScroll, nullptr, &unwatch); napi_set_named_property(env, exports, "unwatchScroll", unwatch); }
@@ -435,6 +538,10 @@ NAPI_MODULE_INIT() {
   napi_value frames;napi_create_function(env,"inspectViewFrames",NAPI_AUTO_LENGTH,InspectViewFrames,nullptr,&frames);napi_set_named_property(env,exports,"inspectViewFrames",frames);
   napi_create_function(env, "inspectWindowButtons", NAPI_AUTO_LENGTH, InspectWindowButtons, nullptr, &buttons);
   napi_set_named_property(env, exports, "inspectWindowButtons", buttons);
+  { napi_value pipSpaces; napi_create_function(env, "pipSpaces", NAPI_AUTO_LENGTH, PipSpaces, nullptr, &pipSpaces); napi_set_named_property(env, exports, "pipSpaces", pipSpaces); }
+  { napi_value frame, place; napi_create_function(env, "pipFrame", NAPI_AUTO_LENGTH, PipFrame, nullptr, &frame); napi_set_named_property(env, exports, "pipFrame", frame); napi_create_function(env, "pipPlace", NAPI_AUTO_LENGTH, PipPlace, nullptr, &place); napi_set_named_property(env, exports, "pipPlace", place);
+    napi_value hold, release; napi_create_function(env, "pipHold", NAPI_AUTO_LENGTH, PipHold, nullptr, &hold); napi_set_named_property(env, exports, "pipHold", hold); napi_create_function(env, "pipRelease", NAPI_AUTO_LENGTH, PipRelease, nullptr, &release); napi_set_named_property(env, exports, "pipRelease", release); }
+  { napi_value windows; napi_create_function(env, "nativeWindows", NAPI_AUTO_LENGTH, NativeWindows, nullptr, &windows); napi_set_named_property(env, exports, "nativeWindows", windows); }
   napi_value strip; napi_create_function(env, "hideFullscreenStrip", NAPI_AUTO_LENGTH, HideFullscreenStrip, nullptr, &strip); napi_set_named_property(env, exports, "hideFullscreenStrip", strip);
   napi_create_function(env, "authenticationAvailable", NAPI_AUTO_LENGTH, AuthenticationAvailable, nullptr, &available);
   napi_create_function(env, "authenticate", NAPI_AUTO_LENGTH, Authenticate, nullptr, &authenticate);

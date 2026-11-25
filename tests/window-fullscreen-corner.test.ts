@@ -72,3 +72,11 @@ test('Fullscreen Seamless: the store follows main and tells a layout once per ch
   assert.match(app, /topSeam && windowFullscreen \? 0 :/, 'the native page card takes radius 0 too');
   assert.match(app, /\[profileFrameTint,currentWindowFinish,windowFullscreen,/, 'the layout runs again when fullscreen flips');
 });
+
+test('Fullscreen corner (reported 16 Nov: "the corners were curved, and then they became square ... It should keep curved"): under the shown Seamless toolbar the page keeps its two top corners round at rest, as the slide draws them; the screen edges stay square', () => {
+  const css = read('src/styles/seamless.css');
+  const flat = css.indexOf(':root[data-window-fullscreen]:root:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0; border-radius: 0;');
+  const round = css.indexOf(":root[data-window-fullscreen]:root:root .app:has(.browser-shell[data-seamless='shown']) .browser-root .browser-body > .page-area { border-top-left-radius: var(--geometry-pageRadius, 8px); border-top-right-radius: var(--geometry-pageRadius, 8px); }");
+  assert.ok(flat >= 0 && round > flat, 'the shown-toolbar rule follows the flat fullscreen rule (same weight: the later one wins)');
+  assert.doesNotMatch(css.slice(round), /data-window-fullscreen[^{]*\{[^}]*border-bottom-(left|right)-radius/, 'the bottom corners (the screen\'s edge) are left square');
+});

@@ -37,7 +37,7 @@ test('the glyph sits at the end of the row in the close button’s slot and the 
 
 test('Tor’s tab glyph is the onion everywhere; the dot matrix is never a tab icon',()=>{
  const mark=read('src/components/TabPrivacyMark.tsx'),chip=read('src/features/tor/TorChip.tsx');
- assert.doesNotMatch(mark,/DotMatrix/,'no matrix drawn in a tab');assert.match(mark,/<TorGlyph size=\{size\}\/>/);
+ assert.doesNotMatch(mark,/DotMatrix/,'no matrix drawn in a tab');assert.match(mark,/<TorGlyph size=\{size\} className="tab-privacy-glyph"\/>/);
  assert.match(chip,/export function TorGlyph[\s\S]*strokeWidth=\{1\.5\}[\s\S]*M8 4V1\.9/,'a 1.5px stroke onion with its sprout on the 16px grid');
 });
 

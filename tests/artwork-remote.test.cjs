@@ -131,3 +131,47 @@ test('picture fetches follow the profile proxy and never go direct when it is un
   await assert.rejects(guarded.pick('space', 'x'), /not confirmed/);
   assert.equal(log.length, 0, 'no request is made when the route is unconfirmed');
 });
+
+// Beta 14 section I: "my picks" are made of the collection pictures a new tab has already shown.
+test('kept(): lists only pictures already on this computer, newest first, with no network call', async () => {
+  const { root, art, log } = setup(answer);
+  assert.deepEqual(art.kept(), [], 'nothing seen yet, nothing listed (and no list file to read)');
+  const a = await art.pick('space', 'tab-1'), b = await art.pick('space', 'tab-2', a.id);
+  assert.notEqual(a.id, b.id);
+  // The second picture was fetched later, so it is the newest.
+  fs.utimesSync(path.join(root, 'artwork-remote', path.basename(a.src)), new Date(1_000), new Date(1_000));
+  const before = log.length;
+  const kept = art.kept();
+  assert.equal(log.length, before, 'listing costs no request');
+  assert.deepEqual(kept.map((item) => item.id), [b.id, a.id]);
+  assert.deepEqual(kept[0], b, 'the same description a pick returns, so a pick can be shown from it');
+  assert.equal(art.kept([a.id]).length, 1);
+  assert.equal(art.kept([a.id])[0].id, a.id);
+  assert.deepEqual(art.kept(['space:000000000000']), [], 'an id that was never kept is not invented');
+  assert.deepEqual(art.kept([]), [], 'asking for none returns none');
+  assert.ok(kept.every((item) => art.response(new URL(item.src))), 'each is served from the local cache');
+});
+
+test('kept(): a picture that left the cache is not listed, and the cached list is read however old it is', async () => {
+  const { root, art, log, tick } = setup(answer);
+  const a = await art.pick('space', 'old');
+  tick(10 * 24 * 60 * 60 * 1000);
+  const before = log.length;
+  assert.equal(art.kept().length, 1, 'a list older than a day is still enough to describe what is kept (no refresh)');
+  assert.equal(log.length, before);
+  fs.unlinkSync(path.join(root, 'artwork-remote', path.basename(a.src)));
+  assert.deepEqual(art.kept(), [], 'trimmed from the cache: no longer something that can be shown without a request');
+  assert.equal(log.length, before);
+});
+
+test('kept(): a damaged or foreign list is skipped, never trusted', async () => {
+  const { root, art } = setup(answer);
+  const a = await art.pick('space', 'x');
+  const file = path.join(root, 'artwork-remote', 'space.json');
+  const good = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, '{ not json');
+  assert.deepEqual(art.kept(), []);
+  fs.writeFileSync(file, JSON.stringify({ fetchedAt: 1, items: [{ title: 'x', imageUrl: 'https://evil.example/a.jpg' }, null, { imageUrl: 5 }, ...good.items] }));
+  assert.deepEqual(art.kept().map((item) => item.id), [a.id], 'entries outside the allow-list or without a title are ignored');
+  assert.ok(art.kept().every((item) => item.src.startsWith('acira-browser-ui://ui/artwork-remote/')));
+});

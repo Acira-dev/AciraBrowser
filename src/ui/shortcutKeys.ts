@@ -70,9 +70,9 @@ const MENU_COMMANDS: Record<string, string> = {
   'Find in page': 'find', 'Split view': 'split-view', 'History': 'history', 'Reopen closed tab': 'reopen-tab', 'Rewind': 'rewind', 'Downloads': 'downloads', 'Settings': 'settings',
   'All open tabs': 'tab-viewer', 'Search and commands': 'command-palette', 'Switch profile': 'switch-profile', 'Focus mode': 'focus-mode', 'Exit Focus mode': 'focus-mode', 'Focus': 'focus-mode', 'Turn Focus off': 'focus-mode', 'Seamless': 'seamless-mode',
   'Routines': 'routines', 'Tab sets': 'routines', 'Bookmark this tab': 'bookmark', 'Bookmark this page': 'bookmark', 'Remove bookmark': 'bookmark', 'All bookmarks': 'bookmarks-manager', 'Bookmarks': 'bookmarks-manager',
-  'Reader mode': 'reader-mode', 'Print…': 'print', 'Save page as…': 'save-page', 'Reload tab': 'reload', 'Duplicate tab': 'duplicate-tab', 'Copy page address': 'copy-url',
+  'Reader mode': 'reader-mode', 'Zap element': 'zap', 'Print…': 'print', 'Save page as…': 'save-page', 'Take screenshot': 'screenshot', 'Reload tab': 'reload', 'Duplicate tab': 'duplicate-tab', 'Copy page address': 'copy-url',
   'Pin tab': 'pin-tab', 'Unpin tab': 'pin-tab', 'Move to new window': 'move-tab-window', 'Mute tab': 'mute-tab', 'Unmute tab': 'mute-tab', 'Close tab': 'close-tab',
-  'Close other tabs': 'close-other-tabs', 'Close tabs to the right': 'close-tabs-right', 'Open a file…': 'open-file',
+  'Close other tabs': 'close-other-tabs', 'Close tabs to the right': 'close-tabs-right', 'Open a file…': 'open-file', 'Task manager': 'task-manager',
 };
 /** A menu row's key: the registry's for that command, else what the row wrote. */
 let translatedMenu: Record<string, string> | null = null;

@@ -9,7 +9,7 @@ const privateTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'acira-arcfox-tests-')
 process.env.TEMP = process.env.TMP = process.env.TMPDIR = privateTemp;
 after(() => fs.rmSync(privateTemp, { recursive: true, force: true }));
 const { DatabaseSync } = require('node:sqlite');
-const { BrowserDatabase } = require('../desktop/database.cjs'), { createImporter } = require('../desktop/imports.cjs'), { createInitialState } = require('../desktop/runtime.cjs');
+const { BrowserDatabase } = require('../desktop/database.cjs'), { createImporter } = require('../desktop/imports.cjs'), { createInitialState, MAX_WORKSPACES } = require('../desktop/runtime.cjs');
 const { parseArcSidebar, arcTabGroups, findSidebar } = require('../desktop/browser-services/import-arc.cjs');
 const firefox = require('../desktop/browser-services/import-firefox.cjs');
 const { createFaviconStore } = require('../desktop/browser-services/favicon-store.cjs');
@@ -133,27 +133,50 @@ test('Arc: discovered with its Favorites and Spaces; import makes workspaces, bo
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('Arc: a Space named like a workspace here gets its own name, and Spaces past the eighth workspace become tab groups', () => {
+test('Arc: a Space named like a workspace here gets its own name, and Spaces past the last workspace (MAX_WORKSPACES, 16) become tab groups', () => {
   const { root, userData } = arcFixture();
   const { importer, state, close } = importerFor(root, { roots: [['Arc', userData]] }, (initial) => {
     const profile = initial.activeBrowserProfileId;
     initial.workspaces = [{ id: 'workspace-default', name: '', browserProfileId: profile }, { id: 'workspace-mine', name: 'Work', browserProfileId: profile }];
-    for (let n = 3; n <= 7; n++) initial.workspaces.push({ id: `workspace-n${n}`, name: `Set ${n}`, browserProfileId: profile });
+    for (let n = 3; n <= MAX_WORKSPACES - 1; n++) initial.workspaces.push({ id: `workspace-n${n}`, name: `Set ${n}`, browserProfileId: profile });
     initial.tabGroups.push({ id: 'group-mine', name: 'Personal', color: 'grey', collapsed: false, browserProfileId: profile });
   });
   const arc = importer.discover().find((source) => source.name === 'Arc');
   const batch = importer.run(arc.id, ['spaces']);
   const profile = state().activeBrowserProfileId, own = state().workspaces.filter((workspace) => workspace.browserProfileId === profile);
-  assert.equal(own.length, 8, 'room for one more workspace only');
-  assert.equal(own[7].name, 'Work · Arc', 'the first Space takes the last place, under its own name');
+  assert.equal(own.length, MAX_WORKSPACES, 'room for one more workspace only');
+  assert.equal(own[MAX_WORKSPACES - 1].name, 'Work · Arc', 'the first Space takes the last place, under its own name');
   const fallback = state().tabGroups.filter((group) => batch.groupIds.includes(group.id) && !group.workspaceId);
   assert.deepEqual(fallback.map((group) => [group.name, group.collapsed]), [['Personal · Arc', true]], 'the second Space falls back to a collapsed tab group');
   importer.undo(batch.id);
   assert.deepEqual(state().workspaces.map((workspace) => workspace.id).slice(0, 2), ['workspace-default', 'workspace-mine']);
-  assert.equal(state().workspaces.length, 7);
+  assert.equal(state().workspaces.length, MAX_WORKSPACES - 1);
   assert.deepEqual(state().tabGroups.map((group) => group.id), ['group-mine']);
   close();
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('Arc: a source with 12 Spaces brings 12 workspaces (the limit was 8 before Beta 14.0), and one with 20 fills the 16 and puts 5 in collapsed tab groups', () => {
+  for (const [count, workspaces, groups] of [[12, 13, 0], [20, MAX_WORKSPACES, 20 - (MAX_WORKSPACES - 1)]]) {
+    const { root, userData } = arcFixture();
+    const tab = (id, url) => [id, { id, title: null, createdAt: 750000000, childrenIds: [], data: { tab: { savedURL: url, savedTitle: 'Page ' + id } } }];
+    const container = (id, children) => [id, { id, childrenIds: children, data: { itemContainer: { containerType: {} } } }];
+    const items = [], spaces = [];
+    for (let n = 1; n <= count; n++) { items.push(...container('c' + n, ['t' + n]), ...tab('t' + n, `https://site${n}.example.com/`)); spaces.push('s' + n, { id: 's' + n, title: 'Space ' + n, profile: { default: true }, containerIDs: ['pinned', 'c' + n] }); }
+    fs.writeFileSync(path.join(root, 'Arc', 'StorableSidebar.json'), JSON.stringify({ sidebar: { containers: [{ global: {} }, { items, spaces, topAppsContainerIDs: [{ default: true }, 'none'] }] } }));
+    const { importer, state, close } = importerFor(root, { roots: [['Arc', userData]] });
+    const arc = importer.discover().find((source) => source.name === 'Arc');
+    const batch = importer.run(arc.id, ['spaces']);
+    const profile = state().activeBrowserProfileId, own = state().workspaces.filter((workspace) => workspace.browserProfileId === profile);
+    // the profile keeps its own Main workspace: 12 Spaces make 12 more (13 in all), and the room is the limit minus Main
+    assert.equal(own.length, workspaces, count + ' Spaces');
+    assert.equal(own.length - 1 + batch.groupIds.length, count, 'every Space comes, as a workspace or a collapsed tab group');
+    assert.equal(batch.groupIds.length, groups);
+    assert.equal(batch.tabIds.length, count, 'no tab is lost');
+    importer.undo(batch.id);
+    close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 /** A Firefox profile folder with places.sqlite (roots, a folder, a separator, a smart folder) and favicons.sqlite. */

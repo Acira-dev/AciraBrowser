@@ -2,12 +2,19 @@
    nearer the title (as in the approved picture), at the row's end, Inter 12px with tabular figures, and the close button and the pinned row's
    sound meter give way to it at once for as long as it shows (so the two never overlap): a label, never a second control; they fade back as ever on release.
    Beta.14 (founder, 8 Nov, option A "fuller ink"): weight 560 and the close button's own ink (--sb-muted, 64% light, 60% dark) instead of 450 and the quiet ink (52%, 44%), so
-   the figures read crisply at 1x; a typed first digit's matches take full ink at 720. It appears with a short fade and goes at once;
-   reduced motion (the sidebar's own rule at the end of sidebar.css) takes the fade away. */
-.app.style-acira .acira-sidebar .sb-tab-number{position:absolute;inset-block:0;inset-inline-end:8.5px;width:var(--tab-control,20px);display:grid;place-items:center;pointer-events:none;color:var(--sb-muted);font:560 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;animation:sb-tab-number-in 100ms var(--sb-ease)}
+   the figures read crisply at 1x; a typed first digit's matches take full ink at 720. Beta 14 (reported 12 Nov): a little smaller (11px) and a little fainter (88% of the
+   close button's ink), and they fade in and out instead of popping; reduced motion (the sidebar's own rule at the end of sidebar.css) takes the fade away. */
+.app.style-acira .acira-sidebar .sb-tab-number{position:absolute;inset-block:0;inset-inline-end:8.5px;width:var(--tab-control,20px);display:grid;place-items:center;pointer-events:none;color:color-mix(in srgb,var(--sb-muted) 88%,transparent);font:520 11px/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;opacity:1;transition:opacity var(--sb-dur) var(--sb-ease)}
+/* Beta 14: the figures fade in and fade out (a plain short fade, the sidebar's own duration and ease), they do not pop. A transition, not a keyframe: a release in the
+   middle of the fade-in, or a press in the middle of the fade-out, turns round from where the ink is. */
+@starting-style{.app.style-acira .acira-sidebar .sb-tab-number{opacity:0}}
 .app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number{color:var(--sb-fg)}
-.app.style-acira .acira-sidebar .sb-tab:has(>.sb-tab-number)>:is(.sb-tab-close,.sb-tab-sound){opacity:0;pointer-events:none;transition:none}
+/* Plain rules, no :has()/:is(): the row carries data-num while its figure shows (AciraSidebar's TabRow sets it with the figure and drops it as the figure starts to leave), so the
+   style recalc never has to match a relational selector on every row. The :root prefix keeps the specificity (0,7,0) the old rule had, over tab-sound.css's `.sb-tab-close[data-sound]{opacity:1}`
+   and sidebar.css's hover/current `.sb-tab-close{opacity:1;pointer-events:auto}` (both 0,6,0). */
+:root .app.style-acira .acira-sidebar .sb-tab[data-num]>.sb-tab-close,:root .app.style-acira .acira-sidebar .sb-tab[data-num]>.sb-tab-sound{opacity:0;pointer-events:none;transition:none}
 /* A first digit waiting for its second (Ctrl/Cmd+1, then 5 = tab 15): the figures it can still lead to (10…19 for 1) take the full ink, the rest step back; at once, like the figures themselves. */
 .app.style-acira .acira-sidebar .sb-tab-number[data-typed=match],.app.style-acira .acira-sidebar .sb-tab:hover>.sb-tab-number[data-typed=match]{color:var(--sb-fg);font-weight:720}
 .app.style-acira .acira-sidebar .sb-tab-number[data-typed=other]{opacity:.32}
-@keyframes sb-tab-number-in{from{opacity:0}}
+/* last, so it wins over a typed figure's dimming: a released figure goes to nothing whatever it was. */
+.app.style-acira .acira-sidebar .sb-tab-number[data-leaving]{opacity:0}

@@ -2,10 +2,15 @@ import React,{ Component,type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDesignVariables } from './ui/designSystem';
 import { installDisclosureMotion } from './ui/disclosureMotion';
+import { installActiveBorder } from './ui/activeBorder';
 import { initLocale, applyLanguageSetting, t } from './i18n';
 import { installWindowFullscreen } from './ui/windowFullscreen';
+import { installWindowActive } from './ui/windowActive';
+import { installInputIdle } from './ui/edgeBreath';
+import { installVideoGlow } from './ui/videoGlow';
 import { planRecovery, readReloads, type RecoveryLog } from './ui/viewRecovery';
-installDesignVariables();installDisclosureMotion();
+import { pinInterfaceFrame } from './ui/scrollReveal';
+installDesignVariables();installDisclosureMotion();installActiveBorder();pinInterfaceFrame();// D177: nothing scrolls the interface's own frame
 // Only the window's own interface view (not the popup layer) speaks for the window: main takes the page views off it while its error screen is up.
 const isWindowView=!new URLSearchParams(location.search).get('view');
 const tellMain=(on:boolean)=>{if(!isWindowView)return;try{void import('./runtime/client').then(({runtime})=>runtime.browserCommand({type:'interface-error',tabId:'interface',on})).catch(()=>{});}catch{/* no window to tell */}};
@@ -28,6 +33,10 @@ class AppErrorBoundary extends Component<{children:ReactNode},{message:string;at
 document.documentElement.dataset.native=window.acira?'true':'false';
 document.documentElement.dataset.platform=window.acira?.platform||(/Mac/.test(navigator.platform)?'darwin':'win32');
 installWindowFullscreen();
+installWindowActive();
+installInputIdle();
+installVideoGlow();
+void import('./features/metrics/reportSettings').then(({installSettingsReport})=>installSettingsReport()).catch(()=>undefined);// Beta 14 (B8): the two settings that live in the interface are told to the usage count (closed values only)
 performance.mark('acira-render-begin');
 // The last language used is loaded before the first paint (English needs no wait), so nothing flashes in the wrong language.
 void initLocale().catch(()=>undefined).then(()=>{ // Every view (the page, menus and popups in the overlay) follows the language setting on its own.

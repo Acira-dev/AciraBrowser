@@ -150,7 +150,7 @@ test('anything that is not a small PNG data URL is dropped (validation of the IP
   for (const bad of ['', null, undefined, 42, {}, 'data:image/svg+xml;base64,PHN2Zz4=', 'data:text/html;base64,PGI+', 'https://example.test/i.png', 'data:image/png;base64,', 'data:image/png;base64,a b', 'data:image/png;base64,' + 'A'.repeat(100 * 1024)]) {
     assert.equal(validIconUrl(bad), false, String(bad).slice(0, 40));
   }
-  const clean = sanitizeIcons({ Chrome: PNG('c'), Edge: 'javascript:alert(1)', Zen: PNG('z'), Opera: PNG('o'), __proto__: { Brave: PNG('b') } }, ['Chrome', 'Edge', 'Brave', 'Opera']);
+  const clean = sanitizeIcons({ Chrome: PNG('c'), Edge: 'javascript:alert(1)', Zen: PNG('z'), Lynx: PNG('o'), __proto__: { Brave: PNG('b') } }, ['Chrome', 'Edge', 'Brave', 'Lynx']);
   assert.deepEqual(clean, { Chrome: PNG('c') }, 'invalid, unknown, inherited and unrequested entries are all removed');
   assert.deepEqual(sanitizeIcons(null), {});
   assert.deepEqual(sanitizeIcons('Chrome'), {});
@@ -191,8 +191,9 @@ test('macOS uses the supported small fallback when its normal icon is unavailabl
 
 test('every browser the importers can name has a place to look, and the list matches what imports.cjs and import-firefox.cjs detect', () => {
   const win = browserExecutables(WIN, { platform: 'win32', home: HOME });
-  for (const name of BROWSERS) assert.ok(win[name]?.length, name + ' has no Windows candidates');
-  const detected = new Set([...require('../desktop/imports.cjs').browserRoots('win32', HOME).map(([name]) => name), ...require('../desktop/browser-services/import-firefox.cjs').firefoxRoots('win32', HOME).map(([name]) => name)]);
+  // Safari exists on macOS only.
+  for (const name of BROWSERS.filter((browser) => browser !== 'Safari')) assert.ok(win[name]?.length, name + ' has no Windows candidates');
+  const detected = new Set([...require('../desktop/imports.cjs').browserRoots('win32', HOME).map(([name]) => name), ...require('../desktop/browser-services/import-firefox.cjs').firefoxRoots('win32', HOME).map(([name]) => name), ...require('../desktop/browser-services/import-chromium-forks.cjs').forkRoots('win32', HOME, WIN).map((entry) => entry.browser)]);
   for (const name of detected) assert.ok(BROWSERS.includes(name), name + ' is imported but has no icon lookup');
 });
 

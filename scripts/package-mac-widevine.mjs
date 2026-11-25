@@ -2,6 +2,7 @@
 // submission is changed. Credentials stay in the official EVS client.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {assertNoPrivateNames} from './release-private-names.mjs';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -21,6 +22,7 @@ const {macBuildVersion}=require('../packaging/macos/build-version.cjs');
 const {readMacTor,NATIVE_FILES}=require('../desktop/browser-services/tor-mac.cjs');
 const signer=require('../desktop/browser-services/mac-distribution-identity.cjs');
 const {notarizationPolicy,notarizeBundle,notarize,stapleAndAssess,sealedNotarization,notarizationOutcome}=require('../packaging/macos/notarization.cjs');
+const {brandHelpers,assertHelperNames}=require('../packaging/macos/helper-names.cjs');
 const {createMacUpdateZip}=require('../packaging/macos/update-zip.cjs');
 const {preparePasskeySigning,verifySignedPasskeys}=require('../packaging/macos/passkeys.cjs');
 const read=async file=>JSON.parse(await fs.readFile(file,'utf8'));
@@ -50,9 +52,13 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  await fs.cp(path.join(runtime.runtime,'Contents/Frameworks'),path.join(contents,'Frameworks'),{recursive:true,verbatimSymlinks:true});
  await fs.copyFile(path.join(runtime.runtime,'Contents/MacOS/Electron'),path.join(contents,'MacOS/AciraBrowser'));
  await removeMacWidevineRuntime(runtime);   // the package has what it needs from it (a stopped or failed build before this point leaves it for the next build's sweep, fetch-mac-widevine.mjs)
+ // D139: the engine's four helper bundles are named after this bundle ("Acira Browser Helper...", ids computer.acira.browser.helper...) before the fuses, the
+ // VMP signature and the signing; the engine finds them by the main bundle's CFBundleName (packaging/macos/helper-names.cjs).
+ await brandHelpers(appBundle);
  await fs.mkdir(application);
  for(const folder of ['desktop','dist','resources','node_modules','source-licenses'])try{await fs.cp(path.join(candidate,folder),path.join(application,folder),{recursive:true,verbatimSymlinks:true});}catch(error){if(error.code!=='ENOENT')throw error;}
  for(const file of ['package.json','page-zoom-levels.json','LICENSE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(candidate,file),path.join(application,file));
+ await assertNoPrivateNames(application,'the Mac app folder');
  const pkg=await read(path.join(application,'package.json'));pkg.version=version;pkg.productName='Acira Browser';pkg.author={name:require('../packaging/electron-builder.json').extraMetadata.author.name};
  await fs.writeFile(path.join(application,'package.json'),JSON.stringify(pkg,null,2)+'\n');
  // Executable Tor components live outside ASAR, in the existing first-choice
@@ -63,7 +69,7 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  assert(readMacTor(path.join(tor,'tor'),{arch}));
  const infoFile=path.join(contents,'Info.plist'),info=plist.parse(await fs.readFile(infoFile,'utf8'));
  assert.equal(info.CFBundleIdentifier,'computer.acira.browser');
- info.CFBundleVersion=macBuildVersion();info.CFBundleShortVersionString=version.split('-')[0];info.LSMinimumSystemVersion='13.0';
+ info.CFBundleVersion=macBuildVersion();info.CFBundleShortVersionString=version.split('-')[0];info.LSMinimumSystemVersion='13.0';info.CFBundleURLTypes=require('../packaging/macos/url-types.cjs').macUrlTypes();Object.assign(info,require('../packaging/macos/permission-texts.cjs').macPermissionTexts());/* D142: the template still carries the engine's own words for sound capture and Bluetooth *//* the template's own list has web addresses only: acira:// (the personal Insider link) is claimed here */
  await fs.writeFile(infoFile,plist.build(info));await require('../packaging/macos/icon.cjs').applyMacIcon(appBundle,repo);await writeMacUpdateConfig(resources);
  // Browser passkeys (docs/launch/ICLOUD_PASSKEYS.md) only with Apple's approved Developer ID provisioning profile: it is validated, embedded
  // here and its managed entitlement goes on the browser root alone. A profile the template carried never ships by itself.
@@ -84,6 +90,7 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
  await run('/usr/bin/codesign',resealArguments(appBundle,policy));
  await run('/usr/bin/codesign',['--verify','--deep','--strict',appBundle]);
  verifySigningDetails((await run('/usr/bin/codesign',['--display','--verbose=4',appBundle])).stderr,policy);
+ await assertHelperNames(appBundle);
  if(passkeys){await verifySignedPasskeys(appBundle,passkeys);await fs.rm(passkeyWork,{recursive:true,force:true});}
  const vmpAfter=await signWidevine(appBundle,{verifyOnly:true});assert(readMacTor(path.join(tor,'tor'),{arch}));
  const expected=arch==='x64'?'x86_64':'arm64';assert.equal((await run('/usr/bin/lipo',['-archs',path.join(contents,'MacOS/AciraBrowser')])).stdout.trim(),expected);
@@ -105,14 +112,14 @@ export async function packageMacWidevine(candidate,{template,arch=process.arch,v
    await fs.cp(setup.installer,path.join(work,'Install Acira.app'),{recursive:true,verbatimSymlinks:true});
    await fs.writeFile(path.join(work,'READ ME.txt'),`Acira Browser ${version}\n${arch==='arm64'?'Apple silicon':'Intel Mac'}; macOS 13 or later.\nOpen Install Acira.app. Installation progress reflects copying and verification.\nWidevine prepares automatically when online. Service subscriptions and device restrictions apply.\n${notary.enabled?'Developer ID signed and notarized by Apple.':'Developer ID signed beta; not notarized or stapled. macOS may warn or block it.'}\nYour browser profile remains stored separately.\n`);
    const diskImage=path.join(output,`AciraBrowser-${version}-mac-${arch}.dmg`);
-   await run('/usr/bin/hdiutil',['create','-volname','Acira Setup','-srcfolder',work,'-format','UDZO',diskImage]);
+   /* 14.0: lzma (ULMO), not zlib (UDZO): the installer is a whole second Electron (about 146 MB of the download) that zlib squeezes to 49 % and lzma to 30 %; measured on the real installer app, 397.50 MB became 355.02 MB and hdiutil verify passed. macOS 13 (this build's minimum) mounts it. */await run('/usr/bin/hdiutil',['create','-volname','Acira Setup','-srcfolder',work,'-format','ULMO',diskImage]);
    await run('/usr/bin/codesign',['--sign',policy.identity,'--timestamp',diskImage]);await run('/usr/bin/codesign',['--verify','--strict',diskImage]);await run('/usr/bin/hdiutil',['verify',diskImage]);
    if(notary.enabled){console.log('Notarizing the disk image with Apple');appleSubmission.diskImage={...await notarize({artifact:diskImage,policy:notary}),...await stapleAndAssess({artifact:diskImage})};}
    Object.assign(receipt,{diskImage,sha256:await hashFile(diskImage),bytes:(await fs.stat(diskImage)).size});
   }finally{await fs.rm(work,{recursive:true,force:true});}
  }
  receipt.packagingInputs=[];
- for(const file of ['scripts/package-mac-widevine.mjs','scripts/fetch-mac-widevine.mjs','packaging/macos/widevine.cjs','packaging/macos/passkeys.cjs','packaging/mac/entitlements.mac.plist','packaging/macos/widevine-runtime.json','packaging/macos/update-zip.cjs','packaging/macos/update-verify.cjs'])receipt.packagingInputs.push({file,sha256:await hashFile(path.join(repo,file))});
+ for(const file of ['scripts/package-mac-widevine.mjs','scripts/fetch-mac-widevine.mjs','packaging/macos/widevine.cjs','packaging/macos/passkeys.cjs','packaging/mac/entitlements.mac.plist','packaging/macos/widevine-runtime.json','packaging/macos/update-zip.cjs','packaging/macos/update-verify.cjs','packaging/macos/helper-names.cjs','packaging/macos/permission-texts.cjs','packaging/macos/url-types.cjs'])receipt.packagingInputs.push({file,sha256:await hashFile(path.join(repo,file))});
  await fs.writeFile(path.join(output,'mac-widevine-package.json'),JSON.stringify(receipt,null,2)+'\n');
  if(notaryWork)await fs.rm(notaryWork,{recursive:true,force:true});
  return receipt;

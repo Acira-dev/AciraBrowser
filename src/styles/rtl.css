@@ -3,10 +3,10 @@
    only the interface surfaces inside it take the reading direction. Websites are
    separate WebContents and must never receive these rules. */
 html[dir='rtl'] .app { direction: ltr; }
-html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .nt-page, .fr-stage, .fr-w, .navigation-error, .t-toast, .t-pill, .lib, .rw-page, .pvt-page) {
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .nt-page, .fr-stage, .fr-w, .navigation-error, .t-toast, .t-pill, .lib, .rw-page, .pvt-page, .address-suggestions) {
   direction: rtl;
 }
-html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .lib, .rw-page, .pvt-page) { text-align: start; }
+html[dir='rtl'] .app :is(.browser-settings, .browser-popup, .acira-sidebar, .lib, .rw-page, .pvt-page, .address-suggestions) { text-align: start; }
 /* Preserve connected-script shaping rather than Latin display tracking. */
 html:lang(ar) .app :is(h1, h2, h3, button, input, .display-hero, .display-page, .lede) { letter-spacing: normal; }
 

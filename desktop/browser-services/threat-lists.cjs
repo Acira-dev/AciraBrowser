@@ -41,14 +41,9 @@ const compactList = ({ sorted, entries }) => {
 function parseCompactDomains(text) { return compactList(sortedHashes(text, hashHost, MAX_ENTRIES * 2)); }
 /** The same, off the main thread: hashing and sorting 390,000 domains takes about half a second. */
 function parseCompactDomainsAsync(text) {
-  const { Worker } = require('node:worker_threads');
   const source = `const { parentPort, workerData } = require('node:worker_threads'); const hashHost = ${hashHost.toString()}; const sortedHashes = ${sortedHashes.toString()};
     try { const result = sortedHashes(workerData.text, hashHost, workerData.limit); const copy = new Float64Array(result.sorted); parentPort.postMessage({ sorted: copy, entries: result.entries }, [copy.buffer]); } catch (error) { parentPort.postMessage({ error: String(error.message || error) }); }`;
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(source, { eval: true, workerData: { text, limit: MAX_ENTRIES * 2 } });
-    worker.once('message', message => { worker.terminate(); message.error ? reject(new Error(message.error)) : resolve(compactList(message)); });
-    worker.once('error', reject);
-  });
+  return require('./job-process.cjs').runJob({ source, data: { text, limit: MAX_ENTRIES * 2 }, label: 'The threat list' }).then(message => { if (message && message.error) throw new Error(message.error); return compactList(message); });
 }
 
 /** Reads the list syntax these feeds use: `||host/path^$all`, `||host^$all`, or a bare host (domain, IPv4, [IPv6], optionally :port). Anything else is ignored.
@@ -85,14 +80,9 @@ function packThreatList(text, hash, limit) {
   return { hosts: pack(hosts), pathHosts: pack(pathHosts), paths: pack(paths), entries };
 }
 function packThreatListAsync(text) {
-  const { Worker } = require('node:worker_threads');
   const source = `const { parentPort, workerData } = require('node:worker_threads'); const hashHost = ${hashHost.toString()}; const scanThreatList = ${scanThreatList.toString()}; const packThreatList = ${packThreatList.toString()};
     try { const result = packThreatList(workerData.text, hashHost, workerData.limit); parentPort.postMessage(result, [result.hosts.buffer, result.pathHosts.buffer, result.paths.buffer]); } catch (error) { parentPort.postMessage({ error: String(error.message || error) }); }`;
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(source, { eval: true, workerData: { text, limit: MAX_ENTRIES } });
-    worker.once('message', message => { worker.terminate(); message.error ? reject(new Error(message.error)) : resolve({ packed: true, hosts: message.hosts, pathHosts: message.pathHosts, paths: message.paths, entries: message.entries }); });
-    worker.once('error', reject);
-  });
+  return require('./job-process.cjs').runJob({ source, data: { text, limit: MAX_ENTRIES }, label: 'The threat list' }).then(message => { if (message && message.error) throw new Error(message.error); return { packed: true, hosts: message.hosts, pathHosts: message.pathHosts, paths: message.paths, entries: message.entries }; });
 }
 const RELEASE_LAST_MATCH = /(?:)/;
 const sortedHas = (sorted, value) => { let low = 0, high = sorted.length - 1; while (low <= high) { const mid = (low + high) >> 1, at = sorted[mid]; if (at === value) return true; if (at < value) low = mid + 1; else high = mid - 1; } return false; };
@@ -221,7 +211,11 @@ async function validateAsync(text, source) {
 }
 
 /** `allowlist` (site-allowlist.cjs) is loaded, refreshed and consulted with the lists. */
-function createThreatLists({ cachePath, download = downloadList, io = fs, now = Date.now, enabled = true, allowlist = null }) {
+/** `settle` (Beta 14 page-load pass): waits for a moment with no website loading (background-work.cjs settled) before each heavy step on the main thread:
+ * checking a downloaded list of up to 16 MB and writing it, when it replaces a list already in use. A list that is not there yet (a first run) and the
+ * lists already on disk load at once, as before: protection never starts later than it did. */
+/** `collect` (14.2): asked once reading or replacing the lists has left their text in main as garbage (heap-collect.cjs). */
+function createThreatLists({ cachePath, download = downloadList, io = fs, now = Date.now, enabled = true, allowlist = null, settle = () => { try { const work = require('./background-work.cjs').shared(); return typeof work.settled === 'function' ? work.settled() : Promise.resolve(); } catch { return Promise.resolve(); } }, collect = () => { try { require('./heap-collect.cjs').sharedHeapCollect().request(); } catch { /* no collector */ } } }) {
   const lists = new Map(), meta = new Map(); let on = enabled !== false, loaded = false, loading = null, refreshing = null, lastError = null;
   const file = source => path.join(cachePath, source.file), metaPath = path.join(cachePath, 'threat-lists.json');
   const readMeta = () => { try { const saved = JSON.parse(io.readFileSync(metaPath, 'utf8')); for (const source of SOURCES) if (saved && Number.isFinite(saved[source.id]?.updated)) meta.set(source.id, { updated: saved[source.id].updated, listed: saved[source.id].listed }); } catch { /* No saved state yet. */ } };
@@ -232,7 +226,7 @@ function createThreatLists({ cachePath, download = downloadList, io = fs, now = 
     return loading || (loading = new Promise(resolve => setImmediate(async () => {
       readMeta(); allowlist?.load();
       for (const source of SOURCES) { try { const text = io.readFileSync(file(source), 'utf8'); lists.set(source.id, await validateAsync(text, source)); } catch { meta.delete(source.id); } }
-      loaded = true; loading = null; resolve();
+      loaded = true; loading = null; collect(); resolve();
     })));
   }
   /** The threat for an address, or null. Never throws and never blocks on I/O. */
@@ -248,8 +242,8 @@ function createThreatLists({ cachePath, download = downloadList, io = fs, now = 
     let failure;
     for (const url of source.urls) {
       try {
-        const text = await download(url, session, { maxBytes: MAX_BYTES, timeoutMs: 10 * 60 * 1000 }), parsed = await validateAsync(text, source);
-        io.mkdirSync(cachePath, { recursive: true }); const tmp = file(source) + '.' + randomUUID().slice(0, 8); io.writeFileSync(tmp, text); io.renameSync(tmp, file(source));
+        const text = await download(url, session, { maxBytes: MAX_BYTES, timeoutMs: 10 * 60 * 1000 }), replacing = lists.has(source.id); if (replacing) await settle(); const parsed = await validateAsync(text, source);
+        if (replacing) await settle(); io.mkdirSync(cachePath, { recursive: true }); const tmp = file(source) + '.' + randomUUID().slice(0, 8); io.writeFileSync(tmp, text); io.renameSync(tmp, file(source));
         lists.set(source.id, parsed); meta.set(source.id, { updated: now(), listed: parsed.entries }); return true;
       } catch (error) { failure = error; if (error && error.closing === true) break; /* 13.8 (background-work.cjs): a stopped download is not tried again on the other address */ }
     }
@@ -260,7 +254,7 @@ function createThreatLists({ cachePath, download = downloadList, io = fs, now = 
     if (!refreshing) refreshing = (async () => {
       await load(); const errors = [];
       for (const source of SOURCES) { try { await refreshOne(source, session); } catch (error) { if (error && error.closing === true) { writeMeta(); return; } /* 13.8: the quit began: no other list is started, nothing is recorded as a failure, and what this pass already swapped in keeps its time */ errors.push(source.title + ': ' + String(error.message || error)); } }
-      lastError = errors.length ? errors.join(' ') : null; writeMeta();
+      lastError = errors.length ? errors.join(' ') : null; writeMeta(); collect();
     })().finally(() => { refreshing = null; });
     return refreshing.then(status);
   }

@@ -122,11 +122,20 @@ test('the sidebar, the tab menu and the desktop bridge all go through the one fu
   assert.equal((sidebar.match(/addFavorite\(/g) ?? []).length, 4, 'drag, Cmd+Shift+D / command / menu, the + form and a dropped link');
   assert.match(sidebar, /const asked=event\.type==='sidebar-pin-app'\?event\.tabId:event\.type==='ui'&&\(event as \{action\?:string\}\)\.action==='favorite-tab'/, 'the keyboard and the menu take one path');
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(app, /state\.settings\.verticalTabs && isWebsite\(context\) && !context\.privacy && row\(tr\("acirasidebar\.addToFavorites"\), LayoutGrid, \(\) => \{ void runtime\.browserCommand\(\{ type: 'ui', tabId: tab\.id, action: 'favorite-tab', targetTabId: context\.id \}\)/, 'the tab menu row: sidebar layout, websites, not private or Tor tabs');
-  assert.match(readFileSync(new URL('../desktop/validation.cjs', import.meta.url), 'utf8'), /'rename-tab','favorite-tab','preview-hold'/);
-  assert.match(readFileSync(new URL('../src/runtime/types.ts', import.meta.url), 'utf8'), /'rename-tab' \| 'favorite-tab'/);
+  // Beta 14 (reported 14 Nov): the row stands wherever a sidebar (the Favorites' only place) exists: tabs in the sidebar and Top + sidebar, not plain tabs along the top
+  assert.match(app, /sidebarOn\(state\.settings\) && isWebsite\(context\) && !context\.privacy && \(context\.favoriteId && readSidebarApps\(context\.browserProfileId, !!state\.browserProfiles\.find\(item => item\.id === context\.browserProfileId\)\?\.private\)\.apps\.some\(app => app\.id === context\.favoriteId\) \? row\(tr\("acirasidebar\.removeFromFavorites"\), LayoutGrid, \(\) => \{ void runtime\.browserCommand\(\{ type: 'ui', tabId: tab\.id, action: 'unfavorite-tab', targetTabId: context\.id \}\); close\(\); \}\) : row\(tr\("acirasidebar\.addToFavorites"\), LayoutGrid, \(\) => \{ void runtime\.browserCommand\(\{ type: 'ui', tabId: tab\.id, action: 'favorite-tab', targetTabId: context\.id \}\); close\(\); \}\)\)/);
+  assert.doesNotMatch(app, /state\.settings\.verticalTabs && isWebsite\(context\) && !context\.privacy && row\(tr\("acirasidebar\.addToFavorites"\)/, 'the old condition (tabs in the sidebar only) is gone');
+  assert.match(sidebar, /action==='unfavorite-tab'\)\{const target=\(event as \{targetTabId\?:string\}\)\.targetTabId;if\(typeof target==='string'\)unfavoriteTab\(target,state,dispatch\);return;\}/, 'the sidebar removes it, with the tile\'s own Undo toast');
+  assert.match(sidebar, /toast=removeSidebarAppWithUndo\(tab\.browserProfileId,!!owner\?\.private,tab\.favoriteId\)/);
+  assert.match(readFileSync(new URL('../desktop/validation.cjs', import.meta.url), 'utf8'), /'rename-tab','favorite-tab','unfavorite-tab','preview-hold'/);
+  assert.match(readFileSync(new URL('../src/runtime/types.ts', import.meta.url), 'utf8'), /'rename-tab' \| 'favorite-tab' \| 'unfavorite-tab'/);
   const en = JSON.parse(readFileSync(new URL('../src/i18n/en.json', import.meta.url), 'utf8')) as Record<string, string>;
   assert.equal(en['acirasidebar.addToFavorites'], 'Add to Favorites', 'the menu row reuses the form\'s own, already translated, label');
+  for (const code of ['ar', 'de', 'en', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh-CN']) {
+    const words = JSON.parse(readFileSync(new URL(`../src/i18n/${code}.json`, import.meta.url), 'utf8')) as Record<string, string>;
+    assert.ok(words['acirasidebar.removeFromFavorites'], `${code} has the Remove from Favorites row`);
+  }
+  assert.equal(en['acirasidebar.removeFromFavorites'], 'Remove from Favorites');
 });
 
 test('the motion: the bookmark\'s split, with the tile as its end; the tab stays, the tiles make room, the new tile is held until the copy lands', () => {
@@ -147,7 +156,7 @@ test('the motion: the bookmark\'s split, with the tile as its end; the tab stays
   assert.match(sidebar, /data-morph=\{favoriteMorphing\(app\.id\)\?'':undefined\} data-motion-skip=\{favoriteMorphing\(app\.id\)\?'':undefined\}/, 'the new tile is held back and left out of the list\'s enter animation');
   assert.match(sidebar, /const adding=favoritePlan\?\.kind==='add';/);
   assert.match(sidebar, /else if\(!adding\)current\.rowPreview\?\.end\(/, 'a drop that makes a favorite splits instead of going home');
-  assert.match(sidebar, /tiles\.splice\(Math\.min\(pin!\.index,apps\.length\),0,<span key="gap" className="sb-app sb-app-slot sb-app-gap"/, 'the tiles make room under a tab that would make a favorite');
+  assert.match(sidebar, /list\.splice\(Math\.min\(pin!\.index,shown\.length\),0,<span key="gap" className="sb-app sb-app-slot sb-app-gap"/, 'the tiles make room under a tab that would make a favorite');
   assert.match(sidebar, /if\(tile\.classList\.contains\('sb-app-gap'\)\)return items\.indexOf\(tile\);/, 'over the slot the drop stays: the slot never chases the pointer');
   assert.match(sidebar, /animateSpring\(wrap,\[\{translate:`0 \$\{shift\}px`\},\{translate:'0 0'\}\],'reorder\.move'/, 'the list below glides when the first favorite opens the region');
   assert.match(readFileSync(new URL('../src/components/sidebar/sidebar.css', import.meta.url), 'utf8'), /\.sb-app\[data-morph\]\{opacity:0\}/);
@@ -163,4 +172,19 @@ test('no info icon in the favorites area: the (i) and its tip are gone, with its
 test('adding a favorite takes no tab out of the list: nothing filters a linked tab, and tab.favorite keeps its group and place', () => {
   const core = readFileSync(new URL('../src/runtime/core.ts', import.meta.url), 'utf8');
   assert.equal(/tab\.group=''/.test(core.slice(core.indexOf("case 'tab.favorite'"), core.indexOf("case 'tab.favorite'") + 600)), false, 'the group stays');
+});
+
+test('the tab menu\'s Remove from Favorites is a real command the desktop accepts, for the menu in Top + sidebar as in the sidebar', async () => {
+  const { createRequire } = await import('node:module');
+  const { createInitialState, reduceBrowser } = await import('../src/runtime/core');
+  const { validateCommand } = createRequire(import.meta.url)('../desktop/validation.cjs');
+  const state = reduceBrowser(createInitialState(), { type: 'tab.navigate', url: 'https://example.com/' });
+  const id = state.activeTabId;
+  for (const action of ['favorite-tab', 'unfavorite-tab']) assert.doesNotThrow(() => validateCommand({ type: 'ui', tabId: id, action, targetTabId: id }, state), action);
+  assert.throws(() => validateCommand({ type: 'ui', tabId: id, action: 'unfavorite-tab', targetTabId: 'nope' }, state), 'an unknown tab is refused');
+  // the row's condition is "a sidebar exists", which Top + sidebar is and plain tabs along the top is not
+  const { sidebarOn } = await import('../src/runtime/shelf');
+  assert.equal(sidebarOn({ ...state.settings, verticalTabs: false, shelf: true }), true, 'Top + sidebar');
+  assert.equal(sidebarOn({ ...state.settings, verticalTabs: true, shelf: false }), true, 'tabs in the sidebar');
+  assert.equal(sidebarOn({ ...state.settings, verticalTabs: false, shelf: false }), false, 'plain tabs along the top: no Favorites place, no row');
 });

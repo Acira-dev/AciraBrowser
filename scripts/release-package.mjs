@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {assertNoPrivateNames} from './release-private-names.mjs';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
@@ -45,6 +46,7 @@ export async function packageWindows(candidate,{widevine=null}={}){
   const appDir=path.join(output,'resources/app');await fs.mkdir(appDir,{recursive:true});
   for(const item of ['desktop','dist','resources','node_modules','package.json','page-zoom-levels.json']){try{await fs.cp(path.join(candidate,item),path.join(appDir,item),{recursive:true,errorOnExist:true});}catch(error){if(error.code!=='ENOENT')throw error;}}
   for(const item of ['LICENSE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(identity.committedSource?candidate:root,item),path.join(appDir,item));
+  await assertNoPrivateNames(appDir,'the Windows app folder');
   await fs.copyFile(path.join(root,'packaging/acira-icon-512.png'),path.join(appDir,'dist/app-icon.png'));
   // Where the installed app looks for updates (electron-builder does not write this for a prepackaged folder; see packaging/windows-update-config.cjs).
   const updateConfig=windowsUpdateConfig();await fs.writeFile(path.join(output,'resources','app-update.yml'),serializeUpdateConfig(updateConfig));

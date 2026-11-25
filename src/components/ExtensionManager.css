@@ -6,7 +6,7 @@
 /* The popup (panel system, src/styles/panels.css): rows are the system's; only the odd blocks need a rule. */
 .extension-panel{display:flex;flex-direction:column;min-width:0}
 /* The panel is 320 wide: a label or hint longer than that (the developer-tools row, in English too, and most languages) goes onto a second line instead of ending in an ellipsis. */
-.extension-panel :is(.acira-menu-row,.menu-form-trigger){height:auto;min-height:30px;padding-block:5px}
+.extension-panel :is(.acira-menu-row,.menu-form-trigger){height:auto;min-height:30px;padding-block:4px}
 .extension-panel .acira-menu-row-identity{min-height:44px}
 .extension-panel :is(.acira-menu-title,.acira-menu-sub){white-space:normal;overflow-wrap:anywhere}
 .extension-panel-actions{padding:0 8px 4px 36px}

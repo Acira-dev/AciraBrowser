@@ -46,7 +46,7 @@ async function engineRun(engine){
   // Click the chip with the real mouse.
   await click(s.box.x+s.box.width/2,s.box.y+s.box.height/2);s=await read();out.clicked={sent:s.sent,on:s.on};
   // Hover the engine's own Images link (not a result): the chip goes.
-  await move(t.x+40,t.y+t.height/2);await move(5,5);await sleep(260);s=await read();out.away={on:s.on};
+  await move(t.x+40,t.y+t.height/2);await move(5,5);s=await read();for(const until=Date.now()+1500;s.on&&Date.now()<until;){await sleep(25);s=await read();}out.away={on:s.on};
   // Keyboard: focus the third title, Tab reaches its chip, Enter previews it, Esc on the chip returns to the title.
   await js(`(()=>{const h=document.querySelectorAll('main h3,main h2,main .title')[2];(h.closest('a')||h.querySelector('a')).focus();return true;})()`);await sleep(40);s=await read();out.focusTitle={on:s.on};
   await key('Tab');s=await read();out.tabToChip={active:s.active,focused:await js('document.activeElement&&document.activeElement.outerHTML.slice(0,80)')};

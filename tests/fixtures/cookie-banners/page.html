@@ -52,13 +52,17 @@ if (kind === 'consent-page') { const head = document.createElement('header'); he
 // A page drawn in a shadow tree (nu.nl's consent page, DPG Media) has no text of its own in the document: it is not empty.
 if (kind === 'shadow-page') { const host = document.createElement('div'); host.attachShadow({mode: 'open'}).innerHTML = '<div style="width:600px;height:400px;margin:40px auto">' + 'Jouw privacy-instellingen. '.repeat(40) + '</div>'; document.body.append(host); const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.textContent = 'We use cookies.'; document.body.append(banner); }
 // A OneTrust banner as its script draws it, with the style element it adds (ids from stackoverflow.com and ikea.com, 2 Nov 2026), and one that offers a paid subscription instead of a reject.
-if (kind === 'onetrust' || kind === 'onetrust-pay') {
+if (kind === 'onetrust' || kind === 'onetrust-pay' || kind === 'onetrust-late') {
   tall(); window.__clicked = [];
+  const draw = () => {
   const sdkStyle = document.createElement('style'); sdkStyle.id = 'onetrust-style'; document.head.append(sdkStyle);
   const banner = document.createElement('div'); banner.id = 'onetrust-banner-sdk'; banner.setAttribute('role', 'region');
-  banner.innerHTML = kind === 'onetrust' ? '<p>We use cookies to improve your experience.</p><button id="onetrust-accept-btn-handler">Accept all</button><button id="onetrust-reject-all-handler">Reject all</button>' : '<p>Read with ads and cookies, or subscribe for 2,99 € a month without ads.</p><button id="onetrust-accept-btn-handler">Accept and continue</button><button id="onetrust-reject-all-handler">Subscribe</button>';
+  banner.innerHTML = kind !== 'onetrust-pay' ? '<p>We use cookies to improve your experience.</p><button id="onetrust-accept-btn-handler">Accept all</button><button id="onetrust-reject-all-handler">Reject all</button>' : '<p>Read with ads and cookies, or subscribe for 2,99 € a month without ads.</p><button id="onetrust-accept-btn-handler">Accept and continue</button><button id="onetrust-reject-all-handler">Subscribe</button>';
   banner.querySelectorAll('button').forEach(button => button.addEventListener('click', () => { window.__clicked.push(button.id); banner.remove(); }));
   document.body.append(banner);
+  };
+  // Most live consent tools draw their banner seconds after the page has loaded (Didomi on elpais.com: 3.4 s after DOMContentLoaded, 15 Nov 2026).
+  if (kind === 'onetrust-late') setTimeout(draw, 3000); else draw();
 }
 if (kind === 'wall' || kind === 'wall-stuck') {
   tall();

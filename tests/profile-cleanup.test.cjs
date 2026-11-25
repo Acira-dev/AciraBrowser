@@ -129,9 +129,9 @@ test('a session cookie saved while a keyring worked does not come back after a n
 test('the no-keyring test switch is honoured only on a throwaway profile, and main passes its safe storage through it',async()=>{
  const fs=require('node:fs'),path=require('node:path'),{EventEmitter}=require('node:events'),{storageForRun,createSessionCookieRestore}=require('../desktop/browser-services/session-cookie-restore.cjs');
  const real={isEncryptionAvailable:()=>true,encryptString:text=>Buffer.from('enc:'+text),decryptString:bytes=>String(bytes).slice(4)};
- for(const env of [{ACIRA_TEST_PASSWORD_STORE:'basic_text'},{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-agents/x',ACIRA_TEST_PASSWORD_STORE:'gnome_libsecret'},{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-agents/x'}])assert.deepEqual(storageForRun({safeStorage:real,platform:'darwin',env}),{safeStorage:real,platform:'darwin'},JSON.stringify(env));
+ for(const env of [{ACIRA_TEST_PASSWORD_STORE:'basic_text'},{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-qa/x',ACIRA_TEST_PASSWORD_STORE:'gnome_libsecret'},{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-qa/x'}])assert.deepEqual(storageForRun({safeStorage:real,platform:'darwin',env}),{safeStorage:real,platform:'darwin'},JSON.stringify(env));
  for(const backend of ['basic_text','unknown']){
-  const forced=storageForRun({safeStorage:real,platform:'darwin',env:{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-agents/x',ACIRA_TEST_PASSWORD_STORE:backend}});
+  const forced=storageForRun({safeStorage:real,platform:'darwin',env:{ACIRA_BROWSER_TEST_DATA:'/tmp/acira-qa/x',ACIRA_TEST_PASSWORD_STORE:backend}});
   assert.equal(forced.platform,'linux');assert.equal(forced.safeStorage.getSelectedStorageBackend(),backend);assert.equal(forced.safeStorage.decryptString(forced.safeStorage.encryptString('x')),'x');
   const restore=createSessionCookieRestore({directory:path.resolve('/tmp/acira-no-keyring-switch-unused'),...forced,makeAccess:()=>{throw Error('restore is off: no reader page');}});
   assert.equal((await restore.attach({session:{cookies:new EventEmitter()},profileId:'A',partition:'persist:A'})).supported,false);restore.dispose();

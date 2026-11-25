@@ -155,7 +155,7 @@ test('remove ×: only history rows carry it, and a press on the list never takes
   // Rendered on the server the list would need motion's DOM; the row's condition and the focus hand-back are what matter.
   const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8');
   const list = read('../src/components/AddressSuggestions.tsx'), main = read('../desktop/main.cjs'), field = read('../src/components/AddressField.tsx');
-  assert.ok(list.includes(`{item.kind==='history'&&item.historyId?<button type="button" className="address-suggestion-remove" tabIndex={-1}`), 'only history rows get the ×');
+  assert.ok(list.includes(`const removable=(item:AddressSuggestion)=>item.kind==='history'&&!!item.historyId;`) && list.includes(`tabIndex={-1} aria-label={t("addresssuggestions.removeTitleFromHistory"`), 'only history rows get the ×');
   assert.ok(list.includes('onPointerDown={event=>event.preventDefault()} onMouseDown={event=>event.preventDefault()'), 'a press never moves focus inside the list');
   assert.ok(main.includes(`if(contents===overlayView?.webContents&&layout.overlay?.kind==='suggestions'){`) && main.includes(`setImmediate(()=>{if(layout.overlay?.kind==='suggestions'&&contents.isFocused()&&chromeView&&!chromeView.webContents.isDestroyed())focusContents(chromeView.webContents);});return;}`), 'main hands focus back to the field once the press has moved it');
   assert.ok(field.includes('if (suggestionOpen && !event.relatedTarget && !document.hasFocus())'), 'the field waits for focus to come back before closing');

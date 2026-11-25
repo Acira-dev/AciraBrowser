@@ -30,7 +30,7 @@ function project(state,profileId){
   let groupRef=null;
   if(tab.group&&!tab.pinned){
    const key=`${workspaceOf(tab)||''}\u0000${tab.group}`;
-   if(!groupRefs.has(key)){const source=(state.tabGroups||[]).find(group=>group.name===tab.group&&group.browserProfileId===profileId&&workspaceOf(group)===workspaceOf(tab));groupRef=`g${groups.length}`;groupRefs.set(key,groupRef);groups.push({ref:groupRef,name:clean(tab.group,64),color:source?.color||'none',order:groups.length,collapsed:source?.collapsed===true,workspace:workspaceOf(tab)});}
+   if(!groupRefs.has(key)){const source=(state.tabGroups||[]).find(group=>group.name===tab.group&&group.browserProfileId===profileId&&workspaceOf(group)===workspaceOf(tab));groupRef=`g${groups.length}`;groupRefs.set(key,groupRef);groups.push({ref:groupRef,name:clean(tab.group,64),color:source?.color||'none',order:groups.length,collapsed:source?.collapsed===true,workspace:workspaceOf(tab),...(source?.pinned?{pinned:true}:{}),...(source?.parentGroupId?{parent:clean((state.tabGroups||[]).find(group=>group.id===source.parentGroupId)?.name||'',64)||undefined}:{})});}
    groupRef=groupRefs.get(key);
   }
   refOf.set(tab.id,`t${tabs.length}`);
@@ -76,7 +76,7 @@ function readCheckpoint(value,profileId){
  if(!value||typeof value!=='object'||value.schemaVersion!==SCHEMA||value.ownerProfileId!==profileId||typeof value.id!=='string'||!/^cp-[a-z0-9]+-[0-9a-f]{8}$/.test(value.id))return null;
  if(!Number.isFinite(value.createdAt)||!REASONS.includes(value.reason)||!Array.isArray(value.tabs)||!Array.isArray(value.groups))return null;
  const space=item=>typeof item.workspace==='string'&&/^[A-Za-z0-9_.:-]{1,120}$/.test(item.workspace)?item.workspace:null;
- const groups=value.groups.filter(g=>g&&typeof g.ref==='string'&&typeof g.name==='string').map(g=>({ref:g.ref,name:clean(g.name,64),color:typeof g.color==='string'?g.color:'none',order:Number(g.order)||0,collapsed:g.collapsed===true,workspace:space(g)}));
+ const groups=value.groups.filter(g=>g&&typeof g.ref==='string'&&typeof g.name==='string').map(g=>({ref:g.ref,name:clean(g.name,64),color:typeof g.color==='string'?g.color:'none',order:Number(g.order)||0,collapsed:g.collapsed===true,workspace:space(g),...(g.pinned===true?{pinned:true}:{}),...(typeof g.parent==='string'&&g.parent.trim()?{parent:clean(g.parent,64)}:{})}));
  const refs=new Set(groups.map(g=>g.ref));
  const tabs=value.tabs.filter(t=>t&&typeof t.ref==='string'&&eligibleUrl(t.url)).map(t=>({ref:t.ref,groupRef:refs.has(t.groupRef)?t.groupRef:null,order:Number(t.order)||0,title:clean(t.title,MAX_TITLE),url:t.url,pinned:t.pinned===true,active:t.active===true,workspace:space(t)}));
  const splits=readSplits(value.splits,tabs);

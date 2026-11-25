@@ -1,4 +1,5 @@
 import { groupForTab } from './tabGroups';
+import { tabIsPinned } from './pinnedFolders';
 import { workspaceIdOf } from './workspaces';
 import { unloadLanding } from './tabTrail';
 import type { BrowserAction, BrowserSnapshot, TabSession } from './types';
@@ -13,7 +14,7 @@ import type { BrowserAction, BrowserSnapshot, TabSession } from './types';
  * Whether a page is playing something or holds typed input only the page can say; main checks that and tells the person with a toast.
  */
 export type SleepScope = Pick<BrowserSnapshot, 'activeTabId' | 'windowUi' | 'browserProfiles'>;
-type MenuScope = SleepScope & Pick<BrowserSnapshot, 'tabs' | 'workspaces' | 'activeBrowserProfileId'>;
+type MenuScope = SleepScope & Pick<BrowserSnapshot, 'tabs' | 'tabGroups' | 'workspaces' | 'activeBrowserProfileId'>;
 
 /** What no menu offers: no page to free, already asleep, never slept, or on screen in a split. */
 function unloadable(state: SleepScope, tab: TabSession): boolean {
@@ -23,8 +24,10 @@ function unloadable(state: SleepScope, tab: TabSession): boolean {
   return !state.browserProfiles.find(profile => profile.id === tab.browserProfileId)?.private;
 }
 
-/** Does the tab's own menu offer Unload tab? A pinned tab yes; the tab on screen only if an awake tab can take its place. */
+/** Does the tab's own menu offer Unload tab? The tab on screen only if an awake tab can take its place. (13.10 also offers a pinned tab; Beta 14's pinned menu has its own row, pinnedClose.ts.) */
 export function mayOfferSleep(state: MenuScope, tab: TabSession): boolean {
+  // Beta 14: a pinned tab's menu already has its own Unload tab row (its close puts it to sleep in place: runtime/pinnedClose.ts), so this one is not offered twice.
+  if (tabIsPinned(state, tab)) return false; // a tab of a pinned folder has that row too (pinned folders)
   return unloadable(state, tab) && (tab.id !== state.activeTabId || !!unloadLanding(state as BrowserSnapshot, tab));
 }
 

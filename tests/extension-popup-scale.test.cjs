@@ -176,7 +176,8 @@ test('a page that asks for a new size every few milliseconds is still measured w
   await popup.whenReady();
   page.layOut();
   const started = Date.now();
-  while (Date.now() - started < 300 && !page.measures.length) { popup.setSize({width: 288, height: 374}); popup.setSize({width: 273, height: 374}); page.layOut(); await sleep(4); }
+  // (the popup's own wait for the page's start-up is not a measure of it: only the fit's counts)
+  while (Date.now() - started < 300 && !page.measures.some(m => m.code === 'fit')) { popup.setSize({width: 288, height: 374}); popup.setSize({width: 273, height: 374}); page.layOut(); await sleep(4); }
   assert.ok(page.measures.some(m => m.code === 'fit'), 'the page was measured while it kept asking');
   assert.ok(Date.now() - started < 200, 'within the fit delay of the first ask, not after the asking stopped');
   popup.destroy();

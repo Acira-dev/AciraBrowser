@@ -6,6 +6,10 @@ import { NoteList } from './NoteList';
 import { t } from '../../i18n';
 import { runtime } from '../../runtime/client';
 import { downloadLine, errorLines, pauseUpdate, restartToUpdate, resumeUpdate, tryAgainUpdate, useUpdateStatus, type UpdateView } from './useUpdateReady';
+import { Glyph } from '../dialogs/glyphs';
+import { appTheme, useDialogSurface } from '../dialogs/dialogSurface';
+import '../dialogs/dialogs.css';
+import '../dialogs/prompts.css';
 import './update-pill.css';
 
 /** What the toolbar's Update pill opens (and what opens by itself, once, when a download finishes): one question in the glass panel. Install now
@@ -13,29 +17,32 @@ import './update-pill.css';
  *  back; Read more shows this version's release notes in the same panel, as plain text (main has already stripped every tag; nothing here is HTML).
  *  The panel opens at the size of its note (popup.ts) and grows to the notes when Read more is chosen; long notes scroll inside. Nothing takes focus when it opens by itself.
  *  While the update downloads, the same pill (the dots) opens the same panel on the download instead (UpdateDownload). */
-export function UpdatePopover({ close, reducedMotion }: { close: () => void; reducedMotion: boolean }) {
-  const update = useUpdateStatus({ fresh: true }), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), seen = useRef(false), notesBox = useRef<HTMLDivElement>(null);
+export function UpdatePopover({ close, reducedMotion, glass = 64 }: { close: () => void; reducedMotion: boolean; glass?: number }) {
+  const update = useUpdateStatus({ fresh: true }), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [keys, setKeys] = useState(false), seen = useRef(false), notesBox = useRef<HTMLDivElement>(null), root = useRef<HTMLDivElement>(null), theme = appTheme();
+  // Beta 14: "Update ready" is the sample's prompt (an accent tile, a bold title, one quiet line, What's new on the left, Later and Restart on the right) in the glass of his dialog family; while it downloads the panel keeps its own look.
+  useDialogSurface(root, 'prompt', glass, theme, !(update && update.phase !== 'ready'));
   // The update went away under the panel (installed from the menu, or a failed re-check): nothing left to ask.
   useEffect(() => { if (update) seen.current = true; else if (seen.current) close(); }, [update, close]);
   if (update && update.phase !== 'ready') return <UpdateDownload update={update} reducedMotion={reducedMotion} close={close} />;
   const install = () => { setBusy(true); void restartToUpdate().finally(() => window.setTimeout(() => setBusy(false), 8000)); };
   const version = update?.version ?? '';
   return (
-    <div className="update-popover" role="group" aria-labelledby="update-pop-title" data-view={reading ? 'notes' : 'ask'} aria-busy={busy || undefined} data-popup-pending={update ? undefined : ''}>
-      <div className="acira-menu-row acira-menu-row-identity">
-        <span className="acira-menu-icon update-pop-mark" aria-hidden="true"><UpdateMark panel preset="check" tone="accent" reducedMotion={reducedMotion} /></span>
-        <span className="acira-menu-title" id="update-pop-title">{reading ? t('update.whatsNew') : t('update.readyTitle')}<span className="acira-menu-sub">{version && t('update.version', { version })}</span></span><span />
+    <div ref={root} className="update-popover update-prompt dlg dlg-pad-p" data-theme={theme} data-keys={keys || undefined} role="group" aria-labelledby="update-pop-title" data-view={reading ? 'notes' : 'ask'} aria-busy={busy || undefined} data-popup-pending={update ? undefined : ''}
+      onKeyDown={(event) => { if (event.key === 'Tab') setKeys(true); }}>
+      <div className="dlg-row dlg-row-start" style={{ gap: 12 }}>
+        <div className="dlg-tile dlg-tile-accent"><Glyph name="refresh"/></div>
+        <div className="dlg-col"><div className="dlg-title dlg-title-sm" id="update-pop-title">{reading ? t('update.whatsNew') : t('update.readyTitle')}</div>
+          <div className="dlg-sub dlg-sub-s">{reading ? (version && t('update.version', { version })) : t('update.readyLine')}</div></div>
       </div>
-      {reading
-        ? <div className="update-pop-scroll"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}>{<NoteList notes={update?.notes || t('update.noNotes')} />}</div></ScrollRegion></div>
-        : <p className="update-pop-note">{t('update.readyBody')}</p>}
+      {reading && <div className="update-pop-scroll dlg-mt12"><ScrollRegion contentRef={notesBox}><div className="update-pop-notes" tabIndex={0} role="region" aria-label={t('update.whatsNew')}>{<NoteList notes={update?.notes || t('update.noNotes')} />}</div></ScrollRegion></div>}
       {/* Two installs of this version did not take (main sets lastResort): the same quiet way out as in the download panel. */}
-      {update?.lastResort && !reading && <div className="update-pop-actions update-pop-links"><button type="button" className="acira-button acira-button-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close(); }}>{t('update.lastResort')}</button></div>}
-      <div className="update-pop-actions">
-        <button type="button" className="acira-button acira-button-quiet" disabled={!update} onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.readMore')}</button>
-        <span className="update-pop-gap" />
-        <button type="button" className="acira-button acira-button-secondary" onClick={close}>{t('update.later')}</button>
-        <button type="button" className="acira-button acira-button-primary" disabled={busy || !update} onClick={install}>{busy ? t('update.installing') : t('update.installNow')}</button>
+      {update?.lastResort && !reading && <div className="dlg-foot dlg-foot-p dlg-foot-wrap"><button type="button" className="dlg-btn dlg-btn-quiet" onClick={() => { void runtime.dispatch({ type: 'tab.new', url: update.lastResort! }); close(); }}>{t('update.lastResort')}</button></div>}
+      <div className="dlg-foot dlg-foot-p dlg-foot-wrap">
+        <button type="button" className="dlg-btn dlg-btn-quiet" disabled={!update} onClick={() => setReading((value) => !value)}>{reading ? t('update.back') : t('update.whatsNew')}</button>
+        <div className="dlg-end">
+          <button type="button" className="dlg-btn dlg-btn-glass" onClick={close}>{t('update.later')}</button>
+          <button type="button" className="dlg-btn dlg-btn-primary" data-default disabled={busy || !update} onClick={install}>{busy ? t('update.installing') : t('update.restart')}</button>
+        </div>
       </div>
     </div>
   );

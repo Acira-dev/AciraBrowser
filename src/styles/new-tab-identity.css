@@ -1,0 +1,7 @@
+/* ---- Beta 14/AI on the new tab page: the header chip's picture wears the rank ring (src/styles/rank-ring.css) and the rank's seal sits on that ring as a small token. One picture, one name; the rank word is
+   the chip's tooltip. The chip is the 40 px round button of 13.10 (new-tab-page.css), its picture 28 px. ---- */
+/* The ring at this picture size: the ring file says 1.5 px with a 2 px gap under 72 px. The ring's outer edge is then 35 px, inside the 40 px chip, so nothing grows and nothing is clipped. */
+.app .nt-workspace-profile .nt-identity-avatar { --acira-rank-ring-stroke:1.5px; --acira-rank-ring-gap:2px; }
+/* The seal: a token on the ring at the chip's lower inline-end corner (the 4:30 position; 7:30 in right-to-left), centred on the ring so half of it lies over the ring and half outside. No plate, no glow, no shadow
+   (the plan): it is the supplied small coin as it is. It never takes the pointer, so the chip's own press and tooltip are the whole control. */
+.app .nt-workspace-profile .nt-identity-seal { position:absolute; inset-block-end:-2px; inset-inline-end:-2px; width:16px; height:16px; margin:0; pointer-events:none; }

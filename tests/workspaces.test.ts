@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialState, makeTab, persistedSnapshot, reduceBrowser, restoreSnapshot } from '../src/runtime/core';
 import { bulkCloseTargets } from '../src/runtime/profileActions';
-import { MAX_WORKSPACES, activeWorkspaceOf, cleanWorkspaceName, normalizeWorkspaces, scopeToWorkspace, validWorkspaceIcon, windowWorkspaces, workspaceIdOf } from '../src/runtime/workspaces';
+import { MAX_WORKSPACES, WORKSPACE_KEYS, workspaceKeyLabel, activeWorkspaceOf, cleanWorkspaceName, normalizeWorkspaces, scopeToWorkspace, validWorkspaceIcon, windowWorkspaces, workspaceIdOf } from '../src/runtime/workspaces';
 import { frameTintFor } from '../src/ui/theme';
 import { workspacePlaying } from '../src/ui/workspaceAudio';
 import type { BrowserAction, BrowserSnapshot } from '../src/runtime/types';
@@ -177,13 +177,16 @@ test('rename, icon and colour: validated, trimmed, and a taken name is refused',
   assert.ok(validWorkspaceIcon('layers') && validWorkspaceIcon('W') && validWorkspaceIcon('😀') && !validWorkspaceIcon('ab') && !validWorkspaceIcon('') && !validWorkspaceIcon('<'));
 });
 
-test('at most eight workspaces in a profile', () => {
+test('at most MAX_WORKSPACES (16) workspaces in a profile', () => {
   let state = three();
   for (let i = 1; i < MAX_WORKSPACES; i++) state = run(state, { type: 'workspace.create', name: `W${i}` });
   assert.equal(state.workspaces.length, MAX_WORKSPACES);
-  const over = run(state, { type: 'workspace.create', name: 'Ninth' });
+  const over = run(state, { type: 'workspace.create', name: 'One too many' });
   assert.equal(over.workspaces.length, MAX_WORKSPACES);
   assert.equal(over.toast?.i18n?.id, 'runtime.workspaceLimit');
+  assert.equal(MAX_WORKSPACES, 16, 'the limit Beta 14.0 ships (Discord ask, reported 18 Nov)');
+  assert.equal(WORKSPACE_KEYS, 8, 'number keys 1-8 only (9 is the last tab); workspaces 9-16 have no number key');
+  assert.equal(workspaceKeyLabel(7) !== '' && workspaceKeyLabel(8) === '' && workspaceKeyLabel(15) === '', true);
 });
 
 test('deleting closes the tabs with an Undo that brings the workspace, its tabs and its groups back', () => {

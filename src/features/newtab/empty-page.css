@@ -1,0 +1,15 @@
+/* 14.1: the empty page a close can show (EmptyPage.tsx). The New Tab page's own ground (.nt-page), a centred card in the locked page's
+   quiet type (workspaces.css .ws-locked): the workspace's mark, its name, one hint line and one quiet button. No picture, no glow. */
+.app.style-acira .nt-page.nt-empty { display: grid; place-items: center; padding: 24px; outline: none; }
+.app.style-acira .nt-empty-card { display: grid; justify-items: center; gap: 8px; max-width: 360px; text-align: center; animation: nt-empty-in calc(220ms * var(--motion-scale, 1)) cubic-bezier(.2, .8, .2, 1) both; }
+.app.style-acira .nt-empty-glyph { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; background: var(--input-fill, rgb(127 127 127 / .1)); box-shadow: 0 0 0 1px var(--sb-line, rgb(127 127 127 / .16)); color: var(--nt-text-2); }
+.app.style-acira .nt-empty-glyph[data-colored] { color: var(--ws-color); }
+.app.style-acira .nt-empty-glyph .ed-editor-icon { width: 20px; height: 20px; }
+.app.style-acira .nt-empty-name { margin: 4px 0 0; font: 600 15px/22px var(--font-ui, inherit); letter-spacing: -.01em; color: var(--text-primary); }
+.app.style-acira .nt-empty-hint { margin: 0; font: 400 13px/18px var(--font-ui, inherit); color: var(--nt-text-3); text-wrap: pretty; }
+.app.style-acira .nt-empty-new { margin-top: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--nt-hover); color: var(--nt-text-2); font: 500 12px/28px var(--font-ui, inherit); cursor: default; transition: background calc(120ms * var(--motion-scale, 1)) var(--nt-ease); }
+.app.style-acira .nt-empty-new:hover { background: var(--nt-press); }
+.app.style-acira .nt-empty-new:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 2px; }
+@keyframes nt-empty-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .app.style-acira .nt-empty-card { animation: none; } }
+.app.style-acira[data-reduced-motion] .nt-empty-card { animation: none; }

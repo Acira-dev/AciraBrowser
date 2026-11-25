@@ -120,7 +120,7 @@ function createOffscreen({session,createContents=defaultOffscreenContents,onChan
 function defaultAuthWindow({session,parent,title}){
  const {BrowserWindow}=require('electron');
  return new BrowserWindow({width:520,height:680,minWidth:380,minHeight:420,show:false,parent:parent&&!parent.isDestroyed?.()?parent:undefined,autoHideMenuBar:true,
-  minimizable:false,maximizable:false,fullscreenable:false,title,icon:path.join(__dirname,'..','..','dist','app-icon.png'),
+  minimizable:false,maximizable:false,fullscreenable:false,title,icon:require('../app-icon-host.cjs').currentIcon()||path.join(__dirname,'..','..','dist','app-icon.png'),
   webPreferences:{session,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,allowRunningInsecureContent:false,spellcheck:false}});
 }
 
@@ -487,7 +487,7 @@ function installExtensionApis(runtime,{session,userData,storeKey='default',sourc
   const bookmarks=bookmarksApi(bookmarkBuffer?()=>bookmarkBuffer.nodes():safe(stores.bookmarks),{profileId:storeKey,update:bookmarkBuffer?compute=>bookmarkBuffer.apply(compute):null,ready:typeof stores.bookmarksReady==='function'?()=>bookmarkBuffer?.hasPending()||!!stores.bookmarksReady():null}),history=historyApi(safe(stores.history)),sessions=sessionsApi(safe(stores.closedTabs));
   for(const name of ['get','getChildren','getRecent','getTree','getSubTree','search','create','update','move','remove','removeTree'])handle('bookmarks.'+name,guard('bookmarks',(event,...args)=>bookmarks[name](event,...args)));
   for(const name of ['search','getVisits'])handle('history.'+name,guard('history',(event,...args)=>history[name](event,...args)));
-  for(const name of ['addUrl','deleteUrl','deleteRange','deleteAll'])handle('history.'+name,guard('history',()=>history.write()));
+  // history.addUrl / deleteUrl / deleteRange / deleteAll are ext-api/history.cjs's (14.3): they change this profile's own list.
   for(const name of ['getRecentlyClosed','getDevices','restore'])handle('sessions.'+name,guard('sessions',(event,...args)=>sessions[name](event,...args)));
   handle('search.query',guard('search',async(event,query)=>{const text=typeof query?.text==='string'?query.text.trim().slice(0,2048):'';if(!text)return failure('Search text is required.');try{await stores.search({text,disposition:query.disposition,tabId:query.tabId});}catch(error){return failure(String(error?.message||error).slice(0,300));}return undefined;}));
  }

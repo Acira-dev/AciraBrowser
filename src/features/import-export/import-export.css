@@ -64,3 +64,12 @@
 .acira-import-panel .aip-previous li>span{display:grid;gap:4px;flex:1 1 200px;min-width:0}
 .acira-import-panel .aip-previous li strong{font-size:13px;font-weight:500}
 .acira-import-panel .aip-previous li>span>span{color:var(--text-secondary);font-size:12px}
+/* Beta 14: what an import could not bring, said plainly under the choices (and again in the receipt), and Safari's permission note. */
+.acira-import-panel .aip-notbrought{display:grid;gap:8px;min-width:0;margin:16px 0 14px}
+.acira-import-panel :where(.aip-notbrought) h3.aip-notbrought-title{margin:0;color:var(--text-secondary);font-size:12px;font-weight:500;line-height:1.5}
+.acira-import-panel :where(.aip-notbrought) ul.aip-notbrought-list{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.acira-import-panel :where(.aip-notbrought) li.aip-notbrought-item{position:relative;min-width:0;padding-inline-start:14px;color:var(--text-secondary);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.acira-import-panel :where(.aip-notbrought) li.aip-notbrought-item::before{content:"";position:absolute;inset-inline-start:2px;top:.62em;width:4px;height:4px;border-radius:50%;background:var(--text-secondary);opacity:.55}
+.acira-import-panel .aip-receipt .aip-notbrought{margin:0 0 16px}
+.acira-import-panel .aip-permission{display:grid;gap:8px;justify-items:start;margin-top:16px;outline:0}
+.acira-import-panel :where(.aip-permission) strong.aip-permission-title{font-weight:600}

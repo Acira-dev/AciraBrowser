@@ -1,0 +1,107 @@
+/* The Task manager pop-up. Rows, heads and the divider are the one panel system's (src/styles/panels.css): 44px two-line rows for tabs, 32px
+   rows for extensions and Acira's parts, 28px heads, the 16px icon column, text at x = 36; every gap is on the 4 px grid. What is new here: the fixed top (the one number
+   and how it splits), the memory column (64px, tabular, with a meter under a tab's figure) and the two buttons that come in beside it.
+   Nothing changes size on hover, on a new reading or when a figure gains a digit. */
+.tm-panel { display: flex; flex-direction: column; min-width: 0; --tm-fig: 64px; }
+
+/* A figure's text is drawn from its data-v (TaskManagerPanel's Eased writes it there while it eases). */
+.tm-num::after { content: attr(data-v); }
+
+/* Before the first reading (it arrives a frame or two after the glass): the name is there, everything that the reading decides keeps its room
+   and stays unseen, so nothing is shown in one state and then another. */
+.tm-top[data-wait] > .tm-using, .tm-top[data-wait] > .tm-split, .tm-top[data-wait] > .tm-legend, .tm-panel[data-wait], .tm-sweep[data-wait] { visibility: hidden; }
+
+/* ── The fixed top ── */
+.tm-top { padding: 0 8px 8px; }
+.tm-title { display: flex; align-items: center; justify-content: space-between; height: 32px; }
+.tm-title-name { font: 500 13px/20px var(--font-ui); }
+/* The key that opens it: the pop-ups' own shortcut hint (.popup-shortcut, as the tab viewer's header shows Alt+T), set on the figures' edge. */
+.tm-title > .tm-key { margin: 0; padding: 0; }
+.tm-using { display: flex; align-items: baseline; gap: 8px; height: 24px; margin: 0 0 8px; font: 400 12px/24px var(--font-ui); color: var(--menu-t3); white-space: nowrap; }
+.tm-total { font: 600 20px/24px var(--font-ui); letter-spacing: -0.3px; font-variant-numeric: tabular-nums; color: var(--text-1, var(--text-primary, var(--text))); }
+/* How it splits: tabs, extensions, Acira itself. One 4px bar in three parts, 2px apart; each part glides to its new length. */
+.tm-split { display: flex; gap: 2px; height: 4px; }
+.tm-split-part { flex: 1 1 0; min-width: 4px; border-radius: 2px; transition: flex-grow 360ms cubic-bezier(0.2, 0, 0, 1); }
+.tm-split-part[data-k='tabs'], .tm-legend-item[data-k='tabs']::before { background: var(--accent); }
+.tm-split-part[data-k='ext'], .tm-legend-item[data-k='ext']::before { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.tm-split-part[data-k='own'], .tm-legend-item[data-k='own']::before { background: color-mix(in srgb, currentColor 26%, transparent); }
+.tm-split[data-empty] > .tm-split-part { background: color-mix(in srgb, currentColor 10%, transparent); }
+.tm-legend { display: flex; gap: 12px; margin-top: 8px; min-width: 0; overflow: hidden; font: 400 12px/16px var(--font-ui); color: var(--menu-t3); white-space: nowrap; }
+.tm-legend-item::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-inline-end: 4px; border-radius: 2px; vertical-align: 1px; }
+.tm-legend-fig { font-variant-numeric: tabular-nums; color: var(--menu-t2); }
+
+/* ── Sections ── */
+.tm-head { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; height: 28px; padding: 4px 8px 0; }
+.tm-head-icon { display: grid; place-items: center; width: 16px; height: 16px; color: var(--tm-ws, var(--menu-t2)); }
+.tm-head-icon .ws-char { font: 600 12px/16px var(--font-ui); }
+.tm-head-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 12px/16px var(--font-ui); color: var(--menu-t2); }
+.tm-own { padding-top: 8px; }
+
+/* ── Rows ── */
+.tm-item { position: relative; }
+.tm-row { grid-template-columns: 16px minmax(0, 1fr) var(--tm-fig); }
+.tm-static { box-sizing: border-box; display: grid; column-gap: 8px; align-items: center; height: 32px; padding: 0 8px; font: 400 13px/20px var(--font-ui); }
+/* The foot is drawn outside .tm-panel (the pop-up's fixed foot), where --tm-fig is not set: with .tm-row's columns it had NO columns at all, so its
+   glyph sat on a line of its own and the two lines of text were pushed down to the pop-up's bottom edge. Its own columns are the menu row's. */
+.tm-static.tm-sweep { height: 44px; grid-template-columns: 16px minmax(0, 1fr) auto; }
+/* In all three states (waiting, nothing to unload, the button) the foot keeps one grid step under it: its second line is then as far from the
+   pop-up's bottom edge as the title is from the top one. */
+.tm-static.tm-sweep, .acira-menu-row.tm-sweep { margin-bottom: 4px; }
+/* An extension's row is one line: a processor figure, when there is one to show, follows its name on the same line (the row never grows). */
+.tm-ext-title { display: flex; align-items: baseline; gap: 8px; }
+.tm-ext-title > .tm-name { flex: 0 1 auto; min-width: 0; }
+.tm-ext-cpu { flex: none; font: 400 12px/16px var(--font-ui); color: var(--menu-t3); font-variant-numeric: tabular-nums; }
+.tm-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tm-item > .tm-row > .site-identity-icon, .tm-item > .tm-row > .acira-symbol { justify-self: center; }
+.tm-ext-icon { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; }
+/* The playing tab's glyph sits in the line of words, before them. */
+.tm-item .acira-menu-sub > .tm-live { display: inline-block; width: 12px; height: 12px; margin-inline-end: 4px; vertical-align: -2px; color: var(--accent); }
+.tm-item:is(:hover, :focus-within) > .tm-row.acira-menu-row { background: var(--menu-hover); }
+/* A sleeping tab is dimmed: its name and icon step back, its line says "Sleeping". */
+.tm-item[data-state='sleeping'] .tm-name, .tm-item[data-state='sleeping'] .site-identity-icon { opacity: 0.55; }
+/* Acira itself opens to its parts: the chevron sits after the name, so its figure stays in the one column. */
+.tm-own-name { display: flex; align-items: center; gap: 4px; }
+.tm-row[aria-expanded='true'] .acira-menu-chevron { transform: rotate(90deg); }
+.tm-part > .acira-menu-title { font-weight: 400; color: var(--menu-t2); }
+.tm-part > .acira-menu-value { text-align: end; }
+.tm-note { grid-template-columns: 16px minmax(0, 1fr) auto; }
+
+/* The memory column: one fixed width, right-aligned, tabular. A tab's figure sits over a 40 x 2 meter on a faint track (its weight against the
+   heaviest tab), two grid steps under the figure so it never reads as an underline; every meter fills from the same start edge (lengths
+   compare when they share a start) and eases to its new length. The fill is the meter's own painted background, not an
+   element with a transform: nothing is lifted onto a layer of its own and put back at every reading (which re-drew the text around it). */
+.tm-fig { display: grid; justify-items: end; align-content: center; min-width: 0; font-variant-numeric: tabular-nums; }
+.tm-mem { font: 450 13px/20px var(--font-ui); white-space: nowrap; }
+@property --tm-share { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+.tm-meter { display: block; width: 40px; height: 2px; margin: 8px 0 0; border-radius: 1px; --tm-fill: color-mix(in srgb, currentColor 56%, transparent); --tm-track: color-mix(in srgb, currentColor 12%, transparent);
+  background: linear-gradient(to right, var(--tm-fill) var(--tm-share), var(--tm-track) var(--tm-share)); transition: --tm-share 360ms cubic-bezier(0.2, 0, 0, 1); }
+html[dir='rtl'] .tm-meter { background: linear-gradient(to left, var(--tm-fill) var(--tm-share), var(--tm-track) var(--tm-share)); }
+.tm-fig-quiet { color: var(--menu-t3); font: 400 12px/16px var(--font-ui); }
+.tm-fig-quiet > .tm-glyph { width: 14px; height: 14px; }
+
+/* Unload and Close: on hover and by keyboard, beside the figure (which stays in view). The name's tail fades out under them, so no text is
+   re-cut and nothing in the row moves. */
+.tm-acts { position: absolute; top: 50%; inset-inline-end: calc(8px + var(--tm-fig) + 8px); display: flex; gap: 4px; transform: translateY(-50%); opacity: 0; pointer-events: none; transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1); }
+.tm-item:is(:hover, :focus-within) > .tm-acts { opacity: 1; pointer-events: auto; }
+/* (the mask exists only on the row that shows its buttons: a mask on every title would give each one a surface of its own) */
+@property --tm-cut { syntax: '<length>'; inherits: false; initial-value: 0px; }
+.tm-item[data-kind='tab'] .acira-menu-title { --tm-cut: 0px; transition: --tm-cut 120ms cubic-bezier(0.2, 0, 0, 1); }
+.tm-item[data-kind='tab']:is(:hover, :focus-within) .acira-menu-title { mask-image: linear-gradient(to left, transparent var(--tm-cut), #000 calc(var(--tm-cut) + 28px)); }
+html[dir='rtl'] .tm-item[data-kind='tab']:is(:hover, :focus-within) .acira-menu-title { mask-image: linear-gradient(to right, transparent var(--tm-cut), #000 calc(var(--tm-cut) + 28px)); }
+.tm-item[data-kind='tab'][data-acts='2']:is(:hover, :focus-within) .acira-menu-title { --tm-cut: 56px; }
+.tm-item[data-kind='tab'][data-acts='1']:is(:hover, :focus-within) .acira-menu-title { --tm-cut: 28px; }
+.tm-act { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--menu-t2, inherit); cursor: default; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1); }
+.tm-act > .tm-glyph { width: 14px; height: 14px; }
+.tm-act:is(:hover, :focus-visible) { background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; outline: none; }
+.tm-act[data-danger]:is(:hover, :focus-visible) { color: var(--btn-danger-ink, #c42b1c); }
+
+/* ── The fixed foot: one action, set apart by THE divider ── */
+.popup-content-task-manager .popup-fixed-footer { padding-top: 4px; background: var(--divider) left top / 100% 1px no-repeat; }
+.tm-sweep > .acira-menu-icon { color: var(--accent); }
+/* Nothing to unload: the same row, said quietly. */
+.tm-sweep-idle > .acira-menu-icon { color: var(--menu-t3); }
+.tm-sweep-idle > .acira-menu-title { font-weight: 400; color: var(--menu-t2); }
+
+@media (prefers-reduced-motion: reduce) { .tm-act, .tm-acts, .tm-meter, .tm-split-part, .tm-item .acira-menu-title { transition: none; } }
+.app[data-reduced-motion='true'] .tm-act, .app[data-reduced-motion='true'] .tm-acts, .app[data-reduced-motion='true'] .tm-meter, .app[data-reduced-motion='true'] .tm-split-part, .app[data-reduced-motion='true'] .tm-item .acira-menu-title { transition: none; }
+@media (forced-colors: active) { .tm-act { color: ButtonText; } .tm-meter { --tm-fill: Highlight; --tm-track: GrayText; } .tm-split-part { background: Highlight; } }

@@ -1,5 +1,5 @@
 'use strict';
-// Firefox (and Zen, which keeps Firefox's profile format; Helium's add-zen-importer patch reads both the same way).
+// Firefox (and Zen, LibreWolf, Waterfox and Floorp, which keep Firefox's profile format; Helium's add-zen-importer patch reads Firefox and Zen the same way).
 // Profiles are listed in profiles.ini; bookmarks and history live in places.sqlite, site icons in favicons.sqlite. Both
 // databases are read from a private snapshot copy (import-snapshot.cjs), so this works while Firefox is open.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
@@ -9,13 +9,13 @@ const { readDatabase } = require('./import-snapshot.cjs');
 function firefoxRoots(platform = process.platform, home = os.homedir(), env = process.env) {
   if (platform === 'win32') {
     const roaming = env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    return [['Firefox', path.join(roaming, 'Mozilla', 'Firefox')], ['Zen', path.join(roaming, 'zen')]];
+    return [['Firefox', path.join(roaming, 'Mozilla', 'Firefox')], ['Zen', path.join(roaming, 'zen')], ['LibreWolf', path.join(roaming, 'librewolf')], ['Waterfox', path.join(roaming, 'Waterfox')], ['Floorp', path.join(roaming, 'Floorp')]];
   }
   if (platform === 'darwin') {
     const base = path.join(home, 'Library', 'Application Support');
-    return [['Firefox', path.join(base, 'Firefox')], ['Zen', path.join(base, 'zen')]];
+    return [['Firefox', path.join(base, 'Firefox')], ['Zen', path.join(base, 'zen')], ['LibreWolf', path.join(base, 'LibreWolf')], ['Waterfox', path.join(base, 'Waterfox')], ['Floorp', path.join(base, 'Floorp')]];
   }
-  return [['Firefox', path.join(home, '.mozilla', 'firefox')], ['Zen', path.join(home, '.zen')]];
+  return [['Firefox', path.join(home, '.mozilla', 'firefox')], ['Zen', path.join(home, '.zen')], ['Zen', path.join(home, '.var', 'app', 'app.zen_browser.zen', '.zen')], ['LibreWolf', path.join(home, '.librewolf')], ['Waterfox', path.join(home, '.waterfox')], ['Floorp', path.join(home, '.floorp')]];
 }
 
 /** profiles.ini sections as [{name, location, isDefault}]. Install sections name the profile Firefox opens by default. */

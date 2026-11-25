@@ -49,7 +49,8 @@ test('R5 fold mirror: wired in the sidebar — pictures keep their nesting and l
   assert.match(tsx, /foldPlan\(leaving\.map/, 'useFlip plans every fold');
   assert.match(tsx, /delay:fold\.wait,fill:'backwards'/, 'the rows below wait for the fade, holding where they were');
   assert.match(tsx, /delay:fold\.delays\[at\],easing:SPRING/, 'each picture fades on the unfold\'s spring, on its own planned delay');
-  assert.match(tsx, /opacity:0,transform:'translateY\(-4px\) scale\(\.98\)'/, 'back the way it came: up 4px and to 98%');
+  // (in a layout switch the rows that leave fade where they stand: `turns`, Beta 14.0; every other leaving row still goes back the way it came)
+  assert.match(tsx, /opacity:0,transform:turns\?\(at0&&at0!=='none'\?at0:'none'\):'translateY\(-4px\) scale\(\.98\)'/, 'back the way it came: up 4px and to 98%');
   assert.match(tsx, /item\.el\.animate\(\[\{opacity:from,transform:'translateY\(-4px\) scale\(\.98\)'\},\{opacity:1,transform:'none'\}\]/, 'the unfold it mirrors');
   assert.match(tsx, /ghost\.setAttribute\('data-nested',''\)/, 'a picture keeps its section\'s nesting');
   assert.match(tsx, /top:\(top-HEAD\)\+'px'/, 'the clip starts above the first row, so its rise is never cut');

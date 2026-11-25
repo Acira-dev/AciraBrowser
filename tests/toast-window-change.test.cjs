@@ -20,8 +20,23 @@ test('main asks it on a resize, a blur / minimise / hide, a move and a press on 
  assert.doesNotMatch(main,/mainWindow\.on\(event,\(\)=>\{if\(!dialogDepth\)closeOverlay\(false\);\}\)/,'no unconditional close is left on those events');
 });
 
+test('the one-time Welcome (Beta 14 AL) stays through a resize, a blur, a minimise and a move, and follows the window\'s size meanwhile',()=>{
+ const {closesOnWindowChange,resizeLayout,keptThroughResize}=require('../desktop/native-policy.cjs');
+ const welcome={id:11,kind:'welcome',bounds:{x:12,y:40,width:1176,height:618}};
+ assert.equal(closesOnWindowChange(welcome),false);
+ const layout={views:[{tabId:'a',bounds:{x:0,y:72,width:1200,height:666}}],viewport:{width:1200,height:738},overlay:welcome};
+ assert.deepEqual(resizeLayout(layout,[1200,738],[1000,680]).overlay,{...welcome,bounds:{x:12,y:11,width:976,height:560}},'its frame is window - 24 by window - 120 again, re-centred');
+ assert.equal(keptThroughResize(welcome,0,0).bounds.height,618,'no size change, no change');
+});
+
+test('the interface does not close the welcome on a real window resize either (its frame is re-placed), while every other popup but the tab viewer still closes',()=>{
+ const app=fs.readFileSync(path.join(__dirname,'..','src','App.tsx'),'utf8');
+ assert.match(app,/if \(moved && openRef\.current && openRef\.current !== 'tabs' && openRef\.current !== 'welcome'/);
+});
+
 test('a click in the page still dismisses the toasts: the page mouseDown closes any overlay',()=>{
- assert.match(main,/if\(input\.type==='mouseDown'\)\{closeOverlay\(\);/);
+ /* 17 Nov: named a dismissal, so a question card waiting for its answer takes it as "nobody decided" (card-question-held.test.cjs); every other overlay closes as before */
+ assert.match(main,/if\(input\.type==='mouseDown'\)\{closeOverlay\(false,false,undefined,'dismiss'\);/);
 });
 
 test('the resize\'s own layout keeps the toast stack, on the page\'s bottom edge, and drops a menu (main retired a dropped id without a word: no toast showed again)',()=>{

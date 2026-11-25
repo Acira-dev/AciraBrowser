@@ -141,7 +141,7 @@
 .app.style-acira .browser-shell:is([data-layout=compact],[data-layout=focus]) .address-bar{height:26px}
 /* Founder, 24 Oct: the focus ring sits inside the field (inset 2px, radius concentric with the field's 4px), so the
    focused field keeps 4px clear above and below inside the 36px toolbar at every zoom and never touches its edges. */
-.app.style-acira .browser-shell .address-bar:focus-within{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:-2px;box-shadow:none}
+.app.style-acira .browser-shell .address-bar:focus-within{outline:none;box-shadow:none}/* the focus ring is the active border's (styles/active-border.css); forced colours keep the system's own focus outline on the input */
 .app.style-acira .browser-shell .address-bar .address-field{position:relative;flex:1;min-width:0;height:100%;display:flex;align-items:center}
 .app.style-acira .browser-shell .address-bar .address-field>input{width:100%;height:100%;padding:0 8px!important;font:400 13px/1 var(--font-ui);text-align:left;background:none;border:0;outline:none}
 .app.style-acira .browser-shell .address-bar .address-field[data-display]>input{color:transparent;caret-color:transparent}
@@ -309,7 +309,8 @@
    light and dark (it used to be darker than the strip in light finishes, which read as a hollow, not a selection). */
 .app.style-acira{--tab-strip-recess:rgb(0 0 0 / .05);--tab-lift-active:0 0 0 .5px rgb(0 0 0 / .07),0 1px 2px rgb(0 0 0 / .08),0 2px 8px -3px rgb(0 0 0 / .12)}
 .app.style-acira[data-chrome=dark]{--tab-strip-recess:rgb(0 0 0 / .22);--tab-lift-active:inset 0 0 0 1px rgb(255 255 255 / .07),0 1px 3px rgb(0 0 0 / .4)}
-:root:root .app.style-acira .browser-shell>.acira-tab-row{background-image:linear-gradient(var(--tab-strip-recess),var(--tab-strip-recess))}
+/* The recess band is the strip's own child (App.tsx), not its background: a layout switch that adds or takes the band fades it over the slide while the strip's tabs glide (sidebar.css), where a background on the strip itself stepped in the first frame (Beta 14, Shelf collapse). */
+.app.style-acira .browser-shell>.acira-tab-row>.acira-strip-tone{position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--tab-strip-recess),var(--tab-strip-recess))}
 .app.style-acira .tab-strip-container .tab-strip-selection:not([data-privacy]){background:var(--tab-surface);box-shadow:var(--tab-lift-active)}
 .app.style-acira .tab-strip-container .tabs-strip>.browser-tab:not(.selected){color:color-mix(in srgb,var(--frame-text) 80%,transparent)}
 .app.style-acira .tab-strip-container .tabs-strip>.browser-tab.selected{color:var(--frame-text)}
@@ -329,6 +330,7 @@
    the sidebar switches, the tab row, the bookmarks bar and the focus row glide to their new place with the toolbar
    (G names the toolbar and the sidebar). One element per name: a duplicate aborts the transition. */
 :root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-tab-row{view-transition-name:acira-tab-row}
+:root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-tab-row>.acira-strip-tone{view-transition-name:acira-strip-tone}
 :root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-bookmarks-row{view-transition-name:acira-bookmarks}
 :root:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-focus-row{view-transition-name:acira-focus-row}
 /* Round 2 (M, P02): one size per role, with A's controls (28px, radius 6) and bible §5.1. Chrome icon buttons (the
@@ -361,3 +363,30 @@
 /* Seamless changes chrome visibility, not the address field's finish. A hover
    keeps the correct resting fill; focus still has its normal editing treatment. */
 .app.style-acira .browser-shell[data-seamless] .address-bar:not(:focus-within):hover { background:var(--address-fill); }
+
+/* Beta 14: the side panel sites' icons at the right end of the top-tabs toolbar (components/sidebar/SidePanelIcons.tsx, `toolbar`). One group of the actions' own buttons (28 px, 4 px apart: ui/toolbarFit.ts `siteGroupWidth`);
+   the toolbar fit takes icons off the end (`data-fit-hidden`, the "+" first) and the » menu lists the ones that left. The site's own icon, never tinted; pressed while its panel is open; the unread dot and the sound mark as in the sidebar's row. */
+.app .acira-shell .toolbar-actions>.toolbar-sites{display:flex;align-items:center;gap:4px;flex:none}
+.app .acira-shell .toolbar-sites>.toolbar-site{position:relative;width:28px;min-width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0}
+.app .acira-shell .toolbar-site .sb-sp-glyph{display:grid;place-items:center;width:16px;height:16px;transition:transform var(--fast,120ms) cubic-bezier(.23,1,.32,1)}
+.app .acira-shell .toolbar-site .sb-sp-glyph>:is(img,svg).sb-sp-site{width:16px;height:16px;border-radius:3px}
+.app .acira-shell .toolbar-site:active .sb-sp-glyph{transform:scale(.94)}
+.app .acira-shell .toolbar-site[data-open]{background:var(--hover);color:var(--hover-text)}
+.app .acira-shell .toolbar-site[data-dragging]{opacity:.45}
+.app .acira-shell .toolbar-site[data-drop]::before{content:'';position:absolute;top:5px;bottom:5px;width:2px;border-radius:1px;background:var(--chrome-accent,currentColor)}
+.app .acira-shell .toolbar-site[data-drop=before]::before{left:-3px}
+.app .acira-shell .toolbar-site[data-drop=after]::before{right:-3px}
+.app .acira-shell .toolbar-site .sb-sp-dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--chrome-accent,currentColor);box-shadow:0 0 0 1.5px var(--chrome-sheet,var(--sheet,transparent))}
+.app .acira-shell .toolbar-site .sb-sp-sound{position:absolute;left:6px;top:6px;width:16px;height:16px;pointer-events:none}
+.app .acira-shell .toolbar-site .sb-sp-sound>.tab-sound-meter[data-variant=badge]{display:block;right:-2px;bottom:-2px}
+.app .acira-shell .toolbar-site[data-sound] .sb-sp-glyph{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,right -2px bottom -2px;mask-composite:exclude}
+.app .acira-shell .toolbar-site-add{color:var(--muted-text,inherit)}
+.app .acira-shell .toolbar-site-add:disabled{opacity:.4}
+/* D179: Copy link in the address field (ui/addressCopy.ts). A zero-width slot after the field, so nothing moves; the button is not drawn at rest, shows while the
+   pointer is over the field (or it has the keyboard focus), never while the field is being edited, and the text under it fades out. No transition of its own. */
+.app.style-acira .browser-shell .address-bar .address-copy-slot{position:relative;flex:0 0 0;width:0;height:100%;align-self:stretch}
+.app.style-acira .browser-shell .address-bar .address-copy{position:absolute;right:2px;top:50%;width:22px;height:22px;margin-top:-11px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:none;color:var(--text-muted,currentColor);opacity:0;pointer-events:none;cursor:default}
+.app.style-acira .browser-shell .address-bar:hover .address-copy,.app.style-acira .browser-shell .address-bar .address-copy:focus-visible{opacity:1;pointer-events:auto}
+.app.style-acira .browser-shell .address-bar .address-copy:hover{background:color-mix(in srgb,currentColor 11%,transparent);color:var(--text,currentColor)}
+.app.style-acira .browser-shell .address-bar:has(.address-field[data-focused=true]) .address-copy{opacity:0;pointer-events:none}
+.app.style-acira .browser-shell .address-bar:is(:hover,:has(.address-copy:focus-visible)):not(:has(.address-field[data-focused=true])):has(.address-copy-slot)>.address-field{-webkit-mask-image:linear-gradient(to left,transparent 0,transparent 26px,#000 40px);mask-image:linear-gradient(to left,transparent 0,transparent 26px,#000 40px)}

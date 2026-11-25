@@ -13,6 +13,7 @@ function scaleLayout(layout,factor){
   ...(layout.pageBounds?{pageBounds:rect(layout.pageBounds,factor)}:{}),
   ...(layout.pageRadius!==undefined?{pageRadius:layout.pageRadius*factor}:{}),
   ...(layout.captionHeight!==undefined?{captionHeight:layout.captionHeight*factor}:{}),
+  ...(layout.captionPlateHeight!==undefined?{captionPlateHeight:layout.captionPlateHeight*factor}:{}),
   ...(layout.edge?{edge:{topHeight:layout.edge.topHeight*factor,sideWidth:layout.edge.sideWidth*factor}}:{}),
   ...(layout.assistant?{assistant:{...layout.assistant,bounds:rect(layout.assistant.bounds,factor)}}:{}),
   ...(layout.overlay?{overlay:{...layout.overlay,bounds:rect(layout.overlay.bounds,factor),

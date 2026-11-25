@@ -6,16 +6,17 @@ const usage=require('../desktop/browser-services/usage-facts.cjs');
 
 const BASE_FIELDS=['schema','event','installId','appVersion','channel','platform','arch','language','day'];
 const folder=()=>fs.mkdtempSync(path.join(os.tmpdir(),'acira-metrics-'));
-function make(extra={}){const sent=[];let time=Date.parse('2026-10-25T12:00:00Z');
- const metrics=createMetrics({directory:extra.directory||folder(),endpoint:'https://metrics.example.org/v1/daily',appVersion:'0.9.1',platform:'win32',arch:'x64',language:'en-GB',send:async(url,body)=>{sent.push({url,body:JSON.parse(body)});return extra.status??204;},now:()=>time,...extra});
- return {metrics,sent,advance:ms=>{time+=ms;}};}
+function make(extra={}){const sent=[],others=[];let time=Date.parse('2026-10-25T12:00:00Z');
+ const metrics=createMetrics({directory:extra.directory||folder(),endpoint:'https://metrics.example.org/v1/daily',appVersion:'0.9.1',platform:'win32',arch:'x64',language:'en-GB',installedOn:()=>'2026-10-20',send:async(url,body)=>{const parsed=JSON.parse(body);(parsed.event==='daily'?sent:others).push({url,body:parsed});return extra.status??204;},now:()=>time,...extra});
+ return {metrics,sent,others,advance:ms=>{time+=ms;}};}
 
 test('nothing is sent, and no id exists, before a saved on choice',async()=>{
- const {metrics,sent}=make();
+ const {metrics,sent,others}=make();
  assert.equal((await metrics.status()).choice,'unset');assert.equal((await metrics.status()).enabled,false);
  assert.deepEqual(await metrics.maybeSend(),{sent:false,reason:'off'});
- await metrics.set(false);assert.deepEqual(await metrics.maybeSend(),{sent:false,reason:'off'});
+ await metrics.set(false);await metrics.idle();assert.deepEqual(await metrics.maybeSend(),{sent:false,reason:'off'});
  assert.equal(sent.length,0);assert.equal((await metrics.status()).payload.installId,SAMPLE_ID,'while off the preview shows a placeholder id, not a real one');assert.equal((await metrics.status()).sample,true);
+ assert.deepEqual(others.map(item=>item.body.event),['off'],'the choice to switch it off is the one thing that is sent, and it carries no id');
 });
 
 test('new setup defaults an unset choice on once and preserves every saved choice',async()=>{
@@ -30,7 +31,7 @@ test('new setup defaults an unset choice on once and preserves every saved choic
 });
 
 test('an in-flight successful send cannot restore an opt-out or its deleted id',async()=>{
- let complete;const {metrics}=make({send:()=>new Promise(resolve=>{complete=resolve;})});
+ let complete;const {metrics}=make({send:(url,body)=>JSON.parse(body).event==='daily'?new Promise(resolve=>{complete=resolve;}):Promise.resolve(204)});
  await metrics.set(true);const pending=metrics.maybeSend();await new Promise(resolve=>setImmediate(resolve));await metrics.set(false);complete(204);await pending;
  const status=await metrics.status();assert.equal(status.choice,'off');assert.equal(status.sample,true);
  assert.equal(status.lastSent,'');
@@ -58,13 +59,15 @@ test('the message is small, fixed and carries nothing that identifies a person: 
  const preview=(await metrics.status()).payload;
  assert.deepEqual(await metrics.maybeSend(),{sent:true});
  const body=sent[0].body;
- assert.deepEqual(Object.keys(body).sort(),[...BASE_FIELDS,...usage.FIELDS].sort(),'exactly the documented fields');
+ assert.equal(body.schema,4);assert.deepEqual(Object.keys(body).slice(0,BASE_FIELDS.length),BASE_FIELDS,'the nine base fields come first');
+ const allowed=new Set([...BASE_FIELDS,...usage.MESSAGE_ORDER]);for(const key of Object.keys(body))assert.ok(allowed.has(key),key+' is a documented field');
+ for(const key of [...usage.SNAPSHOT,...usage.USES,...usage.FLAGS.filter(name=>!['installDay','returning'].includes(name)),'minutesActive','sessions','pagesLoaded','daysSinceInstall','crashes','updateResult','trackersBlocked','everUsed','usedInFirst3Days','osVersion'])assert.ok(key in body,key+' is in the message');
  assert.match(body.installId,/^[0-9a-f-]{36}$/);assert.notEqual(body.installId,SAMPLE_ID);assert.equal(body.language,'en','only the language, not the region');assert.equal(body.day,'2026-10-25');
- assert.deepEqual({theme:body.theme,finish:body.finish,tabLayout:body.tabLayout,toolbar:body.toolbar,animation:body.animation,uiLanguage:body.uiLanguage,searchEngine:body.searchEngine,aiFree:body.aiFree,vpn:body.vpn,vpnApp:body.vpnApp,extensions:body.extensions,profiles:body.profiles,siteProtectionOff:body.siteProtectionOff,importSource:body.importSource},
-  {theme:'dark',finish:'burgundy',tabLayout:'sidebar',toolbar:'automatic',animation:'fast',uiLanguage:'fr',searchEngine:'duckduckgo',aiFree:'on',vpn:'on',vpnApp:'Mullvad VPN',extensions:'2-3',profiles:'2',siteProtectionOff:'1',importSource:'chrome'});
+ assert.deepEqual({theme:body.theme,finish:body.finish,tabLayout:body.tabLayout,animation:body.animation,uiLanguage:body.uiLanguage,searchEngine:body.searchEngine,aiFree:body.aiFree,vpn:body.vpn,vpnApp:body.vpnApp,extensions:body.extensions,profiles:body.profiles,siteProtectionOff:body.siteProtectionOff,importSource:body.importSource},
+  {theme:'dark',finish:'burgundy',tabLayout:'sidebar',animation:'fast',uiLanguage:'fr',searchEngine:'duckduckgo',aiFree:'on',vpn:'on',vpnApp:'Mullvad VPN',extensions:'2-3',profiles:'2',siteProtectionOff:'1',importSource:'chrome'});
  assert.deepEqual([body.torTabs,body.splitView,body.torWindows,body.rewind],['1-2','1-2','0','0'],'counts are buckets, never exact numbers');
  assert.deepEqual(body,preview,'"See what\'s sent" is exactly what is sent');
- for(const field of Object.keys(usage.ENUMS))assert.ok(usage.ENUMS[field].includes(body[field]),field+' is a value from its closed list');
+ for(const field of Object.keys(usage.ENUMS))if(field in body)assert.ok(usage.ENUMS[field].includes(body[field]),field+' is a value from its closed list');
  for(const name of usage.USES)assert.ok(usage.COUNT_BUCKETS.includes(body[name]),name+' is a bucket');
  assert.doesNotMatch(Object.values(body).join(' '),/https?:|@|\\|\/Users|history|password/i,'no value is an address, path or account detail');
 });
@@ -74,8 +77,9 @@ test('hostile or unexpected facts can only become a fallback value: no URL, site
  const {metrics,sent}=make({facts:async()=>hostile});await metrics.set(true);await metrics.maybeSend();
  const body=sent[0].body,text=JSON.stringify(body);
  assert.doesNotMatch(text,/evil|secret|Alice|someone|private-search|corp|employer|[A-Z]:\\/i);
- assert.deepEqual([body.theme,body.finish,body.tabLayout,body.toolbar,body.animation,body.uiLanguage,body.searchEngine,body.aiFree,body.vpn,body.vpnApp,body.extensions,body.profiles,body.siteProtectionOff,body.importSource],['system','unknown','unknown','unknown','unknown','other','other','unknown','unknown','none','0','1','6+','none']);
- assert.ok(text.length<1400,'one small message, '+text.length+' bytes');
+ assert.deepEqual([body.theme,body.finish,body.tabLayout,body.animation,body.uiLanguage,body.searchEngine,body.aiFree,body.vpn,body.vpnApp,body.extensions,body.profiles,body.siteProtectionOff,body.importSource],['system','unknown','unknown','unknown','other','other','unknown','unknown','none','0','1','6+','none']);
+ assert.ok(text.length<7000,'one message, '+text.length+' bytes (the function takes 8 KB)');
+ assert.ok(!('toolbar' in body),'`toolbar` is not sent: windowView says the same');
  const broken=make({facts:async()=>{throw new Error('boom');}});await broken.metrics.set(true);assert.equal((await broken.metrics.maybeSend()).sent,true,'a failing fact source still sends the base message with fallbacks');
 });
 
@@ -134,6 +138,45 @@ test('no endpoint, or a route that would hide nothing, sends nothing even when o
  const none=make({endpoint:''});await none.metrics.set(true);assert.deepEqual(await none.metrics.maybeSend(),{sent:false,reason:'no endpoint'});assert.equal((await none.metrics.status()).configured,false);
  const routed=make({routeOk:()=>false});await routed.metrics.set(true);assert.deepEqual(await routed.metrics.maybeSend(),{sent:false,reason:'route'});assert.equal(routed.sent.length,0);
 });
+test('r13: nothing is sent while setup is open, even with the choice on; the first message follows the moment setup has finished',async()=>{
+ let open=true;const run=make({ready:()=>!open});
+ // The Privacy step turns an unset choice on as soon as it shows (and the native side schedules a send 3 s later): that send must not happen.
+ await run.metrics.set(true,{onlyIfUnset:true});assert.equal((await run.metrics.status()).enabled,true);
+ assert.deepEqual(await run.metrics.maybeSend(),{sent:false,reason:'setup'});assert.equal(run.sent.length,0);
+ // Setup is over: the usage notice (section C) now holds the first message until X, a link or 24 hours.
+ open=false;assert.deepEqual(await run.metrics.maybeSend(),{sent:false,reason:'notice'});assert.equal(run.sent.length,0);
+ assert.equal(run.metrics.noticeAct('link').how,'link');assert.deepEqual(await run.metrics.maybeSend(),{sent:true});assert.equal(run.sent.length,1);
+ // Use defaults / Skip setup call the same initialization: an unset choice goes on once, a saved opt-out is never changed.
+ const skipped=make({});assert.equal((await skipped.metrics.set(true,{onlyIfUnset:true})).choice,'on');
+ const optedOut=make({});await optedOut.metrics.set(false);assert.equal((await optedOut.metrics.set(true,{onlyIfUnset:true})).choice,'off');assert.deepEqual(await optedOut.metrics.maybeSend(),{sent:false,reason:'off'});
+});
+test('r13: the setup gate reads setup\'s own record: open only while it exists and says neither complete, skipped nor upgraded',()=>{
+ const {setupRecordFinished}=require('../desktop/browser-services/setup-gate.cjs');
+ const write=(installation)=>{const dir=folder();fs.mkdirSync(path.join(dir,'setup'));fs.writeFileSync(path.join(dir,'setup','onboarding.json'),JSON.stringify(installation===undefined?{}:{installation}));return dir;};
+ assert.equal(setupRecordFinished(folder()),true,'no record at all (an old profile): finished');
+ assert.equal(setupRecordFinished(write(undefined)),true,'a record with no installation part: finished');
+ assert.equal(setupRecordFinished(write({complete:false})),false,'setup open');
+ assert.equal(setupRecordFinished(write({})),false,'setup open (nothing says finished)');
+ for(const key of ['complete','skipped','upgraded'])assert.equal(setupRecordFinished(write({[key]:true})),true,key);
+ const damaged=folder();fs.mkdirSync(path.join(damaged,'setup'));fs.writeFileSync(path.join(damaged,'setup','onboarding.json'),'{not json');
+ assert.equal(setupRecordFinished(damaged),true,'a damaged record can never hold the message for good');
+});
+test('r13: the setup fact says skipped for a skipped setup (Skip setup writes skipped AND complete), completed for a finished one, unknown otherwise',()=>{
+ assert.equal(usage.setupFactOf({complete:true,skipped:true}),'skipped');
+ assert.equal(usage.setupFactOf({complete:true,skipped:false}),'completed');
+ assert.equal(usage.setupFactOf({complete:false,skipped:false}),'unknown');
+ assert.equal(usage.setupFactOf(undefined),'unknown');assert.equal(usage.setupFactOf(null),'unknown');
+ assert.match(fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8'),/facts\.setup=usage\.setupFactOf\(i\)/);
+});
+test('r13: main reads setup as finished from its own record, and Use defaults, Skip setup and Escape all call the install count',()=>{
+ const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/ready:\(\)=>setupRecordFinished\(app\.getPath\('userData'\)\)/);
+ const onboarding=fs.readFileSync(path.join(__dirname,'../src/features/onboarding/Onboarding.tsx'),'utf8');
+ const leave=onboarding.slice(onboarding.indexOf('const leave = async'),onboarding.indexOf('const profiles = state.browserProfiles'));
+ assert.match(onboarding,/const countInstall = \(path: "completed" \| "defaults" \| "skipped"\) =>\s+void runtime\s+\.service\(\{ type: "metrics\.set", enabled: true, onlyIfUnset: true, where: "setup", setup: \{ path: resumedSetup\.current \? "abandoned" : path, step, seconds:/);
+ const quickAt=leave.indexOf('if (quick)'),countAt=leave.indexOf('countInstall(skip ?'),skipAt=leave.indexOf('if (skip)');
+ assert.ok(quickAt>=0&&countAt>quickAt&&countAt<skipAt,'counted after the profile short setup returns and before the skip and finish branches, so every finished setup counts and a second profile never does');
+});
 test('only a plain https address is accepted: no credentials, query, fragment; http only for a local test server',()=>{
  assert.equal(checkedEndpoint('https://metrics.example.org/v1/daily'),'https://metrics.example.org/v1/daily');
  for(const bad of ['http://metrics.example.org/','https://user:pw@metrics.example.org/','https://metrics.example.org/?key=abc','https://metrics.example.org/#x','ftp://x/','nonsense',''])assert.equal(checkedEndpoint(bad),'',bad);
@@ -172,11 +215,19 @@ test('main wires the facts and the use counters in one place each, and never pas
  const calls=[...main.matchAll(/usageNote\('([A-Za-z]+)'\)/g)].map(match=>match[1]);
  const ratingOnly=Object.keys(require('../desktop/browser-services/feature-rating.cjs').SOURCES).filter(name=>!usage.USES.includes(name));
  for(const name of calls)assert.ok(usage.USES.includes(name)||ratingOnly.includes(name),name+' is a name from the closed list');
- for(const name of usage.USES)assert.ok(calls.includes(name),name+' is counted somewhere');
- assert.doesNotMatch(main,/usageNote\([^')]/,'usageNote only takes a literal feature name');
+ // Beta 14: that every use is counted somewhere, and by whom, is tests/usage-counters-wired.test.cjs (desktop/browser-services/usage-producers.cjs says who counts each name).
+ const source0=()=>fs.readFileSync(path.join(__dirname,'../src/features/metrics/noteUse.ts'),'utf8');
+ assert.match(source0(),/protection: 'protectionPanel'/,'the protection panel is counted when its popup opens (noteUse.ts POPUP_USES)');
+ // pages loaded (counted by the fact it happened, in ordinary windows only) and the sampler, the cold start and the crash counter are wired in main
+ assert.match(main,/wc\.on\('did-navigate',\(\)=>\{if\(!privateMode&&!torMode\)try\{metricsService\(\)\.notePage\(\);\}catch\{\}\}\);/);
+ for(const wired of [/usageStart\(\);void metricsService\(\)\.maybeSend\(\)/,/usageCrash\(details\)/,/usageColdStartMs=Math\.round\(process\.uptime\(\)\*1000\)/,/onBlocked:\(\)=>\{try\{metricsService\(\)\.noteTrackers\(1\)/,/before-quit',\(\)=>\{try\{metricsInstance\?\.flush\(\)/])assert.match(main,wired,String(wired));
+ // usageNote takes a literal feature name, or `name` from usage-hooks.cjs: a loop over names that tests/usage-hooks.test.cjs proves are only closed-list uses.
+ assert.doesNotMatch(main,/usageNote\((?!'|name\)|request\.name\))[^)]/,'usageNote only takes a literal feature name, a name from usage-hooks, or an interface note that was checked against a closed list');
+ for(const call of main.matchAll(/usageNote\(request\.name\)/g))assert.match(main.slice(Math.max(0,call.index-90),call.index),/\.includes\(request\.name\)\)$/,'an interface note is checked against its closed list first');
+ for(const call of main.matchAll(/usageNote\(name\)/g))assert.match(main.slice(Math.max(0,call.index-260),call.index),/for\(const name of (usageHooks\(\)|hooks)\.for(Action|Command)\(/,'usageNote(name) only in a loop over the hook tables');
 });
 
 test('a test profile never sends to the shipped (live) endpoint: only an address QA names itself', () => {
  const main = require('fs').readFileSync(require('path').join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
- assert.match(main, /endpoint:test\?\(process\.env\.ACIRA_METRICS_ENDPOINT\|\|''\):require\('\.\/browser-services\/metrics-config\.cjs'\)\.endpoint/);
+ assert.match(main, /endpoint:test\?\(process\.env\.ACIRA_METRICS_ENDPOINT\|\|''\):\(app\.isPackaged&&!buildIdentity\.qa\?require\('\.\/browser-services\/metrics-config\.cjs'\)\.endpoint:''\)/, 'Beta 14 B9: only a packaged, real-identity build reaches the live address');
 });

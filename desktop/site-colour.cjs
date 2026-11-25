@@ -8,6 +8,9 @@
  *   1. <meta name=theme-color>, as Chromium resolved it (the `did-change-theme-color` event: media queries and alpha done)
  *   2. the page's own top edge: one thin capturePage of the top 24 DIP, when it is one flat colour
  *   3. the site's icon, from the icon store the sidebar already uses (nothing is fetched: a brand colour of the icon's colourful pixels)
+ *   4. (14.1) the page's own colour: one capturePage of the top BAND_DIP of the page, the brand colour that covers the most of it, when it covers at least
+ *      BAND_SHARE (a page that is its colour: coveryourtracks.eff.org's green under a black logo bar, no theme-color, a grey icon, had no colour at all; the tester,
+ *      21 Nov). A white or black page, or one of photos in many colours, still gives nothing.
  * A reading never repaints at once: `createHold` (math module) shows a new colour only when it is more than dE 3.5 from the shown one and
  * the same candidate was read twice over 220 ms. A navigation to another site skips the dwell, not the distance. Re-reads happen on the
  * triggers in researcher A's table (load + 250 ms, +1.5 s, +4 s; an in-page navigation +400 ms; a theme-color change; an icon change),
@@ -19,6 +22,8 @@
 const math = require('./site-color-math.cjs');
 
 const STRIP_DIP = 24, FLAT_SHARE = .85, SEGMENT_AGREE = 6, TIMEOUT_MS = 3000, HOST_MEMORY = 200;
+/** Source 4 (14.1): the band of the page that is read for its own colour, and the share of it one brand colour must cover. */
+const BAND_DIP = 200, BAND_SHARE = .3;
 const rgbOf = hex => { const p = math.fromHex(hex); return p ? p.slice(0, 3) : null; };
 /** A colour a person would call the site's colour (A: saturated, luminance between near-black and near-white). */
 function isBrand(rgb) {
@@ -38,6 +43,30 @@ function flatStrip(bitmap, width, height) {
   return { rgb: whole.rgb, hex: whole.hex, share: whole.share };
 }
 
+/** Source 4 (14.1): the brand colour covering the most of a band of the page (BGRA), with the share of the band it covers: {rgb, hex, share} when that share is at
+ *  least BAND_SHARE, else null. Pixels are binned 4 bits a channel (as `math.summarise` does); a bin and its neighbours count as one colour, so a gradient or
+ *  text anti-aliasing does not split it; only pixels that are brand colours on their own (isBrand) vote. Every 2nd pixel each way. */
+function bandBrand(bitmap, width, height, { share = BAND_SHARE, step = 2 } = {}) {
+  if (!bitmap || !(width > 0) || !(height > 0) || bitmap.length < width * height * 4) return null;
+  const bins = new Map(); let total = 0;
+  for (let y = 0; y < height; y += step) for (let x = 0; x < width; x += step) {
+    const at = (y * width + x) * 4, b = bitmap[at], g = bitmap[at + 1], r = bitmap[at + 2]; total++;
+    if (!isBrand([r, g, b])) continue;
+    const key = (r >> 4) << 8 | (g >> 4) << 4 | (b >> 4), bin = bins.get(key);
+    if (bin) { bin[0]++; bin[1] += r; bin[2] += g; bin[3] += b; } else bins.set(key, [1, r, g, b]);
+  }
+  if (!total || !bins.size) return null;
+  let best = null;
+  for (const [key, bin] of bins) {
+    const kr = key >> 8, kg = (key >> 4) & 15, kb = key & 15; let n = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dg = -1; dg <= 1; dg++) for (let db = -1; db <= 1; db++) { const near = bins.get((kr + dr) << 8 | (kg + dg) << 4 | (kb + db)); if (near && kr + dr >= 0 && kg + dg >= 0 && kb + db >= 0 && kr + dr < 16 && kg + dg < 16 && kb + db < 16) n += near[0]; }
+    if (!best || n > best.n || (n === best.n && bin[0] > best.bin[0])) best = { n, bin };
+  }
+  const covered = best.n / total; if (covered < share) return null;
+  const rgb = [best.bin[1], best.bin[2], best.bin[3]].map(v => Math.round(v / best.bin[0]));
+  return isBrand(rgb) ? { rgb, hex: math.toHex(rgb), share: Math.round(covered * 1000) / 1000 } : null;
+}
+
 /** The brand colour of a stored icon (a data URL) via the bitmap the caller decoded: {rgb} or null. */
 function iconBrand(bitmap, width, height) {
   const colours = math.iconColours(bitmap, width, height);
@@ -54,17 +83,19 @@ function createSiteColour({
   visible = () => true,            // is this tab's page on screen right now
   stripOf = async () => null,      // (tabId) -> {bitmap,width,height} of the top 24 DIP, or null
   iconOf = async () => null,       // (tabId, urls) -> '#rrggbb' brand colour of the icon the page announced, or null (one cached fetch, never repeated)
+  bandOf = async () => null,       // (14.1) (tabId) -> {bitmap,width,height} of the top BAND_DIP of the page, or null
   rememberHosts = true,
 } = {}) {
   const tabs = new Map(), hostMemory = new Map();
   const remember = (host, hex) => { if (!rememberHosts || !host) return; hostMemory.delete(host); hostMemory.set(host, hex); if (hostMemory.size > HOST_MEMORY) hostMemory.delete(hostMemory.keys().next().value); };
 
   function attach(tabId, { emit, url = () => '' }) {
-    const tab = { id: tabId, emit, url, host: null, theme: null, themeSeen: false, settleUntil: 0, hold: math.createHold(), shown: null, none: 0, timers: new Set(), generation: 0, force: false, disposed: false, icons: [], iconColour: undefined, sampledVisible: false };
+    const tab = { id: tabId, emit, url, host: null, shownHost: null, theme: null, themeSeen: false, settleUntil: 0, hold: math.createHold(), shown: null, none: 0, timers: new Set(), generation: 0, force: false, disposed: false, icons: [], iconColour: undefined, sampledVisible: false };
     tabs.set(tabId, tab);
     const later = (ms, fn) => { const t = schedule(() => { tab.timers.delete(t); if (!tab.disposed) fn(); }, ms); t.unref?.(); tab.timers.add(t); return t; };
     const clear = () => { for (const t of tab.timers) cancel(t); tab.timers.clear(); };
-    const publish = hex => { if (hex === tab.shown) return; tab.shown = hex; emit({ siteColor: hex }); };
+    // (14.1) every colour goes out with the site it was read for: the interface's ring and folder use it only while that site is the one shown
+    const publish = hex => { const host = hex ? tab.host : null; if (hex === tab.shown && host === tab.shownHost) return; tab.shown = hex; tab.shownHost = host; emit({ siteColor: hex, siteColorHost: host }); };
 
     async function resolve() {
       if (tab.disposed) return;
@@ -79,8 +110,20 @@ function createSiteColour({
         if (flat && isBrand(flat.rgb)) found = { rgb: flat.rgb, from: 'edge' };
       }
       if (!found && (tab.icons.length || tab.iconColour)) {
-        if (tab.iconColour === undefined) { tab.iconColour = null; const hex = await iconOf(tabId, tab.icons).catch(() => null); if (token !== tab.generation || tab.disposed) return; if (!tab.iconColour) tab.iconColour = hex || null; }
+        if (tab.iconColour === undefined) {
+          tab.iconColour = null; const asked = tab.icons, hex = await iconOf(tabId, asked).catch(() => null);
+          if (tab.disposed) return;
+          // D164: the answer is kept for the icons it was asked for, also when another pass started meanwhile (it was thrown away, and the page had no icon colour until its next icon event)
+          if (tab.icons === asked && !tab.iconColour) tab.iconColour = hex || null;
+          if (token !== tab.generation) { if (hex && tab.icons === asked) later(0, () => resolve()); return; }
+        }
         if (tab.iconColour) found = { rgb: rgbOf(tab.iconColour), from: 'icon' };
+      }
+      if (!found && visible(tabId)) {
+        const band = await bandOf(tabId).catch(() => null);
+        if (token !== tab.generation || tab.disposed) return;
+        const brand = band && bandBrand(band.bitmap, band.width, band.height);
+        if (brand) found = { rgb: brand.rgb, from: 'page' };
       }
       if (token !== tab.generation || tab.disposed) return;
       const force = tab.force; tab.force = false;
@@ -92,7 +135,11 @@ function createSiteColour({
         else if (result.changed) { const hex = math.toHex(result.rgb); publish(hex); remember(tab.host, hex); }
         return;
       }
-      // Nothing with a brand colour: the glow goes away, but only when it is not a one-off (twice, or right after a change of site).
+      // D164: a site keeps the colour it was shown with until a DIFFERENT colour is read. A reading that finds nothing on the same site (a preload's sub-load ending, a capture that came back
+      // empty, a same-site page whose icon is still being fetched, a remembered colour before the page announced its icon) is no reason to drop it: that was the glow leaving and coming back
+      // on one page. Off, private and another site are decided above and below, as before.
+      if (tab.shown && tab.host && tab.shownHost === tab.host) { tab.none = 0; return; }
+      // Nothing with a brand colour on a site whose colour is not the one shown: the glow goes away, but only when it is not a one-off (twice, or right after a change of site).
       tab.none++;
       if (tab.shown && (force || tab.none >= 2)) { tab.hold = math.createHold(); publish(null); remember(tab.host, null); }
       else if (tab.shown) later(500, () => resolve());
@@ -106,7 +153,7 @@ function createSiteColour({
         const host = hostOf(newUrl);
         if (host !== tab.host) {
           tab.host = host; tab.theme = null; tab.hold = math.createHold(); tab.force = true; tab.none = 0; tab.icons = []; tab.iconColour = undefined; tab.iconHanded = false;
-          if (host && hostMemory.has(host) && level() !== 'off' && !blocked(tabId)) { const hex = hostMemory.get(host); if (hex !== tab.shown) { tab.shown = hex; emit({ siteColor: hex }); if (hex) tab.hold.push(rgbOf(hex), now(), { force: true }); } }
+          if (host && hostMemory.has(host) && level() !== 'off' && !blocked(tabId)) { const hex = hostMemory.get(host); if (hex !== tab.shown || (hex ? host : null) !== tab.shownHost) { tab.shown = hex; tab.shownHost = hex ? host : null; emit({ siteColor: hex, siteColorHost: tab.shownHost }); if (hex) tab.hold.push(rgbOf(hex), now(), { force: true }); } }
         }
         clear();
       },
@@ -191,4 +238,4 @@ function decodeIcon(nativeImage, dataUrl) {
   try { const image = nativeImage.createFromDataURL(dataUrl); if (image.isEmpty()) return null; const size = image.getSize(1), bitmap = image.toBitmap({ scaleFactor: 1 }); return bitmap.length === size.width * size.height * 4 ? { bitmap, width: size.width, height: size.height } : null; } catch { return null; }
 }
 
-module.exports = { createSiteColour, isBrand, flatStrip, iconBrand, hostOf, captureStrip, decodeIcon, iconColour, brandOfIcon };
+module.exports = { createSiteColour, isBrand, flatStrip, bandBrand, BAND_DIP, BAND_SHARE, iconBrand, hostOf, captureStrip, decodeIcon, iconColour, brandOfIcon };

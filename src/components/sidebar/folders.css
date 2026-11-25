@@ -1,0 +1,152 @@
+/* Beta 14, section M: tab groups as outline folders that draw themselves (GroupFolderGlyph.tsx, folderGlyph.ts, groupAutoColors.ts).
+   The brief: an outline folder in both states, flat; no background colour behind a folder, open or closed; the colour lives in the folder's line work
+   and its name; the folder's one line morphs when it opens and closes (the guide line beside its tabs draws and retracts with it) and closing is the exact reverse.
+   Every duration is a number of "units" times --motion-scale (Premium 1.7, Fast .6, Off 0), so the speed setting scales it and Off makes it instant. */
+
+/* The group's colour, as one animatable token: the palette colour the group carries, or (automatic) the colour its sites gave it. */
+@property --gc{syntax:'<color>';inherits:true;initial-value:transparent}
+
+.app.style-acira .acira-sidebar .sb-group{
+ --fg-u:calc(1ms * var(--motion-scale,1));            /* one unit of the draw timeline */
+ --fg-ease:cubic-bezier(.65,0,.35,1);                  /* the website hero's draw curve: symmetric, so playing it backward is itself */
+ --gc-line-l:.555;--gc-name-l:.45;--gc-name-c:1;--gc-name-max:.13;  /* item05 --b14-l: .555 light, .72 dark; the name's chroma is capped at .13 on a light sidebar only (b14-folders-r2.css lines 31-32) */
+ --gc:var(--group-color);
+ transition:--gc calc(240ms * var(--motion-e,1)) var(--sb-ease)}
+@container style(--sidebar-tone: dark){.app.style-acira .acira-sidebar .sb-group{--gc-line-l:.72;--gc-name-l:.86;--gc-name-c:.7;--gc-name-max:1}}
+/* Automatic: hue and chroma from the sites (groupAutoColors.ts), lightness from the sidebar's tone. A palette colour is used as it is. */
+.app.style-acira .acira-sidebar .sb-group[data-tint=auto]{--gc:oklch(var(--gc-line-l) var(--gc-c) calc(var(--gc-h) * 1deg))}
+
+/* ---- the icon: ONE line in the group's colour, nothing behind, nothing filled ---- */
+.app.style-acira .acira-sidebar .sb-group-folder{color:oklch(from var(--gc) calc(l - .07) c h)}  /* light: a 1 px line at the palette's lightness reads pale on white, so the line work takes a step deeper of the same hue (item05) */
+@container style(--sidebar-tone: dark){.app.style-acira .acira-sidebar .sb-group-folder{color:var(--gc)}}
+.app.style-acira .acira-sidebar .sb-group-folder>.fg{display:grid;place-items:center;overflow:visible}
+.app.style-acira .acira-sidebar .fg-svg{grid-area:1/1;display:none;overflow:visible;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.app.style-acira .acira-sidebar .fg-x1{display:block;stroke-width:1.25}
+.app.style-acira .acira-sidebar .fg-x15{stroke-width:1.875}
+/* 150%: the same folder drawn on the device-pixel grid, so every straight line is centred on a whole device pixel (100% and 200% use the first drawing) */
+@media (min-resolution:1.4dppx) and (max-resolution:1.6dppx){
+ .app.style-acira .acira-sidebar .fg-x1{display:none}
+ .app.style-acira .acira-sidebar .fg-x15{display:block}
+}
+/* the name: a deep (light sidebar) or pale (dark) shade of the folder's own hue, so the colour reads on the row without any fill */
+.app.style-acira .acira-sidebar .sb-group[data-tint]>.sb-group-header .sb-group-name{color:oklch(from var(--gc) var(--gc-name-l) calc(min(c,var(--gc-name-max)) * var(--gc-name-c)) h)}
+
+/* ---- the line morphs ----
+   Closed it is a plain outline folder, open it is the drop-front folder: the same path with the same commands, `d` moves between the two (folderGlyph.ts), the front
+   drops and widens while the lip sweeps across from the right wall. 240 units on the website hero's curve, which is symmetric, so closing is the exact reverse.
+   `.fg[data-open]` is the folder open, or a tab carried over it. The transition ends on the settled drawing: it is the same element and the same `d`, nothing is swapped. */
+.app.style-acira .acira-sidebar .fg-m{d:var(--dc);transition:d calc(240 * var(--fg-u)) var(--fg-ease)}
+.app.style-acira .acira-sidebar .fg[data-open] .fg-m{d:var(--do)}
+/* the two settled drawings exist only for Reduce Motion */
+.app.style-acira .acira-sidebar .fg-c,.app.style-acira .acira-sidebar .fg-o{display:none}
+/* Reduce Motion (the app's setting or the system's): the line does not travel. The new drawing replaces the old one with a short cross-fade; specific enough, and !important,
+   to beat the sidebar's blanket "transition:none!important" for reduced motion. */
+.app.style-acira .acira-sidebar[data-reduced-motion] .fg-m{display:none}
+.app.style-acira .acira-sidebar[data-reduced-motion] .fg-c,.app.style-acira .acira-sidebar[data-reduced-motion] .fg-o{display:inline;transition:opacity 120ms linear!important}
+.app.style-acira .acira-sidebar[data-reduced-motion] .fg-o{opacity:0}
+.app.style-acira .acira-sidebar[data-reduced-motion] .fg[data-open] .fg-o{opacity:1}
+.app.style-acira .acira-sidebar[data-reduced-motion] .fg[data-open] .fg-c{opacity:0}
+@media (prefers-reduced-motion:reduce){
+ .app.style-acira .acira-sidebar .fg-m{display:none}
+ .app.style-acira .acira-sidebar .fg-c,.app.style-acira .acira-sidebar .fg-o{display:inline;transition:opacity 120ms linear!important}
+ .app.style-acira .acira-sidebar .fg-o{opacity:0}
+ .app.style-acira .acira-sidebar .fg[data-open] .fg-o{opacity:1}
+ .app.style-acira .acira-sidebar .fg[data-open] .fg-c{opacity:0}
+}
+
+/* ---- the guide line beside the folder's tabs: draws downward as the folder opens, retracts upward as it closes ---- */
+.app.style-acira .acira-sidebar .sb-group.ed-rail-tab-group .sb-group-members::before{background:var(--gc);clip-path:inset(0 0 0 0 round 1px);transition:clip-path calc(173 * var(--fg-u)) var(--fg-ease) 0s}
+/* closed: nothing of the line is left (the retract is a copy of the line at its open height, folderRail.ts: the rows go at once and fade as copies) */
+.app.style-acira .acira-sidebar .sb-group.ed-rail-tab-group[data-collapsed]:not([data-holds-active]) .sb-group-members::before{opacity:var(--sb-rail);clip-path:inset(0 0 100% 0 round 1px);transition:none}
+/* the retracting copy of the line while the folder closes */
+.app.style-acira .acira-sidebar .sb-group-members>.fg-rail-copy{position:absolute;z-index:1;top:0;left:var(--sb-rail-x);width:var(--ng-w,2px);border-radius:1px;background:var(--gc);opacity:var(--sb-rail);pointer-events:none;
+ -webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade,12px),#000 calc(100% - var(--sb-rail-fade,12px)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade,12px),#000 calc(100% - var(--sb-rail-fade,12px)),transparent)}
+
+/* ---- groups inside groups (Beta 14, AE; runtime/groupNesting.ts, nestRail.ts) ----
+   Every group's line sits exactly under the centre of its own folder (x 14 of the group's box) and is two DEVICE pixels wide (2px at 100%, 1.3333px at 150%): the only
+   width that is both crisp and exactly centred at 150%. A group that holds groups draws a connecting line: a trunk and a small curve into each inner group, one stroke
+   (nestRail.ts); an inner group starts where its parent's tabs start, with its own line under its own folder and its tabs the usual 6px past that line. */
+.app.style-acira .acira-sidebar{--ng-w:2px;--ng-line-o:.3;--ng-fade:18px}
+@media (min-resolution:1.4dppx) and (max-resolution:1.6dppx){
+ .app.style-acira .acira-sidebar{--ng-w:1.3333px}
+ /* item24 groupNest.css: the inner groups start 21.3333px in (32 device px) so their folder and line land on whole device pixels */
+ .app.style-acira .acira-sidebar .sb-group-members>.sb-group[data-nested-group]{margin-left:21.3333px}
+}
+.app.style-acira .acira-sidebar .sb-group-members>.sb-group{margin-left:var(--sb-group-indent);min-width:0}
+/* item24 groupNest.css: an inner group's line sits under its folder's centre (14px), its tabs the usual 6px past the line; the line is fainter (--ng-inner-o .42, square ends) */
+.app.style-acira .acira-sidebar .sb-group[data-nested-group]>.sb-group-members{--sb-group-indent:calc(14px + var(--ng-w,2px) / 2 + 6px)}
+.app.style-acira .acira-sidebar .sb-group[data-nested-group]>.sb-group-members::before{opacity:.42;border-radius:0}
+/* the connector replaces today's line in a parent: the same draw (downward) and retract (upward) as the folder's own line, so the curves appear as the line reaches them */
+.app.style-acira .acira-sidebar .sb-group[data-has-inner]>.sb-group-members::before{content:none}
+.app.style-acira .acira-sidebar .sb-group-members>.sb-group-rail{position:absolute;z-index:1;left:0;right:0;top:0;bottom:0;pointer-events:none;color:var(--gc);--cw:var(--ng-w);--co:var(--ng-line-o);--cf:var(--ng-fade);
+ clip-path:inset(0 0 0 0);transition:clip-path calc(173 * var(--fg-u)) var(--fg-ease) 0s}
+.app.style-acira .acira-sidebar .sb-group[data-collapsed]:not([data-holds-active]):not([data-nest-target])>.sb-group-members>.sb-group-rail{clip-path:inset(0 0 100% 0);transition:none}
+/* item24 groupNest.css: the connector's strokes, one opacity over the whole stroke, the path moving on the sidebar's spring (a carry: its own 180 ms ease) */
+.app.style-acira .acira-sidebar .sb-group-rail>.ng-conn{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
+.app.style-acira .acira-sidebar .sb-group[data-nest-target]>.sb-group-members>.sb-group-rail{clip-path:none;transition:none}
+.app.style-acira .acira-sidebar .ng-conn>.ng-g{opacity:var(--co);transition:opacity 180ms cubic-bezier(.22,1,.36,1)}
+.app.style-acira .acira-sidebar .ng-trunk,.app.style-acira .acira-sidebar .ng-preview,.app.style-acira .acira-sidebar .ng-lifted{fill:none;stroke-width:var(--cw);stroke-linecap:round;stroke-linejoin:round;transition:d var(--ng-dms,480ms) linear(0,.10848,.22451,.33768,.4423,.53567,.61695,.6864,.74492,.79365,.83386,.8668,.89359,.91527,.93272,.94672,.9579,.96681,.97388,.97948,.98391,.9874,.99015,.9923,.994,.99532,.99636,.99717,.9978,.99829,.99867,.99897,1),stroke-width 180ms cubic-bezier(.22,1,.36,1)}
+.app.style-acira .acira-sidebar .ng-conn .ng-preview{stroke-opacity:0;transition:d 180ms cubic-bezier(.22,1,.36,1),stroke-opacity 180ms cubic-bezier(.22,1,.36,1),stroke-width 180ms cubic-bezier(.22,1,.36,1)}
+.app.style-acira .acira-sidebar .ng-conn .ng-preview[data-on]{stroke-opacity:1}
+.app.style-acira .acira-sidebar .ng-conn .ng-lifted{stroke-opacity:0;transition:stroke-opacity 180ms cubic-bezier(.22,1,.36,1),stroke-width 180ms cubic-bezier(.22,1,.36,1)}
+/* While a group is carried the rows move by the room it opens; the connector follows on the carry's own 180 ms ease. */
+/* E9: what stays of a carried group under its header (the current tab's row, its line) is lifted with it: hidden for the carry, never left behind. */
+.app.style-acira .acira-sidebar .sb-group[data-ng-lift]>.sb-group-members{visibility:hidden}
+.app.style-acira .acira-sidebar .sb-tabs[data-ng-carry] .sb-group-rail{overflow:visible!important}
+.app.style-acira .acira-sidebar .sb-tabs[data-ng-carry] .ng-conn .ng-trunk{transition:d 180ms cubic-bezier(.22,1,.36,1),stroke-width 180ms cubic-bezier(.22,1,.36,1)}
+/* an inner group whose parent is folded goes with the parent's rows: its header is gone and its current tab stands where the parent's own tabs stand */
+.app.style-acira .acira-sidebar .sb-group[data-hidden]{margin-left:0}
+.app.style-acira .acira-sidebar .sb-group[data-hidden]>.sb-group-header,.app.style-acira .acira-sidebar .sb-group[data-hidden]>.sb-header-add{display:none}
+.app.style-acira .acira-sidebar .sb-group[data-hidden]>.sb-group-members::before{content:none}
+
+/* ---- carrying a group (Beta 14, AE: groupCarry.ts; the values are item24 groupNest.css section 3) ----
+   The group a carried group would land inside: a soft wash of its own colour on its header, its folder opens, and a plain line there gives way to the connector with its elbow. */
+.app.style-acira .acira-sidebar .sb-group>.sb-group-header{transition:background-color 180ms cubic-bezier(.22,1,.36,1)}
+.app.style-acira .acira-sidebar .sb-group[data-nest-target]>.sb-group-header{background:color-mix(in srgb,var(--group-color) 13%,transparent)}
+@container style(--sidebar-tone: dark){.app.style-acira .acira-sidebar .sb-group[data-nest-target]>.sb-group-header{background:color-mix(in srgb,var(--group-color) 17%,transparent)}}
+.app.style-acira .acira-sidebar .sb-group[data-nest-target]>.sb-group-header .fg-m{d:var(--do)}
+.app.style-acira .acira-sidebar[data-reduced-motion] .sb-group[data-nest-target]>.sb-group-header .fg-o{opacity:1}
+.app.style-acira .acira-sidebar[data-reduced-motion] .sb-group[data-nest-target]>.sb-group-header .fg-c{opacity:0}
+.app.style-acira .acira-sidebar .sb-group-members::before{transition:opacity 180ms cubic-bezier(.22,1,.36,1)}
+.app.style-acira .acira-sidebar .sb-group[data-nest-target]>.sb-group-members::before{opacity:0}
+/* The carried group: a compact chip of the app's frosted glass (the menus' --frost-fill / --frost-blur / --frost-shadow, a hairline rim and a faint wash of the group's colour), its
+   folder, name and a quiet count centred. It morphs out of the header row (--g 0 = the row, 1 = the chip; groupCarry.ts drives it per frame) and back into a row where it lands. */
+.app .ng-chip{position:fixed;left:0;top:0;z-index:1000;display:flex;align-items:center;gap:8px;box-sizing:border-box;margin:0;padding:0 12px 0 6px;
+ border-radius:8px;pointer-events:none;isolation:isolate;white-space:nowrap;color:var(--ng-gn);--g:0;will-change:transform;--fg-u:calc(1ms * var(--motion-scale,1));--fg-ease:cubic-bezier(.65,0,.35,1)}
+.app .ng-chip::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:var(--g);
+ background:color-mix(in srgb,var(--group-color) 8%,var(--frost-fill,var(--glass)));
+ -webkit-backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);backdrop-filter:blur(var(--frost-blur,32px)) saturate(1.45);
+ box-shadow:inset 0 0 0 1px rgb(var(--ink,0 0 0)/.12),0 1px 2px rgb(0 0 0/.12),0 8px 22px -8px rgb(0 0 0/.38)}
+.app.opaque-glass .ng-chip::before{background:var(--overlay);-webkit-backdrop-filter:none;backdrop-filter:none}
+/* Recommended take: the chip rounds to a pill as it lifts (8px as a row, 15px as a chip). :root[data-ngchip=std] keeps the tab radius. */
+.app .ng-chip{border-radius:calc(8px + var(--g) * 7px)}
+:root[data-ngchip=std] .app .ng-chip{border-radius:8px}
+.app .ng-chip-icon{flex:none;display:grid;place-items:center;width:16px;height:16px;color:var(--ng-gc)}
+.app .ng-chip-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.app .ng-chip-count{flex:none;font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--ng-gn);opacity:calc(var(--g) * .6)}
+/* the folder on the chip: the same drawing and morph as the header's (the chip is outside the sidebar, so the rules are repeated for it) */
+.app .ng-chip .fg{display:grid;place-items:center;overflow:visible}
+.app .ng-chip .fg-svg{grid-area:1/1;display:none;overflow:visible;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.app .ng-chip .fg-x1{display:block;stroke-width:1.25}
+.app .ng-chip .fg-x15{stroke-width:1.875}
+@media (min-resolution:1.4dppx) and (max-resolution:1.6dppx){.app .ng-chip .fg-x1{display:none}.app .ng-chip .fg-x15{display:block}}
+.app .ng-chip .fg-m{d:var(--dc);transition:d calc(240 * var(--fg-u)) var(--fg-ease)}
+.app .ng-chip .fg[data-open] .fg-m{d:var(--do)}
+.app .ng-chip .fg-c,.app .ng-chip .fg-o{display:none}
+
+/* ---- folders in an area of their own (Settings > Sidebar > Tab groups: above / below) ----
+   One clearly distinct area with no tray behind it: the folders sit together and the line that ends the area is the stronger line the sidebar already has
+   (the stock divider is its faint one), with a little more room around it. */
+:root:root:root .app.style-acira .acira-sidebar .sb-sep[data-flip="sep:folders"]{--sb-line:var(--sb-line-strong);margin-block:8px}  /* panels.css sets the stock divider with :root:root:root */
+
+/* ---- no background colour behind a folder, in any state ----
+   A tab carried over a folder: a 1 px ring in the folder's colour (line work, like the rest) instead of the tint, and the folder draws itself open.
+   Hover keeps the sidebar's own neutral row hover, the same ink every row uses, never a colour. */
+.app.style-acira .acira-sidebar .sb-group[data-joining]>.sb-group-header,.app.style-acira .acira-sidebar .sb-group[data-joining]>.sb-group-header:hover{background:none;box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--gc) 70%,transparent)}
+
+@media (forced-colors:active){
+ .app.style-acira .acira-sidebar .sb-group-rail{color:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group-folder{color:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group[data-tint]>.sb-group-header .sb-group-name{color:CanvasText}
+ .app.style-acira .acira-sidebar .sb-group-members::before,.app.style-acira .acira-sidebar .fg-rail-copy{background:CanvasText}
+}

@@ -8,7 +8,8 @@ import test from 'node:test';
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 
 test('RTL titles: each title box takes its direction from the title', () => {
-  const sidebar = read('src/components/sidebar/AciraSidebar.tsx');
+  // The sidebar's saved-page rows are drawn by the shared Bookmarks tree rows (BookmarkTree.tsx, also used by the All Bookmarks pop-up), so its title boxes count there.
+  const sidebar = read('src/components/sidebar/AciraSidebar.tsx') + read('src/components/sidebar/BookmarkTree.tsx');
   assert.equal(sidebar.match(/<span className="sb-tab-title">/g), null, 'no sidebar title box without dir');
   assert.ok((sidebar.match(/<span className="sb-tab-title" dir="auto">/g)?.length ?? 0) >= 7, 'tabs and the saved pages beside them');
   assert.match(read('src/components/CompactTabs.tsx'), /<span className="acira-compact-tab-label" dir="auto"><span className="tab-title-text">/);

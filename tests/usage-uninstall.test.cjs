@@ -205,7 +205,7 @@ test('never during an update: --updated or /KEEP_APP_DATA (the new installer alw
   // a person's own uninstall: Settings > Apps opens AciraRemove.exe, which runs the real uninstaller with "/currentuser /S"; the
   // QuietUninstallString is "/currentuser /S" too; running the uninstaller by hand passes nothing
   const launcher = read('packaging', 'installer', 'AciraUninstall.cs');
-  assert.match(launcher, /new ProcessStartInfo\(real, "\/currentuser \/S"\)/);
+  assert.match(launcher, /new ProcessStartInfo\(real, "\/currentuser \/S" \+ \(reason\.Length > 0 \? " \/ACIRA_REASON=" \+ reason : ""\)\)/, 'the same command line, plus the reason when one was tapped (Beta 14)');
   for (const params of ['/currentuser /S', '/S', '', '/currentuser', '--delete-app-data']) assert.equal(runUninstallMessage({ params, files }).sent.length, 1, JSON.stringify(params) + ' is a real uninstall');
 });
 
@@ -317,8 +317,88 @@ test('offsets in the uninstaller match the app\'s file; the arch is right for th
 
 test('the longest uninstall message fits the server limit', async () => {
   const { validateUninstall, UNINSTALL_MAX_BYTES } = await server;
-  const longest = uninstallMessage({ installId: '6081ef29-10d4-4023-8c6e-7dc490f6903f', appVersion: '1234.1234.1234-' + 'a'.repeat(9), arch: 'arm64', day: '2026-11-03' });
+  const longest = uninstallMessage({ installId: '6081ef29-10d4-4023-8c6e-7dc490f6903f', appVersion: '1234.1234.1234-beta.99', arch: 'arm64', day: '2026-11-03' });
   assert.ok(validateUninstall(longest, NOW));
   const bytes = Buffer.byteLength(JSON.stringify(longest));
   assert.ok(bytes < 180 && bytes < UNINSTALL_MAX_BYTES, `longest is ${bytes} bytes`);
+});
+
+// ---- Beta 14, the plan: the optional one-tap reason --------------------------------------------------------------------------------------------------------------------------------------
+// The branded remover (packaging/installer/AciraUninstall.cs) asks "Why are you removing Acira?" before it removes anything, only while sharing is on, and runs the real uninstaller with
+// /ACIRA_REASON=<word> after a tap. un.AcUsageUninstalled puts one of seven words into the message (schema 4); anything else, or Skip, sends the message as before (schema 1).
+const reasonsOf = () => require('../desktop/browser-services/usage-facts.cjs').UNINSTALL_REASONS;
+
+test('Beta 14: a reason tapped on the remover\'s card goes into the message as schema 4, each of the seven words, and the server stores it', async () => {
+  const { validateUninstall, UNINSTALL_REASONS } = await server;
+  assert.deepEqual([...reasonsOf()], [...UNINSTALL_REASONS], 'the app and the function have the same seven words');
+  assert.equal(reasonsOf().length, 7);
+  const saved = await savedFile();
+  for (const word of reasonsOf()) {
+    const run = runUninstallMessage({ params: `/currentuser /S /ACIRA_REASON=${word}`, files: saved.files });
+    assert.equal(run.sent.length, 1, word + ': one message');
+    const [send] = run.sent, text = send.args[3].value, message = JSON.parse(text);
+    assert.deepEqual(message, uninstallMessage({ installId: saved.id, appVersion: '0.1.0-beta.9', arch: 'x64', day: '2026-11-03', reason: word }), word + ': the message "What\'s sent" describes');
+    assert.equal(text, JSON.stringify(message), 'same fields in the same order, no spaces');
+    assert.equal(message.schema, 4); assert.equal(message.reason, word); assert.equal(Object.keys(message).at(-1), 'reason', 'the reason comes last');
+    assert.deepEqual(validateUninstall(message, NOW), { install_id: saved.id, day: '2026-11-03', app_version: '0.1.0-beta.9', platform: 'win32', arch: 'x64', reason: word }, word + ': stored');
+    assert.match(text, /^[\x20-\x7e]+$/, 'ASCII only'); assert.equal(Number(send.args[4].value), text.length);
+    assert.equal(run.openHandles, 0); assert.equal(run.stackLeft, 0); assert.deepEqual(run.registers, run.outer, 'every register is given back'); assert.equal(run.error, false);
+    assert.equal(run.calls.map((c) => c.fn.split('::')[1]).join(), 'GetSystemTime,WinHttpOpen,WinHttpSetTimeouts,WinHttpConnect,WinHttpOpenRequest,WinHttpSetOption,WinHttpSendRequest,WinHttpReceiveResponse,WinHttpCloseHandle,WinHttpCloseHandle,WinHttpCloseHandle', word + ': the same one request with the same short limits');
+  }
+});
+
+test('Beta 14: no tap, Skip, or anything that is not one of the seven words sends the message as before (schema 1, no reason)', async () => {
+  const { validateUninstall } = await server;
+  const saved = await savedFile();
+  const plain = uninstallMessage({ installId: saved.id, appVersion: '0.1.0-beta.9', arch: 'x64', day: '2026-11-03' });
+  assert.equal(plain.schema, 1); assert.ok(!('reason' in plain));
+  const odd = ['', '/ACIRA_REASON=', '/ACIRA_REASON=evil', '/ACIRA_REASON=SLOW', '/ACIRA_REASON=Slow', '/ACIRA_REASON=slow;x', '/ACIRA_REASON=slow,"x":1', '/ACIRA_REASON=missing_feature', '/ACIRA_REASON=https://x.example/',
+    '/ACIRA_REASON=' + 'a'.repeat(300), '/ACIRA_REASON=slows', '/ACIRA_REASON=slo', '/ACIRA_REASON="slow"', '/ACIRA_REASON=\'slow\'', '/ACIRA_REASON=-slow', '/ACIRA_REASON=$0', '/ACIRA_REASON=$R8', '/ACIRA_REASON=${AC_USAGE_HOST}', '/ACIRA_REASON=reason', '/ACIRA_REASON=other2'];
+  for (const extra of odd) {
+    const run = runUninstallMessage({ params: `/currentuser /S ${extra}`.trim(), files: saved.files });
+    assert.equal(run.sent.length, 1, JSON.stringify(extra) + ': the message still goes');
+    const message = JSON.parse(run.sent[0].args[3].value);
+    assert.deepEqual(message, plain, JSON.stringify(extra) + ': no reason');
+    assert.ok(validateUninstall(message, NOW));
+    assert.equal(run.openHandles, 0); assert.deepEqual(run.registers, run.outer);
+  }
+  // the first of two options wins, and the option works whatever its place on the command line
+  assert.equal(JSON.parse(runUninstallMessage({ params: '/currentuser /S /ACIRA_REASON=slow /ACIRA_REASON=crashes', files: saved.files }).sent[0].args[3].value).reason, 'slow');
+  assert.equal(JSON.parse(runUninstallMessage({ params: '/ACIRA_REASON=other /currentuser /S', files: saved.files }).sent[0].args[3].value).reason, 'other');
+  assert.equal(JSON.parse(runUninstallMessage({ params: '/currentuser /acira_reason=not-clear /S', files: saved.files }).sent[0].args[3].value).reason, 'not-clear', 'the option name is not case sensitive, its value is');
+});
+
+test('Beta 14: a reason never changes whether the message is sent: not on an update, not with sharing off or without the route note, not in a QA build', async () => {
+  const on = await savedFile(), off = await savedFile({ on: false }), held = await savedFile({ route: false });
+  for (const params of ['/S /KEEP_APP_DATA /currentuser --updated /ACIRA_REASON=slow', '/S /KEEP_APP_DATA /currentuser /ACIRA_REASON=crashes', '/S --updated /ACIRA_REASON=other', '/currentuser /S --delete-app-data /KEEP_APP_DATA /ACIRA_REASON=slow'])
+    assert.equal(runUninstallMessage({ params, files: on.files }).calls.length, 0, params + ': nothing, not even the clock');
+  for (const [name, files] of [['sharing off', off.files], ['no route note', held.files], ['no file', {}]]) assert.equal(runUninstallMessage({ params: '/currentuser /S /ACIRA_REASON=slow', files }).calls.length, 0, name);
+  assert.equal(runUninstallMessage({ params: '/currentuser /S /ACIRA_REASON=slow', files: on.files, qa: true }).calls.length, 0, 'a QA build has no address and sends nothing');
+  // a failed send is not retried and nothing waits for an answer, with or without a reason
+  const failed = runUninstallMessage({ params: '/currentuser /S /ACIRA_REASON=slow', files: on.files, send: 0 });
+  assert.equal(failed.sent.length, 1); assert.ok(!failed.calls.some((c) => c.fn.endsWith('WinHttpReceiveResponse'))); assert.equal(failed.openHandles, 0);
+});
+
+test('Beta 14: the seven words in the installer script, the remover and the app are one list in one order; the option is named the same in both; the card adds no network work', async () => {
+  const { UNINSTALL_REASONS } = await server;
+  const fn = body();
+  const inScript = [...fn.matchAll(/^\s*StrCmpS \$R8 "([a-z-]+)" acReasonKnown$/gm)].map((m) => m[1]);
+  assert.deepEqual(inScript, [...UNINSTALL_REASONS], 'acira-installer.nsh');
+  const launcher = read('packaging', 'installer', 'AciraUninstall.cs');
+  const inLauncher = /static readonly string\[\] REASONS = \{ ([^}]*) \};/.exec(launcher); assert.ok(inLauncher);
+  assert.deepEqual([...inLauncher[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]), [...UNINSTALL_REASONS], 'AciraUninstall.cs');
+  assert.ok(fn.includes('${GetOptions} $0 "/ACIRA_REASON=" $R8') && launcher.includes('" /ACIRA_REASON=" + reason'), 'the same option on both sides');
+  const full = NSH.slice(NSH.indexOf('Function un.AcUsageUninstalled'), NSH.indexOf('FunctionEnd', NSH.indexOf('Function un.AcUsageUninstalled')));
+  assert.equal([...full.matchAll(/WinHttpSendRequest/g)].length, 1, 'still exactly one request');
+  assert.ok(!/WinHttp|inetc|NSISdl|nsExec|Exec /.test(read('packaging', 'installer', 'AciraUninstall.cs').slice(launcher.indexOf('void LoadWhy'), launcher.indexOf('// The card\'s scale on a screen'))), 'the card\'s own code does no network work');
+  const template = /StrCpy \$5 '(\{"schema":4,"event":"uninstall",[^']*\})'/.exec(fn); assert.ok(template, 'the schema 4 template');
+  assert.deepEqual([...template[1].matchAll(/\$\{?(\w+)\}?/g)].map((m) => m[1]), ['3', 'VERSION', 'AC_USAGE_ARCH', '4', 'R8'], 'only the id, version, arch, date and the checked word');
+  assert.ok(fn.indexOf('acReasonKnown:') < fn.indexOf('StrCpy $5 \'{"schema":4'), 'the word is checked before it is used');
+  assert.match(fn, /StrCpy \$R8 ""\n\s+acReasonKnown:/, 'anything that is not one of the seven becomes nothing');
+  // the longest message with a reason still fits the function's limit
+  const { validateUninstall, UNINSTALL_MAX_BYTES } = await server;
+  const longest = uninstallMessage({ installId: '6081ef29-10d4-4023-8c6e-7dc490f6903f', appVersion: '1234.1234.1234-beta.99', arch: 'arm64', day: '2026-11-03', reason: 'missing-feature' });
+  assert.ok(validateUninstall(longest, NOW)); const bytes = Buffer.byteLength(JSON.stringify(longest)); assert.ok(bytes < 220 && bytes < UNINSTALL_MAX_BYTES, `longest with a reason is ${bytes} bytes`);
+  // the message "What's sent" shows is the one without a reason (what Skip sends); the reason is described in the sheet's sentence in every language
+  assert.deepEqual(uninstallMessage({ installId: SAMPLE_ID, appVersion: '1', arch: 'x64', day: '2026-11-03', reason: 'nonsense' }).schema, 1, 'an unknown word is no reason');
 });

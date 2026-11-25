@@ -45,7 +45,7 @@ test('motion polish: split springs come from the one token table and fades take 
   assert.equal(motionTokens['tab.merge'][1], .310);
 });
 
-test('Unsplit: the page that leaves flies back into its tab (clamped into the page area) and fades as it lands', () => {
+test('Replacing a pane: the page that leaves flies back into its tab (clamped into the page area) and fades as it lands (Unsplit and Close pane no longer morph, D191 part 4)', () => {
   const box = (tabId: string, x: number, y: number, width: number, height: number): PaneBox => ({ tabId, x, y, width, height });
   const split = [box('a', 0, 0, 597, 700), box('b', 603, 0, 597, 700)];
   const home = homeRect({ x: 420, y: -34, width: 180, height: 30 }, { width: 1200, height: 700 });
@@ -57,6 +57,6 @@ test('Unsplit: the page that leaves flies back into its tab (clamped into the pa
   assert.equal(planMorph(split, [box('a', 0, 0, 1200, 700)]).find(item => item.tabId === 'b')!.home, undefined, 'without a tab on screen it fades in place');
   const layer = read('src/components/SplitMorphLayer.tsx'), app = read('src/App.tsx');
   assert.match(layer, /morphSpring\(item\.kind === 'exit' && !item\.home \? 'menu\.fade' : morphToken\(intent\), scale\)/, 'a homing page rides the intent spring');
-  assert.match(layer, /\.\.\.\(item\.home \? \{ opacity: fadeLate \} : \{\}\)/);
+  assert.match(layer, /\.\.\.\(item\.home \? \{ opacity: fadeLate \} : item\.kind === 'enter' \? \{ opacity: fadeTile \} : \{\}\)/);   // D191: an arriving tile fades by its size; the page flying home keeps its late fade
   assert.match(app, /homes\[id\] = homeRect\(/, 'App finds each leaving tab in the strip, compact strip or sidebar');
 });

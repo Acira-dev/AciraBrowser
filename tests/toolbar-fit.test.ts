@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { captionWidth, fitMetrics, fitToolbar, hideOrder, type FitInput, type FitItem } from '../src/ui/toolbarFit';
+import { captionWidth, fitMetrics, fitToolbar, groupWidth, hideOrder, type FitInput, type FitItem } from '../src/ui/toolbarFit';
 
 /** The top row's layout, from the CSS sizes in toolbar-controls.css, for every allowed window width, interface scale,
  * tab layout and window view. The row is [leading] [address] [actions] [caption buttons]; the property: no control's
@@ -131,4 +131,100 @@ test('R4-26 Home shows by default and only leaves for » after the low-priority 
   // The founder's case: 900 DIP, 150%, tabs in the sidebar, Home on: the menu stays in view.
   const r = row(900, 150, 'sidebar', 'full', defaults), result = fitToolbar(r.input);
   assert.ok(menuRight(r, result.hidden, result.dropTabViewer, result.address, result.actions) <= r.viewport - captionWidth(150) + 0.01);
+});
+
+// ---- Beta 14: the extension buttons give way to the address field, one at a time, behind the "more" button ----
+/** The pinned extensions as the hook measures them now: a group of `count` buttons the fit may take off the end. */
+const pinnedItems = (count: number, others: string[] = ['extensions', 'focus', 'profile']): FitItem[] => [{ id: 'pinned', width: groupWidth(count), parts: { count } }, ...optional(...others)];
+
+test('the group is a button each at the buttons\' own size and pitch; the "more" button is one of the slots', () => {
+  assert.equal(groupWidth(0), 0);
+  assert.equal(groupWidth(1), fitMetrics.extensionButton);
+  assert.equal(groupWidth(3), 3 * 30 + 2 * 5);
+  assert.equal(fitMetrics.extensionButton, 30);
+  assert.equal(fitMetrics.extensionGap, 5);
+});
+
+test('the extension buttons never take the address field below its comfortable room before they give way: one at a time from the end, the rest behind "more", at every window', () => {
+  let checked = 0, partial = 0;
+  for (const count of [1, 5, 12, 20]) for (const scale of [80, 100, 125, 150]) for (const layout of layouts) for (const view of views) {
+    for (let width = minWindow; width <= 2560; width += 8) {
+      const r = row(width, scale, layout, view, pinnedItems(count), [72]);
+      const result = fitToolbar(r.input), pinned = result.pinned!;
+      const label = `${count} pinned: ${width} DIP, ${scale}%, ${layout}, ${view}`;
+      assert.ok(pinned, label);
+      if (result.hidden.includes('pinned')) { assert.deepEqual(pinned, { visible: 0, more: false }, label); continue; }
+      assert.ok(pinned.visible >= 0 && pinned.visible <= count, label);
+      assert.equal(pinned.more, pinned.visible < count, `"more" shows exactly when some are behind it: ${label}`);
+      const slots = pinned.visible + (pinned.more ? 1 : 0);
+      // The buttons gave way for the field: either they all stay, or only the "more" button is left, or the field has its comfortable room.
+      assert.ok(slots === count || slots <= 1 || result.address >= fitMetrics.addressComfort, `${label}: ${slots} slots with the field at ${result.address.toFixed(1)}`);
+      const right = menuRight(r, result.hidden, result.dropTabViewer, result.address, result.actions);
+      const limit = r.captionOverlays ? r.viewport - captionWidth(scale) : r.viewport - r.padRight;
+      assert.ok(right <= limit + 0.01, `${label}: the menu ends at ${right.toFixed(1)}, past ${limit.toFixed(1)}`);
+      if (pinned.more) partial++;
+      checked++;
+    }
+  }
+  assert.ok(checked > 3000 && partial > 300, `${checked} windows, ${partial} with a "more" button`);
+});
+
+test('narrowing the row: the extension slots only go down, nothing else leaves before the pinned group is down to the "more" button alone, and the group leaves entirely only below the old floor', () => {
+  for (const count of [5, 12, 20]) {
+    const input = row(1920, 100, 'sidebar', 'full', pinnedItems(count, ['extensions', 'history', 'downloads', 'focus', 'profile']), [72]).input;
+    let slots = Infinity, hiddenCount = 0;
+    for (let inner = input.inner; inner >= 0; inner -= 3) {
+      const result = fitToolbar({ ...input, inner }), pinned = result.pinned!;
+      const now = result.hidden.includes('pinned') ? 0 : pinned.visible + (pinned.more ? 1 : 0);
+      assert.ok(now <= slots, `slots grew from ${slots} to ${now} at ${inner}`);
+      assert.ok(result.hidden.length >= hiddenCount, 'what left does not come back as the row narrows');
+      if (result.hidden.some(id => id !== 'pinned')) assert.ok(now <= 1, `another button left at ${inner} while ${now} extension slots were still there`);
+      if (result.hidden.includes('pinned')) assert.ok(result.address >= 0);
+      slots = now; hiddenCount = result.hidden.length;
+    }
+    assert.equal(slots, 0, 'in the end the group leaves too (then it is the Extensions entry in »)');
+  }
+});
+
+test('with room for everything nothing moves: no "more", the field wider than its comfort', () => {
+  const result = fitToolbar(row(1920, 100, 'sidebar', 'full', pinnedItems(20)).input);
+  assert.deepEqual(result.pinned, { visible: 20, more: false });
+  assert.deepEqual(result.hidden, []);
+  assert.ok(result.address > fitMetrics.addressComfort);
+});
+
+test('the same window with 1, 5, 12 and 20 pinned: the more are pinned, the more sit behind "more", and the field is the same or wider than with the old whole-group rule', () => {
+  const at = (count: number) => fitToolbar(row(1100, 100, 'sidebar', 'full', pinnedItems(count)).input);
+  const ones = [1, 5, 12, 20].map(at);
+  for (let i = 1; i < ones.length; i++) assert.ok(ones[i].pinned!.visible >= ones[i - 1].pinned!.visible || ones[i].pinned!.more, 'a longer list never shows fewer buttons than a shorter one without "more"');
+  for (const result of ones) assert.ok(result.address >= fitMetrics.addressComfort || result.pinned!.visible + (result.pinned!.more ? 1 : 0) <= 1, `field ${result.address.toFixed(0)}`);
+  assert.equal(ones[3].pinned!.more, true);
+});
+
+test('a row without a pinned group with parts answers as before, and says so (pinned: null)', () => {
+  const result = fitToolbar(row(900, 150, 'sidebar', 'full', everything, [72]).input);
+  assert.equal(result.pinned, null);
+  assert.ok(result.hidden.includes('pinned'), 'the old rule: the group leaves whole');
+});
+
+test('a pinned group that says how much room the field keeps (the toolbar\'s whole-group rule) leaves first, at that room, and everything else still leaves at the old floor', () => {
+  const room = fitMetrics.addressComfort;
+  const items = (withRoom: boolean) => everything.map(item => item.id === 'pinned' && withRoom ? { ...item, room } : item);
+  let sawBetween = 0;
+  for (const scale of [80, 100, 125, 150]) for (const layout of layouts) for (const view of views) for (let width = minWindow; width <= 2560; width += 8) {
+    const r = row(width, scale, layout, view, items(true), [72]);
+    const result = fitToolbar(r.input), old = fitToolbar({ ...r.input, items: items(false) });
+    const label = `${width} DIP, ${scale}%, ${layout}, ${view}`;
+    if (!result.hidden.includes('pinned')) assert.ok(result.address >= room || result.hidden.length === everything.length + 1, `${label}: the group stays with the field at ${result.address.toFixed(1)}`);
+    // Whatever left in the old rule leaves in this one too (the group first, and for the field's comfort: never later than before).
+    assert.ok(old.hidden.every(id => result.hidden.includes(id)), `${label}: ${old.hidden.join()} vs ${result.hidden.join()}`);
+    if (result.hidden.includes('pinned') && !old.hidden.includes('pinned')) sawBetween++;
+  }
+  assert.ok(sawBetween > 100, `${sawBetween} windows where the group now leaves earlier`);
+  // The group alone is what moves between the old floor and the comfortable room: no other button leaves for it.
+  const input = row(1500, 100, 'sidebar', 'full', items(true), [72]).input;
+  for (let inner = input.inner; inner >= 0; inner -= 2) {
+    const result = fitToolbar({ ...input, inner });
+    if (result.hidden.some(id => id !== 'pinned') && !result.hidden.includes('pinned')) assert.fail(`another button left before the group at ${inner}`);
+  }
 });

@@ -1,0 +1,362 @@
+/* @flatten-is */
+/* Ambient mode (Beta 14, F6; ui/ambient.ts, desktop/ambient-edge.cjs). The page's own edge colours spill softly into the sidebar and the toolbar, as if the frame were glass: never a solid
+   paint. The light is two layers that cross-fade (so a new read is never a cut and never a flicker), inside the surface it lights:
+     .st-amb-side  inside the sidebar, anchored to its page-side edge, falling off across the surface (232px: 100% at the edge, 70% at 48px, 34% at 112px, 10% at 176px, 0)
+     .st-amb-top   inside the toolbar (.browser-shell), anchored to its page-side (bottom) edge, falling off upward across the toolbar
+   Both are drawn from the same rows of stops over the page's rectangle (inline gradients: `i` layers) and masked by the same fall-off, and above the page's top edge the sidebar's light fades in with the
+   same curve the toolbar's fades out, so at the corner where they meet the two are one light: no line, no shadow, no step of tone. The sidebar's light lies under its content; the toolbar's under its icons.
+   WHEN IT OPENS: `--amb-reach` (0 to 1) is how far the light has grown from the page-side edge. It starts at 0 and reaches 1 on the surface's own clock (the docked sidebar's 480ms spring, the edge reveal's
+   --edge-ms and --edge-ease), from the first frame: the light is revealed by the surface opening, never laid on a dark panel and faded in after it. */
+@property --amb-reach { syntax: '<number>'; inherits: true; initial-value: 1; }
+.st-amb-side, .st-amb-top { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; --amb-reach: 1; --amb-y0: 0px; }
+.st-amb-side > .amb-l, .st-amb-top > .amb-l, .st-amb-strip > .amb-l, .st-amb-head-in > .amb-l { position: absolute; inset: 0; opacity: 0; background-repeat: no-repeat; }
+:root[data-ambient-light] :is(.st-amb-side, .st-amb-top, .st-amb-strip, .st-amb-head-in) > .amb-l { will-change: opacity; }   /* off: nothing is promoted, nothing is animated, no view-transition layer is named (every sidebar transition stays as it was) */
+/* A NEW READ CROSSES THE OLD ONE AS A STRAIGHT BLEND. The layers of one surface ADD (plus-lighter, as a view transition's two pictures do) inside their own isolated surface: laid over each other, two
+   translucent layers crossing let the frame through in the middle of the fade, a third colour darker than both (up to 15 levels off the straight blend, the colour page's margin turning from green
+   to red, real frames). The layers' opacities always sum to at most 1 (the new one comes in on the curve the others leave on), so the sum is the straight blend of the two pictures over whatever is
+   under them. At rest one layer shows and nothing changes. Off: as before. */
+:root[data-ambient-light] :is(.st-amb-side, .st-amb-top, .st-amb-strip, .st-amb-head-in) { isolation: isolate; }
+:root[data-ambient-light] :is(.st-amb-side, .st-amb-top, .st-amb-strip, .st-amb-head-in) > .amb-l { mix-blend-mode: plus-lighter; }
+/* THE APP IS ITS OWN STACKING CONTEXT WHILE THE LIGHT IS ON. The Mini rail's light layer stands in `.app` itself, under the rail (miniRail.css `.sb-mini-amb`: fixed, `z-index: -1`). Only the site glow isolated
+   the app (site-glow.css, `html[data-site-glow]`), so on a page that gives the glow no colour while its picture gives the light plenty (white chrome round a bright video) the app was not isolated: `z-index: -1`
+   then resolves in the ROOT's stacking context and the layer is painted BEHIND THE APP'S OWN FILL (the frame's colour at 66 %). The rail showed 0.34 to 0.39 of its light, the same in R, G and B, beside a toolbar
+   at full strength: a step of 20 levels per px at the rail's edge (hidden captures, three widths; real stills 0.32), while the same layer on a page with a glow colour was whole. The light must not depend on
+   another feature's attribute for where it is painted: with the light on, the app is isolated (the same state every page with a glow colour already has), with or without Site color. */
+:root[data-ambient-light] .app.style-acira:not(.native-layer) { isolation: isolate; }
+/* ONE FIELD. The light is a function of the distance from the page's edge, the same curve everywhere it falls: 100% at the edge, 70% at 48px, 34% at 112px, 10% at 176px, nothing at 232px (the stops below).
+   The frame around the page is an L: the sidebar's column and the toolbar's band above the page, meeting in the corner. In the column the distance is across (to the page's side edge); in the band it is up (from the page's
+   top edge); in the corner square it is the straight distance to the page's corner (a circle with its explicit radius: a view-transition snapshot paints nothing for one without), so the field turns the corner in a quarter circle with no seam, no step and no crease (the slope across the seam is the same on both
+   sides: nothing at all). The colour of each point is the page's own colour at the nearest point of its edge (the rows of stops, shared at the corner). --amb-y0 is where the toolbar band ends (the page begins), in this layer's own pixels. */
+.st-amb-side > .amb-l {
+  -webkit-mask-image:
+    radial-gradient(circle 232px at 100% 100%, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach))),
+    linear-gradient(to left, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach)));
+  -webkit-mask-size: 100% var(--amb-y0), 100% calc(100% - var(--amb-y0));
+  -webkit-mask-position: 0 0, 0 var(--amb-y0);
+  -webkit-mask-repeat: no-repeat;
+}
+html[data-sidebar-side=right] .st-amb-side > .amb-l { -webkit-mask-image:
+    radial-gradient(circle 232px at 0 100%, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach))),
+    linear-gradient(to right, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach))); }
+/* the toolbar: the band's distance from the page's top edge on the SAME curve (it is a fraction of the sidebar's own depth, not a strip of its own: the toolbar is as lit at the corner as the sidebar beside it) */
+.st-amb-top > .amb-l {
+  -webkit-mask-image: linear-gradient(180deg, transparent calc(var(--amb-y0) - 232px), rgb(0 0 0 / .1) calc(var(--amb-y0) - 176px), rgb(0 0 0 / .34) calc(var(--amb-y0) - 112px), rgb(0 0 0 / .7) calc(var(--amb-y0) - 48px), #000 var(--amb-y0));
+}
+
+/* The opening: the docked sidebar arriving (only a layer that arrived with it: `data-arrive`, set by ui/ambient.ts when the layer mounts inside the switch; the old state of a closing carries the attribute of the switch too, and its picture is taken at the first frame, so an animation on it started from nothing) (the layout switch's 480ms spring, stretched like the sidebar's own slide), the sidebar and the toolbar of an edge reveal (Seamless, peek) on the edge's clock. */
+@keyframes amb-reveal { from { --amb-reach: 0; } }
+:root[data-ambient-light][data-mode-switch=layout] .st-amb-side[data-arrive] { animation: amb-reveal calc(480ms * var(--motion-pace, 1)) linear(0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1) backwards; }
+/* D54 (c), 19 Nov: nor when the docked sidebar ARRIVES in a layout switch (`data-rail-slide=in`): the light is whole from the first frame and slides in with the sidebar, as in an edge reveal. The growing reach
+   lit the 8 px beside the page by 9 levels from one frame to the next early in a dock, and left the arriving head dimmer than the bar it meets at the travelling edge. */
+:root[data-ambient-light][data-mode-switch=layout][data-rail-slide=in] .st-amb-side[data-arrive] { animation: none; }
+/* earlier work (reported 18 Nov): NOT in an edge reveal. There the light is in the sidebar's picture, whole, from the first frame, and slides in with it: a reach that grew over the slide (a custom property: the main thread)
+   brought the sidebar in DARK beside the lit top bar and lit it after it had arrived ("it's a different colour and doesn't match around it"). */
+.app[data-reduced-motion=true] :is(.st-amb-side, .st-amb-top) { animation: none !important; }
+/* WHEN IT CLOSES: the exit is the entrance played backwards. The sidebar's light is its own view-transition group (it is the same size as the sidebar, so the sidebar's own slide fits it exactly), and a group that
+   leaves is a still picture: it slides out with the sidebar on the sidebar's own animation and its clip draws back toward the page-side edge on the same clock, so the light and the surface end together.
+   Arriving it needs no animation of its own (the live light grows its reach above) and, unlike the browser's default for a new group, it does not fade in. The name carries the same setup guard as every other
+   name (tests/setup-chrome-names); in an edge reveal the sidebar's descendants are unnamed by seamless.css, and this one is the exception. */
+:root[data-ambient-light]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-expanded>.st-amb-side { view-transition-name: acira-amb-side; }
+:root[data-ambient-light][data-mode-switch='edge'][data-mode-switch][data-mode-switch]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-expanded>.st-amb-side { view-transition-name: acira-amb-side !important; }
+/* THE TOOLBAR'S LIGHT TRAVELS WITH THE TOOLBAR in a layout switch. It is its own group, like the toolbar's icons (acira-toolbar): the group goes from the old toolbar's place to the new one (the toolbar grows into the place the sidebar leaves, or
+   gives it up) and both pictures of the light fill the group, so the light is full at every point of the toolbar at every frame. Left in the root's picture it was the root's cross-fade that carried it: the strip of toolbar the sidebar
+   had just left was lit by the new picture alone, at the cross-fade's own weight, a dark wedge between the sidebar's edge and the old toolbar's end. */
+:root[data-ambient-light][data-mode-switch=layout]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.st-amb-top { view-transition-name: acira-amb-top; }
+:root[data-mode-switch=layout]::view-transition-old(acira-amb-top), :root[data-mode-switch=layout]::view-transition-new(acira-amb-top) { height: 100%; }
+/* D54 (19 Nov): ...and 2 px wider than the group on the side the sidebar is NOT on. Both pictures are stretched to the moving group, and a stretched picture's last column is drawn half transparent: the bar's
+   last point at the window's far edge read 28 to 35 levels darker than both rests in every frame of a close and of a dock (lossless, 16 px). That column now lies outside the window. */
+:root[data-mode-switch=layout]::view-transition-old(acira-amb-top), :root[data-mode-switch=layout]::view-transition-new(acira-amb-top) { width: calc(100% + 2px); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout]::view-transition-old(acira-amb-top), html[data-sidebar-side=right]:root[data-mode-switch=layout]::view-transition-new(acira-amb-top) { left: -2px; }
+/* ...and on the sidebar's own clock (the page's group and the sidebar's slide have it, sidebar.css): the toolbar's light grows into the place the sidebar leaves at the very pace the sidebar's edge moves, so the two lights
+   never overlap (the default glide is a quick expo-out and ran ahead of the sidebar's edge: a double-lit block where they met) and never leave a gap between them. */
+:root[data-mode-switch=layout]::view-transition-group(acira-amb-top) { animation-duration: calc(480ms * var(--motion-pace, 1)); animation-timing-function: linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1); }
+/* D54 (c), 19 Nov: WHEN THE DOCKED SIDEBAR LEAVES OR ARRIVES (`data-rail-slide`, sharedMotion measureFrameBands) THE BAR'S LIGHT STANDS STILL AND IS SEEN THROUGH A WINDOW THAT TRAVELS WITH THE SIDEBAR'S EDGE,
+   as in an edge reveal (view-morph.css). The morphing group above stretched both pictures to a box laid out on whole pixels, beside a sidebar that moves by a transform: on the boundary pixel both lights
+   were there (one device pixel +31 levels travelling with the edge), the squeezed picture carried the corner's light sideways (13 to 15 over both rests behind an arriving sidebar), and the stretched
+   picture's last column was half transparent (the 2 px above). Now: the group does not move; the image pair is the window, as wide as the window of the app, starting at the sidebar's edge and sliding with it
+   by a bare transform on the sidebar's own clock and curve (the compositor draws its edge with the same partial coverage as the sidebar's); inside it each picture is its own size at its own place and
+   slides back by as much, so it stands still on screen. The two states cross-fade where both exist. In the sidebar's column only the frame WITHOUT the sidebar has light (the strip the sidebar leaves, or
+   has not yet covered): that picture is whole there and weighted beside it (`--amb-w`, a registered number: a weight, not a place, so the main thread running it a frame late moves nothing). */
+/* THE BAR'S LIGHT REACHES 4 px PAST THE WINDOW'S FAR EDGE (the side the sidebar is not on), always: `.st-amb-top` below. A picture standing inside a window that moves by fractions of a pixel is drawn
+   with a soft last column: at the window's far edge the bar's last point dimmed and came back from frame to frame (63 to 91). With the layer itself 4 px longer, that column is outside the window. Always,
+   not only while a switch runs: a box that grows when the switch starts moves a gradient that is measured from its near end, and with the sidebar on the right the near end IS the far edge (the light
+   stood 4 px off for the switch, up to 7 levels on a bright page). At rest those 4 px are outside the window. (A hair of `scale` on the pictures was tried first: an individual scale also scales the
+   animated translation, and the pictures drifted by 0.7 px against the window.) */
+@property --amb-w { syntax: '<number>'; inherits: false; initial-value: 1; }
+@keyframes amb-rail-with { to { transform: translateX(calc(var(--sf-dir, -1) * var(--frame-rail-width, 0px))); } }
+@keyframes amb-rail-against { to { transform: translateX(calc(-1 * var(--sf-dir, -1) * var(--frame-rail-width, 0px))); } }
+@keyframes amb-weigh-in { from { --amb-w: 0; } to { --amb-w: 1; } }
+@keyframes amb-weigh-out { from { --amb-w: 1; } to { --amb-w: 0; } }
+:root[data-mode-switch=layout][data-rail-slide]::view-transition-group(acira-amb-top) { animation: none; }
+:root[data-mode-switch=layout][data-rail-slide]::view-transition-image-pair(acira-amb-top) { isolation: isolate; -webkit-mask-image: linear-gradient(to right, transparent 0, rgb(0 0 0 / var(--amb-e1, .25)) 2.5px, rgb(0 0 0 / var(--amb-e2, .5)) 5px, rgb(0 0 0 / var(--amb-e3, .75)) 7.5px, #000 10px), linear-gradient(#000 0 0); -webkit-mask-size: 10px 100%, calc(100% - 10px) 100%; -webkit-mask-position: 0 0, 100% 0; -webkit-mask-repeat: no-repeat; animation-duration: calc(480ms * var(--motion-pace, 1)); animation-timing-function: linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1); animation-fill-mode: both; }
+/* (the two pictures ADD where both exist: the browser's own cross-fade says so through its animation names, which the names below replace, so it is said here.) */
+:root[data-mode-switch=layout][data-rail-slide]::view-transition-old(acira-amb-top), :root[data-mode-switch=layout][data-rail-slide]::view-transition-new(acira-amb-top) { width: auto; max-width: none; height: 100%; object-fit: none; object-position: left top; mix-blend-mode: plus-lighter; animation-duration: calc(480ms * var(--motion-pace, 1)); animation-timing-function: linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1); animation-fill-mode: both; }
+/* THE TWO LIGHTS CROSS OVER 10 px AT THE TRAVELLING EDGE, they do not meet on a line (as in an edge reveal, view-morph.css): met on a line, one device pixel carried both whenever the sidebar and the window were
+   drawn a fraction of a pixel apart (up to +14 levels). The window above carries its first 10 px into the sidebar on the bend (`--amb-e1..3`, ui/ambient.ts: the two add up to the bar's value on every row),
+   and the sidebar's light gives those 10 px up inside the bar's height (`--amb-foot`); under the foot it is whole to its edge, where nothing of the bar is. */
+:root[data-mode-switch=layout][data-rail-slide]::view-transition-old(acira-amb-side), :root[data-mode-switch=layout][data-rail-slide]::view-transition-new(acira-amb-side) { -webkit-mask-image: linear-gradient(to left, transparent 0, #000 10px), linear-gradient(#000 0 0); -webkit-mask-size: 100% var(--amb-foot, 36px), 100% calc(100% - var(--amb-foot, 36px)); -webkit-mask-position: 0 0, 0 100%; -webkit-mask-repeat: no-repeat; }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide]::view-transition-old(acira-amb-side), html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide]::view-transition-new(acira-amb-side) { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 10px), linear-gradient(#000 0 0); }
+/* (leaving by a rail slide the sidebar's light picture is not also clipped back: it slides out of the window whole, so the clip took nothing off, and with the sidebar on the right the clip's edge lay
+   on the travelling edge, where at some fractions of a pixel it let one device pixel of the head's full light through the 10 px fade. A page the interface draws itself keeps the clip: it follows.) */
+:root:root[data-mode-switch=layout][data-rail-slide=out]:not([data-page-follow])::view-transition-old(acira-amb-side):only-child { animation-name: acira-sidebar-leave; }
+:root:root[data-mode-switch=layout][data-rail-slide=out][data-sidebar-side=right]:not([data-page-follow])::view-transition-old(acira-amb-side):only-child { animation-name: acira-sidebar-leave-right; }
+/* THE TWO PICTURES ARE WEIGHED ON ONE CLOCK (19 Nov, the real takes): beside the sidebar's column the bar is the old picture times (1 - w) plus the new one times w, and both weights are the registered
+   number `--amb-w` (amb-weigh-in / amb-weigh-out), never one of them a compositor opacity. A weight is a main-thread animation: in the first frames of a layout switch the main thread runs late (25 to 82 ms
+   frames), and with the old picture fading on the compositor and the new one weighed in late, the bar beside the column dipped 6 to 8 levels under both rests in a close and rose as much in a dock (lossless
+   frames, on a frozen clock, never showed it). On one clock a late frame only holds the cross-fade a moment; the sum stays whole. */
+/* LEAVING: the group is the whole bar; the window starts at the sidebar's edge and goes with it; the old picture (the bar beside the sidebar) fades, the new one (the whole bar) is whole in the sidebar's column */
+:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-image-pair(acira-amb-top) { inset: 0 calc(-1 * var(--frame-rail-width, 0px)) 0 calc(var(--frame-rail-width, 0px) - 10px); animation-name: amb-rail-with; }
+:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-old(acira-amb-top) { left: 10px; opacity: 1; animation-name: amb-rail-against, amb-weigh-out; -webkit-mask-image: linear-gradient(rgb(0 0 0 / var(--amb-w)) 0 0); }
+:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-new(acira-amb-top) { left: calc(10px - var(--frame-rail-width, 0px)); opacity: 1; animation-name: amb-rail-against, amb-weigh-in; -webkit-mask-image: linear-gradient(to right, #000 var(--frame-rail-width, 0px), rgb(0 0 0 / var(--amb-w)) var(--frame-rail-width, 0px)); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide]::view-transition-image-pair(acira-amb-top) { -webkit-mask-image: linear-gradient(to left, transparent 0, rgb(0 0 0 / var(--amb-e1, .25)) 2.5px, rgb(0 0 0 / var(--amb-e2, .5)) 5px, rgb(0 0 0 / var(--amb-e3, .75)) 7.5px, #000 10px), linear-gradient(#000 0 0); -webkit-mask-position: 100% 0, 0 0; }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-image-pair(acira-amb-top) { inset: 0 calc(var(--frame-rail-width, 0px) - 10px) 0 calc(-1 * var(--frame-rail-width, 0px)); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-old(acira-amb-top) { left: var(--frame-rail-width, 0px); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=out]::view-transition-new(acira-amb-top) { left: var(--frame-rail-width, 0px); -webkit-mask-image: linear-gradient(to left, #000 var(--frame-rail-width, 0px), rgb(0 0 0 / var(--amb-w)) var(--frame-rail-width, 0px)); }
+/* ARRIVING: the group is the bar beside the sidebar; the window starts as the whole bar and its edge goes with the sidebar's; the old picture (the whole bar) is whole in the sidebar's column, the new one fades in */
+:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-image-pair(acira-amb-top) { inset: 0 0 0 calc(-1 * var(--frame-rail-width, 0px) - 10px); animation-name: amb-rail-against; }
+:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-old(acira-amb-top) { left: 10px; opacity: 1; animation-name: amb-rail-with, amb-weigh-out; -webkit-mask-image: linear-gradient(to right, #000 var(--frame-rail-width, 0px), rgb(0 0 0 / var(--amb-w)) var(--frame-rail-width, 0px)); }
+:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-new(acira-amb-top) { left: calc(var(--frame-rail-width, 0px) + 10px); opacity: 1; animation-name: amb-weigh-in, amb-rail-with; -webkit-mask-image: linear-gradient(rgb(0 0 0 / var(--amb-w)) 0 0); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-image-pair(acira-amb-top) { inset: 0 calc(-1 * var(--frame-rail-width, 0px) - 10px) 0 0; }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-old(acira-amb-top) { left: 0; -webkit-mask-image: linear-gradient(to left, #000 var(--frame-rail-width, 0px), rgb(0 0 0 / var(--amb-w)) var(--frame-rail-width, 0px)); }
+html[data-sidebar-side=right]:root[data-mode-switch=layout][data-rail-slide=in]::view-transition-new(acira-amb-top) { left: 0; }
+/* from AND to: a clip-path animated from `none` to a shape is discrete (it flips at the half way), and the light of a leaving sidebar vanished in one frame at about 90 ms instead of drawing back */
+@keyframes amb-retract { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+@keyframes amb-retract-right { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
+:root:root[data-mode-switch=layout]::view-transition-new(acira-amb-side):only-child { animation: calc(480ms * var(--motion-pace, 1)) linear(0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1) both acira-sidebar-arrive; opacity: 1; }
+:root:root[data-mode-switch=layout]::view-transition-old(acira-amb-side):only-child { animation: calc(480ms * var(--motion-pace, 1)) linear(0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1) both acira-sidebar-leave, calc(480ms * var(--motion-pace, 1)) linear(0, .03361, .112, .21091, .31536, .41656, .50969, .59255, .66451, .72589, .77752, .82045, .85584, .88478, .9083, .9273, .94258, .95483, .9646, .97237, .97853, .9834, .98725, .99027, .99265, .99452, .99598, .99712, .99801, .99871, .99925, .99967, 1) both amb-retract; opacity: 1; }
+:root:root[data-mode-switch=layout][data-sidebar-side=right]::view-transition-new(acira-amb-side):only-child { animation-name: acira-sidebar-arrive-right; }
+:root:root[data-mode-switch=layout][data-sidebar-side=right]::view-transition-old(acira-amb-side):only-child { animation-name: acira-sidebar-leave-right, amb-retract-right; }
+:root:root[data-page-follow][data-mode-switch=layout]::view-transition-new(acira-amb-side):only-child { animation-name: acira-sidebar-arrive-follow; }
+:root:root[data-page-follow][data-mode-switch=layout]::view-transition-old(acira-amb-side):only-child { animation-name: acira-sidebar-leave-follow, amb-retract; }
+:root:root[data-page-follow][data-sidebar-side=right][data-mode-switch=layout]::view-transition-new(acira-amb-side):only-child { animation-name: acira-sidebar-arrive-follow-right; }
+:root:root[data-page-follow][data-sidebar-side=right][data-mode-switch=layout]::view-transition-old(acira-amb-side):only-child { animation-name: acira-sidebar-leave-follow-right, amb-retract-right; }
+:root:root[data-mode-switch=edge]::view-transition-new(acira-amb-side):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-in; opacity: 1; }
+/* leaving, the light goes with the sidebar, whole: the clip that drew it back ran on the main thread, behind the compositor's slide, and took the light off a sidebar that was still on screen. */
+:root:root[data-mode-switch=edge]::view-transition-old(acira-amb-side):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-out; opacity: 1; }
+:root:root[data-mode-switch=edge][data-sidebar-overlay]::view-transition-new(acira-amb-side):only-child, :root:root[data-mode-switch=edge][data-sidebar-overlay]::view-transition-old(acira-amb-side):only-child { animation-timing-function: var(--edge-ease-px, var(--edge-ease)); }
+@media (forced-colors: active), (prefers-contrast: more) { .st-amb-side, .st-amb-top, .st-amb-strip { display: none !important; } }
+
+/* The toolbar's light is the toolbar's whole box: the shell has a 1px bottom border (frost-preview.css, transparent or a divider tone) and a layer that fills the PADDING box left that last row unlit: plain frame in a line across the
+   top of the card, which the card's own 1px ring hid along its straight edge but not above its curve (a pale or dark line over the corner that made it read square). The layer now reaches under the border, so a divider draws over light as it does over the glass. */
+.st-amb-top { inset: 0 -4px -1px 0; }   /* 4 px past the window's far edge: D54 (c), above */
+html[data-sidebar-side=right] .st-amb-top { inset: 0 0 -1px -4px; }
+/* ...and every shell lets it paint there (`overflow: clip` with `overflow-clip-margin: border-box`, frost-preview.css and navigation-progress.css) except the BARE one: Sidebar + address with its
+   sidebar hidden, a 6 px band over the page (address-in-sidebar.css), is `overflow: hidden`, which clips at the padding box whatever the clip margin. Its last px, the one right above the page, was
+   the bare frame across the whole window: 28 against 100 levels in the 5 px over it, a dark line under the lit band (the team's circles, 20 Nov; the release tip alike). With the light on, the
+   bare band clips like every other shell: at its border box, nothing past it. */
+:root:root:root[data-ambient-light] .browser-root .browser-shell[data-sbmode='bare'] { overflow: clip; overflow-clip-margin: border-box; }
+
+/* THE TOP IS ONE LIT FIELD (reported 14 Nov, preview 2: with the tabs on top, the strip row and the toolbar row read as two stripes with a hard edge between them). The strip is recessed a step back (a black .22 in a dark frame, .05 in a light one:
+   toolbar-controls.css `--tab-strip-recess`) and the toolbar row, and the bookmarks bar, have their own fill (`--tab-surface`); over the light that is a dark band above a lighter one (measured, the step between the two rows: 39 levels in a dark frame, 92 in a light one, of which
+   the light itself adds 4 to 23). The light is already one field over both rows (`.st-amb-top` is the whole shell, anchored at its bottom). So while Ambient mode is on the rows are not painted over it, as in every sidebar layout (sidebar.css: the toolbar is transparent beside a docked sidebar) and with the Shelf
+   docked (shelf.css: no recess): the strip's recess token is clear (what reads it follows: the narrow tab's close patch, the active tab's lift) and the rows are transparent. Not while a sidebar floats over the page (`data-edge-float`: the toolbar needs its fill there). Tied to the mode, not to the light being
+   shown, so the frame keeps one tone as the light comes and goes from page to page. */
+:root[data-ambient-mode] .app.style-acira { --tab-strip-recess: rgb(0 0 0 / 0); }
+:root:root:root[data-ambient-mode]:not([data-edge-float]) .app.style-acira .browser-shell > :is(.browser-toolbar.acira-persistent-toolbar, .acira-bookmarks-row) { background: transparent; }
+
+/* THE PAGE CARD'S CORNERS (ui/ambient.ts `.st-amb-corners`). The card is rounded; what shows outside its curve, inside its box, is the frame, and the sidebar's light and the toolbar's, each ending at its own box, never reached it:
+   the lit L met the card at a SQUARE corner with a notch of plain frame in it (the team's report: in 13.8 that corner is the card's curve). So under the card there is a host the size of its box with a piece at each corner, each
+   piece only the cut-out (a circle mask of the card's own radius: transparent in the card, opaque outside it; an explicit radius, a view-transition snapshot paints nothing for one without) in the light of the page's own corner
+   colour (the first and last stops of the sidebar's and the toolbar's rows). It is the card's own group in a layout switch (same box, same spring), so in a docked sidebar's opening and closing it glides with the card. */
+@property --amb-c-tl { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --amb-c-tr { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --amb-c-bl { syntax: '<color>'; inherits: true; initial-value: transparent; }
+@property --amb-c-br { syntax: '<color>'; inherits: true; initial-value: transparent; }
+.st-amb-corners { position: absolute; pointer-events: none; z-index: 0; --amb-cr: var(--geometry-pageRadius, 12px);
+  transition: --amb-c-tl calc(300ms * var(--motion-scale, 1)) cubic-bezier(.2, 0, 0, 1), --amb-c-tr calc(300ms * var(--motion-scale, 1)) cubic-bezier(.2, 0, 0, 1), --amb-c-bl calc(300ms * var(--motion-scale, 1)) cubic-bezier(.2, 0, 0, 1), --amb-c-br calc(300ms * var(--motion-scale, 1)) cubic-bezier(.2, 0, 0, 1); }
+.app[data-reduced-motion=true] .st-amb-corners { transition: none; }
+/* UNDER A WEBSITE'S PAGE the pieces lie over the card's edge and reach 1 px under the page's curve. The card's dark surface (opaque) runs exactly to that curve under the native page, and
+   the page's soft edge pixels blended with it: a ring round every corner of the page darker than both the page and the light beside it (50 to 73 levels where the page is 143 and the
+   light 85; real windows, every layout; the team: 'corners that need filling', 20 Nov). Over the card and 1 px under the curve the page's soft edge lies on the light; under the page
+   the piece is never seen. A page the interface draws in the card (a new tab, Settings) has one edge, the card's own: the pieces stay under it as they were. */
+.browser-body:has(> .page-area > .page-content[data-native]) > .st-amb-corners { z-index: 1; --amb-cr-in: 1px; }
+/* THE LIP ALONG THE CARD'S TOP EDGE (D121, 21 Nov). In the Sidebar mode morph (`data-mode-switch=morph`: the live layout, no view transition) the card's top eases to its new place and the
+   strip above the page ends exactly there in every frame (ui/ambient.ts placeCap), while main's page reaches the screen a little after the interface's frame: going from Sidebar + address with the
+   sidebar on the RIGHT (the card under the 36 pt caption strip) to Hide the toolbar the page rises 30 pt, and for 3 to 5 frames a row or two of the card's top showed above it: its fill,
+   near-black in the dark look and white in the light one, as a line along the whole rising page (real key-window frames: 8 of 12 takes on the 14.1 tip). The lip is the strip's own light at the page's edge (the top row's colours at full strength, the field the
+   strip ends with) along the card's top, 8 px, shown only in the morph and only under a website: where main's page has arrived it lies under it and is never seen; where the page has not, the
+   frame there is lit as the margin above it is. It covers the card's own shape only: at the two top corners it is masked to the inside of the card's curve, the exact complement of the corner
+   pieces' masks (the pieces are the light at its own strength, not opaque: under them the lip would light the cut-outs twice). */
+.st-amb-strip[data-s=lip] { display: none; left: 0; top: 0; width: 100%; height: 8px;
+  -webkit-mask: radial-gradient(circle var(--amb-cr) at 100% 100%, #000 calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), transparent calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))) left top / var(--amb-cr) var(--amb-cr) no-repeat,
+    radial-gradient(circle var(--amb-cr) at 0 100%, #000 calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), transparent calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))) right top / var(--amb-cr) var(--amb-cr) no-repeat,
+    linear-gradient(#000, #000) center top / calc(100% - 2 * var(--amb-cr)) 100% no-repeat; }
+:root[data-mode-switch=morph] .browser-body:has(> .page-area > .page-content[data-native]) > .st-amb-corners > .st-amb-strip[data-s=lip] { display: block; }
+/* ...and the card's own fill (--surface, the page's place before it draws: white in the light look) stands aside under the lip, so the lip lies on the frame the strip above the page lies on
+   and, where it shows, IS the margin's light on the margin's frame. On the fill it would be that light on WHITE: by the light look's numbers (the margin 170,216,190 is the light at about a third
+   of its strength over a frame of about 231,240,238) some 10 to 16 levels lighter than the margin over it; the dark surface and the dark frame are near enough to show nothing. Only in the morph,
+   only under a website, only the lip's 8 px: everywhere else the fill is as it was. */
+:root[data-mode-switch=morph] .browser-body > .page-area:has(> .page-content[data-native]), :root[data-mode-switch=morph] .browser-body > .page-area > .page-content[data-native] { background: linear-gradient(transparent 0 8px, var(--surface) 8px); }
+:where(.st-amb-corners) > i.st-amb-corner { position: absolute; width: var(--amb-cr); height: var(--amb-cr); }
+:where(.st-amb-corners) > i.st-amb-corner[data-c=tl] { left: 0; top: 0; background: var(--amb-c-tl); -webkit-mask: radial-gradient(circle var(--amb-cr) at 100% 100%, transparent calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), #000 calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))); }
+:where(.st-amb-corners) > i.st-amb-corner[data-c=tr] { right: 0; top: 0; background: var(--amb-c-tr); -webkit-mask: radial-gradient(circle var(--amb-cr) at 0 100%, transparent calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), #000 calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))); }
+:where(.st-amb-corners) > i.st-amb-corner[data-c=bl] { left: 0; bottom: 0; background: var(--amb-c-bl); -webkit-mask: radial-gradient(circle var(--amb-cr) at 100% 0, transparent calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), #000 calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))); }
+:where(.st-amb-corners) > i.st-amb-corner[data-c=br] { right: 0; bottom: 0; background: var(--amb-c-br); -webkit-mask: radial-gradient(circle var(--amb-cr) at 0 0, transparent calc(var(--amb-cr) - .5px - var(--amb-cr-in, 0px)), #000 calc(var(--amb-cr) + .5px - var(--amb-cr-in, 0px))); }
+:root[data-ambient-light][data-mode-switch=layout]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-body > .st-amb-corners { view-transition-name: acira-amb-corners; }
+:root[data-mode-switch=layout]::view-transition-group(acira-amb-corners) { animation-duration: calc(480ms * var(--motion-pace, 1)); animation-timing-function: linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1); }
+:root[data-mode-switch=layout]::view-transition-old(acira-amb-corners), :root[data-mode-switch=layout]::view-transition-new(acira-amb-corners) { height: 100%; }
+
+
+/* THE FRAME IS ONE SURFACE (Beta 14, frame at rest; the team 18 Nov: "the colour is not merged with how the sidebar and the top bar is. Same thing for the below part and for the right line... one interface, not multiple interfaces put together").
+   The page card is ringed by four linings: the sidebar, the top bar, the thin strip on the far side and the strip under the card. The first two carried the light; the other two stayed the plain frame, so the light stopped at a hard
+   edge at the card's top-right and bottom-left corners (66 to 77 levels in a dark frame). Here the light goes all the way round: two thin strips (ui/ambient.ts) sit in the corners' host, where the card sits, one along the far side
+   and one under the card, in the page's own colours on those edges (desktop/ambient-edge.cjs reads them), at the strength the field has at the card's edge, and each of the four corners is ONE colour (ui/ambientColours.ts: the
+   two rows that meet there are given the same). The far-side strip also covers the square at the card's bottom corner, so no corner is lit twice. */
+.st-amb-strip { position: absolute; pointer-events: none; overflow: hidden; z-index: 0; }
+.st-amb-strip[data-s=far] { left: 100%; top: 0; width: var(--amb-mr, 0px); height: calc(100% + var(--amb-mb, 0px)); }
+html[data-sidebar-side=right] .st-amb-strip[data-s=far] { left: auto; right: 100%; width: var(--amb-ml, 0px); }
+.st-amb-strip[data-s=bottom] { left: 0; top: 100%; width: 100%; height: var(--amb-mb, 0px); }
+/* THE NEAR-SIDE STRIP (D111, 20 Nov). With the sidebar hidden the card rests 6 px in from the window's edge on the sidebar's side too, and that margin was the one side of the frame with no light
+   (the far side's strip 21 / 53 / 31 where the near margin read 9 / 9 / 11; the square under the card's near corner unlit as well). It is the far strip's mirror: in the corners' host, from the card's
+   top to the window's bottom (the square under the near corner is in it; the square above it is the strip above the page's, D105), in the near column's colours (ui/ambient.ts), rendered only
+   while no sidebar stands there (`data-cap`).
+   IN A MOVE OF THE SIDEBAR it is a picture of its own (`acira-amb-near`), named only while rendered: an old picture alone when a sidebar arrives, a new one alone when it goes. A sidebar's glass is
+   never lit from under it (a floating one is translucent, a docked one is the frame's own glass with its own light at its page-side edge), so the picture shows only where the sidebar's
+   travelling edge has not reached: DOCKING, the sidebar's edge goes from the window's edge across the rail's width (`--frame-rail-width`) on the 480 ms curve, and the strip's old picture is cut
+   at that edge (the margin is 6 px: gone in a frame or two); UNDOCKING, the new picture is uncovered by that edge on its way back. A FLOATING sidebar's edge starts and ends at the card's resting
+   edge (sidebar-overlay.css `--sf-sidebar-travel`): it covers the margin from the first frame of a reveal to the last of a hide, so there the strip shows nothing until the move is over.
+   (A reveal of the hidden TOOLBAR, `data-edge-top`, leaves it unnamed, in the window's own picture with the far strip: the two sides of the card move alike.) */
+.st-amb-strip[data-s=near] { display: none; right: 100%; top: 0; width: var(--amb-ml, 0px); height: calc(100% + var(--amb-mb, 0px)); }
+html[data-sidebar-side=right] .st-amb-strip[data-s=near] { right: auto; left: 100%; width: var(--amb-mr, 0px); }
+.st-amb-strip[data-s=near][data-cap] { display: block; }
+:root[data-ambient-light][data-mode-switch=layout]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-body > .st-amb-corners > .st-amb-strip[data-s=near][data-cap] { view-transition-name: acira-amb-near; }
+:root[data-ambient-light][data-mode-switch=edge][data-edge-side]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-body > .st-amb-corners > .st-amb-strip[data-s=near][data-cap] { view-transition-name: acira-amb-near; }
+@property --amb-near-p { syntax: '<number>'; inherits: false; initial-value: 0; }
+@keyframes amb-near-go { to { --amb-near-p: 1; } }
+:root:root[data-mode-switch=layout]::view-transition-old(acira-amb-near):only-child, :root:root[data-mode-switch=layout]::view-transition-new(acira-amb-near):only-child { animation: calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both amb-near-go; opacity: 1; mix-blend-mode: normal; }
+:root:root[data-mode-switch=layout]::view-transition-old(acira-amb-near):only-child { clip-path: inset(0 0 0 calc(var(--frame-rail-width, 0px) * var(--amb-near-p))); }
+:root:root[data-mode-switch=layout]::view-transition-new(acira-amb-near):only-child { clip-path: inset(0 0 0 calc(var(--frame-rail-width, 0px) * (1 - var(--amb-near-p)))); }
+html[data-sidebar-side=right]:root:root[data-mode-switch=layout]::view-transition-old(acira-amb-near):only-child { clip-path: inset(0 calc(var(--frame-rail-width, 0px) * var(--amb-near-p)) 0 0); }
+html[data-sidebar-side=right]:root:root[data-mode-switch=layout]::view-transition-new(acira-amb-near):only-child { clip-path: inset(0 calc(var(--frame-rail-width, 0px) * (1 - var(--amb-near-p))) 0 0); }
+:root:root[data-mode-switch=edge]::view-transition-old(acira-amb-near), :root:root[data-mode-switch=edge]::view-transition-new(acira-amb-near) { animation: none; opacity: 0; mix-blend-mode: normal; }
+/* THE STRIP ABOVE THE PAGE (D105, 20 Nov: "one frame all round in every layout"). In Hide the toolbar at rest the 6 px above the page were the one side of the card with no light, and the lit sidebar ended at a
+   hard edge beside them. THE CAUSE: the bar's light is `.st-amb-top`, a child of `.browser-shell`; the hidden toolbar's shell has no height and renders none of its children (seamless.css), and the 6 px above
+   the page are then the card's own margin inside `.browser-body`, which no strip covered (the interface layer alone, rows 3 to 10 px on a page red above: R 24.8 where the 6 px band of Sidebar + address reads
+   35.9; real window, at the sidebar's edge 22 to 74 levels in one column). So the frame gets its third strip (ui/ambient.ts): rendered only where the frame shows above the page with no bar ending on it
+   (`data-cap`; in every other layout it is `display: none`), and made to be the very light the 6 px band of Sidebar + address is. THE SAME BOX: a child of the browser's column, from that column's own top
+   and left edge (the 6 px squares over the card's two top corners are in it) to 4 px past the window's far edge, as `.st-amb-top` (D54 c above), as tall as the margin (`--amb-mt`; `--amb-top` is 0 but under a bar on its way in). THE SAME COLOURS: the
+   top row over the page's rectangle (ui/ambient.ts geometry). THE SAME FALL-OFF: the band's, by the distance up from the page's top edge (100% on the edge, 96% at 6 px).
+   IN A LAYOUT SWITCH it is a PICTURE OF ITS OWN (`acira-amb-cap`), named only while the shell is hidden: an old picture alone when the toolbar comes back, a new one alone when it leaves. The bar's own
+   light is not touched: it arrives and leaves exactly as it does without the strip (view-morph.css). (Tried first under the bar's name, so that one group went between the bar's box and the strip's:
+   the group's foot then travels through the page's corner for the first 100 ms of a return and the last 100 of a leave, and on real frames, 57 a second, a 1 to 2 px unlit seam ran through the corner's
+   cut-out for 4 to 6 frames; and on a profile started with Reduce motion on, where the header takes its height at once and the page with it, the bar's rows under the growing group stood unlit.)
+   THE TOOLBAR COMES BACK. The bar's light stands at full from the first frame it shows (view-morph.css), and by then the header has some height: over the strip's rows it is the strip's light
+   or more. So the strip's old picture shows NOTHING of itself (an old picture whole beside it was a frame 30 levels over both rests, real takes); the script gives it what the bar still lacks
+   (ui/ambient.ts capReturn, one animation on the picture in the frame the shell takes its size): where the header takes
+   its height at once (a session started with Reduce motion on: the bar's light there is 19% weaker over the strip's rows than the strip, 10 levels), that difference let go over 240 ms.
+   THE TOOLBAR LEAVES. The old bar's light (view-morph.css) stands until the rising page has covered the bar, then goes over `--page-cover-len`, while main's page covers its last 2.5 points; and
+   into Hide the toolbar the strip above the page is lit, so that last point under it showed the bare frame between the lit strip and the page for one to two frames (a 1 pt line 30 levels under
+   both, real takes; on the release tip it lay inside the unlit strip). There the old light waits until the page has landed (`--page-cover-ms` + `--page-cover-len`, set only where the strip is
+   lit in the new state and no sidebar slides in with it), and the strip's new picture comes in on that very delay: the two cross over the strip's rows alone, the rows going from the old bar's
+   top rows to the strip, rising all the way, over 150 ms on the glide's pace (on the page's own 50 ms the 12 levels came in three frames, 9 to 12 a frame, real takes). (Tried first as a two-part weight on two registered numbers, the strip coming in under the old light: with a script reading the pictures'
+   computed style every frame it took the interface's renderer down once in 56 switches, the release tip none in 56; a plain fade has no such risk.) WHERE A SIDEBAR SLIDES IN WITH IT (`data-rail-slide`:
+   Along the top -> Hide the toolbar) the old light is weighed along the sidebar's travelling edge (above) and keeps its own time: the strip comes in on the old light's own delay and length, as it did.
+   THE HOVER REVEAL (the hidden toolbar shown over the page's top, and put away). The page keeps its place and the bar stands over its top; the bar is the frame's own glass and carries its own light, so
+   while it is shown the strip shows nothing (opacity 0: lit under the bar it was a band 30 to 40 levels over the bar's own rows). In the two moves it is a PICTURE OF ITS OWN (`acira-amb-cap`), named only
+   while the shell is hidden: so it is an old picture alone when the bar arrives and a new picture alone when the bar leaves, with no mark of direction needed, and it runs on the transition's own clock
+   with the bar's picture (acira-edge-shell, seamless.css). (Tried first as transitions of the live element: they start at the commit, the pictures' animations a frame to three later, and on real frames
+   the strip was uncovered about 50 ms ahead of the lifting bar: four frames of both lights, 128 against a rest of 95. And as animations keyed on the state: the reveal's marks are set a frame or two before
+   the state changes, and the wrong move played on the old state for those frames: two dark frames.)
+   ARRIVING: the bar drops in and fades in over the first 30% of the reveal (edge-drop, edge-fade-in) while the reveal shows the NEW root picture from its first frame, in which the strip shows nothing:
+   the strip's old picture goes out on that very fade, so what the arriving glass has not yet covered is the lit strip, never the bare frame.
+   LEAVING: the bar lifts by `--edge-h` on the reveal's time and curve (edge-lift). The strip's new picture is at full from the first frame but clipped from the bar's foot up: its clip goes from the bar's
+   height (`--amb-bar`) to that height less `--edge-h` on the same time and curve, which IS the foot's place at every frame; and the bar's light at its foot is the strip's light (the same fall-off from
+   the page's top). So as the foot passes, the rows go from the one to the other, and nothing of the strip shows through the bar. (The clip is the rule's own, moved by one registered number,
+   `--amb-cap-u`, 0 to 1 on the lift's time and curve.)
+   EVERY MOVE OF THESE PICTURES IS A PLAIN OPACITY OR A REGISTERED NUMBER, never a keyframe that holds a `var()`: with `opacity: var(--amb-cap-k)` and a clip of two `var()`s written in the
+   keyframes themselves, a script that read the pictures' computed style in every frame took the interface's renderer down (process gone, exit code 5; several in about 60 switches, hidden runs;
+   never without the reads, and never on the release tip under the same reads). The interface reads no picture's style there, but nothing in the frame may stand that near a fault. */
+.st-amb-strip[data-s=top] { display: none; left: 0; top: var(--amb-top, 0px); width: calc(100% + 4px); height: var(--amb-mt, 0px); }
+html[data-sidebar-side=right] .st-amb-strip[data-s=top] { left: -4px; }
+.st-amb-strip[data-s=top][data-cap] { display: block; }
+.st-amb-strip[data-s=top] > .amb-l { -webkit-mask-image: linear-gradient(to top, #000 0, rgb(0 0 0 / .7) 48px, rgb(0 0 0 / .34) 112px, rgb(0 0 0 / .1) 176px, transparent 232px); }
+:root[data-ambient-light][data-mode-switch=layout][data-m-seamless~=hidden]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-root > .st-amb-strip[data-s=top][data-cap] { view-transition-name: acira-amb-cap; }   /* data-m-seamless: the root's mirror of the shell's data-seamless (ui/rootMirror.ts, App.tsx), set in the same commit */
+@property --amb-cap-u { syntax: '<number>'; inherits: false; initial-value: 0; }
+@keyframes amb-cap-rise { from { opacity: 0; } }
+:root:root[data-mode-switch=layout]::view-transition-new(acira-amb-cap):only-child { animation: calc(150ms * var(--motion-pace, 1)) linear calc(var(--page-cover-ms, var(--page-rise-ms, 289ms)) + var(--page-cover-len, calc(150ms * var(--motion-pace, 1)))) both amb-cap-rise; opacity: 1; mix-blend-mode: normal; }
+:root:root[data-mode-switch=layout][data-rail-slide]::view-transition-new(acira-amb-cap):only-child { animation: var(--page-cover-len, calc(150ms * var(--motion-pace, 1))) linear var(--page-cover-ms, var(--page-rise-ms, 289ms)) both amb-cap-rise; }
+:root:root[data-ambient-light][data-mode-switch=layout][data-page-rise][data-m-seamless~=hidden]:not([data-rail-slide])::view-transition-old(acira-amb-top):only-child { animation: calc(150ms * var(--motion-pace, 1)) linear calc(var(--page-cover-ms, var(--page-rise-ms, 289ms)) + var(--page-cover-len, calc(150ms * var(--motion-pace, 1)))) both acira-control-fade-out; }
+:root:root[data-mode-switch=layout]::view-transition-old(acira-amb-cap):only-child { animation: none; opacity: 0; mix-blend-mode: normal; }
+:root[data-m-seamless~=shown] .browser-root > .st-amb-strip[data-s=top] { opacity: 0; }
+:root[data-ambient-light][data-mode-switch=edge][data-edge-top][data-m-seamless~=hidden]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-root > .st-amb-strip[data-s=top][data-cap] { view-transition-name: acira-amb-cap; }
+@keyframes amb-cap-out { to { opacity: 0; } }
+@keyframes amb-cap-uncover { to { --amb-cap-u: 1; } }
+:root:root[data-mode-switch=edge]::view-transition-old(acira-amb-cap):only-child { animation: calc(var(--edge-ms, 340ms) * .3) ease-out both amb-cap-out; opacity: 1; mix-blend-mode: normal; }
+:root:root[data-mode-switch=edge]::view-transition-new(acira-amb-cap):only-child { animation: var(--edge-ms, 289ms) var(--edge-ease, cubic-bezier(.65, 0, .35, 1)) both amb-cap-uncover; opacity: 1; mix-blend-mode: normal; clip-path: inset(calc(var(--amb-bar, 36px) - var(--edge-h, 72px) * var(--amb-cap-u)) 0 0 0); }
+
+/* NO RING ROUND THE PAGE CARD (frame at rest, the team 18 Nov: "no line to it, so it blends"). The card used to wear a 1px ring (6% white in a dark frame, 8% black in a light one: 12 to 20 levels at the card's edge along the top, the far side, the bottom and round its curves);
+   with the light going all the way round, the frame and the page meet with nothing drawn between them. The sources no longer draw it (sidebar.css, address-in-sidebar.css, seamless.css, frost-preview.css, the peek's rim in sidebar-overlay.css). This one rule is the guarantee for any layout whose own
+   rule still did (miniRail.css draws one with !important, over the Mini rail): it is the longest selector, so it wins there. Nothing else puts a shadow on the card. */
+:root:root:root:root:root:root .app .browser-root .browser-body > .page-area { box-shadow: none !important; }
+
+/* THE HEAD IS THE COLUMN (the team, 19 Nov, on the real stills; it replaces 'the head is the unlit fill beyond a short rise', which was right only while the top of the column was unlit: once the column is lit
+   from the foot, D51, a head of plain fill is the darker strip, 8 to 17 levels under the tiles' row below it). A glow round the page depends on the distance from the page's edge, and a point in the head is as far
+   from that edge as the point of the column under it. So at every x across the sidebar the head, from the window's top to the bar's foot, carries the light of the column just below the foot: the SAME layer, the
+   same gradient (its first colour is held up to the top), the same fall-off across. No ramp at the foot, no fall-off of the head's own, no rise. Floating, docked and in Mini alike (`data-headed`, ui/ambient.ts).
+   THE CORNER IS ONE VALUE (the team, 19 Nov, on the real takes). The bar's light falls off upward from the page's top edge on the same curve the column's falls off across: 77 % at the top of a 36 px bar. A head
+   that carried the column's light at full height stood OVER the bar it joins along the window's top rows: a ridge at the sidebar's edge, 95 to 98 where the bar beside it read 86 to 88, at rest and travelling with
+   the edge. A point of the head is as far from the page as the FARTHER of its two distances (across to the page's side, up from the bar's foot): its light is the column's fall-off at max(dx, h). The mask is the
+   fall-off across LESS A TRIANGLE at the corner: a diagonal gradient in a square as tall as the band (`--amb-y0` / `--amb-foot`), nothing on the diagonal dx = h and below it, rising to the corner (`--amb-d1..4`,
+   ambientColours cornerClamp: exact along the window's top row, never over the bar's value under it). At the edge the head is the bar's light on every row, beyond dx = h it is the column's, nothing between is
+   brighter than either: monotone across the edge, no blend, and the two are the same sample (the rows' shared corner stop; the cut's colour under a floating sidebar).
+   A DOCKED sidebar and the MINI rail: the side layer itself, with that mask (there is no page above their head: the column's first colour is the only one there).
+   A FLOATING sidebar travels over the bar, and what travels may never be brighter than what stood there (on the first frame of a reveal the arriving head carried the colour of the place it would stop at: 38 levels
+   over both resting states at the window's edge of a page whose top row is pale there). Its head is the BAR'S OWN colours, the top row over the page's real rectangle, with no fall-off of their own
+   (`.st-amb-head-in`), seen through the sidebar's field on the wrapper (`.st-amb-head`: the fall-off across less the corner's triangle). In a reveal or a hide the colours stand still and the field travels with the
+   sidebar's edge (styles/view-morph.css); at rest the picture is the last frame of the slide. The column's layer is clear above the foot there and comes in over the 40 px under it (`--amb-tail`) while the head's
+   piece goes out over the same 40 px, its fade bent so the two layers add up to the straight blend (`--amb-b1..3`, ambientColours bleedFade): no step along the foot, at rest or in any frame. */
+.st-amb-head { position: absolute; left: 0; top: 0; width: 100%; height: 0; z-index: -1; pointer-events: none; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to left, #000 0, rgb(0 0 0 / .7) 48px, rgb(0 0 0 / .34) 112px, rgb(0 0 0 / .1) 176px, transparent 232px), linear-gradient(to top right, transparent 50%, rgb(0 0 0 / var(--amb-d1, .068)) 62.5%, rgb(0 0 0 / var(--amb-d2, .127)) 75%, rgb(0 0 0 / var(--amb-d3, .179)) 87.5%, rgb(0 0 0 / var(--amb-d4, .225)) 100%); -webkit-mask-size: 100% 100%, var(--amb-foot, 0px) var(--amb-foot, 0px); -webkit-mask-position: 0 0, 100% 0; -webkit-mask-repeat: no-repeat; -webkit-mask-composite: source-out; mask-composite: subtract; }
+html[data-sidebar-side=right] .st-amb-head { -webkit-mask-image: linear-gradient(to right, #000 0, rgb(0 0 0 / .7) 48px, rgb(0 0 0 / .34) 112px, rgb(0 0 0 / .1) 176px, transparent 232px), linear-gradient(to top left, transparent 50%, rgb(0 0 0 / var(--amb-d1, .068)) 62.5%, rgb(0 0 0 / var(--amb-d2, .127)) 75%, rgb(0 0 0 / var(--amb-d3, .179)) 87.5%, rgb(0 0 0 / var(--amb-d4, .225)) 100%); -webkit-mask-position: 0 0, 0 0; }
+.st-amb-head-in { position: absolute; inset: 0; }
+.st-amb-head-in > .amb-l { -webkit-mask-image: linear-gradient(180deg, #000 var(--amb-y0), rgb(0 0 0 / var(--amb-b3, .75)) calc(var(--amb-y0) + var(--amb-tail, 0px) * .25), rgb(0 0 0 / var(--amb-b2, .5)) calc(var(--amb-y0) + var(--amb-tail, 0px) * .5), rgb(0 0 0 / var(--amb-b1, .25)) calc(var(--amb-y0) + var(--amb-tail, 0px) * .75), transparent calc(var(--amb-y0) + var(--amb-tail, 0px))); }   /* whole above the foot (the field is the wrapper's); under it the piece goes out over `--amb-tail` */
+/* THE COLUMN'S LAYER UNDER A HEAD. Floating: clear above the foot, coming in over the tail under it (the head's piece is above). Docked and Mini: its fall-off across at every height (the head is the column) less the
+   corner's triangle; they keep the reach that grows when a sidebar docks (`--amb-reach`). */
+.ed-rail.is-peek > .st-amb-side[data-headed] > .amb-l { -webkit-mask-image: linear-gradient(to left, #000 0, rgb(0 0 0 / .7) 48px, rgb(0 0 0 / .34) 112px, rgb(0 0 0 / .1) 176px, transparent 232px), linear-gradient(180deg, #000 var(--amb-y0), transparent calc(var(--amb-y0) + var(--amb-tail, 0px))); -webkit-mask-size: 100% 100%; -webkit-mask-position: 0 0; -webkit-mask-repeat: no-repeat; -webkit-mask-composite: source-out; mask-composite: subtract; }
+html[data-sidebar-side=right] .ed-rail.is-peek > .st-amb-side[data-headed] > .amb-l { -webkit-mask-image: linear-gradient(to right, #000 0, rgb(0 0 0 / .7) 48px, rgb(0 0 0 / .34) 112px, rgb(0 0 0 / .1) 176px, transparent 232px), linear-gradient(180deg, #000 var(--amb-y0), transparent calc(var(--amb-y0) + var(--amb-tail, 0px))); }
+.ed-rail:not(.is-peek) > .st-amb-side[data-headed] > .amb-l, .app > .st-amb-side.sb-mini-amb[data-headed] > .amb-l { -webkit-mask-image: linear-gradient(to left, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach))), linear-gradient(to top right, transparent 50%, rgb(0 0 0 / var(--amb-d1, .068)) 62.5%, rgb(0 0 0 / var(--amb-d2, .127)) 75%, rgb(0 0 0 / var(--amb-d3, .179)) 87.5%, rgb(0 0 0 / var(--amb-d4, .225)) 100%); -webkit-mask-size: 100% 100%, var(--amb-y0) var(--amb-y0); -webkit-mask-position: 0 0, 100% 0; -webkit-mask-repeat: no-repeat; -webkit-mask-composite: source-out; mask-composite: subtract; }
+html[data-sidebar-side=right] .ed-rail:not(.is-peek) > .st-amb-side[data-headed] > .amb-l, html[data-sidebar-side=right] .app > .st-amb-side.sb-mini-amb[data-headed] > .amb-l { -webkit-mask-image: linear-gradient(to right, #000 0, rgb(0 0 0 / .7) calc(48px * var(--amb-reach)), rgb(0 0 0 / .34) calc(112px * var(--amb-reach)), rgb(0 0 0 / .1) calc(176px * var(--amb-reach)), transparent calc(232px * var(--amb-reach))), linear-gradient(to top left, transparent 50%, rgb(0 0 0 / var(--amb-d1, .068)) 62.5%, rgb(0 0 0 / var(--amb-d2, .127)) 75%, rgb(0 0 0 / var(--amb-d3, .179)) 87.5%, rgb(0 0 0 / var(--amb-d4, .225)) 100%); -webkit-mask-position: 0 0, 0 0; }
+@media (forced-colors: active), (prefers-contrast: more) { .st-amb-head { display: none !important; } }
+/* THE PAGE'S CORNERS AT A FLOATING SIDEBAR'S EDGE (ui/ambient.ts paintCorners, `--amb-cut`): the cut-outs there are the pieces that slide with the sidebar (`.sidebar-page-corners`, sidebar-overlay.css: the frame's veil in the
+   corner's shape). Their light is in them, so it is at the page's corner in every frame of a reveal and a hide; the card's own pieces at that edge are clear while the sidebar floats (reported 18 Nov: "check the corners too"). */
+:root[data-ambient-light][data-sidebar-overlay] .app.style-acira:has(>.acira-sidebar.is-peek) .sidebar-page-corners::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: var(--amb-cut, transparent); }
+/* its colours are a picture of their own in an edge reveal or hide (the sidebar's other descendants are unnamed there, seamless.css; this is the second exception, with the side light above) */
+:root[data-ambient-light][data-mode-switch='edge'][data-mode-switch][data-mode-switch][data-mode-switch]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-peek>.st-amb-head>.st-amb-head-in { view-transition-name: acira-amb-head !important; }
+
+/* D148 (23 Nov 2026, the team's own window: finish Ocean, a toolbar colour of its own, Site colour Rich, Ambient on): the toolbar wears its colour (frame.css: --tab-surface, the toolbar colour at its veil, solid
+   without the window's material) and ended in a hard edge on the margin beside the page, which wears the finish: 80,62,98 against 12,22,35 on the rig, 107,74,122 against 0,15,24 on his screen, a step of 66 to
+   about 100 levels at the page's corner by the bar's end. The margin now CONTINUES THE BAR'S OWN PAINT: under the margin's light (the Ambient strips and the corner pieces are later children of the column) the
+   very surface the toolbar wears, the same colour at the same veil over the same frame, from the bar's foot down, fading out over the field's ramp (160 px, ambientColours FIELD_RAMP_PX, the same smoothstep as
+   fieldRow). At the seam both sides are the same layers, whatever the window's material shows through them. Only on the far side (the bar ends there; at its other end it meets the sidebar), and only where
+   the corner reaches: the margin and the card's rounded cut-out (under the card it is hidden). Nothing measured, no element, no timer: one painted box. */
+/* D173 (14.4): the box is shown whenever a toolbar colour is chosen, with Ambient mode OFF too (the toolbar wears its colour either way, and with Ambient off the margin beside the page was the
+   plain frame: a step of 59 to 72 levels at the bar's end). With Ambient on it is the same box, the same paint (D148); it used to come and go with Ambient mode, so nothing toggles it now. */
+.app.style-acira[data-toolbar-color]:not(.native-layer) .browser-body::before {
+  content: ''; position: absolute; top: 0; right: 0; width: calc(var(--geometry-pageRadius, 12px) + 8px); height: 160px; z-index: 0; pointer-events: none;
+  background: rgb(var(--toolbar-rgb) / var(--toolbar-veil));
+  -webkit-mask-image: linear-gradient(180deg, #000 0, rgb(0 0 0 / .844) 40px, rgb(0 0 0 / .5) 80px, rgb(0 0 0 / .156) 120px, transparent 160px);
+}
+:root:is([data-material=acrylic]:is([data-window-active=false], [data-system-transparency=off]), :not(:is([data-material=acrylic], [data-material=vibrancy]))) .app.style-acira[data-toolbar-color]:not(.native-layer) .browser-body::before { background: rgb(var(--toolbar-rgb)); }
+:root[data-sidebar-side=right] .app.style-acira[data-toolbar-color]:not(.native-layer) .browser-body::before { right: auto; left: 0; }
+/* D148, THE SIDEBAR'S FOOT (the team's screen: the sidebar's lit edge 78,59,95 against the strip under the card 40,37,70, about 38 levels in the 6 px row under the page). The edge light's second layer carries its
+   own foot fade (site-glow.css, "the edge light ends where the card does": transparent 6 px above the window's bottom), and that layer BREATHES: at the top of its breath (translateY(12px) scale(1.07, 1.12) about the
+   selected row, opacity 1) the fade is carried below the window, so the sidebar's foot is lit, every 17 s, in the active window only (a window that is not the active one never breathes: hidden windows read 0 to 2).
+   With Ambient mode on, the light now goes ON under the margin: in the 6 px row under the card, and only there, the same three rails reach 160 px past the sidebar's edge, their lights drawn whole about the seam
+   (the ellipses were cut at the sidebar's edge; their far halves are the same light mirrored), faded over the field's ramp (FIELD_RAMP_PX, fieldRow's smoothstep). The same elements: the same colour, opacity,
+   place, breath and fades as the light beside it, so the two sides of the seam are one paint in every frame. Elsewhere the clip is the sidebar's edge as before; the sidebar on the right mirrors it. */
+/* The sidebar clips what it holds at its own box (frost-preview.css `.ed-rail { overflow: hidden }`): here the same cut is a clip-path, the sidebar's box and the 6 px row under the card for the ramp's 160 px past its edge.
+   Its content draws as before everywhere else (its rows scroll in their own list, `.sb-scroll`; min-width and min-height are 0 already, so the flex layout is the same). */
+:root[data-ambient-mode] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) { overflow: visible; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% + 160px) calc(100% - 6px), calc(100% + 160px) 100%, 0 100%); }
+:root[data-ambient-mode][data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) { clip-path: polygon(0 0, 100% 0, 100% 100%, -160px 100%, -160px calc(100% - 6px), 0 calc(100% - 6px)); }
+:root[data-ambient-mode] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail {
+  right: -160px; --ab-ex: calc(100% - 160px);
+  clip-path: polygon(0 0, calc(100% - 160px) 0, calc(100% - 160px) calc(100% - 6px), 100% calc(100% - 6px), 100% 100%, 0 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%);
+}
+:root[data-ambient-mode] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-top] {
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--ab-top-y, 0px), rgb(0 0 0 / .1) calc(var(--ab-top-y, 0px) + 16px), rgb(0 0 0 / .42) calc(var(--ab-top-y, 0px) + 35px), rgb(0 0 0 / .8) calc(var(--ab-top-y, 0px) + 52px), #000 calc(var(--ab-top-y, 0px) + 64px)), linear-gradient(90deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+:root[data-ambient-mode] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-lit]::before, :root[data-ambient-mode] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-lit]::after { inset: 0; }
+:root[data-ambient-mode][data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail { left: -160px; right: 0; --ab-ex: 160px; clip-path: polygon(160px 0, 100% 0, 100% 100%, 0 100%, 0 calc(100% - 6px), 160px calc(100% - 6px)); -webkit-mask-image: linear-gradient(270deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%); }
+:root[data-ambient-mode][data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-top] { -webkit-mask-image: linear-gradient(180deg, transparent var(--ab-top-y, 0px), rgb(0 0 0 / .1) calc(var(--ab-top-y, 0px) + 16px), rgb(0 0 0 / .42) calc(var(--ab-top-y, 0px) + 35px), rgb(0 0 0 / .8) calc(var(--ab-top-y, 0px) + 52px), #000 calc(var(--ab-top-y, 0px) + 64px)), linear-gradient(270deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%); }

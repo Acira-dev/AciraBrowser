@@ -19,8 +19,14 @@ function signOptions(application,policy,{entitlements}={}){
 function resealArguments(application,policy){
  return ['--force','--sign',policy.identity,...(policy.distribution?['--options','runtime','--timestamp','--preserve-metadata=entitlements']:['--timestamp=none']),application];
 }
+/** One nested bundle signed again inside an app that is otherwise kept as signed: the installer's helpers after they are renamed (D139,
+ *  helper-names.cjs). The same identity and options as the first signing; the entitlements are named, not taken from the old signature. */
+function nestedSignArguments(target,policy,entitlements){
+ if(typeof entitlements!=='string'||!entitlements)throw Error('A nested Mac bundle is signed with its entitlements file named.');
+ return ['--force','--sign',policy.identity,...(policy.distribution?['--options','runtime','--timestamp']:['--timestamp=none']),'--entitlements',entitlements,target];
+}
 function verifySigningDetails(details,policy){
  if(!policy.distribution){if(!/^Signature=adhoc$/m.test(details))throw Error('Expected the declared local ad-hoc signature.');return;}
  if(!details.includes('Authority='+policy.identity+'\n')||!details.includes('TeamIdentifier='+policy.team+'\n')||!/^CodeDirectory .*flags=0x[\da-f]+\([^\n]*runtime[^\n]*\)/mi.test(details)||/^Signature=adhoc$/m.test(details))throw Error('Mac signing identity or hardened runtime did not survive final sealing.');
 }
-module.exports={signingPolicy,signOptions,resealArguments,verifySigningDetails};
+module.exports={signingPolicy,signOptions,resealArguments,nestedSignArguments,verifySigningDetails};

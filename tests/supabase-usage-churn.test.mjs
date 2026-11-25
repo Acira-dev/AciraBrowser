@@ -39,7 +39,7 @@ test('uninstall message: exactly the seven fields, Windows only, a real random i
   for (const arch of ARCHES) assert.ok(validateUninstall(message({ arch }), NOW), arch);
   for (const key of UNINSTALL_FIELDS) { const value = message(); delete value[key]; assert.equal(validateUninstall(value, NOW), null, key + ' is required'); }
   for (const extra of ['channel', 'language', 'reason', 'comment', 'url', 'ip', 'userAgent', 'time', 'keptData']) assert.equal(validateUninstall(message({ [extra]: 'x' }), NOW), null, extra);
-  for (const [field, wrong] of [['platform', 'darwin'], ['platform', 'linux'], ['platform', 'Win32'], ['arch', 'mips'], ['schema', 2], ['schema', '1'], ['event', 'daily'], ['event', 'Uninstall'], ['installId', ID.toUpperCase()], ['installId', 'not-an-id'], ['installId', SAMPLE_ID], ['appVersion', '1.0'], ['appVersion', '1.0.0; drop'], ['day', '2026-11-05'], ['day', '2026-11-03T10:00:00Z'], ['day', '2026-02-30']]) assert.equal(validateUninstall(message({ [field]: wrong }), NOW), null, `${field}=${wrong}`);
+  for (const [field, wrong] of [['platform', 'darwin'], ['platform', 'linux'], ['platform', 'Win32'], ['arch', 'mips'], ['schema', 2], ['schema', '1'], ['event', 'daily'], ['event', 'Uninstall'], ['installId', ID.toUpperCase()], ['installId', 'not-an-id'], ['installId', SAMPLE_ID], ['appVersion', '1.0'], ['appVersion', '1.0.0; drop'], ['day', '2026-11-06'], ['day', '2026-11-03T10:00:00Z'], ['day', '2026-02-30']]) assert.equal(validateUninstall(message({ [field]: wrong }), NOW), null, `${field}=${wrong}`);
   assert.ok(validateUninstall(message({ day: '2026-11-02' }), NOW), 'yesterday (time zones)');
   assert.equal(validateUninstall(null, NOW), null); assert.equal(validateUninstall([], NOW), null);
   assert.equal(validateUninstall(PROBES.uninstall(DAY), NOW), null, 'the placeholder id only with the probe flag');
@@ -92,8 +92,8 @@ test('migration: the uninstall table mirrors the function, is locked, has no ide
   const text = sql();
   const table = text.match(/create table if not exists public\.usage_uninstalls \([\s\S]*?\n\);/)[0];
   assert.match(table, /install_id\s+uuid not null primary key/, 'one row per install');
-  for (const column of UNINSTALL_COLUMNS) assert.match(table, new RegExp(`^\\s*${column}\\s+\\w+ not null`, 'm'), column + ' not null');
-  assert.equal((table.match(/^\s{2}\w+\s/gm) || []).length, UNINSTALL_COLUMNS.length, 'only these columns');
+  for (const column of UNINSTALL_COLUMNS.filter((name) => name !== 'reason')) assert.match(table, new RegExp(`^\\s*${column}\\s+\\w+ not null`, 'm'), column + ' not null');
+  assert.equal((table.match(/^\s{2}\w+\s/gm) || []).length, UNINSTALL_COLUMNS.length - 1, 'only these columns (the optional reason is added by the schema-4 migration)');
   assert.deepEqual(list(/check \(platform in \(([^)]*)\)\)/.exec(table)[1]), [...UNINSTALL_PLATFORMS]);
   assert.deepEqual(list(/check \(arch in \(([^)]*)\)\)/.exec(table)[1]), [...ARCHES]);
   const daily = fs.readFileSync(path.join(root, 'supabase/migrations/20261025000000_usage_metrics.sql'), 'utf8');
@@ -141,8 +141,8 @@ test('migration: the three founder views are invoker views, revoked, and say "go
 
 test('deploy: the dry run lists the churn migration and the uninstall checks; the health checks pass against the real handler and store nothing', async () => {
   const files = await migrationFiles();
-  assert.equal(files.at(-1), FILE);
-  assert.equal(healthChecks(DAY).length, 8);
+  assert.ok(files.includes(FILE) && files.at(-2) === '20261113000000_usage_schema4.sql' && files.at(-1) === '20261116000000_usage_installs.sql', 'the churn migration is still run, then schema 4, then the install views');
+  assert.equal(healthChecks(DAY).length, 14, "Beta 14: two more probe the uninstaller reason");
   const labels = healthChecks(DAY).map(([label, , want]) => `${label} ${want}`).join('\n');
   assert.match(labels, /uninstall message from a Mac is refused 400/); assert.match(labels, /uninstall probe[^\n]*202/);
   const logs = []; const original = console.log; console.log = (...args) => logs.push(args.join(' '));
@@ -156,7 +156,7 @@ test('deploy: the dry run lists the churn migration and the uninstall checks; th
   console.log = () => {};
   try { await smoke('https://x.supabase.co/functions/v1/usage', fetchImpl, { attempts: 1, wait: 0 }); } finally { console.log = original; }
   assert.equal(store.rows.length + store.ratings.length + store.uninstalls.size, 0, 'the health checks store nothing');
-  assert.deepEqual(store.probes.map(([table]) => table), ['daily_usage', 'feature_ratings', 'usage_uninstalls']);
+  assert.deepEqual(store.probes.map(([table]) => table), ['daily_usage', 'feature_ratings', 'usage_uninstalls', 'usage_uninstalls', 'usage_off', 'usage_surveys'], 'the uninstall table is probed twice: without a reason (schema 1) and with one (schema 4)');
 });
 
 test('the public source export and the setup runbook know the new migration', async () => {

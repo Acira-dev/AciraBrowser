@@ -32,6 +32,8 @@ async function runCheck(command,message,{win,exec,helper,timeoutMs,env}){
 }
 
 const NOT={
+ // D150 (14.3): the helper could not start (acira-verify.exe is gone or blocked: an antivirus quarantined it on a member's PC); "Couldn't verify it's you" sent him round in circles
+ get helperMissing(){return {ok:false,code:'failed',reason:'helper-missing',message:tr('pw.gate.helperMissing','Acira can’t verify you because an antivirus may have removed or blocked a part of Acira. Restoring it or reinstalling Acira fixes this.')};},
  get cancelled(){return {ok:false,code:'cancelled',message:tr('pw.gate.cancelled','Cancelled.')};},
  get failed(){return {ok:false,code:'failed',message:tr('pw.gate.failed','Couldn’t verify it’s you. Try again.')};},
  get unavailable(){return {ok:false,code:'unavailable',message:tr('pw.gate.unavailable','Acira can’t verify you on this PC. Set up Windows Hello or a Windows password and try again.')};},
@@ -58,12 +60,14 @@ function windowsVerifier({exec,env=process.env,platform=process.platform,timeout
   let win=null;try{win=asked&&!asked.isDestroyed?.()?asked:parentWindow?.()||null;}catch{}
   const options={win,exec,helper:helper??helperPath({packaged}),timeoutMs,env:helperEnv(env)};
   const hello=await runCheck('hello',message,options);
+  if(hello.code==='failed')return NOT.helperMissing;
   const out=hello.stdout||'';
   if(hello.code==='timeout'||out==='timeout')return NOT.timeout;
   if(out==='result:Verified')return {ok:true,method:'hello'};
   if(out==='result:Canceled')return NOT.cancelled;
   if(!hello.code&&(out.startsWith('unavailable:')||HELLO_FALLBACK.has(out))){
    const credential=await runCheck('password',message,options);
+   if(credential.code==='failed')return NOT.helperMissing;
    if(credential.code==='timeout'||credential.stdout==='timeout')return NOT.timeout;
    return credential.stdout==='result:Verified'?{ok:true,method:'credential'}:credential.stdout==='result:Canceled'?NOT.cancelled:credential.stdout==='result:Failed'?NOT.failed:NOT.unavailable;
   }

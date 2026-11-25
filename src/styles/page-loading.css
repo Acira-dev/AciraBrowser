@@ -1,0 +1,12 @@
+/* (The class is page-wait: styles.css has an older .page-loading, a 2 px accent bar.) */
+/* D151: the page area while the page on show has nothing to show yet (PageLoading.tsx): its one surface, and after 400 ms the tab row's own
+   loader at its centre, twice the row's size, in the row's colour (text-primary), no chip, no rim, no text. It fades in over 150 ms and leaves
+   with the page's first content, in the same switch as the cover. */
+.page-area > .page-wait {
+  position: absolute; z-index: 2; left: 50%; top: 50%; display: grid; place-items: center; width: 28px; height: 28px; margin: -14px 0 0 -14px;
+  color: var(--text-primary); pointer-events: none;
+  animation: page-wait-in 150ms ease-out both;
+}
+@keyframes page-wait-in { from { opacity: 0; } }
+/* Reduce Motion: the loader stands still (DotMatrix reducedMotion) and simply appears after the same wait. */
+[data-reduced-motion="true"] .page-area > .page-wait { animation: none; }

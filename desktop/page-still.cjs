@@ -15,6 +15,11 @@ const HOLD_MAX_MS = 120, SETTLE_MS = 32, FADE_MS = 130, RELEASE_MS = 20000, MAX_
 // beneath it and the picture dissolves on the house crossfade (130 ms x speed scale). A navigation holds the picture until the new
 // page has painted (bounded), so a page that has not drawn yet never shows as a white or dark frame.
 const PRIME_MAX_WIDTH = 2560, PRIME_QUALITY = 92, SHOWN_SETTLE_MS = 34, NAV_HOLD_MS = 450;
+// D159 (member, Windows, 14.2: "screen flash"): at Enter on the New Tab one frame showed the page area bare, white (the arriving page's view shown
+// before the cover was on screen) or dark (the interface's New Tab gone before it). The cover is moved in at the same moment as the switch, and on
+// Windows it reaches the screen a frame later. The arriving page's view is now shown COVER_UP_MS after the cover was moved in (two frames, the
+// interface keeps its New Tab as long: newTabHold.ts), never later, whatever else happens. The Mac does not show the race; nothing there moves.
+const COVER_UP_MS = 34;
 /** Runs in the interface (main sends it as `(${uiAtRest})()`): true when nothing of the window's frame is in motion. A picture of the
  * new tab page is only worth keeping if it is of the page at rest: taken while the sidebar glides (the layout view transition, the page
  * content held in its old box by followPage), it shows the page displaced by the sidebar's width beside a bare strip of the page card,
@@ -38,7 +43,7 @@ const parked = rect => ({ x: -rect.width - 64, y: rect.y, width: rect.width, hei
 const roundRect = rect => ({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
 const BASE = 'html,body{height:100%;margin:0;background:rgb(0 0 0 / 0)}html{background-repeat:no-repeat;background-position:top left;background-size:100% 100%}';
 
-function createPageStill({ WebContentsView, getWindow, later = (fn, ms) => setTimeout(fn, ms) }) {
+function createPageStill({ WebContentsView, getWindow, later = (fn, ms) => setTimeout(fn, ms), now = Date.now }) {
   let view = null, ready = null, hideTimer = null, releaseTimer = null, version = 0, job = null, cssKey = null, primed = null, primeSeq = 0, fadeKey = null;
   const queued = new Map();
   let disposed = false;
@@ -161,11 +166,21 @@ function createPageStill({ WebContentsView, getWindow, later = (fn, ms) => setTi
   function flip(entry, run, showing = false) {
     if (disposed) return;
     if (job && !job.ready) { queued.set(entry, run); return; }
+    // D159: an arriving page's view under a cover that has only just been moved in waits until the cover is on screen (bounded, upNow).
+    if (job && job.cover && showing && !job.up && now() < job.upAt) { job.waiting.set(entry, run); return; }
+    if (job && job.cover && !showing) job.waiting.delete(entry);
     run();
     if (job && job.cover) { if (showing && !job.swapped) { const j = job; later(() => { j.swapped = true; settle(j); }, SHOWN_SETTLE_MS); } return; }
     if (job && job.ready && job.shown) leave(job);
   }
 
+  /** D159: the cover has been on screen long enough (or its bound ran out): the views that waited are shown, as they would have been. */
+  function upNow(j) {
+    if (j.up) return; j.up = true;
+    const runs = [...j.waiting.values()]; j.waiting.clear();
+    for (const run of runs) { try { run(); } catch { /* a page that went */ } }
+    if (runs.length && job === j && !j.swapped) later(() => { j.swapped = true; settle(j); }, SHOWN_SETTLE_MS);
+  }
   /** A covering picture leaves once a page is showing beneath it and (for a navigation) that page has painted. */
   function settle(j) { if (j === job && j.swapped && j.held) leave(j); }
 
@@ -212,7 +227,9 @@ function createPageStill({ WebContentsView, getWindow, later = (fn, ms) => setTi
     if (!primed || primed.key !== key || !live() || (job && !job.left) || !win || win.isDestroyed()) return false;
     const layer = view, rect = primed.rect; primed = null; ++primeSeq;
     clearTimeout(hideTimer); clearTimeout(releaseTimer); hideTimer = releaseTimer = null; ++version;
-    const j = job = { ready: true, shown: true, abandoned: false, left: false, cover: true, swapped: false, held: !until, hidden: false, pressed: false, target, ms: Math.round(FADE_MS * scale) };
+    const j = job = { ready: true, shown: true, abandoned: false, left: false, cover: true, swapped: false, held: !until, hidden: false, pressed: false, target, ms: Math.round(FADE_MS * scale), upAt: now() + COVER_UP_MS, waiting: new Map() };
+    // D159: the views waiting to be shown until the cover has been on screen for COVER_UP_MS; the bound shows them whatever happened.
+    later(() => upNow(j), COVER_UP_MS);
     // Over the pages and the interface, under any popup or panel layer (`above` names the slot among the window's other layers).
     const others = win.contentView.children.filter(child => child !== layer), at = typeof above === 'function' ? above(others) : others.length;
     if (win.contentView.children.indexOf(layer) !== at) win.contentView.addChildView(layer, Math.max(0, Math.min(others.length, at)));
@@ -252,4 +269,4 @@ function presentPage(entry, visible, { outer, inner, apply }) {
   return true;
 }
 
-module.exports = { createPageStill, presentPage, uiAtRest, HOLD_MAX_MS, FADE_MS, DISSOLVE_STRETCH, NAV_HOLD_MS, SHOWN_SETTLE_MS, AWAIT_SWAP_MS };
+module.exports = { createPageStill, presentPage, uiAtRest, HOLD_MAX_MS, FADE_MS, DISSOLVE_STRETCH, NAV_HOLD_MS, SHOWN_SETTLE_MS, AWAIT_SWAP_MS, COVER_UP_MS };

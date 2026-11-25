@@ -453,7 +453,7 @@ test('the Windows guard covers every website frame, never needs another file (sa
  // macOS: the guard's Mac answers need no main-process question, and an approved Apple bridge is registered after it, so it sits on top.
  assert.match(source,/process\.platform==='darwin'[\s\S]*executeInMainWorld\(\{func:guard,args:\[null,true,refused\]\}\)/);
  assert.match(blocking,/'passkey-guard-preload\.cjs'\)\}\);if\(process\.platform==='darwin'\)session\.registerPreloadScript\(\{type:'frame',filePath:path\.join\(__dirname,'browser-services','mac-passkey-preload\.cjs'\)\}\)/);
- assert.match(blocking,/if\(process\.platform==='win32'\)pipeline\.useHeaders\(passkeyPolicy\)/,'no Permissions-Policy denial on a Mac: security keys still work');
+ assert.match(blocking,/if\(process\.platform==='win32'\)pipeline\.useHeaders\(passkeyPolicy,\{scope:'documents'\}\)/,'no Permissions-Policy denial on a Mac: security keys still work');
 });
 
 // The same script in real Chromium (Electron), with the credential calls stubbed so no Windows dialog can open.

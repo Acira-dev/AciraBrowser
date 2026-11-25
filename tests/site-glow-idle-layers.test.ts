@@ -17,7 +17,7 @@ class FakeEl {
   shown: string | null = null;   /* what the layer is drawn at right now (the computed opacity); null = settled at its inline opacity */
   style = new FakeStyle(); className = ''; attrs = new Map<string, string>(); children: FakeEl[] = []; isConnected = true; offsetWidth = 0;
   setAttribute(k: string, v: string) { this.attrs.set(k, v); } getAttribute(k: string) { return this.attrs.get(k) ?? null; } removeAttribute(k: string) { this.attrs.delete(k); } hasAttribute(k: string) { return this.attrs.has(k); }
-  prepend(el: FakeEl) { this.children.unshift(el); } /* the engine prepends layer 0, then layer 1: `frameLayers()` below puts them back in creation order */
+  prepend(el: FakeEl) { this.children.unshift(el); } /* the engine prepends layer 0, then layer 1: `frameLayers()` below puts them back in creation order (three: Beta 14/site tint) */
   dataset: Record<string, string> = {};
 }
 const app = new FakeEl(), root = new FakeEl();
@@ -28,14 +28,16 @@ Object.assign(globalThis, {
   matchMedia: () => ({ matches: false }), requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: () => {}, setTimeout
 });
 
-const frameLayers = () => [...app.children].reverse();
+const allFrame = () => [...app.children].reverse();   // creation order: top 0, bottom 0, top 1, bottom 1, ... (Beta 14 two-band split)
+const frameLayers = () => allFrame().filter(el => el.getAttribute('data-band') === 'top');
+const bottomLayers = () => allFrame().filter(el => el.getAttribute('data-band') === 'bottom');
 const BLUE = { color: '#3b6ff5', level: 'rich' as const, blocked: false }, GREEN = { color: '#1ed760', level: 'rich' as const, blocked: false };
 const glow = await import('../src/ui/siteGlowEngine');
 const mount = (ref: unknown) => { const el = new FakeEl(); const cleanup = (ref as (e: FakeEl) => (() => void) | undefined)(el); return { el, unmount: () => { el.isConnected = false; cleanup?.(); } }; };
 const lit = (el: FakeEl) => el.hasAttribute('data-lit'), wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// 13.9 speed: every idle frame layer kept `will-change: opacity`, so after the first site colour the three full-window layers stayed on the compositor for good, each with a compositor
-// surface of its own (12.6 MB at 2x in dark) and an overlap layer above it. A frame layer and its rails now wear `data-lit` while they show or fade; only a lit layer keeps will-change.
+// Beta 14 speed pass (RAM bar): every idle frame layer kept `will-change: opacity`, so the three full-window layers stayed on the compositor from the first colour on, each with a compositor
+// surface of its own (12.6 MB at 2x in dark) and an overlap layer above it: +50 MB of GPU memory against 13.8. A frame layer now wears `data-lit` like the rails, and only a lit layer keeps will-change.
 test('a frame layer is lit while its glow shows or fades away, and not otherwise, with its rails', async () => {
   const rails = [mount(glow.railGlowRef0), mount(glow.railGlowRef1), mount(glow.railGlowRef2)];
   glow.syncSiteGlow(BLUE, { instant: false });
@@ -45,6 +47,7 @@ test('a frame layer is lit while its glow shows or fades away, and not otherwise
   const blue = frame.findIndex(lit);
   assert.ok(Number(frame[blue].style.opacity) > 0, 'the lit one is the one that shows');
   assert.ok(lit(rails[blue].el), 'its rail with it');
+  assert.deepEqual(bottomLayers().map(lit), frame.map(lit), 'and each band has its bottom band lit with it');
   glow.syncSiteGlow(GREEN, { instant: false });
   const green = frame.findIndex((el, i) => i !== blue && lit(el));
   assert.ok(green >= 0 && lit(frame[blue]), 'a new colour: the new layer is lit at once, the old one stays lit while it fades out');
@@ -55,6 +58,7 @@ test('a frame layer is lit while its glow shows or fades away, and not otherwise
   await wait(520);
   assert.equal(frame.filter(lit).length, 0, 'faded away: no frame layer is lit');
   assert.equal(rails.filter(r => lit(r.el)).length, 0, 'and no rail');
+  assert.equal(bottomLayers().filter(lit).length, 0, 'and no bottom band');
   glow.syncSiteGlow(BLUE, { instant: true });
   assert.equal(frame.filter(lit).length, 1, 'an instant colour lights its layer at once');
   glow.syncSiteGlow({ ...BLUE, color: undefined, blocked: true } as never, { instant: true });

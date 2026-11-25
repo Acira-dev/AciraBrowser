@@ -12,7 +12,7 @@ function Row({ id, list, index, count, reduced, onToggle, onMove, onSwitch, onDr
   return <Reorder.Item as="li" value={id} data-item={id} dragListener={false} dragControls={controls} onDragEnd={onDragEnd} transition={aciraSpring(reduced)} className="toolbar-customize-row menu-customize-row"
     onKeyDown={event => { if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) { event.preventDefault(); event.stopPropagation(); onMove(event.key === 'ArrowUp' ? -1 : 1); } }}>
     <span className="toolbar-customize-grip" aria-hidden="true" onPointerDown={event => controls.start(event)}/>
-    <label className="toolbar-customize-check" title={label}><input type="checkbox" checked onChange={onToggle}/><span>{label}</span></label>
+    <label className="toolbar-customize-check" title={label}><input className="popup-check" type="checkbox" checked onChange={onToggle}/><span>{label}</span></label>
     <button type="button" className="toolbar-customize-move" aria-label={t('menucustomizer.moveUp', { label })} title={t('menucustomizer.moveUpHint')} disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={14}/></button>
     <button type="button" className="toolbar-customize-move down" aria-label={t('menucustomizer.moveDown', { label })} title={t('menucustomizer.moveDownHint')} disabled={index === count - 1} onClick={() => onMove(1)}><ArrowUp size={14}/></button>
     <button type="button" className="toolbar-customize-move menu-customize-switch" aria-label={list === 'main' ? t('menucustomizer.moveToMore', { label }) : t('menucustomizer.moveToMain', { label })} title={list === 'main' ? t('menucustomizer.toMore') : t('menucustomizer.toMain')} data-other={other} onClick={onSwitch}>{list === 'main' ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}</button>
@@ -59,7 +59,7 @@ export function MenuCustomizer({ profileId, reduced }: { profileId: string; redu
         {layout.hidden.length > 0 && <section className="menu-customize-list" aria-label={t('menucustomizer.hidden')}>
           <p className="popup-label">{t('menucustomizer.hidden')}</p>
           <ul className="toolbar-customize-list">
-            {layout.hidden.map(id => <li key={id} className="toolbar-customize-row menu-customize-row" data-hidden><label className="toolbar-customize-check" title={menuItemLabel(id)}><input type="checkbox" checked={false} onChange={() => save(setMenuItemHidden(layout, id, false))}/><span>{menuItemLabel(id)}</span></label></li>)}
+            {layout.hidden.map(id => <li key={id} className="toolbar-customize-row menu-customize-row" data-hidden><label className="toolbar-customize-check" title={menuItemLabel(id)}><input className="popup-check" type="checkbox" checked={false} onChange={() => save(setMenuItemHidden(layout, id, false))}/><span>{menuItemLabel(id)}</span></label></li>)}
           </ul>
         </section>}
       </div>

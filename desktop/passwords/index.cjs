@@ -44,8 +44,21 @@ function dialogs({dialog,appDialog,env,packaged}){
   },
  };
 }
-/** `packaged` is Electron's app.isPackaged; leaving it out keeps every test switch off. */
-function sharedPasswords({dir,safeStorage,clipboard,ClipboardItem,dialog,appDialog,shell,systemPreferences,env=process.env,packaged}){
- return shared??=createPasswords({dir,keys:safeStorageKeys(safeStorage),gate:createGate({verify:platformVerifier({env,packaged,systemPreferences})}),clipboard:clipboardPort({clipboard,ClipboardItem}),trash:typeof shell?.trashItem==='function'?file=>shell.trashItem(file):null,...dialogs({dialog,appDialog,env,packaged})});
+/**
+ * Test switch ACIRA_MASKS_TEST_ORIGINS (JSON {"simplelogin":"http://127.0.0.1:PORT",...}): the mask service talks to a local stand-in instead of the
+ * real service. Like the other test switches it is read only in an unpackaged run inside an isolated test profile, and it only takes plain
+ * loopback origins; an installed app ignores it whatever the environment says.
+ */
+function maskTestOrigins({env,packaged}){
+ if(!testSwitchesAllowed({env,packaged})||!env.ACIRA_MASKS_TEST_ORIGINS)return {};
+ try{
+  const parsed=JSON.parse(env.ACIRA_MASKS_TEST_ORIGINS),out={};
+  for(const [id,origin] of Object.entries(parsed||{})){const url=new URL(String(origin));if(url.protocol==='http:'&&(url.hostname==='127.0.0.1'||url.hostname==='localhost')&&url.pathname==='/'&&!url.username&&!url.password)out[id]=url.origin;}
+  return out;
+ }catch{return {};}
 }
-module.exports={sharedPasswords,dialogs,clipboardPort,WINDOWS_PRIVATE_FORMATS};
+/** `packaged` is Electron's app.isPackaged; leaving it out keeps every test switch off. */
+function sharedPasswords({dir,safeStorage,clipboard,ClipboardItem,dialog,appDialog,shell,systemPreferences,maskFetch=null,env=process.env,packaged}){
+ return shared??=createPasswords({dir,keys:safeStorageKeys(safeStorage),gate:createGate({verify:platformVerifier({env,packaged,systemPreferences})}),clipboard:clipboardPort({clipboard,ClipboardItem}),trash:typeof shell?.trashItem==='function'?file=>shell.trashItem(file):null,maskFetch,maskOrigins:maskTestOrigins({env,packaged}),...dialogs({dialog,appDialog,env,packaged})});
+}
+module.exports={sharedPasswords,dialogs,clipboardPort,maskTestOrigins,WINDOWS_PRIVATE_FORMATS};

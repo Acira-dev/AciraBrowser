@@ -35,6 +35,12 @@ body.bare #text{padding:2px 4px 2px}
 #tag{flex:none}
 #tag:empty{display:none}
 #tag::before{content:'· '}
+/* B14 Mini sample: a rail item's name, in the house tooltip's look (src/styles/transient.css .t-tip): the inverted chip, 24px, radius 4,
+   one line sized to its text, at most 260px with an ellipsis. Drawn here because this view is above the page. */
+body.tip #card{width:max-content;max-width:260px;height:24px;padding:0 8px;border-radius:4px;background:rgb(24 24 27);box-shadow:0 0 0 1px rgb(255 255 255/.1),0 1px 2px rgb(0 0 0/.2),0 4px 12px -2px rgb(0 0 0/.25);display:flex;align-items:center}
+body.tip #pic,body.tip #meta{display:none}
+body.tip #text{padding:0;min-width:0}
+body.tip #ttl{display:block;font:500 12px/16px Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:#f4f4f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 @media (forced-colors:active){#card{border:1px solid CanvasText;box-shadow:none}}
 </style>
 </head>
@@ -75,7 +81,7 @@ const play=(el,keyframes,id,opening=false)=>{
 const settle=()=>{for(const a of running.splice(0))a.cancel();};
 
 function render(state){
- body.classList.toggle('light',state.dark===false);
+ body.classList.toggle('light',state.dark===false);body.classList.toggle('tip',!!state.tip);
  speed=state.speed==='fast'?'fast':'premium';off=state.speed==='off'||!!state.reducedMotion;
  card.style.left=state.inset.left+'px';card.style.top=state.inset.top+'px';
  $('ttl').textContent=state.title||state.host||'';$('host').textContent=state.host||'';$('tag').textContent=state.renamed?(state.labels&&state.labels.renamed)||'':'';
@@ -106,7 +112,7 @@ tabCard.onState(state=>{
   return;
  }
  render(state);
- tabCard.command({type:'size',height:measure()+0});
+ tabCard.command({type:'size',height:measure()+0,...(state.tip?{width:Math.ceil(card.getBoundingClientRect().width)}:{})});
 });
 // Ready once Inter is in, so the first card is measured in it.
 document.fonts.load('400 13px Inter').catch(()=>{}).finally(()=>tabCard.command({type:'ready'}));

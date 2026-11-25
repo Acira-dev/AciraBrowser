@@ -224,6 +224,28 @@ test('re-running setup over an installed Acira asks first (Repair / Update / Ope
   // a running Acira quits the ordinary way; nothing in the chooser kills a process
   assert.match(choose, /"--acira-installer-quit"/);
   assert.doesNotMatch(choose, /\.Kill\(|TerminateProcess/);
+  // The installed exe's version is the four-part a.b.c.N (windowsFileVersion): the chooser reads it back as a.b.c-beta.N before it compares, or a Beta 14 setup
+  // over 13.x said "A newer Acira is installed" (0.1.0.13 read as the release 0.1.0) and changed nothing (17 Nov 2026).
+  assert.ok(choose.includes('return FromFileVersion(f.Length > 0 ? f : (v.ProductVersion ?? "").Trim());'), 'the installed version goes through FromFileVersion');
+  assert.ok(choose.includes('if (v.IndexOf(\'-\') < 0 && parts.Length == 4 && int.TryParse(parts[3], out n) && n > 0) return parts[0] + "." + parts[1] + "." + parts[2] + "-beta." + n;'));
+  // The same rule and comparison in JS (a port of FromFileVersion and Compare), over what windowsFileVersion writes for each kind of build.
+  const fromFileVersion = v => { const parts = v.split('.'); return !v.includes('-') && parts.length === 4 && Number(parts[3]) > 0 ? `${parts[0]}.${parts[1]}.${parts[2]}-beta.${Number(parts[3])}` : v; };
+  const compare = (a, b) => {
+    const parse = v => { const dash = v.indexOf('-'); return [(dash < 0 ? v : v.slice(0, dash)).split('.').slice(0, 3).map(Number), dash < 0 ? '' : v.slice(dash + 1)]; };
+    const [x, xp] = parse(a), [y, yp] = parse(b);
+    for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return Math.sign(x[i] - y[i]);
+    if (xp === yp) return 0; if (!xp) return 1; if (!yp) return -1;
+    const p = xp.split('.'), q = yp.split('.');
+    for (let i = 0; i < Math.min(p.length, q.length); i++) { const m = /^\d+$/.test(p[i]), k = /^\d+$/.test(q[i]); const c = m && k ? Math.sign(Number(p[i]) - Number(q[i])) : m ? -1 : k ? 1 : (p[i] < q[i] ? -1 : p[i] > q[i] ? 1 : 0); if (c) return c; }
+    return Math.sign(p.length - q.length);
+  };
+  const kind = (installedFileVersion, setup) => ['older', 'same', 'newer'][compare(fromFileVersion(installedFileVersion), setup) + 1];
+  assert.equal(kind('0.1.0.13', '0.1.0-beta.14'), 'older', '13.x -> Beta 14 offers the update (the 17 Nov bug said newer)');
+  assert.equal(kind('0.1.0.13', '0.1.0-beta.13.11'), 'older', '13.10 -> 13.11 offers the update');
+  assert.equal(kind('0.1.0.14', '0.1.0-beta.14'), 'same', 'Beta 14 over itself offers Repair');
+  assert.equal(kind('0.1.0.14', '0.1.0-beta.13.10'), 'newer', 'no downgrade from 14 to 13.x');
+  assert.equal(kind('1.0.0.0', '0.1.0-beta.14'), 'newer', 'a stable 1.0.0 stays newer than any beta');
+  assert.equal(kind('0.1.0.14', '1.0.0'), 'older', 'a beta -> stable 1.0.0 offers the update');
   const main = read('desktop', 'main.cjs');
   assert.match(main, /INSTALLER_QUIT_ARG='--acira-installer-quit';if\(primaryInstance&&process\.argv\.includes\(INSTALLER_QUIT_ARG\)\)app\.exit\(0\);if\(primaryInstance\)app\.on\('second-instance',\(_event,args\)=>\{if\(Array\.isArray\(args\)&&args\.includes\(INSTALLER_QUIT_ARG\)\)app\.quit\(\);\}\);/);
   assert.match(read('scripts', 'build-installer-helper.cjs'), /build\('acira-uninstall\.exe','AciraUninstall\.cs',resources,\['AciraChoose\.cs'\]\);/);

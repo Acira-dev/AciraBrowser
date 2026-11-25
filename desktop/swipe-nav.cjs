@@ -51,6 +51,23 @@ function swipeEnabled(platform, prefs) {
   try { return prefs?.isSwipeTrackingFromScrollEventsEnabled?.() === true; } catch { return false; }
 }
 
+/** Windows and Linux have no system switch for "swipe between pages": Acira's own setting (Settings › Tabs, off until turned on while the gesture is new) decides,
+ * and ACIRA_NO_TOUCHPAD_SWIPE=1 in the environment turns it off whatever the setting says. `on` is the setting. */
+function webSwipeEnabled(platform, env, on = true) {
+  if (platform !== 'win32' && platform !== 'linux') return false;
+  if (env && String(env.ACIRA_NO_TOUCHPAD_SWIPE || '') === '1') return false;
+  return on === true;
+}
+
+/** Chromium's numbers for a touchpad history swipe on Windows and Linux (content/browser/renderer_host/overscroll_configuration.cc and overscroll_controller.cc,
+ * Chromium 156.0.8078.75): the arrow starts after 60 DIP of sideways travel, sideways must be 2.5 times the vertical, the swipe completes at 30 % of the
+ * display's longer side (the 60 included), a fling over 1100 DIP/s completes below that. `size` is the display's size in DIP. Pure. */
+const TOUCHPAD_START = 60, TOUCHPAD_COMPLETE = .3, TOUCHPAD_RATIO = 2.5, TOUCHPAD_FLING = 1100;
+function touchpadTune(size) {
+  const longest = Math.max(Number(size?.width) || 0, Number(size?.height) || 0) || 1280;
+  return {commit: Math.max(longest * TOUCHPAD_COMPLETE, TOUCHPAD_START + 40), engage: TOUCHPAD_START, progressFrom: TOUCHPAD_START, ratio: TOUCHPAD_RATIO, cancelRatio: TOUCHPAD_RATIO, flingVelocity: TOUCHPAD_FLING};
+}
+
 /**
  * The overscroll rule. `facts` is what the page preload saw for one horizontal wheel: `prevented` (the page cancelled the wheel) and `chain`,
  * the scrollers from the element under the pointer outward, the page's own last: {scrolls, left, max, rtl, behavior} where `scrolls` says
@@ -79,7 +96,8 @@ function pageCanScroll(facts, direction) {
  * Effects: start {direction}, progress {progress 0..1}, armed {on}, list {open, count}, select {index}, commit {direction, steps}, cancel.
  */
 function createSwipeTracker(opts = {}) {
-  const cfg = {commit: COMMIT, engage: ENGAGE, holdMs: HOLD_MS, warmMs: WARM_MS, rowStep: ROW_STEP, factsMs: FACTS_MS, coastMs: COAST_MS, noise: NOISE, ...opts.config};
+  const base = {commit: COMMIT, engage: ENGAGE, holdMs: HOLD_MS, warmMs: WARM_MS, rowStep: ROW_STEP, factsMs: FACTS_MS, coastMs: COAST_MS, noise: NOISE, ...opts.config};
+  let cfg = base;   // a gesture may carry its own numbers (sample.tune: Windows and Linux); the Mac's never do
   const now = opts.now || Date.now, after = opts.after || ((fn, ms) => setTimeout(fn, ms)), clear = opts.clear || (timer => clearTimeout(timer));
   const emit = effect => { try { opts.emit?.(effect); } catch { /* an effect that fails never breaks the gesture */ } };
   let st = 'idle', dir = null, x = 0, y = 0, p = 0, shown = false, armed = false, held = false, sel = 0, rows = 0, heldY = 0, natural = true;
@@ -92,7 +110,7 @@ function createSwipeTracker(opts = {}) {
   const cancel = () => { const was = shown; done(); if (was) emit({type: 'cancel'}); };
   const commit = steps => { const direction = dir; done(); emit({type: 'commit', direction, steps}); };
   const progress = () => {
-    const next = clamp(along() / cfg.commit, 0, 1);
+    const from = cfg.progressFrom || 0, next = clamp((along() - from) / (cfg.commit - from), 0, 1);
     if (next !== p) { p = next; emit({type: 'progress', progress: p}); }
   };
   const armHold = () => {
@@ -110,7 +128,7 @@ function createSwipeTracker(opts = {}) {
   function decide() {
     const ax = Math.abs(x), ay = Math.abs(y);
     if (ay >= cfg.engage && ay > ax) { st = 'off'; return; }          // up and down: the page's scroll
-    if (ax < cfg.engage || ax < ay * 1.2) return;                       // not far enough, or not clearly sideways yet
+    if (ax < cfg.engage || ax < ay * (cfg.ratio || 1.2)) return;        // not far enough, or not clearly sideways yet
     dir = x > 0 ? 'back' : 'forward';
     if (!opts.canGo?.(dir)) { st = 'off'; return; }                     // nowhere to go: nothing is shown
     st = 'probing';
@@ -132,6 +150,7 @@ function createSwipeTracker(opts = {}) {
     const sideways = along();
     if (sideways < -cfg.engage) { cancel(); return; }                   // the fingers went back the other way
     if (!held && Math.abs(y) > Math.max(sideways, 0) * .9 + cfg.engage * 2) { cancel(); return; } // more up-down than sideways
+    if (cfg.cancelRatio && !held && sideways > cfg.engage && Math.abs(y) * cfg.cancelRatio > sideways) { cancel(); return; } // no longer clearly sideways (Chromium's 2.5)
     progress();
     const moving = Math.abs(dx) + Math.abs(dy) >= cfg.noise;
     if (!armed && p >= 1) { armed = true; emit({type: 'armed', on: true}); armHold(); }
@@ -144,11 +163,13 @@ function createSwipeTracker(opts = {}) {
       if (p < .5) { held = false; armed = false; emit({type: 'list', open: false}); emit({type: 'armed', on: false}); }
     }
   }
-  function lift() {
+  function lift(speed = 0) {
     clear(hold); clear(warm); hold = warm = null;
     if (st === 'tracking') {
       if (held) { commit(sel + 1); return; }
       if (armed) { commit(1); return; }
+      // A fast flick completes below the threshold (Chromium: over 1100 DIP/s in the swipe's direction; only a gesture that carries a velocity and the number).
+      if ((dir === 'back' ? speed : -speed) >= cfg.flingVelocity && along() > cfg.engage) { commit(1); return; }
       // Short of the threshold with the fingers up: the swipe's coast can still carry it over; with no coast it is let go.
       if (along() > cfg.engage) { st = 'coasting'; coast = after(() => { coast = null; if (st === 'coasting') cancel(); }, cfg.coastMs); return; }
       cancel();
@@ -173,7 +194,7 @@ function createSwipeTracker(opts = {}) {
   function feed(sample) {
     const phase = sample.phase || 'none', momentum = sample.momentum || 'none', dx = Number(sample.dx) || 0, dy = Number(sample.dy) || 0;
     if (phase === 'began') {
-      reset(); natural = sample.natural !== false;
+      reset(); natural = sample.natural !== false; cfg = sample.tune ? {...base, ...sample.tune} : base;
       if (!opts.enabled?.() || opts.begin?.(sample) === false) { st = 'off'; return; }
       st = 'watching';
       move(dx, dy);
@@ -181,7 +202,7 @@ function createSwipeTracker(opts = {}) {
     }
     if (phase === 'cancelled') { if (st === 'tracking' || st === 'coasting') cancel(); else if (st !== 'idle') done(); return; }
     if (phase === 'changed') { move(dx, dy); return; }
-    if (phase === 'ended') { move(dx, dy); lift(); return; }
+    if (phase === 'ended') { move(dx, dy); lift(Number(sample.velocity) || 0); return; }
     if (momentum !== 'none') {
       if (st === 'tracking') lift();                                    // the lift was not reported: the coast says it
       if (st === 'coasting') { if (momentum === 'ended') cancel(); else coasting(dx, dy); }
@@ -206,6 +227,7 @@ function createSwipeTracker(opts = {}) {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 const path = require('node:path');
+const {createTouchpadPhases} = require('./touchpad-phases.cjs');
 const FILE = path.join(__dirname, 'swipe-nav.html'), PRELOAD = path.join(__dirname, 'swipe-nav-preload.cjs');
 // Interface pixels (the pages are zoomed with the interface, so a view is `px × uiScale` window pixels).
 const STRIP = 76, CHIP = 36, SHADOW = 28, REST = 12, LIST_GAP = 10, LIST_WIDTH = 300, ROW = 44, LIST_PAD = 4, EDGE = 8;
@@ -314,6 +336,7 @@ function createSwipeNav(deps) {
   /** Every effect of the gesture ends here. `leave` says how the views go: the arrow sinks back (cancel) or is spent (commit). */
   function finish(leave) {
     clear(exitTimer); exitTimer = null;
+    if (gesture) try { deps.follow?.(gesture.tabId, false); } catch { /* the page went away */ }
     for (const role of ['chip', 'list']) if (visible[role]) send(role, {type: 'leave', leave, ...common()});
     const wait = deps.motion?.() === 'off' ? 0 : EXIT_MS, run = () => { exitTimer = null; hideView('chip'); hideView('list'); };
     if (wait) { exitTimer = after(run, wait); exitTimer?.unref?.(); } else run();
@@ -324,8 +347,9 @@ function createSwipeNav(deps) {
     enabled: () => Boolean(deps.enabled?.()) && !deps.blocked?.(),
     begin: sample => {
       // The point the monitor read from the event; where the pointer is, when that misses every page (AppKit sends a scroll to the view under the pointer).
-      let page = deps.pageAt?.(sample.x, sample.y);
-      if (!page) { const pointer = deps.cursor?.(); if (pointer) page = deps.pageAt?.(pointer.x, pointer.y); }
+      // A Windows / Linux sample names its tab (the page's own preload sent it); a Mac sample has only a point.
+      let page = sample.tabId ? deps.pageOf?.(sample.tabId) : deps.pageAt?.(sample.x, sample.y);
+      if (!page && !sample.tabId) { const pointer = deps.cursor?.(); if (pointer) page = deps.pageAt?.(pointer.x, pointer.y); }
       if (!page) return false;
       facts = facts && facts.tabId === page.tabId ? facts : null;
       gesture = {tabId: page.tabId, startedAt: now()}; listed = null;
@@ -334,21 +358,26 @@ function createSwipeNav(deps) {
     canGo: direction => Boolean(gesture) && Boolean(deps.canGo?.(gesture.tabId, direction)),
     verdict: direction => {
       if (!gesture || !facts || facts.tabId !== gesture.tabId) return 'wait';
-      if (now() - facts.at > FACTS_FRESH_MS || facts.toward !== (direction === 'back' ? -1 : 1)) return 'wait';
-      return pageCanScroll(facts, direction) ? 'blocked' : 'go';
+      // The page's snapshot is about the physical way the wheel went (toward the left edge or the right one); in a right-to-left interface on Windows / Linux Back is the other way (deps.rtl is never given on a Mac).
+      const physical = deps.rtl?.() ? (direction === 'back' ? 'forward' : 'back') : direction;
+      if (now() - facts.at > FACTS_FRESH_MS || facts.toward !== (physical === 'back' ? -1 : 1)) return 'wait';
+      return pageCanScroll(facts, physical) ? 'blocked' : 'go';
     },
     rows: direction => { listed = gesture ? deps.history?.(gesture.tabId, direction) : null; return listed?.rows?.length || 0; },
     emit: effect => {
+      if (effect.type !== 'progress') try { deps.log?.({k: 'e', e: effect.type, direction: effect.direction, steps: effect.steps, index: effect.index, count: effect.count, on: effect.on}); } catch { /* ignored */ }
       if (!gesture && effect.type !== 'cancel') return;
       if (effect.type === 'start') {
         const page = deps.pageOf?.(gesture.tabId);
         if (!page) { tracker.abort(); return; }
-        gesture.page = page; gesture.side = effect.direction === 'back' ? 'left' : 'right';
+        const mirrored = Boolean(deps.rtl?.());   // Windows / Linux, a right-to-left interface: Chromium swaps Back and Forward (gesture_nav_simple.cc); a Mac never gets deps.rtl
+        gesture.page = page; gesture.side = (effect.direction === 'back') !== mirrored ? 'left' : 'right'; gesture.glyph = mirrored ? ((effect.direction === 'back') ? 'fwd' : 'back') : null;
+        try { deps.follow?.(gesture.tabId, true); } catch { /* the page went away */ }   // Windows / Linux: the page's preload now also sends its vertical wheel events (the list's rows)
         if (!prepare('chip')) return;
         clear(exitTimer); exitTimer = null;
         const placed = swipePlacement({page: page.bounds, side: gesture.side, scale: scaleNow()});
         show('chip', placed.chip);
-        send('chip', {type: 'show', side: gesture.side, ...common()});
+        send('chip', {type: 'show', side: gesture.side, ...(gesture.glyph ? {glyph: gesture.glyph} : {}), ...common()});
       } else if (effect.type === 'progress') send('chip', {type: 'progress', progress: effect.progress});
       else if (effect.type === 'armed') send('chip', {type: 'armed', on: effect.on});
       else if (effect.type === 'warm') { if (deps.history?.(gesture.tabId, tracker.direction)?.rows?.length >= 2) prepare('list'); }
@@ -395,7 +424,51 @@ function createSwipeNav(deps) {
     });
   }
 
+  // Windows and Linux: the wheel events of a page (or of the sidebar's interface view) and the lift markers go through one rebuilt-phases module each
+  // (touchpad-phases.cjs) and feed the same trackers. Nothing here runs on a Mac, whose samples come from the native monitor.
+  const adapters = new Map();
+  const adapterFor = (source, key) => {
+    const id = source + ':' + key;
+    let adapter = adapters.get(id);
+    if (adapter) return adapter;
+    const target = source === 'page' ? tracker : source === 'interface' ? side : null;
+    if (!target) return null;
+    adapter = createTouchpadPhases({
+      now, after, clear, coastDetect: deps.platform === 'win32', flingVelocity: TOUCHPAD_FLING,
+      rtl: () => Boolean(deps.rtl?.()),
+      emit: sample => {
+        const out = source === 'page' ? {...sample, tabId: key} : {...sample};
+        if (out.phase === 'began') out.tune = touchpadTune(deps.displaySize?.());
+        target.feed(out);
+      },
+      snapshot: () => target.snapshot,
+      alive: () => target.state !== 'idle' && target.state !== 'off',
+    });
+    adapters.set(id, adapter);
+    return adapter;
+  };
+  const webReady = () => Boolean(deps.enabled?.()) && !deps.blocked?.();
+  const logWheel = (source, wheel) => { try { deps.log?.({k: 'w', s: source === 'page' ? 'p' : 'i', dx: wheel?.dx, dy: wheel?.dy, m: wheel?.mods ? 1 : 0, d: wheel?.mode}); } catch { /* a log never breaks the swipe */ } };
+  /** One wheel event of a page ('page', key = the tab's id) or of the interface ('interface'): {t, dx, dy, x, y, mods, mode}. */
+  const webWheel = (source, key, wheel) => {
+    try {
+      logWheel(source, wheel);                                                           // only when ACIRA_TOUCHPAD_LOG=1 gave main a log: numbers, never page data
+      const adapter = adapterFor(source, String(key));
+      if (!adapter) return;
+      if (!webReady()) { adapter.abort(); return; }
+      adapter.wheel(wheel);
+    } catch { /* a bad message never breaks scrolling: it is only read */ }
+  };
+  /** The type of an input event Chromium reported for that page or the interface (`input-event` in main). */
+  const webMarker = (source, key, type) => {
+    if (type !== 'gestureFlingStart' && type !== 'gestureFlingCancel' && type !== 'gestureScrollEnd') return;   // the only types that matter; every mouse move passes through here
+    try { deps.log?.({k: 'm', s: source === 'page' ? 'p' : 'i', type}); } catch { /* ignored */ }
+    if (!webReady()) return;                                                            // the setting is off: nothing is learned or acted on
+    try { adapterFor(source, String(key))?.marker(type); } catch { /* ignored */ }   // made on the first marker too: an ordinary touchpad scroll teaches the machine that it sends lift markers
+  };
+
   return {
+    webWheel, webMarker,
     /** One native scroll sample (see decodeSample): a page's history, or over the sidebar the workspaces. */
     sample: raw => { try { tracker.feed(raw); } catch { tracker.abort(); } if (side) try { side.feed(raw); } catch { side.abort(); } },
     /** The page's scroll snapshot for the wheel it just saw: {toward, prevented, chain} from the page of `tabId`. */
@@ -406,6 +479,7 @@ function createSwipeNav(deps) {
     },
     /** After every committed action: another tab in front, or this one gone, ends the gesture. */
     onState: (previous, next) => {
+      for (const id of [...adapters.keys()]) if (id.startsWith('page:') && !next.tabs.some(tab => tab.id === id.slice(5))) { adapters.get(id)?.abort(); adapters.delete(id); }
       if (!gesture) return;
       if ((previous && previous.activeTabId !== next.activeTabId) || !next.tabs.some(tab => tab.id === gesture.tabId)) tracker.abort();
       if (views.chip && scaleNow() !== scale) destroy();
@@ -417,7 +491,7 @@ function createSwipeNav(deps) {
       const win = getWindow();
       for (const role of ['chip', 'list']) if (visible[role] && live(role)) try { win.contentView.addChildView(views[role].view); } catch { /* gone */ }
     },
-    abort: () => { tracker.abort(); side?.abort(); },
+    abort: () => { tracker.abort(); side?.abort(); for (const adapter of adapters.values()) adapter.abort(); },
     dispose: destroy,
     get active() { return tracker.state !== 'idle' && tracker.state !== 'off'; },
     get tracker() { return tracker; },
@@ -427,6 +501,6 @@ function createSwipeNav(deps) {
 }
 
 module.exports = {
-  createSwipeTracker, createSwipeNav, pageCanScroll, swipeEnabled, decodeSample, phaseName, swipePlacement, historyRows, rowAddress,
+  createSwipeTracker, createSwipeNav, pageCanScroll, swipeEnabled, webSwipeEnabled, touchpadTune, TOUCHPAD_START, TOUCHPAD_COMPLETE, TOUCHPAD_RATIO, TOUCHPAD_FLING, decodeSample, phaseName, swipePlacement, historyRows, rowAddress,
   COMMIT, ENGAGE, HOLD_MS, WARM_MS, ROW_STEP, FACTS_MS, FACTS_FRESH_MS, COAST_MS, NOISE, MAX_ROWS, STRIP, CHIP, SHADOW, REST, LIST_GAP, LIST_WIDTH, ROW,
 };

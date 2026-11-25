@@ -65,3 +65,36 @@ test('interactive controls in every chrome row are no-drag regions (the rows the
     for (const part of rule.selector.split(',')) assert.ok(!/(^|[\s>+~])(button|input|select|textarea)(?![\w-])(?:\.[\w-]+|\[[^\]]*\]|:[\w-]+)*\s*$/.test(part.trim()) && !/\.icon-button\s*$/.test(part.trim()), `${path.relative(src, file)}: a drag region on a control: ${part.trim()}`);
   }
 });
+
+// Beta 14: "in Focus with tabs on top the chips show but cannot be clicked" (a 13.7 tester). Cause, reproduced in the real app (a click on the middle of a chip, whose icon is
+// where the compact chip's close button sits): a Focus rule of 27 Oct (R3-82) forced `pointer-events:auto` on EVERY button of the Focus row, which also woke each chip's invisible
+// close button (opacity 0, pointer-events:none until its tab is the current one and hovered): it covered the middle of the chip and took the press, so the click never selected.
+test('no rule gives every button of the Focus row pointer events (it woke the chips\' invisible close buttons: dead clicks in Focus)', () => {
+  const offenders = [];
+  for (const file of cssFiles) for (const rule of rulesOf(fs.readFileSync(file, 'utf8'))) {
+    if (!/pointer-events\s*:\s*auto/.test(rule.body)) continue;
+    for (const part of rule.selector.split(',')) if (/data-layout=focus/.test(part) && /\b(button|input|select|textarea)\b|\[role=button\]|\[data-popup-trigger\]/.test(part.replace(/\.[\w-]+/g, ''))) offenders.push(`${path.relative(src, file)}: ${part.trim()}`);
+  }
+  assert.deepEqual(offenders, [], 'a blanket pointer-events:auto over a row\'s buttons re-enables the ones that hide themselves:\n' + offenders.join('\n'));
+});
+
+test('a chip\'s close button takes presses only where it is on show: the current tab hovered or focused, or the Focus chip with room for it', () => {
+  const closeRules = [];
+  for (const file of cssFiles) for (const rule of rulesOf(fs.readFileSync(file, 'utf8'))) {
+    if (!/pointer-events\s*:\s*auto/.test(rule.body)) continue;
+    if (/acira-compact-tab-close/.test(rule.selector)) closeRules.push(rule.selector.trim());   // whole selector: a comma inside :is(...) is not a list
+  }
+  assert.ok(closeRules.length >= 2, 'the hover rule and the Focus chip rule are both there');
+  for (const part of closeRules) assert.match(part, /\.selected:is\(:hover,:focus-within\)|\.focus-tab\b|:enabled/, `a rule that lets the close button take presses must say when: ${part}`);
+  const base = fs.readFileSync(path.join(src, 'components', 'CompactTabs.css'), 'utf8');
+  assert.match(base, /\.acira-compact-tab-close\{[^}]*opacity:0;pointer-events:none/, 'at rest the close button is invisible and takes nothing');
+});
+
+test('Focus with tabs on top draws the one chip and the tab-list button, and Compact keeps its row of chips (AA)', () => {
+  const app = fs.readFileSync(path.join(src, 'App.tsx'), 'utf8');
+  assert.match(app, /const focusTab = parts\.currentTab && <FocusTab /);
+  assert.match(app, /\{parts\.miniTabs&&miniTabs\}\{focusTab\}/, 'the one chip stands where the row of chips stood');
+  assert.match(app, /const tabOverview = \(s\.showTabOverview!==false \|\| parts\.currentTab\) && /, 'the list is the only way to the other tabs there: the Show tab overview setting does not hide it');
+  const css = fs.readFileSync(path.join(src, 'components', 'FocusTab.css'), 'utf8');
+  assert.match(css, /\.acira-compact-tabs\[data-single=true\]\{flex:0 1 168px/);
+});

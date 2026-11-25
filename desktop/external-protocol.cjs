@@ -11,13 +11,18 @@ const DENIED_EXTERNAL_SCHEMES = new Set([
 ]);
 
 /** Decides what a clicked app link does. appName(url) is the handling app's name ('' for none); ask resolves true for Open. */
-async function openAppLink(url, {t, appName, ask, toast, open}) {
+async function openAppLink(url, {t, appName, ask, toast, open, remembered = () => false, remember = () => {}}) {
   let parsed; try { parsed = new URL(url); } catch { return 'invalid'; }
   const scheme = parsed.protocol.slice(0, -1).toLowerCase();
   if (DENIED_EXTERNAL_SCHEMES.has(scheme)) return 'denied';
   let name = ''; try { name = String(appName(url) || '').replace(/\.app$/i, '').trim(); } catch { /* No answer is no app. */ }
   if (!name && scheme !== 'mailto' && scheme !== 'tel') { toast(t('main.noAppForLinks', {scheme: scheme + ':'})); return 'no-app'; }
-  if (!await ask({message: name ? t('main.openApp', {app: name}) : t('main.openAnExternalApplication'), detail: url})) return 'cancelled';
+  // Beta 14: "Always for this site" (the prompt's checkbox) is one saved yes per site and link type. mailto: and tel: always ask (the system picks the app), so they are never offered it and never remembered.
+  const always = scheme !== 'mailto' && scheme !== 'tel';
+  if (always && remembered(scheme)) { open(url); return 'opened'; }
+  const answer = await ask({message: name ? t('main.openApp', {app: name}) : t('main.openAnExternalApplication'), detail: url, scheme, always});
+  if (!(answer && typeof answer === 'object' ? answer.open === true : answer === true)) return 'cancelled';
+  if (always && answer && typeof answer === 'object' && answer.always === true) remember(scheme);
   open(url); return 'opened';
 }
 

@@ -7,6 +7,6 @@ test('the messages a person reads when an image is refused keep a space before e
  const png=Buffer.alloc(40);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(13,8);png.write('IHDR',12);png.writeUInt32BE(8192,16);png.writeUInt32BE(8192,20);
  assert.throws(()=>artworkImageInfo(png),/no larger than 24 megapixels or 8192 pixels on either side/);
  const source=fs.readFileSync('desktop/workspace-artwork.cjs','utf8');
- assert.match(source,/up to 8 MB/);assert.match(source,/keep up to 5\./);assert.doesNotMatch(source,/up to[0-9]/);
+ assert.match(source,/up to 8 MB/);assert.match(source,/keep up to 12\./);assert.doesNotMatch(source,/up to[0-9]/);
  const image=fs.readFileSync('desktop/artwork-image.cjs','utf8');assert.match(image,/image up to 8 MB/);assert.doesNotMatch(image,/(?:up to|than)[0-9]/);
 });

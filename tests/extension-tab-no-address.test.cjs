@@ -21,11 +21,11 @@ function run(details, {profiles = [{id: 'p1', private: false, partition: 'persis
   const state = {browserProfiles: profiles, activeBrowserProfileId: 'p1', tabs: []};
   const BrowserWindow = function (options) { calls.windows.push(options); this.webContents = {loadURL: async url => { calls.loaded.push(url); }, setWindowOpenHandler() {}, on() {}}; this.setMenu = () => {}; this.on = () => {}; this.id = 9; this.show = () => {}; this.isDestroyed = () => false; this.close = () => {}; };
   BrowserWindow.getAllWindows = () => [];   // extensionCreateTab looks for the extension's page already open in a window (extension-page-windows.cjs, 1Password): none here
-  const factory = new Function('privateMode', 'windowClosing', 'quitting', 'state', 'dispatch', 'validateAction', 'showMain', 'parseExternalURLs', 'BrowserWindow', 'path', 'dist', 'tm', 'require', 'auxiliaries', 'extensionManager', 'ensurePage', 'loadPage', 'process',
+  const factory = new Function('privateMode', 'windowClosing', 'quitting', 'state', 'dispatch', 'validateAction', 'showMain', 'parseExternalURLs', 'BrowserWindow', 'path', 'dist', 'tm', 'require', 'auxiliaries', 'extensionManager', 'ensurePage', 'loadPage', 'process', 'appIconPath',
     `${text}\nreturn extensionCreateTab;`);
   const fake = {session: {fromPartition: () => ({extensions: {getExtension: () => null}})}};
   const create = factory(false, false, false, state, action => calls.dispatched.push(action), (action) => action, () => { calls.shown++; }, list => list.map(value => { try { const u = new URL(value); return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : undefined; } catch { return undefined; } }),
-    BrowserWindow, path, '/dist', key => key, name => (name === 'electron' ? fake : name.startsWith('.') ? require(path.join(__dirname, '../desktop', name)) : require(name)), new Map(), {attachTab() {}}, async () => ({}), async () => {}, process);
+    BrowserWindow, path, '/dist', key => key, name => (name === 'electron' ? fake : name.startsWith('.') ? require(path.join(__dirname, '../desktop', name)) : require(name)), new Map(), {attachTab() {}}, async () => ({}), async () => {}, process, () => '/dist/app-icon.png');
   return create(details).then(result => ({calls, result}), error => ({calls, error}));
 }
 

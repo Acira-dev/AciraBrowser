@@ -26,7 +26,11 @@ test('the interface offers the report only outside Tor and once this build can s
 test('the Acira menu: "Report a problem…" under Settings only when App hands it the action; Help > Report a Problem opens the menu on the form',()=>{
  const menu=read('src/components/BrowserMenu.tsx'),app=read('src/App.tsx');
  assert.match(menu,/\{row\(t\("browsermenu\.settings"\),Settings2,\(\)=>parts\.navigate\('acira:\/\/settings'\),'Ctrl ,'\)\}\n\s*\{parts\.report&&row\(t\('report\.menuRow'\),MessageSquare,parts\.report\)\}\n\s*<\/>;/,'the last row, the existing row style and the form\'s speech-bubble glyph; nothing else moves');
- assert.match(app,/report: kind === 'menu' && canReport \? \(\) => setReporting\(true\) : undefined/);
+ // Beta 14: the same row, still only when App hands it the action (canReport). Where the feedback server's addresses are set it opens the report pop-up; where they are not (every 13.x build, and today's
+ // Beta 14 until the addresses are given) it opens the in-place form exactly as before. A private window or Tor tab never gets the pop-up.
+ assert.match(app,/report: kind === 'menu' && canReport \? \(\) => \(feedbackOn \? onOpen\?\.\('feedback'\) : setReporting\(true\)\) : undefined/);
+ assert.match(app,/const feedbackView = useFeedbackView\(kind === 'menu' \? 'menu' : null\), feedbackOn = feedbackView\.available && !feedbackView\.privateOrTor && kind === 'menu';/);
+ assert.match(app,/canReport = reportSubjects\.length > 0;/,'the row is still gated by the website-report rules, never by the pop-up');
  assert.match(app,/\(kind === 'security' \|\| kind === 'menu'\) && id === 'report' \? 'report' as const/,'the menu takes the report intent');
  assert.match(app,/\(overlay === 'tor' \|\| overlay === 'security' \|\| overlay === 'menu'\) && popupIntent\.current/,'and carries it to the native popup');
  const {macMenuTemplate}=require('../desktop/platform.cjs'),seen=[];
@@ -52,7 +56,7 @@ test('every new string is in all 13 catalogs',()=>{
 test('the report form sits on the panel system: choices without an icon keep the 32px text column, labels and note on the text edge',()=>{
  const css=read('src/styles/site-report.css');
  assert.match(css,/\.site-report \.menu-choice>\.menu-toggle-blank\{display:none\}/,'without this the blank slot stretches and the choice labels are cut ("Blocked by mist…")');
- assert.match(css,/\.app \.browser-popup \.site-report \.menu-seg button\{padding:0 10px\}/,'the About switch has words and no glyph: even padding');
+ assert.match(css,/\.app \.browser-popup \.site-report \.menu-seg button\{padding:0 12px\}/,'the About switch has words and no glyph: even padding, on the 4 px grid (12, was 10 before the spacing sweep)');
  for(const rule of [/\.site-report \.acira-menu-label\{padding-left:32px\}/,/\.site-report-note\{padding:2px 8px 4px 32px\}/,/\.site-report-fine\{margin:4px 8px 4px 32px;/])assert.match(css,rule);
  assert.match(read('src/styles/error-page.css'),/\.navigation-error \.ne-detail \.ne-link\{padding:0\}/,'the warning page link starts on its paragraph\'s edge');
 });

@@ -41,6 +41,8 @@ export interface ImportSource {
   browser: string;
   name: string;
   available: Record<ImportCategory, boolean>;
+  /** Safari: macOS has to allow reading its data first; it is imported from Settings, never from setup. */
+  permission?: "needed";
   email?: string;
   accountName?: string;
   picture?: string;
@@ -107,10 +109,12 @@ export interface SetupResult {
     source: ImportSource;
     bookmarks: number;
     history: number | null;
-    /** Arc only: Favorites, Spaces with pinned tabs, and how many pinned tabs in all. */
+    /** Arc, Opera, Vivaldi, Zen: Favorites, Spaces or workspaces, and how many pinned tabs (Arc: all tabs). */
     favorites?: number;
     spaces?: number;
     pinned?: number;
+    /** Opera, Vivaldi, Zen: open tabs in all. */
+    tabs?: number;
     extensions: {
       id: string;
       name: string;

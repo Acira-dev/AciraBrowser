@@ -1,5 +1,8 @@
 /* Compositing only. The existing sidebar, toolbar, frame finish and corner rules remain unchanged. */
-:root[data-sidebar-overlay='native'] .app.style-acira { background:none!important; }
+/* Image and colour only, never the whole `background` shorthand: with all nine background longhands !important, every flip of
+   data-sidebar-overlay made Chromium restyle the whole interface (~535 elements, 8 forced recalculations per Seamless reveal on an M5);
+   the two longhands paint the same nothing and restyle .app alone (Beta 14 smoothness, qa/smoothness-premium/scn/styleprobe.js). */
+:root[data-sidebar-overlay='native'] .app.style-acira { background-image:none!important;background-color:transparent!important; }
 /* Match the native frame backing while the page occupies the space behind it. */
 :root[data-platform=darwin] .app.style-acira { --sf-base-default:rgb(230 230 230); }
 :root[data-platform=darwin] .app.style-acira[data-chrome=dark] { --sf-base-default:rgb(55 55 55); }
@@ -14,8 +17,10 @@
 /* Capture the finish with the sidebar's controls as one moving layer. Its full-height gradient
    has the same origin as the shared window frame, so the joined header keeps its existing look. */
 :root[data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek { isolation:isolate; }
+/* earlier work (reported 18 Nov: "why is the top a different colour and there's a lining separating the sidebar"): the copy lies UNDER the sidebar's lights (z -2; the site glow's wash and the Ambient light are at -1), as the frame's own veil
+   does under a docked sidebar. At -1 it was the last thing painted at that level, OVER them: the floating sidebar's body lost its light (16 levels at its page-side edge) on a hard line where the copy begins, the foot of the top band. */
 :root[data-sidebar-overlay] .app.style-acira>.acira-sidebar.is-peek::after {
- content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+ content:'';position:absolute;inset:0;z-index:-2;pointer-events:none;
  background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
  background-size:var(--sf-bg-size);background-position:var(--sf-bg-position);background-repeat:var(--sf-bg-repeat);
  background-color:var(--sf-base-default,rgb(var(--sidebar-rgb,var(--chrome-rgb))));
@@ -72,16 +77,25 @@
 /* The floating sidebar slides the same distance as the page's covered edge and the corner pieces (--sf-sidebar-travel: where the page's
    resting left edge meets the sidebar's right edge), not its own width. Seamless rests the page 6px in from the window, so a full-width
    slide left a sliver of bare glass between the sidebar and the page that closed as they met, and the 6px margin strip under the sidebar
-   was veiled twice (the frame's and the sidebar's own) and read darker. Docked slides keep sidebar.css's full width. */
-:root[data-mode-switch='edge'][data-sidebar-overlay] { --sb-slide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%))); }
+   was veiled twice (the frame's and the sidebar's own) and read darker. Docked slides keep sidebar.css's full width.
+   Set on ::view-transition, the root of the pictures' tree (only the slide keyframes on ::view-transition-old/new read it): on <html> itself,
+   every flip of data-sidebar-overlay during a reveal changed a custom property every element inherits, and Chromium restyled the whole
+   interface each time (8 forced full recalculations per Seamless reveal on an M5; Beta 14 smoothness). */
+:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition { --sb-slide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%))); }
 @keyframes sidebar-corners-in { from { transform:translateX(calc(var(--sf-dir,-1) * var(--sf-sidebar-travel))); } }
 @keyframes sidebar-corners-out { to { transform:translateX(calc(var(--sf-dir,-1) * var(--sf-sidebar-travel))); } }
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area { visibility:hidden; }
+/* D151: a page that has not drawn yet is see-through; while it is the one on show the page surface stays over the hole (chromeEdge.ts markBlank), as docked shows it under the page, and the hole opens once the page has drawn. */
+:root[data-sidebar-overlay='native'][data-page-blank] .app .browser-body>.page-area { visibility:visible; }
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area .split-label { visibility:visible; }
 /* A split's interface panes (a new tab, Settings) are not cut out for a website: they stay drawn while the float is native. */
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area .page-pane[data-pane]:not([data-web]) { visibility:visible; }
-/* Internal pages keep their original content dimensions while the unchanged frame clips the covered portion. */
-:root[data-sidebar-overlay='dom'] .app .page-area>.page-content {
+/* Internal pages keep their original content dimensions while the unchanged frame clips the covered portion.
+   D128 (split): a split chosen or opened while a LIVE (native) float is out is in the glass float, whose page area stands beside the sidebar: its panes, title bars and the split-open morph's tiles stood there
+   (x 240 for a sidebar of 240) and the pages with them, then all of it was laid out again at the hide. A split's content keeps its resting geometry here exactly as it does in the picture float, so the
+   interface and the pages agree and the rectangles are the resting ones (chromeEdge.ts refreshEdgeFloat sets the same --sidebar-page-* variables in this float). */
+:root[data-sidebar-overlay='dom'] .app .page-area>.page-content,
+:root[data-sidebar-overlay='native'] .app .page-area>.page-content.split-pages {
  position:absolute;top:var(--sidebar-page-top,0px);left:var(--sidebar-page-left);width:var(--sidebar-page-width);height:var(--sidebar-page-height);
 }
 
@@ -93,8 +107,7 @@
 .sidebar-page-rim { display:none; }
 :root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim { display:block; position:fixed; inset:0; z-index:1; pointer-events:none; clip-path:polygon(var(--sf-rim-line-x,var(--sf-rim-x,0px)) 0,100% 0,100% 100%,var(--sf-rim-x,0px) 100%,var(--sf-rim-x,0px) var(--sf-rim-top,0px),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-top,0px)); }
 :root[data-sidebar-overlay] .app:has(>.acira-sidebar.is-peek) .sidebar-page-rim-low { clip-path:polygon(var(--sf-rim-x,0px) var(--sf-rim-mid,0px),100% var(--sf-rim-mid,0px),100% 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) 100%,var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-bottom,0px),var(--sf-rim-x,0px) var(--sf-rim-bottom,0px)); }
-.sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:rgb(0 0 0 / .08); stroke-width:1; }
-.app[data-chrome=dark] .sidebar-page-rim>svg { stroke:rgb(255 255 255 / .06); }
+.sidebar-page-rim>svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke:transparent; stroke-width:1; }   /* no ring any more (frame at rest, ambient.css): the rim draws nothing; its geometry is chromeEdge's and stays until the slides stop using it */
 /* The stroke waits for the sidebar while it slides in (chromeEdge applyEdge): the picture it would be captured in holds it at its final place, so it stood alone ahead of the sliding edge. It fades in as the sidebar lands.
    Only while an edge transition plays: with none (another switch is playing, the page is hidden) there is nothing to wait for. */
 .sidebar-page-rim .rim-edge { transition:opacity calc(140ms * var(--motion-scale,1)) ease-out; }
@@ -108,8 +121,8 @@
    stays on the corner, so the line stretches out with a leaving sidebar and shortens before an arriving one. Its right and bottom
    follow the card's own edges (desktop-page-band). Arriving, it is drawn out from the sidebar along the top and the bottom and the
    two meet halfway down the right edge; leaving, it stretches all the way with the sidebar and fades as it goes. */
-:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-rim-top>svg { view-transition-name:acira-page-rim; }
-:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .sidebar-page-rim-low>svg { view-transition-name:acira-page-rim-low; }
+:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) :where(.sidebar-page-rim-top)>svg.sidebar-page-rim-svg { view-transition-name:acira-page-rim; }
+:root[data-mode-switch=edge][data-sidebar-overlay]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) :where(.sidebar-page-rim-low)>svg.sidebar-page-rim-svg { view-transition-name:acira-page-rim-low; }
 :root[data-mode-switch=edge]::view-transition-group(acira-page-rim),
 :root[data-mode-switch=edge]::view-transition-group(acira-page-rim-low) { animation:none; }
 :root[data-mode-switch=edge]::view-transition-image-pair(acira-page-rim) { animation:edge-rim-travel var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both; clip-path:polygon(var(--sf-rim-line-x,var(--sf-rim-x,0px)) -2px,calc(100% + 100vw) -2px,calc(100% + 100vw) calc(100% + 100vh),var(--sf-rim-x,0px) calc(100% + 100vh),var(--sf-rim-x,0px) var(--sf-rim-top,0px),var(--sf-rim-line-x,var(--sf-rim-x,0px)) var(--sf-rim-top,0px)); }
@@ -118,6 +131,14 @@
 :root[data-mode-switch=edge]::view-transition-new(acira-page-rim-low):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-draw-low var(--edge-ms) cubic-bezier(.4,0,.2,1) both; left:round(calc(var(--desktop-band-right-to,0px) - var(--desktop-band-right)),var(--px,.5px)); top:round(calc(var(--desktop-band-bottom-to,0px) - var(--desktop-band-bottom)),var(--px,.5px)); }
 :root[data-mode-switch=edge]::view-transition-old(acira-page-rim):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-fade var(--edge-ms) linear both; left:round(calc(var(--desktop-band-right-from,0px) - var(--desktop-band-right)),var(--px,.5px)); }
 :root[data-mode-switch=edge]::view-transition-old(acira-page-rim-low):only-child { animation:edge-rim-hold var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both,desktop-page-band var(--edge-ms) var(--edge-ease) both,edge-rim-fade var(--edge-ms) linear both; left:round(calc(var(--desktop-band-right-from,0px) - var(--desktop-band-right)),var(--px,.5px)); top:round(calc(var(--desktop-band-bottom-from,0px) - var(--desktop-band-bottom)),var(--px,.5px)); }
+/* Beta 14 (reported 16 Nov: "the line on the top bar, that line below, the black one, is a bit glitchy in Seamless"): when the top bar arrives or leaves while the sidebar stays (data-edge-top
+   in / out), the card's frame line along its top moves between the window's top and the bar's foot. Its old and new pictures cross-faded where they stood, so the new line stood alone across
+   the page ahead of the dropping bar for about a third of the slide (and the old one stayed under the lifting bar). It now rides the card's moving top edge with the corner pieces (above):
+   the picture taken with the bar standing is the only one drawn, lifted by the distance the edge travels. */
+:root[data-mode-switch=edge][data-edge-top='in']::view-transition-old(acira-page-rim),
+:root[data-mode-switch=edge][data-edge-top='out']::view-transition-new(acira-page-rim) { animation:none; opacity:0; }
+:root[data-mode-switch=edge][data-edge-top='in']::view-transition-new(acira-page-rim) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-in; opacity:1; mix-blend-mode:normal; }
+:root[data-mode-switch=edge][data-edge-top='out']::view-transition-old(acira-page-rim) { animation:var(--edge-ms) var(--edge-ease-px,var(--edge-ease)) both edge-corner-lift-out; opacity:1; mix-blend-mode:normal; }
 @keyframes edge-rim-travel { from { translate:var(--sf-rim-shift-from,0px) 0; } to { translate:var(--sf-rim-shift-to,0px) 0; } }
 @keyframes edge-rim-hold { from { translate:calc(-1 * var(--sf-rim-shift-from,0px)) 0; } to { translate:calc(-1 * var(--sf-rim-shift-to,0px)) 0; } }
 @keyframes edge-rim-fade { 0%,35% { opacity:1; } 100% { opacity:0; } }
@@ -137,7 +158,7 @@
 
 /* macOS supplies the same behind-window material beneath both chrome surfaces.
    Keep the original veil; an opaque fallback or a webpage blur would change it. */
-:root[data-desktop-material=ready][data-sidebar-overlay=dom] .app.style-acira { background:none!important; }
+:root[data-desktop-material=ready][data-sidebar-overlay=dom] .app.style-acira { background-image:none!important;background-color:transparent!important; }
 :root[data-desktop-material=ready][data-sidebar-overlay=dom] .app.style-acira::before {
  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
  background-image:var(--sf-bg-image),linear-gradient(var(--sf-bg-color),var(--sf-bg-color));
@@ -168,13 +189,20 @@
 :root:root[data-sidebar-overlay=native] .app.style-acira :is(.acira-sidebar.is-peek,.browser-shell[data-seamless=shown]) {
  background:linear-gradient(180deg,color-mix(in srgb,rgb(var(--sidebar-rgb,var(--chrome-rgb))) 96%,#fff),rgb(var(--sidebar-rgb,var(--chrome-rgb))) 120px),rgb(var(--sidebar-rgb,var(--chrome-rgb)))!important;
 }
-:root[data-desktop-material=ready]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background:transparent!important; }
+/* Beta 14: the Seamless sidebar over the LIVE page wears the Mini sidebar's glass (chromeEdge.ts placeGlass): a blurred, saturated wash of the strip of the page under it (the canvas, bleeding 64px past every side
+   so the blur never fades at an edge), under the Mini float's own frost fill (dark rgb(17 18 21 / .92), light --frost-fill). The values are miniRail.css's (.sb-mini-shade), not new ones. */
+:root:root[data-sidebar-overlay=native] .app.style-acira>.acira-sidebar.is-peek[data-live-glass] { background:transparent!important; --live-fill:rgb(var(--sidebar-rgb,var(--chrome-rgb)) / .76); }
+:root:root[data-sidebar-overlay=native] .app.style-acira[data-chrome=dark]>.acira-sidebar.is-peek[data-live-glass] { --live-fill:linear-gradient(rgb(var(--sidebar-rgb,var(--chrome-rgb)) / .82), rgb(var(--sidebar-rgb,var(--chrome-rgb)) / .73)); }
+/* 14.1: the fill is the THEME's own colour (the finish, a coloured theme, the site tint: --sidebar-rgb / --chrome-rgb, what the translucent frame is tinted with today), over a wash that is a neutral tone of the window's material with 5 % of the page (chromeEdge.ts GLASS_TINT): in the dark look the frame veil's own vertical gradient (.82 at the top to .73 at the foot, today's frame is 26 at the top and 31 at the foot), .76 in the light look; the bar takes the top's. Not the Mini float's fixed fill. */
+.app.style-acira>.acira-sidebar.is-peek>.sb-live-glass { position:absolute; left:-64px; top:-64px; width:calc(100% + 128px); height:calc(100% + 128px); filter:blur(var(--frost-blur,32px)) saturate(1); z-index:-2; pointer-events:none; }
+:root:root[data-sidebar-overlay=native] .app.style-acira>.acira-sidebar.is-peek[data-live-glass]::after { background:var(--live-fill)!important; mask:none!important; -webkit-mask:none!important; }
+:root[data-desktop-material=ready]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background-image:none!important;background-color:transparent!important; }
 :root[data-desktop-material=ready][data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app :is(.page-area,.browser-body,.browser-root) { overflow:visible; }
 /* 13.10 (laptop, 15 Nov: "in a window that is not the active one the sidebar is all there in the first frame and only its rows slide in afterwards"; the same since 13.9 with Windows transparency effects
    off): the two rules above are what lets the page's picture stand under the sliding sidebar for the whole transition. Where the window's material is not live (inactive window, transparency off) the page
    area kept its opaque background and clipped the picture at the sidebar's new edge, so the sidebar's column was one flat dark from the very first frame, with nothing behind the sliding panel, and only
    the rows moved. The same two rules for those states (any material that is not live: Windows inactive / transparency off, Linux, which has no window material at all, a Mac with reduced transparency), for the length of the transition only: at rest, and where the material is live, nothing changes. */
-:root:not([data-desktop-material=ready])[data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background:transparent!important; }
+:root:not([data-desktop-material=ready])[data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app .page-area { background-image:none!important;background-color:transparent!important; }
 :root:not([data-desktop-material=ready])[data-mode-switch=edge][data-edge-snapshot]:is([data-sidebar-overlay=dom],[data-edge-float=dom]) .app :is(.page-area,.browser-body,.browser-root) { overflow:visible; }
 /* The same for the toolbar: its band is the shown toolbar's own background, which at rest is the window's flat finish (frost-preview.css) and in the live-glass state is the frame's veil carried by the
    sliding layer. Here it is neither, so the sliding layer was the controls alone over the page and the band stood in at once when the transition ended (~0.38 s in, laptop Fault 1, top edge). The sliding layer wears the
@@ -216,3 +244,92 @@
 .page-area .page-pane[data-pane]>.edge-page-picture { position:absolute;left:0;top:0;width:100%;height:100%;display:block;z-index:3;pointer-events:none; }
 /* When the sidebar floats over raised websites instead, only their panes step aside: a split's new tab or Settings is drawn here and stays. */
 :root[data-sidebar-overlay='native'] .app .browser-body>.page-area .page-pane[data-pane]:not([data-web]) { visibility:visible; }
+
+/* Beta 14: the slide waits for the early raise (chromeEdge.ts holdSlide): the transition is set up beside it, its layers stand at their first frame until main has answered. */
+:root[data-edge-hold]::view-transition-group(*),
+:root[data-edge-hold]::view-transition-image-pair(*),
+:root[data-edge-hold]::view-transition-old(*),
+:root[data-edge-hold]::view-transition-new(*) { animation-play-state: paused !important; }
+
+/* 13.11 round 7 (laptop, Run 10): on a launch's first reveal the sidebar's first frame reaches the screen ~200 ms late and the slide (from translateX(-100%), the whole layer off screen) is already 110-228 px in. A layer that
+   starts off screen is not in view, so its tiles are not "required" for the first frame and are rastered only once they move in. Two ways to have them rastered before the slide starts, chosen with ACIRA_EDGE_RASTER
+   (main sets data-edge-raster; the default is OFF since the laptop's Run 11: 'will' did not beat 'off'): 'will' = the layers the reveal slides say they will move (will-change: transform, which asks for the whole layer to be
+   rastered), 'sliver' = the slide starts with 2 px of the layer in view instead of none, 'both', 'off'. Only while the reveal plays. */
+:root:is([data-edge-raster=will], [data-edge-raster=both])[data-mode-switch=edge] .app.style-acira .ed-rail.acira-sidebar.is-peek,
+:root:is([data-edge-raster=will], [data-edge-raster=both])[data-mode-switch=edge] .app.style-acira .browser-shell[data-seamless=shown] { will-change: transform; }
+:root:is([data-edge-raster=sliver], [data-edge-raster=both])[data-mode-switch=edge][data-sidebar-overlay]::view-transition { --sb-slide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%) + 2px)); }
+:root:is([data-edge-raster=sliver], [data-edge-raster=both])[data-sidebar-side=right][data-mode-switch=edge][data-sidebar-overlay]::view-transition { --sb-slide-from: translateX(calc(var(--sf-sidebar-travel, 100%) - 2px)); }
+/* 13.11: the warm-up view transition (src/ui/edgeWarm.ts): the first transition of a launch pays a first-time cost in the compositor; one is played at idle with layers of the reveal's sizes. 1 % opacity, inside the window, under the native page. */
+.edge-warm-layer { position: fixed; z-index: 0; pointer-events: none; opacity: .01; border-radius: 12px; background: rgb(128 128 128); contain: paint; }
+:root[data-edge-warming]:not([data-fr-finale]) .app:not(:has(>.setup-dialog)) .edge-warm-layer[data-warm=sidebar] { view-transition-name: edge-warm-sidebar; }
+:root[data-edge-warming]:not([data-fr-finale]) .app:not(:has(>.setup-dialog)) .edge-warm-layer[data-warm=page] { view-transition-name: edge-warm-page; }
+:root[data-edge-warming]:not([data-fr-finale]) .app:not(:has(>.setup-dialog)) .edge-warm-layer[data-warm=bar] { view-transition-name: edge-warm-bar; }
+.edge-warm-layer[data-blur] { background: rgb(128 128 128 / .5); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); }
+:root[data-edge-warming]::view-transition-group(edge-warm-sidebar),
+:root[data-edge-warming]::view-transition-group(edge-warm-page),
+:root[data-edge-warming]::view-transition-group(edge-warm-bar) { animation-duration: 180ms; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+:root[data-edge-warming]::view-transition-new(edge-warm-sidebar):only-child { animation: 180ms cubic-bezier(0.4, 0, 0.2, 1) both edge-warm-slide; }
+:root[data-edge-warming]::view-transition-new(edge-warm-page):only-child,
+:root[data-edge-warming]::view-transition-new(edge-warm-bar):only-child { animation: 180ms cubic-bezier(0.16, 1, 0.3, 1) both edge-warm-fade; }
+@keyframes edge-warm-slide { from { transform: translateX(-100%); clip-path: inset(0 0 0 100% round 12px); } to { transform: none; clip-path: inset(0 round 12px); } }
+@keyframes edge-warm-fade { from { opacity: 0; clip-path: inset(0 100% 0 0 round 12px); } to { opacity: 1; clip-path: inset(0 round 12px); } }
+
+/* 13.11 round 8: the `real` warm-up mounts the real sidebar and plays the real reveal once, invisibly: the sidebar at 1 % opacity, out of every hit test. */
+:root[data-edge-warming=real] .app.style-acira .ed-rail.acira-sidebar.is-peek { opacity: .01 !important; pointer-events: none !important; }
+
+/* Beta 14.1: the Seamless top bar over the LIVE page wears the same glass as the sidebar (chromeEdge.ts placeGlass): a blurred wash of the strip of the page under it (the canvas inside .bar-live-glass, bleeding 64px past every side so the blur never fades
+   at an edge, clipped to the bar), under the Mini float's own fill. Without a glass the bar keeps the opaque finish of the rule above. */
+:root:root[data-sidebar-overlay=native] .app.style-acira .browser-shell[data-seamless=shown][data-live-glass] { background:transparent!important; isolation:isolate; --live-fill:rgb(var(--sidebar-rgb,var(--chrome-rgb)) / .76); }
+:root:root[data-sidebar-overlay=native] .app.style-acira[data-chrome=dark] .browser-shell[data-seamless=shown][data-live-glass] { --live-fill:rgb(var(--sidebar-rgb,var(--chrome-rgb)) / .82); }
+.app.style-acira .browser-shell[data-seamless=shown][data-live-glass] > .bar-live-glass { position:absolute; inset:0; overflow:hidden; z-index:-2; pointer-events:none; }
+.app.style-acira .browser-shell[data-seamless=shown][data-live-glass] > .bar-live-glass > .bar-live-glass-canvas { position:absolute; left:-64px; top:-64px; width:calc(100% + 128px); height:calc(100% + 128px); filter:blur(var(--frost-blur,32px)) saturate(1); }
+:root:root[data-sidebar-overlay=native] .app.style-acira .browser-shell[data-seamless=shown][data-live-glass]::after { content:''; position:absolute; inset:0; z-index:-2; background:var(--live-fill); pointer-events:none; }   /* above the glass (same level, later in the tree), under the Ambient light (.st-amb-top, -1) */
+
+/* Beta 14.1 (live float): the site glow's top band (a wash 210px tall across the window's top, styles/site-glow.css) is painted by the interface and is covered by the native page at rest ("the native page view is drawn
+   above the interface, so the washes only ever show beside the page"). The live float raises the interface OVER the page, and the band then lay on the page's header as a faint tint (alpha up to 76 of 255 over the top 300px of
+   the page, a moving page's first line of text greyed). It is cut with the same hole as the frame's veil, so it shows only beside the page, exactly as at rest. */
+:root[data-sidebar-overlay=native] .app.style-acira .st-glow[data-band=top] { mask:var(--sf-mask) 0 0 / 100vw 100vh no-repeat; }
+:root[data-sidebar-overlay=native][data-sidebar-side=right] .app.style-acira .st-glow[data-band=top] { mask:var(--sf-mask-flat) 0 0 / 100vw 100vh no-repeat; }
+
+/* Beta 14.1 (live float, found with the Linux stand-in: interface alpha 255 over the page's whole hole in every frame of the hide and of the top bar's float): where there is no window material (Linux; `data-material=none`)
+   the browser root paints the frame's flat finish (frost-preview.css, `.browser-root { background: var(--ed-chrome) }`; with a material it is transparent). It lies under the native page at rest, and over the live page's hole while the
+   interface is raised: a dark page area for as long as the float lasts, which a sidebar in the DOM (sidebar.css, the expanded rail makes it transparent) hid for the open but not for the hide or for the top bar alone. In the live float the frame is the
+   masked veil above (`.app::before`, whose base is opaque where there is no material), so the root paints nothing. */
+:root[data-sidebar-overlay=native] .app.style-acira > .browser-root { background:transparent !important; }
+/* A custom toolbar colour (Settings, Appearance) is what the bar is tinted with: the glass fill is that colour at the strength its veil has. */
+:root:root[data-sidebar-overlay=native] .app.style-acira[data-toolbar-color] .browser-shell[data-seamless=shown][data-live-glass] { --live-fill:rgb(var(--toolbar-rgb) / max(var(--toolbar-veil,.76), .6)); }
+
+/* Beta 14.1 (live float, the team's circle at the sidebar's foot, 21 Nov): the two pieces beside the sidebar that give the page's corners their curve (`.sidebar-page-corners`) are the frame's veil in the corner's shape, and the veil is translucent:
+   over the LIVE page, whose own pixels fill the square corner they cut, it made a grey wedge on a white page and a dark notch on a dark one (the page's pixels showing through at 54-66 %). Over the live page they are opaque, in the tone the glass beside
+   them has at that height (its fill over the one neutral tone: the frame's veil gradient, .82 at the top and .73 at the foot in the dark look, .76 in the light). Without a glass (the opaque finish) they are the finish's colour. The Ambient light (::before) lies over them as before.
+   (`data-live-glass` is put on the pieces by chromeEdge.ts placeGlass with the sidebar's; no :has() here, the costly-selector rule.) */
+:root[data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira .sidebar-page-corners { background:rgb(var(--sidebar-rgb,var(--chrome-rgb))) !important; }
+:root[data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira .sidebar-page-corners[data-live-glass] { background:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 76%, rgb(236 240 237)) !important; }
+:root[data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira[data-chrome=dark] .sidebar-page-corners[data-live-glass] { background:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 82%, rgb(71 72 71)) !important; }
+:root[data-desktop-material=ready][data-sidebar-overlay=native] .app.style-acira[data-chrome=dark] .sidebar-page-corners.sidebar-page-corners-low[data-live-glass] { background:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 73%, rgb(71 72 71)) !important; }
+
+/* Beta 14.1 (live float, the top bar's feet): the card the team knows begins under the bar with two ROUND top corners (the picture float's card is laid out from the bar's foot). Over the live page, which runs on under the bar with square corners, the two corners are
+   two small wedges of the bar's own tone that hang from its foot (chromeEdge.ts placeFeet puts the element in the bar and sets where the page's edges are: --foot-l / --foot-r from the bar's sides), so the bar's own slide carries them. The wedge's shape is the corner pieces'
+   (paintPageHoles: the corner outside an 8px arc). Opaque, in the glass's tone at the bar (its fill over the one neutral: dark .82, light .76, a custom toolbar colour at its veil's strength), the finish's colour when the bar has no glass (`.bar-live-tone` carries the glass's attribute). */
+/* The shell clips what is not in its box (frost-preview.css `overflow: clip`, with navigation-progress.css's clip margin at its border box): in the live float the wedges below its foot are outside it. The float lets them show (the way the sidebar-mode morph and the
+   address-in-sidebar shell already do); the glass wrapper clips its own canvas. The bar's rounded bottom corners (seamless.css, the clip rounded the glass with them) are square under the wrapper: the wedges meet the bar's foot, and no page pixel shows in a corner. */
+:root[data-sidebar-overlay=native] .app.style-acira .browser-shell[data-seamless=shown] { overflow:visible; }
+.bar-live-feet, .bar-live-lap { display:none; }
+:root[data-sidebar-overlay=native] .app.style-acira .browser-shell[data-seamless=shown]>.bar-live-feet { display:block; position:absolute; left:0; right:0; top:100%; height:0; pointer-events:none; }
+:root[data-sidebar-overlay=native] .app.style-acira .bar-live-tone { --foot-tone:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 98.8%, #fff); }
+:root[data-sidebar-overlay=native] .app.style-acira .bar-live-tone[data-live-glass] { --foot-tone:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 76%, rgb(236 240 237)); }
+:root[data-sidebar-overlay=native] .app.style-acira[data-chrome=dark] .bar-live-tone[data-live-glass] { --foot-tone:color-mix(in srgb, rgb(var(--sidebar-rgb,var(--chrome-rgb))) 82%, rgb(71 72 71)); }
+:root[data-sidebar-overlay=native] .app.style-acira[data-toolbar-color] .bar-live-tone[data-live-glass] { --foot-tone:color-mix(in srgb, rgb(var(--toolbar-rgb)) calc(max(var(--toolbar-veil,.76), .6) * 100%), rgb(236 240 237)); }
+:root[data-sidebar-overlay=native] .app.style-acira[data-chrome=dark][data-toolbar-color] .bar-live-tone[data-live-glass] { --foot-tone:color-mix(in srgb, rgb(var(--toolbar-rgb)) calc(max(var(--toolbar-veil,.76), .6) * 100%), rgb(71 72 71)); }
+.bar-live-feet::before, .bar-live-feet::after { content:''; position:absolute; top:0; width:8px; height:8px; background:var(--foot-tone); }
+.bar-live-feet::before { left:var(--foot-l,0px); mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 0H8A8 8 0 0 0 0 8Z'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
+.bar-live-feet::after { right:var(--foot-r,0px); mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M8 0H0A8 8 0 0 1 8 8Z'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
+/* The wedge at a floating sidebar's edge is NOT the bar's: the corner piece beside the sidebar draws it (chromeEdge.ts paintPageHoles puts the piece's wedge at the bar's foot while the bar is shown), so it rides the sidebar's slide and the bar's drop in every frame, as 14.0's does.
+   (A first version hid the bar's own wedge for the whole transition and faded it in after: the corner read square for ~58 frames at 120 Hz.) */
+.bar-live-feet[data-near=l]::before, .bar-live-feet[data-near=r]::after { display:none; }
+/* Beta 14.1 (the bar first, then the sidebar): the bar narrows to the sidebar's edge the moment the sidebar arrives (the interface root is laid out beside a floating sidebar, clips what lies outside it, and the bar's glass with it), so the strip the bar vacates
+   would show the LIVE page's header until the sliding sidebar has covered it (found with the stepped rig's `rev` case: the page's logo and title where the bar had been, for the first 300 ms). A flat piece in the bar's tone stands there, under the sidebar (z-index 10), outside the root's clip. */
+:root[data-sidebar-overlay=native] .app.style-acira>.bar-live-lap { display:block; position:fixed; left:0; right:0; top:0; height:var(--lap-h,0px); z-index:5; pointer-events:none; }
+.bar-live-lap::before, .bar-live-lap::after { content:''; position:absolute; top:0; bottom:0; background:var(--foot-tone); }
+.bar-live-lap::before { left:0; width:var(--lap-l,0px); }
+.bar-live-lap::after { right:0; width:var(--lap-r,0px); }

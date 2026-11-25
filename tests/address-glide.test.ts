@@ -95,13 +95,12 @@ test('the narrow field: the field text starts left of its box and comes in from 
   assert.match(css, /padding-left: calc\(8px \+ max\(0px, \(var\(--af-center, 0px\) - var\(--af-pre, 0px\)\) \* var\(--af-p\)\)\) !important; text-indent: min\(0px,/, 'the part of the offset left of the padding is a negative indent');
 });
 
-test('the ring goes with the text on the same spring, in both directions, and waits for the release of a press that holds the at-rest text (7 Nov: it popped at once)', () => {
-  const css = read('../src/styles/address-glide.css'), app = read('../src/App.tsx');
-  assert.match(app, /className=\{`address-bar`\}[^>]*style=\{\{ '--af-ms': addressGlide\.ms \+ 'ms', '--af-ease': addressGlide\.ease \} as CSSProperties\}/, 'the bar carries the time and the easing the field does');
-  assert.match(css, /outline-color var\(--af-ms, 0ms\) var\(--af-ease, linear\)/);
-  assert.match(css, /:not\(:focus-within\) \{ outline: 2px solid transparent; outline-offset: -2px; \}/, 'a ring of the same size at rest, so its colour can move');
-  assert.match(css, /\[data-holding\]\):focus-within \{ outline-color: transparent; \}/, 'a held press: the ring comes with the glide');
-  assert.match(css, /@media not \(forced-colors: active\)/, 'forced colours keep the system ring, no transparent one');
+test('the ring is the active border (Beta 14, F1/F2): it appears and leaves in the chosen look\'s own motion as the field takes and loses focus, and still waits for the release of a press that holds the at-rest text', () => {
+  const css = read('../src/styles/address-glide.css'), app = read('../src/App.tsx'), ring = read('../src/styles/active-border.css');
+  assert.match(app, /className=\{`address-bar`\}[^>]*style=\{\{ '--af-ms': addressGlide\.ms \+ 'ms', '--af-ease': addressGlide\.ease \} as CSSProperties\}/, 'the bar still carries the time and the easing the text glides on');
+  assert.doesNotMatch(css, /outline/, 'no outline of the old ring is left in the glide\'s stylesheet: the ring is a pseudo-element now');
+  assert.match(ring, /\.address-bar:focus-within:not\(:has\(\.address-field\[data-glide\]\[data-holding\]\)\)::after/, 'a held press: the ring leaves it until the release, which is when the text starts to travel');
+  assert.match(ring, /\.address-bar \{\s*&::after \{|\.ab-demo-field\) \{\s*&::after \{|\.nt-page \.nt-search\)\) \{\s*&::after \{|\.ed-list-search\)\) \{\s*&::after \{/, 'the ring waits at rest, so it can leave as well as arrive');
 });
 
 test('a field that shows the full address shows it from its start, so its text lines up with the shown text (a narrow field would scroll to the end of a long address)', () => {

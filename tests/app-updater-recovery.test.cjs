@@ -14,7 +14,7 @@ const until=async(what,ms=8000)=>{const end=Date.now()+ms;while(!what()){if(Date
 const made=[];test.after(()=>{for(const root of made)fs.rmSync(root,{recursive:true,force:true});});
 const tmp=()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'acira-update-recovery-'));made.push(root);return root;};
 
-/** The feed and its file over HTTP. mode: 'good', 'corrupt' (the right size, other bytes), 'html' (a sign-in page with 200), 'slow' (pieces, for a pause), 'hang' (headers, then nothing). */
+/** The feed and its file over HTTP. mode: 'good', 'corrupt' (the right size, other bytes), 'html' (a sign-in page with 200), 'slow' (pieces over about a second, so the interface hears of progress under 100 %: since D131 a pause is not taken at 100), 'hang' (headers, then nothing). */
 async function feedServer(version='0.1.0-beta.14'){
  const state={mode:'good',requests:[]},doc=()=>({version,releaseNotes:'- Safer updates',releaseDate:'2026-11-08T00:00:00.000Z',files:[{url:NAME,sha512:sha512(FILE),size:FILE.length}]});
  const server=http.createServer((req,res)=>{
@@ -28,7 +28,7 @@ async function feedServer(version='0.1.0-beta.14'){
   res.writeHead(match?206:200,{'content-length':bytes.length-start,etag:'"f"',...(match?{'content-range':`bytes ${start}-${bytes.length-1}/${bytes.length}`}:{})});
   if(state.mode==='hang'){res.write(bytes.subarray(start,start+1000));return;}
   if(state.mode!=='slow')return res.end(bytes.subarray(start));
-  let at=start;const step=()=>{if(res.destroyed)return;const piece=bytes.subarray(at,at+25000);at+=piece.length;if(at>=bytes.length)return res.end(piece);res.write(piece);setTimeout(step,25);};step();
+  let at=start;const step=()=>{if(res.destroyed)return;const piece=bytes.subarray(at,at+20000);at+=piece.length;if(at>=bytes.length)return res.end(piece);res.write(piece);setTimeout(step,50);};step();
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  return Object.assign(state,{base:`http://127.0.0.1:${server.address().port}/`,files:()=>state.requests.filter(r=>r.name===NAME),close:()=>new Promise(resolve=>{server.closeAllConnections?.();server.close(resolve);})});
@@ -63,7 +63,7 @@ const pendingOf=root=>path.join(root,'cache','pending');
 
 test('1/5 a pause is not for good: a manual check resumes it, an automatic one leaves it, and a pause older than a week is dropped at the next start',async t=>{
  const feed=await feedServer(),root=tmp(),c=clock();t.after(feed.close);feed.mode='slow';
- let first,done=false;const paused=new Promise(resolve=>{first=make(root,liteUpdater(feed,{root}),{now:c.now,onChange:status=>{if(!done&&status.status==='downloading'&&status.transferred>=100000&&status.pausable){done=true;resolve(first.pause());}}});});
+ let first,done=false;const paused=new Promise(resolve=>{first=make(root,liteUpdater(feed,{root}),{now:c.now,onChange:status=>{if(status.status==='downloading')c.later(500);if(!done&&status.status==='downloading'&&status.transferred>=100000&&status.pausable){done=true;resolve(first.pause());}}});});
  await first.check();await paused;assert.equal(first.status().status,'paused');
  const asked=feed.requests.length;
  await first.check();assert.equal(first.status().status,'paused','an automatic check leaves a pause alone');assert.equal(feed.requests.length,asked,'and sends nothing');
@@ -73,7 +73,7 @@ test('1/5 a pause is not for good: a manual check resumes it, an automatic one l
  await until(()=>first.status().status==='ready');
  // a pause left for more than PAUSE_LASTS: the next start does not stay paused
  const second=tmp();feed.mode='slow';
- let again,done2=false;const stopped=new Promise(resolve=>{again=make(second,liteUpdater(feed,{root:second}),{now:c.now,onChange:status=>{if(!done2&&status.status==='downloading'&&status.transferred>=100000&&status.pausable){done2=true;resolve(again.pause());}}});});
+ let again,done2=false;const stopped=new Promise(resolve=>{again=make(second,liteUpdater(feed,{root:second}),{now:c.now,onChange:status=>{if(status.status==='downloading')c.later(500);if(!done2&&status.status==='downloading'&&status.transferred>=100000&&status.pausable){done2=true;resolve(again.pause());}}});});
  await again.check();await stopped;assert.equal(json(second).download.paused,true);assert.ok(json(second).download.pausedAt>0);
  feed.mode='good';c.later(PAUSE_LASTS-60000);
  assert.equal(make(second,liteUpdater(feed,{root:second}),{now:c.now}).status().status,'paused','six days and 23 hours: still the person\'s pause');

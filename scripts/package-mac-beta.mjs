@@ -2,6 +2,7 @@
 // are rewritten and no Apple submission or automatic-update offer is made.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {assertNoPrivateNames} from './release-private-names.mjs';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -56,6 +57,7 @@ export async function packageMacBeta(candidate,{template,arch,version,signingIde
  await fs.rm(application,{recursive:true});await fs.mkdir(application);
  for(const folder of ['desktop','dist','resources','node_modules','source-licenses'])try{await fs.cp(path.join(candidate,folder),path.join(application,folder),{recursive:true,verbatimSymlinks:true});}catch(error){if(error.code!=='ENOENT')throw error;}
  for(const file of ['package.json','page-zoom-levels.json','LICENSE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(candidate,file),path.join(application,file));
+ await assertNoPrivateNames(application,'the Mac app folder');
  const torDirectory=path.join(application,'resources/tor');
  if(!readMacTor(path.join(torDirectory,'tor'),{arch})){
   await fs.rm(torDirectory,{recursive:true});

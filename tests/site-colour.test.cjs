@@ -138,3 +138,53 @@ test('a colour handed over by the tab\'s icon stays through the page\'s own icon
   tab.iconResolved('#ff0033'); await clock.advance(800);
   assert.equal(emitted[emitted.length - 1], '#ff0033', 'the site changed its icon: the new colour');
 });
+
+// 14.1 (reported 21 Nov): coveryourtracks.eff.org, a green page (body rgb(48, 93, 66)) under a black logo bar, no theme-color and an icon with no brand colour, had no colour
+// at all: no ring, no glow, no folder. The engine's 4th source is the page itself: the brand colour that covers the most of its top BAND_DIP, when it covers enough.
+test('the page\'s own colour: the brand colour that covers the most of the top band, not a small logo, not a page of many colours, not white or black', () => {
+  const { bandBrand, BAND_SHARE } = require('../desktop/site-colour.cjs');
+  const eff = bgra(120, 200, (x, y) => (y < 22 ? (x < 12 && y > 4 && y < 18 ? [237, 28, 36] : [0, 0, 0]) : (x > 30 && x < 70 && y > 40 && y < 90 ? [241, 196, 15] : [48, 93, 66])));
+  const read = bandBrand(eff, 120, 200);
+  assert.ok(read, 'the green field is the page\'s colour'); assert.equal(read.hex, '#305d42'); assert.ok(read.share > .6, String(read.share));
+  assert.equal(bandBrand(bgra(120, 200, (x, y) => (x < 20 && y < 20 ? [237, 28, 36] : [255, 255, 255])), 120, 200), null, 'a white page with a red logo: none');
+  assert.equal(bandBrand(bgra(120, 200, () => [13, 17, 23]), 120, 200), null, 'a near-black page: none');
+  const quilt = bgra(120, 200, (x, y) => [[220, 40, 40], [40, 160, 60], [40, 80, 220], [230, 180, 20]][(Math.floor(x / 30) + Math.floor(y / 50)) % 4]);
+  assert.equal(bandBrand(quilt, 120, 200), null, 'four colours of a quarter each (photos, tiles): none of them covers ' + BAND_SHARE);
+  const header = bgra(120, 200, (x, y) => (y < 80 ? [91, 33, 182] : [255, 255, 255]));
+  assert.equal(bandBrand(header, 120, 200).hex, '#5b21b6', 'a coloured header taller than the thin strip counts');
+  assert.ok(bandBrand(bgra(120, 200, (x, y) => [48 + (x % 6), 93 - (y % 5), 66]), 120, 200), 'a field with a little noise (a texture, anti-aliasing) is still one colour');
+});
+
+test('the page is read last: after the theme-color, the top edge and the icon, only when they give nothing, only while the tab is on screen', async () => {
+  let bands = 0;
+  const green = async () => { bands++; return { bitmap: bgra(120, 200, (x, y) => (y < 22 ? [0, 0, 0] : [48, 93, 66])), width: 120, height: 200 }; };
+  const blackStrip = async () => ({ bitmap: bgra(100, 12, () => [0, 0, 0]), width: 100, height: 12 });
+  let h = harness({ stripOf: blackStrip, iconOf: async () => null, bandOf: green });
+  h.tab.navigated('https://coveryourtracks.eff.org/'); h.tab.iconChanged(['https://coveryourtracks.eff.org/static/favicon.ico']); h.tab.loaded(); await h.clock.advance(800);
+  assert.deepEqual(h.emitted, ['#305d42'], 'no theme-color, a black top edge, a grey icon: the page\'s green');
+  bands = 0; h = harness({ stripOf: blackStrip, iconOf: async () => '#ff4500', bandOf: green });
+  h.tab.navigated('https://a.test/'); h.tab.iconChanged(['https://a.test/i.png']); h.tab.loaded(); await h.clock.advance(800);
+  assert.deepEqual(h.emitted, ['#ff4500'], 'an icon with a brand colour wins over the page'); assert.equal(bands, 0, 'and the page is not even captured');
+  bands = 0; h = harness({ stripOf: blackStrip, bandOf: green });
+  h.tab.navigated('https://b.test/'); h.tab.themeColor('#5b21b6'); await h.clock.advance(800);
+  assert.deepEqual(h.emitted, ['#5b21b6'], 'a theme-color wins'); assert.equal(bands, 0);
+  bands = 0; h = harness({ visible: () => false, stripOf: blackStrip, bandOf: green });
+  h.tab.navigated('https://c.test/'); h.tab.loaded(); await h.clock.advance(6000);
+  assert.equal(bands, 0, 'a tab off screen is never captured'); assert.deepEqual(h.emitted, []);
+  bands = 0; h = harness({ level: () => 'off', stripOf: blackStrip, bandOf: green });
+  h.tab.navigated('https://d.test/'); h.tab.loaded(); await h.clock.advance(6000);
+  assert.equal(bands, 0, 'Off captures nothing'); assert.deepEqual(h.emitted, []);
+});
+
+test('every colour goes out with the site it was read for, also when a remembered site has the same colour as the last one', async () => {
+  const out = [];
+  const clock = fakeClock();
+  const control = createSiteColour({ now: clock.now, schedule: clock.schedule, cancel: clock.cancel, stripOf: async () => ({ bitmap: bgra(100, 12, () => [255, 0, 51]), width: 100, height: 12 }) });
+  const tab = control.attach('t1', { emit: patch => out.push(patch) });
+  tab.navigated('https://www.a.test/'); tab.loaded(); await clock.advance(400);
+  assert.deepEqual(out.at(-1), { siteColor: '#ff0033', siteColorHost: 'a.test' });
+  tab.navigated('https://b.test/'); tab.loaded(); await clock.advance(400);
+  assert.deepEqual(out.at(-1), { siteColor: '#ff0033', siteColorHost: 'b.test' }, 'the same red read for another site still names that site');
+  tab.navigated('https://a.test/x'); await clock.advance(10);
+  assert.deepEqual(out.at(-1), { siteColor: '#ff0033', siteColorHost: 'a.test' }, 'a remembered site gives its colour and its name at once');
+});

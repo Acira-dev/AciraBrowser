@@ -1,3 +1,4 @@
+import { LineIcon } from '../components/LineIcon';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { BrowserDownload, BrowserSnapshot, ServiceRequest } from '../runtime/types';
 import { runtime } from '../runtime/client';
@@ -90,8 +91,10 @@ function DownloadRow({ item, act, reduced }: { item: BrowserDownload; act: (id: 
       <span className="dl-meta">{meta}{item.dangerous ? <> · <span data-warn>{t('dl.review')}</span></> : null}</span>
     </div>
     <span className="lib-actions lib-actions-live">
-      {item.status === 'Downloading' && item.canPause && <button type="button" className="lib-icon" aria-label={t('dl.pauseAria', { name: label })} title={t('dl.pause')} onClick={() => void act(item.id, 'pause')}><Pause size={14} /></button>}
-      {item.status === 'Paused' && item.canResume && <button type="button" className="lib-icon" aria-label={t('dl.resumeAria', { name: label })} title={t('dl.resume')} onClick={() => void act(item.id, 'resume')}><Play size={14} /></button>}
+      {/* One button for Pause and Resume: the same element stays mounted, so its icon morphs between the two bars and the triangle (section G). */}
+      {((item.status === 'Downloading' && item.canPause) || (item.status === 'Paused' && item.canResume)) && (item.status === 'Paused'
+        ? <button type="button" className="lib-icon" aria-label={t('dl.resumeAria', { name: label })} title={t('dl.resume')} onClick={() => void act(item.id, 'resume')}><LineIcon name="play" size={14} /></button>
+        : <button type="button" className="lib-icon" aria-label={t('dl.pauseAria', { name: label })} title={t('dl.pause')} onClick={() => void act(item.id, 'pause')}><LineIcon name="pause" size={14} /></button>)}
       {item.canCancel && <button type="button" className="lib-icon" aria-label={t('dl.cancelAria', { name: label })} title={t('dl.cancel')} onClick={() => void act(item.id, 'cancel')}><X size={14} /></button>}
       {!live(item) && item.status !== 'Ready' && (item.canResume
         ? <button type="button" className="acira-button acira-button-quiet lib-compact" onClick={() => void act(item.id, 'resume')}><Play size={13} />{t('dl.resume')}</button>

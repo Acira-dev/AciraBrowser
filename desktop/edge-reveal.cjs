@@ -10,8 +10,9 @@
 // wider inside the window, a pointer arriving fast or pushing against the edge needs less dwell, and a push that carries the
 // pointer out across the left or top edge (onto a neighbouring monitor) still reveals when it stops just past the edge.
 const EDGE = { top: 8, side: 10 };          // the zone inside the window along each edge, in DIPs (Zen keeps an 8px sliver)
-const DWELL = { top: 90, side: 90 };        // resting in the zone this long shows the edge
-const DWELL_PUSH = { top: 40, side: 40 };   // pressing against the edge (within 1px) or arriving fast means it
+// 14.2 (D144): the side's plain waits are Fast's floors at every speed (Premium was 90 / 40); the pass simulation runs at Premium too. The top keeps 90 / 40.
+const DWELL = { top: 90, side: 60 };        // resting in the zone this long shows the edge
+const DWELL_PUSH = { top: 40, side: 30 };   // pressing against the edge (within 1px) or arriving fast means it
 const PUSH = 1;
 const APPROACH = 0.6;              // px/ms toward the edge on the way in: intent, so the shorter dwell applies
 const SWEEP = 24;                  // px along the edge since the dwell began: a pass (scrolling, heading elsewhere), not a rest; the dwell restarts
@@ -37,8 +38,13 @@ const OUTSIDE_CAP = 2500;          // ... for at most this long
 // pressed against the very edge (nothing a page draws is there, so that is the person asking). Over empty page it stays 90/40.
 // Why 650: a click on a control that was just reached lands 150 to 450 ms after arriving, and a reveal covers the page
 // (the pointer leaves it, a press goes to the sidebar), so the dwell has to outlast the click, not race it.
-const ENGAGED_DWELL = { top: 650, side: 650 };
-const ENGAGED_PUSH = { top: 260, side: 260 };
+// 14.2 (D144): the side waits 500 at Premium (hover delays against accidental opening: 300-500 ms; report in the design notes). Top 650.
+const ENGAGED_DWELL = { top: 650, side: 500 };
+// 14.1 (reported 21 Nov: "the sidebar doesn't show fast"; decided by the release owner, P2): pressed against the very edge over a control the person is
+// asking (nothing a page draws is at the window's last pixel), so that wait is 120 ms (was 260). A pointer sliding down a menu of links along the very edge is
+// not a rest: while engaged and pressed, the wait restarts after ENGAGED_PUSH_SWEEP px of travel along the edge (SWEEP elsewhere), so no slide adds up to it.
+const ENGAGED_PUSH = { top: 120, side: 120 };
+const ENGAGED_PUSH_SWEEP = 4;   // 4 px: a slide along the very edge at 100 px/s restarts the wait every 40 ms (below 90 and 120); a hand resting there does not drift 4 px in 90 ms
 
 // Animation speed (Settings > Appearance): the waits between the pointer and the bar are about intent, not motion, but "Fast" and "None" ask for a bar
 // that does not make you wait (reported 6 Nov: Briski's "it takes 1 second to appear": the 650ms engaged wait below was most of it, whatever the speed).
@@ -46,12 +52,39 @@ const ENGAGED_PUSH = { top: 260, side: 260 };
 // Floors, from simulating the controller against passing pointers (tests/edge-reveal.test.cjs "Fast waits"): 60/30ms is the shortest rest/arrival pair that
 // keeps every crossing of the zone, every slide along it faster than 0.4px/ms and every touch of 30ms or less a pass (30ms is also two samples of the 16ms
 // poller); below it touches of 20 to 30ms and slides up to 0.5px/ms reveal. The engaged waits (a control under the pointer) keep most of R8's reason, a click
-// on a control just reached lands 150 to 450ms after arriving: 400 / 180ms give the click most of that window; Premium keeps 650 / 260.
+// on a control just reached lands 150 to 450ms after arriving: 400 / 180ms give the click most of that window; Premium keeps 650 / 260 (now 300 / 90; Premium 650 / 120, 500 at the side).
 const PREMIUM = { dwell: DWELL, push: DWELL_PUSH, engaged: ENGAGED_DWELL, engagedPush: ENGAGED_PUSH, grace: GRACE, keyGrace: KEY_GRACE, minVisible: MIN_VISIBLE, lockout: LOCKOUT };
-const FAST = { dwell: { top: 60, side: 60 }, push: { top: 30, side: 30 }, engaged: { top: 400, side: 400 }, engagedPush: { top: 180, side: 180 }, grace: { top: 180, side: 120 }, keyGrace: 250, minVisible: 250, lockout: 150 };
+// 14.1 (P1, P2): Fast and None's engaged waits 300 (was 400) and pressed 90 (was 180); the plain waits keep their floors (60 / 30).
+const FAST = { dwell: { top: 60, side: 60 }, push: { top: 30, side: 30 }, engaged: { top: 300, side: 300 }, engagedPush: { top: 90, side: 90 }, grace: { top: 180, side: 120 }, keyGrace: 250, minVisible: 250, lockout: 150 };
 /** The waits for each speed the interface reports (`input.speed`: 'premium' | 'fast' | 'off'); anything else is Premium. */
 const WAITS = { premium: PREMIUM, fast: FAST, off: FAST };
 const waitsFor = speed => (typeof speed === 'string' && Object.hasOwn(WAITS, speed) ? WAITS[speed] : PREMIUM);
+
+// Beta 14 (the hidden sidebar's handle): "Show the hidden sidebar when the mouse touches" is the whole edge (everything above, unchanged and the default), a handle only, or never. The handle is a short faint line
+// on the sidebar's edge; only its hit area (16 x 72 DIPs, larger than the 3 x 48 line but no larger) reveals the sidebar, the rest of the edge does nothing, with the very same dwell, approach and grace as the edge's.
+// Pointing within NEAR DIPs of the hit area brightens the line (the layer eases it, desktop/sidebar-handle.cjs). `handle` = { y, inset }: the hit area's centre from the window's top, and how far in from the
+// sidebar's edge it starts (0 on the left; on the right it stays clear of the page's scrollbar, see handleGeometry). A tab, link or file being dragged (`carrying`) still reveals the sidebar at the whole edge in the
+// edge and handle modes, whatever button is held: that is how things get dropped into it. Never turns the pointer reveal off (and the drag's).
+const HANDLE = { hitW: 16, hitH: 72, lineW: 3, lineH: 48, near: 40, right: 20, top: 56, bottom: 56, rows: 24 };
+const REVEAL_MODES = ['edge', 'handle', 'never'];
+const revealOf = input => (REVEAL_MODES.includes(input?.reveal) ? input.reveal : 'edge');
+/** The handle's box in DIPs for the interface scale `input.handle.scale` (1 = 100 %): the hit area's centre, its inset from the sidebar's edge, its size, how near counts, the rows of slack the monitor-overshoot reveal has. */
+function handleBox(handle, height) {
+  const sc = Number.isFinite(handle?.scale) && handle.scale > 0 ? handle.scale : 1;
+  return { y: Number.isFinite(handle?.y) ? handle.y : (Number(height) || 0) / 2, inset: Number(handle?.inset) || 0, w: HANDLE.hitW * sc, h: HANDLE.hitH * sc, near: HANDLE.near * sc, rows: HANDLE.rows * sc, scale: sc };
+}
+/** Where the handle's hit area is for a window `height` DIPs tall, from the remembered fraction of the height (0.5 = the middle): its centre line and its inset from the sidebar's edge.
+ * The centre keeps the whole hit area clear of the window's top (the Mac's traffic lights, the Windows caption buttons) and bottom (the resize grip), and on the right of the page's scrollbar column. */
+function handleGeometry({ height, fraction, side, scale = 1 }) {
+  const sc = Number.isFinite(scale) && scale > 0 ? scale : 1, f = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0.5, h = Math.max(0, Number(height) || 0);
+  const low = (HANDLE.top + HANDLE.hitH / 2) * sc, high = Math.max(low, h - (HANDLE.bottom + HANDLE.hitH / 2) * sc);
+  return { y: Math.round(Math.min(high, Math.max(low, f * h))), inset: side === 'right' ? Math.round(HANDLE.right * sc) : 0, scale: sc };
+}
+/** The fraction of the height a handle dragged to centre `y` is remembered as (the reverse of handleGeometry, inside the same limits). */
+function handleFraction({ height, y, scale = 1 }) {
+  const sc = Number.isFinite(scale) && scale > 0 ? scale : 1, h = Math.max(1, Number(height) || 1), low = (HANDLE.top + HANDLE.hitH / 2) * sc, high = Math.max(low, h - (HANDLE.bottom + HANDLE.hitH / 2) * sc);
+  return Math.round(Math.min(1, Math.max(0, Math.min(high, Math.max(low, y)) / h)) * 10000) / 10000;
+}
 
 // 13.10 (Discord, "still kinda slow, responsive"): the reveal over a website waits for the page's picture (capture, JPEG, decode, paint, park: 100 to 250 ms) AFTER the dwell has run out.
 // A rest that is going to reveal now says so ahead of time (`prime`): from the first sample at which the pointer is resting or pressed against the edge, once the wait is within
@@ -69,10 +102,17 @@ const fresh = () => ({ phase: 'hidden', since: 0, shownAt: 0, leaveAt: 0, lockUn
  * `topAuto` (Settings > Appearance > Layout > Hide the toolbar: tabs in a sidebar, the toolbar hides like Seamless's in Full, Compact or Focus): the top
  * edge is always there (the toolbar has no other way back) and so is a closed sidebar's (its button is in the hidden toolbar), whatever those switches say. */
 function enabledEdges(input) {
-  const seamless = input.view === 'seamless', edges = input.edges || { top: true, side: true }, peek = input.peek || {}, auto = !!input.topAuto && !seamless;
+  const seamless = input.view === 'seamless', edges = input.edges || { top: true, side: true }, peek = input.peek || {}, auto = !!input.topAuto && !seamless, reveal = revealOf(input);
   return {
     top: !!((seamless && edges.top) || auto),
-    side: !!(input.vertical && (seamless ? edges.side : !input.docked && (auto || peek[input.view] !== false))),
+    // Beta 14: the whole edge is today's rule, whatever the views' switches say. A handle is there for any hidden sidebar (the switches belong to the whole edge). Never is no pointer reveal at all: Seamless keeps its zone for what
+    // a key or the pin (Ctrl+Shift+E) asks, the other views' shortcut docks the sidebar and needs none.
+    // "Docked" is the window's own "sidebar open" preference. Seamless never shows a docked sidebar (it is hidden until the edge or the pin brings it out, whatever that preference says: it
+    // stays true when the view is switched to Seamless from a Full one), so there it does not count; in the other views a docked sidebar is already there and needs no handle.
+    // Beta 14: a closed sidebar that is a Mini rail has no edge reveal at all (that is Hidden's): the rail's own intent lives in the interface (src/ui/miniRail.ts) and main only raises the float it asks for.
+    // 14.1 (reported 21 Nov): Seamless's "Show the sidebar at the left edge" switched off took Ctrl+Shift+E with it: the side was disabled, and a disabled zone
+    // is reset on every sample, pin included, so the shortcut did nothing. The switch is about the POINTER (sidePointer below); keys and the pin still reach the side, as with Never.
+    side: !!input.miniRail ? false : reveal === 'never' ? !!(input.vertical && seamless) : reveal === 'handle' ? !!(input.vertical && (seamless || !input.docked)) : !!(input.vertical && (seamless ? true : !input.docked && (auto || peek[input.view] !== false))),
   };
 }
 
@@ -129,38 +169,52 @@ function createEdgeController({ now = Date.now } = {}) {
     const inBand = !!(point && b && input.band > 0 && point.x >= b.x && point.x < b.x + b.width && point.y < b.y && point.y >= b.y - input.band);
     // `cornerOnly` (Windows, caption-notch.cjs createCaptionCorner): the top is the caption buttons alone and only their corner shows them; no edge strip, push-out or bounce.
     const cornerOnly = !!input.cornerOnly;
+    // Beta 14: with a handle only the handle's hit area is the side zone (a tab, link or file being dragged makes the whole edge the zone again, as it is in the edge mode).
+    const reveal = revealOf(input), handled = reveal === 'handle';
+    // Whether the pointer may reveal the side at all: not with Never, nor in Seamless with its side switch off (the zone stays for keys and the pin: enabledEdges).
+    const sidePointer = reveal !== 'never' && !(input.view === 'seamless' && !handled && (input.edges || {}).side === false);
+    const carrying = !!input.carrying && sidePointer;
+    const hit = handleBox(input.handle, b ? b.height : 0);
+    const onHandle = !!(rel && rel.x >= hit.inset && rel.x < hit.inset + hit.w && Math.abs(rel.y - hit.y) <= hit.h / 2);
+    const wholeEdge = !!(rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top);
     const trigger = {
       top: !!(live && (rel && ((!cornerOnly && rel.y <= EDGE.top) || caption) || (!cornerOnly && inBand))),
       // (The caption buttons' corner belongs to the top: with the sidebar on the right it shares its upper end with the side zone.)
-      side: !!(live && rel && rel.x <= EDGE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top && !caption),
+      side: !!(live && !caption && sidePointer && (handled ? onHandle || (carrying && wholeEdge) : wholeEdge)),
     };
-    // A push out across the left or top edge (the two monitors: the window's edge is not the screen's, so the pointer
+    // How near the pointer is to the handle's hit area (the layer brightens the line within HANDLE.near DIPs): one number for the layer, only while this window is the one in use.
+    const handleRead = (() => {
+      if (!handled || !enabled.side || !point || !b || !live) return { near: false, over: false };
+      const dx = Math.max(hit.inset - (point.x - b.x), 0, (point.x - b.x) - (hit.inset + hit.w)), dy = Math.max(Math.abs(point.y - b.y - hit.y) - hit.h / 2, 0);
+      return { near: Math.hypot(dx, dy) <= hit.near, over: onHandle };
+    })();
+    // A push out across the left or top edge (the team's two monitors: the window's edge is not the screen's, so the pointer
     // slips past it): remember where it crossed; if it stops close past that edge, that is a reveal, not a trip to the neighbour.
     // Back in, close to the edge it left by, soon after leaving: the overshoot came back (BOUNCE).
     const bounced = { top: false, side: false };
     if (inside && crossed) {
       if (live && t - crossed.at <= BOUNCE_WINDOW) {
-        if (crossed.zone === 'side') bounced.side = rel.x <= BOUNCE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top;
+        if (crossed.zone === 'side') bounced.side = rel.x <= BOUNCE.side && rel.y > EDGE.top && rel.y < b.height - EDGE.top && (!handled || Math.abs(rel.y - hit.y) <= hit.h / 2 + hit.rows);
         else bounced.top = !cornerOnly && rel.y <= BOUNCE.top;
       }
       crossed = null;
     }
     if (inside) { lastInside = { rel, t }; exit = null; }
     else if (point && b && live && !exit && lastInside && t - lastInside.t <= 100) {
-      const crossedSide = point.x < b.x && lastInside.rel.x <= EXIT_FROM && point.y >= b.y + EDGE.top && point.y < b.y + b.height - EDGE.top;
+      const crossedSide = point.x < b.x && lastInside.rel.x <= EXIT_FROM && point.y >= b.y + EDGE.top && point.y < b.y + b.height - EDGE.top && (!handled || Math.abs(point.y - b.y - hit.y) <= hit.h / 2 + hit.rows);
       const crossedTop = point.y < b.y && lastInside.rel.y <= EXIT_FROM && point.x >= b.x && point.x < b.x + b.width;
       exit = crossedTop ? { zone: 'top', at: t, still: 0 } : crossedSide ? { zone: 'side', at: t, still: 0 } : { zone: '', at: t, still: 0 };
       crossed = exit.zone ? { zone: exit.zone, at: t } : null;
     }
     if (exit?.zone && point && b && !inside) {
       const past = exit.zone === 'side' ? b.x - point.x : b.y - point.y;
-      const across = exit.zone === 'side' ? point.y >= b.y && point.y < b.y + b.height : point.x >= b.x && point.x < b.x + b.width;
+      const across = exit.zone === 'side' ? point.y >= b.y && point.y < b.y + b.height && (!handled || Math.abs(point.y - b.y - hit.y) <= hit.h / 2 + hit.rows) : point.x >= b.x && point.x < b.x + b.width;
       if (past > EXIT[exit.zone] || !across || t - exit.at > EXIT_WINDOW) exit.zone = '';
       else if (Math.hypot(v.x, v.y) < 0.25) { if (!exit.still) exit.still = t; } else exit.still = 0;
     }
-    const exited = { top: bounced.top || (!cornerOnly && exit?.zone === 'top' && !!exit.still && t - exit.still >= EXIT_DWELL), side: bounced.side || (exit?.zone === 'side' && !!exit.still && t - exit.still >= EXIT_DWELL) };
+    const exited = { top: bounced.top || (!cornerOnly && exit?.zone === 'top' && !!exit.still && t - exit.still >= EXIT_DWELL), side: sidePointer && (bounced.side || (exit?.zone === 'side' && !!exit.still && t - exit.still >= EXIT_DWELL)) };
     const toward = { top: -v.y, side: -v.x }, along = { top: point ? point.x : 0, side: point ? point.y : 0 };
-    const pushing = { top: !!(rel && rel.y <= PUSH) || inBand, side: !!(rel && rel.x <= PUSH) };
+    const pushing = { top: !!(rel && rel.y <= PUSH) || inBand, side: handled ? !!(onHandle && rel.x <= hit.inset + PUSH) : !!(rel && rel.x <= PUSH) };
     const onChrome = {
       top: inBand || !!(inside && rel.y <= size.topHeight + LEEWAY),
       // Full/Compact/Focus keep one connected frame: crossing into its toolbar is not leaving for the page (with the toolbar hidden there is no such frame: Seamless's rule).
@@ -190,16 +244,16 @@ function createEdgeController({ now = Date.now } = {}) {
         // A held button (a seek bar, a slider, text being selected, a drawing, a drag; in any frame), an in-page drag or a native
         // menu or dialog is not a rest at the edge: nothing comes up under it, and nothing after it either until the pointer has
         // left the edge and come back (reported 30 Oct; R8: this also holds for the overshoot-and-return reveals above and below).
-        if (input.pressed) { z.phase = 'hidden'; z.since = 0; z.blocked = z.blocked || !!trigger[zone]; why[zone] = 'pressed'; continue; }
+        if (input.pressed && !(zone === 'side' && carrying)) { z.phase = 'hidden'; z.since = 0; z.blocked = z.blocked || !!trigger[zone]; why[zone] = 'pressed'; continue; }
         if (exited[zone] && !z.blocked && t >= z.lockUntil) { z.phase = 'shown'; z.shownAt = t; z.leaveAt = 0; z.held = false; z.keyed = false; z.via = 'exit'; z.outsideAt = t; why[zone] = 'exit'; exit = null; continue; }
         if (!trigger[zone] || z.blocked) { z.phase = 'hidden'; z.since = 0; continue; }
         // (The caption buttons' own corner in `cornerOnly`: the hidden buttons are under the pointer, so they come back at once, lock-out or not.)
         if (t < z.lockUntil && !(cornerOnly && caption)) { z.phase = 'hidden'; z.since = 0; continue; }
+        const engaged = !!input.engaged && !caption && !(zone === 'side' && carrying);
         if (z.phase === 'hidden') { z.phase = 'dwelling'; z.since = t; z.fast = toward[zone] >= APPROACH; z.anchor = along[zone]; }
         // Sliding along the edge (a pass on the way somewhere, a scroll with the pointer parked near the edge) is not a rest: the
-        // dwell counts only while the pointer stays within SWEEP px along the edge (sampling-rate independent).
-        else if (Math.abs(along[zone] - z.anchor) > SWEEP && !caption) { z.since = t; z.fast = false; z.anchor = along[zone]; }
-        const engaged = !!input.engaged && !caption;
+        // dwell counts only while the pointer stays within SWEEP px along the edge (sampling-rate independent); ENGAGED_PUSH_SWEEP over a control pressed to the edge.
+        else if (Math.abs(along[zone] - z.anchor) > (engaged && pushing[zone] ? ENGAGED_PUSH_SWEEP : SWEEP) && !caption) { z.since = t; z.fast = false; z.anchor = along[zone]; }
         const need = zone === 'top' && caption ? 0 : engaged ? (pushing[zone] ? T.engagedPush[zone] : T.engaged[zone]) : pushing[zone] || z.fast ? T.push[zone] : T.dwell[zone];
         if (t - z.since >= need) { z.phase = 'shown'; z.shownAt = t; z.leaveAt = 0; z.held = false; z.keyed = false; z.via = caption && zone === 'top' ? 'caption' : 'pointer'; why[zone] = z.via; }
         else if (!caption && t - z.since >= need - PRIME_LEAD && (pushing[zone] || Math.hypot(v.x, v.y) < PRIME_SPEED)) prime[zone] = true;
@@ -221,7 +275,16 @@ function createEdgeController({ now = Date.now } = {}) {
         Object.assign(z, fresh(), { lockUntil: t + T.lockout, blocked: trigger[zone] }); why[zone] = 'left';
       } else why[zone] = 'grace';
     }
-    return { top: zones.top.phase === 'shown' || zones.top.phase === 'leaving', side: zones.side.phase === 'shown' || zones.side.phase === 'leaving', why, prime };
+    // Seamless (reported 16 Nov: "the search URL is disappearing later than the sidebar"): with the pointer gone from both, the sidebar's shorter grace ran out first and the
+    // toolbar's ran out 100 ms (Fast 60) later as a second hide, which the interface could only play after the first had finished: the address field left after the sidebar
+    // was gone. A pointer-revealed edge still only waiting out its grace now leaves with the other, in the same sample (one hide, on one clock). Keys, holds and pins keep theirs.
+    if (input.view === 'seamless') for (const zone of ZONES) {
+      const other = zones[zone === 'top' ? 'side' : 'top'], name = zone === 'top' ? 'side' : 'top';
+      if (why[zone] === 'left' && other.phase === 'leaving' && !other.keyed && t - other.shownAt >= T.minVisible) { Object.assign(other, fresh(), { lockUntil: t + T.lockout, blocked: trigger[name] }); why[name] = 'left'; }
+    }
+    const sideShown = zones.side.phase === 'shown' || zones.side.phase === 'leaving';
+    // Beta 14: the handle is there while the sidebar is hidden and the window can use it; it goes while the sidebar is out and returns with the sidebar's going.
+    return { top: zones.top.phase === 'shown' || zones.top.phase === 'leaving', side: sideShown, why, prime, handle: { on: handled && !!enabled.side && !input.suspended, near: handleRead.near, over: handleRead.over, sideShown } };
   }
 
   /** Pin an edge open (Ctrl+Shift+E in Seamless) or let it go; letting go starts the normal grace. */
@@ -256,12 +319,15 @@ function edgeDistance(point, b, enabled, side) {
  * pointer source, { point() } in content coordinates, when the system's answer cannot be trusted: Wayland, pointer-point.cjs; null otherwise) and `cursorRead(point)`
  * (every screen answer, so a constant (0, 0) is learned). */
 function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule = setTimeout, cancel = clearTimeout }) {
-  let timer = null, stopped = false;
+  let timer = null, stopped = false, asleep = false;
   const seen = new Map();
   const entryOf = item => { let entry = seen.get(item); if (!entry) { entry = { edge: createEdgeController({ now }), last: { top: false, side: false, pinned: { top: false, side: false } }, prime: { top: false, side: false }, listening: false }; seen.set(item, entry); } return entry; };
+  // ACIRA_EDGE_TRACE (D144): the timer's real delay for a 16 ms look (the Windows timer), median and longest of 60.
+  let lookAt = 0, looks = [];
   const step = () => {
     timer = null;
-    let fast = false, soon = 250;
+    if (lookAt && looks.push(Date.now() - lookAt) > 59) { console.log('[edge-cadence]', looks.sort((x, y) => x - y)[30], looks[59]); looks = []; }
+    let fast = false, soon = 250, awake = false;
     for (const item of windows()) {
       const win = item.window;
       if (!win || win.isDestroyed?.()) { seen.delete(item); continue; }
@@ -272,6 +338,12 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       // A fullscreen window is the only thing its display shows: another app holding the keyboard (the other monitor, Spotlight, a notification) must not stop
       // its edges, or the sidebar "would not reveal" until a click gave the window the keyboard back. `live()` is main's word for that (the window's Space is showing).
       const state = item.state, effective = view(state), focused = !!win.isFocused?.() || !!item.live?.(), peek = item.peek?.() || null;
+      // Battery: a window nobody can see (minimised, hidden, or covered / on another Space: `item.unseen()`, the interface's own page visibility) and that does not hold the
+      // keyboard can reveal nothing: no pointer can reach it. While nothing of it is showing it costs no look at all; when no window needs a look the poller sleeps (no timer)
+      // and main wakes it (`wake()`) when a window is shown, restored, focused or seen again. A window that can be seen is looked at exactly as before.
+      if (!focused && !entry.edge.active() && !entry.last.top && !entry.last.side && !entry.last.pinned.top && !entry.last.pinned.side && !entry.notchShown && !entry.cornerShown
+        && (!!win.isMinimized?.() || win.isVisible?.() === false || !!item.unseen?.())) continue;
+      awake = true;
       // Windows, Sidebar mode: the caption buttons' notch shows while the pointer is along the top (caption-notch.cjs; its own controller, the same rules as Seamless's top edge).
       // Nothing is sent to the interface: `item.notchShown(shown)` is main's caption overlay going visible or transparent.
       const notchInput = item.notch?.() || null;
@@ -306,8 +378,11 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         else if (watching && cornerInput.hidden) soon = Math.min(soon, cornerLook(require('./caption-notch.cjs').cornerDistance(point, box, cornerInput.height)));
         reportCorner = () => { const current = item.cornerIsShown ? !!item.cornerIsShown() : !!entry.cornerShown; if (shown !== current) item.cornerShown?.(shown); entry.cornerShown = shown; };
       }
-      const input = { view: effective, vertical: !!state?.settings?.verticalTabs, sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium' };
+      const input = { view: effective, vertical: !!(state?.settings?.verticalTabs || (state?.settings?.shelf && state?.settings?.verticalTabs !== true)), sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium', miniRail: !!item.miniRail?.(), reveal: item.reveal?.() || 'edge', handle: item.handle?.() || null, carrying: !!item.carrying?.() };
       const enabled = enabledEdges(input);
+      // Beta 14: the handle's layer is told what the poller knows (whether a handle is wanted, whether the pointer is near it or on it, whether the sidebar is out) on every look; it changes only what changed.
+      const handleOn = input.reveal === 'handle' && enabled.side && !item.suspended?.() && !win.isMinimized?.();
+      const tellHandle = (near = false, over = false, sideShown = false) => { try { item.handleLayer?.({ on: handleOn, near, over, sideShown }); } catch {} };
       // ACIRA_EDGE_TRACE: what the controller is told (view, layout, the switches) and what that allows, whenever it changes.
       if (TRACE) { const line = JSON.stringify({ ...input, enabled }); if (line !== entry.input) { entry.input = line; console.log('[edge-input]', Date.now(), line); } }
       // Nothing to watch in a view whose edges are all off (Full with a closed sidebar, by default): no per-frame work.
@@ -335,12 +410,12 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         const recent = !over && !onBar && !!entry.overAt && at - entry.overAt <= EXIT_WINDOW;
         if (idle) {
           const look = cornerLook(edgeDistance(point, bounds, enabled, input.sidebarSide));
-          if ((!over && !recent) || look > 16) { soon = Math.min(soon, look); reportCorner(); continue; }
+          if ((!over && !recent) || look > 16) { soon = Math.min(soon, look); tellHandle(false, false, false); reportCorner(); continue; }
         }
         usable = over || recent || onBar;
         if (TRACE && usable !== entry.unfocusedOver) { entry.unfocusedOver = usable; console.log('[edge-unfocused]', Date.now(), JSON.stringify({ over: usable, point })); }
       }
-      if (!(usable && edgesOn) && idle) { reportCorner(); continue; }
+      if (!(usable && edgesOn) && idle) { tellHandle(false, false, false); reportCorner(); continue; }
       fast = true;
       if (TRACE) { const line = JSON.stringify({ pressed: !!item.pressed?.(), engaged: !!item.engaged?.(), ...item.why?.() }); if (line !== entry.intent) { entry.intent = line; console.log('[edge-intent]', Date.now(), line); } }
       // Wayland (pointer-point.cjs): the system never says where the pointer is (Electron answers {0,0}), so the window's own pointer events do. They are in the
@@ -363,6 +438,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         pressed: !!item.pressed?.(),
         engaged: !!item.engaged?.(),
       });
+      tellHandle(!!result.handle?.near, !!result.handle?.over, !!result.handle?.sideShown || entry.edge.pinned('side'));
       const pinned = { top: entry.edge.pinned('top'), side: entry.edge.pinned('side') };
       if (TRACE && (result.top !== entry.last.top || result.side !== entry.last.side)) console.log('[edge]', Date.now(), JSON.stringify({ top: result.top, side: result.side, why: result.why, focused, usable, view: effective }));
       // A page that covers the whole window leaves the interface with nothing to paint, and Chromium stops giving it frames (about
@@ -383,7 +459,9 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       }
       reportCorner();
     }
-    if (!stopped) timer = schedule(tick, fast ? 16 : soon);
+    lookAt = TRACE && fast ? Date.now() : 0;
+    asleep = !fast && !awake;
+    if (!stopped && !asleep) timer = schedule(tick, fast ? 16 : soon);
     timer?.unref?.();
   };
   // One window's trouble (a getter that throws mid-close, a bad cursor read) must never stop the poller for every window: it would end every edge reveal and the Windows
@@ -398,7 +476,9 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
   };
   app.whenReady().then(() => { if (!stopped && !timer) { timer = schedule(tick, 250); timer?.unref?.(); } });
   app.on('will-quit', () => { stopped = true; if (timer) cancel(timer); });
-  return { tick, pin: (item, zone, on) => { entryOf(item).edge.pin(zone, on); }, dismiss: (item, zone) => { entryOf(item).edge.dismiss(zone); }, pinned: (item, zone) => !!seen.get(item)?.edge.pinned(zone), entryFor: item => seen.get(item) };
+  /** Battery: a window may need looks again (shown, restored, focused, seen again, a new one): the next look comes at once. Nothing happens while the poller is awake. */
+  const wake = () => { if (stopped || timer) return; asleep = false; timer = schedule(tick, 0); timer?.unref?.(); };
+  return { tick, wake, sleeping: () => asleep && !timer, pin: (item, zone, on) => { entryOf(item).edge.pin(zone, on); }, dismiss: (item, zone) => { entryOf(item).edge.dismiss(zone); }, pinned: (item, zone) => !!seen.get(item)?.edge.pinned(zone), entryFor: item => seen.get(item) };
 }
 
-module.exports = { createEdgeController, watchChromeEdges, cornerLook, edgeDistance, CORNER_REACH, PRIME_LEAD, PRIME_SPEED, WAITS, waitsFor, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };
+module.exports = { createEdgeController, watchChromeEdges, enabledEdges, handleGeometry, handleFraction, revealOf, HANDLE, REVEAL_MODES, cornerLook, edgeDistance, CORNER_REACH, PRIME_LEAD, PRIME_SPEED, WAITS, waitsFor, EDGE, DWELL, DWELL_PUSH, APPROACH, SWEEP, ENGAGED_PUSH_SWEEP, EXIT, EXIT_DWELL, EXIT_WINDOW, EXIT_FROM, BOUNCE, BOUNCE_WINDOW, GRACE, KEY_GRACE, MIN_VISIBLE, LOCKOUT, LEEWAY, OUTSIDE, OUTSIDE_CAP, ENGAGED_DWELL, ENGAGED_PUSH };

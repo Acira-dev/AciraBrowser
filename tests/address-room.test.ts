@@ -106,30 +106,32 @@ test('a history suggestion prints no "From your history" beside its title (a scr
   const html = render([history('a', 'List of the best things to watch tonight')]);
   assert.ok(!/class="address-suggestion-source"/.test(html), 'no visible source label');
   assert.ok(/<span class="address-suggestions-a11y">From your history<\/span>/.test(html), 'the source stays in the reading order for assistive technology');
-  assert.ok(/class="address-suggestion-remove"/.test(html), 'the remove (x) is still there');
-  assert.ok(/data-removable/.test(html), 'the row says it has one (the title fades under it on hover)');
+  assert.ok(/<button type="button" class="sug-end sug-end-button"[^>]*aria-label="Remove List of the best things to watch tonight from history"/.test(html), 'the remove control is still there, in the row\'s end slot (Beta 14: the clock that turns into the x)');
+  assert.ok(!/class="address-suggestion-remove"/.test(html), 'and no longer a separate x laid over the title');
 });
 
-test('titles and addresses pick their own direction, so a right-to-left title is cut at its end (and a Latin one as before)', () => {
+test('titles and sites pick their own direction, so a right-to-left title is cut at its end (and a Latin one as before)', () => {
   const html = render([history('a', 'قائمة الأفلام المقترحة لهذا المساء')]);
-  assert.match(html, /<span dir="auto">/);
-  assert.match(html, /<small dir="auto">/);
+  assert.match(html, /<span class="sug-title" dir="auto">/);
+  assert.match(html, /<span class="sug-site" dir="auto">a\.test<\/span>/);
 });
 
-test('other rows keep their labels', () => {
+test('bookmark and open-tab rows print no words either (Beta 14 O): a star and a tab mark, the words only for a screen reader', () => {
   const bookmark: AddressSuggestion = { id: 'b', kind: 'bookmark', title: 'Saved page', url: 'https://b.test/', detail: 'Bookmark' };
   const tab: AddressSuggestion = { id: 't', kind: 'tab', title: 'Open page', url: 'https://t.test/', detail: 'Already open', tabId: 'tab-1' };
   const html = render([bookmark, tab]);
-  assert.ok(/class="address-suggestion-source">Bookmark</.test(html));
-  assert.ok(/class="address-suggestion-action"/.test(html), 'Switch to tab is still a button');
+  assert.ok(!/class="address-suggestion-source"/.test(html), 'no visible type word');
+  assert.ok(!/>Bookmark</.test(html.replace(/<span class="address-suggestions-a11y">[^<]*<\/span>/g, '')), 'the word Bookmark is only in the reading order');
+  assert.ok(!/>Switch to tab</.test(html), 'and "Switch to tab" is not printed on the row');
+  assert.ok(/<span class="address-suggestions-a11y">Bookmark<\/span>/.test(html) && /<span class="address-suggestions-a11y">Already open<\/span>/.test(html));
+  assert.ok(/<button type="button" class="sug-end sug-end-button"[^>]*aria-keyshortcuts="Shift\+Enter"/.test(html), 'switching to the tab is still a button, with its key');
 });
 
-test('the remove (x) is out of the row\'s flow and shows on hover or selection', () => {
+test('the end slot is a fixed 26px beside the title, never a layer over it (Beta 14 O)', () => {
   const css = read('../src/components/AddressSuggestions.css');
-  assert.match(css, /\.address-suggestion-remove\{position:absolute;[^}]*opacity:0;pointer-events:none\}/, 'at rest it takes no room and cannot be hit');
-  assert.match(css, /\.address-suggestion:is\(:hover,\[aria-selected=true\]\) \.address-suggestion-remove,\.address-suggestion-remove:focus-visible\{opacity:1;pointer-events:auto\}/);
-  assert.match(css, /\.address-suggestion\[data-removable\]:has\(\.address-suggestion-copy>span:dir\(rtl\)\) \.address-suggestion-copy\{padding-right:36px\}/, 'a right-to-left title keeps the x\'s room (it starts where the x is)');
-  assert.ok(!/:dir\(rtl\) \.address-suggestion-copy\{[^}]*mask-image/.test(css));
+  assert.match(css, /\.sug-end\{flex:0 0 26px;width:26px;height:26px;/, 'the type icon costs a fixed slot, not the title\'s room');
+  assert.match(css, /\.sug-line\{flex:1;min-width:0;display:flex;flex-wrap:wrap;[^}]*height:18px;overflow:hidden\}/, 'the site wraps out of sight when it does not fit whole');
+  assert.ok(!/address-suggestion-remove|address-suggestion-action|address-suggestion-source/.test(css), 'the old x layer, switch word and source word are gone');
 });
 
 test('App: the star and the zoom icon follow the two switches, offer Hide on right-click, and popups hang from the field when they are gone', () => {

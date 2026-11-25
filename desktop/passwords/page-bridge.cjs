@@ -7,12 +7,12 @@ const {generate}=require('./generator.cjs');
 const {tr}=require('./text.cjs');
 
 const CHANNELS=new Set(['acira:pw-focus','acira:pw-dismiss','acira:pw-key','acira:pw-submit','acira:pw-ready','acira:pw-form-gone','acira:pw-form-stays','acira:pw-username']);
-const FIELD=/^f\d{1,6}$/,KINDS=new Set(['login','signup','change']),ROLES=new Set(['username','password','new-password']);
+const FIELD=/^f\d{1,6}$/,KINDS=new Set(['login','signup','change']),ROLES=new Set(['username','password','new-password','email']);
 const PENDING_MS=15000,USERNAME_MS=5*60*1000,PROMPT_MS=30000,PROBE_MS=450,MAX_ITEMS=6,RATE_PER_SECOND=40;
 const finite=n=>typeof n==='number'&&Number.isFinite(n)&&Math.abs(n)<1e6;
 
 /** ui: {show(spec), hide(), focusPrompt()} (the native frame view); page: {send(tabId,channel,payload), url(tabId), focus(tabId)}. */
-function createPageBridge({service,ownerOf,ui,page,notify=()=>{},now=Date.now,timers={setTimeout,clearTimeout}}){
+function createPageBridge({service,ownerOf,ui,page,notify=()=>{},filled=()=>{},now=Date.now,timers={setTimeout,clearTimeout}}){
  const vault=service.vault;
  let shown=null;// {tabId,docId,profileId,origin,mode:'suggest'|'save',items,index,info,pending}
  const pending=new Map();// tabId -> {docId,origin,profileId,url,kind,username,password,hadPrevious,at,timer}
@@ -56,23 +56,40 @@ function createPageBridge({service,ownerOf,ui,page,notify=()=>{},now=Date.now,ti
    if(typed&&matches.some(m=>m.username===typed))matches=matches.filter(m=>m.username===typed);
    for(const match of matches.slice(0,MAX_ITEMS))items.push({kind:'login',id:match.id,label:match.username||tr('pw.frame.noUsername','No username'),secondary:match.match==='site'?displayHost(match.origin):''});
   }
+  items.push(...maskRows(owner,info));
   if(!items.length){if(shown?.mode==='suggest'&&shown.tabId===owner.tabId)hide();return;}
   hide();
-  shown={tabId:owner.tabId,docId:payload.docId,profileId:owner.profileId,origin:normalizeOrigin(owner.url),mode:'suggest',items,index:-1,info};
-  ui.show({mode:'suggest',tabId:owner.tabId,rect:info.rect,items:items.map(({kind,label,secondary})=>({kind,label,secondary})),index:-1});
+  shown={tabId:owner.tabId,docId:payload.docId,profileId:owner.profileId,private:Boolean(owner.private),origin:normalizeOrigin(owner.url),mode:'suggest',items,index:-1,info};
+  ui.show({mode:'suggest',tabId:owner.tabId,rect:info.rect,items:frameItems(items),index:-1});
   page.send(owner.tabId,'acira:pw-open',{docId:payload.docId,open:true});
+ }
+ /** The frame draws rows from {kind,label,secondary}; every mask row (new, earlier, waiting) shares the envelope icon. */
+ const frameItems=items=>items.map(({kind,label,secondary})=>({kind:/^(mask|wait)/.test(kind)?'mask':kind,label,secondary}));
+ /** Mask rows for an email field (or the email-like username of a sign-up form): earlier masks made for this site, then "Use an email mask". Only with a connected service and the offer on. */
+ function maskRows(owner,info){
+  if(!(info.role==='email'||(info.role==='username'&&info.kind==='signup'&&info.email)))return [];
+  let offer=null;try{offer=service.masks?.offerFor(owner.profileId,owner.url)||null;}catch{offer=null;}
+  if(!offer)return [];
+  return [...offer.existing.map(({id,address})=>({kind:'mask-use',maskId:id,label:address,secondary:tr('pw.mask.usedHere','Made for this site')})),{kind:'mask-new',label:tr('pw.mask.use','Use an email mask'),secondary:offer.name}];
  }
  function validInfo(p){
   if(!ROLES.has(p.role)||!KINDS.has(p.kind)||!FIELD.test(String(p.fieldId))||!p.rect||![p.rect.x,p.rect.y,p.rect.width,p.rect.height].every(finite))return null;
   const ids=list=>Array.isArray(list)&&list.length<=4&&list.every(id=>FIELD.test(String(id)));
   if(!ids(p.passwordIds)||!ids(p.freshIds)||(p.usernameId&&!FIELD.test(String(p.usernameId))))return null;
-  return {role:p.role,kind:p.kind,fieldId:p.fieldId,usernameId:p.usernameId||'',passwordIds:p.passwordIds,freshIds:p.freshIds,rect:{x:p.rect.x,y:p.rect.y,width:Math.max(0,p.rect.width),height:Math.max(0,p.rect.height)}};
+  return {role:p.role,kind:p.kind,email:p.email===true,fieldId:p.fieldId,usernameId:p.usernameId||'',passwordIds:p.passwordIds,freshIds:p.freshIds,rect:{x:p.rect.x,y:p.rect.y,width:Math.max(0,p.rect.width),height:Math.max(0,p.rect.height)}};
  }
  function choose(index){
   const current=shown;if(!current||current.mode!=='suggest'||!Number.isInteger(index)||index<0||index>=current.items.length)return;
   const item=current.items[index],tabId=current.tabId,url=page.url(tabId);
+  if(current.waiting)return;// a mask is being made: the list shows "Making a mask…" until it is ready
+  if(item.kind==='mask-new'&&url&&normalizeOrigin(url)===current.origin)return makeMask(current,tabId,url);
   hide();
   if(!url||normalizeOrigin(url)!==current.origin)return;// the tab moved on while the list was open
+  if(item.kind==='mask-use'){
+   const mask=service.masks?.find(current.profileId,item.maskId);
+   if(!mask||!mask.enabled||!['exact','upgrade'].includes(classify(mask.origin,url)))return;// only a mask made for this very site, and only while it is on
+   page.send(tabId,'acira:pw-fill',{docId:current.docId,usernameId:current.info.fieldId,username:mask.address});page.focus(tabId);return;
+  }
   if(item.kind==='generate'){
    const password=generate();
    page.send(tabId,'acira:pw-fill',{docId:current.docId,passwordIds:current.info.freshIds,password});
@@ -81,7 +98,21 @@ function createPageBridge({service,ownerOf,ui,page,notify=()=>{},now=Date.now,ti
   let secret;try{secret=vault.secret(current.profileId,item.id);}catch{return;}
   if(!classify(secret.origin,url))return;// never fill a login the page isn't entitled to (also re-checked in main, not trusted from the list)
   page.send(tabId,'acira:pw-fill',{docId:current.docId,usernameId:current.info.usernameId,username:secret.username,passwordIds:current.info.passwordIds.slice(0,1),password:secret.password});
+  /* Beta 14 (B4): one saved login filled is one use, counted by the fact only (never which site or account), and not from a private tab */
+  if(!current.private)try{filled();}catch{}
   page.focus(tabId);
+ }
+ /** One new mask: the service is asked in the main process, once, after this click. The page learns only the address that goes into its field. */
+ async function makeMask(current,tabId,url){
+  current.items=[{kind:'wait',label:tr('pw.mask.making','Making a mask…'),secondary:''}];current.index=-1;current.waiting=true;
+  ui.show({mode:'suggest',tabId,rect:current.info.rect,items:frameItems(current.items),index:-1});
+  let made;
+  try{made=await service.masks.create(current.profileId,{url});}
+  catch(error){if(shown===current)hide();notify(error?.name==='MaskError'&&typeof error.message==='string'&&error.message?error.message:tr('pw.mask.err.generic','Something went wrong, and nothing was changed. Try again.'));return;}// only a MaskError's own calm words are shown: a disk or vault error's text (a path, an errno) never is
+  if(shown===current)hide();
+  const here=page.url(tabId);// the field is filled only if this very page is still showing
+  if(here&&normalizeOrigin(here)===current.origin)page.send(tabId,'acira:pw-fill',{docId:current.docId,usernameId:current.info.fieldId,username:made.address});
+  notify(tr('pw.mask.made','Email mask ready: {address}',{address:made.address}));
  }
  function key(owner,name){
   if(!shown||shown.mode!=='suggest'||shown.tabId!==owner.tabId)return;
@@ -90,7 +121,7 @@ function createPageBridge({service,ownerOf,ui,page,notify=()=>{},now=Date.now,ti
   if(name==='ArrowDown')shown.index=(shown.index+1)%count;
   else if(name==='ArrowUp')shown.index=shown.index<=0?count-1:shown.index-1;
   else if(name==='Enter'){if(shown.index>=0)choose(shown.index);else hide();return;}
-  ui.show({mode:'suggest',tabId:shown.tabId,rect:shown.info.rect,items:shown.items.map(({kind,label,secondary})=>({kind,label,secondary})),index:shown.index});
+  ui.show({mode:'suggest',tabId:shown.tabId,rect:shown.info.rect,items:frameItems(shown.items),index:shown.index});
  }
 
  // --- sign-in submitted -----------------------------------------------------------------------------------------------
@@ -116,7 +147,7 @@ function createPageBridge({service,ownerOf,ui,page,notify=()=>{},now=Date.now,ti
   if(target){let current;try{current=vault.get(entry.profileId,target.id);}catch{return;}if(current.password===entry.password)return;}
   const kind=target?'update':'save',username=entry.username||target?.username||'';
   shown={tabId,docId:entry.docId,profileId:entry.profileId,origin:entry.origin,mode:'save',kind,username,password:entry.password,items:[],index:-1};
-  ui.show({mode:'save',tabId,kind,host:displayHost(entry.origin),username,masked:'•'.repeat(Math.min(12,entry.password.length)),focus:typing!==true});
+  ui.show({mode:'save',tabId,kind,host:displayHost(entry.origin),username,masked:'•'.repeat(Math.min(12,entry.password.length)),focus:typing!==true,reveal:()=>entry.password});
   shown.timer=timers.setTimeout(()=>{if(shown?.mode==='save'&&shown.tabId===tabId)hide();},PROMPT_MS);shown.timer?.unref?.();
  }
  function ready(owner,payload){

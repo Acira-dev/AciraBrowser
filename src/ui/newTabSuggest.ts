@@ -31,8 +31,8 @@ export interface NewTabSuggest {
   activeId?: string;
   /** The box took the keyboard. Focus alone opens nothing: only typing, or an arrow key, does (as in the address field). */
   focus(field: NewTabField): void;
-  /** The box's text changed (typing, a paste, an input method): the list opens, follows the text, or closes on an empty box. */
-  change(field: NewTabField): void;
+  /** The box's text changed (typing, a paste, an input method): the list opens, follows the text, or closes on an empty box. `inputType` is the input event's: a paste or a drop is never sent to a suggestion service. */
+  change(field: NewTabField, inputType?: string): void;
   /** A key in the box: true when the list took it. */
   key(event: KeyboardEvent<HTMLInputElement>): boolean;
   /** The box lost the keyboard for good (the field's own parking of a blur that is only the view's has already been applied). */

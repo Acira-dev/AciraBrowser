@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 // default, so the check has to look at everything the Reset puts back. Site color (beta.13) was put back by the button but ignored by the check, so changing only it never
 // showed the row. These tests walk the keys the buttons write: a setting added to a reset without being added to its check fails here.
 
-const stock: AppearanceLook = { ...palettePreference(defaultAppearancePalette), interfaceScale: 100, systemTheme: false, reducedMotion: false, animationSpeed: 'premium', reducedTransparency: false, siteColor: 'soft' };
+const stock: AppearanceLook = { ...palettePreference(defaultAppearancePalette), interfaceScale: 100, systemTheme: false, reducedMotion: false, animationSpeed: 'premium', reducedTransparency: false, siteColor: 'soft', activeBorder: 'divider-fade', ambientMode: false, noelOn: false, noelSnow: 'sidebar', noelHat: true };
 const apply = (look: AppearanceLook, patch: Partial<AppearanceLook>): AppearanceLook => ({ ...look, ...patch });
 
 test('a stock look has nothing to reset, and an old profile without Site color counts as Soft', () => {
@@ -66,6 +66,12 @@ const DIFFERENT: Record<string, AppearanceLook> = {
   animationSpeed: { animationSpeed: 'fast' },
   reducedTransparency: { reducedTransparency: true },
   siteColor: { siteColor: 'rich' },
+  activeBorder: { activeBorder: 'lit-edge' },
+  ambientMode: { ambientMode: true },
+  noelOn: { noelOn: true },
+  noelSnow: { noelSnow: 'window' },
+  noelHat: { noelHat: false },
+  noelKeepSnowing: { noelKeepSnowing: false },
   glassOpacity: { glassOpacity: 40 },
   surfaceColor: { glassOpacity: 64, surfaceColor: '#abcdef' },
   sidebarColor: { glassOpacity: 64, sidebarColor: '#abcdef' },
@@ -92,21 +98,24 @@ test('custom window colors only count while they are switched on', () => {
 });
 
 const rested: SidebarLayoutNow = {
-  width: SIDEBAR_RESET.settings.sidebarWidth, side: SIDEBAR_RESET.settings.sidebarSide, appsHidden: SIDEBAR_RESET.appsHidden, appsPlace: SIDEBAR_RESET.appsPlace,
+  width: SIDEBAR_RESET.settings.sidebarWidth, side: SIDEBAR_RESET.settings.sidebarSide, appsHidden: SIDEBAR_RESET.appsHidden, appsPlace: SIDEBAR_RESET.appsPlace, appsLimit: SIDEBAR_RESET.appsLimit,
   favoriteTabsInList: SIDEBAR_RESET.settings.favoriteTabsInList, tabsInSidebar: SIDEBAR_RESET.settings.verticalTabs, newTabsTop: SIDEBAR_RESET.rail.newTabsTop, folders: SIDEBAR_RESET.rail.folders, open: SIDEBAR_RESET.shown,
 };
 
 test('Reset sidebar layout is off for the default layout and on for each setting it puts back', () => {
   assert.equal(sidebarLayoutChanged(rested), false);
-  assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: undefined, newTabsTop: undefined, folders: undefined }), false, 'unset means the default');
-  assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: false }), false, 'Off is the default since 13.9');
+  assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: undefined, newTabsTop: undefined, folders: undefined, appsLimit: undefined }), false, 'unset means the default');
+  assert.equal(sidebarLayoutChanged({ ...rested, favoriteTabsInList: false }), false, 'Off is the default since Beta 14');
+  assert.equal(sidebarLayoutChanged({ ...rested, appsLimit: 12 }), false, '12 is the default stack limit');
   const each: Record<string, Partial<SidebarLayoutNow>> = {
     'size Narrow (beta.13)': { width: 168 },
     'size Wide (beta.13)': { width: 312 },
     'side Right (beta.13)': { side: 'right' },
     'Favorites hidden': { appsHidden: true },
     'Favorites at the bottom (beta.13)': { appsPlace: 'bottom' },
-    'Favorites’ tabs in the list (13.9: the default is out of it)': { favoriteTabsInList: true },
+    'Favorites’ tabs in the list (Beta 14: the default is out of it)': { favoriteTabsInList: true },
+    'Favorites before the stack: 6 (Beta 14)': { appsLimit: 6 },
+    'Favorites before the stack: show all (Beta 14)': { appsLimit: 'all' },
     'tabs in the sidebar': { tabsInSidebar: true },
     'new tabs at the bottom': { newTabsTop: false },
     'tab groups above (beta.13)': { folders: 'above' },
@@ -117,7 +126,7 @@ test('Reset sidebar layout is off for the default layout and on for each setting
 });
 
 test('every key in the sidebar reset list is read by its check', () => {
-  const read = new Set(['sidebarWidth', 'sidebarSide', 'favoriteTabsInList', 'verticalTabs', 'tabs', 'newTabsTop', 'folders']);
+  const read = new Set(['sidebarWidth', 'sidebarSide', 'sidebarReveal', 'sidebarClosed', 'favoriteTabsInList', 'verticalTabs', 'tabs', 'newTabsTop', 'folders']);
   const written = [...Object.keys(SIDEBAR_RESET.settings), ...Object.keys(SIDEBAR_RESET.rail).filter((key) => key !== 'newTabsTopChosen')];
   assert.deepEqual(written.filter((key) => !read.has(key)), [], 'a key the sidebar Reset writes is not in sidebarLayoutChanged');
 });

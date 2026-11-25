@@ -29,7 +29,7 @@ function createAppDialog({BaseWindow,WebContentsView,ipcMain,nativeTheme,preload
    window.show();window.moveTop();contents.focus();
    // Activation focuses the first button; put focus back on the default (the safe answer when the action is risky).
    contents.executeJavaScript("typeof focusDefault==='function'&&focusDefault()").catch(()=>undefined);};
-  const onRespond=(event,index,selected,dismissed)=>{if(event.sender===contents&&current&&Number.isInteger(index)&&index>=0&&index<current.count)current.finish(index,Number.isInteger(selected)&&selected>=0&&selected<current.items?selected:undefined,dismissed===true);};
+  const onRespond=(event,index,selected,dismissed,checked)=>{if(event.sender===contents&&current&&Number.isInteger(index)&&index>=0&&index<current.count)current.finish(index,Number.isInteger(selected)&&selected>=0&&selected<current.items?selected:undefined,dismissed===true,checked===true&&current.hasCheckbox&&dismissed!==true);};
   ipcMain.on('acira:dialog-ready',onReady);ipcMain.on('acira:dialog-respond',onRespond);
   // a window made again after its page stopped must not leave its listeners behind
   window.on('closed',()=>{ipcMain.removeListener('acira:dialog-ready',onReady);ipcMain.removeListener('acira:dialog-respond',onRespond);});
@@ -44,14 +44,14 @@ function createAppDialog({BaseWindow,WebContentsView,ipcMain,nativeTheme,preload
   try{made=ensure();if(!await made.loaded){if(pool===made)pool=null;try{if(!made.window.isDestroyed())made.window.destroy();}catch{}try{if(!made.contents.isDestroyed())made.contents.close();}catch{}return attempt<1?present(parent,options,attempt+1):{response:cancelId,checkboxChecked:false,dismissed:true};}}catch{return {response:cancelId,checkboxChecked:false};}
   return new Promise(resolve=>{
    const usable=parent&&!parent.isDestroyed?.()?parent:null;
-   const finish=(response,selected,dismissed)=>{if(!current||current.finish!==finish)return;current=null;usable?.removeListener?.('closed',onParentClosed);try{if(!made.window.isDestroyed()){made.window.hide();made.window.setParentWindow(null);}}catch{}resolve({response,checkboxChecked:false,...(selected===undefined?{}:{selected}),...(dismissed===true?{dismissed:true}:{})});};
+   const finish=(response,selected,dismissed,checked)=>{if(!current||current.finish!==finish)return;current=null;usable?.removeListener?.('closed',onParentClosed);try{if(!made.window.isDestroyed()){made.window.hide();made.window.setParentWindow(null);}}catch{}resolve({response,checkboxChecked:checked===true,...(selected===undefined?{}:{selected}),...(dismissed===true?{dismissed:true}:{})});};
    const onParentClosed=()=>finish(cancelId,undefined,true);
    // its page stopped: asked again in a new window, once; then answered the safe way (cancel), so nothing waits for good
    const again=()=>{usable?.removeListener?.('closed',onParentClosed);resolve(attempt<1?present(parent,options,attempt+1):{response:cancelId,checkboxChecked:false,dismissed:true});};
    const items=(Array.isArray(options.items)?options.items:[]).slice(0,30).map(item=>({label:String(item?.label||'').slice(0,120),kind:String(item?.kind||'').slice(0,20),thumb:typeof item?.thumb==='string'&&/^data:image\/(?:png|jpeg);base64,/.test(item.thumb)&&item.thumb.length<200000?item.thumb:''}));
-   current={made,finish,again,cancelId,count:buttons.length,parent:usable,items:items.length,popover:!!options.popover&&!items.length,width:items.length?WIDE:options.popover?POPOVER:WIDTH};
+   current={made,finish,again,cancelId,count:buttons.length,hasCheckbox:typeof options.checkboxLabel==='string'&&options.checkboxLabel.length>0,parent:usable,items:items.length,popover:!!options.popover&&!items.length,width:items.length?WIDE:options.popover?POPOVER:WIDTH};
    try{if(usable){usable.once('closed',onParentClosed);made.window.setParentWindow(usable);}}catch{}
-   made.contents.send('acira:dialog-init',{kicker:String(options.title||'').slice(0,60),title:String(options.message||'').slice(0,240),detail:String(options.detail||'').slice(0,1200),buttons,defaultId,cancelId,dark:nativeTheme.shouldUseDarkColors,warning:options.type==='warning',popover:!!options.popover&&!items.length,items});
+   made.contents.send('acira:dialog-init',{kicker:String(options.title||'').slice(0,60),title:String(options.message||'').slice(0,240),detail:String(options.detail||'').slice(0,1200),buttons,defaultId,cancelId,dark:nativeTheme.shouldUseDarkColors,warning:options.type==='warning',popover:!!options.popover&&!items.length,items,checkboxLabel:typeof options.checkboxLabel==='string'?options.checkboxLabel.slice(0,120):'',checkboxChecked:options.checkboxChecked===true});
   });
  }
 

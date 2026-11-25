@@ -1,5 +1,6 @@
 import type { BrowserProfile } from './types';
 import { cleanProfileSettings } from './profileSettings';
+import { cleanSites } from './sidePanelSites';
 import { isGreyProfileColor,profileColorFor } from './profileColors';
 
 const row=(value:unknown):Record<string,unknown>=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
@@ -24,7 +25,7 @@ export function normalizeBrowserProfiles(value:unknown,fallback:BrowserProfile[]
    reserved.add(partition);
   }
   partitions.add(partition);
-  profiles.push({id:input.id,name:input.name.trim()?input.name:'Recovered profile',...(typeof input.defaultName==='string'&&input.defaultName.trim()&&input.defaultName.length<=40?{defaultName:input.defaultName}:{}),color:typeof input.color==='string'&&/^#[\da-f]{6}$/i.test(input.color)?input.color:'',...(typeof input.avatar==='string'&&input.avatar&&input.avatar.length<=16?{avatar:input.avatar}:{}),...(validProfilePicture(input.picture)?{picture:input.picture}:{}),...(validProfileEmail(input.email)?{email:input.email.trim()}:{}),...(cleanProfileSettings(input.settings)?{settings:cleanProfileSettings(input.settings)}:{}),partition});
+  profiles.push({id:input.id,name:input.name.trim()?input.name:'Recovered profile',...(typeof input.defaultName==='string'&&input.defaultName.trim()&&input.defaultName.length<=40?{defaultName:input.defaultName}:{}),color:typeof input.color==='string'&&/^#[\da-f]{6}$/i.test(input.color)?input.color:'',...(typeof input.avatar==='string'&&input.avatar&&input.avatar.length<=16?{avatar:input.avatar}:{}),...(validProfilePicture(input.picture)?{picture:input.picture}:{}),...(validProfileEmail(input.email)?{email:input.email.trim()}:{}),...(cleanProfileSettings(input.settings)?{settings:cleanProfileSettings(input.settings)}:{}),...(cleanSites(input.sidePanelSites).length?{sidePanelSites:cleanSites(input.sidePanelSites)}:{}),partition});
  }
  // A grey or missing colour (the old default) becomes a palette colour, stable per profile id; chosen colours stay.
  for(const profile of profiles)if(isGreyProfileColor(profile.color))profile.color=profileColorFor(profile.id,profiles.map(item=>item.color));

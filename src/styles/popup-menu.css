@@ -26,19 +26,19 @@
    right-aligned in Inter 12 at 44%, and a 32px hint footer. Opens without animation (§3.9). */
 .app.style-acira .browser-popup.popup-content-palette>.popup-header{display:none}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-fixed-search{padding:0;margin:0 -4px;border-bottom:1px solid var(--line)}
-.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search{height:44px;margin:0;padding:0 14px;gap:10px;background:none;border-radius:0}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search{height:44px;margin:0;padding:0 12px;gap:8px;background:none;border-radius:0}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .popup-search input{font:400 14px/1.2 var(--font-ui)}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-list{padding-top:6px}
-.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result{min-height:32px;height:32px;padding:0 8px;gap:10px}
+.app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result{min-height:32px;height:32px;padding:0 8px;gap:8px}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label{display:flex;align-items:baseline;gap:12px;min-width:0;flex:1}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label>strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:450}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-label>small{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row{min-height:32px}
-.app .browser-popup .popup-hints{display:flex;align-items:center;gap:16px;height:32px;padding:0 14px;margin:0 -4px;border-top:1px solid var(--line);font:400 12px/1 var(--font-ui);color:var(--text-3,var(--muted))}
+.app .browser-popup .popup-hints{display:flex;align-items:center;gap:16px;height:32px;padding:0 12px;margin:0 -4px;border-top:1px solid var(--line);font:400 12px/1 var(--font-ui);color:var(--text-3,var(--muted))}
 .app .browser-popup .popup-hints>span{display:inline-flex;align-items:center;gap:6px}
-.app .browser-popup .popup-hints kbd{display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 3px;font:500 11px/1 var(--font-ui);color:var(--text-2,inherit);background:none;border-radius:var(--radius-kbd,3px);box-shadow:inset 0 0 0 1px var(--line-strong,var(--line))}
+.app .browser-popup .popup-hints kbd{display:inline-grid;place-items:center;min-width:16px;height:16px;padding:0 4px;font:500 11px/1 var(--font-ui);color:var(--text-2,inherit);background:none;border-radius:var(--radius-kbd,3px);box-shadow:inset 0 0 0 1px var(--line-strong,var(--line))}
 .app.style-acira .browser-popup.popup-content-palette>.popup-header{display:none}
-.app.style-acira .browser-popup.popup-content-palette .popup-search{height:44px;margin:0 -4px 6px;padding:0 14px;gap:10px;background:none;border-radius:0;border-bottom:1px solid var(--line)}
+.app.style-acira .browser-popup.popup-content-palette .popup-search{height:44px;margin:0 -4px 6px;padding:0 12px;gap:8px;background:none;border-radius:0;border-bottom:1px solid var(--line)}
 .app.style-acira .browser-popup.popup-content-palette .popup-search input{font:400 14px/1.2 var(--font-ui)}
 /* The row's close button sits in its own 28px slot after the host, shown on the hovered or cursor row only. */
 .app.style-acira .browser-popup:is(.popup-content-tabs,.popup-content-palette) .tab-result-row{position:relative}
@@ -66,8 +66,8 @@
 /* F39 command bar (§5.4): sentence-case section labels, 32px rows, matched letters at full ink and the rest at 80%,
    host or shortcut right-aligned in Inter 12 at 44%; the keyboard row is a 7% fill. No motion. */
 .app .browser-popup.popup-content-palette .palette-results{display:flex;flex-direction:column;padding:2px 0 6px}
-.app .browser-popup.popup-content-palette .palette-section{height:28px;padding:10px 8px 0;font:500 12px/18px var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
-.app .browser-popup.popup-content-palette .palette-row{display:flex;align-items:center;gap:10px;width:100%;height:32px;min-height:32px;padding:0 8px;border:0;border-radius:var(--radius-menu-row,4px);background:none;color:var(--text-primary,inherit);font:400 13px/1 var(--font-ui);text-align:left;cursor:default}
+.app .browser-popup.popup-content-palette .palette-section{height:28px;padding:8px 8px 0;font:500 12px/18px var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
+.app .browser-popup.popup-content-palette .palette-row{display:flex;align-items:center;gap:8px;width:100%;height:32px;min-height:32px;padding:0 8px;border:0;border-radius:var(--radius-menu-row,4px);background:none;color:var(--text-primary,inherit);font:400 13px/1 var(--font-ui);text-align:left;cursor:default}
 .app .browser-popup.popup-content-palette .palette-row[data-active=true]{background:color-mix(in srgb,var(--text-primary,currentColor) 7%,transparent)}
 .app .browser-popup.popup-content-palette .palette-row>svg,.app .browser-popup.popup-content-palette .palette-row>:first-child{flex:0 0 16px;width:16px;height:16px}
 .app .browser-popup.popup-content-palette .palette-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--text-primary,currentColor) 80%,transparent)}
@@ -75,7 +75,7 @@
 .app .browser-popup.popup-content-palette .palette-hint{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 66%,transparent)}
 .app .browser-popup.popup-content-palette .palette-title mark{background:none;color:var(--text-primary,currentColor);font-weight:500}
 .app .browser-popup.popup-content-palette .palette-meta{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 66%,transparent)}
-.app .browser-popup.popup-content-palette .palette-empty{margin:0;padding:14px 8px;font:400 13px/1.4 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
+.app .browser-popup.popup-content-palette .palette-empty{margin:0;padding:12px 8px;font:400 13px/1.4 var(--font-ui);color:color-mix(in srgb,var(--text-primary,currentColor) 52%,transparent)}
 /* Acira menu: no header (critique round 3); Bookmarks opens its own surface, marked with a trailing chevron. */
 .app.style-acira .browser-popup.popup-content-menu>.popup-header{display:none}
 .app .browser-popup .menu-row-more>svg:last-child{flex:0 0 14px;margin-left:6px;opacity:.44}
@@ -99,10 +99,31 @@
 .app .browser-popup .menu-heading{display:flex;align-items:center;gap:8px;min-height:30px;height:30px;padding:0 8px;font:500 12px/1.2 var(--font-ui);color:var(--text-2,var(--muted));cursor:default}
 .app .browser-popup .menu-heading>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .app .browser-popup :is(.menu-row,.menu-heading)>img.menu-ext-icon{flex:0 0 16px;width:16px;height:16px;object-fit:contain;border-radius:3px}
-.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="1"]{padding-inline-start:22px}
-.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="2"]{padding-inline-start:36px}
-.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="3"]{padding-inline-start:50px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="1"]{padding-inline-start:24px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="2"]{padding-inline-start:40px}
+.app .browser-popup :is(.menu-row,.menu-heading)[data-depth="3"]{padding-inline-start:56px}
 .app .browser-popup .menu-row>i.menu-icon{display:block;font-style:normal}
 .app .browser-popup .menu-row>i.menu-dot{position:relative}
 .app .browser-popup .menu-row>i.menu-dot::after{content:"";position:absolute;inset:5px;border-radius:50%;background:currentColor}
 .browser-popup .menu-preview-label{padding:6px 12px 8px;font-size:11px;line-height:16px;color:var(--text-2,var(--muted));border-bottom:1px solid rgb(var(--ink)/.08);margin-bottom:4px}
+
+/* Beta 14: a page-menu row with a second line (the first-use image search chooser): the label, then what the service is good for, quieter. The menu's own rows are held to 30px by a
+   rule of the system (panels.css, :root:root:root), so this one is named at the same weight and one attribute more. */
+:root:root:root .browser-popup .menu-row[data-detail]{height:46px;min-height:46px;padding-block:4px;align-items:center}
+:root:root:root .browser-popup .menu-row[data-detail]>.menu-row-text{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;flex:1;text-align:start}
+:root:root:root .browser-popup .menu-row[data-detail]>:where(.menu-row-text)>span.menu-row-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:18px}
+:root:root:root .browser-popup .menu-row[data-detail]>:where(.menu-row-text)>small.menu-row-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:14px;color:var(--text-2,var(--muted))}
+/* a grey line that may need two lines (the screenshot menu's, in a long language): the row grows instead of cutting it off */
+:root:root:root .browser-popup .menu-row[data-detail="wrap"]{height:auto;min-height:46px}
+:root:root:root .browser-popup .menu-row[data-detail="wrap"]>:where(.menu-row-text)>small.menu-row-detail{overflow:visible;text-overflow:clip;white-space:normal}
+
+/* C1 (the team notes, 17 Nov; docs/launch/POPUP_SPACING_RULEBOOK.md rule 8): a status line, note or hint with no text takes no space - it stays in the page, so a screen reader still hears a message when it arrives,
+   but out of the layout, so no empty band sits under the last button. The exception is a line directly above its buttons (the code-entry screen keeps its reserved line so an error never moves them: that line carries no .popup-status). */
+.app .popup-status:empty:not(:has(+ .ins-buttons)) { position: absolute; width: 1px; height: 1px; min-height: 0; margin: 0; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); }
+
+/* C6 (docs/launch/POPUP_SPACING_RULEBOOK.md, rule 1): what no stylesheet of a pop-up sets falls to the browser's or the app-wide default, and those were off the grid: a pop-up's checkbox carries the browser's 3 px margin
+   (the checkboxes of the pop-ups wear `popup-check`, a class, because a rule ending in `input[type=checkbox]` would be tried on every input: scripts/costly-selectors.mjs; one class of specificity, so every rule that sets its own margin on a longer selector still wins),
+   and the app-wide .btn is 5px 10px (frost-preview.css): in a pop-up it is 4px 12px (its height is min-height: 30px, so nothing moves vertically). */
+:where(.browser-popup) .popup-check { margin: 0; }
+.app.style-acira .browser-popup .btn { padding: 4px 12px; }
+

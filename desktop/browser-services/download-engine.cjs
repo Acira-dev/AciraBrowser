@@ -21,7 +21,7 @@ const clipName=text=>{const chars=Array.from(String(text));return chars.length>5
 const read=(item,method,fallback)=>{try{return item[method]();}catch{return fallback;}};
 
 /** Native-selected paths and engine validators stay in main; private recovery is memory-only. */
-function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=require('./navigation-rescue.cjs').shared,torWarning=()=>false,journalPath=path.join(app.getPath('userData'),'download-recovery.json'),now=Date.now,platform=process.platform,interruptedAfter=10000}){
+function createDownloads({onStart=()=>{},dialog,shell,app,getOwner,askSite,preferences,rescue=require('./navigation-rescue.cjs').shared,torWarning=()=>false,journalPath=path.join(app.getPath('userData'),'download-recovery.json'),now=Date.now,platform=process.platform,interruptedAfter=10000}){
  const active=new Map(),attached=new WeakSet(),recoveries=new Map(),pending=new WeakMap(),bursts=new Map(),observers=new Set(),expected=new WeakMap(),dropped=new Set(),seen=new Set(),bornAt=Date.now();let lastPersist=0,quitting=false;
  /* While the Save dialog (or the several-files question) is open, a transfer is parked here, paused, under a short name of its own (its real name is kept beside it: a long name inside this folder can be too long for the file system). */
  const stagingRoot=path.join(path.dirname(journalPath),'download-staging'),stagedIn=file=>typeof file==='string'&&path.dirname(path.dirname(file))===stagingRoot?path.dirname(file):null;
@@ -29,7 +29,7 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=r
  const sameFile=(a,b)=>process.platform==='linux'?a===b:a.toLowerCase()===b.toLowerCase(),inFlight=file=>[...active.values()].some(e=>e.target&&sameFile(e.target,file));
  const destination=(name,folder)=>folder?nextFreePath(folder,name,inFlight):preferences?preferences.destination(name,{taken:inFlight}):nextFreePath(app.getPath('downloads'),name,inFlight);
  /* The Save dialog suggests a name no other download is about to use (the dialog itself only asks about files already on disk). */
- const suggest=name=>{const folder=preferences?.get().folder||app.getPath('downloads');try{return nextFreePath(folder,name,inFlight);}catch{return path.join(folder,name);}};
+ const suggest=(name,explicit=false)=>{const folder=explicit&&preferences?.lastSaveFolder?.()||preferences?.get().folder||app.getPath('downloads');try{return nextFreePath(folder,name,inFlight);}catch{return path.join(folder,name);}};
  /* A finished file's quarantine mark (macOS) is written beside its Ready row; opening or dragging the file waits for it, so nothing opens it unmarked. */
  const marking=new Map(),markDownloaded=file=>{markOfTheWeb(file);const mark=quarantine(file).finally(()=>{if(marking.get(file)===mark)marking.delete(file);});marking.set(file,mark);};
  /* chrome.downloads (ext-api/downloads): observers hear every ordinary download's records before the Downloads page does; expected holds the downloads an extension asked for, matched to their will-download by address. */
@@ -54,6 +54,7 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=r
   if(wc&&typeof wc.isDestroyed==='function'&&!wc.isDestroyed()){const url=read(item,'getURL','');let tabUrl='';try{tabUrl=wc.getURL();}catch{}if(rescue.shouldRescue({url,mime:read(item,'getMimeType',''),disposition:read(item,'getContentDisposition',''),tabUrl,wcId:wc.id})){event.preventDefault();setImmediate(()=>{try{if(!wc.isDestroyed())void wc.loadURL(url).catch(()=>{});}catch{}});return;}}
   const recovering=!wc&&(pending.get(session)||[]).find(e=>e.path===read(item,'getSavePath',''));
   if(recovering)pending.set(session,(pending.get(session)||[]).filter(e=>e!==recovering));
+  else try{onStart();}catch{}/* Beta 14: one download started (usage schema 4 counts that it happened, never what) */
   const claimed=!recovering&&!wc?takeExpected(session,item):null,owner=recovering?.owner||claimed?.owner||getOwner(wc);if(!owner){event.preventDefault();return;}
   const id=recovering?.id||'download-'+randomUUID(),profileId=owner.profileId,startedAt=recovering?.startedAt||now();if(claimed)claimed.begin(id);let announced=!!recovering,ended,ext=claimed?.request.extension;let selectedPath=recovering?.path,finalPath=recovering?.finalPath,settle=()=>{},answered=recovering?null:new Promise(resolve=>{settle=resolve;}),saveFailed=false,rescued=null,last=0,lastStatus='',terminal=false,startedToast=false,endedToast=false;seen.add(id);
   const testDir=process.env.ACIRA_BROWSER_TEST_DOWNLOAD_DIR,testRoot=process.env.ACIRA_BROWSER_TEST_DATA,validTest=!!(testDir&&testRoot&&path.resolve(testDir).startsWith(path.resolve(testRoot)+path.sep));
@@ -100,21 +101,22 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=r
    update(state==='completed'?'Ready':state==='cancelled'?'Cancelled':'Interrupted',true);active.delete(id);});
   try{
    if(!recovering){item.pause();if(validTest)fs.mkdirSync(testDir,{recursive:true});
-    /* R3-38: a secured workspace's file never lands silently in the normal Downloads folder: always ask where. */const direct=!validTest&&preferences&&!preferences.get().askWhere&&!profileId.startsWith('private-secured-');
+    /* R3-38: a secured workspace's file never lands silently in the normal Downloads folder: always ask where. *//* Beta 14 (D2): a download the person chose with "Save … as…" asks where, whatever the setting says (in a test run only when a rig has put its dialog stand-in in place: globalThis.__aciraSaveDialogQa). */const forced=!recovering&&!claimed&&typeof rescue.takeSaveAs==='function'&&rescue.takeSaveAs([...read(item,'getURLChain',[]),read(item,'getURL','')]),testAsk=validTest&&forced&&globalThis.__aciraSaveDialogQa===true;
+    const direct=!validTest&&preferences&&!preferences.get().askWhere&&!profileId.startsWith('private-secured-')&&!forced;
     /* Electron reads the save path once, right after this handler returns: a path set later is reported by getSavePath() but the file is written where the first one said, and with no path Electron opens a second Save panel of its own and waits on it (Electron 44). So a path is set now: the real one when no answer is needed, else a staging file the transfer is parked in, paused, and moved from to the answer when it finishes. */
-    const asker=recovering?null:filenameAsker(profileId,owner),name=entry.name=path.basename(read(item,'getFilename','')||'download'),early=claimed||asker?null:validTest?destination(name,testDir):direct?destination(name):null;
+    const asker=recovering?null:filenameAsker(profileId,owner),name=entry.name=path.basename(read(item,'getFilename','')||'download'),early=claimed||asker?null:validTest&&!testAsk?destination(name,testDir):direct?destination(name):null;
     if(early){entry.target=selectedPath=early;item.setSavePath(early);}
     else if(!claimed||asker||claimed.request.saveAs||claimed.request.conflictAction==='prompt')try{const stage=path.join(stagingRoot,id.slice(-8)),extension=path.extname(name);fs.mkdirSync(stage,{recursive:true});item.setSavePath(path.join(stage,'download'+(/^\.[\w-]{1,16}$/.test(extension)?extension:'')));}catch{/* no room to park it: the answer is still tried */}
     const burstKey=profileId+'|'+owner.tabId,prior=claimed?0:bursts.get(burstKey);if(!claimed)bursts.set(burstKey,now());if(prior&&now()-prior<10000){/* Held behind the question, a transfer with its real path is in the journal as held, so what a crash leaves there goes at the next start. */if(early)keep('Paused',true);const allowedMany=askSite?await askSite(profileId,wc,{message:t('dl.manyMessage'),detail:t('dl.manyDetail')}):false;if(!allowedMany){settle({canceled:true});item.cancel();owner.toast(t('dl.blockedRepeat'));return;}/* Allowed: no longer held (a transfer that stopped meanwhile stays resumable). */entry.allowed=true;if(early&&terminal)keep(lastStatus,true);}
     /* The extensions that listen are told the download exists, then asked for a name; the transfer waits (parked, paused) until they have all answered or their time is up. A suggestion is only ever a path inside the download folder, and "ask where to save" still asks. */
     let suggestion=null;
     if(asker){if(!announced)update('Downloading',true,true);const chain=read(item,'getURLChain',[]),folder=validTest?testDir:preferences?.get().folder||app.getPath('downloads');let tentative=path.join(folder,name);/* 13.8: the name an extension is asked about is the one Chromium generated from the response (ChromeDownloadManagerDelegate::NotifyExtensions: virtual_path.BaseName()), never the folder or name the download's own creator asked for: that one is the lowest-priority suggestion and is only used when no listener answers (downloads_api.cc ExtensionDownloadsEventRouterData::BeginFilenameDetermination) */suggestion=await Promise.resolve().then(()=>asker.determine({id,browserProfileId:profileId,url:read(item,'getURL',''),originalUrl:chain.length>1?chain[0]:undefined,mime:read(item,'getMimeType',''),totalBytes:read(item,'getTotalBytes',0),receivedBytes:read(item,'getReceivedBytes',0),startedAt,status:'Downloading',path:tentative,...(ext?{byExtensionId:ext.id,byExtensionName:ext.name}:{})})).catch(()=>null);}
-    const suggested=suggestion&&(suggestion.filename||suggestion.conflictAction)?suggestion:null,plain=()=>validTest?{canceled:false,filePath:destination(name,testDir)}:direct?{canceled:false,filePath:destination(name)}:dialog.showSaveDialog(owner.window,{title:t('dl.saveTitle'),defaultPath:suggest(name)});
+    const suggested=suggestion&&(suggestion.filename||suggestion.conflictAction)?suggestion:null,plain=()=>validTest&&!testAsk?{canceled:false,filePath:destination(name,testDir)}:direct?{canceled:false,filePath:destination(name)}:dialog.showSaveDialog(owner.window,{title:t('dl.saveTitle'),defaultPath:suggest(name,forced)});
     /* A suggestion that cannot be written (a folder name over the file system's limit, a folder that is already a file) is dropped: the download goes on with its own name instead of failing for it. */
     const selected=claimed?await claimed.destination({item,owner,dialog,preferences,app,t,testDir:validTest?testDir:null,suggestion:suggested}).catch(error=>{if(!suggested)throw error;return claimed.destination({item,owner,dialog,preferences,app,t,testDir:validTest?testDir:null,suggestion:null});}):early?{canceled:false,filePath:early}:suggested?await require('./ext-api/downloads/destination.cjs').chooseDestination({item,owner,dialog,preferences,app,t,testDir:validTest?testDir:null,request:{...(suggested.filename?{filename:suggested.filename}:{}),conflictAction:suggested.conflictAction||'uniquify',saveAs:!validTest&&!direct}}).catch(()=>plain()):await plain();
     /* The answer: a file already on disk was confirmed in the dialog (replace it), unless another download is still writing it; a name another download is about to use or still writing gets the next free one. */
     const replace=!early&&!!selected.filePath&&fs.existsSync(selected.filePath)&&!others(selected.filePath),chosen=selected.canceled||!selected.filePath?null:early||(!replace&&others(selected.filePath)?nextFreePath(path.dirname(selected.filePath),path.basename(selected.filePath),others):selected.filePath);
-    if(chosen&&!early){entry.target=chosen;entry.replace=replace;}
+    if(chosen&&!early){entry.target=chosen;entry.replace=replace;if(forced&&!owner.private&&!owner.tor&&!String(profileId).startsWith('private-'))try{preferences?.rememberSaveFolder?.(path.dirname(chosen));}catch{}}
     settle(chosen?{canceled:false,filePath:chosen}:{canceled:true});if(terminal)return;if(!chosen){item.cancel();return;}
     if(stagedIn(read(item,'getSavePath','')))[selectedPath,finalPath]=[item.getSavePath(),chosen];else if(!early){selectedPath=chosen;item.setSavePath(selectedPath);}
    }
@@ -141,7 +143,7 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=r
   catch{
    if(!fs.existsSync(file))return {deleted:true,trashed:true,name};
    if(platform!=='linux')throw new Error(t('dl.deleteFailed',{name}));
-   const response=await dialog.showMessageBox(context.owner?.window,{type:'warning',title:t('dl.delete'),message:t('dl.noTrashMessage',{name}),detail:t('dl.noTrashDetail'),buttons:[t('dialog.cancel'),t('dl.deleteForever')],defaultId:0,cancelId:0});
+   const response=await dialog.showMessageBox(context.owner?.window,{type:'warning',title:t('dl.delete'),message:t('dl.noTrashMessage',{name}),detail:t('dl.noTrashDetail'),buttons:[t('dialog.cancel'),t('dl.deleteForever')],defaultId:0,cancelId:0,site:{centered:true,icon:'trash',tone:'danger'}});
    if(response.response!==1)return {cancelled:true};
    try{await fs.promises.unlink(file);}catch{throw new Error(t('dl.deleteFailed',{name}));}
    return {deleted:true,trashed:false,name};
@@ -206,6 +208,44 @@ function createDownloads({dialog,shell,app,getOwner,askSite,preferences,rescue=r
   return changed;
  }
  function reconcile(records,profileId){return records.filter(r=>r.browserProfileId===profileId).map(record=>{const entry=active.get(record.id),saved=recoveries.get(record.id),finished=record.status==='Ready',exists=finished&&!!record.path&&fs.existsSync(record.path);return {...record,...(!entry&&dropped.has(record.id)?{status:'Cancelled'}:!entry&&['Downloading','Paused'].includes(record.status)?{status:'Interrupted'}:{}),canPause:!!entry&&!entry.pending&&!read(entry.item,'isPaused',false),canResume:entry?!entry.pending&&!!read(entry.item,'canResume',false):canRecover(saved),canCancel:!!entry||!!saved,canRetry:!entry&&!record.private&&!profileId.startsWith('private-')&&!!httpURL(record.url),canOpen:exists,canShow:exists};});}
- return {attach,command,reconcile,forget,keepForQuit,observe(listener){observers.add(listener);return()=>observers.delete(listener);},startExtension,hasActive:controller=>[...active.values()].some(e=>e.owner.controller===controller),hasActiveTab:tabId=>[...active.values()].some(e=>e.owner.tabId===tabId&&!e.pending||e.owner.tabId===tabId),/* The person's own click or key press in the page ends a burst: the next download is theirs, not the page's (Chrome allows one download per interaction the same way). */userActed,clearPrivate(profileId){for(const [id,entry]of active)if(entry.profileId===profileId){try{entry.item.cancel();}catch{}active.delete(id);}for(const [id,entry]of recoveries)if(entry.profileId===profileId)recoveries.delete(id);for(const key of bursts.keys())if(key.startsWith(profileId+'|'))bursts.delete(key);}};
+ /** Beta 14: a file Acira made itself (a page screenshot) lands in the downloads folder under a name no file has, and is listed like any download, through the owner of the page it came from
+  * (so a private or Tor page's file carries the same private / tor mark as its downloads and is not kept in the history). Written under a temporary name and put in place without overwriting.
+  * In a test run (ACIRA_BROWSER_TEST_DATA) it goes to the test download folder, or to <data>/downloads: never to the real folder. Returns {id,name,path,bytes}.
+  * Beta 14 member cards: `mime` is the file's type (a picture unless said). `askWhere` true keeps the "Ask where to save" choice (a secured workspace always asks): the Save dialog opens like a download's, a file the person
+  * picks there is replaced (the dialog asked), and Cancel returns null. `askWhere:'always'` (the member card's own Save picture / Save video, the team 17 Nov) opens the dialog every time, whatever that choice is: it starts in the
+  * download folder on a name no file has, and a filter for the file's own extension makes the system add it when the person types a name without one (Windows). The screenshot never asks: it is saved and copied in one go.
+  * `titleId` is the message id of the dialog's title (a download's "Save download" unless said; the member card says "Save picture" / "Save video", the words of its buttons).
+  * A test run never opens a dialog (it would wait for a person), except when a rig has put a stand-in for the dialog in place and says so (globalThis.__aciraSaveDialogQa === true, set from main by the rig). */
+ async function saveFile(source,name,data,{mime='image/png',askWhere=false,titleId='dl.saveTitle',into}={}){
+  const owner=source&&typeof source.record==='function'?source:getOwner(source);if(!owner)throw new Error(t('screenshot.noPage'));
+  if(!(data instanceof Uint8Array)||!data.length)throw new TypeError(t('screenshot.noBytes'));
+  const testRoot=process.env.ACIRA_BROWSER_TEST_DATA,testDir=process.env.ACIRA_BROWSER_TEST_DOWNLOAD_DIR;
+  /* `into`: a folder the person set for these files (Settings: the screenshots folder): saved there with no dialog, a name no file has. In a test run only a folder inside the test root counts. */
+  const target0=typeof into==='string'&&path.isAbsolute(into)&&(!testRoot||path.resolve(into).startsWith(path.resolve(testRoot)+path.sep))?into:undefined;
+  const inTest=!!testRoot,folder=target0||(!inTest?undefined:testDir&&path.resolve(testDir).startsWith(path.resolve(testRoot)+path.sep)?testDir:path.join(testRoot,'downloads'));
+  let picked=null;
+  const asked=!target0&&(askWhere==='always'||(askWhere&&(preferences?.get().askWhere||String(owner.profileId).startsWith('private-secured-'))));
+  if(asked&&(!inTest||globalThis.__aciraSaveDialogQa===true)){
+   const extension=path.extname(String(name)).slice(1).toLowerCase(),filters=/^[a-z0-9]{1,5}$/.test(extension)?[{name:extension.toUpperCase(),extensions:[extension]}]:[];
+   const answer=await dialog.showSaveDialog(owner.window,{title:t(titleId),defaultPath:suggest(name,true),...(filters.length?{filters}:{})});
+   if(answer.canceled||!answer.filePath)return null;
+   picked=inFlight(answer.filePath)?nextFreePath(path.dirname(answer.filePath),path.basename(answer.filePath),inFlight):answer.filePath;
+   if(asked&&askWhere==='always'&&!owner.private&&!owner.tor&&!String(owner.profileId).startsWith('private-'))try{preferences?.rememberSaveFolder?.(path.dirname(picked));}catch{}   // the next save the person starts opens here (never from a private or Tor window)
+  }
+  let target=null,last=null;
+  for(let attempt=0;attempt<8&&!target;attempt++){
+   const wanted=picked&&!attempt?picked:destination(name,folder),temp=path.join(path.dirname(wanted),`.${randomUUID().slice(0,8)}.crdownload`);
+   try{
+    await fs.promises.mkdir(path.dirname(wanted),{recursive:true});await fs.promises.writeFile(temp,data,{flag:'wx',mode:0o600});
+    try{if(wanted===picked&&!attempt)await fs.promises.rename(temp,wanted);else await fs.promises.copyFile(temp,wanted,fs.constants.COPYFILE_EXCL);target=wanted;}catch(error){if(error.code!=='EEXIST')throw error;last=error;}
+   }finally{await fs.promises.rm(temp,{force:true}).catch(()=>{});}
+  }
+  if(!target)throw last||new Error(t('screenshot.saveFailed'));
+  const stamp=now(),id='download-'+randomUUID(),bytes=data.length,record={type:'download',tabId:owner.tabId,id,browserProfileId:owner.profileId,name:path.basename(target),path:target,receivedBytes:bytes,totalBytes:bytes,startedAt:stamp,endedAt:stamp,updatedAt:stamp,
+   size:`${Math.max(1,Math.round(bytes/1024))} KB`,status:'Ready',mime,canPause:false,canResume:false,canRetry:false,dangerous:false,...(owner.tor?{tor:true}:{})};
+  if(typeof owner.record==='function')owner.record(record);
+  return {id,name:record.name,path:target,bytes,owner};
+ }
+ return {saveFile,attach,command,reconcile,forget,keepForQuit,observe(listener){observers.add(listener);return()=>observers.delete(listener);},startExtension,hasActive:controller=>[...active.values()].some(e=>e.owner.controller===controller),hasActiveTab:tabId=>[...active.values()].some(e=>e.owner.tabId===tabId&&!e.pending||e.owner.tabId===tabId),/* The person's own click or key press in the page ends a burst: the next download is theirs, not the page's (Chrome allows one download per interaction the same way). */userActed,clearPrivate(profileId){for(const [id,entry]of active)if(entry.profileId===profileId){try{entry.item.cancel();}catch{}active.delete(id);}for(const [id,entry]of recoveries)if(entry.profileId===profileId)recoveries.delete(id);for(const key of bursts.keys())if(key.startsWith(profileId+'|'))bursts.delete(key);}};
 }
 module.exports={createDownloads,dangerous,markOfTheWeb,quarantine};

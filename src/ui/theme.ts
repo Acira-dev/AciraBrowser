@@ -4,6 +4,8 @@ import type { BrowserSnapshot,Settings,TabGroupColor } from '../runtime/types';
 import { contrast,fromOklch,luminance,mix,rgb,toOklch } from './colorMath';
 import { designTokens } from './designSystem';
 import { semanticColorVariables,type AppearanceColorOverrides } from './semanticColors';
+import { OWN_FINISH } from '../runtime/ownColours';
+import { frameFieldTokens,OWN_DARK_C,OWN_DARK_L,OWN_LIGHT_C,OWN_LIGHT_L } from './frameField';
 export { contrast,luminance,mix,rgb } from './colorMath';
 export function readableAccent(accent:string,surface:string,dark:boolean,minimum=3){let result=accent;for(let i=0;i<10&&contrast(result,surface)<minimum;i++)result=mix(result,dark?'#ffffff':'#000000',.8);return result;}
 /** Readable neutral foreground; custom tint never becomes an icon color. */
@@ -99,6 +101,13 @@ const finishCache=new Map<string,Record<string,string>>();
 export function systemAccentOf(value?:string):string|undefined{return value&&/^#[\da-f]{6}$/i.test(value)&&toOklch(value)[1]>=.02?value.toLowerCase():undefined;}
 export type WindowFinish='private'|'tor';
 const windowFinishes:Record<WindowFinish,[number,number,number]>={private:[.24,.035,200],tor:[.24,.04,310]};
+/** The accent the person chose, before any lightening for contrast: the system's on Linux when matched, Acira blue for the default (Porcelain) finish, the finish's own accent, or their custom accent.
+ * The theme builds its accent from this (computeStudyFinish), and a tab of Acira's own pages glows in it (ui/ownPageGlow.ts), so the two never disagree. */
+export function finishAccentOf(s:Pick<Settings,'colorPreset'|'browserTint'|'accentColor'>&{windowFinish?:WindowFinish;systemAccent?:string}):string{
+ const preset=appearancePalette(s.colorPreset),matched=!!preset&&preset.tint.toLowerCase()===(s.browserTint||'').toLowerCase(),forced=s.windowFinish?windowFinishes[s.windowFinish]:null,porcelain=!forced&&(!s.colorPreset||matched&&preset!.name==='Porcelain');
+ return systemAccentOf(s.systemAccent)||(porcelain?designTokens.color.blue:matched?preset!.accent:(s.accentColor||s.browserTint));
+}
+
 export function studyFinish(s:Pick<Settings,'colorPreset'|'browserTint'|'accentColor'>&AppearanceColorOverrides&{windowFinish?:WindowFinish;frameTint?:string;systemAccent?:string},dark=false,highContrast=false,reducedTransparency=false):Record<string,string>{return memo(`f|${dark}|${highContrast}|${reducedTransparency}|${JSON.stringify(s)}`,()=>computeStudyFinish(s,dark,highContrast,reducedTransparency));}
 /** A finish's frame colour alone (what a FinishSwatch shows, the token set's --ed-chrome without a frame tint), with no
  * token set built: the opening lines of computeStudyFinish below, kept identical (a test holds them equal). G measured
@@ -113,11 +122,13 @@ export function frameChromeOf(s:Pick<Settings,'colorPreset'|'browserTint'>&{wind
  const [srcL,srcC,h]=forced?[forced[0],forced[1],forced[2]*Math.PI/180] as [number,number,number]:toOklch(porcelain?neutral.chrome:matched?preset!.light:s.browserTint||neutral.chrome);
  const deepFinish=!porcelain&&srcL<.62;
  const chromeL=forced?forced[0]:dark?.16:deepFinish?Math.min(.3,Math.max(.25,srcL)):Math.min(.93,Math.max(.86,srcL+.06));
- const chrome=porcelain?neutral.chrome:forced?fromOklch(forced[0],forced[1],h):fromOklch(chromeL,dark?Math.min(srcC*.45,.032):Math.min(srcC*(deepFinish?.95:.8),deepFinish?.09:.06),h);
+ // 14.1 Your colours: an own colour's frame keeps its hue at Acira's fixed lightness (ui/frameField.ts frameStop), the same in the swatch and the frame
+ const own=!forced&&s.colorPreset===OWN_FINISH&&/^#[\da-f]{6}$/i.test(s.browserTint||'');
+ const chrome=own?fromOklch(dark?OWN_DARK_L:OWN_LIGHT_L,Math.min(srcC*(dark?.6:.5),dark?OWN_DARK_C:OWN_LIGHT_C),h):porcelain?neutral.chrome:forced?fromOklch(forced[0],forced[1],h):fromOklch(chromeL,dark?Math.min(srcC*.45,.032):Math.min(srcC*(deepFinish?.95:.8),deepFinish?.09:.06),h);
  frameChromeCache.set(key,chrome);return chrome;
 }
 function computeStudyFinish(s:Pick<Settings,'colorPreset'|'browserTint'|'accentColor'>&AppearanceColorOverrides&{windowFinish?:WindowFinish;frameTint?:string;systemAccent?:string},dark=false,highContrast=false,reducedTransparency=false):Record<string,string>{
- const key=JSON.stringify([s.colorPreset,s.browserTint,s.accentColor,dark,highContrast,reducedTransparency,s.glassOpacity,s.surfaceColor,s.sidebarColor,s.tabColor,s.toolbarColor,s.windowFinish,s.frameTint,s.systemAccent]);
+ const key=JSON.stringify([s.colorPreset,s.browserTint,s.accentColor,dark,highContrast,reducedTransparency,s.glassOpacity,s.surfaceColor,s.sidebarColor,s.tabColor,s.toolbarColor,s.windowFinish,s.frameTint,s.systemAccent,s.frameGradient,s.frameMaterial]);
  const cached=finishCache.get(key);if(cached)return cached;
  const neutral=dark?studyTones.dark:studyTones.light;
  const preset=appearancePalette(s.colorPreset),matched=!!preset&&preset.tint.toLowerCase()===(s.browserTint||'').toLowerCase();
@@ -134,7 +145,9 @@ function computeStudyFinish(s:Pick<Settings,'colorPreset'|'browserTint'|'accentC
  // The frame sits a clear step away from the page it holds (at least .06 in OKLab lightness when either is dark), so the
  // sidebar and the main page never read as one surface.
  const chromeL=forced?forced[0]:dark?.16:deepFinish?Math.min(.3,Math.max(.25,srcL)):Math.min(.93,Math.max(.86,srcL+.06));
- const finishChrome=porcelain?neutral.chrome:forced?fromOklch(forced[0],forced[1],h):fromOklch(chromeL,dark?Math.min(srcC*.45,.032):Math.min(srcC*(deepFinish?.95:.8),deepFinish?.09:.06),h);
+ // 14.1 Your colours: an own colour's frame is its hue at Acira's fixed lightness (frameChromeOf above and ui/frameField.ts say the same)
+ const own=!forced&&s.colorPreset===OWN_FINISH&&/^#[\da-f]{6}$/i.test(s.browserTint||'');
+ const finishChrome=own?fromOklch(dark?OWN_DARK_L:OWN_LIGHT_L,Math.min(srcC*(dark?.6:.5),dark?OWN_DARK_C:OWN_LIGHT_C),h):porcelain?neutral.chrome:forced?fromOklch(forced[0],forced[1],h):fromOklch(chromeL,dark?Math.min(srcC*.45,.032):Math.min(srcC*(deepFinish?.95:.8),deepFinish?.09:.06),h);
  // A profile's frame tint (G, benchmark §2 #2); a private or Tor window keeps its own finish.
  const chrome=!forced&&s.frameTint&&/^#[\da-f]{6}$/i.test(s.frameTint)?mixOklab(s.frameTint,finishChrome,dark?.08:.07):finishChrome;
  // Strong ink on colored chrome: pure white on dark finishes, near-black on pale ones.
@@ -142,7 +155,7 @@ function computeStudyFinish(s:Pick<Settings,'colorPreset'|'browserTint'|'accentC
  const chromeSheet=porcelain||!chromeDark?(dark?mix('#ffffff',chrome,.1):'#ffffff'):fromOklch(chromeL+(dark?.07:.09),Math.min(srcC*.7,.06),h);
  // "Match my system theme" (Linux): the desktop's accent takes the accent role alone. Frame, tones and finish stay the person's own.
  const systemAccent=systemAccentOf(s.systemAccent);
- const base=systemAccent||(porcelain?designTokens.color.blue:matched?preset!.accent:(s.accentColor||s.browserTint));
+ const base=finishAccentOf(s);
  // Acira's own pages take the finish too: deep in its hue with light ink for a deep finish, a pale wash of it
  // with dark ink for a pale one. Porcelain keeps the website's exact neutrals.
  const tone=surfaceOverride?finishTones(dark?.235:deep?.37:.984,Math.min(contentC*(dark?.3:deep?.48:.2),dark?.022:deep?.044:.011),contentHue,deep)
@@ -181,6 +194,7 @@ function computeStudyFinish(s:Pick<Settings,'colorPreset'|'browserTint'|'accentC
   '--shadow':deep?'0 12px 36px #00000066':designTokens.material.overlayShadow,
   '--rim':deep?'#ffffff14':'#ffffffcc',
   ...semantic,
+  ...(own&&!forced?frameFieldTokens({...s,colorPreset:s.colorPreset,browserTint:s.browserTint} as never,dark):{}),
   '--mac-glass-color':macGlass,'--mac-glass-density':`${macDensity*100}%`,
   '--mac-light-ink':'20 21 24','--mac-light-sheet':macLightSheet,'--mac-light-sheet-rgb':triple(macLightSheet),'--mac-light-accent':macLightAccent,'--mac-light-accent-soft':macLightSoft,'--mac-light-accent-ink':readableAccent(macLightAccent,macLightSoft,false,6),...macGroupColors,
  };

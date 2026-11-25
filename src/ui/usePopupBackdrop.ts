@@ -17,9 +17,12 @@ const cancel=(request:CaptureRequest)=>{request.cancelled=true;request.lifetime.
  * Acquisition starts on mount, independently of the formation clock. The sheet
  * primes its first visible glass frame from decoded sources, never from an
  * opaque plate that switches to glass when the animation ends. */
-export function usePopupBackdrop({id,enabled,closing,context}:{id?:number;enabled:boolean;closing:boolean;context:string}) {
+export function usePopupBackdrop({id,enabled,closing,context,geometryKey=''}:{id?:number;enabled:boolean;closing:boolean;context:string;geometryKey?:string}) {
   const [state,setState]=useState<BackdropState>({status:enabled?'pending':'live',videos:[],opaque:!enabled});
   const published=useRef<BackdropVideo[]>([]),request=useRef<CaptureRequest|null>(null),previous=useRef({context,enabled});
+  // The box the popup is laid out in now, the box the published frames were asked for, and when this popup opened.
+  const [laidOutAgain,setLaidOutAgain]=useState(0);   // the box moved between a frame's ask and its publication: the refresh below runs again
+  const latestKey=useRef(geometryKey),publishedKey=useRef(geometryKey),opened=useRef({id,at:performance.now()});latestKey.current=geometryKey;if(opened.current.id!==id)opened.current={id,at:performance.now()};
   useLayoutEffect(()=>{
     const changedContext=previous.current.context!==context,changedEnabled=previous.current.enabled!==enabled;
     if(changedContext&&canRetainClosingMaterial({closing,enabled,previousEnabled:previous.current.enabled,frames:published.current})){
@@ -53,6 +56,19 @@ export function usePopupBackdrop({id,enabled,closing,context}:{id?:number;enable
     return()=>{if(window.__aciraPopupCapture===receive)delete window.__aciraPopupCapture;};
   },[]);
   useEffect(()=>()=>{if(request.current)cancel(request.current);stop(published.current);published.current=[];},[]);
+  // A popup of a measured kind is laid out twice: its estimated box, then its measured one. A frame that straddled the second layout is discarded by main and asked for again; one that finished before the
+  // measured box arrived was kept, and its glass ended short of the box (a Security popup's lower 32 px). While the popup is still forming, a published frame that was asked for another box is asked for once more.
+  useEffect(()=>{
+    if(!enabled||closing||id===undefined||!runtime.popupBackdropSnapshot||!published.current.length||publishedKey.current===geometryKey||performance.now()-opened.current.at>600)return;
+    let cancelled=false;const controller=new AbortController(),key=geometryKey;
+    void(async()=>{try{
+      const snapshot=await runtime.popupBackdropSnapshot!(id);if(cancelled||snapshot.id!==id||!snapshot.sources.length)return;
+      const decoded=await Promise.all(snapshot.sources.map(async source=>({source:{key:source.key,bounds:source.bounds,radius:source.radius,sourceBounds:source.sourceBounds},frame:await decodePopupSnapshot(source,controller.signal)})));
+      if(cancelled){stop(decoded);return;}
+      const retired=published.current;published.current=decoded;publishedKey.current=key;setState({status:'live',videos:decoded,opaque:false});stop(retired);
+    }catch{/* the frame already shown stays */}})();
+    return()=>{cancelled=true;controller.abort();};
+  },[geometryKey,id,enabled,closing,laidOutAgain]);
   useEffect(()=>{
     if(!enabled){stop(published.current);published.current=[];setState({status:'live',videos:[],opaque:true});return;}
     if(closing||id===undefined)return;
@@ -80,14 +96,17 @@ export function usePopupBackdrop({id,enabled,closing,context}:{id?:number;enable
           try{
             // A popup of a measured kind lays out twice (its estimated height, then its measured one) and the broker
             // discards a frame that straddled the second layout: ask once more against the settled layout.
-            let snapshot=await runtime.popupBackdropSnapshot(id);
-            if(!cancelled&&!snapshot.sources.length)snapshot=await runtime.popupBackdropSnapshot(id);
+            let asked=latestKey.current,snapshot=await runtime.popupBackdropSnapshot(id);
+            if(!cancelled&&!snapshot.sources.length){asked=latestKey.current;snapshot=await runtime.popupBackdropSnapshot(id);}
+            // The second ask can reach main while the discarded first capture is still running (main refuses a second capture of one owner until the first has settled: an empty answer at once). Falling back
+            // to the one-shot media path at that point gave the glass another crop (a whole-window frame), so a refused ask is asked again after the running capture has had time to settle: up to 3 more times, 30 ms apart.
+            for(let again=0;again<3&&!cancelled&&!snapshot.sources.length;again++){await new Promise(resolve=>setTimeout(resolve,30));if(cancelled)break;asked=latestKey.current;snapshot=await runtime.popupBackdropSnapshot(id);}
             if(cancelled)return;
             if(snapshot.id===id&&snapshot.sources.length){
               const decoded=await Promise.all(snapshot.sources.map(async source=>({source:{key:source.key,bounds:source.bounds,radius:source.radius,sourceBounds:source.sourceBounds},frame:await decodePopupSnapshot(source,snapshotController.signal)})));
               if(cancelled){stop(decoded);return;}
               if(!deadline.accept()){stop(decoded);return;}
-              const retired=published.current;published.current=decoded;setState({status:'live',videos:decoded,opaque:false});stop(retired);return;
+              const retired=published.current;published.current=decoded;publishedKey.current=asked;setState({status:'live',videos:decoded,opaque:false});stop(retired);if(latestKey.current!==asked)setLaidOutAgain(count=>count+1);return;
             }
           }catch(error){snapshotController.abort();if(cancelled)return;if(import.meta.env.DEV)console.warn('Popup snapshot unavailable; trying one-shot media',error);}
           deadline.cancel();if(cancelled)return;deadline=createPopupMaterialDeadline(fallback);

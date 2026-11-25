@@ -5,7 +5,9 @@ import { useEffect } from 'react';
  *  Rows are hit-tested against their layout boxes (the painted box minus the running slide's translate); when that row is not
  *  the one drawn under the pointer, the press, the click and the menu go to the same spot of the settled row instead. Nothing
  *  moves and nothing else changes: outside a slide every event passes through untouched. */
-const ROWS='[data-flip],.split-group-parent';
+// 14.1: a folder's hover "+" (.sb-header-add) stands beside its header, not inside it, so it was in no row: a press on it while any row still slid
+// (a tab opened a moment ago: the rows below make room) went to the header under it, which folded the folder instead of opening a tab. It is its own target.
+const ROWS='[data-flip],.split-group-parent,.sb-header-add';
 
 /** The slide still to run under `el` (its own and its ancestors' running animations, up to the scroll box), in px. */
 function slideShift(el:Element,box:Element):number{

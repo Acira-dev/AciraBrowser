@@ -14,11 +14,13 @@ export const importLabels: Record<ImportCategory, string> = {
 };
 export function importCapabilities(profile: ImportSource): ImportCategory[] {
   const options: ImportCategory[] = [];
+  // Safari needs the person's permission first (macOS): it is imported from Settings, never from setup.
+  if (profile.permission === "needed") return options;
   if (profile.available.bookmarks) options.push("bookmarks");
   if (profile.available.history) options.push("history");
   if (profile.available.preferences) options.push("preferences");
   if (profile.available.extensions) options.push("extensions");
-  // Arc: the sidebar's Favorites and each Space's pinned tabs.
+  // Arc, Opera, Vivaldi and Zen: Favorites (speed dial, Essentials) and workspaces with their tabs.
   if (profile.available.favorites) options.push("favorites");
   if (profile.available.spaces) options.push("spaces");
   return options;

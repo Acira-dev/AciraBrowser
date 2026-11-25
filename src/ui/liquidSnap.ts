@@ -65,6 +65,14 @@ export function pickTarget(targets: readonly LiquidTarget[], pointer: Pt, joined
   if (inside) return { target: inside, anchor: { ...pointer }, distance: 0 };
   return held ?? nearest;
 }
+
+/** The target the chip reaches for this frame, or null. The list is read only while the chip is engaged (`targets()` measures every group header, workspace icon and split cell):
+ *  a row carried inside the sidebar's list is not a chip yet and picks nothing, so reading it every frame of that drag was all cost (Beta 14 drag speed pass). */
+export function pickLiquidTarget(engaged: boolean, pointer: Pt | null, joined: string, half: number, targets: () => LiquidTarget[], only?: (item: LiquidTarget) => boolean): { target: LiquidTarget; anchor: Pt; distance: number } | null {
+  if (!engaged || !pointer) return null;
+  const available = targets();
+  return pickTarget(only ? available.filter(only) : available, pointer, joined, half);
+}
 /** The target the chip is most drawn to (the nearest within reach), with its tension, or null. */
 export function strongest(targets: readonly LiquidTarget[], pointer: Pt, half = 14): { key: string; anchor: Pt; s: number } | null {
   const best = pickTarget(targets, pointer, '', half);
@@ -509,8 +517,7 @@ export function liquidChip(chip: HTMLElement, { exclude = '', onFrame, beforeFra
     if (!ending) sim.half = chipHalf();
     sim.released = ending || !active || !ready();
     const joined = sim.bodies.find(b => b.live && b.attached)?.key ?? '';
-    const available = targets ? targets() : liquidTargets(document, exclude);
-    const target = !ending && active && pointer && ready() ? pickTarget(only ? available.filter(only) : available, pointer, joined, sim.half) : null;
+    const target = pickLiquidTarget(!ending && active && ready(), pointer, joined, sim.half, targets ?? (() => liquidTargets(document, exclude)), only);
     simStep(sim, pointer, target, dt, springs);
     // An owned cell's own colours, read once before it steps aside (its outline is the picker's `--split-outline`).
     for (const b of sim.bodies) if (b.owned && b.node && !bodyColors.has(b.key)) { const cs = getComputedStyle(b.node); let fill = parseColor(cs.backgroundColor); if (fill[3] < .1 && b.node.matches('[data-ws],.sidebar-bookmark-return,.sb-bookmark,.sidebar-tab-drag-gap')) fill = palette(host, chip).chip; bodyColors.set(b.key, { fill, line: parseColor(cs.getPropertyValue('--split-outline').trim()) }); }

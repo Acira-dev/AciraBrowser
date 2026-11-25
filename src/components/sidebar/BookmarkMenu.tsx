@@ -17,6 +17,8 @@ import { folderTitle } from '../../ui/bookmarkFolderName';
 import { SECTION_NAMES,sidebarWindowId,type SectionId } from '../../ui/sidebarSections';
 import { SectionMenu,sectionActions } from './SectionActions';
 import { SizeMenu } from './SizeMenu';
+import { MediaMenu } from './MediaMenu';
+import { favoriteTabsInList } from '../../runtime/favoriteTabsRule';
 
 import { t } from '../../i18n';
 type Row=(label:string,Icon:BrowserMenuIcon,action:()=>void,hint?:string)=>ReactNode;
@@ -35,8 +37,14 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
  if(!target)return <p className="bm-menu-note">{t("bookmarkmenu.thisBookmarkWasRemoved")}</p>;
  // The sidebar edge's menu: the three sizes (components/sidebar/SizeMenu.tsx).
  if(target.kind==='size')return <SizeMenu state={state} dispatch={dispatch} row={row} close={close}/>;
+ // The now-playing card's menu: the picture-in-picture switch (components/sidebar/MediaMenu.tsx).
+ if(target.kind==='media')return <MediaMenu state={state} dispatch={dispatch} row={row} close={close}/>;
  // A section's own menu (Downloads, History, Reading list, Favorites): Hide this section and Customize sidebar…
- if(target.kind==='zone'){const section=target.section as SectionId;return section in SECTION_NAMES?<SectionMenu row={row} windowId={sidebarWindowId(state)} section={section} close={close}/>:null;}
+ if(target.kind==='zone'){
+  const section=target.section as SectionId;
+  // Favorites' free space also holds the switch for the Favorites' tabs in the tab list (off by default since Beta 14: an open Favorite shows only as its tile), so it is found where the Favorites are.
+  const listed=favoriteTabsInList(state.settings),before=section==='favorites'&&state.settings.verticalTabs?row(listed?t("sidebarmenu.favoriteTabsHide"):t("sidebarmenu.favoriteTabsShow"),ListFilter,()=>{dispatch({type:'settings.update',patch:{favoriteTabsInList:!listed}});close();}):null;
+  return section in SECTION_NAMES?<SectionMenu row={row} windowId={sidebarWindowId(state)} section={section} close={close} before={before}/>:null;}
  // A folder button on the bookmarks bar: the folder's pages and folders.
  if(target.kind==='contents')return <FolderContents state={state} dispatch={dispatch} folder={target.node} row={row} close={close} navigate={navigate}/>;
  const run=(action:()=>void)=>()=>{action();close();};
@@ -82,7 +90,7 @@ export function BookmarkMenu({state,dispatch,target:ref,row,close,navigate}:{sta
   {editable&&<MenuFormFlyout title={t('bookmarkmenu.newFolder')}>{dismiss=><MenuNameForm label={t('bookmarkmenu.folderName')} action={t('searchEngines.add')} cancel={dismiss} submit={title=>{dispatch({type:'bookmark.folder',title,parentId:null});close();}}/>}</MenuFormFlyout>}
   {editable&&row(t("bookmarkmenu.sortByName"),ListFilter,run(()=>sortHere(null)))}
   {editable&&sep('a')}
-  {row(t("bookmarkmenu.openBookmarks"),ArrowUpRight,run(()=>openWorkspacePage('bookmarks',state,dispatch)),'Ctrl Shift O')}
+  {row(t("bookmarkmenu.openBookmarks"),ArrowUpRight,run(()=>openWorkspacePage('bookmarks',state,dispatch)))}
   {sep('c')}
   {sectionActions(row,sidebarWindowId(state),'bookmarks',close)}
  </>;

@@ -183,7 +183,7 @@ test('main\'s select-tab is still the expression the numbers copy, and main feed
   assert.equal((main.match(/if\(mouse\.type==='mouseDown'\)tabNumberHold\.abandon\(\)/g) || []).length, 2, 'a click in a page or in the interface drops a waiting digit');
   assert.match(main, /owner=noted==='flushed'\?null:pageOwner\(pages,wc\)/, 'a digit sent to its tab by the next key must not pull the old page back');
   assert.match(main, /select:position=>\{const here=listedTabs\(state\),target=position<0\?here\.at\(-1\):here\[position-1\]/, 'the two-digit number picks from the same list');
-  assert.match(main, /mainWindow\.on\('blur',\(\)=>tabNumberHold\.cancel\(\)\)/, 'the numbers go when the window loses focus');
+  assert.match(main, /mainWindow\.on\('blur',\(\)=>\{tabNumberHold\.cancel\(\);tabCycle\.blur\(\);\}\)/, 'the numbers go when the window loses focus (and so does Ctrl+Tab\'s hold, tab-cycle.cjs)');
   assert.match(main, /if\(input\.type==='mouseWheel'\)tabNumberHold\.interrupt\(\)/, 'Ctrl+wheel zooms the page: no numbers');
   // The numbers are a label: they never reveal a hidden sidebar and never ask for focus.
   const hold = readFileSync(new URL('../desktop/tab-numbers.cjs', import.meta.url), 'utf8');

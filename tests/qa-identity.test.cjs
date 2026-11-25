@@ -36,7 +36,7 @@ test('the installer script writes and removes only the names of its own identity
   const [qaPart, realPart] = block.split('!else');
   const names = part => Object.fromEntries([...part.matchAll(/!define (AC_\w+) "([^"]+)"/g)].map(m => [m[1], m[2]]));
   const q = names(qaPart), r = names(realPart);
-  assert.deepEqual(Object.keys(q).sort(), ['AC_APP_EXE', 'AC_DATA_DIR', 'AC_PROGID', 'AC_REG_APP', 'AC_REG_KEY']);
+  assert.deepEqual(Object.keys(q).sort(), ['AC_APP_EXE', 'AC_DATA_DIR', 'AC_PROGID', 'AC_REG_APP', 'AC_REG_KEY', 'AC_RETURN_KEY']);
   assert.deepEqual(Object.keys(r).sort(), Object.keys(q).sort());
   for (const key of Object.keys(q)) assert.notEqual(q[key], r[key], key);
   assert.equal(r.AC_REG_KEY, 'Software\\AciraBrowser'); assert.equal(r.AC_PROGID, 'AciraBrowser.Url'); assert.equal(r.AC_REG_APP, 'Acira Browser');

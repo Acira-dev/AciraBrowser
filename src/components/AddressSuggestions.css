@@ -1,29 +1,62 @@
 .address-suggestions{padding:4px;color:var(--text);width:100%;min-width:0}
 .address-suggestions>ul{position:relative;list-style:none;margin:0;padding:0;min-width:0;overflow:hidden}
-.address-suggestion{position:relative;display:flex;align-items:center;gap:12px;height:44px;padding:0 8px;border-radius:4px;cursor:default;color:var(--text);user-select:none}
-.address-suggestion-selection{position:absolute;inset:0 0 auto;height:44px;border-radius:4px;background:var(--menu-hover,rgb(128 128 128 / .06));pointer-events:none;list-style:none}
+.address-suggestion{position:relative;display:flex;align-items:center;gap:10px;height:36px;padding:0 6px 0 10px;border-radius:6px;cursor:default;color:var(--text);user-select:none}
+.address-suggestion-selection{position:absolute;inset:0 0 auto;height:36px;border-radius:6px;background:var(--menu-hover,rgb(128 128 128 / .06));pointer-events:none;list-style:none}
 .address-suggestion[aria-selected=true]{color:var(--text)}
 .address-suggestion-icon{flex:0 0 16px;display:grid;place-items:center;width:16px;height:16px}
-.address-suggestion-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.address-suggestion-copy>span{font-size:13px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.address-suggestion-copy strong{font-weight:600}
-.address-suggestion-copy small{font-size:11px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.address-suggestion[aria-selected=true] .address-suggestion-copy small{color:var(--muted)}
-.address-suggestion-source,.address-suggestion-action{font-size:11px;white-space:nowrap;color:inherit}
-/* An answer (a sum, a conversion, a time) reads as the result: the figure first, large and even-width, the question under it. */
-.address-suggestion[data-kind=answer] .address-suggestion-copy>span{font-size:15px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
-.address-suggestion-key{flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-.address-suggestion-enter{flex:0 0 16px;visibility:hidden;color:var(--menu-t3,var(--muted))}
-.address-suggestion-remove{position:absolute;inset-block:0;inset-inline-end:4px;margin:auto 0;width:28px;height:28px;padding:0;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer;opacity:0;pointer-events:none}
-/* 13.6: the remove (x) of a history row shows on hover (and on the keyboard-selected row) over the end of the row, so at rest the title has the whole row. Under it the title fades out instead of being cut. */
-.address-suggestion:is(:hover,[aria-selected=true]) .address-suggestion-remove,.address-suggestion-remove:focus-visible{opacity:1;pointer-events:auto}
-.address-suggestion[data-removable]:is(:hover,[aria-selected=true]) .address-suggestion-copy{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent calc(100% - 28px));mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent calc(100% - 28px))}
-/* A title in a right-to-left script (dir=auto on the title) starts at the row's right, where the x is: such a row keeps the x's room from the start, so nothing shifts or hides under it. */
-.address-suggestion[data-removable]:has(.address-suggestion-copy>span:dir(rtl)) .address-suggestion-copy{padding-right:36px}
-.address-suggestion-remove:hover{background:color-mix(in srgb,currentColor 10%,transparent)}
-.address-suggestion-remove:focus-visible{outline:2px solid currentColor;outline-offset:1px}
-.address-suggestion[aria-selected=true] .address-suggestion-enter{visibility:visible}
+:where(.address-suggestions) strong.sug-match{font-weight:600;color:var(--text)}
 .address-suggestion-empty{display:flex;align-items:center;height:44px;padding:0 8px;font-size:13px;color:var(--muted)}
-@media(max-width:600px){.address-suggestion-source{display:none}.address-suggestion-action{font-size:10px}}
-
 .address-suggestions-a11y{position:absolute;width:1px;height:1px;padding:0;margin:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+
+/* ---- Beta 14 section O, row design A. The type of a row is a small quiet icon, never a word; the title wins the row. ---- */
+.sug-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sug-keys{flex:none;font:500 11px/18px inherit;font-family:inherit;padding:0 6px;border-radius:4px;color:var(--muted);background:color-mix(in srgb,currentColor 7%,transparent);font-variant-numeric:tabular-nums;white-space:nowrap}
+.sug-enter{visibility:hidden;color:var(--menu-t3,var(--muted))}
+.address-suggestion[aria-selected=true] .sug-enter{visibility:visible}
+
+/* One line. The title shrinks last; the site follows it, faint, and only when it fits whole: it wraps onto a hidden second line instead of being cut
+   (the site's icon already names the site). */
+.sug-line{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;height:18px;overflow:hidden}
+.sug-title{flex:0 1 auto;font-size:13px;line-height:18px;color:color-mix(in srgb,var(--text) 88%,transparent)}
+.sug-site{flex:0 0 auto;font-size:12px;line-height:18px;color:var(--muted);white-space:nowrap}
+.address-suggestion[data-k=answer] .sug-title{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.address-suggestion[aria-selected=true] .sug-title{color:var(--text)}
+
+/* The end slot (26px) holds the row's type. */
+.sug-end{flex:0 0 26px;width:26px;height:26px;margin-inline-end:-2px;display:grid;place-items:center;border-radius:5px;color:var(--menu-t3,var(--muted));opacity:.78;
+  transition:opacity .2s cubic-bezier(.22,1,.36,1),color .2s cubic-bezier(.22,1,.36,1),background-color .2s cubic-bezier(.22,1,.36,1)}
+:where(.sug-end) svg.sug-glyph{width:14px;height:14px}
+.address-suggestion[aria-selected=true] .sug-end{opacity:1}
+.sug-end-button{border:0;padding:0;background:transparent;cursor:pointer;font:inherit}
+.sug-end-button:is(:hover,:focus-visible){opacity:1;color:var(--text);background:color-mix(in srgb,currentColor 10%,transparent)}
+.sug-end-button:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+
+/* The clock turns into the x: the ring winds back into 12 o'clock while the two hands swing out into the two strokes of the x. Leaving runs the exact
+   reverse (same curve, same length), so there is no cut and no colour jump. Only a pointer on the clock itself does it; the arrow keys leave it a clock.
+   A clock and an x are the same drawing in every reading direction: it is never mirrored. */
+.sug-morph .r{stroke-linecap:butt;stroke-dasharray:1 2;stroke-dashoffset:0;transition:stroke-dashoffset .3s cubic-bezier(.22,1,.36,1)}
+.sug-morph .h1{d:path("M8 8L8 4.75");transition:d .3s cubic-bezier(.22,1,.36,1)}
+.sug-morph .h2{d:path("M8 8L10.25 9.5");transition:d .3s cubic-bezier(.22,1,.36,1)}
+.sug-end-button:is(:hover,:focus-visible) .sug-morph .r{stroke-dashoffset:1.01}
+.sug-end-button:is(:hover,:focus-visible) .sug-morph .h1{d:path("M5.25 5.25L10.75 10.75")}
+.sug-end-button:is(:hover,:focus-visible) .sug-morph .h2{d:path("M10.75 5.25L5.25 10.75")}
+/* An open tab: the tab mark gives way to "go there" (an arrow) under the pointer: a cross-fade with a 2px travel. The arrow points away from the start edge,
+   so in a right-to-left list it is mirrored and travels the other way. */
+.sug-swap{position:relative;display:grid;width:14px;height:14px}
+:where(.sug-swap) svg.sug-glyph{grid-area:1/1;transition:opacity .22s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1)}
+:where(.sug-swap) svg+svg.sug-glyph{opacity:0;transform:translate(-2px,2px)}
+.sug-end-button:is(:hover,:focus-visible) :where(.sug-swap) svg.sug-glyph:first-child{opacity:0;transform:translate(2px,-2px)}
+.sug-end-button:is(:hover,:focus-visible) :where(.sug-swap) svg+svg.sug-glyph{opacity:1;transform:none}
+.address-suggestion:dir(rtl) :where(.sug-swap) svg+svg.sug-glyph{transform:translate(2px,2px) scaleX(-1)}
+.address-suggestion:dir(rtl) .sug-end-button:is(:hover,:focus-visible) :where(.sug-swap) svg.sug-glyph:first-child{transform:translate(-2px,-2px)}
+.address-suggestion:dir(rtl) .sug-end-button:is(:hover,:focus-visible) :where(.sug-swap) svg+svg.sug-glyph{transform:scaleX(-1)}
+/* The return mark of the selected row points toward the start edge in a right-to-left list. */
+.address-suggestion:dir(rtl) :where(.sug-enter) svg.sug-glyph{transform:scaleX(-1)}
+/* Reduce motion: every part that has a transition, named (the clock's three parts: .r, .h1, .h2, the swap's two icons, the end slot): no rule here ends in * or an :is() list,
+   which the style engine would try on every element of the window at every recalc (b14 integration). */
+[data-reduced] .sug-morph .r,[data-reduced] .sug-morph .h1,[data-reduced] .sug-morph .h2,[data-reduced] :where(.sug-swap) svg.sug-glyph,[data-reduced] .sug-end{transition:none}
+@media (prefers-reduced-motion:reduce){.sug-morph .r,.sug-morph .h1,.sug-morph .h2,:where(.sug-swap) svg.sug-glyph{transition:none}}
+
+/* Beta 14: the search engine's suggestions are a group of their own under the person's rows. Its label is quiet: small, muted, no rule and no box, the width of the rows. */
+.address-suggestion-group{display:flex;align-items:flex-end;padding:0 10px 4px;font-size:11px;line-height:14px;font-weight:500;letter-spacing:.01em;color:var(--menu-t3,var(--muted));white-space:nowrap;overflow:hidden;cursor:default;user-select:none;list-style:none}
+:where(.address-suggestion-group)>span.address-suggestion-group-label{min-width:0;overflow:hidden;text-overflow:ellipsis}

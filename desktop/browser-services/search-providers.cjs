@@ -6,11 +6,17 @@ function searchTemplate(value){
  let url;try{url=new URL(value.replace('%s',MARKER));}catch{throw new Error('Enter a valid HTTPS search template.');}if(url.protocol!=='https:'||url.username||url.password||url.origin.toLowerCase().includes(MARKER.toLowerCase()))throw new Error('Search templates need a fixed HTTPS origin without credentials.');
  if(![url.pathname,url.search,url.hash].some(part=>part.includes(MARKER)))throw new Error('Place %s in the search path, query or fragment.');return url.href.replace(MARKER,'%s');
 }
+/** Beta 14: an engine's optional suggestion address. Like a search address (one %s, https, a fixed origin) but %s must be where text is SENT: the path or the query, never only the fragment. */
+function suggestTemplate(value){
+ const template=searchTemplate(value),url=new URL(template.replace('%s',MARKER));
+ if(![url.pathname,url.search].some(part=>part.includes(MARKER)))throw new Error('Place %s in the suggestion address path or query.');
+ return template;
+}
 function searchProvidersChoice(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!['defaultId','engines'].includes(key))||typeof value.defaultId!=='string'||!Array.isArray(value.engines)||!value.engines.length||value.engines.length>30)throw new Error('Choose one to thirty local search providers and a default.');
  const ids=new Set(),keywords=new Set(),engines=value.engines.map(engine=>{
-  if(!engine||typeof engine!=='object'||Array.isArray(engine)||Object.keys(engine).some(key=>!['id','name','keyword','template'].includes(key))||typeof engine.id!=='string'||!/^[a-z][a-z0-9-]{0,63}$/.test(engine.id)||ids.has(engine.id)||typeof engine.name!=='string'||!engine.name.trim()||engine.name.length>80||/[\u0000-\u001f\u007f]/u.test(engine.name)||typeof engine.keyword!=='string')throw new Error('Each search provider needs a unique stable ID, bounded name and optional shortcut.');
-  const keyword=engine.keyword.toLowerCase();if(keyword&&!/^[a-z0-9][a-z0-9_-]{0,23}$/.test(keyword)||keyword&&keywords.has(keyword))throw new Error('Search shortcuts must be unique letters, numbers, underscores or hyphens.');ids.add(engine.id);if(keyword)keywords.add(keyword);return {id:engine.id,name:engine.name.trim(),keyword,template:searchTemplate(engine.template)};
+  if(!engine||typeof engine!=='object'||Array.isArray(engine)||Object.keys(engine).some(key=>!['id','name','keyword','template','suggest'].includes(key))||typeof engine.id!=='string'||!/^[a-z][a-z0-9-]{0,63}$/.test(engine.id)||ids.has(engine.id)||typeof engine.name!=='string'||!engine.name.trim()||engine.name.length>80||/[\u0000-\u001f\u007f]/u.test(engine.name)||typeof engine.keyword!=='string')throw new Error('Each search provider needs a unique stable ID, bounded name and optional shortcut.');
+  const keyword=engine.keyword.toLowerCase();if(keyword&&!/^[a-z0-9][a-z0-9_-]{0,23}$/.test(keyword)||keyword&&keywords.has(keyword))throw new Error('Search shortcuts must be unique letters, numbers, underscores or hyphens.');ids.add(engine.id);if(keyword)keywords.add(keyword);const suggest=engine.suggest===undefined||engine.suggest===''?undefined:suggestTemplate(engine.suggest);return {id:engine.id,name:engine.name.trim(),keyword,template:searchTemplate(engine.template),...suggest?{suggest}:{}};
  });if(!ids.has(value.defaultId))throw new Error('The selected default search provider is missing.');return {defaultId:value.defaultId,engines};
 }
 function resolveSearchInput(input,settings, {allowBang=true}={}){
@@ -32,4 +38,4 @@ function createSearchProviders({database,getProfiles}){
  function resolve(session,input,options){return resolveSearchInput(input,choice(context(session)),options);}
  return {attach,get,set,resolve,release:session=>contexts.delete(session)};
 }
-module.exports={defaultSearchProviders,searchTemplate,searchProvidersChoice,resolveSearchInput,createSearchProviders};
+module.exports={defaultSearchProviders,searchTemplate,suggestTemplate,searchProvidersChoice,resolveSearchInput,createSearchProviders};

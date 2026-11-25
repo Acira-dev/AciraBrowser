@@ -13,7 +13,7 @@ import {build as esbuild} from 'esbuild';
 import {build as viteBuild, loadConfigFromFile} from 'vite';
 import {oneByteSource, oneByteFile, sameProgram, hasWideText, countWide, LATIN1, ASCII} from '../scripts/one-byte-source.mjs';
 import {oneByteChunk, oneByteChunks, worthEscaping} from '../scripts/one-byte-chunks.mjs';
-import {bundleAnswerPreload, ANSWER_PRELOAD_ENTRY, PATH_LOADED} from '../scripts/desktop-bundle.mjs';
+import {bundleAnswerPreload, ANSWER_PRELOAD_ENTRY, PATH_LOADED, onDemandLibrary, answerLibrarySource} from '../scripts/desktop-bundle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -162,7 +162,8 @@ test('the cookie-banner preload every frame of every page reads is Latin-1 and t
     const text = await fs.readFile(outfile, 'utf8');
     assert.equal(highest(text) <= LATIN1, true, 'no character above U+00FF');
     new vm.Script(text, {filename: 'autoconsent-preload.cjs'});
-    await esbuild({absWorkingDir: root, entryPoints: [ANSWER_PRELOAD_ENTRY], outfile: plainFile, bundle: true, platform: 'browser', format: 'cjs', target: 'chrome130', external: ['electron'], legalComments: 'inline', logLevel: 'silent'});
+    // the same build as bundleAnswerPreload's (the library carried as text, compiled on demand: speed pass 2), only without the one-byte pass
+    await esbuild({absWorkingDir: root, entryPoints: [ANSWER_PRELOAD_ENTRY], outfile: plainFile, bundle: true, platform: 'browser', format: 'cjs', target: 'chrome130', external: ['electron'], legalComments: 'inline', logLevel: 'silent', plugins: [onDemandLibrary(await answerLibrarySource(root))]});
     const plain = await fs.readFile(plainFile, 'utf8');
     assert.equal(sameProgram(plain, text), null);
     assert.ok(text.length < plain.length * 1.1, 'the escapes add only a few KB to a 177 KB script');

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { ArrowUpRight, Bookmark, Folder, FolderOpen, PenLine, Pin, Plus, Star, Trash2, X } from '../components/AppIcons';
 import { SiteIdentityIcon } from '../components/SiteIdentityIcon';
+import { noteUse } from './metrics/noteUse';
 import type { BookmarkNode, BrowserAction, BrowserSnapshot } from '../runtime/types';
 import { openPage, savedPageIdentity } from '../ui/pageActions';
 import { openBookmarkMenu } from '../ui/bookmarkMenu';
@@ -141,7 +142,7 @@ export function BookmarksManager({ state, dispatch, onNavigate }: { state: Brows
           ? <button type="button" className="lib-open" data-lib-stop onClick={() => { setSelected(node.id); setQuery(''); }} onDoubleClick={() => setEditing(node.id)} onKeyDown={event => reorderKey(event, node)}>
               <Folder size={16} /><span className="lib-text"><span className="lib-title">{label}</span><span className="lib-host">{t('plural.bookmarks', { count: countIn(node.id) })}</span></span>
             </button>
-          : <button type="button" className="lib-open" data-lib-stop title={`${label} · ${node.url}`} onClick={event => openSavedPage(event, node, state, dispatch, onNavigate)} onAuxClick={event => openSavedPage(event, node, state, dispatch, onNavigate)}
+          : <button type="button" className="lib-open" data-lib-stop title={`${label} · ${node.url}`} onClick={event => { noteUse('bookmarksOpened'); openSavedPage(event, node, state, dispatch, onNavigate); }} onAuxClick={event => openSavedPage(event, node, state, dispatch, onNavigate)}
               onKeyDown={event => reorderKey(event, node)}>
               <SiteIdentityIcon url={node.url!} favicon={savedPageIdentity(node.url!, state).favicon || siteIcon(node.url!)} size={16} className="lib-site" />
               <span className="lib-text"><span className="lib-title">{label}</span><span className="lib-host">{path ? `${path} · ${pageHost(node.url!)}` : pageHost(node.url!)}{node.tor && ` · ${privacyNames.tor.label}`}</span></span>

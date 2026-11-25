@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { UpdateMark } from './UpdateMark';
 import { t } from '../../i18n';
 import { claimUpdatePrompt, claimWhatsNew, formatBytes, formatRetryIn, formatShare, useUpdateStatus, useWhatsNew, type UpdateView } from './useUpdateReady';
+import { insiderCall } from '../../runtime/feedback';
 import './update-pill.css';
 
 /** The tooltip of the download dot: what is happening, then how far it is ("42% · 160 of 382 MB · 5 MB/s"). Sizes and speed appear once they are known. */
@@ -38,7 +39,8 @@ export function UpdatePill({ onOpen, onOpenNotes, active, canAsk, reducedMotion 
   // A moment after the window is up, so it arrives calmly after the browser's own arrival rather than with it.
   useEffect(() => {
     if (!whatsNew?.pending || !canAsk) return;
-    const timer = window.setTimeout(() => { void claimWhatsNew().then((claimed) => { if (claimed) openNotes.current(); }); }, 1200);
+    // Beta 14: a profile that owes the one-time Beta 14 welcome sees its notes as the welcome's second step, not as this popup on top of it (the welcome claims the notes itself).
+    const timer = window.setTimeout(() => { void insiderCall({ type: 'insider.state' }).then((answer) => answer.view?.welcome.owed === true).catch(() => false).then((owed) => { if (!owed) return claimWhatsNew().then((claimed) => { if (claimed) openNotes.current(); }); }); }, 1200);
     return () => window.clearTimeout(timer);
   }, [whatsNew, canAsk]);
   if (!update) return null;

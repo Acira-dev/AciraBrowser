@@ -1,0 +1,17 @@
+/* What Zap removed on this page, in the site controls pop-up (features/ZapSiteSection.tsx). It is rows of the panel system (src/styles/panels.css):
+   [icon column] [title] [trailing], text on x = 36, one 6% highlight for hover and keyboard. Only what that system lacks is here. Tokens only. */
+.zap-site-slot{display:contents}
+/* THE divider above the group (the same 1px fade-ended line the other groups use), then the heading. */
+.zap-site{display:flex;flex-direction:column;margin:4px 0 0;padding-top:5px;background:var(--menu-sep) center top/100% 1px no-repeat}
+/* The heading starts on the text edge (row padding 8 + icon column 16 + gap 8). Restore all sits at the far end of the same line; in a language whose heading is long it drops to a line of its own instead of squeezing the words. */
+.zap-site-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;column-gap:12px;row-gap:2px;box-sizing:border-box;min-height:32px;padding:5px 8px 5px 32px}
+:where(.zap-site-head)>h3.zap-site-title{flex:0 1 auto;min-width:0;margin:0;font:500 13px/20px var(--font-ui,inherit);overflow-wrap:anywhere;color:inherit}
+.zap-site-head>.zap-restore-all{flex:none;line-height:20px}
+/* A part's row: the whole row restores it. Its name wraps rather than cuts (a part's own words can be long); the quiet note is the row's second line. */
+.site-controls .zap-row{height:auto;min-height:32px;padding-block:6px}
+.site-controls .zap-row>.acira-menu-title{white-space:normal;overflow-wrap:anywhere;line-height:20px}
+.zap-row>.acira-menu-title .acira-menu-sub{white-space:normal}
+/* "Restore" is the row's text button: the same small underlined text as the pop-up's other text buttons (.shields-text). */
+.zap-restore{font:400 12px/16px var(--font-ui,inherit);color:var(--menu-t2,inherit);text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+.zap-row:is(:hover,:focus-visible) .zap-restore{color:inherit}
+@media (forced-colors:active){.zap-row:focus-visible{outline:2px solid Highlight;outline-offset:-2px}}

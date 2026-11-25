@@ -79,14 +79,14 @@ summary:focus-visible,
 /* ── search: one field surface ───────────────────────────── */
 .st-toolbar { position: sticky; top: 0; z-index: 30; width: min(100%, 800px); margin: 0 auto; padding: 18px 40px 8px; background: var(--st-bg); }
 .st-search { position: relative; }
-.st-search-field { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 10px; border-radius: 4px; background: var(--st-field); border: 1px solid transparent; color: var(--st-muted); transition: border-color 0.12s, background-color 0.12s; }
+.st-search-field { position: relative; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 10px; border-radius: 4px; background: var(--st-field); border: 1px solid transparent; color: var(--st-muted); transition: border-color 0.12s, background-color 0.12s; }
 .st-search-field > svg { flex: none; width: 16px; height: 16px; }
 /* The "/" key hint gives its room to the placeholder in the narrowest field (200% in a 900×600 window), where the longer languages' would
    be cut ("Pesquisar configurações" needs 220px of content box beside the hint; the field has 224 at 150%, 197 at 200%). */
 .st-search-field { container: st-search / inline-size; }
 @container st-search (width < 220px) { .st-kbd { display: none; } }
 .st-search-field:hover { border-color: var(--st-edge); }
-.st-search-field:focus-within { border-color: var(--st-ring); box-shadow: inset 0 0 0 1px var(--st-ring); outline: 0; color: var(--st-text); }
+.st-search-field:focus-within { outline: 0; color: var(--st-text); } /* the ring is the active border's (styles/active-border.css) */
 .st-search .st-search-field input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: 0; font-size: 14px; color: var(--st-text); }
 .st-search .st-search-field input:focus-visible { outline: 0; }
 .st-search .st-search-field input::placeholder { color: var(--st-muted); opacity: 1; }
@@ -262,13 +262,6 @@ textarea, .st-textarea { width: 100%; min-height: 72px; padding: 6px 10px; resiz
 .st-source-form { display: flex; gap: 8px; width: 100%; }
 .st-source-form .st-input { flex: 1; width: auto; min-width: 0; } /* R4-39: an input's default minimum width kept this row wider than a narrow pane */
 .st-source-form .st-button { flex: 0 0 auto; }
-/* Insider code (13.11): the sources row's field and buttons in a stacked row; a code of 32 characters fits the field, and in a narrow pane the buttons drop under it. The message is the site list's: the red line under the field, and the field's edge red with it. */
-.st-insider { width: 100%; max-width: 520px; }
-.st-insider .st-source-form { flex-wrap: wrap; }
-.st-insider .st-source-form .st-input { flex: 1 1 280px; }
-.st-insider-swap { display: inline-grid; } .st-insider-swap > span { grid-area: 1 / 1; } .st-insider-swap > span[data-hide] { visibility: hidden; } /* Activate / Checking…: both laid in one cell, so the button keeps the longer one's width and the field never changes width */
-.st-insider .st-input[aria-invalid='true'] { border-color: var(--danger-text, #b3261e); }
-.st-insider .st-input[aria-invalid='true']:focus-visible { border-color: var(--danger-text, #b3261e); box-shadow: inset 0 0 0 1px var(--danger-text, #b3261e); } /* a failed code keeps the field focused: one red ring, not red over the blue one */
 .st-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .st-chips li { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 3px 0 8px; border-radius: 4px; background: var(--st-field); border: 1px solid var(--st-edge); font-size: 12.5px; }
 .st-chips li button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; color: var(--st-muted); font-size: 15px; line-height: 1; }
@@ -310,6 +303,9 @@ textarea, .st-textarea { width: 100%; min-height: 72px; padding: 6px 10px; resiz
 .profile-cleanup__feedback { min-width: 0; font-size: 12px; line-height: 16px; color: var(--st-muted); }
 .profile-cleanup__loading { margin: 0; font-size: 12px; color: var(--st-muted); }
 .profile-cleanup fieldset:disabled .st-switch { opacity: 0.4; }
+/* A group of controls that is off while its switch is off (Noël › Snowfall): a plain fieldset, so every button in it is disabled for the keyboard and for screen readers, dimmed like a disabled switch. */
+.st-dim { min-width: 0; margin: 0; padding: 0; border: 0; }
+.st-dim:disabled { opacity: 0.4; }
 
 /* ── import & export ─────────────────────────────────────── */
 .acira-import-panel { gap: 32px; font-size: 13px; }
@@ -381,7 +377,7 @@ textarea, .st-textarea { width: 100%; min-height: 72px; padding: 6px 10px; resiz
 .app.style-acira .browser-settings.settings-acira .aip-chosen { display: inline-flex; align-items: center; gap: 10px; font: inherit; }
 
 /* Inputs change border color on focus: no outer ring (bible 3.10). */
-.app.style-acira .browser-settings.settings-acira :is(.st-input, textarea, .st-textarea):focus-visible { outline: 0; border-color: var(--st-ring); box-shadow: inset 0 0 0 1px var(--st-ring); }
+/* (Beta 14: the ring is the Active border's, styles/active-border.css 4b: an outline over the field's own edge, in the chosen look.) */
 /* Text areas read like the other fields: a soft fill that grows with its text, an edge only on hover and focus (no resize grip). */
 .app.style-acira .browser-settings.settings-acira :is(textarea, .st-textarea) { min-height: 64px; max-height: 240px; padding: 8px 12px; resize: none; field-sizing: content; border-radius: 8px; background: var(--st-field); border: 1px solid transparent; box-shadow: none; line-height: 18px; transition: border-color 0.12s; }
 .app.style-acira .browser-settings.settings-acira :is(textarea, .st-textarea):hover:not(:disabled) { border-color: var(--st-edge); }

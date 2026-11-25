@@ -85,10 +85,14 @@ test('the model stays the very same state through a New Tab page\'s whole load a
 
 test('main: the model hears the page through quietPatch only, and no colour is read from the New Tab page', () => {
   assert.match(main, /function browserEvent\(id,patch\)\{[^}]*newTabKit\.quietPatch\(state\.tabs\.find\(tab=>tab\.id===id\),patch\);if\(!say\)return;record\(\{type:'state',tabId:id,\.\.\.say\}\);\}/);
-  const start = main.indexOf('blocked:id=>{const tab=state.tabs.find(item=>item.id===id);');
+  // the rule is one named function (Ambient mode reads the same rule); the site colour engine and Ambient mode are both given it
+  const head = 'const siteColourBlocked=id=>{const tab=state.tabs.find(item=>item.id===id);';
+  const start = main.indexOf(head);
   assert.ok(start > 0, 'the site colour\'s blocked rule is where this test expects it');
-  const end = main.indexOf('visible:id=>pageVisible(id)', start);
-  const body = main.slice(start, end).replace(/,\s*$/, '').replace(/^blocked:/, '');
+  const end = main.indexOf(';const siteColour=require(', start);
+  assert.ok(end > start, 'the rule ends where the site colour engine is made');
+  assert.match(main.slice(end), /^;const siteColour=require\('\.\/site-colour\.cjs'\),siteColourControl=siteColour\.createSiteColour\(\{level:\(\)=>state\.settings\.siteColor\|\|'soft',blocked:id=>siteColourBlocked\(id\),/, 'the site colour engine uses that rule');
+  const body = main.slice(start + 'const siteColourBlocked='.length, end);
   const run = (state, flags = {}) => new vm.Script('(' + body + ')').runInNewContext({state, privateMode: flags.privateMode || false, torMode: false, newTabKit: kit});
   const ordinary = {tabs: [{id: 'w', url: 'https://example.com/', contentKind: 'web', browserProfileId: 'p'}, {id: 'n', url: 'acira://new', contentKind: 'web', browserProfileId: 'p'}, {id: 'i', url: 'acira://new', contentKind: 'internal', browserProfileId: 'p'}], browserProfiles: [{id: 'p'}]};
   assert.equal(run(ordinary)('w'), false, 'a website keeps its colour');

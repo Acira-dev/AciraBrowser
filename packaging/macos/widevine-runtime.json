@@ -1,9 +1,9 @@
 {
-  "electron": "44.9.3",
-  "release": "44.9.3+wvcus",
+  "electron": "45.2.1",
+  "release": "45.2.1+wvcus",
   "repository": "castlabs/electron-releases",
   "platforms": {
-    "arm64": {"sha256": "3f49f11710e87974b6b7c7acb2c172c1f37c804f319f7c887e0a791bbda8dc6b", "bytes": 130924538},
-    "x64": {"sha256": "99ca1b2c3bb295d7927ef8d17137952385844d67f63dbe827a7214aecca181fe", "bytes": 134596086}
+    "arm64": {"sha256": "93e1976a66d58004bf25e5b777c979cc3c03513868d5faf294bcd6f58e63bd24", "bytes": 121097932},
+    "x64": {"sha256": "865396e65fc869c2d824a77e1c1bb4c2f5d3392566f00b5e5edeeec1b3f11bed", "bytes": 125023122}
   }
 }

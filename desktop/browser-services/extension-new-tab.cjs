@@ -30,7 +30,8 @@ function isOverridePage(tab) {
 function overrideFor({tab, privateMode = false, torMode = false, split = false, setup = false, baseline = null, choice = null}) {
  // Chrome: "we never allow the new tab page to be overridden in incognito since we need to ensure users see details about what incognito is"
  if (privateMode || torMode || split || setup || !choice || !tab) return null;
- if (tab.url !== NEW_TAB || tab.error || tab.privacy || tab.private) return null;
+ // 14.1: the empty page a close can show (src/runtime/emptyPage.ts) is Acira's quiet page and never loads anything, an extension's page included
+ if (tab.url !== NEW_TAB || tab.error || tab.privacy || tab.private || tab.blank === true) return null;
  if (baseline && baseline.has(tab.id)) return null;
  if (typeof choice.url !== 'string' || !/^chrome-extension:\/\/[a-p]{32}\//.test(choice.url)) return null;
  return {tabId: tab.id, profileId: tab.browserProfileId, extensionId: choice.extensionId, url: choice.url};

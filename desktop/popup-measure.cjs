@@ -6,19 +6,20 @@
 // At scale 1 every result equals the old inline formulas (tests/popup-measure.test.cjs pins that).
 
 /** `current` is the popup's layout in DIPs, `height` its measured content height in DIPs, `lockedTop` the tab viewer's remembered top. */
-function measuredPlacement({current, height, windowHeight, scale = 1, lockedTop}) {
+function measuredPlacement({current, height, windowHeight, scale = 1, lockedTop, page = null}) {
   const px = value => value * scale;
   const anchor = current.anchor || current.bounds;
   const below = windowHeight - anchor.y - anchor.height - px(20), above = anchor.y - px(20);
   // A point anchor (a right-click, a new group's editor beside its sidebar header) is 2 CSS px: 3 DIP at 150%.
   const point = anchor.width <= px(2) + .01 && anchor.height <= px(2) + .01, gap = px(point ? 2 : 8);
-  const up = below < (point ? height : Math.min(height, px(280))) && above > below;
+  // Easy Files flips on its whole height (src/ui/popup.ts popupGeometry has the same rule): the two can never place it differently.
+  const up = below < (point || current.kind === 'easy-files' ? height : Math.min(height, px(280))) && above > below;
   const centered = current.origin?.x === .5 && current.origin?.y === .5, keepTop = current.kind === 'palette';
   const h = Math.min(height, centered || keepTop ? windowHeight - px(120) : Math.max(px(100), up ? above : below), windowHeight - px(24));
   const y = keepTop
     ? Math.max(px(12), Math.min(windowHeight - h - px(12), current.bounds.y))
     : centered
-      ? Math.max(px(60), Math.min(windowHeight - h - px(12), lockedTop !== undefined ? lockedTop : (windowHeight - h) / 2))
+      ? Math.max(px(current.kind === 'dialog' ? 12 : 60), Math.min(windowHeight - h - px(12), lockedTop !== undefined ? lockedTop : current.kind === 'dialog' && page ? (current.context?.dialog?.top ? page.y + px(16) : page.y + (page.height - h) * .44) : (windowHeight - h) / 2))   // Beta 14: a dialog sits 44 % of the free height down the page area (src/ui/popup.ts popupGeometry has the same rule)
       : Math.max(px(12), Math.min(up ? anchor.y - h - gap : anchor.y + anchor.height + gap, windowHeight - h - px(12)));
   // Same measured height as the layout already carries (a child flyout opening or closing only changes the input area): nothing to place again.
   const unchanged = !centered && !keepTop && Math.abs((current.contentHeight || 0) - height) < .5;
@@ -58,4 +59,46 @@ function fitWindowsOverlay(layout, [windowWidth, windowHeight], scale = 1) {
   return {...layout, overlay: {...layout.overlay, bounds, ...(auxiliaryBounds ? {auxiliaryBounds} : {})}};
 }
 
-module.exports = {measuredPlacement, snapBounds, snapOverlay, fitWindowsOverlay};
+/** The part of the window's content that is on a screen, sideways, in content coordinates: the content rectangle cut by the work area it overlaps most, along a left or right
+ * edge that hangs more than `tolerance` px past that work area (a window dragged past a screen's side; the 8 px a maximised Windows window overhangs is no such window).
+ * Only the sides: a popup is already kept inside the window's height, and a window resting over the Dock keeps its popups where they are. Null when no side hangs (nothing
+ * to fit), or when so little of the window is on any screen (a hidden test window parked off-screen, a minimised one) that fitting to it would only squeeze the popup. */
+function visibleContent(content, workAreas, {minWidth = 400, tolerance = 24} = {}) {
+  let best = null, bestArea = 0;
+  for (const area of workAreas || []) {
+    const width = Math.min(content.x + content.width, area.x + area.width) - Math.max(content.x, area.x), height = Math.min(content.y + content.height, area.y + area.height) - Math.max(content.y, area.y);
+    if (width > 0 && height > 0 && width * height > bestArea) { bestArea = width * height; best = area; }
+  }
+  if (!best) return null;
+  const left = content.x < best.x - tolerance ? best.x - content.x : 0;
+  const right = content.x + content.width > best.x + best.width + tolerance ? best.x + best.width - content.x : content.width;
+  if (!left && right === content.width) return null;
+  return right - left >= minWidth ? {x: left, y: 0, width: right - left, height: content.height} : null;
+}
+
+/** Shifts a popup (and its child flyout) left, right, up or down until it sits inside `visible` with the interface's 12 px margin, so no row of it is ever on the
+ * far side of a screen edge. A popup larger than the visible part is left where it is (it cannot fit; the window must be moved). Pure, in DIPs. A hung-from-anchor
+ * popup keeps its anchor and gets the grow-from point recomputed, so the open animation still starts from the control. */
+function fitOverlayToVisible(layout, visible, scale = 1) {
+  const overlay = layout?.overlay;
+  if (!overlay || !visible || !overlay.bounds) return layout;
+  const margin = Math.round(12 * scale), boxes = [overlay.bounds, overlay.auxiliaryBounds].filter(Boolean);
+  const left = Math.min(...boxes.map(box => box.x)), right = Math.max(...boxes.map(box => box.x + box.width));
+  const top = Math.min(...boxes.map(box => box.y)), bottom = Math.max(...boxes.map(box => box.y + box.height));
+  const shift = (low, high, from, to) => {
+    if (to - from > high - low - 2 * margin) return 0;
+    if (from < low + margin) return low + margin - from;
+    if (to > high - margin) return high - margin - to;
+    return 0;
+  };
+  const dx = shift(visible.x, visible.x + visible.width, left, right), dy = shift(visible.y, visible.y + visible.height, top, bottom);
+  if (!dx && !dy) return layout;
+  const move = box => box && {...box, x: box.x + dx, y: box.y + dy};
+  const centered = overlay.origin?.x === .5 && overlay.origin?.y === .5, anchor = overlay.anchor;
+  const origin = !centered && dx && overlay.origin && anchor && overlay.bounds.width > 0
+    ? {...overlay.origin, x: Math.max(0, Math.min(1, (anchor.x + anchor.width / 2 - (overlay.bounds.x + dx)) / overlay.bounds.width))}
+    : overlay.origin;
+  return {...layout, overlay: {...overlay, bounds: move(overlay.bounds), ...(overlay.auxiliaryBounds ? {auxiliaryBounds: move(overlay.auxiliaryBounds)} : {}), ...(origin ? {origin} : {})}};
+}
+
+module.exports = {measuredPlacement, snapBounds, snapOverlay, fitWindowsOverlay, visibleContent, fitOverlayToVisible};

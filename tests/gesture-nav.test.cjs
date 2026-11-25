@@ -191,6 +191,16 @@ test('main: the side buttons and the swipe share one zone check and one workspac
   assert.ok(main.includes("function stepWorkspace(direction){if(windowClosing)return false;const next=require('./mouse-nav.cjs').steppedWorkspace(windowWorkspaces(state),state.activeWorkspaceId,direction);if(next)dispatch({type:'workspace.select',id:next.id});return Boolean(next);}"), 'the switcher\'s own action');
 });
 
+test('Beta 14 Shelf (tabs on top, a sidebar with the workspace row): its sidebar and its rail are the same sidebar body, so the rule follows it there', () => {
+  const sidebar = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'sidebar', 'AciraSidebar.tsx'), 'utf8');
+  const asides = [...sidebar.matchAll(/<aside[^>]*?className=\{?["`]([^"`]*)["`]/g)].map(m => m[1]);
+  assert.ok(asides.length >= 3, 'the closed sidebar, the rail and the open sidebar (the Shelf or tabs in the sidebar)');
+  for (const name of asides) assert.match(name, /(^| )acira-sidebar( |$)/, `every sidebar root is .acira-sidebar: ${name}`);
+  assert.match(sidebar, /<aside className="ed-rail acira-sidebar"[^>]*aria-hidden="true" inert/, 'the closed sidebar is hidden and inert: never the sidebar zone');
+  assert.ok(sidebar.includes('<WorkspaceRow key="workspaces" state={state}'), 'the open sidebar (the Shelf too) shows the workspace row');
+  assert.ok(sidebar.includes("windowWorkspaces(state).length>1||profilesAsSpaces(state))entries.splice(0,0,{key:'workspaces'"), 'the rail shows the workspaces icon where there is more than one');
+});
+
 test('the test is registered with npm test', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   assert.ok(pkg.testSuites.node.includes('tests/gesture-nav.test.cjs'));

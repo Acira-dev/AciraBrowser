@@ -94,8 +94,8 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
     const line = /const edgeHolds=\{top:false,side:false\},edgeKeys=[^\n]*\n/.exec(text);
     assert.ok(line, 'the source still has the edge item');
     const runtime = require('../desktop/runtime.cjs');
-    Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default' }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: event => emitted.push(event), popupHold: popupHold || { merge: base => base },
-      effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, workspaceIsOpen: runtime.workspaceIsOpen,
+    Object.assign(sandbox, { state: edge.state, pointerHeld: { held: false }, edgeIntent: { busy: false, engaged: false, hover: false, cursor: 'default', carrying: false }, sidebarHandle: { dragging: () => false, geometry: () => null, update() {} }, pageFullscreen: { any: () => false }, wakeInterface: () => {}, emitBrowser: event => emitted.push(event), popupHold: popupHold || { merge: base => base },
+      effectiveView: runtime.effectiveView, hideToolbarOn: runtime.hideToolbarOn, seamlessEdgesOf: runtime.seamlessEdgesOf, sidebarPeekOf: runtime.sidebarPeekOf, miniRailOn: runtime.miniRailOn, workspaceIsOpen: runtime.workspaceIsOpen,
       // 13.7: main's pointer source (desktop/pointer-point.cjs), as a Windows window has it: the screen answer, never the events path (that is Wayland's)
       pointerSource: require('../desktop/pointer-point.cjs').createPointerSource({ platform: 'win32', env: {} }),
       // 13.10: and the pointer witness (the window's own views say the pointer is on it: an unfocused window under the pointer reveals its edges)

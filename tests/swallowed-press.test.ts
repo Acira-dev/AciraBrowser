@@ -134,3 +134,44 @@ test('13.6 final run: a forwarded press that lands on the hidden duplicate butto
   assert.equal(press(root, 100, 16), true, 'press 3 in the beat: still forwarded, the remembered place was not wiped by the hidden button\'s empty box');
   assert.equal(toggled.length, 2);
 });
+
+// D135 (22 Nov): the one-time warm-up (a view transition of kind `edge`, data-edge-warming) swallows presses like a layout switch does: a press on the sidebar button that started in it never reached the button.
+// A press that starts in the warm-up lets it go (a real input) and its click, which lands on the root because the press began there, is handed to the sidebar button.
+function warmRig(buttons: { left: number; top: number; right: number; bottom: number }[], warming = true) {
+  const root = { dataset: {} as { modeSwitch?: string }, querySelectorAll: (selector: string) => selector === SIDEBAR_BUTTON ? buttons.map(box => ({ getBoundingClientRect: () => box })) : [] };
+  const handlers = new Map<string, Handler>(); const clicked: any[] = []; let letGo = 0, clock = 1000, isWarming = warming;
+  const host: PressHost = { root: root as any, listen: (type, h) => { handlers.set(type, h as Handler); return () => { handlers.delete(type); }; }, click: event => { clicked.push(event); }, now: () => clock, warming: () => isWarming, letGo: () => { letGo++; isWarming = false; } };
+  const stop = forwardSwallowedPress(host);
+  const event = (type: string, target: unknown, x: number, y: number, extra: Record<string, unknown> = {}) => ({ type, target, button: 0, clientX: x, clientY: y, detail: 1, defaultPrevented: false, preventDefault() {}, ...extra });
+  return { root, clicked, stop, letGo: () => letGo, handlers, down: (target: unknown, x: number, y: number, extra = {}) => handlers.get('pointerdown')?.(event('pointerdown', target, x, y, extra)), click: (target: unknown, x: number, y: number, extra = {}) => handlers.get('click')?.(event('click', target, x, y, extra)), tick: (ms: number) => { clock += ms; } };
+}
+
+test('D135: a press that starts in the warm-up lets it go at once, and its click (the root, the press began there) goes to the sidebar button under the pointer, once', () => {
+  const r = warmRig([box]);
+  r.down(r.root, 100, 18);
+  assert.equal(r.letGo(), 1, 'the warm-up is let go on the press, before the release');
+  r.tick(90); r.click(r.root, 100, 18);   // the warm-up is over now: no data-mode-switch, no data-edge-warming; the click comes back on the root
+  assert.equal(r.clicked.length, 1, 'handed to the button'); assert.equal(r.clicked[0].clientX, 100); assert.ok(r.clicked[0].detail >= 1);
+  r.click(r.root, 100, 18); assert.equal(r.clicked.length, 1, 'the next click is an ordinary one: the press was spent');
+});
+
+test('D135: nothing else: a press away from the button, a press when no warm-up plays, a press that reached an element, a click that came long after, a right press', () => {
+  const away = warmRig([box]); away.down(away.root, 400, 300); away.tick(90); away.click(away.root, 400, 300);
+  assert.equal(away.letGo(), 1, 'a real input still lets the warm-up go'); assert.equal(away.clicked.length, 0, 'but only the sidebar button is forwarded to');
+  const quiet = warmRig([box], false); quiet.down(quiet.root, 100, 18); quiet.click(quiet.root, 100, 18);
+  assert.equal(quiet.letGo(), 0, 'no warm-up: not touched'); assert.equal(quiet.clicked.length, 0, 'and an ordinary click on the root is the browser\'s');
+  const reached = warmRig([box]); reached.down({ tagName: 'BUTTON' }, 100, 18); reached.click({ tagName: 'BUTTON' }, 100, 18);
+  assert.equal(reached.letGo(), 1, 'an engine that hit-tests during the transition: the warm-up still lets go'); assert.equal(reached.clicked.length, 0, 'nothing to forward: the press reached its element');
+  const late = warmRig([box]); late.down(late.root, 100, 18); late.tick(2000); late.click(late.root, 100, 18);
+  assert.equal(late.clicked.length, 0, 'a click 2 s after is not that press');
+  const right = warmRig([box]); right.down(right.root, 100, 18, { button: 2 }); right.click(right.root, 100, 18, { button: 2 });
+  assert.equal(right.clicked.length, 0, 'a right press'); assert.equal(right.letGo(), 1);
+});
+
+test('D135: a host without a warm-up (the older hosts and every other test) registers the click listener only, and the cleanup removes both listeners', () => {
+  const plain = rig([box], FORWARDED_SWITCH); assert.equal(plain.stopped(), false);
+  const r = warmRig([box]); assert.deepEqual([...r.handlers.keys()].sort(), ['click', 'pointerdown']);
+  r.stop(); assert.equal(r.handlers.size, 0);
+  const src = read('../src/ui/swallowedPress.ts');
+  assert.match(src, /warming: \(\) => root\.dataset\.edgeWarming !== undefined, letGo: \(\) => abortEdgeWarm\(\)/, 'the browser host: the warm-up marks itself on the root');
+});

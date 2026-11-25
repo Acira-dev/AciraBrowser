@@ -100,6 +100,8 @@ class PopupBackdropBroker {
     const valid=()=>!token.cancelled&&Date.now()<until&&!contents.isDestroyed()&&this.owners.get(contents.id)===owner&&owner.currentId()===id&&sameSnapshotContext(context,owner.snapshotContext?.())&&identities.every(item=>!item.contents.isDestroyed()&&item.contents.mainFrame===item.frame&&item.contents.getURL()===item.url)&&sameSnapshotSources(plan,snapshotPlan(context,owner.sources(region)).map(item=>item.source));
     this.snapshotUsed.set(contents,{id,geometry});this.snapshotPending.set(contents.id,token);
     for(const wc of watched){wc.on('did-start-navigation',navigate);wc.on('render-process-gone',retire);wc.on('destroyed',retire);}
+    // A frame that was discarded (the layout moved while it was taken) consumed nothing: asking again for the same box is allowed. Only a delivered frame makes its box "used".
+    const release=()=>{const held=this.snapshotUsed.get(contents);if(held&&held.id===id&&held.geometry===geometry)this.snapshotUsed.delete(contents);};
     let timer;
     const work=Promise.all(plan.map(async({source,capture,bounds})=>{
       if(!valid())return null;this.snapshotCaptures++;
@@ -110,9 +112,9 @@ class PopupBackdropBroker {
         return {key:source.key,bounds,radius:source.radius||0,sourceBounds:{...source.bounds},png};
       }catch{return null;}finally{this.snapshotCaptures--;}
     })).then(frames=>{
-      if(!valid()||frames.some(frame=>!frame)||frames.reduce((sum,frame)=>sum+frame.png.length,0)>LIMITS.maxBytes)return empty;
+      if(!valid()||frames.some(frame=>!frame)||frames.reduce((sum,frame)=>sum+frame.png.length,0)>LIMITS.maxBytes){release();return empty;}
       return {id,sources:frames.map(({png,...frame})=>({...frame,image:'data:image/png;base64,'+png.toString('base64')}))};
-    }).catch(()=>empty);
+    }).catch(()=>{release();return empty;});
     // A timed-out native capture cannot be cancelled; keep its no-pixels pending token until it settles, refusing
     // further requests from this owner. Late images are discarded before PNG conversion and never published.
     void work.finally(()=>{if(this.snapshotPending.get(contents.id)===token)this.snapshotPending.delete(contents.id);});

@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data: https: http:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Side panel site</title>
+<style>
+/* A side panel site (Beta 14, brief section AF): a pinned website in a panel over the page. This frame is a transparent layer over the page area. It draws what is not
+   the site: the scrim that catches a click outside the panel, the card (frosted surface, hairline rim, a soft shadow that falls off on every side and fits inside the card's 12 px margin, so no view edge cuts it), its slim header (site icon,
+   title, then back, reload, dock, open as tab, close) and a veil over the site's place that holds the site's icon on the glass until the page has painted. The site itself is
+   a native view the main process puts on the card (below this layer while the panel rests, above it while the panel opens, closes or switches, so the veil can fade over it).
+   The values are the page-card material Peek and the extension side panel use, so the three read as one surface. Inter, the browser's one typeface. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
+:root{
+ --veil:#161618;--card:#1c1c1f;--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.64);--hover:rgb(255 255 255/.08);--press:rgb(255 255 255/.12);
+ --line:rgb(255 255 255/.10);--highlight:inset 0 1px 0 rgb(255 255 255/.06);--ring:#6ea8ff;
+ --e1:0 0 0 1px rgb(0 0 0/.45),0 1px 2px rgb(0 0 0/.2),0 4px 14px -4px rgb(0 0 0/.34);
+ --strong:cubic-bezier(.23,1,.32,1);--out:cubic-bezier(.2,0,0,1);
+ --in-ms:200ms;--out-ms:160ms;--veil-ms:120ms;--radius:12px;--inset:4px;--header:40px;--shift:20px;
+ color-scheme:dark;
+}
+body.light{
+ --veil:#f6f6f7;--card:#ffffff;--ink:rgb(29 31 36/.90);--ink-2:rgb(29 31 36/.66);--hover:rgb(0 0 0/.06);--press:rgb(0 0 0/.10);
+ --line:rgb(0 0 0/.08);--highlight:inset 0 1px 0 rgb(255 255 255/.7);--ring:#2563eb;
+ --e1:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 4px 14px -4px rgb(0 0 0/.16);
+ color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none}
+#scrim{position:fixed;inset:0;background:transparent}
+/* 14.1: a docked panel's frame is only its column and the gap beside it; a click in the gap is not "outside" (a docked panel stays) */
+body.docked #scrim{pointer-events:none}
+/* The card sits where main puts it (window pixels, in the frame's own coordinates). It comes from the sidebar's side. */
+/* The card is the frame around the site: its surface (#chrome) has the site's place CUT OUT, so while this layer is above the site's page (opening, closing, swapping) the page shows through where the veil is gone,
+   and the veil is the only thing that covers it. A solid card would hide the page until the layers swap and the page would cut in instead of fading in. */
+#card{position:absolute;border-radius:var(--radius);box-shadow:0 0 0 1px var(--line),var(--highlight),var(--e1);opacity:0;transform:translateX(calc(var(--shift) * var(--from)))}
+#chrome{position:absolute;inset:0;background:var(--card)}
+body.right{--from:1}body.left{--from:-1}
+body.in #card,body.rest #card{opacity:1;transform:none;transition:opacity var(--in-ms) var(--strong),transform var(--in-ms) var(--strong)}
+body.out #card{opacity:0;transform:translateX(calc(var(--shift) * var(--from)));transition:opacity var(--out-ms) var(--strong),transform var(--out-ms) var(--strong)}
+/* 14.1: a DOCKED panel leaves by sliding out of its column, whole and opaque, on the page's own spring (desktop/page-motion.cjs SPRING, 480 ms at Premium, 240 at Fast), while
+   the page glides into the column under it from the first frame: one movement, the column never bare (a fade left the page area's bare colour showing until the page arrived) */
+body.docked.out #card{opacity:1;transform:translateX(calc(100% * var(--from)));transition:transform var(--dock-ms) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+/* D124 (14.1): and it ARRIVES the same way: from outside its column's outer edge, whole and opaque, sliding in on the same spring over the page as it is; main takes the column
+   from the page only when the card has landed (the frame's 'entered'), so the column is never bare and the page never vanishes from it in one frame */
+body.docked:not(.in):not(.rest):not(.out) #card{opacity:1;transform:translateX(calc(100% * var(--from)))}
+body.docked.in #card,body.docked.rest #card{opacity:1;transform:none;transition:transform var(--dock-ms) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+/* D124: the slide ends at the landing: the card is put at its rest place in the frame that says it has landed (under 1 px of the spring's tail), so the rim the site appears against is the rest rim */
+body.docked.landed #card{opacity:1;transform:none;transition:none}
+body.still #card{transition:none}
+#bar{position:absolute;inset:0 0 auto;height:var(--header);display:flex;align-items:center;gap:6px;padding:0 6px 0 12px}
+#icon{width:16px;height:16px;flex:none;border-radius:4px;object-fit:contain}
+#icon[src=""]{display:none}
+#name{flex:1;min-width:0;color:var(--ink);font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{all:unset;flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:var(--ink-2);cursor:default;transition:background-color 120ms var(--out),color 120ms var(--out)}
+button:hover{background:var(--hover);color:var(--ink)}
+button:active{background:var(--press)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+/* Flat line icons that draw themselves on hover (brief section G): the stroke is drawn from its start again. */
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+svg path,svg rect{stroke-dasharray:1;stroke-dashoffset:0}
+button:hover svg path,button:hover svg rect{animation:draw 320ms var(--strong)}
+body.calm button:hover svg path,body.calm button:hover svg rect{animation:none}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+#dock[aria-pressed="true"]{color:var(--ink);background:var(--hover)}
+/* The veil: the card's surface over the site's place, with the site's icon centred, until the page has painted; it fades over the page (the page is a native view under this layer then). */
+#veil{position:absolute;inset:var(--header) var(--inset) var(--inset);background:var(--veil,var(--card));border-radius:calc(var(--radius) - var(--inset));box-shadow:0 0 0 1px var(--line);display:grid;place-items:center;opacity:1}
+#veil img{width:32px;height:32px;border-radius:8px;object-fit:contain;opacity:.92}
+#veil img[src=""]{display:none}
+#veil .mark{width:32px;height:32px;border-radius:8px;display:none;place-items:center;background:var(--hover);color:var(--ink-2);font-weight:600;font-size:15px}
+#veil.nomark .mark{display:grid}
+body.veiled #veil{opacity:1;transition:opacity var(--veil-ms) var(--out)}
+body:not(.veiled) #veil{opacity:0;transition:opacity var(--veil-ms) var(--out);pointer-events:none}
+body.out #veil,body.in #veil{transition-duration:calc(var(--veil-ms) * .7)}
+/* D124: a docked card slides in opaque, so its veil is whole from the first frame (a veil fading in over the card's site hole showed the tab's page through the card) */
+body.docked.veiled:not(.rest) #veil{transition:none}
+/* Closing (14.1): a picture of the site's page, laid in the site's place while the live page is still above this layer (nothing changes on screen), so that once the page is
+   hidden the card leaves WITH its content in one glide. No picture in time: the veil comes up at once instead ("covered"), also before the page goes. */
+#snap{position:absolute;left:var(--inset);top:var(--header);width:calc(100% - 2 * var(--inset));height:calc(100% - var(--header) - var(--inset));border-radius:calc(var(--radius) - var(--inset));display:none;pointer-events:none}
+body.snapped #snap{display:block}
+body.covered #veil{opacity:1!important;transition:none!important}
+/* A crashed site: the card says so where the page would be, in the words of a crashed tab, with Reload. The page view is hidden meanwhile. */
+#crash{position:absolute;inset:var(--header) var(--inset) var(--inset);background:var(--veil,var(--card));border-radius:calc(var(--radius) - var(--inset));box-shadow:0 0 0 1px var(--line);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 24px;text-align:center}
+body.crashed #crash{display:flex}
+#crash strong{font-size:15px;line-height:20px;font-weight:500;color:var(--ink)}
+#crash span{font-size:12.5px;line-height:17px;color:var(--ink-2);max-width:280px}
+#crash button{width:auto;height:28px;padding:0 12px;margin-top:10px;box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font-size:12.5px;font-weight:500}
+body.crashed #veil{opacity:0;pointer-events:none}
+/* The edge the width is dragged by: a few pixels on the card's inner side, quiet until it is pointed at. */
+#grip{position:absolute;top:var(--header);bottom:0;width:8px;cursor:col-resize;z-index:2}
+body.right #grip{left:-4px}body.left #grip{right:-4px}
+body.docked #grip{display:none}
+#grip::after{content:'';position:absolute;top:50%;height:36px;margin-top:-18px;width:3px;left:50%;margin-left:-1.5px;border-radius:2px;background:var(--ink-2);opacity:0;transition:opacity 120ms var(--out)}
+#grip:hover::after,body.sizing #grip::after{opacity:.5}
+body.sizing,body.sizing *{cursor:col-resize!important}
+/* 14.1: while the edge is dragged the card is whole under the site (no hole): where the site's page and the card part for a frame, the card's own surface shows, never the page behind */
+body.sizing #chrome{clip-path:none!important}
+@media (forced-colors:active){#card{border:1px solid CanvasText}button:focus-visible{outline-color:Highlight}}
+</style>
+</head>
+<body class="right">
+<div id="scrim"></div>
+<div id="card" role="complementary" aria-labelledby="name">
+ <div id="chrome"></div>
+ <canvas id="snap" aria-hidden="true"></canvas>
+ <div id="bar"><img id="icon" alt="" src=""><span id="name"></span>
+  <button id="back" type="button" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3.5M7.5 3.75 3.25 8l4.25 4.25" pathLength="1"/></svg></button>
+  <button id="reload" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71M13.25 2.75v2.75H10.5" pathLength="1"/></svg></button>
+  <button id="dock" type="button" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="10" rx="1.5" pathLength="1"/><path d="M9.5 3v10" pathLength="1"/></svg></button>
+  <button id="tab" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.75h3.75V6.5M13 3L8 8M11.25 9.25v3.5a.5.5 0 0 1-.5.5h-7.5a.5.5 0 0 1-.5-.5v-7.5a.5.5 0 0 1 .5-.5h3.5" pathLength="1"/></svg></button>
+  <button id="close" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" pathLength="1"/></svg></button>
+ </div>
+ <div id="crash" role="alert"><strong id="crash-title"></strong><span id="crash-msg"></span><button id="crash-reload" type="button"></button></div>
+ <div id="veil" aria-hidden="true"><img id="veil-icon" alt="" src=""><span class="mark" id="veil-mark"></span></div>
+ <div id="grip" role="separator" aria-orientation="vertical"></div>
+</div>
+<script>
+const api=window.sidePanelSitesFrame,$=id=>document.getElementById(id),body=document.body,card=$('card');
+let speed='premium',phase='',run=-1,settleTimer=0,veilTimer=0,sizing=false,last=null,sizeFrom=null,laid=null,want=null;
+const ms=(base)=>speed==='off'?0:Math.round(base*(speed==='fast'?.6:1));
+$('close').addEventListener('click',()=>api.command('close'));
+$('back').addEventListener('click',()=>api.command('back'));
+$('reload').addEventListener('click',()=>api.command('reload'));
+$('dock').addEventListener('click',()=>api.command('dock'));
+$('tab').addEventListener('click',()=>api.command('tab'));
+$('crash-reload').addEventListener('click',()=>api.command('reload'));
+$('scrim').addEventListener('pointerdown',event=>{if(event.button===0||event.button===2)api.command('outside');});
+$('scrim').addEventListener('contextmenu',event=>{event.preventDefault();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')api.command('close');});
+/* Dragging the inner edge: the pointer's window position goes to main, which clamps the width (340 up to three quarters of the page area, 14.1) and moves the card. */
+const grip=$('grip');
+grip.addEventListener('pointerdown',event=>{if(event.button!==0)return;sizing=true;body.classList.add('sizing');grip.setPointerCapture(event.pointerId);sizeFrom=last&&last.card?{x:Math.round(event.screenX),width:last.card.width/(last.scale||1),card:{...last.card}}:null;api.command('resize-start',{x:event.screenX});event.preventDefault();});
+/* 14.1: the card is always the OUTER of the two edges while the edge is dragged. Widening, it moves HERE, in this frame, with main's own arithmetic and limits (state.size:
+   the narrowest and widest in interface px, the room in window px), ahead of the page main moves from the same event; narrowing, it waits for main's state, after the page.
+   Either way the two can part by a frame only INSIDE the card, where its surface shows (no hole while sizing), never the page behind and never the site past the card's edge. */
+const follow=event=>{
+ const s=last&&last.size,from=sizeFrom;if(!s||!from)return;
+ const k=last.scale||1,dir=last.side==='left'?1:-1,width=Math.min(s.max,Math.max(s.min,Math.round(from.width+(Math.round(event.screenX)-from.x)*dir/k)));
+ const px=Math.min(Math.round(width*k),s.room),c=from.card;
+ want=px;if(laid&&px<laid.width)return;
+ layout({...last,card:{x:dir>0?c.x:c.x+c.width-px,y:c.y,width:px,height:c.height},hole:null});
+};
+grip.addEventListener('pointermove',event=>{if(!sizing)return;follow(event);api.command('resize-move',{x:event.screenX});});
+const stop=event=>{if(!sizing)return;sizing=false;sizeFrom=null;want=null;body.classList.remove('sizing');try{grip.releasePointerCapture(event.pointerId);}catch{}api.command('resize-end');};
+grip.addEventListener('pointerup',stop);grip.addEventListener('pointercancel',stop);
+grip.addEventListener('dblclick',()=>api.command('reset-width'));
+const letter=name=>(String(name||'').trim().match(/[\p{L}\p{N}]/u)||['?'])[0].toUpperCase();
+/* The main process speaks in window pixels; this page is zoomed with the interface, so one CSS pixel is `scale` window pixels. */
+const rr=(x,y,w,h,r)=>`M${x+r} ${y}H${x+w-r}A${r} ${r} 0 0 1 ${x+w} ${y+r}V${y+h-r}A${r} ${r} 0 0 1 ${x+w-r} ${y+h}H${x+r}A${r} ${r} 0 0 1 ${x} ${y+h-r}V${y+r}A${r} ${r} 0 0 1 ${x+r} ${y}Z`;
+function layout(state){
+laid=state.card;
+ const frame=state.card,k=state.scale||1,w=frame.width/k,h=frame.height/k,r=(state.radius||12)/k,inset=state.inset||4,header=40;
+ card.style.left=frame.x/k+'px';card.style.top=frame.y/k+'px';card.style.width=w+'px';card.style.height=h+'px';
+ document.documentElement.style.setProperty('--radius',r+'px');
+ /* the surface: the card's outline with the site's own rounded card (one inset smaller in radius) cut out */
+ const hole=rr(inset,header,Math.max(0,w-2*inset),Math.max(0,h-header-inset),Math.max(2,r-inset));
+ $('chrome').style.clipPath=`path(evenodd,'${rr(0,0,w,h,r)} ${hole}')`;
+ /* the close's picture goes exactly where main has the page's view (window pixels from main, so it lands on the same device pixels at any interface size) */
+ const site=state.hole,snap=$('snap').style;
+ if(site){snap.left=site.x/k+'px';snap.top=site.y/k+'px';snap.width=site.width/k+'px';snap.height=site.height/k+'px';snap.borderRadius=site.radius/k+'px';}
+}
+api.onState(state=>{
+ last=state;
+ body.classList.toggle('light',!state.dark);
+ body.classList.toggle('left',state.side==='left');body.classList.toggle('right',state.side!=='left');
+ body.classList.toggle('docked',!!state.docked);
+ body.classList.toggle('calm',state.speed==='off'||!!state.reduced);
+ speed=state.speed||'premium';
+ const root=document.documentElement.style;
+ root.setProperty('--in-ms',ms(200)+'ms');root.setProperty('--out-ms',ms(160)+'ms');root.setProperty('--veil-ms',ms(120)+'ms');
+ root.setProperty('--shift',(state.docked?10:20)+'px');root.setProperty('--dock-ms',(speed==='fast'?240:speed==='off'?0:480)+'ms');
+ document.documentElement.lang=state.lang||'en';document.documentElement.dir=state.rtl?'rtl':'ltr';
+ /* while the edge is dragged, main's card (a step behind the pointer) is taken only when it is at least as wide as the pointer asks: it never pulls a widening card back */
+ if(state.card&&!(sizing&&want!==null&&state.card.width<want))layout(state);
+ const site=state.site||{};
+ $('name').textContent=site.title||'';$('icon').src=site.icon||'';$('veil-icon').src=site.icon||'';
+ $('veil').classList.toggle('nomark',!site.icon);$('veil-mark').textContent=letter(site.title);
+ const labels=state.labels||{};
+ for(const [id,key] of [['back','back'],['reload','reload'],['tab','openAsTab'],['close','close']]){const label=labels[key]||'';$(id).setAttribute('aria-label',label);$(id).title=label+(id==='close'&&labels.closeKey?' ('+labels.closeKey+')':'');}
+ const dock=$('dock'),dockLabel=state.docked?labels.undock:labels.dock;dock.setAttribute('aria-label',dockLabel||'');dock.title=dockLabel||'';dock.setAttribute('aria-pressed',state.docked?'true':'false');
+ $('back').hidden=!state.canGoBack;
+ body.classList.toggle('crashed',!!state.crashed);
+ $('crash-title').textContent=labels.crashTitle||'';$('crash-msg').textContent=labels.crashMessage||'';$('crash-reload').textContent=labels.reload||'';
+ body.classList.toggle('veiled',state.veiled!==false);
+ if(state.phase&&(state.phase!==phase||(state.phase==='in'&&state.run!==run))){
+  phase=state.phase;run=state.run;clearTimeout(settleTimer);
+  if(phase!=='rest')body.classList.remove('landed');
+  if(phase!=='out'&&phase!=='still'&&phase!=='cover'){body.classList.remove('snapped','covered');const snap=$('snap');snap.width=0;snap.height=0;}
+  if(phase==='in'){
+   /* a docked card turned round on its way out goes back in from where it is (no jump to the start); any other opening starts afresh */
+   const turning=state.docked&&body.classList.contains('out');
+   body.classList.remove('out','rest','still');if(!turning){body.classList.add('still');void card.offsetWidth;body.classList.remove('still');}
+   requestAnimationFrame(()=>{body.classList.add('in');/* the card is whole and opaque well before its last pixels settle: the page goes under the veil and the veil starts to fade then, so the site shows about when the card has finished (the brief's ~200 ms), not 120 ms after */
+   /* docked (D124): landed when main says the card is within 1 px of its place on the spring (state.land), not when the spring formally ends */
+   settleTimer=setTimeout(()=>{if(body.classList.contains('docked'))body.classList.add('landed');body.classList.add('rest');api.command('entered');},state.docked?(Number.isFinite(state.land)?state.land:(speed==='fast'?240:speed==='off'?0:480)+20):Math.round(ms(200)*.7)+20);});
+  }else if(phase==='still'||phase==='cover'){
+   /* closing, first step: the picture (or the veil) is painted in the site's place under the live page; main hides the page only when told, two frames after the paint */
+   const told=state.run,painted=()=>{if(phase!==state.phase||run!==told)return;requestAnimationFrame(()=>requestAnimationFrame(()=>api.command('still-ready',{x:told})));};
+   if(phase==='cover'){body.classList.add('covered');painted();}
+   else{
+    /* the page's own pixels (BGRA from main) on a canvas of their size, scaled into the site's place: exactly the live page (no JPEG, no colour conversion) */
+    try{const still=state.still,rgba=new Uint8ClampedArray(still.pixels),u=new Uint32Array(rgba.buffer),canvas=$('snap');
+     for(let i=0;i<u.length;i++){const v=u[i];u[i]=(v&0xff00ff00)|((v&0xff)<<16)|((v>>>16)&0xff);}
+     canvas.width=still.width;canvas.height=still.height;canvas.getContext('2d').putImageData(new ImageData(rgba,still.width,still.height),0,0);
+     body.classList.add('snapped');painted();
+    }catch{/* main puts the veil there instead */}
+   }
+  }else if(phase==='out'){
+   body.classList.remove('in','rest');body.classList.add('out');settleTimer=setTimeout(()=>api.command('gone'),(state.docked?(speed==='fast'?240:480):ms(160))+20);
+  }else if(phase==='rest'){
+   body.classList.remove('out','still');body.classList.add('in','rest');
+  }
+ }
+ clearTimeout(veilTimer);
+ if(!body.classList.contains('veiled'))veilTimer=setTimeout(()=>api.command('veil-gone'),ms(120)+20);
+});
+</script>
+</body>
+</html>

@@ -16,7 +16,7 @@ function Row({ item, index, count, reduced, onToggle, onMove, onDragEnd }: { ite
   return <Reorder.Item as="li" value={item} data-item={item.id} dragListener={false} dragControls={controls} onDragEnd={onDragEnd} transition={aciraSpring(reduced, motionScale() > 0 ? 1 / motionScale() : 1)} className="toolbar-customize-row" data-hidden={!item.visible || undefined}
     onKeyDown={event => { if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) { event.preventDefault(); event.stopPropagation(); onMove(event.key === 'ArrowUp' ? -1 : 1); } }}>
     <span className="toolbar-customize-grip" aria-hidden="true" onPointerDown={event => controls.start(event)}/>
-    <label className="toolbar-customize-check" title={label}><input type="checkbox" checked={item.visible} onChange={onToggle} aria-describedby="toolbar-customize-hint"/><span>{label}</span></label>
+    <label className="toolbar-customize-check" title={label}><input className="popup-check" type="checkbox" checked={item.visible} onChange={onToggle} aria-describedby="toolbar-customize-hint"/><span>{label}</span></label>
     <button type="button" className="toolbar-customize-move" aria-label={t("toolbarcustomizer.moveLabelLeft", { label: label })} title={t("toolbarcustomizer.moveLeftAltUp")} disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={14}/></button>
     <button type="button" className="toolbar-customize-move down" aria-label={t("toolbarcustomizer.moveLabelRight", { label: label })} title={t("toolbarcustomizer.moveRightAltDown")} disabled={index === count - 1} onClick={() => onMove(1)}><ArrowUp size={14}/></button>
   </Reorder.Item>;
@@ -41,7 +41,7 @@ export function ToolbarCustomizer({ profileId, settings, tab, reduced, dispatch 
     </Reorder.Group>
     <p className="popup-label">{t("toolbarcustomizer.alsoInTheToolbar")}</p>
     <ul className="toolbar-customize-list">
-      {builtins.map(item => <li key={item.id} className="toolbar-customize-row fixed"><label className="toolbar-customize-check"><input type="checkbox" checked={item.checked} onChange={() => dispatch(item.action)}/><span>{item.label.replace(/^Show /, '').replace(/^./, c => c.toUpperCase())}</span></label></li>)}
+      {builtins.map(item => <li key={item.id} className="toolbar-customize-row fixed"><label className="toolbar-customize-check"><input className="popup-check" type="checkbox" checked={item.checked} onChange={() => dispatch(item.action)}/><span>{item.label.replace(/^Show /, '').replace(/^./, c => c.toUpperCase())}</span></label></li>)}
     </ul>
     <div className="toolbar-customize-footer"><span>{t("toolbarcustomizer.theAciraMenuAlwaysStays")}</span><button type="button" className="toolbar-customize-reset" onClick={() => { resetToolbarItems(profileId); dispatch({ type: 'settings.update', patch: { showHome: true, showTabOverview: true, showZoomIcon: true, showBookmarkStar: true } }); }}>{t("browsersettings.reset")}</button></div>
   </div>;

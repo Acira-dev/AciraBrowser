@@ -153,3 +153,14 @@ test('macOS: a key that is also an application-menu accelerator stays the browse
     assert.equal(matchesMenuAccelerator(rules, input, shortcutKey), false, JSON.stringify([input.key, input.shift, input.control]));
   assert.equal(matchesMenuAccelerator(null, cmd('r'), shortcutKey), false, 'Windows and Linux have no menu');
 });
+
+// 14.1 (reported 21 Nov, Windows): "Ctrl+Shift+E doesn't work in Seamless". On Windows the key resolves to the sidebar toggle in either case and follows
+// Chromium's routing like every unreserved browser key: the page sees it first and the toggle runs when the page leaves it. The Seamless fault was the edge
+// switch's (tests/edge-reveal.test.cjs, "side switch off").
+test('Windows: Ctrl+Shift+E is the sidebar toggle, run once the page leaves the key unhandled', () => {
+  for (const key of ['E', 'e']) {
+    const input = down(key, {control: true, shift: true});
+    assert.deepEqual(resolveDefaultShortcut(input, 'win32'), {action: 'workspace'}, key);
+    assert.equal(route('win32', input), RESULT.NOT_HANDLED_IS_SHORTCUT, key);
+  }
+});

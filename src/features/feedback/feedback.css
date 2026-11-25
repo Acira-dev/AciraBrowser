@@ -1,0 +1,147 @@
+/* Beta 14 section E: the report pop-up, the contributor block in the profile viewer, Your reports, the ranks overlay, the ring around a profile picture and the quiet dot.
+   Panel tokens only (--menu-*, --accent, --danger); Inter comes from the app. Logical properties throughout so the right-to-left languages mirror. */
+
+/* The ring around a profile picture is src/styles/rank-ring.css (one place for its numbers, shared with the aura). */
+/* The quiet dot on the profile button while something waits in the viewer. */
+.app .fb-dot{position:absolute;inset-block-start:1px;inset-inline-end:1px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 1.5px var(--menu-surface,var(--surface,#fff));pointer-events:none}
+
+/* ── The Report a bug button on the new-tab page: a bare glyph in the bottom corner (the team's notes 17 Nov, A2). No circle, no fill, no shadow; the end corner (bottom left in right-to-left). 32 px hit area. ─── */
+.app .nt-workspace-actions{display:flex;flex:none;align-items:center;gap:8px}
+.app .nt-feedback{position:absolute;z-index:3;inset-inline-end:16px;inset-block-end:16px;display:grid;place-items:center;width:32px;height:32px;margin:0;padding:0;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--nt-text-2);opacity:1;cursor:default;transition:color 120ms var(--nt-ease,ease)}
+.app .nt-feedback:hover,.app .nt-feedback[aria-expanded=true]{color:var(--text-primary)}
+.app .nt-feedback:active{opacity:.7}
+.app .nt-feedback:focus-visible{outline:2px solid var(--nt-ring,var(--accent));outline-offset:2px}
+/* over a painting it stays readable (the page's text is light there) */
+.app .nt-page[data-style=full][data-art=on] .nt-feedback{color:rgb(255 255 255/.74);filter:drop-shadow(0 1px 2px rgb(0 0 0/.5))}
+.app .nt-page[data-style=full][data-art=on] .nt-feedback:hover,.app .nt-page[data-style=full][data-art=on] .nt-feedback[aria-expanded=true]{color:#fff}
+.app[data-reduced-motion='true'] .nt-feedback{transition:none}
+.app .nt-workspace-profile,.app .profile-button,.app .sb-foot-profile{position:relative}
+.app .sb-foot-profile .fb-dot{inset-block-start:4px;inset-inline-start:21px;inset-inline-end:auto}
+/* the Shelf rail's 36 px profile button (24 px picture): the dot sits on the picture's corner, as on the foot (earlier work's measure) */
+.app .sb-rail-profile .fb-dot{inset-block-start:5px;inset-inline-end:3px}
+.app .profile-button .fb-dot{inset-block-start:3px;inset-inline-end:3px}
+.app .nt-workspace-profile .fb-dot{inset-block-start:3px;inset-inline-end:3px}
+
+/* ── The report pop-up ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* C2 (docs/launch/POPUP_SPACING_RULEBOOK.md): 16 from the glass on every side (the pop-up's 4 + the 2 the measurement adds + 10 here), 16 between groups, 12 / 6 / 4 inside them. */
+.app .fb-panel{display:flex;flex-direction:column;gap:16px;box-sizing:border-box;padding:12px;min-width:0}
+.app .fb-group{display:flex;flex-direction:column;gap:12px;min-width:0}
+.app .fb-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.app .fb-ticks{display:flex;flex-direction:column;gap:4px;min-width:0}
+.app .fb-panel[data-over]{box-shadow:inset 0 0 0 1.5px var(--accent);border-radius:8px}
+.app .fb-label{font:500 12px/16px var(--font-ui);color:var(--menu-t2)}
+.app .fb-chips{display:flex;flex-wrap:wrap;gap:6px}
+.app .fb-chip{height:28px;padding:0 12px;border:1px solid var(--menu-line);border-radius:14px;background:transparent;color:inherit;font:400 12.5px/1 var(--font-ui);cursor:default;white-space:nowrap}
+.app .fb-chip:hover{background:var(--menu-hover)}
+.app .fb-chip[aria-pressed=true]{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 13%,transparent)}
+.app .fb-chip:focus-visible,.app .fb-add:focus-visible,.app .fb-link:focus-visible,.app .fb-rank-cell:focus-visible,.app .fb-mark-chip:focus-visible,.app .fb-thumb-remove:focus-visible,.app .fb-note-dismiss:focus-visible,.app .fb-text:focus-visible,.app .fb-tick input:focus-visible+.fb-tick-box{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:2px}
+.app .fb-text{box-sizing:border-box;width:100%;min-width:0;min-height:88px;padding:8px 12px;border:1px solid var(--menu-line);border-radius:6px;background:transparent;color:inherit;font:400 13px/18px var(--font-ui);resize:none}
+.app .fb-text::placeholder{color:var(--menu-t3)}
+.app .fb-tick{display:flex;align-items:center;gap:8px;font:400 13px/18px var(--font-ui);cursor:default}
+.app :where(.fb-tick) input.fb-tick-input{position:absolute;opacity:0;width:16px;height:16px;margin:0;pointer-events:none}
+.app .fb-tick-box{display:grid;place-items:center;flex:none;width:16px;height:16px;border:1px solid var(--menu-line);border-radius:4px;color:transparent}
+.app .fb-tick input:checked+.fb-tick-box{border-color:transparent;background:var(--toggle-on,var(--accent));color:#fff}
+.app .fb-fine{margin:0;font:400 12px/16px var(--font-ui);color:var(--menu-t3);overflow-wrap:anywhere}
+.app .fb-fine-tick{margin:0;padding-inline-start:24px}
+.app .fb-attach{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.app .fb-add{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border:1px dashed var(--menu-line);border-radius:6px;background:transparent;color:inherit;font:400 12.5px/1 var(--font-ui);cursor:default}
+.app .fb-add:hover:not(:disabled){background:var(--menu-hover)}
+.app .fb-add:disabled{opacity:.5}
+.app .fb-group-files{gap:8px}
+.app .fb-thumbs{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.app .fb-thumb{position:relative;width:80px;height:64px;overflow:hidden;border:1px solid var(--menu-line);border-radius:6px;background:var(--menu-hover)}
+.app :where(.fb-thumb) img.fb-thumb-media,.app :where(.fb-thumb) video.fb-thumb-media{display:block;width:100%;height:100%;object-fit:contain}
+.app .fb-thumb-wait{display:block;width:100%;height:100%}
+.app .fb-thumb-remove{position:absolute;inset-block-start:3px;inset-inline-end:3px;display:grid;place-items:center;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:rgb(0 0 0 / .62);color:#fff;cursor:default}
+.app .fb-check{margin:0;font:500 12px/16px var(--font-ui)}
+.app .fb-problem{margin:0;font:400 12px/16px var(--font-ui);color:var(--danger)}
+/* The footer is one row: the credit line (fine print, muted) on the leading side, Send (28 px, primary) on the trailing end. No fill, no shadow, not sticky (the pop-up scrolls as a whole where it is taller than the window), no separator. */
+.app .fb-foot{display:flex;align-items:center;gap:16px;min-width:0}
+.app .fb-foot .fb-credit{flex:1;min-width:0}
+.app .fb-foot .fb-send{flex:none}
+.app .fb-actions{display:flex;justify-content:flex-end;gap:8px}
+.app .fb-credit{margin:0;font:400 12px/16px var(--font-ui);color:var(--menu-t3)}
+.app .fb-link{display:inline;padding:0;border:0;background:none;color:var(--accent);font:inherit;cursor:default}
+.app .fb-link:hover{text-decoration:underline;text-underline-offset:2px}
+.app .fb-sent{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:4px 0 2px}
+.app .fb-sent-mark{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.app .fb-sent-line{margin:0;font:500 13px/18px var(--font-ui)}
+.app .fb-sent-talk{margin:0;font:400 13px/18px var(--font-ui);color:var(--menu-t2)}
+.app .fb-sent .fb-actions{align-self:stretch;margin-block-start:4px}
+
+/* ── The profile viewer's contributor block, the notes and Your reports ─────────────────────────────────────────────────────────────────────── */
+.app .fb-card{padding:6px 12px 8px}
+.app .fb-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:24px}
+.app .fb-card-label{display:inline-flex;align-items:center;gap:8px;min-width:0;font:500 13px/20px var(--font-ui)}
+.app .fb-card-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .fb-points{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 8px;border-radius:6px;background:var(--menu-hover);box-shadow:inset 0 0 0 1px var(--menu-line);font:500 12px/1 var(--font-ui);font-variant-numeric:tabular-nums;white-space:nowrap}
+.app .fb-away{margin:4px 0 0;padding-inline-start:16px;font:400 12px/16px var(--font-ui);color:var(--menu-t3)}
+.app .fb-also{margin-block-start:2px}
+.app .fb-note{position:relative;margin:0 0 8px;padding:12px 32px 12px 12px;border-radius:8px;background:var(--menu-hover);box-shadow:inset 0 0 0 1px var(--menu-line)}
+[dir=rtl] .app .fb-note,.app[dir=rtl] .fb-note{padding:12px 12px 12px 32px}
+.app :where(.fb-note-lines) p.fb-note-line{margin:0;font:400 12px/17px var(--font-ui);color:var(--menu-t2)}
+.app :where(.fb-note-lines) p.fb-note-line[data-first]{font:500 13px/18px var(--font-ui);color:inherit}
+/* Rank emblems (a proposal under review, shown only when the view names a drawing): the emblem takes the dot's place, and the ranks overlay and the note give it room. */
+.app .fb-rank-row[data-emblem] .fb-rank-cell{min-height:126px;padding-block:16px 12px;overflow:visible}
+.app .fb-rank-row[data-emblem] .fb-rank-cell .re{margin-block-end:2px}
+/* The emblem's centre sits over the centre of the icons of the rows below, and the name over their titles. */
+.app .fb-card-label .re{margin-inline-start:-8px;margin-inline-end:-4px}
+.app .fb-note[data-emblem]{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:12px}
+.app .fb-note[data-emblem] .fb-note-emblem{display:grid;place-items:center;width:44px;height:44px}
+.app .fb-note[data-emblem] .fb-note-ask{grid-column:1/-1}
+.app .fb-note-dismiss{position:absolute;inset-block-start:6px;inset-inline-end:6px;display:grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--menu-t3);cursor:default}
+.app .fb-note-dismiss:hover{background:var(--menu-hover);color:inherit}
+.app .fb-note-ask{display:flex;flex-direction:column;gap:8px;margin-block-start:8px}
+.app :where(.fb-note-ask) label.fb-note-ask-label{font:500 12px/16px var(--font-ui)}
+.app :where(.fb-note-ask) input.fb-note-ask-input{box-sizing:border-box;width:100%;min-width:0;height:30px;padding:0 12px;border:1px solid var(--menu-line);border-radius:6px;background:transparent;color:inherit;font:400 13px var(--font-ui)}
+.app :where(.fb-note-ask) input.fb-note-ask-input:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:2px}
+.app .fb-note-buttons{display:flex;justify-content:flex-end;gap:8px}
+.app .fb-reports{display:flex;flex-direction:column}
+.app .fb-report-list{margin:0;padding:0 4px 4px;list-style:none;display:flex;flex-direction:column;gap:2px}
+.app .fb-report{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:6px}
+.app .fb-report-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 13px/18px var(--font-ui)}
+.app .fb-report-meta{display:flex;gap:6px;font:400 12px/16px var(--font-ui);color:var(--menu-t3)}
+.app .fb-report[data-status=working] .fb-report-status{color:inherit}
+.app .fb-empty{margin:4px 12px 12px;font:400 12.5px/17px var(--font-ui);color:var(--menu-t3)}
+
+/* ── View ranks ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* C4 (docs/launch/POPUP_SPACING_RULEBOOK.md): title -> its sentence 8, sentence -> the rank group 16, group -> the detail 24, detail -> points 20, points -> Hide 8; the inset is 18 / 20 / 18. */
+.app .fb-ranks{display:flex;flex-direction:column;gap:0;box-sizing:border-box;padding:20px;min-width:0}
+.app .fb-ranks-lead{margin:8px 0 0;font:400 13px/18px var(--font-ui);color:var(--menu-t2)}
+.app .fb-ranks-head{display:flex;align-items:center;justify-content:space-between}
+.app :where(.fb-ranks-head) h2.fb-ranks-title{margin:0;font:500 16px/22px var(--font-ui)}
+.app .fb-rank-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.app .fb-rank-detail{margin-block-start:24px}
+.app .fb-rank-cell{display:flex;flex-direction:column;align-items:center;gap:8px;min-height:112px;padding:12px 4px 12px;border:1px solid var(--menu-line);border-radius:8px;background:transparent;color:inherit;font:400 12px/15px var(--font-ui);text-align:center;cursor:default}
+.app .fb-rank-cell:hover{background:var(--menu-hover)}
+.app .fb-rank-cell[aria-checked=true]{background:var(--menu-hover);border-color:color-mix(in srgb,currentColor 28%,transparent)}
+.app .fb-rank-name{display:block;overflow-wrap:anywhere;hyphens:auto}
+.app .fb-rank-yours{font:500 11px/14px var(--font-ui);color:var(--accent)}
+.app .fb-rank-cell[data-mine] .fb-rank-name{font-weight:500}
+.app :where(.fb-rank-detail) h3.fb-rank-detail-name{margin:0 0 8px;font:500 14px/20px var(--font-ui)}
+.app :where(.fb-rank-detail) dl.fb-rank-facts{display:grid;grid-template-columns:minmax(0,96px) minmax(0,1fr);gap:8px 12px;margin:0}
+.app :where(.fb-rank-detail) dt.fb-rank-fact-name{font:400 12px/17px var(--font-ui);color:var(--menu-t3)}
+.app :where(.fb-rank-detail) dd.fb-rank-fact{margin:0;font:400 13px/18px var(--font-ui)}
+/* B4 (the reference design, 17 Nov): the four cards and the Early Member chip are one group; the chip sits 10px under the grid (the note's own number), a pill 32px tall (a 20px seal, the name, " · Yours" when the mark is this profile's) that is chosen like a card and opens its text in the detail area. C4: the group sits 16 under the sentence, the detail 24 under the group, the points line 20 under the detail, Hide 8 under the points. */
+.app .fb-rank-pick{display:flex;flex-direction:column;gap:12px;min-width:0;margin-block-start:16px}
+.app .fb-marks{display:flex}
+.app .fb-mark-chip{display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;height:32px;padding:0 12px 0 6px;border:1px solid var(--menu-line);border-radius:999px;background:transparent;color:inherit;font:500 12px/16px var(--font-ui);cursor:default}
+.app .fb-mark-chip:hover{background:var(--menu-hover)}
+.app .fb-mark-chip[aria-checked=true]{background:var(--menu-hover);border-color:color-mix(in srgb,currentColor 28%,transparent)}
+.app .fb-mark-name{white-space:nowrap}
+.app :where(.fb-rank-detail) p.fb-rank-about{margin:0;font:400 13px/18px var(--font-ui)}
+.app .fb-ranks-points{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:20px 0 0;font:400 12.5px/17px var(--font-ui);color:var(--menu-t2)}
+.app .fb-ranks-off{align-self:flex-start;margin-block-start:8px;font:400 12px/16px var(--font-ui)}
+.app[data-reduced-motion=true] .fb-chip{transition:none}
+@media (forced-colors:active){.app .fb-chip,.app .fb-rank-cell,.app .fb-mark-chip,.app .fb-text,.app .fb-note{border:1px solid CanvasText}.app .fb-chip[aria-pressed=true],.app .fb-rank-cell[aria-checked=true],.app .fb-mark-chip[aria-checked=true]{outline:2px solid Highlight}}
+
+/* The two panels carry their own heading (the tabs, the ranks title): the popup's generic header is not drawn. */
+:root:root:root .browser-popup.popup-content-feedback>.popup-header,:root:root:root .browser-popup.popup-content-ranks>.popup-header,:root:root:root .browser-popup.popup-content-insider>.popup-header,:root:root:root .browser-popup.popup-content-member-card>.popup-header{display:none}
+
+/* Beta 14: in the ranks row the seals are the 48 px full renders; the ones that are not the person's own step back with a plain opacity (never a recolour), and come forward on hover and focus. */
+.app .fb-rank-cell .seal{transition:opacity 160ms cubic-bezier(.2,0,0,1)}
+.app .fb-rank-row[data-has-mine] .fb-rank-cell:not([data-mine]) .seal{opacity:.55}
+.app .fb-rank-row[data-has-mine] .fb-rank-cell:not([data-mine]):is(:hover,:focus-visible) .seal{opacity:1}
+.app .fb-card-label .seal{margin-inline-end:0}
+.app .fb-seal-button{display:inline-grid;place-items:center;flex:none;padding:0;border:0;background:none;color:inherit;border-radius:50%;cursor:default}
+.app .fb-seal-button:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:2px}

@@ -1,15 +1,29 @@
+import {memberCardLayout} from '../features/memberCard/cardData';
+import { miniRailShown } from '../runtime/miniSidebar';
 import {isTorSupported} from './platform';
 import type { BrowserSnapshot,Rectangle,Settings,SidebarSide,TabSession } from '../runtime/types';
 import { clampSidebarWidth } from './sidebarLayout';
+import { r4Layout } from './pictureSwitcher';
+import { readCtrlTabShow } from './tabMru';
+import { RAIL_WIDTH,railOn,sidebarOn } from '../runtime/shelf';
 import { groupForTab } from '../runtime/tabGroups';
 import { menuHeight,menuRowHeight,readMenuLayout,platformMenuLayout } from './menuPrefs';
-import { profilesAsSpaces,windowWorkspaces } from '../runtime/workspaces';
+import { sidebarRowOf } from './sidebarClosedChoice';
+import { transferBlocked } from '../features/transfer/entryPoints';
+import { MAX_WORKSPACES,profilesAsSpaces,windowWorkspaces,workspaceIdOf } from '../runtime/workspaces';
+import { peekTaskManagerExtensions } from './taskManagerRows';
 import { splitGroupMenu } from '../runtime/splitPlacement';
 import { peekWorkspaceTarget } from './workspaceTargetStore';
+import { peekMoreTarget } from './extensionMoreTarget';
+import { overflowHeight, peekOverflowRows } from './overflowRows';
 import { updatePanelPhase } from './updatePhase';
 import { currentLocale } from '../i18n';
+import { TREE_ROW_HEIGHT,allOpenRowCount } from './bookmarkTreeRows';
 import { PANEL_DOWNLOAD_ROWS,PANEL_DOWNLOAD_ROW_HEIGHT,profileDownloads } from './downloadActivity';
 import type { LocaleCode } from '../i18n/locales';
+import { contributorBlockHeight } from '../features/feedback/blockHeight';
+import { easyFilesHeight, EF } from '../features/easyFiles/layout';
+import { favoriteMenuHeight } from './favoriteMenuHeight';
 
 /** The compact menus have one width per kind (260; the toolbar menu 300), which holds English's longest row (a label and its
  * shortcut) untruncated. A language whose longest row is longer gets the width that row measures (label, icon, shortcut, paddings,
@@ -25,31 +39,45 @@ export const MENU_WIDTHS:Record<string,Partial<Record<LocaleCode,number>>>={
  'workspace-context':{ru:270},
  // The workspace menu (280): its "Need other sign-ins for a site?" row and Russian "Next/Previous workspace" were cut (3 Nov, measured in the app).
  'workspace-menu':{es:360,fr:320,de:340,'pt-BR':300,ja:300,ar:300,tr:310,ru:300},
- // The Acira menu (340): Arabic "Tabs" shares its row with the Top / Sidebar switch and lost its last letters to an ellipsis (81px of 91; Turkish 76 of 82). The
+ // The Acira menu (MENU_BASE_WIDTH, 350): Arabic "Tabs" shares its row with the Top / Sidebar switch and lost its last letters to an ellipsis (81px of 91; Turkish 76 of 82, which the 350 base now holds). The
+ // "Sidebar: Open | Mini | Hidden" row (Beta 14) has three equal text columns as wide as the longest word: German "Ausgeblendet" makes the track 286px and left its label 27px ("S…": 68px short at 340,
+ // so 410 here), Russian 13 short (360); Italian and French need 346 and 342 and the English transfer row 340.6, all inside the 350 base. Measured on the packaged builds and this tree with qa/menu-fit/rig.mjs (18 Nov 2026, 13 languages). The
  // Protection panel (320): the Japanese "Saved for this site in this profile." line needs 274px, the panel gave it 264 (German 266, Russian 285).
- 'menu':{ar:360,tr:350},
+ 'menu':{ar:360,ru:360,de:410},
  // More tools (340): French "Effacer les données de navigation…" beside its key (221px of 209 even with ⇧⌘⌫).
  'more-tools':{fr:360},
  'protection':{ja:330,de:330,ru:350},
 };
+/** The Acira menu's width in English and in every language whose longest row fits (340 cut English "Move or copy this profile to another computer" by half a pixel, an ellipsis since Beta 14's first build). */
+export const MENU_BASE_WIDTH=350;
 export const localeMenuWidth=(kind:string,locale:LocaleCode=currentLocale())=>MENU_WIDTHS[kind]?.[locale]??0;
 
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 /** The kinds that open with their left edge at the anchor's x (a menu at the pointer, a panel hung from a row or a chip); the rest right-align to the anchor's right edge (the toolbar's own buttons, at the window's right). */
-const leftAlignedKinds=['tabs','page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','favorite-edit','live-folder','context','split','security','tor','toolbar-context','workspace-menu','workspace-context','workspace-edit'];
+const leftAlignedKinds=['tabs','page-context','tab-context','group-context','split-context','group-preview','strip-context','noel-context','bookmark-context','favorite-context','favorite-edit','live-folder','context','split','security','prompt','tor','toolbar-context','workspace-menu','workspace-context','workspace-edit','easy-files','extension-more'];
 /** Whether a popup is opened from a control inside a sidebar standing on the right. The sidebar is then the window's rightmost `sidebarWidth` px (it exists only
  * with the tabs in the sidebar), and a popup opened from it must hang toward the page, on its left, the way a left sidebar's popups hang to their right:
  * the kinds that hang from the anchor's left edge hang from its right edge instead (popupGeometry). Decided from the settings, the anchor and the window's
  * width alone, so the chrome's layout, the measured pass in the overlay and a test all place the same popup in the same place. A left sidebar is never "from the right". */
-export function popupFromRightSidebar(settings:Partial<Pick<Settings,'sidebarSide'|'verticalTabs'|'sidebarWidth'>>|null|undefined,anchor:Rectangle,viewportWidth:number):boolean{
-  return settings?.sidebarSide==='right'&&!!settings.verticalTabs&&anchor.x+anchor.width/2>=viewportWidth-clampSidebarWidth(settings.sidebarWidth as number);
+export function popupFromRightSidebar(settings:Partial<Pick<Settings,'sidebarSide'|'verticalTabs'|'shelf'|'sidebarRail'|'sidebarWidth'>>|null|undefined,anchor:Rectangle,viewportWidth:number):boolean{
+  return settings?.sidebarSide==='right'&&sidebarOn(settings)&&anchor.x+anchor.width/2>=viewportWidth-(railOn(settings)?RAIL_WIDTH:clampSidebarWidth(settings.sidebarWidth as number));
 }
 export interface PopupGeometry {bounds:Rectangle;anchor:Rectangle;origin:{x:number;y:number};contentHeight:number}
-const compactKinds=new Set(['zoom','page-context','tab-context','group-context','split-context','strip-context','live-folder','bookmark-context','toolbar-context','find','toolbar-overflow','workspace-context']);
+const compactKinds=new Set(['zoom','page-context','tab-context','group-context','split-context','strip-context','noel-context','live-folder','bookmark-context','favorite-context','toolbar-context','find','toolbar-overflow','workspace-context','extension-more']);
 // The palette lists at most ~13 rows (bible §5.4) and scrolls past that.
 const paletteMax=514;
+/** The All Bookmarks pop-up's ceiling (Beta 14): a long tree scrolls inside it. Everything above and below the list (the title bar,
+ *  the search field, "Bookmark this tab" on a website, the New tab row, the panel's padding) is bookmarksChrome; the list gets the rest. */
+export const bookmarksPopupMax=620;
+export const bookmarksChrome=(web:boolean)=>web?164:134;
+/** The room the tree keeps: its rows with every folder open (so opening or closing one never resizes the pop-up), up to what the ceiling leaves. */
+export function bookmarksReserve(state:BrowserSnapshot,web:boolean):number{
+  const mine=state.bookmarkNodes?state.bookmarkNodes.filter(node=>node.browserProfileId===state.activeBrowserProfileId):null;
+  const rows=mine?allOpenRowCount(mine):state.bookmarks.length;
+  return Math.min(bookmarksPopupMax-bookmarksChrome(web),Math.max(1,rows)*TREE_ROW_HEIGHT+8);
+}
 /** The content height a layout carries for a natural height: the clamp popupGeometry applies to estimates and measurements. */
-export const popupContentHeight=(kind:string,natural:number)=>clamp(kind==='palette'?Math.min(natural,paletteMax):natural,compactKinds.has(kind)?36:80,12000);
+export const popupContentHeight=(kind:string,natural:number)=>clamp(kind==='palette'?Math.min(natural,paletteMax):kind==='bookmarks'?Math.min(natural,bookmarksPopupMax):natural,compactKinds.has(kind)?36:80,12000);
 
 /** Recent palette commands live in this origin's storage (shared by the chrome and the overlay). */
 const paletteRecent=()=>{try{const value=JSON.parse(localStorage.getItem('acira-palette-recent')||'[]');return Array.isArray(value)?Math.min(8,value.length):0;}catch{return 0;}};
@@ -75,7 +103,7 @@ export const menuLayoutRows=(main:readonly string[])=>['split','zoom','find'].so
 const torMenuRows=(state:BrowserSnapshot)=>{if(!inTorContext(state))return 0;const tab=state.tabs.find(item=>item.id===state.activeTabId);return tab?.contentKind==='web'&&/^https?:/i.test(tab.url||'')?2:1;};
 /** "Report a problem…" under Settings, while this build can send reports and outside Tor (App.tsx reportSubjects). */
 const reportMenuRows=(state:BrowserSnapshot)=>state.siteReports&&!inTorContext(state)?1:0;
-const mainMenuHeight=(state:BrowserSnapshot,rowHeight=menuRowHeight)=>{const layout=platformMenuLayout(readMenuLayout(profileOf(state)));return menuHeight(layout,'main',rowHeight)+(menuLayoutRows(layout.main)+torMenuRows(state)+reportMenuRows(state))*rowHeight;};
+const mainMenuHeight=(state:BrowserSnapshot,rowHeight=menuRowHeight)=>{const layout=platformMenuLayout(readMenuLayout(profileOf(state)),transferBlocked(state));return menuHeight(layout,'main',rowHeight)+(menuLayoutRows(layout.main)+(menuLayoutRows(layout.main)&&sidebarRowOf(state)?1:0)/* Beta 14: the Sidebar row, where the layout has a sidebar */+torMenuRows(state)+reportMenuRows(state))*rowHeight;};
 /** The tab menu's 30px rows, counted the way App.tsx (tab-context) and TabGroupControls draw them. Always: reload, new tab, duplicate,
  *  rename, pin, move to new window, move to tab group, close, reopen (9). A website adds copy address and mute; a pane of a saved split
  *  adds Open alone and Remove from split view, another website (when the current tab is one) Split view; a grouped tab Remove from
@@ -91,7 +119,8 @@ export function tabMenuRows(state:BrowserSnapshot,target?:{contentKind:string;id
   const grouped=target&&state.tabGroups?.length&&groupForTab(state,target as TabSession)?1:0,workspace=windowWorkspaces(state).length&&!target?.privacy?1:0;
   // A Tor tab on a website (or any website tab of a Tor window) adds New Tor circuit for this site.
     const torCircuit=target?.contentKind==='web'&&target.url!=='acira://new'&&(target.privacy==='tor'||Boolean((state.browserProfiles.find(profile=>profile.id===state.activeBrowserProfileId) as {tor?:boolean}|undefined)?.tor))?1:0;
-    return 9+(web?2:0)+split+closes+grouped+workspace+torCircuit;
+    // Beta 14.0: right-clicked in the Mini rail, the menu starts with Customize sidebar (App.tsx tab-context).
+    return 9+(web?2:0)+split+closes+grouped+workspace+torCircuit+(miniRailShown(state)?1:0);
 }
 export function popupNaturalHeight(kind:string,state:BrowserSnapshot,{recent=paletteRecent(),target,parent}:{recent?:number;target?:{contentKind:string};parent?:string}={}):number {
   return baseNaturalHeight(kind,state,{recent,target})+(parent==='menu'&&(kind==='more-tools'||kind==='downloads')?submenuHeaderHeight:0);
@@ -102,28 +131,39 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   // Header 44 + search field 44 + rows; no footer (the New tab page has its own row). 190 measured for 3 tabs.
   // Comfortable (default): 52px two-line rows and the New tab footer (4px padding + 30px row); Compact: 32px rows, no footer.
   if(kind==='tabs')return state.settings?.tabViewerDensity==='compact'?94+Math.max(1,state.tabs.length)*32:128+Math.max(1,state.tabs.length)*52;
+  // Beta 14: with pictures the Ctrl+Tab list is the viewer, sized by its own layout (ui/pictureSwitcher.ts, the sample's)
+  if(kind==='switcher'&&readCtrlTabShow()==='pictures')return r4Layout(state.tabs.length,typeof window!=='undefined'?{width:window.innerWidth,height:window.innerHeight}:{width:1280,height:800}).height;
   if(kind==='switcher')return 12+Math.min(12,Math.max(1,state.tabs.length))*36+32;
   // Empty query: the other open tabs (up to 8) and recent commands (up to 4), each section a 28px label and 32px rows.
   // A lone tab with no recent commands lists every command instead, which reaches the cap.
   if(kind==='palette'){const others=Math.min(8,Math.max(0,state.tabs.length-1)),recents=Math.min(4,recent),sections=(others?28+others*32:0)+(recents?28+recents*32:0);return sections?Math.min(paletteMax,102+sections):paletteMax;}
   // 52px rows (title and address); websites add "Bookmark this page". No bookmarks: the empty note is one row tall.
-  if(kind==='bookmarks')return (web?154:124)+state.bookmarks.length*52;
+  // The All Bookmarks pop-up (Beta 14): the title bar, the search field, "Bookmark this tab" on a website and the New tab row (bookmarksChrome), then the tree's room: 32px rows, every folder counted open so opening one never resizes it, up to the ceiling.
+  if(kind==='bookmarks')return Math.min(bookmarksPopupMax,bookmarksChrome(web)+bookmarksReserve(state,web));
   if(kind==='context')return base+72+Math.max(1,state.tabs.length-1)*44+44;
   if(kind==='split')return base+Math.max(1,state.tabs.length-1)*44;
   // Profiles are 44px identity rows above one divider and two 30px actions (one profile measured at 125); outside a private window "Add profile…" is one more 30px row under the list.
-  // R4-48: plus the Workspaces section (divider 9, its two-line head 46, a 30px row per workspace, New workspace… until eight) outside a private window.
-  if(kind==='profile'){const own=state.browserProfiles.find(item=>item.id===state.activeBrowserProfileId),n=own&&!own.private?windowWorkspaces(state).length:0,between=own&&!own.private&&(state.browserProfiles.filter(item=>!item.private).length>=2||profilesAsSpaces(state));/* Open profiles: a divider (9), its name and the segmented control under the profiles (70) */return 81+Math.max(1,state.browserProfiles.length)*44+(own&&!own.private?30:0)+(between?79:0)+(n?9+46+n*30+(n<8?30:0):0);}
+  // R4-48: plus the Workspaces section (divider 9, its two-line head 46, a 30px row per workspace, New workspace… until the limit) outside a private window.
+  if(kind==='profile'){const own=state.browserProfiles.find(item=>item.id===state.activeBrowserProfileId),n=own&&!own.private?windowWorkspaces(state).length:0,between=own&&!own.private&&(state.browserProfiles.filter(item=>!item.private).length>=2||profilesAsSpaces(state));/* Open profiles: a divider (9), its name and the segmented control under the profiles (70) */return 81+Math.max(1,state.browserProfiles.length)*44+(own&&!own.private?30:0)+(between?79:0)+(n?9+46+n*30+(n<MAX_WORKSPACES?30:0):0)+(own&&!own.private?contributorBlockHeight():0);}
   // The downloads panel (extensions' panel system): up to five 44px rows (one 32px row says there are none), a divider and the 30px See all downloads row.
   if(kind==='downloads'){const rows=Math.min(PANEL_DOWNLOAD_ROWS,profileDownloads(state,state.activeBrowserProfileId||profileOf(state)).length);return panelChrome+(rows?rows*PANEL_DOWNLOAD_ROW_HEIGHT:32)+9+30;}
   // Recently closed (R3-39): the header, up to six 52px rows (title and site), a divider and the "Open Rewind" row; measured for the real list.
   if(kind==='recent-closed')return 83+6*52;
+  // The Task manager (features/taskManager): the fixed top, the list (a 28px head and 44px rows per workspace that has tabs, a head and 32px rows
+  // for the extensions it last listed, the Acira row) and the fixed foot: taskManagerHeight below. It is measured on open as well (its first
+  // reading arrives at once), so a changed extension count corrects it before the first frame.
+  if(kind==='task-manager')return taskManagerHeight(state);
+  // Easy Files (Beta 14): counted from the offer main sent (every block has a fixed height), so it opens at its final size.
+  if(kind==='easy-files')return easyFilesHeight();
   // 17 rows of 30, four dividers of 9, the 4px container and 2px body inset each side (V02: fits without scrolling).
   // R3-43: counted from the person's layout (30px rows, 9px hairlines, 12px of padding); the default is the measured 588px. In a Tor tab or window (R3-61) one more row: New Tor identity.
   if(kind==='menu')return mainMenuHeight(state);
   // Ten 30px rows and two dividers (Ads and trackers, VPN joined the menu).
-  if(kind==='more-tools')return menuHeight(platformMenuLayout(readMenuLayout(profileOf(state))),'more');
+  if(kind==='more-tools')return menuHeight(platformMenuLayout(readMenuLayout(profileOf(state)),transferBlocked(state)),'more');
   // The toolbar's overflow (P09): the buttons a narrow row hides, 30px menu rows, no title bar; two at most today.
-  if(kind==='toolbar-overflow')return 72;
+  if(kind==='toolbar-overflow')return overflowHeight(peekOverflowRows());
+  // Beta 14: the extensions behind the sidebar row's "more" button: a 30px menu row each in a 4px frame; past about ten it scrolls inside (the list is never taller than the window allows).
+  if(kind==='extension-more')return Math.min(8+30*Math.max(1,peekMoreTarget()?.rows.length??1),340);
   if(kind==='appearance')return 780;
   if(kind==='workspace-cover')return 520;
   // No extensions yet: the empty row and the two ways to add one.
@@ -143,9 +183,23 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   if(kind==='tor')return 251;
   // Update ready (Install now, Later, Read more): 124 measured in English (31 Oct, rig qa/r6-updates-proof.mjs): the identity row, the two-line note, one row of buttons. A longer language wraps the note to three lines and is measured on open; Read more swaps the note for the release notes, up to 11 lines.
   // The download (option B, the dots in the toolbar open it; updatePanelPhase): the identity row with its ring, the line under it and What's new, 102 measured in English (3 Nov, the update-pause rig); a language that wraps the line is measured on open.
-  if(kind==='update')return ['ready','error'].includes(updatePanelPhase())?124:102;
+  if(kind==='update')return updatePanelPhase()==='ready'?133/* Beta 14: the sample's Update ready prompt (two lines under the title) */:updatePanelPhase()==='error'?124:102;
   // What's new after a restart (centred): the identity row, the notes (measured on open: they depend on the feed, and the popup waits for them, data-popup-pending) and the Close row. 222 is the case in tests/popup-heights.json (eight lines of notes, qa/r6-whatsnew-proof.mjs).
   if(kind==='whats-new')return 222;
+  // Beta 14: a dialog (centred, the Close Acira? card is 196 tall) and a prompt (hung under the address field's icon): both are measured on open.
+  if(kind==='dialog')return 196;
+  if(kind==='prompt')return 132;
+  // Beta 14/E4: the report pop-up (tabs, chips, a text box, the attachment row, Send, the credit line) and the ranks overlay; both are measured after they render.
+  if(kind==='feedback')return 480;   // 17 Nov: C2 (grouped blocks, one footer row) + C3 (the 'what it adds' hint always shown): measured in the real app, a QA rig, light and dark, 100 and 150 %
+  if(kind==='ranks')return 504;   // 17 Nov: C4 (title, two-line sentence, gaps) + B4 (the Early Member chip under the cards): measured in the real app, a QA rig, light and dark, 100 and 150 %
+  // Beta 14: the Insider pop-up (the welcome's steps, the code screen, the invites): centred like the ranks overlay, measured after it renders; the code screen is the typical case (292 measured on 15 Nov 2026; the reveal, the invites and the seal screen are taller or shorter and are measured on open).
+  if(kind==='insider')return 294;   // 292 + 2: the pop-up's bottom padding is 22 like its top (C1, 17 Nov); the code screen keeps its reserved status line
+  // Beta 14, the one-time welcome: the largest centred frame the popup system allows (window - 24 wide, window - 120 tall). The frame is invisible: the whole window frosts behind the content.
+  if(kind==='welcome')return Math.max(400,window.innerHeight-120);
+  // Beta 14: "Your card" (centred, 440 wide): the title row, the card at 264 x 396, three buttons and a line for what happened (620 measured in the real app); measured after it renders.
+  if(kind==='member-card')return 620;
+  // Move to another computer (centred, 440 wide): the sheet's height changes with every screen (two cards, the checklist, the code, the number, the preview...), so it is measured on open. 420 is the first screen's estimate until qa/b-popup-heights.mjs measures it in the app.
+  if(kind==='transfer')return 420;
   // A website's tab has more to offer (copy link, reload, site actions) than an Acira page's.
   // Rows of 30 plus 30 for the two dividers and padding. Always: reload, new tab to the right, duplicate, pin, move to new window, move to group, close, close others, reopen (9).
   // A website adds copy address, mute, split and the two bulk closes (14); an Acira page first in the strip adds only close to the right (10).
@@ -164,20 +218,24 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   // Tab bar menu (strip blank space and the + button): new tab, private, Tor; the three windows; reopen closed tab.
   // In the sidebar's tab list the menu ends with a divider and the two section rows (Hide this section, Customize sidebar…): 9 + 2 x 30;
   // plus a divider and New workspace… (Add profile… with profiles as spaces) once the window has workspaces to add to: 39.
-  if(kind==='strip-context'){const n=windowWorkspaces(state).length;return (isTorSupported()?240:180)+(state.settings?.verticalTabs?69:0)+((profilesAsSpaces(state)||n>0&&n<8)?39:0);}
+  if(kind==='strip-context'){const n=windowWorkspaces(state).length;/* + the Tabs layout row and its divider (Beta 14): 39 */return (isTorSupported()?240:180)+39+(state.settings?.verticalTabs?39:0)+((profilesAsSpaces(state)||n>0&&n<MAX_WORKSPACES)?39:0);}
+  // The tree's menu (Noël, sidebar footer; no header, like the other sidebar menus): 7 rows of 30 (Shake, Brush, three Snowfall choices, the hat switch, Turn off), the "Snowfall" heading row (30) and three dividers (9) in 12px of padding: 279 (counted from the same metrics as the strip menu's 240; not in measuredPopupKinds until qa/b-popup-heights.mjs has measured it in the app, so the sheet waits for its real height).
+  if(kind==='noel-context')return 279;
   if(kind==='bookmark-context')return 300;
+  // A Favorite's menu: counted from the rows it draws for this Favorite (ui/favoriteMenuHeight.ts; an open one and a closed one differ, so no remembered height is trusted)
+  if(kind==='favorite-context')return favoriteMenuHeight(state);
   if(kind==='bookmark-edit')return 317;
   if(kind==='favorite-edit')return 239;
   // Live pull requests (item 31): the filter menu (a label, six rows, three dividers, Repositories, Refresh now, Remove) is about 340; the question is shorter. Measured when it opens.
   if(kind==='live-folder')return 340;
   // Workspaces (R3-57, R4-48 wireframe 3): the container and the two-line scope head, a 44px two-line row per workspace, New workspace… (39, until
-  // eight), Rename… and Icon and color…, Delete workspace, and the 44px way to Profiles with their dividers (406 measured with three, qa/b-popup-heights.mjs).
+  // the limit), Rename… and Icon and color…, Delete workspace, and the 44px way to Profiles with their dividers (406 measured with three, qa/b-popup-heights.mjs).
   // R3-38: a workspace other than the first adds its lock rows after a divider: Lock this workspace (two lines, 53 measured), Lock now + Stop locking (87); a locked one shows Unlock (30) in place of Rename…, Icon and color…, the divider and Delete (−69 in all; 397 measured with three, 27 Oct).
   const lockRows=(id?:string)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===id);return !own||list[0]?.id===own.id?0:!own.secured?53:own.unlocked?87:-69;};
-  // Next / previous workspace (two 30px rows) join New workspace…'s group once there are two workspaces; at eight they keep that group's divider (9).
-  if(kind==='workspace-menu'){const count=Math.max(1,windowWorkspaces(state).length),cycle=count>1?60+(count<8?0:9):0;return 235+count*44+(count<8?39:0)+cycle+lockRows(state.activeWorkspaceId);}
+  // Next / previous workspace (two 30px rows) join New workspace…'s group once there are two workspaces; at the limit they keep that group's divider (9).
+  if(kind==='workspace-menu'){const count=Math.max(1,windowWorkspaces(state).length),cycle=count>1?60+(count<MAX_WORKSPACES?0:9):0;return 235+count*44+(count<MAX_WORKSPACES?39:0)+cycle+lockRows(state.activeWorkspaceId);}
   // The sidebar's own menu (target mode 'sidebar'): New workspace… (Add profile…) with its divider (39) and Customize sidebar… (30), in 12px of padding (81 measured, 6 Nov); a workspace's menu gets New workspace… and its divider on top (39) until eight.
-  if(kind==='workspace-context'){const target=peekWorkspaceTarget(),n=windowWorkspaces(state).length,canNew=profilesAsSpaces(state)||n>0&&n<8;if(target?.mode==='sidebar')return 42+(canNew?39:0);return 107+(canNew&&!profilesAsSpaces(state)?39:0)+lockRows(target&&'workspaceId' in target?target.workspaceId:undefined);}
+  if(kind==='workspace-context'){const target=peekWorkspaceTarget(),n=windowWorkspaces(state).length,canNew=profilesAsSpaces(state)||n>0&&n<MAX_WORKSPACES;if(target?.mode==='sidebar')return 42+39/* the Tabs layout row and its divider (Beta 14) */+(canNew?39:0);const subjectId=target&&'workspaceId' in target?target.workspaceId:undefined,own=windowWorkspaces(state).find(item=>item.id===subjectId);/* 14.3: Move left and Move right (two rows of 30) on an open workspace in a list of two or more */const moveRows=own&&!(own.secured&&!own.unlocked)&&n>1&&!profilesAsSpaces(state)?60:0;return 107+(canNew&&!profilesAsSpaces(state)?39:0)+moveRows+lockRows(subjectId);}
   // The form: new has "Start with", its live line and the scope note (472 measured before R4-48, plus a second note line and the scope note), edit does not (384; new 634 measured with R3-38's Lock this workspace row).
   if(kind==='workspace-edit')return peekWorkspaceTarget()?.mode==='edit'?384:634;
   // One 40px row (critique round 6): glyph, input, count, previous, next, close.
@@ -187,15 +245,24 @@ function baseNaturalHeight(kind:string,state:BrowserSnapshot,{recent,target}:{re
   return 360;
 }
 
+/** The Task manager's height, counted from the window's tabs: container 4 + 4, the top 100 (title 32, the figure 24 + 8, the bar 4, the legend 8 + 16, 8 under it),
+ *  2 over the list and 2 under it, each section's 28px head and rows (tabs 44, extensions 32), the Acira row (8 + 44) and the foot (4 + 44 + 4).
+ *  qa/task-manager/edges.mjs checks this count against the pop-up's real height. */
+export function taskManagerHeight(state:BrowserSnapshot,extensions=peekTaskManagerExtensions()):number{
+  const tabs=[...state.tabs,...(state.otherWorkspaceTabs??[])],spaces=windowWorkspaces(state);
+  const split=spaces.length>=2&&tabs.every(tab=>spaces.some(space=>space.id===workspaceIdOf(state,tab)));
+  const heads=tabs.length?split?spaces.filter(space=>tabs.some(tab=>workspaceIdOf(state,tab)===space.id)).length:1:0;
+  return 8+100+4+heads*28+tabs.length*44+(extensions?28+extensions*32:0)+52+52;   // (the foot: 44 and a grid step over and under it)
+}
 /** Kinds whose estimate above is measured for the state it is given; a remembered height would only be staler. */
-export const measuredPopupKinds=['tabs','workspace-menu','switcher','palette','bookmarks','profile','menu','more-tools','extensions','downloads','toolbar-context','customize-toolbar','security','tab-context','strip-context','split-context','bookmark-edit','find','zoom','recent-closed','update','whats-new'];
+export const measuredPopupKinds=['easy-files','tabs','workspace-menu','switcher','palette','bookmarks','profile','menu','more-tools','extensions','downloads','toolbar-context','customize-toolbar','security','tab-context','strip-context','split-context','bookmark-edit','find','zoom','dialog','recent-closed','update','whats-new','transfer','feedback','ranks','insider','member-card'];
 /** The switcher's "Lock this workspace" row (a workspace other than the first, not locked yet) wraps when its words are longer
  *  than the menu (most languages, and "Windows Hello" on Windows), which no estimate knows: that switcher waits for its measured height. */
 const lockThisRowShown=(state:BrowserSnapshot)=>{const list=windowWorkspaces(state),own=list.find(item=>item.id===state.activeWorkspaceId);return !!own&&list[0]?.id!==own.id&&!own.secured;};
 export const popupEstimateMeasured=(kind:string,state:BrowserSnapshot)=>measuredPopupKinds.includes(kind)&&!(kind==='workspace-menu'&&lockThisRowShown(state));
 
 /** The Acira menu at its 30px rows and at its dense 26px rows: 19 rows (17 + the two Layout rows: View, Tabs; Sidebar mode is a Tabs answer), four 9px dividers, 12px of container. */
-export const menuFullHeight=648,menuDenseHeight=568;
+export const menuFullHeight=678,menuDenseHeight=594;
 /** F02 (M's sweep, 900×600): when the space below the menu button is shorter than the full menu, the menu takes its dense
  * rows and fits without scrolling. The chrome (geometry) and the overlay (rows) decide with this one rule, from the window
  * and the button, never from the content, so nothing oscillates. */
@@ -203,7 +270,7 @@ export function menuDense(viewportHeight:number,anchor?:Rectangle,full=menuFullH
 /** The same rule for this profile's own menu: its height follows the rows it holds. */
 export const menuDenseFor=(state:BrowserSnapshot,viewportHeight:number,anchor?:Rectangle)=>menuDense(viewportHeight,anchor,mainMenuHeight(state));
 
-export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:number;height:number},source?:Rectangle,naturalHeight?:number,options:{lockedTop?:number;minTop?:number;target?:{contentKind:string};parent?:string;page?:Rectangle;/** Which edge of the popup meets the anchor: 'start' = its left edge at the anchor's x, 'end' = its right edge at the anchor's right. Overrides the kind's own rule (groupEditorPlacement). */align?:'start'|'end'}={}):PopupGeometry {
+export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:number;height:number},source?:Rectangle,naturalHeight?:number,options:{lockedTop?:number;minTop?:number;/** Beta 14: the card's own width for a dialog or prompt popup, and whether it hangs 16 px under the top of the page (the unsaved-work question) instead of sitting 44 % down. */dialogWidth?:number;dialogTop?:boolean;target?:{contentKind:string};parent?:string;page?:Rectangle;/** Which edge of the popup meets the anchor: 'start' = its left edge at the anchor's x, 'end' = its right edge at the anchor's right. Overrides the kind's own rule (groupEditorPlacement). */align?:'start'|'end';/** Beta 14: a page menu with rows that carry a second line (the image search chooser) is wider, so the second lines are not cut. */wide?:boolean}={}):PopupGeometry {
   if(kind==='suggestions'){
     const anchor=source||{x:120,y:44,width:Math.max(240,viewport.width-360),height:36};
     // The focused field wears a 2px ring at 1px offset, so its visible edge is 3px outside its box: the list is flush with the ring.
@@ -212,32 +279,38 @@ export function popupGeometry(kind:string,state:BrowserSnapshot,viewport:{width:
     return {bounds:{x:Math.round(x),y:Math.round(y),width:Math.round(width),height:Math.round(height)},anchor,origin:{x:.5,y:0},contentHeight};
   }
   // Profiles follow their control; only the tab viewers are window-centred.
-  const centered=kind==='tabs'||kind==='switcher'||kind==='whats-new';
+  const centered=kind==='tabs'||kind==='switcher'||kind==='whats-new'||kind==='ranks'||kind==='insider'||kind==='transfer'||kind==='welcome'||kind==='member-card';
+  // Beta 14: a dialog is centred in the page area (its own x / y below)
+  const centeredHere=centered||kind==='dialog';
   // Menu/panel system (round 9): context menus 260 (the toolbar menu 300: its switch rows carry a shortcut), panels 320; the main menu and More tools 340, so the longest label, shortcut and the switch/chevron column
   // (Search tabs and commands, Ctrl+Shift+K) fit untruncated; search panels (tab viewer, palette) and lists keep theirs.
-  const baseWidth=kind==='switcher'?520:kind==='whats-new'?400:['profile','security','protection','tor','extensions','appearance','downloads','favorite-edit','workspace-edit'].includes(kind)?320:kind==='workspace-menu'?280:kind==='workspace-context'?240:kind==='zoom'?280:kind==='workspace-cover'?480:centered?640:kind==='palette'?640:['context','bookmarks'].includes(kind)?420:kind==='split'?400:kind==='toolbar-context'?300:['page-context','tab-context','group-context','split-context','group-preview','strip-context','bookmark-context','bookmark-edit','live-folder'].includes(kind)?260:kind==='menu'||kind==='more-tools'?340:kind==='customize-toolbar'?320:kind==='toolbar-overflow'?240:360;
-  const desiredWidth=Math.max(baseWidth,localeMenuWidth(kind));
+  const baseWidth=kind==='easy-files'?EF.width:kind==='switcher'?520:kind==='whats-new'?400:kind==='task-manager'?340/* the Acira menu's and More tools' own width: opened from More tools the sheet keeps its box (at 360 it grew for three frames and cut the header's right end) */:kind==='welcome'?Math.max(600,window.innerWidth-24):kind==='ranks'||kind==='insider'||kind==='transfer'||kind==='member-card'?440:kind==='dialog'?(options.dialogWidth??424):kind==='prompt'?(options.dialogWidth??380):kind==='update'?352/* Beta 14: the sample's Update ready prompt is 352 wide */:kind==='feedback'?380:['profile','security','protection','tor','extensions','appearance','downloads','favorite-edit','workspace-edit'].includes(kind)?320:kind==='workspace-menu'?280:kind==='extension-more'?260:kind==='workspace-context'?240:kind==='zoom'?280:kind==='workspace-cover'?480:centeredHere?640:kind==='palette'?640:['context','bookmarks'].includes(kind)?420:kind==='split'?400:kind==='toolbar-context'?300:['page-context','tab-context','group-context','split-context','group-preview','strip-context','noel-context','bookmark-context','favorite-context','bookmark-edit','live-folder'].includes(kind)?260:kind==='menu'?MENU_BASE_WIDTH:kind==='more-tools'?340:kind==='customize-toolbar'?320:kind==='toolbar-overflow'?240:360;
+  const desiredWidth=kind==='switcher'&&readCtrlTabShow()==='pictures'?r4Layout(state.tabs.length,viewport).width:Math.max((kind==='page-context'||kind==='bookmark-context')&&options.wide?340:baseWidth,localeMenuWidth(kind));   // Beta 14: a page menu with two-line rows (the image search chooser) is 340
   const width=Math.max(240,Math.min(desiredWidth,viewport.width-24));
   const anchor=source||{x:viewport.width-60,y:48,width:36,height:36};
   // F02 (M, 900×600): a menu that can't drop its full height takes its dense rows (menuDense), sized for them at once.
-  const natural=popupContentHeight(kind,naturalHeight||popupNaturalHeight(kind,state,{target:options.target,parent:options.parent}));
+  const natural=popupContentHeight(kind,naturalHeight||(kind==='member-card'?memberCardLayout(viewport.height).height:popupNaturalHeight(kind,state,{target:options.target,parent:options.parent})));
   const contentHeight=kind==='menu'&&menuDenseFor(state,viewport.height,anchor)?Math.min(natural,mainMenuHeight(state,26)):natural;
   const below=viewport.height-anchor.y-anchor.height-20,above=anchor.y-20;
   // A menu opened at the pointer (a right-click) sits 2px off it and flips up whenever it would not fit below.
   const point=anchor.width<=2&&anchor.height<=2,gap=point?2:8;
-  const upwards=kind!=='zoom'&&below<(point?contentHeight:Math.min(contentHeight,280))&&above>below;
-  const maxHeight=centered?viewport.height-120:Math.max(100,upwards?above:below);
+  // Easy Files flips above its button when its WHOLE height does not fit below (the others count at most 280): it is a short, fixed-height list.
+  const upwards=kind!=='zoom'&&below<(point||kind==='easy-files'?contentHeight:Math.min(contentHeight,280))&&above>below;
+  // The report pop-up is a form: from a button low on the page it slides up over the button rather than being cut off at the window's bottom.
+  const maxHeight=centeredHere?viewport.height-120:kind==='feedback'?viewport.height-48:Math.max(100,upwards?above:below);
   const height=Math.min(contentHeight,maxHeight,viewport.height-24);
   // From a sidebar on the right the left-hung kinds hang from the anchor's right edge, toward the page (popupFromRightSidebar); the right-aligned ones already do.
   const leftAligned=options.align?options.align==='start':leftAlignedKinds.includes(kind)&&!popupFromRightSidebar(state?.settings,anchor,viewport.width);
   // R3-40: the zoom control is a floating island centred over the page, just below the toolbar (never touching it), and grows
   // from the chip in the address bar that opened it (the surface morphs from the trigger to these bounds).
   const islandX=clamp((options.page?options.page.x+options.page.width/2:viewport.width/2)-width/2,12,viewport.width-width-12);
-  const x=kind==='zoom'?islandX:centered||kind==='palette'?(viewport.width-width)/2:kind==='appearance'?clamp(anchor.x+anchor.width+12,12,viewport.width-width-12):clamp(leftAligned?anchor.x:anchor.x+anchor.width-width,12,viewport.width-width-12);
+  // Beta 14: a dialog sits where the sample's lab puts a modal: centred across the page area, 44 % of the free height down it (a little above the middle, as in the approved pictures).
+  const dialogBox=options.page||{x:0,y:0,width:viewport.width,height:viewport.height};
+  const x=kind==='dialog'?clamp(dialogBox.x+(dialogBox.width-width)/2,12,viewport.width-width-12):kind==='zoom'?islandX:centeredHere||kind==='palette'?(viewport.width-width)/2:kind==='appearance'?clamp(anchor.x+anchor.width+12,12,viewport.width-width-12):clamp(leftAligned?anchor.x:anchor.x+anchor.width-width,12,viewport.width-width-12);
   // Same centring as main's measured pass (desktop/main.cjs acira:set-layout), so the two never disagree.
-  const y=centered||kind==='palette'?clamp(options.lockedTop??Math.round(centered?(viewport.height-height)/2:viewport.height*.14),Math.max(12,options.minTop??60),Math.max(12,viewport.height-height-12)):clamp(kind==='zoom'?Math.max(options.minTop??0,anchor.y+anchor.height+gap):upwards?anchor.y-height-gap:anchor.y+anchor.height+gap,12,viewport.height-height-12);
-  const origin=centered?{x:.5,y:.5}:{x:clamp((anchor.x+anchor.width/2-x)/width,0,1),y:upwards?1:0};
-  return {bounds:{x:Math.round(x),y:Math.round(y),width:Math.round(width),height:Math.round(height)},anchor:centered?{x:Math.round(x+width*.035),y:Math.round(y+height*.035),width:Math.round(width*.93),height:Math.round(height*.93)}:anchor,origin,contentHeight};
+  const y=kind==='dialog'?clamp(options.dialogTop?dialogBox.y+16:dialogBox.y+(dialogBox.height-height)*.44,12,Math.max(12,viewport.height-height-12)):centeredHere||kind==='palette'?clamp(options.lockedTop??Math.round(centeredHere?(viewport.height-height)/2:viewport.height*.14),Math.max(12,options.minTop??60),Math.max(12,viewport.height-height-12)):clamp(kind==='zoom'?Math.max(options.minTop??0,anchor.y+anchor.height+gap):upwards?anchor.y-height-gap:anchor.y+anchor.height+gap,12,viewport.height-height-12);
+  const origin=centeredHere?{x:.5,y:.5}:{x:clamp((anchor.x+anchor.width/2-x)/width,0,1),y:upwards?1:0};
+  return {bounds:{x:Math.round(x),y:Math.round(y),width:Math.round(width),height:Math.round(height)},anchor:centeredHere?{x:Math.round(x+width*.035),y:Math.round(y+height*.035),width:Math.round(width*.93),height:Math.round(height*.93)}:anchor,origin,contentHeight};
 }
 
 /** Where a right-click menu opens (R3-48): at the pointer. popupGeometry treats a 2px anchor as a point, so the menu sits 2px

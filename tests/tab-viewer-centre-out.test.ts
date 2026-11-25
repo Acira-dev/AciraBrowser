@@ -17,7 +17,7 @@ test('the tab viewer pivots on its centre, whatever opened it', () => {
 });
 
 test('no clip, wipe or sweep: the tab viewer never runs the aperture', () => {
-  assert.match(surface, /const aperture=!quiet&&!switching&&!tabViewer&&/);
+  assert.match(surface, /const aperture=(?:!ef&&)?!quiet&&!switching&&!tabViewer&&/);
   assert.doesNotMatch(motion, /clip-?path|inset\(/i);
 });
 

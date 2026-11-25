@@ -1,6 +1,11 @@
 /* One neutral container owns membership; the existing raised glass owns selection. */
 .tab-group-tray{position:absolute;pointer-events:none;z-index:-1;display:block;height:36px;margin:0;padding:2px;border-radius:11px;background:var(--group-tray);box-shadow:inset 0 1px 1.5px color-mix(in srgb,var(--frame-text) 7%,transparent);overflow:visible;box-sizing:border-box}
 .tab-group-tray.compact{height:34px}
+/* Beta 14, AE: a family in the top strip. The parent's tray reaches around its inner groups; each group has a faint line of its own colour along the bottom edge (the strip's form of the sidebar's line,
+   the parent's under the whole family and each inner group's inside it); an inner tray is a darker shade of the parent's (the same translucent fill laid over it). */
+.tab-group-tray[data-has-inner]{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--group-accent) 30%,transparent),inset 0 1px 1.5px color-mix(in srgb,var(--frame-text) 7%,transparent)}
+.tab-group-tray[data-nested]{border-radius:9px;box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--group-accent) 42%,transparent)}
+.tab-group-tray.compact[data-nested]{border-radius:8px}
 .tab-group-tray[data-collapsed=true][data-hover=true]{background:var(--group-tray-hover)}
 .tab-group-header{position:relative;z-index:1;display:flex;align-items:center;flex:0 0 auto;min-width:0;height:32px;border-radius:9px;overflow:hidden}
 .tab-group-header.compact{height:30px}
@@ -19,20 +24,20 @@
 .app :is(.browser-tab,.acira-compact-tab){z-index:1}
 .browser-tab[data-tab-group]::before,.browser-tab[data-tab-group]::after{display:none}
 .tab-group-controls{display:grid;gap:0;padding:0;color:var(--text);font-size:13px}
-.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context){padding:5px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context){padding:4px}
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context)>.popup-header{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0;margin:-1px}
-.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row{min-height:24px;height:24px;padding:0 7px;gap:8px;border-radius:6px;font-size:13px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row{min-height:24px;height:24px;padding:0 8px;gap:8px;border-radius:6px;font-size:13px}
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row>:is(svg,.menu-icon):first-child{flex:0 0 16px;width:16px;height:16px}
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row>span{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row:is(:hover,:focus-visible){outline:none;background:var(--hover);color:var(--hover-text)}
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row:is(:hover,:focus-visible)>svg{color:inherit!important}
-.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) hr{margin:5px 10px}
+.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) hr{margin:4px 8px}
 /* Destructive choices read red and stay red under the hover tint (the cancel button is the focused default). */
 .app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row[data-danger]:not(:disabled),.app :is(.popup-content-tab-context,.popup-content-group-context,.popup-content-strip-context,.popup-content-split-context) .menu-row[data-danger]:is(:hover,:focus-visible){color:var(--danger)}
 /* Drilling into a submenu replaces the whole list, not one row of it. */
 .app .popup-content-tab-context [data-drilled]>:not(.tab-group-controls){display:none!important}
-.app .popup-content-group-preview{padding:10px;border-radius:16px}
-.app .popup-content-group-preview>.popup-header{padding:0 3px 7px;min-height:24px}
+.app .popup-content-group-preview{padding:12px;border-radius:16px}
+.app .popup-content-group-preview>.popup-header{padding:0 4px 8px;min-height:24px}
 .app .popup-content-group-preview .group-preview-row{display:flex;align-items:center;gap:8px;height:28px;width:100%;padding:0 6px;border-radius:6px;color:var(--text);text-align:left;font-size:12px}
 .group-preview-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .group-preview-row:hover,.app .group-preview-row:focus-visible{background:var(--hover)}
@@ -63,6 +68,18 @@
 .group-color-swatch[aria-pressed=true]{border-color:var(--text)}
 .group-color-swatch:hover{background:var(--hover)}
 .group-color-check{position:absolute;inset:0;margin:auto;color:#fff;pointer-events:none;filter:drop-shadow(0 0 1.5px rgb(0 0 0 / .45))}
+.group-auto-row{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:13px;text-align:left}
+.group-auto-row:hover{background:var(--hover)}
+.group-auto-row[aria-pressed=true]{border-color:var(--text)}
+.group-auto-row:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
+.group-auto-swatch{flex:none;position:relative;width:26px;height:26px}
+.group-auto-ring{position:absolute;inset:0;border-radius:50%;background:var(--muted);-webkit-mask:radial-gradient(circle closest-side,transparent 8.5px,#000 9px);mask:radial-gradient(circle closest-side,transparent 8.5px,#000 9px)}
+.group-auto-ring[data-empty]{opacity:.5}
+:where(.group-auto-swatch)>i.group-auto-worn{position:absolute;inset:7px;border-radius:50%;background:var(--muted)}
+:where(.group-auto-swatch)>i.group-auto-worn[data-empty]{opacity:.35}
+.group-auto-text{display:grid;flex:1;min-width:0;line-height:1.25}
+:where(.group-auto-text)>small.group-auto-hint{font-size:11.5px;color:var(--muted)}
+:where(.group-auto-row)>svg.group-auto-check{flex:none}
 .group-color-swatch:focus-visible{outline:2px solid var(--selection-marker);outline-offset:1px}
 .group-name-error{font-size:12px;color:var(--danger)}
 

@@ -82,7 +82,10 @@ test('R3-70: a disclosure sweep clips from the top and keeps its bleed once open
 
 test('R3-70: the sweep is wired where it matters (list hook options, speed-aware strips, the disclosure listener)', () => {
   const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), 'utf8');
-  for (const file of ['src/components/CommandPalette.tsx', 'src/components/AddressSuggestions.tsx', 'src/components/TabResults.tsx']) assert.match(read(file), /frequent:\s*true/, `${file} is a frequent surface`);
+  for (const file of ['src/components/CommandPalette.tsx', 'src/components/TabResults.tsx']) assert.match(read(file), /frequent:\s*true/, `${file} is a frequent surface`);
+  // Beta 14 (section O): the address list no longer glides its rows through each other while you type; its rows re-form in place (ui/suggestionMotion.ts).
+  assert.doesNotMatch(read('src/components/AddressSuggestions.tsx'), /useListMotion/, 'the address list has its own in-place motion');
+  assert.match(read('src/components/AddressSuggestions.tsx'), /useSuggestionMotion\(/);
   for (const file of ['src/features/Library.tsx', 'src/features/BookmarksManager.tsx']) assert.match(read(file), /followers:\s*true/, `${file}: the section below the list glides`);
   assert.match(read('src/components/BookmarksBar.tsx'), /useListMotion\(root/);
   assert.match(read('src/features/settings/SiteListEditor.tsx'), /useListMotion\(rows/);

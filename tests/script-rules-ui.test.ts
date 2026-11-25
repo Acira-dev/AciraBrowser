@@ -67,9 +67,10 @@ test('Settings: busy dims the controls, an error shows in a line under the group
   assert.match(html, /No sites added\./);
 });
 
-test('the panel sits in Privacy under Site permissions, and Settings search finds both rows', () => {
+// Beta 14.4: Scripts are on Protection (what Acira blocks); Site permissions stay on Privacy (what sites may use of yours).
+test('the panel sits on Protection, Site permissions on Privacy, and Settings search finds both rows', () => {
   const panel = read('src/features/settings/panels/site-scripts.tsx'), permissions = read('src/features/settings/panels/site-permissions.tsx');
-  assert.match(panel, /section: 'Privacy', order: 91/);
+  assert.match(panel, /section: 'Protection', order: 91/);
   assert.match(permissions, /section: 'Privacy', order: 90/);
   const entries = read('src/features/settings/entries/site-scripts.ts');
   for (const id of ['site-scripts-everywhere', 'site-scripts-sites']) { assert.match(entries, new RegExp(`id: '${id}'`)); assert.match(panel, new RegExp(`id="${id}"`)); }

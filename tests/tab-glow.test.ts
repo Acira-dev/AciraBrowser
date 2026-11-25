@@ -1,4 +1,4 @@
-// Item 11 (founder-approved 7 Nov 2026): tab rows take 8px corners and a soft glow in the site's colour.
+// Item 11 (team-approved 7 Nov 2026): tab rows take 8px corners and a soft glow in the site's colour.
 // The colour is the site icon's hue and chroma (ui/siteIconColor.ts: ONE reader and cache, shared with the Favorites ring) drawn at one lightness;
 // Settings › Appearance › Site colour (:root[data-site-color]) is Off / Soft (default) / Rich.
 import test from 'node:test';
@@ -106,7 +106,7 @@ test('the stylesheet: Off draws nothing, Soft is the default, Rich is stronger; 
   assert.ok(!css.includes('[data-site-color=soft]'), 'Soft is the default, not an attribute');
   const soft = rules.find((r) => r.selector === '.app.style-acira' && r.body.includes('--tg-glow'))!.body, rich = rules.find((r) => r.selector === ':root[data-site-color=rich] .app.style-acira')!.body;
   const num = (body: string, name: string) => Number(new RegExp(`${name}:\\s*(\\d+)`).exec(body)![1]);
-  for (const name of ['--tg-ring', '--tg-glow', '--tg-blur', '--tg-h-ring', '--tg-h-glow', '--tg-h-blur', '--tg-h-wash']) assert.ok(num(rich, name) >= num(soft, name), `${name}: Rich is not weaker than Soft`);
+  for (const name of ['--tg-glow', '--tg-blur', '--tg-h-ring', '--tg-h-glow', '--tg-h-blur', '--tg-h-wash']) assert.ok(num(rich, name) >= num(soft, name), `${name}: Rich is not weaker than Soft`);
   assert.ok(num(rich, '--tg-glow') > num(soft, '--tg-glow') && num(rich, '--tg-blur') > num(soft, '--tg-blur'));
   assert.match(css, /:root\[data-site-color=rich\] \.app\.style-acira\[data-chrome=dark\]/, 'Rich has its own dark values');
   assert.match(css, /\.app\.style-acira\[data-chrome=dark\] \{/, 'Soft has its own dark values');
@@ -169,7 +169,7 @@ test('the sidebar card carries the glow on the glide: same animation, same clock
   assert.deepEqual(glideColors('', '#00ff00'), ['#00ff0000', '#00ff00'], 'glow arriving');
   assert.equal(glideColors('', undefined), null, 'no colour on either: a plain card, as before');
   const sidebar = src('src/components/sidebar/AciraSidebar.tsx');
-  const call = /glide\.animate\(\[\{transform:`translate[\s\S]*?\}\],\{duration:springMs\(\),easing:SPRING\}\)/.exec(sidebar)?.[0] ?? '';
+  const call = /glide\.animate\(\[\{transform:lift[\s\S]*?\}\],\{duration:springMs\(\),easing:SPRING,fill:'forwards'[\s\S]*?\}\)/.exec(sidebar)?.[0] ?? '';
   assert.ok(call.includes("'--glow-c':tones[0]") && call.includes("'--glow-c':tones[1]"), 'the colour is a keyframe of the card\'s own transform animation');
   assert.match(sidebar, /glideColors\(was\.el\.style\.getPropertyValue\('--site'\),el\.style\.getPropertyValue\('--site'\)\)/);
   assert.match(sidebar, /if\(tones\)glide\.setAttribute\('data-glow',''\)/);

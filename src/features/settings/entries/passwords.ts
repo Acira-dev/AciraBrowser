@@ -9,6 +9,7 @@ const entries: SettingsEntry[] = defineSettings('Passwords', [
   { id: 'passwords-add', title: t("passwords.addAPassword"), group: 'Passwords', description: t("passwords.saveASignInYourself"), aliases: ['new password', 'create login'], when: 'desktop' },
   { id: 'passwords-import', title: t("index.importPasswords"), group: 'Passwords', description: t("passwords.bringPasswordsFromChromeEdge"), aliases: ['csv', 'chrome passwords', 'edge passwords', 'brave passwords', 'bitwarden', 'move passwords'], when: 'desktop' },
   { id: 'passwords-export', title: t("index.exportPasswords"), group: 'Passwords', description: t(isMac()?"passwords.saveAllPasswordsToA.mac":"passwords.saveAllPasswordsToA"), aliases: ['csv', 'backup passwords'], when: 'desktop' },
+  { id: 'passwords-masks', title: t("pwm.title"), group: 'Passwords', description: t("pwm.intro"), aliases: ['email mask', 'email masks', 'hide my email', 'alias', 'email alias', 'relay', 'firefox relay', 'simplelogin', 'addy', 'anonaddy', 'forwarding address', 'throwaway email', 'burner email', 'spam'], when: 'desktop' },
   { id: 'passwords-never', title: t("passwords.neverSavedSites"), group: 'Passwords', description: t("passwords.sitesWhereAciraWonT"), aliases: ['never for this site', 'exceptions', 'blocked sites'], when: 'desktop' },
   { id: 'passwords-delete-all', title: t("passwords.deleteAllPasswords"), group: 'Passwords', description: t("passwords.removeEverySavedPasswordFrom"), aliases: ['clear passwords', 'erase passwords'], when: 'desktop' },
 ]);

@@ -13,7 +13,7 @@
    opens too, so the band does not change colour as the sidebar arrives or the toolbar expands. Focus wears it as well: its
    top bar is the same band as with the sidebar (founder, 30 Oct), not a raised tab surface. */
 :root:root:root:is([data-material=acrylic],[data-material=vibrancy]):not([data-edge-float]) .app.style-acira:not(.native-layer):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) {
-  background: linear-gradient(180deg, rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-top)), rgb(var(--sidebar-rgb, var(--chrome-rgb)) / var(--chrome-veil-bottom)));
+  background: linear-gradient(180deg, rgb(var(--frame-top-rgb,var(--sidebar-rgb,var(--chrome-rgb))) / var(--chrome-veil-top)), var(--frame-mid-veil,)rgb(var(--frame-bottom-rgb,var(--sidebar-rgb,var(--chrome-rgb))) / var(--chrome-veil-bottom)));
 }
 /* Inactive window or transparency off (acrylic's flat grey): the same frame as an opaque finish tone with the top lift. */
 :root:root:root[data-material=acrylic]:is([data-window-active=false], [data-system-transparency=off]):not([data-edge-float]) .app.style-acira:not(.native-layer):is(:has(> .ed-rail.is-expanded),:has(> .browser-root:is(.mode-compact,.side-tabs,.mode-focus))) {
@@ -66,4 +66,24 @@
 /* In sidebar mode the toolbar otherwise sits clear on the frame (G); with a colour it wears it. */
 :root:root:root:root:not([data-edge-float]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell > .browser-toolbar.acira-persistent-toolbar {
   background: var(--tab-surface);
+}
+/* D180 (14.4, the team 24 Nov: "Blend them"): where the toolbar's own colour meets the sidebar's (another colour beside it), the toolbar's paint eases in over its first 32 px from the
+   sidebar's edge instead of starting in a cut: its own colour at its own veil, from nothing at the sidebar's edge, so what shows through there is the frame under it, which is the sidebar's
+   surface. A straight ease, its width picked on real frames (his purple on Ocean, 2x, the ramp averaged per device pixel): 32 px reads 1.9 in dark and 2.9 in light; 24 px read 4.2 in light,
+   16 px 5.5 (the gradient's own dither adds 1 or 2 between single pixels). The same paint, no
+   element, no motion: only the gradient's stops. Without a toolbar colour none of this applies (a plain theme is byte-identical). Mirrored with the sidebar on the right. The bookmarks row,
+   which wears the same surface under the toolbar, eases alike while Ambient mode is off (with it on that row is clear: ambient.css). Not in Sidebar + address
+   (`.browser-shell[data-sbmode]`): there the toolbar sits inside the sidebar's top, from the window's edge, and meets no sidebar. Beside the Mini rail it eases from the rail's edge as well (the toolbar starts there), except in
+   the Windows look with the rail on the right (`html[data-platform=win32][data-m-rail~=mini]` with the sidebar on the right): there the system's caption buttons cover the window's top-right corner
+   in one flat colour, the toolbar's own (windowCaption.ts), --caption-width wide: the toolbar's last part (.compact-caption-space) and the rail's top, so the junction lies under them and the ease must
+   not run there. The sidebar's caption row (.sb-caption) is a clear drag strip inside the sidebar, clipped at the rail. The Windows look's Sidebar layout has no caption box over the strip, left or
+   right: it eases as the Mac look does (14.4, the team: Windows items and the Mini rail in 14.4). The left-hand rules carry :not([data-sidebar-side=right]) so that where the right-hand ones
+   stand down (that Windows state) neither runs: without it the left one was left standing there and eased the toolbar from nothing at the window's left edge, where no rail is. */
+:root:root:root:root:not([data-sidebar-side=right]):not([data-edge-float]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell:not([data-sbmode]) > .browser-toolbar.acira-persistent-toolbar,
+:root:root:root:root:not([data-sidebar-side=right]):not([data-edge-float]):not([data-ambient-mode]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell:not([data-sbmode]) > .acira-bookmarks-row {
+  background: linear-gradient(90deg, rgb(var(--toolbar-rgb) / 0) 0, var(--tab-surface) 32px);
+}
+:root:root:root:root[data-sidebar-side=right]:not([data-edge-float]):not([data-platform=win32][data-m-rail~=mini]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell:not([data-sbmode]) > .browser-toolbar.acira-persistent-toolbar,
+:root:root:root:root[data-sidebar-side=right]:not([data-edge-float]):not([data-platform=win32][data-m-rail~=mini]):not([data-ambient-mode]) .app.style-acira[data-toolbar-color]:has(> .ed-rail.is-expanded) .browser-shell:not([data-sbmode]) > .acira-bookmarks-row {
+  background: linear-gradient(270deg, rgb(var(--toolbar-rgb) / 0) 0, var(--tab-surface) 32px);
 }

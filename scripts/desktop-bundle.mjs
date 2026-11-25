@@ -46,12 +46,28 @@ export const PATH_LOADED = [
   'desktop/browser-services/user-scripts-preload.cjs',
   'desktop/browser-services/side-panel-frame.html',
   'desktop/browser-services/side-panel-frame-preload.cjs',
+  'desktop/side-panel-sites-frame.html',
+  'desktop/side-panel-sites-frame-preload.cjs',
   'desktop/browser-services/secured-notification-preload.cjs',
+  'desktop/browser-services/site-notification-preload.cjs',   // 14.3: a page's notifications to Acira's own panel
+  'desktop/browser-services/site-notification-worker-preload.cjs',   // 14.3: a service worker's notifications (type 'service-worker')
+  'desktop/browser-services/media-session-preload.cjs',   // Beta 14: the page's media-key handlers, for the now-playing card's Previous / Next
+  'desktop/browser-services/pip-signal-preload.cjs',   // Beta 14 (macOS): a video entered picture in picture, so its small window may join a fullscreen Space
+  'desktop/devtools-divider.html',   // Beta 14: the divider between a page and its docked Developer tools
+  'desktop/devtools-divider-preload.cjs',
   'desktop/rewind/peek-frame.html',
   'desktop/rewind/peek-frame-preload.cjs',
+  'desktop/screenshot-layer.html',   // Beta 14: the area picker of the page screenshot, and its preload
+  'desktop/screenshot-layer-preload.cjs',
   'desktop/tab-card.html',
+  'desktop/zap-layer.html',   // Beta 14, Zap: the picker's layer above the page, and the page side that picks and hides
+  'desktop/zap-layer-preload.cjs',
+  'desktop/browser-services/zap-preload.cjs',
   'desktop/tab-card-preload.cjs',
   'desktop/swipe-nav.html',
+  'desktop/season-overlay.html',   // Noël, Snowfall over the whole window: the click-through snow window above the page, its script (built from src/season/winter/overlay.ts) and its preload
+  'desktop/season-overlay.js',
+  'desktop/season-overlay-preload.cjs',
   'desktop/swipe-nav-preload.cjs',
   'desktop/site-prompt.html',
   'desktop/site-prompt-preload.cjs',
@@ -71,7 +87,8 @@ export const PATH_LOADED = [
 /** Read by path, copied by the release builds (see release-build*.mjs) or built separately; tests/release-desktop-bundle.test.mjs checks the list is complete. */
 export const DATA_LOADED = [
   'desktop/ui-preload.cjs', // built from ui-preload-entry.cjs
-  'desktop/browser-services/autoconsent-preload.cjs', // built from autoconsent-preload-entry.cjs (DuckDuckGo's autoconsent bundled in)
+  'desktop/browser-services/autoconsent-preload.cjs', // built from autoconsent-preload-entry.cjs (the entry only: DuckDuckGo's autoconsent is the file below)
+  'desktop/browser-services/autoconsent-library.js', // DuckDuckGo's autoconsent, built beside the preload by bundleAnswerPreload and handed to a frame that finds a consent tool (optional-filtering.cjs)
   'desktop/native/build/mac-material.node', // compiled and copied by copyMacMaterial on macOS
   'desktop/browser-services/annoyance-lists', 'desktop/browser-services/helium-annoyances.txt',
   'desktop/browser-services/vendor/readability/Readability.js', 'desktop/browser-services/vendor/dompurify/purify.min.js',
@@ -235,8 +252,36 @@ export async function bundleDesktop({root, output, plugins, packageFiles}) {
  *  the renderer hold it as two-byte text, so it comes out as Latin-1 (scripts/one-byte-source.mjs). The four builds that write it (build-ui-preload.mjs, release-build.mjs
  *  and the two committed-source builds) all go through here. */
 export const ANSWER_PRELOAD_ENTRY = 'desktop/browser-services/autoconsent-preload-entry.cjs';
+/** Beta 14 speed pass 2: the library is not compiled in every document. A page's main frame only loads it where a consent tool turns up (autoconsent-lazy.cjs),
+ *  yet its ~180 KB of code was part of the preload, so every new document parsed it at its start, before the page's own scripts (about 1.5-2 ms a load, measured
+ *  with the library left out). The library is now bundled on its own and carried in the preload as the text of a string returned by a function nothing calls
+ *  until `require('@duckduckgo/autoconsent').default` is first read (the entry's library()): the parser only skips over that text, and the library is compiled then,
+ *  in the preload's own world (webFrame.executeJavaScriptInIsolatedWorld on Electron's context-isolation world, which runs at once and is not subject to the
+ *  page's content security policy). Same library, same code, same moment of use. */
+export const LIBRARY_KEY = 'acira.autoconsent.library', PRELOAD_WORLD = 999;
+export async function answerLibrarySource(root) {
+  const out = await esbuild({absWorkingDir: root, stdin: {contents: `globalThis[Symbol.for(${JSON.stringify(LIBRARY_KEY)})]=require('@duckduckgo/autoconsent').default;`, resolveDir: root, sourcefile: 'autoconsent-library.js', loader: 'js'}, bundle: true, write: false, platform: 'browser', format: 'iife', target: 'chrome130', legalComments: 'inline', logLevel: 'silent'});
+  // one-byte like the preload itself, so the library is Latin-1 text when it is compiled too (scripts/one-byte-source.mjs)
+  return oneByteSource(out.outputFiles[0].text, LATIN1);
+}
+export const LIBRARY_FILE = 'autoconsent-library.js', LIBRARY_CHANNEL = 'acira:autoconsent-library';
+/** 14.4 (RAM): the library's text is no longer carried in the preload at all. Even as a string the parser only skips, the 193 KB were read and held by EVERY frame's renderer
+ *  (1.4 MB a page on the bench: 20.2 against 18.8 MB with the text taken out). It is a file beside the preload (LIBRARY_FILE, written by bundleAnswerPreload) that the main process
+ *  reads once and hands over, as text, to the one frame that finds a consent tool (LIBRARY_CHANNEL, optional-filtering.cjs); the frame compiles it as before, in the preload's own
+ *  world (999). Same library, same code, same moment of use; where main cannot give it, the banner stays as the site drew it. */
+export function onDemandLibrary() {
+  return {name: 'acira-autoconsent-on-demand', setup(build) {
+    build.onResolve({filter: /^@duckduckgo\/autoconsent$/}, () => ({path: 'autoconsent-on-demand', namespace: 'acira-autoconsent-on-demand'}));
+    build.onLoad({filter: /.*/, namespace: 'acira-autoconsent-on-demand'}, () => ({loader: 'js', contents:
+      `const {webFrame,ipcRenderer}=require('electron');const KEY=Symbol.for(${JSON.stringify(LIBRARY_KEY)});\n` +
+      `function librarySource(){const text=ipcRenderer.sendSync(${JSON.stringify(LIBRARY_CHANNEL)});if(typeof text!=='string'||text.length<1000)throw new Error('The cookie-banner library was not handed over.');return text;}\n` +
+      `module.exports={get default(){if(!globalThis[KEY]){const done=webFrame.executeJavaScriptInIsolatedWorld(${PRELOAD_WORLD},[{code:librarySource(),url:'acira-autoconsent-library.js'}]);if(done&&typeof done.catch==='function')done.catch(()=>{});}const library=globalThis[KEY];if(typeof library!=='function')throw new Error('The cookie-banner library did not load.');return library;}};\n`}));
+  }};
+}
 export async function bundleAnswerPreload({root, outfile, plugins = [], metafile = false, banner, logLevel = 'silent'}) {
-  const result = await esbuild({absWorkingDir: root, entryPoints: [ANSWER_PRELOAD_ENTRY], outfile, bundle: true, platform: 'browser', format: 'cjs', target: 'chrome130', external: ['electron'], legalComments: 'inline', metafile, logLevel, plugins, ...(banner ? {banner: {js: banner}} : {})});
+  const library = onDemandLibrary(), text = await answerLibrarySource(root);
+  const result = await esbuild({absWorkingDir: root, entryPoints: [ANSWER_PRELOAD_ENTRY], outfile, bundle: true, platform: 'browser', format: 'cjs', target: 'chrome130', external: ['electron'], legalComments: 'inline', metafile, logLevel, plugins: [library, ...plugins], ...(banner ? {banner: {js: banner}} : {})});
   await oneByteFile(path.resolve(root, outfile), LATIN1);
+  await fs.writeFile(path.join(path.dirname(path.resolve(root, outfile)), LIBRARY_FILE), text, 'latin1');
   return result;
 }

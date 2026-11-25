@@ -24,14 +24,9 @@
 .app.style-acira .browser-shell .address-bar .address-field[data-glide] > input { padding-left: calc(8px + max(0px, (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p))) !important; text-indent: min(0px, (var(--af-center, 0px) - var(--af-pre, 0px)) * var(--af-p)); }
 .app.style-acira .address-field[data-glide][data-crossfade] > input { color: color-mix(in srgb, var(--text-primary, currentColor) calc((1 - var(--af-p)) * 100%), transparent); caret-color: transparent; }
 .app.style-acira .address-field[data-glide][data-crossfade] > input::selection { background: color-mix(in srgb, Highlight calc((1 - var(--af-p)) * 100%), transparent); }
-/* The field's ring goes with the text: its colour fades in and out on the same time and spring (the bar gets --af-ms and --af-ease from App.tsx), so a click,
-   Cmd/Ctrl+L, Esc and a click away are one motion of text and ring. It rests as a transparent ring of the same size. The field's fill keeps its own quick
-   transition (it is the hover's too). A press that holds the at-rest text for a drag leaves the ring until the release, which is when the text starts to travel. */
-.app.style-acira .browser-shell .address-bar:has(.address-field[data-glide]) { transition: background .22s, border-color .22s, box-shadow .22s, outline-color var(--af-ms, 0ms) var(--af-ease, linear); }
-@media not (forced-colors: active) {
-  .app.style-acira .browser-shell .address-bar:has(.address-field[data-glide]):not(:focus-within) { outline: 2px solid transparent; outline-offset: -2px; }
-  .app.style-acira .browser-shell .address-bar:has(.address-field[data-glide][data-holding]):focus-within { outline-color: transparent; }
-}
+/* The field's ring is the active border (styles/active-border.css, Beta 14): it appears and leaves in the chosen look's own motion as the field takes and loses focus, alongside the text's glide.
+   The field's fill keeps its own quick transition (it is the hover's too). A press that holds the at-rest text for a drag leaves the ring until the release, which is when the text starts to travel (data-holding). */
+.app.style-acira .browser-shell .address-bar:has(.address-field[data-glide]) { transition: background .22s, border-color .22s, box-shadow .22s; }
 /* Measures text in the input's font (the placeholder, the part of the address the at-rest text leaves out). */
 .address-ruler { position: absolute; left: 0; top: 0; visibility: hidden; white-space: pre; pointer-events: none; font: 400 13px/1 var(--font-ui); font-variant-ligatures: no-contextual; }
 @media (forced-colors: active) {

@@ -33,3 +33,32 @@ test('the packagers write no notarization result into a sealed file, and the rec
  assert.match(sealed,/notarization,/);assert.doesNotMatch(sealed,/notarized:|stapled:/);
  assert.match(installer,/notarized:payloadNotarized/,'payload.json says whether the archived browser was already notarized');
 });
+
+test('the Mac disk image is lzma (ULMO): the installer is a second Electron and zlib left 42.5 MB of the download on the table (14.0)',()=>{
+ const widevine=read('scripts/package-mac-widevine.mjs');
+ const create=widevine.match(/hdiutil',\['create'[^\]]*\]/)?.[0];assert(create,'the packager still builds its disk image with hdiutil create');
+ assert.match(create,/'-format','ULMO'/);assert.doesNotMatch(create,/UDZO/);
+ assert.match(widevine,/hdiutil',\['verify',diskImage\]/,'the image is still verified after it is signed');
+});
+
+// D142 (22 Nov 2026): two of the sentences macOS shows in its own permission questions were still the engine's ("This app needs access to audio
+// capture", "... Bluetooth"), kept by the build template. All five come from packaging/macos/permission-texts.cjs.
+test('the sentences in macOS\'s permission questions are Acira\'s own, written by both packagers, and the installer carries none',()=>{
+ const {macPermissionTexts}=require('../packaging/macos/permission-texts.cjs'),texts=macPermissionTexts();
+ assert.deepEqual(Object.keys(texts).sort(),['NSAudioCaptureUsageDescription','NSBluetoothAlwaysUsageDescription','NSBluetoothPeripheralUsageDescription','NSCameraUsageDescription','NSMicrophoneUsageDescription']);
+ for(const [key,text] of Object.entries(texts)){
+  assert.match(text,/^Allow a website you choose to .+ in Acira\.$/,key+': the same shape as the camera line');
+  assert.doesNotMatch(text,/This app|Electron/i,key);assert.ok(text.length<=80,key+' stays one short line in the system\'s box');
+ }
+ assert.equal(texts.NSCameraUsageDescription,'Allow a website you choose to use the camera in Acira.');
+ assert.equal(texts.NSMicrophoneUsageDescription,'Allow a website you choose to use the microphone in Acira.');
+ assert.equal(texts.NSBluetoothAlwaysUsageDescription,texts.NSBluetoothPeripheralUsageDescription,'macOS\'s two Bluetooth keys say the same');
+ assert.notDeepEqual(macPermissionTexts(),null);assert.notEqual(macPermissionTexts(),macPermissionTexts(),'a fresh object each time: a packager may add to its copy');
+ const widevine=read('scripts/package-mac-widevine.mjs'),installer=read('scripts/package-mac-beta-installer.mjs'),plain=read('scripts/package-mac.mjs');
+ const edit=widevine.indexOf("Object.assign(info,require('../packaging/macos/permission-texts.cjs').macPermissionTexts())");
+ assert.ok(edit>0&&edit<widevine.indexOf('await fs.writeFile(infoFile,plist.build(info))'),'the release writes them into the bundle\'s Info.plist, over the template\'s');
+ assert.ok(plain.includes("Object.assign(info,require('../packaging/macos/permission-texts.cjs').macPermissionTexts())"));
+ assert.doesNotMatch(plain+widevine,/info\.NS\w+UsageDescription=/,'no sentence is written anywhere else');
+ assert.match(installer,/\.\.\.Object\.keys\(require\('\.\.\/packaging\/macos\/permission-texts\.cjs'\)\.macPermissionTexts\(\)\),'ElectronAsarIntegrity'\]\)delete info\[key\];/,'the installer asks for nothing: every key goes');
+ for(const text of [widevine,installer,plain])assert.ok(text.includes("'packaging/macos/permission-texts.cjs'"),'recorded among the build\'s inputs');
+});

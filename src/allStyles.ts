@@ -24,7 +24,15 @@ import './styles/kbd.css';
 import './styles/rtl.css';
 // The sidebar on the right: gated on the root's data-sidebar-side, after every layout rule it overrides. It sets places and mirrors, no ink, so it loads before tab-ink.css.
 import './styles/sidebar-right.css';
+// 14.1 Your colours: the frame's one field in the solid paints (after frame.css, frost-preview.css and sidebar-right.css).
+import './styles/own-colours.css';
 // Tab glow (item 11): the site colour round the selected and a hovered tab. Its selectors are more specific than the rows' own, and the tab ink below still loads last.
 import './styles/tab-glow.css';
+// Active border (Beta 14, F1/F2): one look for every active border, five looks, their appear and leave motion. Reads the root's data-active-border.
+import './styles/active-border.css';
+// Ambient mode (Beta 14, F6): the page's edge colours as light in the sidebar and the toolbar.
+import './styles/ambient.css';
+// 14.3 Tab size: Small and Large only (Standard sets nothing), after everything that draws a tab row (it sets heights only, so tab-ink.css still settles every colour last).
+import './styles/tab-size.css';
 // Tab ink on the light cards (current sidebar row, current compact tab, carried tabs): last, so it settles every surface above.
 import './styles/tab-ink.css';

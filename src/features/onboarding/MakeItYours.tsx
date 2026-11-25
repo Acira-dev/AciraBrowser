@@ -8,6 +8,8 @@ import { FinishSwatch } from "../../components/AppearanceControls";
 import { endAppearancePreview } from "../../ui/finishPreview";
 import { windowViewOf, type WindowView } from "../../runtime/windowView";
 import { setTabsLayout, shownView, tabsLayoutOf, viewsOfLayout } from "../../ui/sidebarMode";
+import { setupTabsLayouts } from "./setupLayoutFlag";
+import { tabsLayoutName } from "../../ui/tabsLayoutNames";
 import { windowViewDetail, windowViewName } from "../../ui/windowViewText";
 import { t, useT, type MessageId } from "../../i18n";
 import "./onboarding.css";
@@ -176,7 +178,7 @@ function MakeItYours({ reduced, onClose }: { reduced: boolean; onClose: () => vo
               <Segmented
                 label={t("yours.tabs")}
                 value={layout}
-                options={[["top", t("yours.tabsTop")], ["sidebar", t("yours.tabsSide")], ["sidebar-address", t("yours.tabsSideAddress")]] as const}
+                options={setupTabsLayouts().map((id) => [id, t(tabsLayoutName[id])] as const)}
                 onChange={(value) => setTabsLayout(state, dispatch, value)}
               />
             </div>

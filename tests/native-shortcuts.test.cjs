@@ -150,17 +150,70 @@ test('keys Windows keeps for itself are refused with a reason, and a key another
 
 test('defaults never collide, and none of them is a key Windows keeps for itself',()=>{
  const {restriction}=require('../desktop/shortcut-registry.cjs');
- // Alt+letter defaults are Chrome's own (menu, address, tab viewer, Tor window); the editor refuses new ones for layouts that type with Alt.
- // Alt+1–8 switch workspaces (R3-57; Ctrl+1–9 is go to tab, Ctrl+Shift+1–6 the split layouts, so Alt is the free one).
- const chromeAltLetters=new Set(['Alt+F','Alt+E','Alt+D','Alt+T','Alt+Shift+N','Alt+Shift+T',...Array.from({length:8},(_,i)=>`Alt+${i+1}`)]);
- const owner=new Map();
- for(const command of COMMANDS)for(const raw of command.defaults){
-  const accel=canonical(raw,win);assert.ok(accel,raw);
-  assert.ok(!owner.has(accel),`${accel} is a default of both ${owner.get(accel)} and ${command.id}`);owner.set(accel,command.id);
-  const blocked=restriction(accel,win);
-  if(blocked)assert.ok(chromeAltLetters.has(accel),`${command.id} default ${accel} is restricted: ${blocked.message}`);
+ // The rule (D132), not a list of allowed keys: a command's own factory key is always accepted for that command, and a factory key the editor
+ // would refuse as a NEW key (Chrome's Alt+letter keys, the Task manager's Shift+Esc) is refused for every other command.
+ for(const platform of [win,'darwin','linux']){
+  const fresh=()=>createShortcutRegistry({platform,arch:'x64'}),owner=new Map();
+  for(const command of fresh().list())for(const accel of command.defaults){
+   assert.ok(!owner.has(accel),`${platform}: ${accel} is a default of both ${owner.get(accel)} and ${command.id}`);owner.set(accel,command.id);
+   const own=fresh().set(command.id,accel);assert.equal(own.ok,true,`${platform}: ${command.id} cannot take its own factory key ${accel}: ${own.message}`);
+   const blocked=restriction(accel,platform);if(!blocked)continue;
+   for(const other of fresh().list())if(other.id!==command.id){
+    const taken=fresh().set(other.id,accel,{replace:true});
+    assert.equal(taken.ok,false,`${platform}: ${other.id} took ${accel}, the factory key of ${command.id}`);assert.equal(taken.code,blocked.code);
+   }
+  }
+  if(platform===win)for(const reserved of ['Alt+F4','Alt+Tab','Alt+Space','Ctrl+Esc','Ctrl+Shift+Esc','Ctrl+Alt+Delete','Shift+F10'])assert.ok(!owner.has(canonical(reserved,win)),reserved);
  }
- for(const reserved of ['Alt+F4','Alt+Tab','Alt+Space','Ctrl+Esc','Ctrl+Shift+Esc','Ctrl+Alt+Delete','Shift+F10'])assert.ok(!owner.has(canonical(reserved,win)),reserved);
+});
+
+test('D132: the Task manager\'s own Shift+Esc can be typed back in, is kept in the saved file, and stays refused for everyone else',()=>{
+ const shiftEsc=key('Escape',['shift']);
+ for(const platform of [win,'darwin','linux']){
+  const file=path.join(tmp(),'shortcuts.json'),open=()=>createShortcutRegistry({file,platform,arch:'x64'}),keys=r=>r.list().find(c=>c.id==='task-manager').bindings;
+  const r=open();
+  assert.deepEqual(keys(r),['Shift+Esc']);assert.equal(resolve(r,shiftEsc).action,'task-manager');
+  // changed: the factory key no longer answers
+  assert.equal(r.set('task-manager','Ctrl+Shift+Y').ok,true);assert.equal(resolve(r,shiftEsc),null);assert.equal(resolve(r,key('y',['ctrl','shift'])).action,'task-manager');
+  // typed back in (it was refused: "Esc closes dialogs and stops loading; it cannot be reassigned")
+  const back=r.set('task-manager','Shift+Esc');assert.equal(back.ok,true,back.message);assert.equal(back.binding,'Shift+Esc');
+  assert.deepEqual(keys(r),['Shift+Esc']);assert.equal(resolve(r,shiftEsc).action,'task-manager');assert.equal(resolve(r,key('y',['ctrl','shift'])),null);
+  // after a restart (it was dropped at load, and the command fell back only because its list came out empty)
+  assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')).bindings['task-manager'],['Shift+Esc']);
+  const again=open();assert.deepEqual(keys(again),['Shift+Esc']);assert.equal(resolve(again,shiftEsc).action,'task-manager');
+  // a saved or imported file that holds the factory key beside another key keeps both (the factory key was silently dropped)
+  fs.writeFileSync(file,JSON.stringify({version:1,bindings:{'task-manager':['Ctrl+Shift+Y','Shift+Esc']}}));
+  const both=open();assert.deepEqual(keys(both),['Ctrl+Shift+Y','Shift+Esc']);assert.equal(resolve(both,shiftEsc).action,'task-manager');
+  assert.equal(both.importJson(JSON.stringify({version:1,bindings:{'task-manager':['Shift+Esc','Ctrl+Shift+Y']}})).ok,true);assert.deepEqual(keys(both),['Shift+Esc','Ctrl+Shift+Y']);
+  // nobody else may take it, not by typing, not with "replace", not through a file; and nobody gets plain Esc, the Task manager included
+  for(const id of ['close-tab','new-tab','menu'])for(const replace of [false,true]){const taken=r.set(id,'Shift+Esc',{replace});assert.equal(taken.ok,false);assert.equal(taken.code,'reserved');}
+  assert.deepEqual(keys(r),['Shift+Esc']);
+  for(const id of ['task-manager','close-tab'])assert.equal(r.set(id,'Esc').code,'reserved');
+  for(const accel of ['Ctrl+Esc','Alt+Esc','Ctrl+Shift+Esc'])assert.equal(r.set('task-manager',accel).ok,false,accel+' is not its factory key');
+  fs.writeFileSync(file,JSON.stringify({version:1,bindings:{'close-tab':['Shift+Esc'],'task-manager':['Ctrl+Shift+Y']}}));
+  const stolen=open();assert.ok(!stolen.list().find(c=>c.id==='close-tab').bindings.includes('Shift+Esc'));assert.equal(resolve(stolen,shiftEsc),null);assert.deepEqual(keys(stolen),['Ctrl+Shift+Y']);
+  // Reset still restores it
+  assert.equal(stolen.reset('task-manager').ok,true);assert.deepEqual(keys(stolen),['Shift+Esc']);assert.equal(resolve(stolen,shiftEsc).action,'task-manager');
+  // what Settings asks: the key described for the command it edits
+  assert.equal(r.describe('Shift+Esc','task-manager').valid,true);assert.equal(r.describe('Shift+Esc','close-tab').valid,false);assert.equal(r.describe('Shift+Esc',null).valid,false);
+ }
+});
+
+test('D132: while a key is recorded, Shift+Esc is accepted only for the Task manager; plain Esc still cancels',()=>{
+ const r=make(null),shiftEsc=key('Escape',['shift']);
+ r.set('task-manager','Ctrl+Shift+Y');
+ r.startRecording('w','task-manager');
+ const own=resolve(r,shiftEsc);assert.equal(own.action,'record-key');assert.equal(own.accelerator,'Shift+Esc');assert.equal(own.valid,true);assert.equal(own.cancel,false);assert.equal(own.conflict,null);
+ assert.equal(resolve(r,key('Escape')).cancel,true,'plain Esc cancels the recording, also for the Task manager');
+ r.startRecording('w','close-tab');
+ const other=resolve(r,shiftEsc);assert.equal(other.valid,false);assert.equal(other.code,'reserved');assert.equal(other.cancel,false);
+ // a recording that names no command (or one that does not exist) judges the key as before
+ for(const id of [undefined,null,'no-such-command',7]){r.startRecording('w',id);const none=resolve(r,shiftEsc);assert.equal(none.valid,false);assert.equal(none.code,'reserved');}
+ // the rule is for Acira's own commands: a key an extension suggests for its command is judged as any new key
+ // (the dynamic commands are the module's: taken out again, or the tests after this one would see them)
+ try{r.setDynamic('ext:',[{id:'ext:abc:run',label:'Run',category:'Extensions',action:{action:'extension-command',id:'abc',name:'run'},defaults:['Shift+Esc']}]);
+  const refused=r.set('ext:abc:run','Shift+Esc');assert.equal(refused.ok,false);assert.equal(refused.code,'reserved');
+ }finally{r.setDynamic('ext:',[]);}
 });
 
 test('Chrome and Arc keys added in the coverage pass reach their commands',()=>{

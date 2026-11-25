@@ -129,12 +129,35 @@ test('13.10: check() says why a tab would stay, without unloading it, and wakes 
 test('13.10: main\'s protectedReason lets the person unload a pinned tab and skips the sweep\'s own keep-awake reasons for an explicit request only',()=>{
  const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8');
  const at=main.indexOf('async protectedReason(tab,choice,context)'),body=main.slice(at,main.indexOf('async sleep(id)',at));
- assert.ok(body.includes("if(tab.pinned&&!context?.pressure&&!context?.explicit)return 'pinned';"));
+ assert.ok(body.includes("if(tabIsPinned(state,tab)&&!context?.pressure&&!context?.explicit)return 'pinned';"),'(pinned folders, 14.0: pinned is the tab\'s own flag or a pinned folder)');
  for(const reason of ['recently-audible','background-activity','notifications','never-sleep'])assert.ok(new RegExp('!context\\?\\.explicit&&[^;]*'+reason).test(body)||body.includes("if(!context?.explicit)try{const site")&&reason==='notifications',reason+' only for the automatic sleep');
  for(const reason of ["'capturing'","'audio'","'download'","'inspecting'"])assert.ok(body.includes('return '+reason),reason+' still keeps a tab for an explicit request');
  const sleepNow=main.slice(main.indexOf('async function sleepTabsNow(ids)'),main.indexOf('function tabSleepWake()'));
  assert.ok(sleepNow.includes('unloadLanding(state,tab)')&&sleepNow.indexOf("tabSleep.check(tab.id,{explicit:true})")<sleepNow.indexOf("dispatch({type:'tab.select',id:landing.id})"),'the tab on screen is checked first, then the person moves, then it unloads');
  assert.ok(sleepNow.includes("commitAction({type:'tab.unloaded',ids:report.slept})"),'what was unloaded leaves the trail');
+});
+
+test('14.0: a title or icon change counts as background activity only for a hidden page that has loaded and been left alone for 10 s; a tab opened in the background and never shown is not marked by its own loading',()=>{
+ const {countsAsBackgroundUpdate,BACKGROUND_UPDATE_GRACE_MS}=require('../desktop/tab-sleep.cjs');
+ assert.equal(BACKGROUND_UPDATE_GRACE_MS,10000);
+ const T=1_000_000,base={visible:false,discarding:false,loading:false,now:T};
+ // opened in the background, never shown (shownAt undefined): the fault was that this counted from the first title on
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-300,loading:true}),false,'its title while it loads');
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-4000,loadedAt:T-3000}),false,'its icon 3 s after it loaded');
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-30000,loadedAt:T-9000}),false,'a slow page: 9 s after it finished loading, however long ago it was opened');
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-60000,loadedAt:T-50000}),true,'a real background update: an unread count a minute after it was opened');
+ // a tab that was on screen: as before, 10 s after it was left
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-600000,loadedAt:T-590000,shownAt:T-5000}),false);
+ assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-600000,loadedAt:T-590000,shownAt:T-11000}),true);
+ // never while it is on screen, being unloaded or loading (a reload in the background)
+ for(const patch of [{visible:true},{discarding:true},{loading:true}])assert.equal(countsAsBackgroundUpdate({...base,openedAt:T-600000,loadedAt:T-590000,shownAt:T-60000,...patch}),false,JSON.stringify(patch));
+ assert.equal(countsAsBackgroundUpdate({...base}),false,'nothing known about the page: not marked');
+ // main asks this rule, with the three clocks
+ const main=fs.readFileSync(path.join(__dirname,'../desktop/main.cjs'),'utf8'),at=main.indexOf("for(const event of ['page-title-updated','page-favicon-updated'])"),handler=main.slice(at,main.indexOf('\n',at));
+ assert.ok(/countsAsBackgroundUpdate\(\{[^}]*shownAt:entry\.shownAt,openedAt:entry\.openedAt,loadedAt:entry\.loadedAt/.test(handler),'the handler passes last shown, opened and loaded');
+ // (D125, 14.1: the same did-finish-load also has the page's weight counted, so the line is matched up to the load clock)
+ assert.ok(main.slice(at-400,at).includes("entry.openedAt=Date.now();wc.on('did-finish-load',()=>{entry.loadedAt=Date.now();"),'both clocks are stamped where the page is made');
+ assert.ok(!/Date\.now\(\)-\(entry\.shownAt\|\|0\)>10000/.test(main),'the old clock (last shown, or never) is gone');
 });
 
 test('13.10: tab.close accepts the batch it closes with, and only tab ids',()=>{

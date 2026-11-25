@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DotMatrix } from '../../components/DotMatrix';
 import { runtime } from '../../runtime/client';
-import type { BrowserSnapshot, ImportSource, ServiceResult } from '../../runtime/types';
+import type { BrowserSnapshot, ImportNote, ImportSource, ServiceResult } from '../../runtime/types';
 import { browserIconFor, browserLetter } from './browserIcons';
 import { ExtensionReinstall } from './ExtensionReinstall';
 import { PasswordHandoff } from './PasswordHandoff';
@@ -9,14 +9,18 @@ import { SignBackIn } from './SignBackIn';
 import { importErrorPresentation, type ImportErrorAction } from './importError';
 import { applyImportedFavorites, undoImportBatches } from '../../ui/importedFavorites';
 import { useT, type MessageId } from '../../i18n';
+import { AnotherComputerGroup, ProfileFileRows } from './TransferRows';
 import './import-export.css';
+import { revealInScroller } from '../../ui/scrollReveal';
 
 type Category = 'favorites' | 'spaces' | 'bookmarks' | 'history' | 'preferences' | 'extensions';
 type FeedbackLocation = ImportErrorAction;
 const categoryOrder: Category[] = ['favorites', 'spaces', 'bookmarks', 'history', 'preferences', 'extensions'];
-/** Only Arc has these; other browsers don't list them at all rather than showing them unavailable. */
-const arcOnly: readonly Category[] = ['favorites', 'spaces'];
-const countIds = new Set<string>(['favorites', 'spaces', 'bookmarks', 'history', 'extensions', 'preferences']);
+/** Only Arc, Opera, Vivaldi and Zen have these; other browsers don't list them at all rather than showing them unavailable. */
+const leading: readonly Category[] = ['favorites', 'spaces'];
+const countIds = new Set<string>(['favorites', 'spaces', 'workspaces', 'bookmarks', 'history', 'extensions', 'preferences']);
+/** Arc calls them Spaces; every other browser's are workspaces. */
+const spacesAreWorkspaces = (browser?: string) => browser !== undefined && browser !== 'Arc';
 
 const hexRgb = (value?: string) => { const m = /^#?([0-9a-f]{6})$/i.exec(value || ''); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : null; };
 /** Readable initial on the profile color (WCAG relative luminance). */
@@ -37,8 +41,8 @@ function BrowserTile({ browser, icon }: { browser: string; icon?: string }) {
 /** Presentation of the existing native importer. Discovery and file dialogs stay in runtime.service. */
 export function ImportPanel({ state }: { state: BrowserSnapshot }) {
   const t = useT();
-  const categoryNames = (category: Category) => t(`import.cat.${category}` as MessageId);
-  const countLabel = (category: string, count: number) => t((countIds.has(category) ? `import.count.${category}` : 'import.count.items') as MessageId, { count });
+  const categoryNames = (category: Category, browser?: string) => t((category === 'spaces' && spacesAreWorkspaces(browser) ? 'import.cat.workspaces' : `import.cat.${category}`) as MessageId);
+  const countLabel = (category: string, count: number, browser?: string) => t((countIds.has(category) ? `import.count.${category === 'spaces' && spacesAreWorkspaces(browser) ? 'workspaces' : category}` : 'import.count.items') as MessageId, { count });
   const [result, setResult] = useState<ServiceResult>({});
   const [source, setSource] = useState<ImportSource | null>(null);
   const [categories, setCategories] = useState<Category[]>(['bookmarks', 'history']);
@@ -46,7 +50,6 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
   const [activity, setActivity] = useState(t('import.activity.finding'));
   const [error, setError] = useState('');
   const [exportMessage, setExportMessage] = useState('');
-  const [includeHistory, setIncludeHistory] = useState(false);
   const [feedbackLocation, setFeedbackLocation] = useState<FeedbackLocation>('source');
   const [cancelable, setCancelable] = useState(false);
   const [passwordsBrought, setPasswordsBrought] = useState(0);
@@ -54,6 +57,7 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
   const summary = useRef<HTMLDivElement>(null);
   const errorNotice = useRef<HTMLParagraphElement>(null);
   const selection = useRef<HTMLFieldSetElement>(null);
+  const permissionNote = useRef<HTMLDivElement>(null);
   const findProfiles = useRef<HTMLButtonElement>(null);
   const focusSelection = useRef(false);
   const focusSources = useRef(false);
@@ -69,13 +73,13 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
 
   useEffect(() => {
     if (batch) {
-      summary.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+      revealInScroller(summary.current, { block: 'start', behavior: 'instant' });
       summary.current?.focus({ preventScroll: true });
     }
   }, [batch?.id]);
   useEffect(() => {
     if (error) {
-      errorNotice.current?.closest('.aip-error-block')?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      revealInScroller(errorNotice.current?.closest('.aip-error-block'), { behavior: 'instant' });
       errorNotice.current?.focus({ preventScroll: true });
     }
   }, [error]);
@@ -83,7 +87,7 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
     if (busy) return;
     if (focusSelection.current && preview && source?.id === preview.source.id) {
       focusSelection.current = false;
-      selection.current?.focus({ preventScroll: true });
+      (selection.current ?? permissionNote.current)?.focus({ preventScroll: true });
     }
     if (focusSources.current && !source) {
       focusSources.current = false;
@@ -123,9 +127,9 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
       const next = await runtime.service({ type: 'imports.preview', sourceId: item.id });
       if (mine === generation.current) {
         setResult(current => ({ ...current, ...next }));
-        // Arc's Favorites and Spaces are what its people come for, so they start ticked.
-        const arc = arcOnly.filter(category => next.preview?.source.available[category]);
-        setCategories(old => [...new Set([...arc, ...old.filter(category => !arcOnly.includes(category))])]);
+        // Favorites and workspaces (Arc's Spaces, Opera's and Vivaldi's workspaces, Zen's) are what their people come for, so they start ticked.
+        const own = leading.filter(category => next.preview?.source.available[category]);
+        setCategories(old => [...new Set([...own, ...old.filter(category => !leading.includes(category))])]);
       }
     } catch (error) { if (mine === generation.current) setError(String(error)); }
     finally { if (mine === generation.current) { setBusy(false); setCancelable(false); } }
@@ -140,20 +144,12 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
     } catch (error) { setError(String(error)); }
     finally { setBusy(false); }
   };
-  const importHTML = async () => {
-    setBusy(true); setActivity(t('import.activity.file')); setFeedbackLocation('html'); setError(''); setExportMessage('');
+  /** Bookmarks as an HTML file, for other browsers. (The profile file is the sheet's: Save profile file…, below.) */
+  const exportBookmarks = async () => {
+    setBusy(true); setActivity(t('import.activity.exporting')); setFeedbackLocation('export-html'); setError(''); setExportMessage('');
     try {
-      const next = await runtime.service({ type: 'imports.html' });
-      setResult(current => ({ ...current, ...next }));
-      if (next.cancelled) setExportMessage(t('import.importCancelled'));
-    } catch (error) { setError(String(error)); }
-    finally { setBusy(false); }
-  };
-  const exportData = async (format: 'html' | 'json') => {
-    setBusy(true); setActivity(t('import.activity.exporting')); setFeedbackLocation(format === 'html' ? 'export-html' : 'export-json'); setError(''); setExportMessage('');
-    try {
-      const next = await runtime.service({ type: 'imports.export', format, history: format === 'json' && includeHistory });
-      setExportMessage(next.cancelled ? t('import.exportCancelled') : format === 'html' ? t('import.bookmarksExported') : t('import.profileExported'));
+      const next = await runtime.service({ type: 'imports.export', format: 'html', history: false });
+      setExportMessage(next.cancelled ? t('import.exportCancelled') : t('import.bookmarksExported'));
     } catch (error) { setError(String(error)); }
     finally { setBusy(false); }
   };
@@ -172,13 +168,19 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
   const withSkipped = (count: string, skipped?: { duplicates: number; notWeb: number }) => [count, skipped?.duplicates ? t('import.skip.duplicates', { count: skipped.duplicates }) : '', skipped?.notWeb ? t('import.skip.notWeb', { count: skipped.notWeb }) : ''].filter(Boolean).join(' · ');
   const categoryDescription = (category: Category) => {
     if (!preview?.source.available[category]) return t('import.desc.unavailable');
-    if (category === 'favorites') return t('import.desc.favorites', { count: countLabel(category, preview.favorites ?? 0) });
+    if (category === 'favorites') return t((preview.favoritesFrom === 'speedDial' ? 'import.desc.speedDial' : preview.favoritesFrom === 'essentials' ? 'import.desc.essentials' : 'import.desc.favorites') as MessageId, { count: countLabel(category, preview.favorites ?? 0) });
+    if (category === 'spaces' && spacesAreWorkspaces(preview.source.browser)) return t('import.desc.workspaces', { count: countLabel(category, preview.spaces ?? 0, preview.source.browser), tabs: t('import.count.tabs', { count: preview.tabs ?? 0 }) });
     if (category === 'spaces') return t('import.desc.spaces', { count: countLabel(category, preview.spaces ?? 0), pinned: (preview.pinned ?? 0).toLocaleString() });
     if (category === 'bookmarks') return withSkipped(countLabel(category, preview.bookmarks), preview.skipped?.bookmarks);
     if (category === 'history') return preview.history === null ? t('import.desc.historyUnreadable') : withSkipped(countLabel(category, preview.history), preview.skipped?.history);
     if (category === 'extensions') return t('import.desc.extensions', { count: countLabel(category, preview.extensions.length) });
     return t('import.desc.preferences');
   };
+  /** What could not come over, said plainly (the main process names each item; the words are here so they follow the language). */
+  const notBroughtList = (notes?: ImportNote[]) => notes?.length ? <div className="aip-notbrought" role="group" aria-label={t('import.not.heading')}>
+    <h3 className="aip-notbrought-title">{t('import.not.heading')}</h3>
+    <ul className="aip-notbrought-list">{notes.map(note => <li key={note.id} className="aip-notbrought-item">{t(`import.not.${note.id}` as MessageId, { count: note.count ?? 0, limit: note.limit ?? 0 })}</li>)}</ul>
+  </div> : null;
   const feedback = (location: FeedbackLocation) => feedbackLocation === location && (busy || error || exportMessage) ?
     <div className="aip-inline-feedback">
       {busy && <p className="aip-feedback" role="status"><DotMatrix preset="loader" size={16} reducedMotion={state.settings.reducedMotion}/><span>{activity}</span>{cancelable && <button type="button" className="aip-button aip-quiet" onClick={cancel}>{t('import.cancel')}</button>}</p>}
@@ -191,18 +193,21 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
 
   return <section className="acira-import-panel" aria-label={t('import.panelLabel')} aria-busy={busy}>
     {isPrivate && <p className="aip-notice" role="status">{t('import.private')}</p>}
+    <AnotherComputerGroup disabled={busy || isPrivate} privateWindow={isPrivate} />
     {batch ? <div className="aip-section aip-receipt" data-setting="import-browser" ref={summary} tabIndex={-1} role="status">
       <header className="aip-header">
         <h2 className="aip-heading">{hasIssues ? t('import.completeIssues') : t('import.complete')}</h2>
         <p className="aip-copy">{batch.browser} · {batch.name}</p>
       </header>
       <ul className="aip-results">{batch.results.map(row => <li key={row.category} data-result={row.status}>
-        <div><strong>{categoryOrder.includes(row.category as Category) ? categoryNames(row.category as Category) : row.category}</strong>
+        <div><strong>{categoryOrder.includes(row.category as Category) ? categoryNames(row.category as Category, batch.browser) : row.category}</strong>
           <span className="aip-result-status">{row.status === 'imported' ? t('import.status.imported') : row.status === 'inventory only' ? t('import.status.inventory') : row.status === 'failed' ? t('import.status.failed') : row.status === 'unavailable' ? t('import.status.unavailable') : row.status}</span></div>
-        {(row.status === 'imported' || row.status === 'inventory only') && <p className="aip-copy">{countLabel(row.category, row.count ?? 0)}{row.folders ? ` · ${t('import.folders', { count: row.folders })}` : ''}{row.skipped ? ` · ${t('import.skipped', { count: row.skipped.toLocaleString() })}` : ''}</p>}
+        {(row.status === 'imported' || row.status === 'inventory only') && <p className="aip-copy">{countLabel(row.category, row.count ?? 0, batch.browser)}{row.category === 'spaces' && spacesAreWorkspaces(batch.browser) && row.tabs ? ` · ${t('import.count.tabs', { count: row.tabs })}` : ''}{row.folders ? ` · ${t('import.folders', { count: row.folders })}` : ''}{row.skipped ? ` · ${t('import.skipped', { count: row.skipped.toLocaleString() })}` : ''}</p>}
         {row.status === 'inventory only' && !isPrivate && preview?.extensions?.length ? <ExtensionReinstall profileId={batch.profileId} found={preview.extensions}/> : row.status === 'inventory only' && <p className="aip-copy">{t('import.extNotInstalled')}</p>}
         {row.error && <p className="aip-copy" role="alert">{row.error}</p>}
       </li>)}</ul>
+      {notBroughtList(batch.notBrought)}
+      {batch.browser === 'Arc' && !state.settings.autoPictureInPicture && <p className="aip-copy aip-arc-pip">{t('import.arcPip')}</p>}
       <div className="aip-actions">
         <button type="button" className="aip-button aip-primary" disabled={busy} onClick={another}>{t('import.more')}</button>
         <button type="button" className="aip-button" disabled={busy || isPrivate} onClick={() => void undo(batch.id)}>{t('import.undo')}</button>
@@ -222,7 +227,7 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
           {result.sources!.filter(item => item.browser === browser).map(item => <button type="button" className="aip-source" key={item.id} disabled={busy} onClick={() => void choose(item)}>
             <Avatar source={item} />
             <strong><bdi>{item.name}</bdi>{item.email && item.email !== item.name && <span className="aip-email"><bdi>{item.email}</bdi></span>}</strong>
-            <span className="aip-source-meta">{categoryOrder.filter(category => item.available[category]).map(category => categoryNames(category)).join(' · ') || t('import.noSupportedData')}</span>
+            <span className="aip-source-meta">{item.permission === 'needed' ? t('import.safari.rowHint') : categoryOrder.filter(category => item.available[category]).map(category => categoryNames(category, item.browser)).join(' · ') || t('import.noSupportedData')}</span>
             <span className="aip-source-action">{t('import.chooseProfile')} <span aria-hidden="true">→</span></span>
           </button>)}
         </div>)}</div>}
@@ -230,14 +235,20 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
       </> : <>
         <div className="aip-actions"><button type="button" className="aip-button aip-quiet" disabled={busy} onClick={another}>{t('import.changeProfile')}</button>{!preview && !busy && <button type="button" className="aip-button" onClick={() => void choose(source)}>{t('import.retry')}</button>}</div>
         {feedback('source')}
-        {preview && <>
+        {preview?.permission === 'needed' && <div className="aip-notice aip-permission" role="status" tabIndex={-1} ref={permissionNote}>
+          <strong className="aip-permission-title">{t('import.safari.permissionTitle')}</strong>
+          <span>{t('import.safari.permission')}</span>
+          <button type="button" className="aip-button" disabled={busy} onClick={() => void choose(source)}>{t('import.safari.tryAgain')}</button>
+        </div>}
+        {preview && preview.permission !== 'needed' && <>
           <fieldset ref={selection} tabIndex={-1} className="aip-categories" disabled={busy || isPrivate}>
             <legend>{t('import.chooseWhat')}</legend>
-            {categoryOrder.filter(category => !arcOnly.includes(category) || preview.source.available[category]).map(category => <label key={category} className="aip-category" data-unavailable={!preview.source.available[category] || undefined}>
+            {categoryOrder.filter(category => !leading.includes(category) || preview.source.available[category]).map(category => <label key={category} className="aip-category" data-unavailable={!preview.source.available[category] || undefined}>
               <input type="checkbox" checked={categories.includes(category)} disabled={!preview.source.available[category] || busy || isPrivate} onChange={event => setCategories(old => event.target.checked ? [...old, category] : old.filter(item => item !== category))}/>
-              <span><strong>{categoryNames(category)}</strong><span>{categoryDescription(category)}</span></span>
+              <span><strong>{categoryNames(category, preview.source.browser)}</strong><span>{categoryDescription(category)}</span></span>
             </label>)}
           </fieldset>
+          {notBroughtList(preview.notBrought)}
           <p className="aip-copy aip-signins">{t('import.signinsStay')}</p>
           {preview.warnings.length > 0 && <div className="aip-warnings" role="status">{preview.warnings.map((warning, index) => <p key={index}>{warning}</p>)}</div>}
           <div className="aip-actions"><button type="button" className="aip-button aip-primary" disabled={busy || isPrivate || !categories.length} onClick={() => void run()}>{t('import.importSelected')}</button></div>
@@ -249,21 +260,11 @@ export function ImportPanel({ state }: { state: BrowserSnapshot }) {
     {!isPrivate && <PasswordHandoff from={fromBrowser} reducedMotion={state.settings.reducedMotion} onImported={() => setPasswordsBrought(count => count + 1)} />}
     <div className="aip-section aip-files">
       <header className="aip-header"><h2 className="aip-heading">{t('import.filesHeading')}</h2></header>
-      {!batch && <div className="aip-file-row" data-setting="import-bookmarks-html">
-        <div><h3>{t('import.importBookmarks')}</h3><p className="aip-copy">{t('import.importBookmarksDesc')}</p></div>
-        <button type="button" className="aip-button" disabled={busy || isPrivate} onClick={() => void importHTML()}>{t('import.importBookmarksBtn')}</button>
-        {feedback('html')}
-      </div>}
+      <ProfileFileRows disabled={busy || isPrivate} />
       <div className="aip-file-row" data-setting="export-bookmarks-html">
         <div><h3>{t('import.exportBookmarks')}</h3><p className="aip-copy">{t('import.exportBookmarksDesc')}</p></div>
-        <button type="button" className="aip-button" disabled={busy || isPrivate} onClick={() => void exportData('html')}>{t('import.exportBookmarksBtn')}</button>
+        <button type="button" className="aip-button" disabled={busy || isPrivate} onClick={() => void exportBookmarks()}>{t('import.exportBookmarksBtn')}</button>
         {feedback('export-html')}
-      </div>
-      <div className="aip-file-row" data-setting="export-profile-json">
-        <div><h3>{t('import.exportProfile')}</h3><p className="aip-copy">{t('import.exportProfileDesc')}</p></div>
-        <button type="button" className="aip-button" disabled={busy || isPrivate} onClick={() => void exportData('json')}>{t('import.exportProfileBtn')}</button>
-        <label className="aip-history" data-setting="export-include-history"><input type="checkbox" checked={includeHistory} disabled={busy || isPrivate} onChange={event => setIncludeHistory(event.target.checked)}/><span>{t('import.includeHistory')}</span></label>
-        {feedback('export-json')}
       </div>
       <p className="aip-privacy">{t('import.privacy')}</p>
     </div>

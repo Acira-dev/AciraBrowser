@@ -36,6 +36,9 @@ export function glowColour(sources: GlowSources, order: GlowOrder = 'accent'): {
 export const SITE_GLOW_LEVELS = { soft: .3, rich: .55 } as const;
 /** The setting's two levels as the request's strength (layer opacity .12 + .43 x strength: Soft .30, Rich .55). */
 export const SITE_GLOW_STRENGTH = { soft: .42, rich: 1 } as const;
+/** The edge light (Beta 14, F5) is a thin shape on the sidebar's edge, so Soft has to be SEEN too: its sidebar layers take a larger share of the range than the frame's washes do
+ *  (layer opacity .12 + .43 x strength: Soft .40, Rich .55). Gated like every other layer: the peak is held to the readability rules at this opacity. */
+export const SITE_EDGE_STRENGTH = { soft: .65, rich: 1 } as const;
 export interface SiteGlowRequest { color: string; strength: number }
 export interface SiteGlowColors { g1: string; g2: string; g3: string; opacity: number; peak: string; note: 'ok' | 'gated' | 'none' }
 

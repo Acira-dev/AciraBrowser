@@ -125,8 +125,8 @@ test('sidebar.css: the card sits under the icon, steps the title aside, follows 
   assert.match(own, /--sb-peek-card:#fff/);
   assert.match(own, /\[data-chrome=dark\] \.ed-rail\.acira-sidebar\{--sb-peek-card:color-mix\(in srgb,#fff 17%,transparent\)/);
   // the tile: the icon steps 10px left, the card is under it (z-index 0 against the icon's 1)
-  assert.match(own, /\.sb-app:has\(>\.sb-peek-card\[data-open\]\)>:is\(img,svg,\.sb-app-initial\)\{transform:translateX\(-10px\)/);
-  assert.match(own, /\.sb-app:has\(>\.sb-peek-card\)>:is\(img,svg,\.sb-app-initial\)\{position:relative;z-index:1/);
+  assert.match(own, /\.sb-app:has\(>\.sb-peek-card\[data-open\]\)>\.sb-app-initial\{transform:translateX\(-10px\)/);
+  assert.match(own, /\.sb-app:has\(>\.sb-peek-card\)>\.sb-app-initial\{position:relative;z-index:1/);
   assert.doesNotMatch(own, /\.sb-app>:is\(img,svg/, 'only a tile that has a card changes its icon (the + and the less-favorites chevron are untouched)');
   assert.match(own, /\.sb-app>\.sb-peek-card\{position:absolute;inset:0;z-index:0\}/);
   // the row: a zero-size anchor first in the row, level with the icon, and the title steps aside by 16px

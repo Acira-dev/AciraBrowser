@@ -128,7 +128,8 @@ test('a damaged old remover is dropped before electron-builder runs it; a health
 
 test('the check runs before electron-builder removes the old version, in the installer only',()=>{
  const check=nsh.slice(nsh.indexOf('!macro customCheckAppRunning'),nsh.indexOf('!macroend',nsh.indexOf('!macro customCheckAppRunning')));
- assert.match(check,/!ifndef BUILD_UNINSTALLER[\s\S]*Call AcDropBadUninstaller\s+!endif[\s\S]*_CHECK_APP_RUNNING/);
+ // 14.3 (D147/D149): the installer pass runs the setup's own, time-limited copy of the check (AcCheckAppRunning); the stock macros stay in the uninstaller pass
+ assert.match(check,/!ifndef BUILD_UNINSTALLER[\s\S]*Call AcDropBadUninstaller[\s\S]*!insertmacro AcCheckAppRunning[\s\S]*!else[\s\S]*_CHECK_APP_RUNNING/);
  const section=template('installSection.nsh');
  assert.ok(section.indexOf('!insertmacro CHECK_APP_RUNNING')<section.indexOf('!insertmacro uninstallOldVersion SHELL_CONTEXT'),'electron-builder: the running-app check, then the old version\'s uninstaller');
  assert.match(template('include','installUtil.nsh'),/!insertmacro readReg \$uninstallString "\$rootKey" "\$\{UNINSTALL_REGISTRY_KEY\}" UninstallString\s+\$\{if\} \$uninstallString == ""/,'no UninstallString: electron-builder runs no old uninstaller');
@@ -203,7 +204,17 @@ test('a folder with a single quote, or a typographic one, is told apart from the
 
 test('the running-app check turns the PowerShell way off for such a folder (installer only, after the stock probe, before the stock check); the other way never puts the folder in a command',()=>{
  const check=nsh.slice(nsh.indexOf('!macro customCheckAppRunning'),nsh.indexOf('!macroend',nsh.indexOf('!macro customCheckAppRunning')));
- assert.match(check,/!insertmacro IS_POWERSHELL_AVAILABLE\n\s+!ifndef BUILD_UNINSTALLER\n(?:\s+;[^\n]*\n)+\s+Call AcQuoteInInstdir\n\s+Pop \$0\n\s+\$\{If\} \$0 = 1\n\s+StrCpy \$IsPowerShellAvailable 1\n\s+\$\{EndIf\}\n\s+!endif\n\s+!insertmacro _CHECK_APP_RUNNING/);
+ // 14.3 (D147/D149): the quote rule now sits in the setup's own probe (AcPowerShellProbe, the stock IS_POWERSHELL_AVAILABLE with a time limit), which the check runs before anything else
+ const probe=body('AcPowerShellProbe');
+ assert.match(probe,/Call AcQuoteInInstdir\n\s+Pop \$1\n\s+\$\{If\} \$1 = 1\n\s+StrCpy \$0 1\n\s+\$\{EndIf\}\n\s+StrCpy \$acPsOff \$0/);
+ assert.match(nsh.slice(nsh.indexOf('!macro AcCheckAppRunning')),/^!macro AcCheckAppRunning\n  Call AcPowerShellProbe\n/);
+ assert.match(check,/!ifndef BUILD_UNINSTALLER[\s\S]*!insertmacro AcCheckAppRunning\n[\s\S]*!else\n\s+!insertmacro IS_POWERSHELL_AVAILABLE\n\s+!insertmacro _CHECK_APP_RUNNING/);
+ for(const name of ['AcFindAcira','AcKillAcira']){
+  const text=body(name),other=text.slice(text.indexOf('${Else}',text.indexOf('${If} $acPsOff == 0')));
+  assert.match(text,/StartsWith\('\$INSTDIR'/,name+': the PowerShell way names the folder');
+  assert.doesNotMatch(other.replace(/\$\{Else\}[\s\S]*?\$\{EndIf\}\n(?=\s*!ifdef)/,''),/\$INSTDIR/,name+': the other way names the program, never the folder');
+  assert.match(other,/\$\{PRODUCT_FILENAME\}\.exe/,name+': it names the program');
+ }
  const stock=template('include','allowOnlyOneInstallerInstance.nsh'),macro=name=>stock.slice(stock.indexOf('!macro '+name),stock.indexOf('!macroend',stock.indexOf('!macro '+name)));
  assert.match(stock,/Var \/GLOBAL IsPowerShellAvailable ; 0 = available, 1 = not available/,'the flag the check sets, and what its values mean');
  for(const name of ['FIND_PROCESS','KILL_PROCESS']){

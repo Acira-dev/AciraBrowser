@@ -58,20 +58,21 @@ test('the block\'s hide slide on the right: the picture is put at the group\'s r
   assert.match(css, /\[data-sidebar-side=right\]\[data-mode-switch='edge'\]:has\(\.browser-shell\[data-sbmode='bare'\]\)::view-transition-old\(acira-toolbar\),\s*:root:root\[data-sidebar-side=right\]\[data-mode-switch='layout'\]\[data-block-slide='out'\]::view-transition-old\(acira-toolbar\) \{ left: auto; right: 0;/);
   assert.match(css, /\[data-sidebar-side=right\]\[data-page-follow\]\[data-mode-switch='layout'\]\[data-block-slide='in'\]::view-transition-new\(acira-toolbar\) \{ animation-name: acira-sidebar-arrive-follow-right; \}/);
   assert.match(css, /\[data-sidebar-side=right\]\[data-page-follow\]\[data-mode-switch='layout'\]\[data-block-slide='out'\]::view-transition-old\(acira-toolbar\) \{ animation-name: acira-sidebar-leave-follow-right; \}/);
-  // The slide's start is set for the layout switch on the right (and the edge float's own travel), the block's keyframes take it.
+  // The slide's start is set for the layout switch on the right (and the edge float's own travel), the block's keyframes take it. The float's travel is set on
+  // ::view-transition, the pictures' root (Beta 14 smoothness: on <html> every element inherited it and each flip of the overlay restyled the whole interface).
   assert.match(css, /:root\[data-sidebar-side=right\] \{ --sb-slide-from: translateX\(100%\); \}/);
-  assert.match(css, /\[data-sidebar-side=right\]\[data-mode-switch='edge'\]\[data-sidebar-overlay\] \{ --sb-slide-from: translateX\(var\(--sf-sidebar-travel, 100%\)\); \}/);
+  assert.match(css, /\[data-sidebar-side=right\]\[data-mode-switch='edge'\]\[data-sidebar-overlay\]::view-transition \{ --sb-slide-from: translateX\(var\(--sf-sidebar-travel, 100%\)\); \}/);
   // Nothing of it applies with the sidebar on the left.
   for (const rule of css.match(/^[^\n{]*(sbmode|block-slide)[^\n{]*\{/gm) ?? []) assert.match(rule, /data-sidebar-side=right/, rule);
 });
 
 test('Windows with the sidebar on the right: the sidebar arrives already holding the caption strip and the block\'s room', () => {
   const css = read('../src/styles/sidebar-right.css'), base = read('../src/styles/address-in-sidebar.css');
-  assert.match(base, /:where\(:has\(> \.browser-root > \.browser-shell\[data-sbmode='block'\]\)\) > \.ed-rail\.acira-sidebar \{ padding-top: 80px; \}/, 'the left fallback is the original');
-  assert.match(css, /html\[data-platform=win32\]\[data-sidebar-side=right\]:root:root:root \.app\.style-acira:where\(:has\(> \.browser-root > \.browser-shell\[data-sbmode='block'\]\)\) > \.ed-rail\.acira-sidebar \{ padding-top: calc\(80px \+ 40px \/ var\(--interface-scale, 1\)\); \}/);
+  assert.match(base, /:where\(:has\(> \.browser-root > \.browser-shell\[data-sbmode='block'\]\), :has\(> \.browser-root\.addr-side\)\) > \.ed-rail\.acira-sidebar \{ padding-top: 80px; \}/, 'the left fallback is the original, held by the root\'s addr-side too (Seamless, guard c3)');
+  assert.match(css, /html\[data-platform=win32\]\[data-sidebar-side=right\]:root:root:root \.app\.style-acira:where\(:has\(> \.browser-root > \.browser-shell\[data-sbmode='block'\]\), :has\(> \.browser-root\.addr-side\)\) > \.ed-rail\.acira-sidebar \{ padding-top: calc\(80px \+ \(36px \+ 6px \/ var\(--interface-scale, 1\)\)\); \}/);
   assert.match(css, /\.ed-rail\.acira-sidebar\.is-expanded::before \{ display: none; \}/, 'the 40 px strip is gone from the first commit, as data-addr-side makes it');
   // The open row (108 px + the strip) is a higher rule than the fallback, as on the left.
-  assert.match(css, /\[data-addr-side\]\[data-addr-open\] \{ padding-top: calc\(108px \+ 40px/);
+  assert.match(css, /\[data-addr-side\]\[data-addr-open\] \{ padding-top: calc\(108px \+ \(36px \+ 6px/);
 });
 
 test('Windows with the sidebar on the right: a button that ends 40 px lower (under the caption buttons) waits to drop, so the page never covers it; level buttons are unchanged', () => {

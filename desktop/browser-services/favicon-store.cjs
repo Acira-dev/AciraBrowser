@@ -84,6 +84,8 @@ function createFaviconStore({file,nativeImage,now=()=>Date.now()}){
   if(added)save();
   return added;
  }
+ /** Takes back icons by host (a profile transfer's Undo): only the hosts named, nothing else. */
+ function remove(profileId,hosts){load();const profile=data.profiles[profileId];if(!profile||!Array.isArray(hosts))return 0;let removed=0;for(const host of hosts)if(typeof host==='string'&&profile[host]){delete profile[host];removed++;}if(removed)save();return removed;}
  function forgetProfile(profileId){load();if(data.profiles[profileId]){delete data.profiles[profileId];save();}}
  /** Writes anything pending (used when the app quits). */
  function flush(){
@@ -93,7 +95,7 @@ function createFaviconStore({file,nativeImage,now=()=>Date.now()}){
  }
  /** One site's stored icon (a data URL), or '' when there is none. Read-only: it never drops anything. */
  function get(profileId,host){load();return data.profiles[profileId]?.[host]?.data||'';}
- return {remember,adopt,list,get,forgetProfile,flush,hostOf};
+ return {remember,adopt,remove,list,get,forgetProfile,flush,hostOf};
 }
 
 let shared;

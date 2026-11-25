@@ -83,12 +83,14 @@ test('the sidebar runs the plan, lists favorites\' tabs like any tab, links drop
   assert.match(source,/plan\.kind==='select'\)\{dispatch\(\{type:'tab\.select',id:plan\.tabId,here:true\}\)/,'it goes to the favorite\'s tab and never changes the Space: a tab of another Space comes here (13.4)');
   assert.match(source,/plan\.kind==='adopt'\)\{dispatch\(\{type:'tab\.favorite',id:plan\.tabId,favoriteId:app\.id\}\);if\(plan\.select\)dispatch\(\{type:'tab\.select',id:plan\.tabId,here:true\}\)/,'an open tab at the favorite address is linked and selected, here too (13.4)');
   assert.match(source,/plan\.kind==='home'\)\{dispatch\(\{type:'tab\.navigate',url:app\.url,tabId:plan\.tabId\}\)/);
-  assert.match(source,/const profileTabs=state\.tabs\.filter\(tab=>tab\.browserProfileId===profileId\),listedProfileTabs=profileTabs\.filter\(listed\)/);
-  assert.match(source,/members:state\.tabs\.filter\(tab=>listed\(tab\)&&groupForTab\(state,tab\)\?\.id===group\.id\)/);
+  // 14.1: the empty page a close can show (runtime/emptyPage.ts) is no tab of the profile: it is left out of the list and every count
+  assert.match(source,/const profileTabs=state\.tabs\.filter\(tab=>tab\.browserProfileId===profileId(?:&&tab\.blank!==true)?\),listedProfileTabs=profileTabs\.filter\(listed\)/);
+  assert.match(source,/const groups=sidebarGroups\(state,profileId,listed\);/);
+  assert.match(readFileSync(new URL('../src/components/sidebar/sidebarRows.ts',import.meta.url),'utf8'),/members:state\.tabs\.filter\(tab=>listed\(tab\)&&groupForTab\(state,tab\)\?\.id===group\.id\)/);
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:adopt,favoriteId:app\.id\}\)/,'a tab dropped on Favorites or pinned with Ctrl+Shift+D is linked to the favorite and stays in the list (one function, applyFavorite)');
   assert.match(source,/dispatch\(\{type:'tab\.favorite',id:tab\.id,favoriteId:null\}\)/,'a removed favorite hands its tab back');
   assert.match(source,/const tab=appTabFor\(app,favoriteScope\(state\),profileId\),active=tab\?\.id===state\.activeTabId;/);
-  // 13.9: the title counts every open tab (as the workspace menu's counts do): a favorite's tab that lives only in its tile is still an open tab, never "0 tabs".
+  // Beta 14 (H): the title counts every open tab, as the workspace menu's counts do: a favorite's tab that lives only in its tile is still a tab ("1 tab", never "0 tabs").
   assert.match(source,/<WorkspaceTitle state=\{state\} count=\{profileTabs\.length\}\/>/,'the Space title counts every open tab, the tile-only favorite tabs too');
   assert.doesNotMatch(source,/<WorkspaceTitle state=\{state\}\/>/,'no title without the listed count');
   assert.match(source,/title=\{away\?t\("acirasidebar\.clickToGoBack",\{host:appHost\(app\.url\)\|\|address\(app\.url\)\}\):`\$\{app\.title\} · \$\{address\(app\.url\)\}`\}/);
@@ -110,8 +112,12 @@ test('Close tab: the favorite\'s right-click editor offers it only while the fav
   assert.equal(en['app.closeTab'],'Close tab');
 });
 
-test('Ctrl+Tab\'s Next tab walks the list on screen, then the tabs that live only in a Favorites tile (13.9: a Favorite\'s tab is a tab for the keys)',()=>{
+test('Ctrl+Tab\'s Next tab walks the list on screen, then the tabs that live only in a Favorites tile (a Favorite\'s tab is a tab for the keys)',()=>{
+  // Main does the switch itself now (desktop/tab-cycle.cjs, A11); the sidebar tells it which tabs live only in their tile and main walks the rows, then those (src/runtime/tabCycle.ts).
   const sidebar=readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx',import.meta.url),'utf8');
-  assert.match(sidebar,/own=vertical\?state\.tabs\.filter\(tab=>tab\.browserProfileId===profile\):state\.tabs,target=nextInCycle\(nextTabOrder\(own,state\.tabGroups,state\.activeTabId,vertical,listed\),/);
+  assert.match(sidebar,/unlistedKey=state\.tabs\.filter\(tab=>!listed\(tab\)\)\.map\(tab=>tab\.id\)\.join\(' '\)/);
+  const cycle=readFileSync(new URL('../src/runtime/tabCycle.ts',import.meta.url),'utf8');
+  assert.match(cycle,/const sidebar = !!state\.settings\.verticalTabs, profile = state\.tabs\.find\(tab => tab\.id === state\.activeTabId\)\?\.browserProfileId;/);
+  assert.match(cycle,/tabCycleOrder\(sidebar \? own\.filter\(tab => !unlisted\.has\(tab\.id\)\) : own, state\.tabGroups, state\.activeTabId, sidebar\)/);
+  assert.match(cycle,/\[\.\.\.order, \.\.\.own\.filter\(tab => unlisted\.has\(tab\.id\)\)\.map\(tab => tab\.id\)\]/);
 });
-

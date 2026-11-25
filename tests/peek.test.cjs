@@ -9,6 +9,7 @@ class FakeContents extends EventEmitter{
  loadURL(url){this.url=url;return Promise.resolve();}loadFile(){return Promise.resolve();}getURL(){return this.url;}getTitle(){return 'Title of '+this.url;}isLoading(){return false;}reload(){this.calls.push('reload');}stop(){this.calls.push('stop');}
  isDestroyed(){return this.destroyed;}close(){this.destroyed=true;}focus(){}insertCSS(){return Promise.resolve('css');}removeInsertedCSS(){return Promise.resolve();}send(...args){this.sent.push(args);}setWindowOpenHandler(fn){this.openHandler=fn;}setWebRTCIPHandlingPolicy(){}
 }
+FakeContents.prototype.isAudioMuted=function(){return this.muted===true;};FakeContents.prototype.setAudioMuted=function(v){this.muted=!!v;};
 FakeContents.sessions={};
 class FakeView{constructor(options){this.webContents=new FakeContents(options);this.bounds=null;this.radius=0;this.visible=true;}setBounds(b){this.bounds=b;}getBounds(){return this.bounds;}setBorderRadius(r){this.radius=r;}setBackgroundColor(){}setVisible(v){this.visible=v;}}
 function harness(extra={}){
@@ -20,12 +21,19 @@ function harness(extra={}){
  return h;
 }
 
-test('geometry: card centred at 78% x 86% of the page area, a 44px header over the page view 1px inside the card',()=>{
+test('geometry: card centred at 78% x 86% of the page area; with room the page view is exactly the card (no ring) and the chip and column sit outside it; without room a 36px bar goes over the page',()=>{
  const g=peekGeometry({x:0,y:68,width:1200,height:800});
- assert.deepEqual(g.card,{x:132,y:56,width:936,height:688});assert.equal(g.header,44);
- assert.deepEqual(g.view,{x:133,y:168,width:934,height:643},'the page view sits under the header, 1px inside the sides and bottom');
- assert.equal(g.view.y,68+g.card.y+g.header);assert.equal(peekGeometry(null),null);
+ assert.deepEqual(g.card,{x:132,y:56,width:936,height:688});assert.equal(g.layout,'rail');assert.equal(g.header,0);
+ assert.deepEqual(g.view,{x:132,y:124,width:936,height:688},'the page view is the card itself, no ring');
+ assert.equal(g.view.y,68+g.card.y);assert.equal(peekGeometry(null),null);
+ // the column needs 54px beside the card (8 gap, 38 plate, 8 edge) and the chip 40px above it
+ const room=peekGeometry({x:0,y:68,width:520,height:700});assert.equal(room.layout,'rail');assert.ok(room.card.x>=54&&room.card.y>=40);
+ const thin=peekGeometry({x:0,y:68,width:480,height:700});assert.equal(thin.layout,'bar','too little room beside the card');assert.equal(thin.header,36);
+ assert.deepEqual(thin.view,{x:thin.card.x,y:68+thin.card.y+36,width:thin.card.width,height:thin.card.height-36},'under the slim bar, on the card\'s sides and bottom');
+ const low=peekGeometry({x:0,y:68,width:1200,height:540});assert.equal(low.layout,'bar','too little room above the card');
+ assert.deepEqual(peekGeometry({x:0,y:68,width:480,height:700}).card,{x:53,y:49,width:374,height:602},'the card is the same size with or without the bar');
  const narrow=peekGeometry({x:0,y:68,width:500,height:600});assert.equal(narrow.card.width,390);assert.ok(narrow.card.x>=0&&narrow.card.x+narrow.card.width<=500,'the card stays inside a narrow page');
+ assert.equal(peekGeometry({x:0,y:68,width:1200,height:800},{rtl:true}).rtl,true);
 });
 
 test('open: page view in the source profile session above a frame view; popups refused, tab links stay in the peek',async()=>{
@@ -33,7 +41,7 @@ test('open: page view in the source profile session above a frame view; popups r
  assert.equal(h.peek.open({url:'https://docs.test/a',sourceTabId:source}).ok,true);
  const [frame,view]=h.children.slice(-2);
  assert.equal(view.webContents.options.webPreferences.partition,h.state.browserProfiles[0].partition);assert.equal(view.webContents.options.webPreferences.sandbox,true);
- assert.equal(view.radius,8);assert.equal(view.webContents.url,'https://docs.test/a');assert.equal(frame.webContents.options.webPreferences.preload.endsWith('peek-frame-preload.cjs'),true);
+ assert.equal(view.radius,12,"the page view is curved like the page card");assert.equal(view.webContents.url,'https://docs.test/a');assert.equal(frame.webContents.options.webPreferences.preload.endsWith('peek-frame-preload.cjs'),true);
  assert.deepEqual(h.configured,['profile-personal']);
  assert.deepEqual(view.webContents.openHandler({url:'https://popup.test/',disposition:'new-window'}),{action:'deny'});
  assert.deepEqual(view.webContents.openHandler({url:'https://next.test/',disposition:'foreground-tab'}),{action:'deny'});
@@ -197,6 +205,7 @@ test('the frame is told the title, the address, Back, the link box, the speed, t
  assert.deepEqual(Object.keys(s.labels).sort(),['back','close','copied','copy','download','downloadTitle','frameLabel','notSecure','openAsTab','openInSplit','reload','stop','tryAgain']);
  assert.equal(s.labels.openAsTab,'Open as tab');assert.equal(s.labels.openInSplit,'Open in split view');assert.equal(s.labels.back,'Back');
  assert.match(s.keys.tab,/^(Ctrl|Cmd)\+Enter$/);assert.equal(s.keys.close,'Esc');
+ assert.equal(s.layout,'rail');assert.equal(s.header,0);assert.equal(s.dir,'ltr');
 });
 
 test('Off and reduced motion tell the frame so; only a real accent colour reaches it',()=>{
@@ -314,7 +323,7 @@ test('a menu that cannot be closed never breaks the preview',()=>{
 test('main closes only the preview\'s own page menu when the preview asks (a press in it, or it going away), never another open popup',()=>{
  const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.match(main,/dismissMenu:\(\)=>\{if\(previewMenuUp\(layout\.overlay,pageContextMenu\)\)closeOverlay\(\);\}/,'only a page-context overlay that was opened from the preview');
- assert.match(main,/wc\.on\('before-mouse-event',\(_event,input\)=>\{[^]*?if\(input\.type==='mouseDown'\)\{closeOverlay\(\);/,'a tab\'s page keeps closing any open menu on a press');
+ assert.match(main,/wc\.on\('before-mouse-event',\(_event,input\)=>\{[^]*?if\(input\.type==='mouseDown'\)\{closeOverlay\(false,false,undefined,'dismiss'\);/,'a tab\'s page keeps closing any open menu on a press (17 Nov: named a dismissal, the answer of a question card waiting for one)');
  // 13.4: a menu belongs to the page it was opened over (the tab's page or the preview's page)
  assert.match(main,/pageContextMenu=\{tabId,run:menu\.run,at:Date\.now\(\),owner:wc\.id,/,'the menu knows its page');
  assert.match(main,/function closePageMenuOf\(wc\)\{try\{if\(pageMenuOf\(layout\.overlay,pageContextMenu,wc\.id\)\)closeOverlay\(\);\}catch\{[^}]*\}\}/,'only a page-context overlay opened over that very page');
@@ -343,4 +352,38 @@ test('after a menu closes over the preview the keyboard goes back to the preview
  h.peek.close();assert.equal(h.peek.focusTarget(),null);
  const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
  assert.match(main,/function restoreVisibleFocus\(\)\{const preview=peek\.focusTarget\(\),entry=pages\.get\(state\.activeTabId\);[^]*?if\(preview\)focusContents\(preview\);else if\(entry&&/);
+});
+
+// Beta 14.0, the mini player (EDICT, Discord, 19 Nov): a player opened in a link preview is a now-playing card, and keeps being one as a tab.
+test('a preview\'s page is attached to the media listener by the preview\'s own id, and its sound travels with the preview\'s state',()=>{
+ const attached=[];const h=harness({attachMedia:(id,wc,send,options)=>attached.push({id,wc,send,options})}),source=h.state.activeTabId;
+ h.peek.open({url:'https://video.test/watch',sourceTabId:source});
+ assert.equal(attached.length,1);assert.equal(attached[0].id,'peek:'+source);assert.equal(attached[0].wc,h.children.at(-1).webContents);
+ assert.equal(attached[0].options.unseen(),false,'a preview is in front: never an unseen page');
+ assert.equal(h.events.at(-1).peek.media,undefined,'nothing plays yet: the state says nothing of media');
+ attached[0].send({media:'playing',mediaAt:41});
+ const playing=h.events.at(-1).peek;assert.equal(playing.media,'playing');assert.equal(playing.mediaAt,41);assert.equal(playing.mediaId,'peek:'+source);assert.equal(playing.muted,false);
+ assert.deepEqual(h.peek.mediaTabs(),[{id:'peek:'+source,media:'playing',mediaAt:41}],'Alt+P reads it like a tab\'s sound');
+ attached[0].send({media:'paused'});assert.equal(h.events.at(-1).peek.media,'paused');assert.equal(h.peek.mediaTabs()[0].media,'paused');
+ attached[0].send({media:null});assert.equal(h.events.at(-1).peek.media,undefined);assert.deepEqual(h.peek.mediaTabs(),[]);
+ assert.equal(h.peek.handle({type:'peek.state'}).peek.media,undefined,'the state answer carries it too');
+});
+
+test('the card\'s mute reaches the preview\'s page; opened as a tab it stays muted; a closed preview has no sound row',()=>{
+ const attached=[];const h=harness({attachMedia:(id,wc,send)=>attached.push({id,send})}),source=h.state.activeTabId;
+ h.peek.open({url:'https://video.test/watch',sourceTabId:source});const view=h.children.at(-1);attached[0].send({media:'playing',mediaAt:5});
+ assert.deepEqual(h.peek.handle({type:'peek.mute',muted:true}),{ok:true});assert.equal(view.webContents.muted,true);assert.equal(h.events.at(-1).peek.muted,true);
+ assert.throws(()=>h.peek.handle({type:'peek.mute',muted:true,extra:1}),/Unexpected/);assert.deepEqual(h.peek.handle({type:'peek.mute',muted:'yes'}),{ok:false});
+ const result=h.peek.handle({type:'peek.promote'});assert.equal(result.ok,true);
+ assert.equal(h.state.tabs.find(t=>t.id===result.tabId).muted,true,'the page was muted: the tab it became is too (the tab\'s own state would unmute the page)');
+ assert.deepEqual(h.peek.mediaTabs(),[],'no preview, no preview row');assert.equal(h.events.at(-1).peek,null);
+});
+
+test('main keeps the open preview\'s volume level (prune lists its id) and gives the preview\'s page to the media listener',()=>{
+ const h=harness({attachMedia:()=>{}}),source=h.state.activeTabId;
+ assert.equal(h.peek.mediaId(),null);h.peek.open({url:'https://video.test/watch',sourceTabId:source});assert.equal(h.peek.mediaId(),'peek:'+source);h.peek.close();assert.equal(h.peek.mediaId(),null);
+ const main=require('node:fs').readFileSync(require('node:path').join(__dirname,'../desktop/main.cjs'),'utf8');
+ assert.match(main,/mediaControls\.prune\(\[\.\.\.state\.tabs\.map\(t=>t\.id\),\.\.\.sidePanelSites\.siteIds\(\),\.\.\.\(peek\.mediaId\(\)\?\[peek\.mediaId\(\)\]:\[\]\)\]\)/);
+ assert.match(main,/attachMedia:\(id,wc,send,options\)=>mediaControls\.attach\(id,wc,send,options\)/);
+ assert.match(main,/if\(adopted&&!wc\.isDestroyed\(\)&&wc\.isCurrentlyAudible\(\)\)send\(\{audible:true\}\)/,'an adopted page that is already audible shows its sound badge at once');
 });

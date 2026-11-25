@@ -129,12 +129,12 @@ test('the edge: it opens the menu on a right-click and with the menu key, snaps 
   const handle = sidebar.slice(sidebar.indexOf('function ResizeHandle'), sidebar.indexOf('function ResizeHandle') + 3200);
   assert.match(handle, /onContextMenu=\{event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);openBookmarkMenu\(SIZE_REF/);
   assert.match(handle, /event\.key==='ContextMenu'\|\|event\.shiftKey&&event\.key==='F10'/);
-  assert.match(handle, /const target=snapSidebarWidth\(drag\.current\.raw\)/, 'a release lands on the nearest size');
+  assert.match(handle, /const target=snapSidebarWidth\(raw\)/, 'a release lands on the nearest size');
   assert.match(handle, /draggedSidebarWidth\(side,/, 'the drag is the side-aware one');
   assert.match(handle, /sidebarKeyWidth\(side,/);
   // the hook runs before SidebarApps' early returns (React error #310 otherwise: tests/hooks-order.test.ts); the limit follows it
   assert.match(sidebar, /const size=useSidebarSize\(clampSidebarWidth\(state\.settings\.sidebarWidth\)\);/, 'the Favorites grid follows the size, live while the edge is dragged');
-  assert.match(sidebar, /const tiles=apps\.length,cols=favoriteColumns\(size,tiles\)/);
+  assert.match(sidebar, /const tiles=shown\.length\+\(overflow\?1:0\),cols=rail\?1:overflow\?stackColumns\(size\):favoriteColumns\(size,tiles\)/, 'Beta 14: the grid is the places before the stack; with a stack the columns are the size\'s own (the rail: one column)');
   assert.doesNotMatch(sidebar, /tiles%3!==0&&tiles%4===0\|\|tiles===4\?4:3/, 'the column rule lives in runtime/sidebarSizes.ts only');
   const layout = read('src/ui/sidebarLayout.ts');
   assert.match(layout, /setPreviewedSize\(sizeOf\(width\)\)/, 'the preview publishes the size, not every pixel');

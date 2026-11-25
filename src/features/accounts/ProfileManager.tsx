@@ -25,6 +25,7 @@ import {
 } from "./profileModel";
 import { avatarInitial, initialAllowed, typedInitial } from "./avatarCase";
 import { takenName } from "../../ui/nameTaken";
+import { askConfirm } from "../dialogs/dialogStore";
 
 type Props = { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void };
 
@@ -280,7 +281,7 @@ function ProfileRow({
                 <span>{t("profiles.name")}</span>
                 <input
                   ref={input}
-                  className="st-input"
+                  className="st-input ab-input"
                   value={name}
                   maxLength={PROFILE_NAME_MAX}
                   autoComplete="off"
@@ -294,7 +295,7 @@ function ProfileRow({
               <label className="pm-field pm-initial">
                 <span>{t("profiles.initial")}</span>
                 <input
-                  className="st-input"
+                  className="st-input ab-input"
                   value={initial}
                   maxLength={16}
                   placeholder={[...name.trim()][0]?.toLocaleUpperCase() || "A"}
@@ -308,7 +309,7 @@ function ProfileRow({
               <label className="pm-field">
                 <span>{t("profiles.email")}</span>
                 <input
-                  className="st-input"
+                  className="st-input ab-input"
                   type="email"
                   value={email}
                   placeholder={t("profiles.optional")}
@@ -338,14 +339,26 @@ function ProfileRow({
             <button type="button" className="st-button pm-quiet" onClick={close}>
               {t("profiles.cancel")}
             </button>
-            {canRemove && !confirming && (
+            {canRemove && (
               <button
                 type="button"
                 className="acira-button acira-button-quiet acira-button-danger pm-remove"
                 data-setting={first ? "profile-remove" : undefined}
                 aria-expanded={confirming}
                 aria-controls={warning}
-                onClick={() => setConfirming(true)}
+                onClick={async () => {
+                  // Beta 14: a dialog in frosted glass (a red tile, Cancel the default) instead of a two-step inline row.
+                  setConfirming(true);
+                  const yes = await askConfirm({ message: t("profiles.removeQuestion", { name: profile.name }), detail: current ? t("profiles.removeBodyCurrent") : t("profiles.removeBody"), cancelLabel: t("profiles.keep"), confirmLabel: t("profiles.removeNamed", { name: profile.name }) });
+                  if (!yes) { setConfirming(false); return; }
+                  setRemoving(true);
+                  setProblem("");
+                  const failure = await removeProfile(dispatch, profile.id);
+                  setRemoving(false);
+                  setConfirming(false);
+                  if (failure) setProblem(failure);
+                  else onRemoved();
+                }}
               >
                 {t("profiles.removeEllipsis")}
               </button>
@@ -355,39 +368,6 @@ function ProfileRow({
             <p role="alert" className="pm-problem pm-editor-problem">
               {problem}
             </p>
-          )}
-          {confirming && (
-            <div id={warning} className="pm-confirm" role="alertdialog" aria-labelledby={`${warning}-title`} aria-describedby={`${warning}-body`}>
-              <p id={`${warning}-title`} className="pm-confirm-title">
-                {t("profiles.removeQuestion", { name: profile.name })}
-              </p>
-              <p id={`${warning}-body`}>{current ? t("profiles.removeBodyCurrent") : t("profiles.removeBody")}</p>
-              <div className="pm-actions">
-                <button ref={keep} type="button" className="st-button" onClick={() => setConfirming(false)}>
-                  {t("profiles.keep")}
-                </button>
-                <button
-                  type="button"
-                  className="st-button primary acira-button-danger acira-button-primary"
-                  disabled={removing}
-                  onClick={async () => {
-                    setRemoving(true);
-                    setProblem("");
-                    const failure = await removeProfile(dispatch, profile.id);
-                    setRemoving(false);
-                    if (failure) setProblem(failure);
-                    else onRemoved();
-                  }}
-                >
-                  {removing ? t("profiles.removing") : t("profiles.removeNamed", { name: profile.name })}
-                </button>
-              </div>
-              {problem && (
-                <p role="alert" className="pm-problem">
-                  {problem}
-                </p>
-              )}
-            </div>
           )}
         </form>
       )}
@@ -486,7 +466,7 @@ function CreateProfile({ state, profiles, dispatch, intentKey, spaces = false }:
           <span>{t("profiles.name")}</span>
           <input
             ref={input}
-            className="st-input"
+            className="st-input ab-input"
             placeholder={t("profiles.namePlaceholder")}
             value={name}
             maxLength={PROFILE_NAME_MAX}

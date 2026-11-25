@@ -2,7 +2,8 @@ import type { SearchEngine } from './types';
 
 /** Local search providers and "!keyword query" shortcuts. The strict validator that guards settings updates lives in
  *  desktop/browser-services/search-providers.cjs; this module resolves input with the already-validated list. */
-export interface SearchProvider{id:string;name:string;keyword:string;template:string}
+/** `suggest`: the engine's own suggestion address (Beta 14): https, one %s. Optional; a stock engine finds its service by its host (desktop/suggest-services.json). */
+export interface SearchProvider{id:string;name:string;keyword:string;template:string;suggest?:string}
 export interface SearchProviders{defaultId:string;engines:SearchProvider[]}
 export interface SearchResolution{url:string;query:string;engineId:string;bangUsed:boolean}
 

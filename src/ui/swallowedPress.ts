@@ -1,3 +1,4 @@
+import { abortEdgeWarm } from './edgeWarm';
 /** A press on the sidebar button while the sidebar is still sliding (13.5; a report: "I hide the sidebar with the button and when I click it again to show it, nothing happens").
  *
  * What happened: a layout switch (the sidebar leaving or arriving) is a view transition, and while a view transition plays Chromium does not hit-test the page: every pointer event lands on
@@ -36,7 +37,9 @@ interface PressEvent { type: string; target: unknown; button: number; clientX: n
 interface PressRoot { dataset: { modeSwitch?: string }; querySelectorAll(selector: string): ArrayLike<PressElement> }
 interface PressElement { getBoundingClientRect(): PressBox; dispatchEvent(event: unknown): boolean; isConnected?: boolean }
 export interface PressHost {
-  root: PressRoot; listen(type: 'click', handler: (event: PressEvent) => void): () => void; click(event: PressEvent): unknown;
+  root: PressRoot; listen(type: 'click' | 'pointerdown', handler: (event: PressEvent) => void): () => void; click(event: PressEvent): unknown;
+  /** D135: is the one-time warm-up (edgeWarm.ts) playing? It is a view transition too, so it swallows presses like a layout switch does, and it is let go of by one (`letGo`). Absent: no warm-up in this host. */
+  warming?(): boolean; letGo?(): void;
   /** Where the transition draws this control right now, when it differs from its box (it glides from its old place to its new one). */
   pictureBox?(element: PressElement): PressBox | null;
   /** The sidebar button a click's target is (or is inside), if any. */
@@ -46,18 +49,28 @@ export interface PressHost {
 /** How long the box a button had when it was last pressed still counts: one slide is ~480 ms and the next is queued behind it. */
 export const REMEMBER_MS = 900;
 
-/** Hand a click that the root swallowed during a layout switch to the sidebar button under the pointer. Returns the function that stops it. */
+/** How long after a press the warm-up swallowed its click may still be handed on (the press and its release are ~100 ms apart, a slow one a few hundred). */
+export const WARM_PRESS_MS = 1500;
+/** Hand a click that the root swallowed during a layout switch to the sidebar button under the pointer. Returns the function that stops it.
+ * D135 (22 Nov): the one-time warm-up (a view transition of kind `edge`, data-edge-warming) swallows presses the same way, and a press on the sidebar button that landed in it did nothing. A press that starts in
+ * the warm-up lets it go at once (a real input) and its click, which lands on the root because the press began there, is handed to the sidebar button like a layout switch's. */
 export function forwardSwallowedPress(host: PressHost): () => void {
-  let remembered: { box: PressBox; at: number } | null = null;
+  let remembered: { box: PressBox; at: number } | null = null, warmDown: number | null = null;
   const now = () => host.now?.() ?? 0;
-  return host.listen('click', event => {
+  const stopDown = host.warming ? host.listen('pointerdown', event => {
+    if (!host.warming?.()) return;
+    if (event.target === host.root && event.button === 0) warmDown = now();
+    host.letGo?.();
+  }) : null;
+  const stopClick = host.listen('click', event => {
     const { root } = host;
     // an ordinary press on the button: remember where it was drawn (before the layout flips under it)
     const own = host.buttonOf?.(event.target);
     // (a button with no box, the hidden duplicate that sits first in the page, remembers nothing: the forwarded press below is dispatched on the first control that holds the pointer, which can be that one, and
     // its click comes back through here; its empty box would wipe the one the press before it left, and a third press in the beat before the pictures exist found nothing: 13.6 final run, Compact, 6 in 60)
     if (own) { const ownBox = own.getBoundingClientRect(); if (ownBox.right > ownBox.left && ownBox.bottom > ownBox.top) remembered = { box: ownBox, at: now() }; return; }
-    if (event.target !== root || event.button !== 0 || event.defaultPrevented || root.dataset.modeSwitch !== FORWARDED_SWITCH) return;
+    const warmSwallowed = warmDown !== null && now() - warmDown < WARM_PRESS_MS; if (event.target === root) warmDown = null;
+    if (event.target !== root || event.button !== 0 || event.defaultPrevented || (root.dataset.modeSwitch !== FORWARDED_SWITCH && !warmSwallowed)) return;
     const controls: PressControl<PressElement>[] = [], elements = Array.from(root.querySelectorAll(SIDEBAR_BUTTON));
     let pictured = false;
     for (const element of elements) {
@@ -72,6 +85,7 @@ export function forwardSwallowedPress(host: PressHost): () => void {
     event.preventDefault();
     host.click({ type: 'click', target: hit, button: event.button, clientX: event.clientX, clientY: event.clientY, detail: event.detail, defaultPrevented: false, preventDefault() {} });   // fields named one by one: a real event's are on its prototype, a spread would lose them
   });
+  return () => { stopClick(); stopDown?.(); };
 }
 
 /** The browser's host: the document's root, the window's click events (capture phase, so nothing above can have eaten it), a real click event to the button. */
@@ -92,6 +106,7 @@ export function browserPressHost(): PressHost {
     },
     buttonOf: target => (target instanceof Element ? (target.closest(SIDEBAR_BUTTON) as unknown as PressElement | null) : null),
     now: () => performance.now(),
+    warming: () => root.dataset.edgeWarming !== undefined, letGo: () => abortEdgeWarm(),
     click: event => (event.target as unknown as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: Math.max(1, event.detail), clientX: event.clientX, clientY: event.clientY })),
   };
 }

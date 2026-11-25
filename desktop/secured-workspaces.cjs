@@ -22,7 +22,7 @@ const firstWorkspaceOf=(state,profileId)=>(state.workspaces||[]).find(workspace=
 const workspaceOfTab=(state,tab)=>tab.workspaceId&&(state.workspaces||[]).some(workspace=>workspace.id===tab.workspaceId&&workspace.browserProfileId===tab.browserProfileId)?tab.workspaceId:firstWorkspaceOf(state,tab.browserProfileId);
 const LOCKED_URL='acira://locked';
 
-function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonitor=null,session=null,Notification=null,onNotificationClick=()=>{},onForgetProfile=()=>{},now=Date.now,log=()=>{},timers={setTimeout,clearTimeout,setInterval,clearInterval},run=randomUUID().slice(0,8)}){
+function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonitor=null,session=null,Notification=null,onNotificationClick=()=>{},onClearNotifications=()=>{},onForgetProfile=()=>{},now=Date.now,log=()=>{},timers={setTimeout,clearTimeout,setInterval,clearInterval},run=randomUUID().slice(0,8)}){
  const profiles=new Map(),writeTimers=new Map(),lastWritten=new Map(),shown=new Map(),lastShown=new Map();
  const ordinary=()=>[...controllers].filter(c=>!c.privateMode&&!c.webApp&&c.state);
  const tabsIn=(controller,id)=>(controller.state.tabs||[]).filter(tab=>tab.url!==LOCKED_URL&&tab.privacy==='secured'&&workspaceOfTab(controller.state,tab)===id);
@@ -117,15 +117,19 @@ function createSecuredWorkspaces({tm=key=>key,controllers,vault,gate,powerMonito
    if(!tab||tab.privacy!=='secured'||tab.url===LOCKED_URL)return {ok:false,code:'not-secured'};
    const id=workspaceOfTab(state,tab),workspace=workspaceIn(state,id);
    if(!workspace?.secured||!workspace.unlocked)return {ok:false,code:'locked'};
-   if(!Notification||(typeof Notification.isSupported==='function'&&!Notification.isSupported()))return {ok:false,code:'unsupported'};
    const at=now();if(lastShown.has(id)&&at-lastShown.get(id)<4000)return {ok:true,merged:true};lastShown.set(id,at);
+   /* 14.3: with site notifications In Acira the neutral line is a row in the panel (main.cjs gives `into`): still no words, still only while unlocked */
+   if(typeof request.into==='function'){try{request.into(id);}catch(error){log('Secured notification:',error?.message);}return {ok:true,panel:true};}
+   if(!Notification||(typeof Notification.isSupported==='function'&&!Notification.isSupported()))return {ok:false,code:'unsupported'};
    let note;try{note=new Notification({title:tm('workspaces.securedNotification'),body:'',silent:request.silent===true});}catch(error){log('Secured notification:',error?.message);return {ok:false,code:'failed'};}
    shown.set(note,id);
    try{note.on?.('click',()=>{shown.delete(note);try{onNotificationClick(controller,tabId,request.token);}catch{}});note.on?.('close',()=>shown.delete(note));note.show();}catch(error){shown.delete(note);log('Secured notification:',error?.message);return {ok:false,code:'failed'};}
    return {ok:true};
   },
   /** Locking takes the workspace's notifications away too (Windows keeps nothing that says more than the neutral line anyway). */
-  clearNotifications(id){for(const [note,owner] of [...shown])if(owner===id){shown.delete(note);try{note.close();}catch{}}lastShown.delete(id);},
+  clearNotifications(id){for(const [note,owner] of [...shown])if(owner===id){shown.delete(note);try{note.close();}catch{}}lastShown.delete(id);try{onClearNotifications(id);}catch{}},
+  /** A press on a secured workspace's notification row may bring its tab forward only while that tab is a secured page of an unlocked workspace. */
+  canOpen(controller,tabId){const state=controller?.state,tab=state?.tabs?.find(t=>t.id===tabId);if(!tab||tab.privacy!=='secured'||tab.url===LOCKED_URL)return false;const workspace=workspaceIn(state,workspaceOfTab(state,tab));return Boolean(workspace?.secured&&workspace.unlocked);},
   /** Runs after every action of an ordinary window: leaving locks, edits are sealed, a deleted workspace is forgotten, and the window is kept out of screen capture while a secured tab is on screen. */
   afterAction(controller,previous,state,action){
    if(!previous||!state||controller.privateMode)return;

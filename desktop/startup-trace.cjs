@@ -5,6 +5,8 @@
 //   ACIRA_STARTUP_PROFILE=<file>  also write a main-thread CPU profile of everything up to that point (open it in DevTools)
 const {performance}=require('node:perf_hooks');
 const marks={},cpu={};
+// shown: settles when the first window is on screen (done() below). The update check waits for it (browser-services/app-updater.cjs): it starts the moment the person sees Acira, never during the start-up before that.
+let shownResolve=null;const shown=new Promise(resolve=>{shownResolve=resolve;});
 let session=null;
 if(process.env.ACIRA_STARTUP_PROFILE){
   try{const inspector=require('node:inspector');session=new inspector.Session();session.connect();session.post('Profiler.enable');session.post('Profiler.setSamplingInterval',{interval:250});session.post('Profiler.start');}catch{session=null;}
@@ -21,9 +23,10 @@ function mark(name){
 }
 /** Call once the first window is on screen. */
 function done(){
+  shownResolve?.();
   const file=process.env.ACIRA_STARTUP_TRACE;
   if(file){try{require('node:fs').writeFileSync(file,JSON.stringify({timeOrigin:performance.timeOrigin,epoch:Date.now(),marks,cpu},null,1));}catch{}}
   if(process.env.ACIRA_STARTUP_REQUIRES){try{require('node:fs').writeFileSync(process.env.ACIRA_STARTUP_REQUIRES,JSON.stringify(requireTimes));}catch{}}
   if(session){const profileFile=process.env.ACIRA_STARTUP_PROFILE,active=session;session=null;active.post('Profiler.stop',(error,result)=>{try{if(!error&&profileFile)require('node:fs').writeFileSync(profileFile,JSON.stringify(result.profile));}catch{}try{active.disconnect();}catch{}});}
 }
-module.exports={mark,done,marks,cpu};
+module.exports={mark,done,marks,cpu,shown};

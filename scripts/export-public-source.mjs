@@ -43,6 +43,9 @@ const requiredInputs = ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'package.json', 'pa
   'docs/design/rewind-routines/examples/start-work.acira-routine.json',
   'public/fonts/inter-LICENSE.txt'];
 const code = /\.(?:cjs|mjs|js|ts|tsx|css|json|html|md|txt|svelte|pem)$/i;
+// Beta 14 brief rule 10: the test files made for Beta 14 are never public. The list (scripts/beta14-private-tests.json, itself not exported) names every
+// file under tests/ that release/beta13.8 does not have; tests/beta14-private-tests.test.mjs keeps it complete. 13.8's own tests are exported as before.
+const beta14PrivateTests = (() => { try { return new Set(JSON.parse(fs.readFileSync(path.join(root, 'scripts', 'beta14-private-tests.json'), 'utf8')).files); } catch { return new Set(); } })();
 const asset = /\.(?:svg|png|jpg|ico|woff2|md|txt|json)$/i;
 
 export function safePath(file) {
@@ -63,8 +66,11 @@ export function allowedSource(file) {
   if (/^resources\/(?:brand|filters)\//.test(file)) return /\.(?:mjs|json|txt|md)$/.test(file);
   if (/^packaging\//.test(file)) return !/-preview\.png$/i.test(file)
     && /\.(?:json|cjs|cs|manifest|nsh|plist|txt|md|ico|png|jpg|bmp)$/i.test(file);
-  // 13.11: the Insider tests run against a private QA stand-in server (qa/insider-fake.cjs) that is never exported, so they are not either.
+  // Beta 14: the feedback tests run against a private QA stand-in that is never exported, so they are not either.
+  if (/^tests\/feedback-/.test(file)) return false;
+  // Beta 14 AH: the Insider tests run against a private QA stand-in that is never exported, so they are not either.
   if (/^tests\/insider-/.test(file)) return false;
+  if (beta14PrivateTests.has(file)) return false;
   if (/^tests\//.test(file)) return code.test(file);
   if (/^qa\//.test(file)) return /^qa\/(?:release-|accounts-)[^/]+\.(?:mjs|cjs|tsx|ps1)$/.test(file)
     || ['qa/native-helpers.mjs', 'qa/browser-smoke.mjs', 'qa/window-lifecycle.mjs',
@@ -74,7 +80,7 @@ export function allowedSource(file) {
     || /^scripts\/release-[a-z-]+\.(?:mjs|cjs)$/.test(file) && file !== 'scripts/release-archive-audit.mjs'
     || file === 'scripts/release.mjs';
   return file === '.github/workflows/release-qualification.yml'
-    || /^supabase\/(?:config\.toml|functions\/(?:usage|report|allowlist)\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_(?:usage_metrics(?:_v\d+)?|usage_churn|site_reports)\.sql)$/.test(file);
+    || /^supabase\/(?:config\.toml|functions\/(?:usage|report|allowlist)\/[\w.-]+\.(?:mjs|ts)|migrations\/\d+_(?:usage_metrics(?:_v\d+)?|usage_churn|usage_schema\d+|usage_installs|site_reports)\.sql)$/.test(file);
 }
 
 export function auditExport(entries, readBlob) {

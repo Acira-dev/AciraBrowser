@@ -1,0 +1,63 @@
+/* Easy Files (Beta 14): the panel system's rows and tokens (src/styles/panels.css). Every height is fixed (store.ts EF), so the pop-up opens at its final size. */
+.easy-files { display: flex; flex-direction: column; min-width: 0; --ef-tile-w: 112px; --ef-tile-h: 70px; }
+.easy-files .acira-menu-row { text-align: start; }
+/* Keyboard: the panel system's highlight (a fill), never a ring; the row under a resting pointer lets go of its hover while keys drive. */
+:root:root:root .easy-files .acira-menu-row:focus-visible { outline: none; box-shadow: none; background: var(--menu-hover); }
+:root:root:root [data-input-mode='keyboard'] .easy-files .acira-menu-row:hover:not(:focus) { background: none; }
+/* Section labels: one quiet style, inset to the content edge (8px). */
+.easy-files .ef-label { height: 26px; box-sizing: border-box; padding: 8px 8px 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Thumbnails: the picture itself, cropped to fill; a hairline inside so a white screenshot keeps its edge on light glass. A tile without its picture yet is the quiet tint; the picture fades in over it. */
+.ef-thumb { position: relative; display: grid; place-items: center; flex: none; overflow: hidden; background: color-mix(in srgb, currentColor 6%, transparent); color: var(--menu-t2); }
+:where(.ef-thumb) > img.ef-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Only a picture that arrives after the pop-up is on screen fades in (the ones ready at its first frame are simply there, as in the sample). */
+:where(.ef-thumb) > img.ef-img[data-late] { animation: ef-thumb-in 140ms cubic-bezier(.33, 0, .25, 1) both; }
+@keyframes ef-thumb-in { from { opacity: 0; } }
+.ef-thumb::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transition: box-shadow 120ms cubic-bezier(0.2, 0, 0, 1); }
+.ef-thumb[data-picture]::after { box-shadow: inset 0 0 0 1px var(--menu-line); }
+.ef-thumb .acira-menu-icon { width: 16px; height: 16px; }
+.ef-thumb-row { width: 32px; height: 32px; border-radius: 6px; }
+.ef-thumb-tile { width: var(--ef-tile-w); height: var(--ef-tile-h); border-radius: 6px; }
+/* Several allowed: a tick on what is picked (the cover browser's own check, in the accent). */
+.ef-tick { position: absolute; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--accent, #3b82f6); color: var(--on-accent, #fff); opacity: 0; transform: scale(.85); transition: opacity 120ms cubic-bezier(.33, 0, .25, 1), transform 120ms cubic-bezier(.33, 0, .25, 1); pointer-events: none; }
+.ef-thumb-tile .ef-tick { top: 5px; inset-inline-end: 5px; }
+.ef-thumb-row .ef-tick { width: 16px; height: 16px; bottom: -1px; inset-inline-end: -1px; box-shadow: 0 0 0 1.5px var(--menu-surface, var(--surface, #fff)); }
+.ef-thumb[data-ticked] .ef-tick { opacity: 1; transform: none; }
+.ef-thumb[data-ticked]::after { box-shadow: inset 0 0 0 2px var(--accent, #3b82f6); }
+.ef-thumb-row[data-ticked] { overflow: visible; }
+:where(.ef-thumb-row)[data-ticked] > img.ef-img { border-radius: 6px; }
+
+/* Download rows: 44px, 32px preview, the name over "size · age". */
+.easy-files .ef-file { grid-template-columns: 32px minmax(0, 1fr) 0; column-gap: 8px; padding: 0 8px; }
+.ef-text { display: flex; flex-direction: column; min-width: 0; line-height: 18px; }
+.ef-text .acira-menu-title { line-height: 18px; }
+
+/* The picture row. It scrolls sideways only, rests on whole tiles, and has no native scrollbar. The fade is a mask on the viewport (it does not move with the
+   content), 28px wide, and only on a side that can scroll: a hard cut never shows, a side with nothing more never fades. */
+.ef-row { position: relative; height: calc(var(--ef-tile-h) + 32px); }
+.ef-strip { display: flex; gap: 8px; height: 100%; box-sizing: border-box; padding: 2px 8px 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: 8px; scrollbar-width: none; touch-action: pan-x;
+  --ef-fade-l: 0px; --ef-fade-r: 0px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--ef-fade-l), #000 calc(100% - var(--ef-fade-r)), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 var(--ef-fade-l), #000 calc(100% - var(--ef-fade-r)), transparent 100%); }
+.ef-strip::-webkit-scrollbar { display: none; }
+/* Right to left: the row starts on the right, so the fade of its start is on the right. */
+.ef-strip:dir(rtl) { -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 var(--ef-fade-l), #000 calc(100% - var(--ef-fade-r)), transparent 100%); mask-image: linear-gradient(270deg, transparent 0, #000 var(--ef-fade-l), #000 calc(100% - var(--ef-fade-r)), transparent 100%); }
+.ef-strip[data-fade-start] { --ef-fade-l: 28px; }
+.ef-strip[data-fade-end] { --ef-fade-r: 28px; }
+.ef-strip[data-dragging] { scroll-snap-type: none; cursor: grabbing; }
+.ef-tile { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; width: var(--ef-tile-w); padding: 0; border: 0; background: none; color: inherit; cursor: default; outline: none; scroll-snap-align: start; }
+.ef-tile > .ef-thumb { transition: transform 160ms cubic-bezier(0.2, 0, 0, 1); }
+/* Hover and keyboard focus are drawn INSIDE the tile (inset rings), so the scroller never clips them. */
+.ef-tile:hover > .ef-thumb::after { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 34%, transparent); }
+:root:root:root .easy-files .ef-tile:focus-visible { outline: none; box-shadow: none; }
+.ef-tile:focus-visible > .ef-thumb::after { box-shadow: inset 0 0 0 2px var(--accent, #3b82f6); }
+.ef-tile:active > .ef-thumb { transform: scale(0.97); }
+.ef-tile-cap { display: block; width: 100%; box-sizing: border-box; padding: 0 2px; font: 400 11px/16px var(--font-ui); color: var(--menu-t3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 120ms cubic-bezier(0.2, 0, 0, 1); }
+.ef-tile:is(:hover, :focus-visible) > .ef-tile-cap { color: var(--menu-t2); }
+/* The position bar: 3px, only while the pointer is near the row's bottom edge (never a native scrollbar, never a layout change). */
+.ef-bar { position: absolute; inset-inline: 12px; bottom: 2px; height: 3px; border-radius: 2px; opacity: 0; transition: opacity 160ms cubic-bezier(0.2, 0, 0, 1); pointer-events: none; }
+.ef-row[data-near] .ef-bar { opacity: 1; }
+.ef-bar-thumb { height: 100%; border-radius: inherit; background: color-mix(in srgb, currentColor 32%, transparent); }
+/* b14 integration round 11: the reduced-motion list written out (the build could not flatten it: a member with a combinator under a non-root prefix); each selector padded with :not(.sp) to the list's specificity (0,5,0), the picture's to (0,5,1) */
+.app[data-reduced-motion='true'] .easy-files .ef-tile > .ef-thumb, .app[data-reduced-motion='true'] .easy-files .ef-tile-cap:not(.sp), .app[data-reduced-motion='true'] .easy-files .ef-bar:not(.sp), .app[data-reduced-motion='true'] .easy-files .ef-tick:not(.sp), .app[data-reduced-motion='true'] .easy-files :where(.ef-thumb) > img.ef-img:not(.sp) { transition: none; animation: none; }
+@media (prefers-reduced-motion: reduce) { .ef-tile > .ef-thumb, .ef-tile-cap, .ef-bar, .ef-tick { transition: none; } :where(.ef-thumb) > img.ef-img { animation: none; } .ef-strip { scroll-behavior: auto; } }

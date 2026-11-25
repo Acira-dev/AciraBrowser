@@ -12,6 +12,14 @@ export const secretRules = [
   ['slack-token', /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/g],
   ['supabase-secret', /\bsb_secret_[A-Za-z0-9_-]{24,}\b/g],
   ['credential-url', /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s/:@]+:[^\s/@]{3,}@/gi],
+  // Beta 14 AH: an Ed25519 PRIVATE key in any of its usual spellings (the Insider certificate's signing key is a server secret; a profile's key never leaves its profile in clear):
+  // PKCS#8 DER in base64/base64url (it always starts "MC4CAQAwBQYDK2VwBCIEI") or hex, and a private JWK (kty OKP with a "d").
+  ['ed25519-private-key', /MC4CAQAwBQYDK2VwBCIEI[A-Za-z0-9+/_-]{40,}/g],
+  ['ed25519-private-key-hex', /302e020100300506032b657004220420[0-9a-fA-F]{64}/gi],
+  ['private-jwk', /"kty"\s*:\s*"OKP"[^{}]{0,300}"d"\s*:\s*"[A-Za-z0-9_-]{43}"|"d"\s*:\s*"[A-Za-z0-9_-]{43}"[^{}]{0,300}"kty"\s*:\s*"OKP"/g],
+  // A server secret written down: the Insider signing key or a service-role key assigned to a name, and Supabase service-role JWTs.
+  ['server-secret-assignment', /\b[A-Z0-9_]*(?:SIGNING_(?:PRIVATE_)?KEY|SERVICE_ROLE_KEY|SIGNING_SECRET)\s*[=:]\s*['"]?[A-Za-z0-9_+/=.-]{32,}/g],
+  ['supabase-service-role-jwt', /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*(?:c2VydmljZV9yb2xl|NlcnZpY2Vfcm9sZ|zZXJ2aWNlX3JvbG)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{20,}/g],
 ];
 export function scanSecrets(bytes) {
   if (bytes.includes(0)) return [];

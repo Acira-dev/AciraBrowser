@@ -1,0 +1,460 @@
+/* @flatten-is */
+/* Active border (Beta 14). ONE look for every border that appears because something is ACTIVE, never one look for Favorites, another
+   for tabs, another for the address bar. Chosen in Settings > Appearance > Active border; ui/activeBorder.ts writes it on the root as
+   <html data-active-border="divider-fade|lit-edge|hairline|inner-light|plain"> (Divider fade is the default) and <html data-input-modality="keyboard|pointer">.
+
+   WHAT IS ACTIVE (these draw the ring): the selected Favorite tile, the selected tab (sidebar row and top tab), the address bar while typing in it, a search field or
+   text input while focused. The focus outline of other controls keeps its own 2px (section 5). WHAT IS NOT: resting borders (the address bar's quiet outline,
+   card outlines, dividers), the hover glow, drop markers.
+
+   HOW IT IS DRAWN. The ring is a real 1px border on a pseudo-element of the surface (borders snap to whole device pixels, so the line is crisp at 100% and 150%),
+   painted by a gradient and cut to the border with a mask. Tiles and rows use ::before, fields use ::after (the address bar's ::before is the frost). The pseudo-element
+   exists at rest (opacity 0) so it can LEAVE as well as arrive: one number, --ab-t (0 resting, 1 active), is transitioned, and everything that moves is a function of it.
+   The way out therefore is the way in played backwards (the same number, the mirrored curve, quicker), never a cut.
+
+   THE TOKENS (everyone else reads these; they are set on the surface, so the ring inherits them):
+     --ab-c                the ring's colour: the site's colour where site colour applies, otherwise the accent (the focus colour for a field)
+     --ab-hi               the lit end of Lit edge and Hairline, derived from --ab-c and the tone (--ab-hi-amount, --ab-hi-toward)
+     --ab-seat, --ab-top   the quiet shadow under a selected card, and its top light
+     --ab-lit-*, --ab-hair-*, --ab-div-*, --ab-inner-*, --ab-plain, --ab-key   how strong each look is, in percent of --ab-c, per kind of surface (section 2)
+     --ab-t                0 resting, 1 active (a registered number; the transition lives on the ring)
+     --ab-k                0, or 1 while the person moves with the keyboard (Divider fade and Inner light add a 1px hairline then)
+   TO GIVE A NEW SURFACE THE RING: add its selector to the lists of section 3 (a tile or row: ::before, with its active state in the ACTIVE list; a field: ::after),
+   set --ab-c and one of the three strength profiles of section 2 on it. Nothing else; the five looks, the motion and the keyboard hairline come with the lists.
+
+   MOTION (F2, approved in the videos). Appear with a short motion on the animation-speed setting (--motion-scale: Premium 1.7, Fast 0.6, Off 0), leave with the reverse,
+   quicker. Motion Off or reduced motion: a plain quick fade (80ms, never a cut). Lit edge fades in while the light travels round from the bright corner; Divider fade grows from
+   the centre outward, ends fading as it goes; Hairline and Plain fade softly; Inner light blooms inward from the edge. */
+
+@property --ab-t { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --ab-ba1 { syntax: '<number>'; inherits: false; initial-value: 0; }   /* Inner light's bloom strength, first segment: 0 to 1.5 over the first quarter of the appear (the sample's `25% { --b14-ba: 1.5 }`) */
+@property --ab-ba2 { syntax: '<number>'; inherits: false; initial-value: 0; }   /* ... second segment: 1.5 down to 1 over the other three quarters (added to the first: 0 to -.5) */
+@property --ab-k { syntax: '<number>'; inherits: false; initial-value: 0; }   /* 1 while the keyboard hairline is shown (Divider fade, Inner light) */
+
+/* ---------- 1. Tone: what depends on the light or dark chrome, not on the surface ---------- */
+.app {
+  --ab-hi-amount: 88%; --ab-hi-toward: #000;                              /* light chrome: the lit end is the colour itself, a touch deeper (a ring mixed with white would vanish) */
+  --ab-seat: 0 1px 2px rgb(0 0 0 / .06); --ab-top: inset 0 1px 0 rgb(255 255 255 / .7);
+}
+.app[data-chrome=dark] {
+  --ab-hi-amount: 58%; --ab-hi-toward: #fff;                              /* dark chrome: the colour lifted toward white */
+  --ab-seat: 0 1px 2px rgb(0 0 0 / .26); --ab-top: inset 0 1px 0 rgb(255 255 255 / .06);
+}
+
+:root[data-active-border=plain] .app { --ab-top: 0 0 transparent; }   /* Plain: no highlight, whatever the tone */
+
+/* ---------- 2. Per-surface: the colour and how strong each look is ----------
+   Percent of the colour. A FOCUS ring has to keep 3:1 against the field and the toolbar all round, so the field's profile is held stronger than a selection's. */
+/* tile: the selected Favorite */
+.app.style-acira .acira-sidebar .sb-app, .app.style-acira .acira-sidebar .sb-apps > .sb-glide, .app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate, .app.style-acira .ab-demo-tile {
+  --ab-c: var(--sb-site);
+  --ab-lit-1: 82%; --ab-lit-1-at: 24%; --ab-lit-2: 34%; --ab-lit-2-at: 58%; --ab-lit-3: 16%;
+  --ab-hair-top: 78%; --ab-hair-mid: 52%; --ab-hair-mid-at: 34%; --ab-hair-bottom: 40%;
+  --ab-div-end: 6%; --ab-div-run: 84%; --ab-div-edge: 30%;
+  --ab-inner-line: 16%; --ab-inner-glow: 34%; --ab-inner-depth: 10px; --ab-plain: 78%; --ab-key: 80%;
+}
+:root[data-site-color=rich] .app.style-acira .acira-sidebar .sb-app, :root[data-site-color=rich] .app.style-acira .acira-sidebar .sb-apps > .sb-glide, :root[data-site-color=rich] .app.style-acira .ab-demo-tile { --ab-inner-glow: 44%; }
+/* the Favorites stack (earlier work L2): its button is only the hit area, so the selected Favorite at the front wears the tile's ring on the FRONT PLATE (b14 integration).
+   --sb-site is registered and does not inherit (sidebar.css): the stack hands the colour down as --sb-stack-ring; the ring follows the plate's squircle. */
+.app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate { --ab-c: var(--sb-stack-ring); }
+.app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate::before { corner-shape: inherit; }
+/* row: the selected tab (sidebar row and the top tab's pill) */
+.app.style-acira .acira-sidebar .sb-tab, .app.style-acira .acira-sidebar .sb-glide:not(.sb-apps > .sb-glide), .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection, .app.style-acira .acira-compact-selection, .app.style-acira .ab-demo-row {
+  --ab-c: var(--site);
+  --ab-lit-1: 78%; --ab-lit-1-at: 14%; --ab-lit-2: 30%; --ab-lit-2-at: 52%; --ab-lit-3: 14%;
+  --ab-hair-top: 72%; --ab-hair-mid: 46%; --ab-hair-mid-at: 40%; --ab-hair-bottom: 34%;
+  --ab-div-end: 4%; --ab-div-run: 80%; --ab-div-edge: 22%;
+  --ab-inner-line: 14%; --ab-inner-glow: 30%; --ab-inner-depth: 10px; --ab-plain: 78%; --ab-key: 80%;
+}
+.app.style-acira .acira-sidebar .sb-glide[data-glow]:not(.sb-apps > .sb-glide) { --ab-c: var(--glow-c); }
+/* field: the address bar while typing in it */
+.app.style-acira .browser-shell .address-bar, .app.style-acira .ab-demo-field, .app.style-acira :is(.st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search) {
+  --ab-c: var(--focus-ring-color, var(--accent));
+  --ab-lit-1: 100%; --ab-lit-1-at: 12%; --ab-lit-2: 62%; --ab-lit-2-at: 50%; --ab-lit-3: 45%;
+  --ab-hair-top: 100%; --ab-hair-mid: 86%; --ab-hair-mid-at: 40%; --ab-hair-bottom: 72%;
+  --ab-div-end: 8%; --ab-div-run: 90%; --ab-div-edge: 16%;
+  --ab-inner-line: 24%; --ab-inner-glow: 34%; --ab-inner-depth: 12px; --ab-plain: 100%; --ab-key: 100%;
+}
+.app.style-acira:not([data-chrome=dark]) :is(.browser-shell .address-bar, .ab-demo-field, .st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search) { --ab-lit-2: 84%; --ab-lit-3: 72%; }
+/* search fields (Settings, shortcuts, library, the new tab's): the field profile in the field's own focus colour. They have a 1px transparent border, so the ring sits over it. */
+.app.style-acira :is(.st-search-field, .sk-search) { --ab-c: var(--st-ring, var(--focus-ring-color, var(--accent))); --ab-inset: -1px; }
+.app.style-acira .lib-search { --ab-c: var(--lib-ring, var(--focus-ring-color, var(--accent))); --ab-inset: -1px; }
+.app.style-acira .nt-page .nt-search { --ab-c: var(--nt-ring, var(--focus-ring-color, var(--accent))); --ab-inset: -1px; }   /* the light theme holds the dim end at 72% so the far end keeps 3:1 */
+
+/* the search fields added when F1 was finished (b14 handle round): the tab-search and command-palette field (a popup's own, no border of its own: the ring sits on its edge), the Passwords search,
+   the Frost page's search and the list searches (a real 1px border at rest: the ring sits over it). Same profile, the field's own focus colour. */
+.app.style-acira :is(.browser-popup .popup-search, .pw-search) { --ab-inset: 0; }                                   /* no border of their own: the resting edge is an inset shadow */
+.app.style-acira :is(.ed-search-glass, .ed-list-search) { --ab-inset: -1px; }                                          /* a real 1px border at rest: the ring sits over it */
+.app.style-acira .ed-list-search { position: relative; }
+
+/* a Settings preview card (features/settings/ActiveBorderPreview.tsx): the same ring on a miniature tile, row and field, in the accent */
+.app.style-acira .ab-demo-tile, .app.style-acira .ab-demo-row { --ab-c: var(--accent, #3b6eea); }
+
+/* ---------- 3. The ring: one rule per kind of surface, the five looks nested under it ----------
+   REST lists: the surface whether or not it is active (the ring waits in it, invisible). ACTIVE lists: the same surface while it is active. */
+:is(
+  .app.style-acira .acira-sidebar .sb-app:not([data-drop]):not(.sb-app-stack),
+  .app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate,
+  .app.style-acira .acira-sidebar .sb-tab:not([data-drop]):not([data-split-insert]),
+  .app.style-acira .acira-sidebar .sb-glide,
+  .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection,
+  .app.style-acira .acira-compact-selection,
+  .app.style-acira .ab-demo-tile, .app.style-acira .ab-demo-row
+) {
+  &::before {
+    --ab-hi: color-mix(in oklab, var(--ab-c, transparent) var(--ab-hi-amount), var(--ab-hi-toward));
+    --ab-t: 0; --ab-k: 0; --ab-ba1: 0; --ab-ba2: 0;
+    content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1px solid transparent; pointer-events: none;
+    -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+    opacity: 0;
+    transition: --ab-t var(--ab-out) var(--ab-out-ease), opacity var(--ab-out-fade) var(--ab-out-ease) var(--ab-out-fade-delay), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 var(--ab-out) var(--ab-out-ease), --ab-ba2 var(--ab-out) var(--ab-out-ease);
+  }
+}
+:is(
+  .app.style-acira .acira-sidebar .sb-app[aria-current=page]:not([data-drop]):not([data-glide]):not(.sb-app-stack),
+  .app.style-acira .acira-sidebar .sb-app-stack[aria-current=page] .sb-stack-i[data-depth='0']>.sb-plate,
+  :root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-tab[data-glow][aria-current=true]:not([data-drop]):not([data-split-insert]):not([data-glide]),
+  :root:not([data-site-color=off]) .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection[data-glow],
+  :root:not([data-site-color=off]) .app.style-acira .acira-compact-selection[data-glow],
+  .app.style-acira :is(.ab-demo-tile, .ab-demo-row)[data-ab-active]
+)::before {
+  --ab-t: 1; --ab-ba1: 1.5; --ab-ba2: -.5; opacity: 1;
+  transition: --ab-t var(--ab-in) var(--ab-in-ease), opacity var(--ab-in-fade) var(--ab-in-ease), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 calc(var(--ab-in) * .25) var(--ab-in-ease), --ab-ba2 calc(var(--ab-in) * .75) var(--ab-in-ease) calc(var(--ab-in) * .25);
+}
+/* A card that is flying from one row to the next carries the finished ring: it neither arrives nor leaves, so landing changes nothing (no colour jump). */
+:is(.app.style-acira .acira-sidebar .sb-apps > .sb-glide, :root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-glide[data-glow]:not(.sb-apps > .sb-glide))::before,
+:root:root .app.style-acira .acira-sidebar :is(.sb-app, .sb-tab)[data-glide][data-glide-ring]::before {
+  --ab-t: 1; --ab-ba1: 1.5; --ab-ba2: -.5; opacity: 1; transition: none;
+}
+:root:root .app.style-acira .acira-sidebar :is(.sb-app, .sb-tab)[data-glide]::before { visibility: hidden; }   /* the row's own copy waits under the flying card; it is shown, already finished, when the card lands */
+
+/* SPEED PASS (Beta 14): a sidebar row's ring takes the row's own radius token instead of `border-radius: inherit`. An explicitly inherited property ties the
+   pseudo-element to its row: every style change of the row restyles it too, and a close or a New tab slides every row (40 at 40 tabs) for ~60 frames, so each
+   frame restyled 40 more elements (close: 13 004 -> 7 115 elements, 109 -> 60 ms of style per close, measured with the radius fixed). In the sidebar a row's radius
+   is always var(--sb-row-radius) (sidebar.css, (0,4,0); split-groups.css's hover radius has (0,3,0) and never wins there), so the ring is drawn the same.
+   tests/active-border-row-radius.test.ts. :root:root outranks the list above ((0,7,1) after the :is() flattening). */
+:root:root .app.style-acira .acira-sidebar .sb-tab:not([data-drop]):not([data-split-insert])::before { border-radius: var(--sb-row-radius); }
+
+/* The same ring for a field. */
+:is(.app.style-acira .browser-shell .address-bar, .app.style-acira .ab-demo-field, .app.style-acira :is(.st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search)) {
+  &::after {
+    --ab-hi: color-mix(in oklab, var(--ab-c, transparent) var(--ab-hi-amount), var(--ab-hi-toward));
+    --ab-t: 0; --ab-k: 0; --ab-ba1: 0; --ab-ba2: 0;
+    content: ''; position: absolute; inset: var(--ab-inset, 0); border-radius: inherit; border: 1px solid transparent; pointer-events: none; z-index: 0;
+    -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+    opacity: 0;
+    transition: --ab-t var(--ab-out) var(--ab-out-ease), opacity var(--ab-out-fade) var(--ab-out-ease) var(--ab-out-fade-delay), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 var(--ab-out) var(--ab-out-ease), --ab-ba2 var(--ab-out) var(--ab-out-ease);
+  }
+}
+/* A press that holds the at-rest text for a drag leaves the ring until the release (address-glide.css: the ring goes with the text). */
+.app.style-acira .browser-shell .address-bar:focus-within:not(:has(.address-field[data-glide][data-holding]))::after, .app.style-acira .ab-demo-field[data-ab-active]::after, .app.style-acira :is(.st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search):focus-within::after {
+  --ab-t: 1; --ab-ba1: 1.5; --ab-ba2: -.5; opacity: 1;
+  transition: --ab-t var(--ab-in) var(--ab-in-ease), opacity var(--ab-in-fade) var(--ab-in-ease), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 calc(var(--ab-in) * .25) var(--ab-in-ease), --ab-ba2 calc(var(--ab-in) * .75) var(--ab-in-ease) calc(var(--ab-in) * .25);
+}
+
+/* ---------- 4. The five looks ---------- */
+/* Every selector below says "this look, on the ring of any surface in the lists above": the chosen look on the root, or (a Settings preview) the card's own on the surface. */
+.app.style-acira {
+  --ab-key-ms: max(80ms, calc(120ms * var(--motion-scale, 1)));
+  --ab-out: calc(120ms * var(--motion-scale, 1));                            /* leaving: quicker than arriving */
+  --ab-out-fade: max(80ms, calc(var(--ab-out) * .35));
+  --ab-out-fade-delay: max(0ms, calc(var(--ab-out) - var(--ab-out-fade)));     /* the fade is the LAST part of the way out, as it was the first part of the way in */
+}
+:is(
+  .app.style-acira .acira-sidebar .sb-app:not([data-drop]):not(.sb-app-stack),
+  .app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate,
+  .app.style-acira .acira-sidebar .sb-tab:not([data-drop]):not([data-split-insert]),
+  .app.style-acira .acira-sidebar .sb-glide,
+  .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection,
+  .app.style-acira .acira-compact-selection,
+  .app.style-acira .ab-demo-tile, .app.style-acira .ab-demo-row
+) {
+  /* Lit edge: a 1px ring, brighter at the top-left, fading round the shape. Appears with the light travelling round from the bright corner. */
+  :root[data-active-border=lit-edge] &:not([data-ab-demo])::before, &[data-ab-demo=lit-edge]::before {
+    --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .35); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    background: linear-gradient(135deg, var(--ab-hi) 0%, color-mix(in oklab, var(--ab-c) var(--ab-lit-1), transparent) var(--ab-lit-1-at), color-mix(in oklab, var(--ab-c) var(--ab-lit-2), transparent) var(--ab-lit-2-at), color-mix(in oklab, var(--ab-c) var(--ab-lit-3), transparent) 100%) border-box;
+    -webkit-mask: linear-gradient(135deg, #000 calc(var(--ab-t) * 130% - 30%), transparent calc(var(--ab-t) * 130%)) border-box, linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0) border-box;
+    -webkit-mask-composite: source-in, xor; mask-composite: intersect, exclude;
+  }
+  /* Hairline: one even 1px ring at about half strength, a little brighter along the top. A soft fade. */
+  :root[data-active-border=hairline] &:not([data-ab-demo])::before, &[data-ab-demo=hairline]::before {
+    --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1)); --ab-in-fade: var(--ab-in);
+    --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1)); --ab-out-fade: max(80ms, var(--ab-out)); --ab-out-fade-delay: 0ms;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--ab-hi) var(--ab-hair-top), transparent) 0%, color-mix(in oklab, var(--ab-c) var(--ab-hair-mid), transparent) var(--ab-hair-mid-at), color-mix(in oklab, var(--ab-c) var(--ab-hair-bottom), transparent) 100%) border-box;
+  }
+  /* Divider fade (the default): colour only along the top and bottom edges, thinning and fading toward the corners like our dividers; no sides.
+     --ab-g is how far the lines have grown from the centre (1 = full length). Appears growing from the centre outward, ends fading as they go. */
+  :root[data-active-border=divider-fade] &:not([data-ab-demo])::before, &[data-ab-demo=divider-fade]::before {
+    --ab-g: calc(.04 + .96 * var(--ab-t));
+    border-color: color-mix(in oklab, var(--ab-c) calc(var(--ab-key) * var(--ab-k)), transparent);
+    --ab-in: calc(280ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .3); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    background: linear-gradient(90deg,
+      color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g)), transparent) calc(50% - 50% * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) var(--ab-div-run), transparent) calc(50% - (50% - var(--ab-div-edge)) * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) var(--ab-div-run), transparent) calc(50% + (50% - var(--ab-div-edge)) * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g)), transparent) calc(50% + 50% * var(--ab-g))) border-box;
+  }
+  /* Inner light: no line to speak of; the shape is lit from inside its edge. Blooms inward from the edge: the glow's depth grows from a thin bright line to its full depth,
+     its strength swells to 1.5 over the first quarter and settles to 1. */
+  :root[data-active-border=inner-light] &:not([data-ab-demo])::before, &[data-ab-demo=inner-light]::before {
+    --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .25); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    -webkit-mask: none; mask: none;
+    --ab-line-t: calc(var(--ab-inner-line) + (70% - var(--ab-inner-line)) * (1 - var(--ab-t)));
+    border-color: color-mix(in oklab, var(--ab-c) calc(var(--ab-line-t) + (var(--ab-key) - var(--ab-line-t)) * var(--ab-k)), transparent);
+    box-shadow: inset 0 0 calc(var(--ab-inner-depth) - 9px * (1 - var(--ab-t))) color-mix(in oklab, var(--ab-c) calc(var(--ab-inner-glow) * (var(--ab-ba1) + var(--ab-ba2))), transparent);
+  }
+  /* Plain: one flat 1px line, one colour, no gradient and no highlight. A line cannot be thinner than one screen pixel (0.5px renders as 1px), so "thinner" is the same
+     pixel at lower strength (--ab-plain). A soft fade. */
+  :root[data-active-border=plain] &:not([data-ab-demo])::before, &[data-ab-demo=plain]::before {
+    --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1)); --ab-in-fade: var(--ab-in);
+    --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1)); --ab-out-fade: max(80ms, var(--ab-out)); --ab-out-fade-delay: 0ms;
+    -webkit-mask: none; mask: none; border-color: color-mix(in oklab, var(--ab-c) var(--ab-plain), transparent);
+  }
+  /* Keyboard visibility: Divider fade and Inner light are too faint to show where keyboard focus is (they fail the 3:1 check), so while the person is moving with the
+     keyboard they add a 1px hairline. The mouse shows the pure style. */
+  :root[data-input-modality=keyboard]:is([data-active-border=divider-fade], [data-active-border=inner-light]) &:not([data-ab-demo])::before { --ab-k: 1; }
+}
+
+/* the same five looks on a field's ring (::after): the rules are the ones above, with the pseudo-element changed */
+:is(.app.style-acira .browser-shell .address-bar, .app.style-acira .ab-demo-field, .app.style-acira :is(.st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search)) {
+  :root[data-active-border=lit-edge] &:not([data-ab-demo])::after, &[data-ab-demo=lit-edge]::after {
+    --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .35); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    background: linear-gradient(135deg, var(--ab-hi) 0%, color-mix(in oklab, var(--ab-c) var(--ab-lit-1), transparent) var(--ab-lit-1-at), color-mix(in oklab, var(--ab-c) var(--ab-lit-2), transparent) var(--ab-lit-2-at), color-mix(in oklab, var(--ab-c) var(--ab-lit-3), transparent) 100%) border-box;
+    -webkit-mask: linear-gradient(135deg, #000 calc(var(--ab-t) * 130% - 30%), transparent calc(var(--ab-t) * 130%)) border-box, linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0) border-box;
+    -webkit-mask-composite: source-in, xor; mask-composite: intersect, exclude;
+  }
+  :root[data-active-border=hairline] &:not([data-ab-demo])::after, &[data-ab-demo=hairline]::after {
+    --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1)); --ab-in-fade: var(--ab-in);
+    --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1)); --ab-out-fade: max(80ms, var(--ab-out)); --ab-out-fade-delay: 0ms;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--ab-hi) var(--ab-hair-top), transparent) 0%, color-mix(in oklab, var(--ab-c) var(--ab-hair-mid), transparent) var(--ab-hair-mid-at), color-mix(in oklab, var(--ab-c) var(--ab-hair-bottom), transparent) 100%) border-box;
+  }
+  :root[data-active-border=divider-fade] &:not([data-ab-demo])::after, &[data-ab-demo=divider-fade]::after {
+    --ab-g: calc(.04 + .96 * var(--ab-t));
+    border-color: color-mix(in oklab, var(--ab-c) calc(var(--ab-key) * var(--ab-k)), transparent);
+    --ab-in: calc(280ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .3); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    background: linear-gradient(90deg,
+      color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g)), transparent) calc(50% - 50% * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) var(--ab-div-run), transparent) calc(50% - (50% - var(--ab-div-edge)) * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) var(--ab-div-run), transparent) calc(50% + (50% - var(--ab-div-edge)) * var(--ab-g)),
+      color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g)), transparent) calc(50% + 50% * var(--ab-g))) border-box;
+  }
+  :root[data-active-border=inner-light] &:not([data-ab-demo])::after, &[data-ab-demo=inner-light]::after {
+    --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-in-fade: calc(var(--ab-in) * .25); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+    -webkit-mask: none; mask: none;
+    --ab-line-t: calc(var(--ab-inner-line) + (70% - var(--ab-inner-line)) * (1 - var(--ab-t)));
+    border-color: color-mix(in oklab, var(--ab-c) calc(var(--ab-line-t) + (var(--ab-key) - var(--ab-line-t)) * var(--ab-k)), transparent);
+    box-shadow: inset 0 0 calc(var(--ab-inner-depth) - 9px * (1 - var(--ab-t))) color-mix(in oklab, var(--ab-c) calc(var(--ab-inner-glow) * (var(--ab-ba1) + var(--ab-ba2))), transparent);
+  }
+  :root[data-active-border=plain] &:not([data-ab-demo])::after, &[data-ab-demo=plain]::after {
+    --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1)); --ab-in-fade: var(--ab-in);
+    --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1)); --ab-out-fade: max(80ms, var(--ab-out)); --ab-out-fade-delay: 0ms;
+    -webkit-mask: none; mask: none; border-color: color-mix(in oklab, var(--ab-c) var(--ab-plain), transparent);
+  }
+  :root[data-input-modality=keyboard]:is([data-active-border=divider-fade], [data-active-border=inner-light]) &:not([data-ab-demo])::after { --ab-k: 1; }
+}
+
+/* ---------- 4b. Text inputs that cannot carry a pseudo-element (an <input> has no ::after) ----------
+   The settings forms, the bookmark / Favorite / workspace editors, the Routines and Rewind pages, the group editor and inline renames: the same five looks on the input itself, from the same tokens and the same number
+   (--ab-t, 0 resting, 1 focused). A ring is an outline drawn over the field's own 1px edge (outline-offset -1px: it follows the radius and sits on the edge), a growing line along the top and bottom is a background
+   strip, a glow is four edge gradients; none of them touches the field's own box-shadow or border, so the resting edge is exactly what it was. They are applied at rest too (at --ab-t 0 every colour is transparent)
+   so the way out is the way in played backwards, never a cut. The Passwords search, the Settings search and the other fields whose input sits in a wrapper wear the wrapper's ring (section 3) and are left out here.
+   Written out selector by selector on purpose: a :is() list ending in a type selector cannot be flattened and would be matched against every element.
+   Each one ends in `.ab-input`, the class every such field carries (tests/costly-selectors.test.mjs): Blink files the rule under the class, not under every input and
+   text area of the window. The scope sits in :where() so the specificity is the one the plain `.scope input` had. */
+.app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+.app.style-acira :where(.browser-settings) textarea.ab-input,
+.app.style-acira .bm-edit-input,
+.app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+.app.style-acira :where(.rt-page) textarea.ab-input,
+.app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+.app.style-acira :where(.group-editor) input.ab-input,
+.app.style-acira .m-inline-input {
+  --ab-c: var(--focus-ring-color, var(--accent));
+  --ab-hi: color-mix(in oklab, var(--ab-c) var(--ab-hi-amount), var(--ab-hi-toward));
+  --ab-lit-1: 100%; --ab-lit-1-at: 12%; --ab-lit-2: 62%; --ab-lit-2-at: 50%; --ab-lit-3: 45%;
+  --ab-hair-top: 100%; --ab-hair-mid: 86%; --ab-hair-mid-at: 40%; --ab-hair-bottom: 72%;
+  --ab-div-end: 8%; --ab-div-run: 90%; --ab-div-edge: 16%;
+  --ab-inner-line: 24%; --ab-inner-glow: 34%; --ab-inner-depth: 12px; --ab-plain: 100%; --ab-key: 100%;
+  --ab-t: 0; --ab-k: 0; --ab-ba1: 0; --ab-ba2: 0;
+  transition: --ab-t var(--ab-out) var(--ab-out-ease, ease), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 var(--ab-out) var(--ab-out-ease, ease), --ab-ba2 var(--ab-out) var(--ab-out-ease, ease);
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+}
+.app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *):focus,
+.app.style-acira :where(.browser-settings) textarea.ab-input:focus,
+.app.style-acira .bm-edit-input:focus,
+.app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.rt-page) textarea.ab-input:focus,
+.app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.group-editor) input.ab-input:focus,
+.app.style-acira .m-inline-input:focus {
+  --ab-t: 1; --ab-ba1: 1.5; --ab-ba2: -.5;
+  transition: --ab-t var(--ab-in, 180ms) var(--ab-in-ease, ease), --ab-k var(--ab-key-ms) var(--motion-ease-enter, ease), --ab-ba1 calc(var(--ab-in, 180ms) * .25) var(--ab-in-ease, ease), --ab-ba2 calc(var(--ab-in, 180ms) * .75) var(--ab-in-ease, ease) calc(var(--ab-in, 180ms) * .25);
+}
+/* Plain: one flat 1px line, one colour. */
+:root[data-active-border=plain] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+:root[data-active-border=plain] .app.style-acira :where(.browser-settings) textarea.ab-input,
+:root[data-active-border=plain] .app.style-acira .bm-edit-input,
+:root[data-active-border=plain] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=plain] .app.style-acira :where(.rt-page) textarea.ab-input,
+:root[data-active-border=plain] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=plain] .app.style-acira :where(.group-editor) input.ab-input,
+:root[data-active-border=plain] .app.style-acira .m-inline-input {
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+  --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1));
+  --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1));
+  outline: 1px solid color-mix(in oklab, var(--ab-c) calc(var(--ab-plain) * var(--ab-t)), transparent);
+}
+/* Hairline: one even 1px ring at about half strength, a faint light top edge. */
+:root[data-active-border=hairline] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+:root[data-active-border=hairline] .app.style-acira :where(.browser-settings) textarea.ab-input,
+:root[data-active-border=hairline] .app.style-acira .bm-edit-input,
+:root[data-active-border=hairline] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=hairline] .app.style-acira :where(.rt-page) textarea.ab-input,
+:root[data-active-border=hairline] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=hairline] .app.style-acira :where(.group-editor) input.ab-input,
+:root[data-active-border=hairline] .app.style-acira .m-inline-input {
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+  --ab-in: var(--motion-popover-enter, calc(180ms * var(--motion-scale, 1))); --ab-in-ease: var(--motion-ease-enter, cubic-bezier(.23, 1, .32, 1));
+  --ab-out: var(--motion-popover-exit, calc(120ms * var(--motion-scale, 1))); --ab-out-ease: var(--motion-ease-exit, cubic-bezier(.4, 0, 1, 1));
+  outline: 1px solid color-mix(in oklab, var(--ab-c) calc(var(--ab-hair-mid) * var(--ab-t)), transparent);
+  background-image: linear-gradient(color-mix(in oklab, var(--ab-hi) calc(var(--ab-hair-top) * var(--ab-t) * .5), transparent), color-mix(in oklab, var(--ab-hi) calc(var(--ab-hair-top) * var(--ab-t) * .5), transparent)); background-size: 100% 1px; background-position: top;
+}
+/* Lit edge: a 1px ring brighter at the top-left, fading round the shape. */
+:root[data-active-border=lit-edge] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+:root[data-active-border=lit-edge] .app.style-acira :where(.browser-settings) textarea.ab-input,
+:root[data-active-border=lit-edge] .app.style-acira .bm-edit-input,
+:root[data-active-border=lit-edge] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=lit-edge] .app.style-acira :where(.rt-page) textarea.ab-input,
+:root[data-active-border=lit-edge] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=lit-edge] .app.style-acira :where(.group-editor) input.ab-input,
+:root[data-active-border=lit-edge] .app.style-acira .m-inline-input {
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+  --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+  --ab-lit-line: linear-gradient(90deg, color-mix(in oklab, var(--ab-hi) calc(var(--ab-lit-1) * var(--ab-t)), transparent), transparent 70%);
+  outline: 1px solid color-mix(in oklab, var(--ab-c) calc(var(--ab-lit-2) * var(--ab-t)), transparent);
+  background-image: var(--ab-lit-line), linear-gradient(180deg, color-mix(in oklab, var(--ab-hi) calc(var(--ab-lit-1) * var(--ab-t)), transparent), transparent 70%); background-size: 100% 1px, 1px 100%; background-position: top left, top left;
+}
+/* Divider fade (the default): colour only along the top and bottom edges, growing from the centre outward, ends fading as they go; no sides. */
+:root[data-active-border=divider-fade] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+:root[data-active-border=divider-fade] .app.style-acira :where(.browser-settings) textarea.ab-input,
+:root[data-active-border=divider-fade] .app.style-acira .bm-edit-input,
+:root[data-active-border=divider-fade] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=divider-fade] .app.style-acira :where(.rt-page) textarea.ab-input,
+:root[data-active-border=divider-fade] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=divider-fade] .app.style-acira :where(.group-editor) input.ab-input,
+:root[data-active-border=divider-fade] .app.style-acira .m-inline-input {
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+  --ab-in: calc(280ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+  --ab-g: calc(.04 + .96 * var(--ab-t));
+  --ab-div-line: linear-gradient(90deg,
+    color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g) * var(--ab-t)), transparent) calc(50% - 50% * var(--ab-g)),
+    color-mix(in oklab, var(--ab-c) calc(var(--ab-div-run) * var(--ab-t)), transparent) calc(50% - (50% - var(--ab-div-edge)) * var(--ab-g)),
+    color-mix(in oklab, var(--ab-c) calc(var(--ab-div-run) * var(--ab-t)), transparent) calc(50% + (50% - var(--ab-div-edge)) * var(--ab-g)),
+    color-mix(in oklab, var(--ab-c) calc(var(--ab-div-end) * var(--ab-g) * var(--ab-t)), transparent) calc(50% + 50% * var(--ab-g)));
+  outline: 1px solid color-mix(in oklab, var(--ab-c) calc(var(--ab-key) * var(--ab-k)), transparent);
+  background-image: var(--ab-div-line), var(--ab-div-line); background-size: 100% 1px, 100% 1px; background-position: top, bottom;
+}
+/* Inner light: no line to speak of; the shape is lit from inside its edge. */
+:root[data-active-border=inner-light] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+:root[data-active-border=inner-light] .app.style-acira :where(.browser-settings) textarea.ab-input,
+:root[data-active-border=inner-light] .app.style-acira .bm-edit-input,
+:root[data-active-border=inner-light] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=inner-light] .app.style-acira :where(.rt-page) textarea.ab-input,
+:root[data-active-border=inner-light] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+:root[data-active-border=inner-light] .app.style-acira :where(.group-editor) input.ab-input,
+:root[data-active-border=inner-light] .app.style-acira .m-inline-input {
+  outline-offset: -1px; background-repeat: no-repeat; background-origin: padding-box;
+  --ab-in: calc(300ms * var(--motion-scale, 1)); --ab-in-ease: cubic-bezier(.2, 0, 0, 1); --ab-out-ease: cubic-bezier(1, 0, .8, 1);
+  --ab-glow: color-mix(in oklab, var(--ab-c) calc(var(--ab-inner-glow) * (var(--ab-ba1) + var(--ab-ba2))), transparent);
+  --ab-line-t: calc(var(--ab-inner-line) + (70% - var(--ab-inner-line)) * (1 - var(--ab-t)));
+  outline: 1px solid color-mix(in oklab, var(--ab-c) calc((var(--ab-line-t) + (var(--ab-key) - var(--ab-line-t)) * var(--ab-k)) * var(--ab-t)), transparent);
+  background-image: linear-gradient(180deg, var(--ab-glow), transparent var(--ab-inner-depth)), linear-gradient(0deg, var(--ab-glow), transparent var(--ab-inner-depth)), linear-gradient(90deg, var(--ab-glow), transparent var(--ab-inner-depth)), linear-gradient(270deg, var(--ab-glow), transparent var(--ab-inner-depth)); background-size: 100% 100%; background-position: 0 0;
+}
+/* Keyboard visibility: Divider fade and Inner light add a 1px hairline while the person moves with the keyboard. */
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *):focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.browser-settings) textarea.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira .bm-edit-input:focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.rt-page) textarea.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira :where(.group-editor) input.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=divider-fade] .app.style-acira .m-inline-input:focus { --ab-k: 1; }
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *):focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.browser-settings) textarea.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira .bm-edit-input:focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.rt-page) textarea.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira :where(.group-editor) input.ab-input:focus,
+:root[data-input-modality=keyboard][data-active-border=inner-light] .app.style-acira .m-inline-input:focus { --ab-k: 1; }
+/* Motion Off: a plain quick change, never a cut. */
+.app.style-acira[data-reduced-motion=true] :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *),
+.app.style-acira[data-reduced-motion=true] :where(.browser-settings) textarea.ab-input,
+.app.style-acira[data-reduced-motion=true] .bm-edit-input,
+.app.style-acira[data-reduced-motion=true] :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+.app.style-acira[data-reduced-motion=true] :where(.rt-page) textarea.ab-input,
+.app.style-acira[data-reduced-motion=true] :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]),
+.app.style-acira[data-reduced-motion=true] :where(.group-editor) input.ab-input,
+.app.style-acira[data-reduced-motion=true] .m-inline-input { transition: --ab-t 80ms linear !important; }
+@media (forced-colors: active) {
+.app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *):focus,
+.app.style-acira :where(.browser-settings) textarea.ab-input:focus,
+.app.style-acira .bm-edit-input:focus,
+.app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.rt-page) textarea.ab-input:focus,
+.app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.group-editor) input.ab-input:focus,
+.app.style-acira .m-inline-input:focus { outline: 2px solid Highlight !important; outline-offset: 1px; background-image: none !important; }
+}
+@media (prefers-contrast: more) {
+.app.style-acira :where(.browser-settings) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=color], [type=button], [type=submit], [type=reset], [type=image], .bs-search-input):not(.st-search-field *, .sk-search *, .pw-search *, .lib-search *):focus,
+.app.style-acira :where(.browser-settings) textarea.ab-input:focus,
+.app.style-acira .bm-edit-input:focus,
+.app.style-acira :where(.rt-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.rt-page) textarea.ab-input:focus,
+.app.style-acira :where(.rw-page) input.ab-input:not([type=checkbox], [type=radio], [type=range], [type=file]):focus,
+.app.style-acira :where(.group-editor) input.ab-input:focus,
+.app.style-acira .m-inline-input:focus { outline: 1px solid var(--ab-c) !important; background-image: none !important; }
+}
+
+/* The glow round the focused address bar (the sample, b14-v3.css 'what the surfaces themselves stop drawing and keep'): `box-shadow: 0 0 9px color-mix(in oklab, var(--ab-c) 26%, transparent)` for the four looks that have a
+   line to glow, none for Plain ("no glow round the address bar", NOTES_v3 section 1). It rides the bar's own box-shadow transition (frost-preview.css: .22s), as it does in the sample. */
+:root:root:root .app.style-acira .browser-shell .address-bar:focus-within { box-shadow: 0 0 9px color-mix(in oklab, var(--ab-c) 26%, transparent); }
+:root:root:root[data-active-border=plain] .app.style-acira .browser-shell .address-bar:focus-within { box-shadow: none; }
+
+/* ---------- 5. The focus outline of every other control ----------
+   Not narrowed: every control keeps its own focus outline (2px). Focus border thickness is "still being designed" in the Beta 14 brief, so the earlier
+   1px rule (:root :focus-visible { outline-width: 1px }) was taken out again (b14 integration, round 7). */
+
+/* ---------- 5b. Motion Off ----------
+   Motion Off (Settings > Animation speed, or the system's reduced motion) turns every transition off app-wide (frost-preview.css, !important). The active border is the one exception the brief makes
+   (a plain quick fade, never a cut): an 80ms fade of the ring's opacity, in both directions, and nothing else moves (the sweep, the growth and the bloom are instant). */
+.app[data-reduced-motion=true] :is(
+  .acira-sidebar .sb-app:not([data-drop]):not(.sb-app-stack), .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate, .acira-sidebar .sb-tab:not([data-drop]):not([data-split-insert]), .acira-sidebar .sb-glide,
+  .tab-strip-container:not(.vertical) .tab-strip-selection, .acira-compact-selection, .ab-demo-tile, .ab-demo-row
+)::before, .app[data-reduced-motion=true] :is(.browser-shell .address-bar, .ab-demo-field, .st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search)::after {
+  transition: opacity 80ms linear !important;
+}
+
+/* The two fields of the frost pages that keep a 2px outline of their own in frost-preview.css (a list search, the Frost page's search) draw the ring instead; forced colours keep a mark. */
+.app.style-acira.style-acira .ed-list-search:focus-within { outline: none; }
+@media (forced-colors: active) { .app.style-acira.style-acira :is(.ed-search-glass, .ed-list-search):focus-within { outline: 2px solid Highlight; outline-offset: 1px; } }
+
+/* ---------- 6. Forced colours and high contrast ----------
+   Forced colours: the system's own marks (Highlight) and no ring of ours. More contrast: the ring becomes one flat 1px line at full strength, whatever the look. */
+@media (forced-colors: active) {
+  .app :is(.sb-app, .sb-plate, .sb-tab, .sb-glide, .tab-strip-selection, .acira-compact-selection, .ab-demo-tile, .ab-demo-row)::before, .app :is(.address-bar, .ab-demo-field, .st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search)::after { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root:root:root:root:root :is(
+    .app.style-acira .acira-sidebar .sb-app:not([data-drop]):not(.sb-app-stack),
+    .app.style-acira .acira-sidebar .sb-app-stack .sb-stack-i[data-depth='0']>.sb-plate,
+    .app.style-acira .acira-sidebar .sb-tab:not([data-drop]):not([data-split-insert]),
+    .app.style-acira .acira-sidebar .sb-glide,
+    .app.style-acira .tab-strip-container:not(.vertical) .tab-strip-selection,
+  .app.style-acira .acira-compact-selection,
+    .app.style-acira .ab-demo-tile, .app.style-acira .ab-demo-row
+  )::before, :root:root:root:root:root .app.style-acira :is(.browser-shell .address-bar, .ab-demo-field, .st-search-field, .sk-search, .lib-search, .nt-page .nt-search, .browser-popup .popup-search, .pw-search, .ed-search-glass, .ed-list-search)::after {
+    background: none; -webkit-mask: none; mask: none; box-shadow: none; border-color: var(--ab-c);
+  }
+}

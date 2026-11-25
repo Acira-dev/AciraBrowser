@@ -1,16 +1,16 @@
-import { useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronDown, LockKeyhole, MoreHorizontal, Plus } from '../../components/AppIcons';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
 import { workspacePlaying } from '../../ui/workspaceAudio';
 import { useWorkspaceDropHover, type WorkspaceDropNote } from '../../ui/workspaceDrop';
 import { WorkspaceGlyph, workspaceIcon } from '../../components/WorkspaceGlyph';
 import { TabSoundMeter } from '../../components/TabSound';
-import { MAX_WORKSPACES, profilesAsSpaces, windowWorkspaces, workspaceColorOf, workspaceName } from '../../runtime/workspaces';
+import { MAX_WORKSPACES, WORKSPACE_KEYS, profilesAsSpaces, windowWorkspaces, workspaceColorOf, workspaceName } from '../../runtime/workspaces';
 import { ProfileAvatar } from '../accounts/profileModel';
 import { openSettings } from '../../ui/settingsView';
 import type { BrowserAction, BrowserSnapshot, Workspace } from '../../runtime/types';
 import { isMac } from '../../ui/platform';
-import { springTo } from '../../ui/sharedMotion';
+import { motionSpeed, springTo } from '../../ui/sharedMotion';
 import { commandLabel, shortcutFor, useShortcutKeys } from '../../ui/shortcutKeys';
 import { useWorkspaceSlide } from '../../ui/workspaceMotion';
 import { openWorkspacePopup } from '../../ui/workspaceTarget';
@@ -19,7 +19,7 @@ import { t } from '../../i18n';
 
 type Dispatch = (action: BrowserAction) => void;
 /** Alt+N on Windows and Linux, Ctrl+N on a Mac (the registry's live key when it has answered). */
-export const workspaceKey = (index: number): string | undefined => index < 8 ? shortcutFor(`switch-workspace-${index + 1}`, isMac() ? `⌃${index + 1}` : `Alt ${index + 1}`) : undefined;
+export const workspaceKey = (index: number): string | undefined => index < WORKSPACE_KEYS ? shortcutFor(`switch-workspace-${index + 1}`, isMac() ? `⌃${index + 1}` : `Alt ${index + 1}`) : undefined;
 /** Next / previous workspace: registry id, direction, English name, and the key written for before the registry answers. */
 export const CYCLE_COMMANDS = [['next-workspace', 1, 'Next workspace', 'Ctrl + Alt + PgDn'], ['prev-workspace', -1, 'Previous workspace', 'Ctrl + Alt + PgUp']] as const;
 /** The live key of a cycle command (Settings › Shortcuts), or undefined once the person cleared it. */
@@ -56,19 +56,43 @@ function DropNote() {
   return <div className="sb-ws-drop-anchor" aria-hidden="true"><span className="sb-ws-drop-note" data-shown={hover ? '' : undefined} data-refused={note?.refused || undefined}>{note?.refused && <LockKeyhole size={14} />}<span>{note?.text}</span></span></div>;
 }
 
+/** Brings the open workspace's cell into its strip with room beside it for the edge fades (a glide, or at once for the first placement and a resize). */
+const FADE = 24;
+function revealOpen(scroller: HTMLElement, instant: boolean) {
+  const cell = scroller.querySelector<HTMLElement>('[data-ws][aria-checked=true]');
+  if (!cell || scroller.scrollWidth <= scroller.clientWidth) { if (scroller.scrollLeft) scroller.scrollLeft = 0; fadeEnds(scroller); return; }
+  revealCell(scroller, cell, instant);
+}
+/** Scrolls `cell` into its strip with FADE px of room beside it (so its ring or pill is never under an edge fade). */
+function revealCell(scroller: HTMLElement, cell: HTMLElement, instant: boolean) {
+  const left = cell.offsetLeft - FADE, right = cell.offsetLeft + cell.offsetWidth + FADE, view = scroller.clientWidth, max = scroller.scrollWidth - view;
+  const to = left < scroller.scrollLeft ? left : right > scroller.scrollLeft + view ? right - view : scroller.scrollLeft;
+  const target = Math.max(0, Math.min(max, Math.round(to)));
+  if (Math.abs(target - scroller.scrollLeft) > 0.5) scroller.scrollTo({ left: target, behavior: instant ? 'auto' : 'smooth' });
+  fadeEnds(scroller);
+}
+/** data-more-start / data-more-end: the strip has icons beyond that edge (the CSS fades it). */
+function fadeEnds(scroller: HTMLElement) {
+  const more = scroller.scrollWidth > scroller.clientWidth + 1;
+  scroller.toggleAttribute('data-more-start', more && scroller.scrollLeft > 1);
+  scroller.toggleAttribute('data-more-end', more && scroller.scrollLeft < scroller.scrollWidth - scroller.clientWidth - 1);
+}
+
 /** The switcher in the sidebar (R3-57, R4-23, R4-48). Shown only once there is a second workspace (D1): one workspace has
  * nothing to switch to, so Workspaces is found from the profile panel, the command bar, the tab menu and Settings instead.
  * With several it is one icon per workspace in a row above the profile footer: one click opens a workspace; the open one is
  * a raised pill (with its name while there are four or fewer) that moves to the next one in the frame it is chosen; a colour shows as a 2px
- * rail under the icon. A playing workspace uses the audio matrix in the icon slot; hover or keyboard focus reveals its chosen icon. Right-click: Rename, Icon and color, Delete. Alt+1–8 jump. */
+ * rail under the icon. A playing workspace uses the audio matrix in the icon slot; hover or keyboard focus reveals its chosen icon. Right-click: Rename, Icon and color, Delete. Alt+1–8 jump (the first eight). */
 export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSnapshot; dispatch: Dispatch; moveFocus: (event: KeyboardEvent<HTMLElement>, from?: HTMLElement) => boolean }) {
   useShortcutKeys();
-  // With profiles as spaces the row lists the profiles, eight at most (the keys); the profile panel lists them all.
-  const spaces = profilesAsSpaces(state), list = spaces ? windowWorkspaces(state).slice(0, MAX_WORKSPACES) : windowWorkspaces(state), host = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>()), shownActive = useRef(state.activeWorkspaceId);
+  // With profiles as spaces the row lists the profiles, MAX_WORKSPACES at most; the profile panel lists them all.
+  const spaces = profilesAsSpaces(state), list = spaces ? windowWorkspaces(state).slice(0, MAX_WORKSPACES) : windowWorkspaces(state), host = useRef<HTMLDivElement>(null), strip = useRef<HTMLDivElement>(null), pill = useRef<HTMLSpanElement>(null), placed = useRef(false), lefts = useRef(new Map<string, number>()), shownActive = useRef(state.activeWorkspaceId);
   const active = state.activeWorkspaceId, several = list.length > 1, named = list.length <= NAMED_PILL_MAX;
   // The open cell is as wide as its name: a rename (or another icon) changes the cell without changing the row, which the observer below watches, so it has to restart the placement.
   const names = list.map(item => `${item.id}:${nameIn(state, item)}:${workspaceIcon(item)}`).join('|');
   useWorkspaceSlide('.acira-sidebar .sb-scroll', active, list.map(item => item.id));
+  // (Beta 14.0: the workspace's own title line above the list changes with it and comes in with it, not a crossfade ahead of it.)
+  useWorkspaceSlide('.acira-sidebar .sb-sections-wrap > .sb-ws-title', active, list.map(item => item.id));
   // The pill sits on the open workspace's cell (the first placement and a resize are instant). When a cell grows or shrinks (a rename,
   // a workspace added) the other icons move aside on the S spring (FLIP, transform only). A switch lands at once, pill and icons:
   // the new open cell shows its name at its new place in the same frame, and gliding the icons there drew them over that name while
@@ -79,9 +103,16 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
     if (!row || !el) { placed.current = false; lefts.current.clear(); return; }
     const place = (glide: boolean) => {
       const cells = [...row.querySelectorAll<HTMLElement>('[data-ws],[data-workspace-new]')];
+      // 14.3 (Move left / right): when the open workspace itself changes place, the neighbour it swaps with crosses the pill; the dark pill is see-through, so that neighbour's
+      // icon fades out while it passes under the pill and back once past (the light pill already covers it).
+      const openCell = row.querySelector<HTMLElement>('[data-ws][aria-checked=true]'), openBefore = openCell ? lefts.current.get(openCell.dataset.ws ?? '') : undefined;
+      const swapping = glide && placed.current && !!openCell && openBefore !== undefined && openBefore !== openCell.offsetLeft;
       for (const cell of cells) {
         const id = cell.dataset.ws ?? '+', now = cell.offsetLeft, before = lefts.current.get(id);
-        if (glide && placed.current && before !== undefined && before !== now) void springTo(cell, { x: 0 }, 'workspace.pill', { from: { x: before - now } });
+        if (glide && placed.current && before !== undefined && before !== now) {
+          void springTo(cell, { x: 0 }, 'workspace.pill', { from: { x: before - now } });
+          if (swapping && cell !== openCell && cell.dataset.ws && motionSpeed() !== 'off') cell.animate([{ opacity: 1 }, { opacity: 0, offset: .2 }, { opacity: 0, offset: .7 }, { opacity: 1 }], { duration: motionSpeed() === 'fast' ? 200 : 360, easing: 'linear' });
+        }
         lefts.current.set(id, now);
       }
       const cell = row.querySelector<HTMLElement>('[data-ws][aria-checked=true]');
@@ -90,11 +121,33 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
       void springTo(el, { x: cell.offsetLeft }, 'workspace.pill', glide && placed.current ? {} : { from: { x: cell.offsetLeft } });
       placed.current = true;
     };
+    const first = !placed.current;
     place(!switched);
-    const observer = new ResizeObserver(() => place(false));
+    // 16 icons do not fit a 168 to 312 px column: the cells scroll inside their own strip (the + stays at its end), and the open workspace is always brought into view (Arc and Zen do the same).
+    const scroller = strip.current;
+    if (scroller) revealOpen(scroller, first || !switched || !!state.settings.reducedMotion);
+    // A ResizeObserver reports once as soon as it observes. After a glide has just started (a workspace moved, renamed or added: the row's size is the same) that first report must not
+    // place everything again without the glide: it put the pill on its new cell at once while the icons were still travelling, so the pill sat over the wrong icon for a few frames (14.3, Move left / right).
+    let report = first || switched ? 1 : 0;
+    const observer = new ResizeObserver(() => { if (!report++) { if (scroller) fadeEnds(scroller); return; } place(false); if (scroller) { revealOpen(scroller, true); fadeEnds(scroller); } });
     observer.observe(row);
+    if (scroller) observer.observe(scroller);
     return () => observer.disconnect();
   }, [active, list.length, several, names]);
+  // The edge fades say which side has more icons; a vertical wheel over the strip scrolls it sideways (a trackpad's own sideways swipe already does).
+  useEffect(() => {
+    const scroller = strip.current;
+    if (!scroller) return;
+    const wheel = (event: WheelEvent) => { if (scroller.scrollWidth <= scroller.clientWidth || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return; event.preventDefault(); scroller.scrollLeft += event.deltaY; };
+    const onScroll = () => fadeEnds(scroller);
+    // Keyboard focus moving along the row brings the focused cell in with room for the fades (the browser alone would leave it at the very edge, under the fade).
+    const focused = (event: FocusEvent) => { const cell = (event.target as HTMLElement | null)?.closest<HTMLElement>('.sb-ws'); if (cell && cell.parentElement === scroller) { revealCell(scroller, cell, true); requestAnimationFrame(() => revealCell(scroller, cell, true)); } };
+    scroller.addEventListener('focusin', focused);
+    scroller.addEventListener('wheel', wheel, { passive: false });
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    fadeEnds(scroller);
+    return () => { scroller.removeEventListener('focusin', focused); scroller.removeEventListener('wheel', wheel); scroller.removeEventListener('scroll', onScroll); };
+  }, [several]);
   if (!several) return null;
   const choose = (workspace: Workspace) => { if (workspace.id !== active) dispatch({ type: 'workspace.select', id: workspace.id }); };
   const keys = (event: KeyboardEvent<HTMLElement>, workspace?: Workspace) => {
@@ -108,6 +161,7 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
   };
   return <><DropNote /><div ref={host} className="sb-workspaces" role="radiogroup" aria-label={t('workspaces.switcher')} data-workspace-switcher data-named={named ? '' : undefined}
     onContextMenu={event => { if ((event.target as HTMLElement).closest('.sb-ws:not(.sb-ws-add)')) return; event.preventDefault(); openWorkspacePopup(state, 'workspace-context', event, { mode: 'sidebar' }); }}>
+    <div ref={strip} className="sb-ws-strip" data-workspace-strip>
     <span ref={pill} className="sb-ws-pill" aria-hidden="true" />
     {list.map((workspace, index) => {
       const open = workspace.id === active, name = nameIn(state, workspace), key = workspaceKey(index), color = shownColor(state, workspace), playing = workspacePlaying(state, workspace.id);
@@ -120,12 +174,17 @@ export function WorkspaceRow({ state, dispatch, moveFocus }: { state: BrowserSna
         {open && named && <span className="sb-ws-name">{name}</span>}
       </button>;
     })}
+    </div>
     {spaces
       // A new space is a new profile: the add form in Settings › Profiles, as the profile panel's Add profile… opens it.
       ? <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus aria-label={t('profiles.add')} title={t('profiles.add')}
         onKeyDown={keys} onClick={() => openSettings(state, dispatch, { section: 'Profiles', intent: 'add-profile' })}><Plus size={16} /></button>
-      : list.length < MAX_WORKSPACES && <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.newTitle')} title={t('workspaces.newTitle')}
-      onKeyDown={keys} onClick={event => openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'new' })}><Plus size={16} /></button>}
+      // At the limit the + stays (a row that loses its end button says nothing) and a press says why, with the limit toast the reducer would show.
+      : list.length < MAX_WORKSPACES
+        ? <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-sb-focus data-popup-trigger aria-haspopup="dialog" aria-label={t('workspaces.newTitle')} title={t('workspaces.newTitle')}
+          onKeyDown={keys} onClick={event => openWorkspacePopup(state, 'workspace-edit', event.currentTarget, { mode: 'new' })}><Plus size={16} /></button>
+        : <button type="button" className="sb-ws sb-ws-add" data-workspace-new data-workspace-limit data-sb-focus aria-disabled="true" aria-label={t('runtime.workspaceLimit', { count: MAX_WORKSPACES })} title={t('runtime.workspaceLimit', { count: MAX_WORKSPACES })}
+          onKeyDown={keys} onClick={() => dispatch({ type: 'toast', text: t('runtime.workspaceLimit', { count: MAX_WORKSPACES }), tone: 'info' })}><Plus size={16} /></button>}
   </div></>;
 }
 

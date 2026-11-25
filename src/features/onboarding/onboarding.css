@@ -1167,6 +1167,7 @@
   text-align: center;
   text-wrap: balance;
 }
+.fr-note.fr-usage-line { margin-top: 12px; }
 .fr-card .fr-link {
   padding: 3px 12px;
   margin: -3px 0;
@@ -2365,6 +2366,10 @@
 }
 .fr-note.fr-note-signins {
   margin-top: 8px;
+}
+/* "Coming from another computer? Bring your Acira over." under the file link (picture 19): the same quiet line, 6px below it. */
+.fr-note.fr-note-bringover {
+  margin-top: 6px;
 }
 .fr-card .fr-note-signins .fr-link {
   display: block;

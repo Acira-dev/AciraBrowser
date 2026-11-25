@@ -30,3 +30,14 @@
 }
 .app .tab-strip-container[data-reduced-motion=true],
 .app .acira-compact-tabs[data-reduced-motion=true] { --tab-duration:0s; }
+
+/* D102: while the tabs' icons travel to a strip that has just come in a layout switch (ui/tabTravel.ts sets the mark on the strip's row and takes it off 420 ms after the travel), its tabs stand at their
+   layout places: no width easing and no position glide. A layout switch moves the bar on every frame, and a strip that eased after each of those steps was still gliding in 250 ms after the switch had
+   ended (its first tab 30 pt left of its place at the switch's last frame, real takes of 19 Nov): an icon cannot land on a tab that is still moving out from under the strip's edge. */
+.app .acira-tab-row[data-tab-travel-hold] .tab-flow { transform:none!important; transition:none!important; }
+/* D102, the same strip for the same while. A tab whose own layout motion has begun is given an opaque surface (selection.css, [data-drag-surface]: a dragged tab that snaps back must cover the text of the
+   tabs it passes over; ui/useTabDragSurface.ts marks it `layout`). In a strip that arrives every tab's layout motion begins at once and nothing passes over anything: on a lit bar those surfaces were
+   tab-shaped dark plates (the release tip before the travel: under every arriving tab from +283 to +442 ms of Sidebar -> Along the top; with the travel: one or two frames on two tabs at a time,
+   +258 to +292 ms, real frames of 20 Nov). A held tab keeps no such surface: it is filled as it is at rest. */
+.app .acira-tab-row[data-tab-travel-hold] .browser-tab[data-drag-surface=layout],
+.app .acira-tab-row[data-tab-travel-hold] .tab-group-header[data-drag-surface=layout] { background:transparent!important; }

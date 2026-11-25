@@ -19,7 +19,7 @@ const plain = { activeTabId: 'a', tabs: [{ id: 'a', contentKind: 'web' }], bookm
 const windows = [{ width: 1920, height: 1040 }, { width: 1280, height: 800 }, { width: 900, height: 600 }, { width: 640, height: 480 }];
 const LEFT_HUNG = ['tabs', 'page-context', 'tab-context', 'group-context', 'split-context', 'group-preview', 'strip-context', 'bookmark-context', 'favorite-edit', 'context', 'split', 'security', 'tor', 'toolbar-context', 'workspace-menu', 'workspace-context', 'workspace-edit'];
 const RIGHT_HUNG = ['profile', 'downloads', 'menu', 'more-tools', 'extensions', 'bookmark-edit', 'protection', 'vpn'];
-const CENTRED = ['tabs', 'switcher', 'whats-new', 'palette', 'zoom', 'appearance'];
+const CENTRED = ['tabs', 'switcher', 'whats-new', 'transfer', 'palette', 'zoom', 'appearance'];
 const height = 300;
 const mirror = (box: Rectangle, view: number): Rectangle => ({ ...box, x: mirrorLeft(box.x, box.width, view) });
 
@@ -186,7 +186,8 @@ test('the tab hover card asks to open toward the page: on the left of a right si
   assert.equal(cardSideFor(true, 640, width, 'left'), 'right');
   const hover = fs.readFileSync(new URL('../src/ui/tabHoverCard.ts', import.meta.url), 'utf8');
   assert.match(hover, /cardSideFor\(sidebarRow, box\.left \+ box\.width \/ 2, window\.innerWidth, rootSidebarSide\(\)\)/);
-  assert.match(hover, /cardSide\(row\), cardFloor\(row\)/, 'the hover message still carries the side and the floor');
+  assert.match(hover, /side, cardFloor\(row\)/, 'the hover message still carries the side and the floor');
+  assert.match(hover, /cardAnchor\(row, side\)/, 'and is placed against the sidebar edge');
 });
 
 test('the toasts that sit over the content leave the sidebar\'s room on the right when the sidebar is there', () => {

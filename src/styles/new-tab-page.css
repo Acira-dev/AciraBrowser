@@ -65,14 +65,14 @@
 
 /* ---- search: the hero. 48px, 8px radius, 640px, glass. Accent ring on focus. ---- */
 .app.style-acira .nt-page .nt-search {
-  align-self: center; display: flex; align-items: center; gap: 12px; width: min(640px, 100%); height: 48px; margin: 0; padding: 0 12px 0 16px;
+  position: relative; align-self: center; display: flex; align-items: center; gap: 12px; width: min(640px, 100%); height: 48px; margin: 0; padding: 0 12px 0 16px;
   border: 1px solid var(--nt-field-line); border-radius: 8px; background: var(--nt-field); box-shadow: var(--nt-field-rim); color: var(--nt-text-2);
   transition: border-color 140ms var(--nt-ease);
 }
 /* Glass only where there is a picture behind it to blur: over the framed page's flat ground it changes nothing and costs a blurred pass every frame of the reveal. */
 .app.style-acira .nt-page[data-style=full] .nt-search { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
 .app.style-acira .nt-page .nt-search:hover { border-color: var(--line-emphasis, var(--line-strong)); }
-.app.style-acira .nt-page .nt-search:focus-within { border-color: transparent; outline: 2px solid var(--nt-ring); outline-offset: 1px; color: var(--text-primary); }
+.app.style-acira .nt-page .nt-search:focus-within { border-color: transparent; color: var(--text-primary); } /* the ring is the active border's (styles/active-border.css); forced colours keep an outline below */
 .nt-search > svg { flex: none; width: 18px; height: 18px; }
 .nt-search .address-field { flex: 1; min-width: 0; height: 100%; }
 .app.style-acira .nt-page .nt-search .address-field input { height: 100%; padding-right: var(--space-2, 8px); border: 0; background: transparent; box-shadow: none; outline: none; font-size: 15px; line-height: 24px; color: var(--text-primary); }
@@ -110,7 +110,7 @@
 .nt-figure { position: relative; min-height: 0; margin: 0; }
 
 /* The saved workspace identity stays together above the new framed composition. */
-.nt-workspace-heading { align-self:center; width:min(640px,100%); display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; min-height:40px; }
+.nt-workspace-heading { align-self:center; width:min(640px,100%); max-width:calc(100% - 2 * var(--caption-clear-w, 0px)); display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; min-height:40px; }
 .app.style-acira .nt-workspace-title { display:flex; flex:0 1 auto; align-items:center; gap:12px; min-width:0; max-width:calc(100% - 56px); }
 .nt-workspace-title h1 { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:540 24px/1.3 var(--font-display,var(--font-ui)); letter-spacing:-.032em; }
 .nt-workspace-glyph { display:grid; place-items:center; width:28px; height:28px; flex:none; }
@@ -122,11 +122,11 @@
 @container (max-width:479px) {
  .nt-workspace-title h1 { font-size:22px; }
 }
+/* The wash has two lobes, left and bottom (the team's notes 17 Nov, A4: its right lobe, a faint circle of about 680 px beside the profile picture, read as "a badly blurred circle" and is removed). */
 .nt-glow {
   position: absolute; z-index: 0; left: 50%; top: 50%; width: max(min(1500px, 124%), calc(100% + 160px)); height: 124%; translate: -50% -50%; /* taller than the page, so the wash never ends in a visible edge above the bottom; and never narrower than the page plus 80px each side: on a page wider than ~1340px the old 1500px cap ended the wash in a hard edge with a hue-less strip between it and the sidebar (item 34) */ pointer-events: none; opacity: var(--nt-glow-opacity, .12); transition: opacity calc(600ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)); animation: nt-glow-in calc(520ms * var(--motion-pace, 1)) var(--nt-ease, cubic-bezier(.2, 0, 0, 1)) calc(380ms * var(--motion-pace, 1)) backwards;
   background:
     radial-gradient(40% 54% at 24% 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%),
-    radial-gradient(40% 54% at 76% 42%, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),
     radial-gradient(54% 60% at 50% 92%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
 }
 .nt-glow[data-leaving] { opacity: 0; }
@@ -215,7 +215,7 @@ html[dir='rtl'] :is(.nt-credit-title, .nt-credit-meta) { text-align: right; }
   .nt-glow { display: none; }
   .nt-frame { box-shadow: none; outline: 1px solid CanvasText; }
   .nt-caption > h1 { color: CanvasText; }
-  .app.style-acira .nt-page :is(.nt-hide, .nt-tile, .nt-change, .nt-submit):focus-visible, .app.style-acira .nt-page .nt-search:focus-within { outline-color: Highlight; }
+  .app.style-acira .nt-page :is(.nt-hide, .nt-tile, .nt-change, .nt-submit):focus-visible, .app.style-acira .nt-page .nt-search:focus-within { outline: 2px solid Highlight; outline-offset: 1px; }
 }
 
 /* A scrim sits under every glass element over the painting (bible 3.5: add a scrim, not more blur). */
@@ -226,11 +226,15 @@ html[dir='rtl'] :is(.nt-credit-title, .nt-credit-meta) { text-align: right; }
 /* ---- framed layout (26 Oct): the room measured under the search and links sets the stack's width at 16:9, so the frame,
    the caption row and the controls share both edges, and the search is min(640px, that width), as in the approved layout.
    The page never scrolls; a very short window shrinks the picture instead. ---- */
-.nt-page[data-style=framed] .nt-scroll { overflow: hidden; padding-top: max(24px, calc(var(--nt-top, 18cqh) - var(--nt-head, 0px))); padding-bottom: var(--space-8, 32px); scrollbar-gutter: auto; }
+.nt-page[data-style=framed] .nt-scroll { overflow: hidden; padding-top: max(24px, calc(var(--nt-top, 18cqh) - var(--nt-head, 0px)), var(--nt-band-room, 0px)); padding-bottom: 44px; scrollbar-gutter: auto; transition: padding-top calc(320ms * var(--motion-pace, 1)) cubic-bezier(.16, 1, .3, 1); }
+/* The notice band is a layer over the page (band.css): only a page too SHORT for the card to sit above the heading makes room for it (--nt-band-room = the card's height + 32 px, set by NewTabPage.tsx); on a tall page the
+   term never wins, so closing the card moves nothing. Closing glides the room away (the picture is fitted again every frame meanwhile). */
+.app[data-reduced-motion='true'] .nt-page[data-style=framed] .nt-scroll { transition: none; }
+@media (prefers-reduced-motion: reduce) { .nt-page[data-style=framed] .nt-scroll { transition: none; } }
 .nt-page[data-style=framed] .nt-stack { width: min(100%, 880px, max(240px, calc(var(--nt-frame-height, 36cqh) * 16 / 9))); }
 .nt-credit:not([data-caption]) { grid-template-columns: minmax(0, 1fr); }
 @container (max-height: 440px) {
-  .nt-page[data-style=framed] .nt-scroll { padding-top: 12px; padding-bottom: 12px; }
+  .nt-page[data-style=framed] .nt-scroll { padding-top: max(12px, var(--nt-band-room, 0px)); padding-bottom: 44px; }
   .nt-stack { gap: 12px; }
   .nt-frame-wrap { margin-top: 0; }
   .app.style-acira .nt-page .nt-tile-icon { width: 36px; height: 36px; }
@@ -268,6 +272,9 @@ html[dir='rtl'] :is(.nt-credit-title, .nt-credit-meta) { text-align: right; }
 .app.style-acira .nt-page .nt-art-controls .nt-change { display: inline-flex; align-items: center; gap: 4px; margin: 0; white-space: nowrap; }
 .app.style-acira .nt-page .nt-art-controls .nt-change { height:30px; }
 .app.style-acira .nt-page .nt-art-controls .nt-cover-visibility { width:30px; justify-content:center; padding:0; border-radius:6px; }
+.app.style-acira .nt-page .nt-art-controls .nt-pick { width:30px; justify-content:center; padding:0; border-radius:6px; }
+/* A picture that is one of the person's picks: the star is solid and takes the accent, as a saved page's star does. */
+.app.style-acira .nt-page .nt-art-controls .nt-pick[aria-pressed=true] { color: var(--accent); }
 .app.style-acira .nt-page .nt-art-controls .nt-collection { padding-inline-end: 6px; }
 /* At the 240px stack floor (short window or 150%) the label would leave the credit about 44px: the next-picture button keeps only its icon so the title stays readable. */
 .nt-art-controls .nt-next-icon { display: none; }
@@ -287,7 +294,7 @@ html[dir='rtl'] :is(.nt-credit-title, .nt-credit-meta) { text-align: right; }
 .nt-art-status { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Full artwork needs only the eye, kept at the page corner instead of sharing a footer with the profile name. */
-.nt-full-art-controls { position: absolute; z-index: 4; right: 12px; top: 12px; max-width: calc(100% - 24px); }
+.nt-full-art-controls { position: absolute; z-index: 4; right: calc(12px + var(--caption-clear-w, 0px)); top: 12px; max-width: calc(100% - 24px - var(--caption-clear-w, 0px)); }
 .nt-full-art-controls .nt-art-controls { padding: 2px; border-radius: 6px; background: var(--nt-field); box-shadow: var(--nt-field-rim), inset 0 0 0 1px var(--nt-field-line); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
 .app.style-acira .nt-page .nt-full-art-controls .nt-change { color: var(--nt-text-2); }
 .app.style-acira .nt-page .nt-full-art-controls .nt-change:is(:hover, [aria-expanded=true]) { background: var(--nt-hover); color: var(--nt-text-2); }

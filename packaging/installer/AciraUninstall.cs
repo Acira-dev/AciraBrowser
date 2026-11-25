@@ -2,6 +2,9 @@
 // NSIS uninstaller runs silently. Registered as the UninstallString (Settings > Apps); QuietUninstallString stays the real one.
 // - Silent runs (/S, e.g. the updater removing the previous version) are passed straight to the real uninstaller with the
 //   same command line and exit code; no window.
+// - Beta 14 (the plan): after "Remove", and only while usage sharing is on, a second card asks "Why are you removing Acira?" with seven one-tap reasons and Skip, in the 12 languages
+//   Acira ships. A tap runs the real uninstaller with /ACIRA_REASON=<word> (acira-installer.nsh un.AcUsageUninstalled puts it in its one message); Skip, or no card at all (sharing off,
+//   a QA build, a silent run), runs it as before. The card does no network work and reads only the first bytes of metrics.json. Escape goes back to the question.
 // - The window runs from a copy in %TEMP% so the install folder (and this file) can be removed.
 // - Nothing is deleted by this program except the user data folders, and only after the uninstaller finished and the browser
 //   files are gone. If anything fails, nothing else is touched and the user is told.
@@ -140,7 +143,7 @@ static class Program {
 }
 
 class RemoveForm : Form {
-  enum Stage { Question, Removing, Done }
+  enum Stage { Question, Why, Removing, Done }
   const int W = 560, H = 340;
   readonly string dir, real; readonly bool dark; double s;
   Stage stage = Stage.Question; int hover = -1, focus = 2; bool keyboard, keepData = true;
@@ -157,6 +160,16 @@ class RemoveForm : Form {
       string o = Environment.GetEnvironmentVariable("ACIRA_INSTALLER_LANG"); if (o != null) return o == "en" ? "" : o;
       int id; try { id = GetUserDefaultUILanguage(); } catch { return ""; }
       switch (id & 0x3ff) { case 0x0a: return "es"; case 0x0c: return "fr"; case 0x07: return "de"; case 0x16: return "pt"; case 0x10: return "it"; case 0x11: return "ja"; case 0x04: return (id == 0x0804 || id == 0x1004) ? "zh" : ""; default: return ""; }
+    }
+  }
+  // The reason card follows the Windows display language in all 12 languages Acira ships (the question's art has fewer): "en", es, fr, de, pt, it, ja, zh, ar, hi, ko, ru or tr. ACIRA_INSTALLER_LANG overrides it for tests.
+  static class WhyLang {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern ushort GetUserDefaultUILanguage();
+    internal static readonly string[] CODES = { "en", "es", "fr", "de", "pt", "it", "ja", "zh", "ar", "hi", "ko", "ru", "tr" };
+    public static string Detect() {
+      string o = Environment.GetEnvironmentVariable("ACIRA_INSTALLER_LANG"); if (o != null) return Array.IndexOf(CODES, o) >= 0 ? o : "en";
+      int id; try { id = GetUserDefaultUILanguage(); } catch { return "en"; }
+      switch (id & 0x3ff) { case 0x0a: return "es"; case 0x0c: return "fr"; case 0x07: return "de"; case 0x16: return "pt"; case 0x10: return "it"; case 0x11: return "ja"; case 0x01: return "ar"; case 0x39: return "hi"; case 0x12: return "ko"; case 0x19: return "ru"; case 0x1f: return "tr"; case 0x04: return (id == 0x0804 || id == 0x1004) ? "zh" : "en"; default: return "en"; }
     }
   }
   static string loc = Lang.Detect();
@@ -184,6 +197,11 @@ class RemoveForm : Form {
     using (var st = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)) { var ms = new MemoryStream(); st.CopyTo(ms); ms.Position = 0; return Image.FromStream(ms); }
   }
 
+  // The reason card: the word that goes to the uninstaller is one of these seven (the same closed list as UNINSTALL_REASONS in the usage function); the card shows them in this order, then Skip (the eighth button).
+  static readonly string[] REASONS = { "slow", "crashes", "missing-feature", "not-clear", "switched-back", "just-trying", "other" };
+  Image wScene; readonly Image[] wNorm = new Image[8], wHover = new Image[8]; readonly Rectangle[] wRect = new Rectangle[8], wLrect = new Rectangle[8];
+  string reason = ""; bool wRtl, wKeyboard; int wHot = -1, wFocus = -1;
+
   readonly string dataName;
   public RemoveForm(string dir, string real) {
     this.dir = dir; this.real = real; dataName = DataFolder(dir);
@@ -197,6 +215,7 @@ class RemoveForm : Form {
     // the four scenes: one shared text-free picture per light level, with this language's title/status layer (and, for the question, the buttons) drawn over it
     using (var b5 = Res("dark-base5.jpg")) using (var b9 = Res("dark-base9.jpg")) {
       qScene = Compose(b5, t + "-tq.png", t + "-n-"); rScene = Compose(b5, t + "-tr.png", null); kScene = Compose(b9, t + "-tk.png", null); dScene = Compose(b9, t + "-td.png", null);
+      if (WouldSend(dir, dataName) || Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_WHY") == "1") LoadWhy(b5);
     }
     tip = MakeTip();
     string sceneDump = Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_SCENES"); // test only: write the four composed scenes there and quit
@@ -208,9 +227,43 @@ class RemoveForm : Form {
     Location = new Point(Math.Max(area.X, area.X + (area.Width - ClientSize.Width) / 2), Math.Max(area.Y, area.Y + (area.Height - ClientSize.Height) / 2));
     try { Icon = Icon.ExtractAssociatedIcon(Path.Combine(dir, File.Exists(Path.Combine(dir, "AciraBrowserQA.exe")) ? "AciraBrowserQA.exe" : "AciraBrowser.exe")); } catch { }
     AutoScaleMode = AutoScaleMode.None; // the window is exactly the card in device pixels; a monitor/DPI change resizes it and the layout follows
-    ClientSizeChanged += (a, b) => { double ns = ClientSize.Width / (double)W; if (ns > 0.5 && Math.Abs(ns - s) > 0.004) { s = ns; for (int i = 0; i < 3; i++) rect[i] = ScaledRect(lrect[i]); if (tip != null) tip.Dispose(); tip = MakeTip(); if (IsHandleCreated) Round(); Invalidate(); } };
+    ClientSizeChanged += (a, b) => { double ns = ClientSize.Width / (double)W; if (ns > 0.5 && Math.Abs(ns - s) > 0.004) { s = ns; for (int i = 0; i < 3; i++) rect[i] = ScaledRect(lrect[i]); for (int i = 0; i < 8; i++) wRect[i] = ScaledRect(wLrect[i]); if (tip != null) tip.Dispose(); tip = MakeTip(); if (IsHandleCreated) Round(); Invalidate(); } };
     HandleCreated += (a, b) => Round();
     timer.Interval = 16; timer.Tick += (a, b) => Tick();
+  }
+
+  // Sharing is on in the build installed here: metrics.json begins {"choice":"on","installId":"<36 characters of 0-9 a-f and ->","route":"ok" (the app writes those three keys first), the same test
+  // acira-installer.nsh un.AcUsageUninstalled makes before it sends its one message. Only then is there anything to give a reason to. A QA build sends nothing, so it asks nothing. Reads 128 characters, nothing else.
+  internal static bool WouldSend(string dir, string name) {
+    try {
+      if (name != "AciraBrowser") return false;
+      string root = Environment.GetEnvironmentVariable("APPDATA"); if (string.IsNullOrEmpty(root)) return false;
+      string head; using (var r = new StreamReader(Path.Combine(Path.Combine(root, name), "metrics.json"))) { var buf = new char[128]; int n = r.Read(buf, 0, buf.Length); head = new string(buf, 0, n); }
+      const string a = "{\"choice\":\"on\",\"installId\":\"", b = "\",\"route\":\"ok\"";
+      if (!head.StartsWith(a, StringComparison.Ordinal) || head.Length < a.Length + 36 + b.Length) return false;
+      for (int i = 0; i < 36; i++) if ("0123456789abcdef-".IndexOf(head[a.Length + i]) < 0) return false;
+      return string.CompareOrdinal(head, a.Length + 36, b, 0, b.Length) == 0;
+    } catch { return false; }
+  }
+
+  // The reason card's pictures (scripts/uninstall-why-art-main.cjs): this language's title and line over the question's scene, and eight buttons as transparent layers (normal and hover), laid out by why-layout-<lang>.txt.
+  // Anything missing or odd leaves the card out, and the removal goes on as it always did.
+  void LoadWhy(Image b5) {
+    try {
+      string code = WhyLang.Detect(); if (!Has("dark-why-" + code + "-t.png")) code = "en"; if (!Has("dark-why-" + code + "-t.png")) return;
+      var rects = new Rectangle[8]; bool rtl = false; int found = 0;
+      using (var r = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("why-layout-" + code + ".txt")))
+        for (string line; (line = r.ReadLine()) != null; ) {
+          var p = line.Split(' '); if (p.Length == 1 && p[0] == "rtl") { rtl = true; continue; } if (p.Length < 5) continue;
+          int i = int.Parse(p[0]); if (i < 0 || i > 7) continue; rects[i] = new Rectangle(int.Parse(p[1]), int.Parse(p[2]), int.Parse(p[3]), int.Parse(p[4])); found++;
+        }
+      if (found != 8) return;
+      var norm = new Image[8]; var hov = new Image[8];
+      for (int i = 0; i < 8; i++) { norm[i] = Res("dark-why-" + code + "-n-" + i + ".png"); hov[i] = Res("dark-why-" + code + "-hover-" + i + ".png"); }
+      var scene = Compose(b5, "dark-why-" + code + "-t.png", null);
+      for (int i = 0; i < 8; i++) { wLrect[i] = rects[i]; wRect[i] = ScaledRect(rects[i]); wNorm[i] = norm[i]; wHover[i] = hov[i]; }
+      wRtl = rtl; wScene = scene;
+    } catch { wScene = null; }
   }
 
   // The card's scale on a screen of this DPI (100% = 96): the size the setup window has on that screen, so the two always match. The setup
@@ -249,17 +302,29 @@ class RemoveForm : Form {
     if (m.Msg == 0x02E0) { IntPtr r = m.LParam; int l = Marshal.ReadInt32(r, 0), t = Marshal.ReadInt32(r, 4); Bounds = new Rectangle(l, t, Marshal.ReadInt32(r, 8) - l, Marshal.ReadInt32(r, 12) - t); m.Result = IntPtr.Zero; return; }
     if (m.Msg == 0x84 && stage != Stage.Done) { // WM_NCHITTEST
       var p = PointToClient(new Point((short)(m.LParam.ToInt64() & 0xFFFF), (short)((m.LParam.ToInt64() >> 16) & 0xFFFF)));
-      if (stage != Stage.Question || HitButton(p) < 0) { m.Result = (IntPtr)2; return; } // HTCAPTION
+      bool onButton = stage == Stage.Question ? HitButton(p) >= 0 : stage == Stage.Why && HitWhy(p) >= 0;
+      if (!onButton) { m.Result = (IntPtr)2; return; } // HTCAPTION
     }
     base.WndProc(ref m);
   }
 
   int HitButton(Point p) { for (int i = 0; i < 3; i++) if (rect[i].Contains(p)) return i; return -1; }
+  int HitWhy(Point p) { for (int i = 0; i < 8; i++) if (wRect[i].Contains(p)) return i; return -1; }
 
-  protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); if (stage != Stage.Question) return; int h = HitButton(e.Location); if (h != hover) { hover = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); } }
-  protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); if (hover != -1) { hover = -1; Invalidate(); } }
-  protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); if (stage == Stage.Question && e.Button == MouseButtons.Left) { int h = HitButton(e.Location); if (h >= 0) Act(h); } }
+  protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); if (stage == Stage.Why) { int w = HitWhy(e.Location); if (w != wHot) { wHot = w; Cursor = w >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); } return; } if (stage != Stage.Question) return; int h = HitButton(e.Location); if (h != hover) { hover = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); } }
+  protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); if (hover != -1 || wHot != -1) { hover = -1; wHot = -1; Invalidate(); } }
+  protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); if (stage == Stage.Why && e.Button == MouseButtons.Left) { int w = HitWhy(e.Location); if (w >= 0) Pick(w); return; } if (stage == Stage.Question && e.Button == MouseButtons.Left) { int h = HitButton(e.Location); if (h >= 0) Act(h); } }
   protected override bool ProcessCmdKey(ref Message msg, Keys k) {
+    if (stage == Stage.Why) {
+      // Escape goes back to the question (nothing is removed until a button of this card is used); Tab and the arrows move the ring over the eight buttons, Enter or Space uses the one it is on (Skip when there is none)
+      if (k == Keys.Escape) { stage = Stage.Question; wHot = -1; wFocus = -1; wKeyboard = false; keyboard = false; Cursor = Cursors.Default; Invalidate(); return true; }
+      int step = 0;
+      if (k == Keys.Tab) step = 1; else if (k == (Keys.Tab | Keys.Shift)) step = -1; else if (k == Keys.Down) step = 4; else if (k == Keys.Up) step = -4;
+      else if (k == Keys.Right) step = wRtl ? -1 : 1; else if (k == Keys.Left) step = wRtl ? 1 : -1;
+      if (step != 0) { wKeyboard = true; wFocus = wFocus < 0 ? (step > 0 ? 0 : 7) : (wFocus + step + 8) % 8; Invalidate(); return true; }
+      if (k == Keys.Enter || k == Keys.Space) { wKeyboard = true; Pick(wFocus < 0 ? 7 : wFocus); return true; }
+      return base.ProcessCmdKey(ref msg, k);
+    }
     if (stage != Stage.Question) return base.ProcessCmdKey(ref msg, k);
     if (k == Keys.Escape) { Act(0); return true; }
     if (k == Keys.Tab || k == Keys.Right || k == (Keys.Tab | Keys.Shift) || k == Keys.Left) { keyboard = true; int d = (k == Keys.Left || k == (Keys.Tab | Keys.Shift)) ? -1 : 1; focus = focus < 0 ? (d > 0 ? 0 : 2) : (focus + d + 3) % 3; Invalidate(); return true; }
@@ -269,7 +334,16 @@ class RemoveForm : Form {
 
   void Act(int i) {
     if (i == 0) { ExitCodeValue = 0; Close(); return; }
-    keepData = i == 2; stage = Stage.Removing; hover = -1; Cursor = Cursors.Default; initial = Scan(); t0 = DateTime.UtcNow;
+    keepData = i == 2; hover = -1; Cursor = Cursors.Default;
+    if (wScene != null) { stage = Stage.Why; wHot = -1; wFocus = -1; wKeyboard = false; Invalidate(); return; } // the reason card first, when there is one
+    BeginRemoval();
+  }
+
+  // A button of the reason card: 0..6 are the seven reasons, 7 is Skip. Only a word of REASONS can reach the uninstaller's command line.
+  void Pick(int i) { reason = i >= 0 && i < REASONS.Length ? REASONS[i] : ""; BeginRemoval(); }
+
+  void BeginRemoval() {
+    stage = Stage.Removing; hover = -1; wHot = -1; Cursor = Cursors.Default; initial = Scan(); t0 = DateTime.UtcNow;
     var th = new Thread(Work); th.IsBackground = true; th.Start(); timer.Start(); Invalidate();
   }
 
@@ -280,9 +354,9 @@ class RemoveForm : Form {
   // test only: ACIRA_UNINSTALL_DEMO=<dir> plays the removing screen without removing anything and writes PNGs of the window there
   readonly string demoDir = Environment.GetEnvironmentVariable("ACIRA_UNINSTALL_DEMO"); int demoN;
   void Work() {
-    if (demoDir != null) { Thread.Sleep(6000); ok = true; finished = true; return; }
+    if (demoDir != null) { try { File.WriteAllText(Path.Combine(demoDir, "reason.txt"), reason); } catch { } Thread.Sleep(6000); ok = true; finished = true; return; } // test only: what the card chose
     try {
-      var p = Process.Start(new ProcessStartInfo(real, "/currentuser /S") { UseShellExecute = false, WorkingDirectory = Path.GetTempPath() });
+      var p = Process.Start(new ProcessStartInfo(real, "/currentuser /S" + (reason.Length > 0 ? " /ACIRA_REASON=" + reason : "")) { UseShellExecute = false, WorkingDirectory = Path.GetTempPath() });
       p.WaitForExit();
       if (p.ExitCode != 0 && !Gone()) { ok = false; finished = true; return; }
       // the uninstaller hands over to a copy of itself and exits: wait for the files to disappear
@@ -299,8 +373,21 @@ class RemoveForm : Form {
     try { var v = FileVersionInfo.GetVersionInfo(Path.Combine(dir, File.Exists(Path.Combine(dir, "AciraBrowserQA.exe")) ? "AciraBrowserQA.exe" : "AciraBrowser.exe")); if ((v.ProductName ?? "").Trim() == "Acira Browser QA") return "AciraBrowserQA"; } catch { }
     return "AciraBrowser";
   }
+  // Beta 14 (brief B9, accurate counts): "Remove and delete my data" leaves one yes/no marker for this Windows account, "Acira was installed here before": a registry value, no id, no date, no version.
+  // The app reads it on its next first-ever message and says `returning`, so a wipe and reinstall is counted as a returning install, not as a new person. It is listed on acira://usage.
+  // A QA build leaves none. ACIRA_RETURNING_REG_KEY (a key under Software\AciraTest) redirects it for tests, so a test never writes the real one.
+  internal const string ReturnKey = @"Software\AciraBrowserInstalledBefore";
+  static void LeaveReturningMarker(string name) {
+    if (name != "AciraBrowser") return;
+    try {
+      string key = ReturnKey, test = Environment.GetEnvironmentVariable("ACIRA_RETURNING_REG_KEY");
+      if (!string.IsNullOrEmpty(test) && test.StartsWith(@"Software\AciraTest", StringComparison.OrdinalIgnoreCase)) key = test;
+      using (var k = Registry.CurrentUser.CreateSubKey(key)) { if (k != null) k.SetValue("InstalledBefore", 1, RegistryValueKind.DWord); }
+    } catch { }
+  }
   bool DeleteUserData() {
     bool all = true; string name = dataName; // read before the uninstall removed the exe
+    LeaveReturningMarker(name);
     foreach (var root in new[] { Environment.GetEnvironmentVariable("APPDATA"), Environment.GetEnvironmentVariable("LOCALAPPDATA") }) {
       if (string.IsNullOrEmpty(root)) continue;
       string d = Path.Combine(root, name);
@@ -333,12 +420,15 @@ class RemoveForm : Form {
   protected override void OnPaint(PaintEventArgs e) {
     var g = e.Graphics; g.InterpolationMode = InterpolationMode.HighQualityBicubic; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.SmoothingMode = SmoothingMode.AntiAlias;
     var dst = new Rectangle(0, 0, ClientSize.Width, ClientSize.Height);
-    Image scene = stage == Stage.Question ? qScene : stage == Stage.Removing ? rScene : (keepData || !dataDeleted ? kScene : dScene);
+    Image scene = stage == Stage.Question ? qScene : stage == Stage.Why ? wScene : stage == Stage.Removing ? rScene : (keepData || !dataDeleted ? kScene : dScene);
     g.DrawImage(scene, dst, 0, 0, scene.Width, scene.Height, GraphicsUnit.Pixel);
     if (stage == Stage.Question) {
       if (hover >= 0) g.DrawImage(hoverImg[hover], rect[hover]);
       int f = keyboard ? focus : -1;
       if (f >= 0) using (var pen = new Pen(dark ? Color.FromArgb(237, 237, 239) : Color.FromArgb(22, 24, 28), (float)Math.Max(2, Math.Round(2 * s)))) { var r = rect[f]; r.Inflate(2, 2); g.DrawRectangle(pen, r); }
+    } else if (stage == Stage.Why) {
+      for (int i = 0; i < 8; i++) g.DrawImage(i == wHot ? wHover[i] : wNorm[i], wRect[i]);
+      if (wKeyboard && wFocus >= 0) using (var pen = new Pen(dark ? Color.FromArgb(237, 237, 239) : Color.FromArgb(22, 24, 28), (float)Math.Max(2, Math.Round(2 * s)))) { var r = wRect[wFocus]; r.Inflate(2, 2); g.DrawRectangle(pen, r); }
     } else if (stage == Stage.Removing) DrawLine(g);
   }
 

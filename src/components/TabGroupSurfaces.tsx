@@ -8,7 +8,7 @@ import type { TabStripDrag } from './TabGroupTray';
 type Props={track:RefObject<HTMLDivElement|null>;entries:TabStripEntry[];tabs:TabSession[];groups:TabGroup[];drag:RefObject<TabStripDrag|null>;dragging:string|null;layoutKey:string};
 export function TabGroupSurface({group,count,owns,scopeId,reducedMotion,compact,labelWidth}:{group:TabGroup;count:number;owns:string;scopeId:string;reducedMotion:boolean;compact:boolean;width:number;labelWidth:number}){
  const present=useIsPresent();
- return <motion.div id={`${scopeId}-tray-${group.id}`} style={{width:labelWidth+4,'--group-accent':group.color==='none'?'var(--ed-line)':tabGroupColor(group.color)} as CSSProperties} className={`tab-group-tray ${compact?'compact':''}`} data-group-tray={group.id} data-group-color={group.color} data-collapsed={group.collapsed} role="group" aria-label={`${group.name}, ${count} tabs`} aria-owns={owns} inert={!present||undefined} aria-hidden={!present||undefined} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0,transition:{duration:reducedMotion?0:.5}}} transition={{opacity:{duration:reducedMotion?0:.12}}}/>;
+ return <motion.div id={`${scopeId}-tray-${group.id}`} style={{width:labelWidth+4,'--group-accent':group.color==='none'?'var(--ed-line)':tabGroupColor(group.color)} as CSSProperties} className={`tab-group-tray ${compact?'compact':''}`} data-group-tray={group.id} data-group-color={group.color} data-group-parent={group.parentGroupId||undefined} data-collapsed={group.collapsed} role="group" aria-label={`${group.name}, ${count} tabs`} aria-owns={owns} inert={!present||undefined} aria-hidden={!present||undefined} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0,transition:{duration:reducedMotion?0:.5}}} transition={{opacity:{duration:reducedMotion?0:.12}}}/>;
 }
 /** One V2 container follows the actual rendered members. It has no independent
  * width animation to outrun tab entry, exit, reorder or interrupted collapse. */
@@ -30,9 +30,17 @@ export function TabGroupSurfaces({track,dragging,layoutKey}:Props){
     // 3px of tray beside its members keeps a selected member's white sheet clear of the group ring;
     // vertically the tray stays 30px inside the 36px row.
     const x=Math.max(0,start-origin.left-3),rightEdge=Math.min(root.scrollWidth,end-origin.left+3);
-    return [{surface,x,y:box.top-origin.top-(header.offsetHeight-box.height)/2-2,width:Math.max(0,rightEdge-x),height:header.offsetHeight+4}];
+    return [{surface,x,y:box.top-origin.top-(header.offsetHeight-box.height)/2-2,width:Math.max(0,rightEdge-x),height:header.offsetHeight+4,nested:false,inner:false}];
    });
-   for(const {surface,x,y,width,height} of measured){surface.style.left=`${x}px`;surface.style.top=`${y}px`;surface.style.width=`${width}px`;surface.style.height=`${height}px`;}
+   // Beta 14, AE: a group inside a group. The parent's tray reaches around its inner groups' trays (it ends 3px past the last of them) and stands a little taller; an inner tray sits inside it, 2px in
+   // from the top and the bottom, so the family reads as one thing with the inner groups in it.
+   const byId=new Map(measured.map(item=>[item.surface.dataset.groupTray!,item]));
+   for(const item of measured){
+    const parent=item.surface.dataset.groupParent?byId.get(item.surface.dataset.groupParent):undefined;
+    if(parent){const right=Math.max(parent.x+parent.width,item.x+item.width+3);parent.width=right-parent.x;parent.inner=true;item.nested=true;}
+   }
+   for(const item of measured){if(item.nested){item.y+=2;item.height-=4;}else if(item.inner){item.y-=1;item.height+=2;}}
+   for(const {surface,x,y,width,height,nested,inner} of measured){surface.style.left=`${x}px`;surface.style.top=`${y}px`;surface.style.width=`${width}px`;surface.style.height=`${height}px`;surface.toggleAttribute('data-nested',!!nested);surface.toggleAttribute('data-has-inner',!!inner);}
    const next=measured.map(({x,y,width,height})=>[x,y,width,height].map(value=>value.toFixed(2)).join(',')).join('|');quiet=next===signature?quiet+1:0;signature=next;
    if(!measured.length||!dragging&&quiet>8&&performance.now()>until)cancelFrame(draw);
   };

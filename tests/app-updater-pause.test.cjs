@@ -88,6 +88,38 @@ test('pause keeps the bytes and is kept across a restart: the relaunch starts pa
  await second.install();assert.deepEqual(lite.installed,[true,true],'now, and only now, Install now runs');
 });
 
+test('D131: a pause is refused once the last byte is here (between the last byte and the SHA-512 check): the run ends ready, never "paused, 100 %" with a whole file',async t=>{
+ const feed=await feedServer(),root=tmp();t.after(feed.close);
+ const lite=liteUpdater(feed,{root}),log=[];let updater;
+ updater=make(root,lite,{onChange:status=>{
+  if(status.status==='downloading'&&status.total>0&&status.transferred>=status.total){
+   // the moment the last byte is counted: the interface no longer offers the pause, and main refuses it if it is asked anyway (the button's press, a stale window)
+   log.push({offered:status.pausable,answer:updater.pause().status});
+   setImmediate(()=>log.push({late:updater.pause().status}));
+  }
+ }});
+ await updater.check();
+ await until(()=>updater.status().status==='ready');
+ assert.ok(log.length>=1,'the last byte was seen');
+ assert.equal(log[0].offered,false,'not offered at the last byte');
+ assert.equal(log[0].answer,'downloading','refused: the status is untouched');
+ for(const entry of log)assert.notEqual(entry.answer??entry.late,'paused');
+ assert.equal(updater.status().status,'ready');assert.equal(updater.status().progress,100);
+ assert.equal(JSON.parse(fs.existsSync(path.join(root,'updater.json'))?fs.readFileSync(path.join(root,'updater.json'),'utf8'):'{}').download?.paused,undefined,'no pause was saved');
+ assert.equal(lite.taken.length,1,'electron-updater took the verified file');assert.equal(sha512(fs.readFileSync(lite.taken[0])),sha512(files.exe));
+ assert.deepEqual(feed.fileRequests().map(r=>r.range),[null],'one request: nothing was asked twice');
+});
+
+test('D131: a pause under 100 % still works, and so does Resume (nothing else changed)',async t=>{
+ const feed=await feedServer(),root=tmp();t.after(feed.close);
+ const lite=liteUpdater(feed,{root});let updater,offered=null;
+ const paused=new Promise(resolve=>{updater=make(root,lite,{onChange:status=>{if(status.status==='downloading'&&status.transferred>=100000&&status.transferred<status.total&&status.pausable){offered=true;resolve(updater.pause());}}});});
+ await updater.check();
+ const stopped=await paused;
+ assert.equal(offered,true);assert.equal(stopped.status,'paused');assert.ok(stopped.transferred<stopped.total);
+ updater.resume();await until(()=>updater.status().status==='ready');
+});
+
 test('Resume in the same run goes on at once (no new look); a pause while it looks stays paused',async t=>{
  const feed=await feedServer(),root=tmp();t.after(feed.close);
  const lite=liteUpdater(feed,{root});let updater;
@@ -359,4 +391,40 @@ test('Mac, the real MacUpdater: the zip for this Mac\'s architecture, taken from
  assert.deepEqual(native.got,[sha512(expected)],'Squirrel.Mac received exactly the verified zip for this Mac');
  assert.deepEqual(feed.fileRequests().map(r=>r.name),[arm?'Acira-0.1.0-beta.9-arm64-mac.zip':'Acira-0.1.0-beta.9-mac.zip'],'one download, Acira\'s: MacUpdater found it in its cache');
  assert.equal(updater.status().status,'ready');
+});
+
+// 14.0 (storage win 1), the real MacUpdater: electron-updater copied every downloaded zip to <cache>/update.zip for a differential update (255 MB) although a Mac feed has no blockmap, and
+// pending/ kept the zip after it was installed. With the differential off no copy is made, and the launch that runs the downloaded version removes pending/.
+async function macRun(t,{legacy=false}={}){
+ const feed=await feedServer(),root=tmp(),quits=[];t.after(feed.close);
+ const native=new EventEmitter();native.got=[];native.setFeedURL=options=>{native.feed=options;};
+ native.checkForUpdates=async()=>{const answer=await(await fetch(native.feed.url,{headers:native.feed.headers})).json();const zip=Buffer.from(await(await fetch(answer.url)).arrayBuffer());native.got.push(sha512(zip));native.emit('update-downloaded');};
+ const electronId=require.resolve('electron'),saved=require.cache[electronId];
+ require.cache[electronId]={id:electronId,filename:electronId,loaded:true,exports:{autoUpdater:native}};
+ t.after(()=>{if(saved)require.cache[electronId]=saved;else delete require.cache[electronId];});
+ const {MacUpdater}=require('electron-updater/out/MacUpdater'),mac=new MacUpdater(null,appAdapter(root,feed,quits));
+ mac.httpExecutor=nodeExecutor();mac._testOnlyOptions={platform:'darwin'};mac.logger=null;t.after(()=>mac.closeServerIfExists());
+ if(legacy)Object.defineProperty(mac,'disableDifferentialDownload',{get:()=>false,set(){}}); // what 13.x did: electron-updater's own default
+ const updater=createAppUpdater({app:{getVersion:()=>'0.1.0-beta.8',isPackaged:true,getPath:()=>root},dir:root,platform:'darwin',env:{},autoUpdater:mac,qaBuild:false,macAvailability:()=>null,schedule:()=>null,every:()=>null,fetch});
+ const ready=new Promise(resolve=>mac.once('update-downloaded',resolve));
+ await updater.check();await ready;await until(()=>native.got.length===1);
+ return {mac,root,cache:path.join(root,'Caches','acira-browser-updater'),feed};
+}
+test('Mac, the real MacUpdater: 13.x made a second full copy of every update (update.zip); with the differential off none is made, and the zip waits in pending/ for the install',async t=>{
+ const before=await macRun(t,{legacy:true});
+ assert.equal(fs.existsSync(path.join(before.cache,'update.zip')),true,'the old behaviour: a whole second copy of the update, kept for ever');
+ assert.equal(fs.statSync(path.join(before.cache,'update.zip')).size,fs.statSync(path.join(before.cache,'pending',fs.readdirSync(path.join(before.cache,'pending')).find(n=>n.endsWith('.zip')))).size);
+ const now=await macRun(t);
+ assert.equal(now.mac.disableDifferentialDownload,true);
+ assert.equal(fs.existsSync(path.join(now.cache,'update.zip')),false,'no copy for a differential update that cannot happen (the feed has no Mac blockmap)');
+ assert.equal(fs.readdirSync(path.join(now.cache,'pending')).filter(n=>n.endsWith('.zip')).length,1,'the zip is still in pending/ for Squirrel.Mac and the install');
+ assert.deepEqual(now.feed.requests.filter(r=>r.name.endsWith('.blockmap')),[],'and MacUpdater asked for no blockmap');
+});
+test('Mac, the real MacUpdater: the launch that runs the downloaded version removes pending/ (255 MB); a launch on the older version keeps it',async t=>{
+ const run=await macRun(t),pending=path.join(run.cache,'pending'),zip=fs.readdirSync(pending).find(n=>n.endsWith('.zip'));assert.ok(zip);
+ const relaunch=version=>createAppUpdater({app:{getVersion:()=>version,isPackaged:true,getPath:()=>run.root},dir:run.root,platform:'darwin',env:{},autoUpdater:run.mac,qaBuild:false,macAvailability:()=>null,schedule:()=>null,every:()=>null,fetch});
+ const older=relaunch('0.1.0-beta.8');await older.check().catch(()=>{});await older.tidied();
+ assert.equal(fs.existsSync(path.join(pending,zip)),true,'still waiting for its install: kept');
+ const installed=relaunch('0.1.0-beta.9');await installed.check().catch(()=>{});await installed.tidied();
+ assert.deepEqual(fs.existsSync(pending)?fs.readdirSync(pending):[],[],'installed: the 0.5 MB stand-in zip is gone (255 MB in a real update)');
 });

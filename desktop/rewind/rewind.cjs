@@ -217,6 +217,7 @@ function createRewind({dir,now=Date.now,limits={},timers={setTimeout,clearTimeou
   }
   while(receipts.size>2000)receipts.delete(receipts.keys().next().value);
   const groups=[];
+  const restoredAs=new Map();
   for(const group of checkpoint.groups){
    const byRef=ref=>created.get(ref)||adopted.get(ref),members=chosen.filter(t=>t.groupRef===group.ref&&byRef(t.ref)).map(t=>byRef(t.ref));if(!members.length)continue;
    // A group that only closed tabs still reference is invisible to the user: bring it back under its own name.
@@ -224,12 +225,25 @@ function createRewind({dir,now=Date.now,limits={},timers={setTimeout,clearTimeou
    const spaces=ctx.state().workspaces?.filter(w=>w.browserProfileId===profileId)||[],spaceOf=item=>item.workspaceId&&spaces.some(w=>w.id===item.workspaceId)?item.workspaceId:spaces[0]?.id||null,target=spaceOf(ctx.state().tabs.find(t=>t.id===members[0])||{});
    const live=name=>ctx.state().tabs.some(t=>t.browserProfileId===profileId&&spaceOf(t)===target&&t.group===name&&!members.includes(t.id));
    const dormant=ctx.state().tabGroups.find(g=>g.browserProfileId===profileId&&spaceOf(g)===target&&g.name===group.name&&!live(g.name));
-   if(dormant){ctx.dispatch({type:'tab.group.assign',tabIds:members,groupId:dormant.id});ctx.dispatch({type:'tab.group.update',id:dormant.id,patch:{color:group.color,collapsed:false}});groups.push(group.name);continue;}
+   if(dormant){ctx.dispatch({type:'tab.group.assign',tabIds:members,groupId:dormant.id});ctx.dispatch({type:'tab.group.update',id:dormant.id,patch:{color:group.color,collapsed:false}});groups.push(group.name);restoredAs.set(group.name,dormant.name);continue;}
    let name=live(group.name)?`${group.name} · Recovered`.slice(0,64):group.name;
    while(ctx.state().tabGroups.some(g=>g.browserProfileId===profileId&&spaceOf(g)===target&&g.name===name))name=`${name}′`.slice(0,64);
    ctx.dispatch({type:'tab.group.create',tabId:members[0],name,color:group.color});
    const made=ctx.state().tabGroups.find(g=>g.browserProfileId===profileId&&spaceOf(g)===target&&g.name===name);if(made&&members.length>1)ctx.dispatch({type:'tab.group.assign',tabIds:members,groupId:made.id});
-   groups.push(name);
+   groups.push(name);restoredAs.set(group.name,name);
+  }
+  // Beta 14, pinned folders: a folder that stood in the Pinned block goes back to it (the reducer keeps the flag off an inner folder).
+  for(const group of checkpoint.groups){
+   if(!group.pinned||group.parent)continue;
+   const back=restoredAs.get(group.name),live=back&&ctx.state().tabGroups.find(g=>g.browserProfileId===profileId&&g.name===back);
+   if(live&&!live.pinned)ctx.dispatch({type:'tab.group.update',id:live.id,keepActive:true,patch:{pinned:true}});
+  }
+  // Beta 14 (AE): a group that stood inside another goes back inside it when both came back (one level; the reducer refuses a move that is not allowed).
+  for(const group of checkpoint.groups){
+   if(!group.parent)continue;
+   const child=restoredAs.get(group.name),parent=restoredAs.get(group.parent);if(!child||!parent)continue;
+   const find=name=>ctx.state().tabGroups.find(g=>g.browserProfileId===profileId&&g.name===name);
+   const inner=find(child),outer=find(parent);if(inner&&outer&&!inner.parentGroupId)ctx.dispatch({type:'tab.group.move',id:inner.id,parentId:outer.id});
   }
   // A split comes back whole, or not at all: every pane must be a live tab (restored now or already open). The first pane is selected,
   // because a split always includes the tab you are on. Only asked for by "restore with its split" and by a new window.

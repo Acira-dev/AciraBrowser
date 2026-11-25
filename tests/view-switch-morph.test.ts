@@ -80,7 +80,7 @@ test('a rise under 8 px (Full to Compact: the toolbar is 4 px lower) leaves the 
 test('client.ts queues a layout switch behind a playing transition, in order, and does not treat main\'s confirmation as another switch', () => {
   const client = read('../src/runtime/client.ts');
   assert.match(client, /if\(kind==='layout'&&\(queuedLayouts>0\|\|modeSwitchPlaying\(\)\)\)\{queuedLayouts\+\+;modeUpdatePending=true;layoutQueue=layoutQueue\.then\(\(\)=>whenModeSwitchSettled\(\)\)\.then\(\(\)=>\{queuedLayouts--;startSwitch\(update,'layout',slideHint\);\}\);return;\}/);
-  assert.match(client, /modeUpdatePending=queuedLayouts>0;update\(\);/, 'snapshots keep waiting while a switch is queued');
+  assert.match(client, /modeUpdatePending=queuedLayouts>0;(?:const was=kind==='layout'\?miniDockSnapshot\(\):null;)?update\(\);/, 'snapshots keep waiting while a switch is queued (a layout switch notes the Mini dock before it applies, b14-mini 98cd124b1)');
   assert.match(client, /const shownNow=latest\.current;[\s\S]*?if\(sidebarLayoutChanged\(shownNow,next\)\|\|chromeLayoutChanged\(shownNow,next\)\)modeSwitch\(/, 'a snapshot that matches what is on screen is applied as it is');
 });
 

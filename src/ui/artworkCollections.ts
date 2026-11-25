@@ -1,5 +1,6 @@
 import { t, type MessageId } from '../i18n';
-import { defaultArtwork, type CatalogArtwork, type NewTabPreferences } from './newTabPreferences';
+import { artworkCatalog, defaultArtwork, type CatalogArtwork, type NewTabPreferences } from './newTabPreferences';
+import { pickKind } from './artworkPicks';
 import type { PersonalArtwork } from '../runtime/connectedServices';
 
 export type ArtworkCollection = NewTabPreferences['collection'];
@@ -39,3 +40,10 @@ export const coverView = (collection: ArtworkCollection, artwork: string, browsi
   listed && (browsingMine || artwork.startsWith('personal:')) ? 'personal' : collection;
 /** The uploads as covers (ids are `personal:<id>`, the form the preferences store). */
 export const personalCovers = (assets: PersonalArtwork[]): CatalogArtwork[] => assets.map(item => ({ id: 'personal:' + item.id, name: item.name, src: item.url, alt: 'Personal new-tab image' }));
+
+/** The picture a pick id stands for, from what is on hand: the catalog, the person's own images, the collection pictures kept on this computer. Null when it is not there (anymore). */
+export function pickedPicture(id: string, personal: PersonalArtwork[], kept: readonly CatalogArtwork[]): CatalogArtwork | null {
+  const kind = pickKind(id);
+  if (kind === 'built-in') return artworkCatalog.find(item => item.id === id) ?? null;
+  return (kind === 'personal' ? personalCovers(personal) : kept).find(item => item.id === id) ?? null;
+}

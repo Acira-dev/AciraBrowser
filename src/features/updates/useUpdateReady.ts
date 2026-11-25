@@ -27,7 +27,7 @@ export interface UpdateView {
   /** A download that stopped (phase 'error'): when main tries again by itself (epoch ms; null once the quick tries are used up or while one runs), how many tries failed in a row, and why. */
   retryAt?: number | null;
   failures?: number;
-  cause?: 'network' | 'file' | 'other';
+  cause?: 'network' | 'file' | 'locked' | 'other';
   /** Main is looking again right now (a retry, or a press of Try again): the stopped look stays, with "Retrying…", instead of the pill going away for the length of the look. */
   retrying?: boolean;
 }
@@ -200,6 +200,7 @@ export function errorLines(update: UpdateView): { what: string; when: string | n
   const share = update.total && update.transferred !== null ? formatShare(update.transferred, update.total) : t('update.downloadDetailShort', { percent: update.percent });
   if (update.retrying) return { what: share, when: t('update.retryingSoon') };
   if (update.cause === 'file') return { what: t('updates.notVerified'), when: null };
+  if (update.cause === 'locked') return { what: t('updates.fileInUse'), when: update.retryAt ? formatRetryIn(update.retryAt) : t('update.retryLater') };
   const why = update.cause === 'network' ? t('app.connectionFailed') : t('update.causeOther');
   return { what: `${why} · ${share}`, when: update.retryAt ? formatRetryIn(update.retryAt) : t('update.retryLater') };
 }

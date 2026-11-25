@@ -1,0 +1,53 @@
+/* Beta 14 (reported 14 Nov): the top strip's tab x APPEARS the way the rest of the interface does. It used to show with one bare opacity step (13.6's
+   frost-preview.css, .12 s ease-out, no scale), in a narrow tab on an opaque square patch laid over the title, while a long title's fade flipped to a
+   two-sided one in the same frame. Now, as the pointer comes to a tab: the x fades and grows from .88 (tab-sound.css's own slot values: --ts-dur 140 ms x
+   the speed setting, --ts-ease, --ts-out; the item07 sample leaves the x's appearance to the 13.6 CSS ("Hover fill unchanged") and only redraws the
+   strokes when the pointer reaches the x), the same on the way out; the title's fade end already makes room for it, so no letter moves and the x needs no
+   patch; the long title's left fade comes in over the same time instead of at once.
+   Only opacity and transform change on the x (compositor); the title's mask stops are two registered lengths, so a hover repaints one title and recalculates
+   nothing else. The :root prefix keeps these over the dozen hover and container rules the close slot already has. */
+@property --tab-x-room{syntax:'<length>';inherits:false;initial-value:0px}
+@property --tab-fade-l{syntax:'<length>';inherits:false;initial-value:0px}
+
+/* ---- the x ---------------------------------------------------------------------------------------------------------------- */
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true])>.tab-close:not([data-sound]){
+  transform:scale(var(--ts-out,.88));
+  transition:opacity var(--ts-dur,140ms) var(--ts-ease,cubic-bezier(.2,0,0,1)),transform var(--ts-dur,140ms) var(--ts-ease,cubic-bezier(.2,0,0,1)),background-color .12s ease-out,color .12s ease-out;
+}
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close:not([data-sound]){transform:none}
+@container (min-width:105px){
+  :root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab.selected:not([data-icon-only=true]):not([data-tab-group])>.tab-close:not([data-sound]){transform:none}
+}
+:root .app[data-reduced-motion=true] .tab-strip-container .browser-tab>.tab-close{transition:none}
+
+/* ---- the tab's own hover plate ---------------------------------------------------------------------------------------------- */
+/* It appeared and left in one frame while the x beside it faded, so the pair read as two things arriving at different times. It now fades with the x, in and out,
+   over the same time. It is a pseudo-element whose OPACITY fades (compositor, no style work per frame: fading the tab's background-color instead cost about 12 extra
+   style recalculations per hover, measured), drawn in the colour the plate always had (--tab-hover) under the tab's content (the tab is a layout container, so
+   it is its own stacking context and z-index -1 stays inside it). Grouped tabs and a tab being dragged keep their own plate rules untouched. */
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab.tab-flow:not(.selected):not([data-tab-group]):not([data-drag-surface]){background:transparent}
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab.tab-flow:not(.selected):not([data-tab-group]):not([data-drag-surface])::after{
+  content:'';position:absolute;inset:0;z-index:-1;border-radius:var(--tab-radius,8px);background:var(--tab-hover);opacity:0;pointer-events:none;
+  transition:opacity var(--ts-dur,140ms) var(--ts-ease,cubic-bezier(.2,0,0,1));
+}
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab.tab-flow:not(.selected):not([data-tab-group]):not([data-drag-surface]):hover::after{opacity:1}
+:root .app[data-reduced-motion=true] .tab-strip-container .browser-tab.tab-flow::after{transition:none}
+
+/* ---- the title ---------------------------------------------------------------------------------------------------------------- */
+/* One mask for every state, its stops registered lengths: --tab-fade-l is the left fade a scrolling title gets (0 at rest, 14px while it scrolls: it used to switch
+   to a different mask in the frame the pointer arrived), --tab-x-room is the room the x takes in a narrow tab (see below). The room closes a little faster than the x opens (.7 of its time), so the letters under the x are gone as it becomes visible. */
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab>.tab-title{
+  transition:--tab-x-room calc(var(--ts-dur,140ms) * .7) var(--ts-ease,cubic-bezier(.2,0,0,1)),--tab-fade-l var(--ts-dur,140ms) var(--ts-ease,cubic-bezier(.2,0,0,1));
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--tab-fade-l),#000 calc(100% - 20px - var(--tab-x-room)),transparent calc(100% - var(--tab-x-room)));
+  mask-image:linear-gradient(to right,transparent,#000 var(--tab-fade-l),#000 calc(100% - 20px - var(--tab-x-room)),transparent calc(100% - var(--tab-x-room)));
+}
+/* the left fade comes in when the text starts to move (ui/titleMarquee.ts waits 650 ms before it glides), not when the pointer arrives: until then the first letters stay whole.
+   The delay belongs to this state's transition only, so it is not paid on the way out. */
+:root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab>.tab-title[data-marquee]{--tab-fade-l:14px;transition-delay:0s,650ms}
+:root .app[data-reduced-motion=true] .tab-strip-container .browser-tab>.tab-title{transition:none}
+/* Narrow tabs (the x sits over the end of the title): the title's fade end moves in by the x's overlap as the pointer comes, so the letters under the x are
+   already gone and the x needs no opaque patch. Nothing reflows: only the fade moves. */
+@container (max-width:104px){
+  :root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-title{--tab-x-room:15px}
+  :root .app.style-acira .tab-strip-container:not(.vertical) .browser-tab:not([data-icon-only=true]):is(:hover,:focus-within)>.tab-close:not(:hover){background:transparent}
+}

@@ -83,6 +83,23 @@ test('a caption that floats over the page (Seamless, Hide the toolbar, the corne
   assert.equal(hidden.state.views.length, 0);
 });
 
+// F6 (the team's note of 17 Nov: "window controls get a rounded border only in Seamless"): there is ONE plate. Seamless and Hide the toolbar publish captionFloat, the Sidebar + address notch publishes captionNotch;
+// for the same tone and the same height main draws the very same view in all three (radius, colour, bounds), light and dark, and the same plate stays through a resize. If this fails a mode has its own plate again.
+test('F6: Seamless, Hide the toolbar and the Sidebar + address notch draw the very same plate', () => {
+  for (const [appearance, captionColor] of [['light', '#eef0f2'], ['dark', '#27282b']]) {
+    const plates = {};
+    const floating = realMainCaption({ layout: { appearance, captionColor, captionNotch: false, captionFloat: true, captionHidden: false, captionHeight: 36 } });
+    floating.api.setCaption(); plates.seamlessOrHideToolbar = frame(floating).box && floating.state.views[0];
+    const notch = realMainCaption({ layout: { appearance, captionColor, captionNotch: true, captionFloat: false, captionHidden: false, captionHeight: 36 } });
+    notch.api.notchShown(true); plates.notch = frame(notch).box && notch.state.views[0];
+    for (const [mode, view] of Object.entries(plates)) assert.ok(view, `${appearance}: ${mode} has a plate`);
+    const shape = view => ({ radius: view.radius, color: view.color, bounds: view.bounds, visible: view.visible });
+    assert.deepEqual(shape(plates.notch), shape(plates.seamlessOrHideToolbar), `${appearance}: the notch's plate is Seamless's plate`);
+    assert.equal(plates.notch.radius, RADIUS);
+    assert.equal(plates.notch.color, withAlpha(captionColor, OPACITY));
+  }
+});
+
 test('a caption on the toolbar (the plain layouts) has no box at all, and its colour is what it was', () => {
   const ctx = realMainCaption({ layout: { captionNotch: false, captionFloat: false, captionHidden: false, captionHeight: 40 } });
   ctx.api.setCaption();
@@ -153,7 +170,7 @@ test('main.cjs wires it: the box is changed inside the overlay\'s own paint, one
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.match(main, /try\{updateCaption\(mainWindow,\{\.\.\.caption,hidden:layout\.captionHidden===true\}\);[^\n]*captionBackdrop\.apply\(box,\{above:overlayHost,linger:!hidden&&!box\?require\('\.\/caption-backing\.cjs'\)\.HANDOVER_MS:0\}\);captionKey=key;/, 'a delay only when the buttons stay and the box goes (the toolbar took the caption over), never when they hide');
   assert.match(main, /const key=JSON\.stringify\(\[caption,layout\.captionHidden===true,box\]\);/, 'the box is part of what "already applied" means');
-  assert.match(main, /box=behind&&behind\.box&&process\.platform==='win32'\?\{tone:behind\.box\.tone,height\}:null;/, 'Windows only');
+  assert.match(main, /box=behind&&behind\.box&&process\.platform==='win32'\?\{tone:behind\.box\.tone,height:plate\}:null;/, 'Windows only');
   const backing = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'caption-backing.cjs'), 'utf8');
   assert.doesNotMatch(backing, /setInterval|requestAnimationFrame/, 'no repeating timer and no frame callback');
   assert.equal((backing.match(/schedule\(/g) || []).length, 1, 'one delayed call: the hand-over');
@@ -190,4 +207,39 @@ test('the hand-over: when the interface\'s toolbar takes the caption over, the b
   assert.equal(clock.timers.length, 0, 'no timer for a box that is not showing');
   backing.apply(box); backing.apply(null, { linger: HANDOVER_MS }); backing.dispose();
   assert.equal(clock.timers.length, 0, 'dispose ends a wait');
+});
+
+// F6 (19 Nov): the plate behind the caption buttons is the same height in every mode that shows it. Measured on the Windows stand-in (data-platform win32), layout.captionHeight is 34 in the Sidebar + address notch and
+// 36 in Seamless and Hide the toolbar: plates of 40 and 42 DIP, 60 and 63 px at 150 %. The interface now sends captionPlateHeight (the toolbar row's 36, the row that takes the caption over); main draws the plate at
+// max(buttons, plate), so the notch's 34 px buttons stand on the same 42 DIP plate as Seamless.
+test('F6: the plate is drawn at the toolbar row height in every mode, never at the mode\'s own button height', () => {
+  const fs = require('node:fs'), path = require('node:path'), root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'desktop/main.cjs'), 'utf8');
+  assert.match(main, /plate=Math\.max\(height,Math\.round\(layout\.captionPlateHeight\|\|0\)\)/);
+  assert.match(fs.readFileSync(path.join(root, 'desktop/interface-scale.cjs'), 'utf8'), /captionPlateHeight:layout\.captionPlateHeight\*factor/, 'scaled with the interface like the buttons');
+  assert.match(fs.readFileSync(path.join(root, 'desktop/validation.cjs'), 'utf8'), /captionPlateHeight/);
+  assert.match(fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8'), /captionPlateHeight: designTokens\.geometry\.toolbar/);
+  const { backingBounds } = require('../desktop/caption-backing.cjs');
+  const plate = height => backingBounds(1200, Math.max(height, 36)).height - 12;
+  for (const buttons of [32, 34, 36]) assert.equal(plate(buttons), 42, `buttons ${buttons}: the same 42 DIP plate (63 px at 150 %)`);
+});
+
+// D91 (19 Nov): the New Tab page's top-right controls (the profile button at the end of the workspace heading, the art controls) stay clear of the caption buttons' rectangle wherever the caption stands over the page.
+// The interface publishes the rectangle's width as --caption-clear-w (138 DIP of buttons + 6 of plate + 8 of air, over the interface zoom; 0 on the Mac and wherever the caption is not over the page).
+test('D91: the New Tab page keeps its top-right controls clear of the caption rectangle (--caption-clear-w, 0 off Windows)', () => {
+  const fs = require('node:fs'), path = require('node:path'), root = path.join(__dirname, '..');
+  const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8'), css = fs.readFileSync(path.join(root, 'src/styles/new-tab-page.css'), 'utf8');
+  assert.match(app, /root\.style\.setProperty\('--caption-clear-w', win && \(captionNotch \|\| topSeam\) && !windowFullscreen && !\(workspaceOpen && sidebarSideOf\(s\) === 'right'\) \? `\$\{\(138 \+ 6 \+ 8\) \/ \(\(s\.interfaceScale \|\| 100\) \/ 100\)\}px` : '0px'\)/);
+  assert.match(app, /\(root\.dataset\.platform \|\| 'darwin'\) === 'win32'/);
+  assert.match(css, /\.nt-workspace-heading \{[^}]*max-width:calc\(100% - 2 \* var\(--caption-clear-w, 0px\)\)/, 'the heading is centred: both sides give the width, so its right end clears the caption');
+  assert.match(css, /\.nt-full-art-controls \{[^}]*right: calc\(12px \+ var\(--caption-clear-w, 0px\)\)/);
+  assert.doesNotMatch(css, /--caption-clear-w: *[1-9]/, 'the page never sets it: only the interface does');
+});
+
+// D91, the matrix's second find: with the sidebar on the right on Windows (address in the sidebar) the sidebar's top row started 40 DIP down, a fixed number, while the caption buttons and their plate grow with the
+// interface (34 x zoom + 6 DIP for the buttons' room, the plate 36 x zoom + 6): at 125 / 150 % the "Collapse sidebar" button stood under them. The reserve is the plate's own: 36 CSS px + 6 DIP.
+test('D91: the right sidebar leaves the caption plate\'s room, which scales with the interface (36 px + 6 DIP), not 40 DIP', () => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/styles/sidebar-right.css'), 'utf8');
+  assert.doesNotMatch(css, /40px \/ var\(--interface-scale/);
+  assert.equal((css.match(/\(36px \+ 6px \/ var\(--interface-scale, 1\)\)/g) || []).length, 6, 'five rooms, and D153\'s drag band over the same strip (Sidebar + address)');
 });

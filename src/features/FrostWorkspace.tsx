@@ -1,4 +1,5 @@
 import {DotMatrix} from '../components/DotMatrix';
+import { RootMirror } from '../ui/rootMirror';
 import { AnimatePresence,motion } from 'motion/react';
 import { useEffect,useId,useLayoutEffect,useRef,useState,type CSSProperties,type FormEvent,type MouseEvent,type ReactNode } from 'react';
 import { AddressField } from '../components/AddressField';
@@ -112,7 +113,7 @@ export function ExperimentRail({ state, dispatch }: {
       
     </div>}
     <footer><RailButton label={t("browsermenu.settings")} glyph="settings" icon={Settings2} current={current.url === 'acira://settings'} onClick={() => navigate('settings')}/><RailButton label={t("app.switchProfile")} text={profile?.name || 'Personal'} popupTrigger onClick={target => popup(state, 'profile', target)}><span className="ed-profile-initial"><bdi className="chip-letter">{state.browserProfiles.find(profile => profile.id === current.browserProfileId)?.name[0] || 'P'}</bdi></span></RailButton></footer>
-  </aside>;
+  <RootMirror name="rail-collapsed" value={expanded ? null : ''}/></aside>;
 }
 /** Reuse the tab strip's validated inline name editor and persisted group state. */
 function SidebarGroup({group,members,state,dispatch,showMembers=false,children}:{group:TabGroup;members:TabSession[];state:BrowserSnapshot;dispatch:Dispatch;showMembers?:boolean;children?:ReactNode}){

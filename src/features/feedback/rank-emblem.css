@@ -1,0 +1,19 @@
+/* Beta 14/E5 (rank emblems, proposal): the emblem's own paint. No colour is chosen here: the line and the aura use the rank's ring colour (`--acira-rank-ring-<rank>`, OPEN, the accent until the
+   the team set it), the Early Member mark is neutral. Everything is flat: strokes, flat tints, radial gradients that fall to nothing inside the box. No filter, no blur, no shadow. */
+.app .re { --re-color: var(--accent); position: relative; display: inline-block; flex: none; width: var(--re-size); height: var(--re-size); line-height: 0; color: inherit; }
+.app .re[data-rank='contributor'] { --re-color: var(--acira-rank-ring-contributor, var(--accent)); }
+.app .re[data-rank='trusted'] { --re-color: var(--acira-rank-ring-trusted, var(--accent)); }
+.app .re[data-rank='insider'] { --re-color: var(--acira-rank-ring-insider, var(--accent)); }
+.app .re[data-rank='founding'] { --re-color: var(--acira-rank-ring-founding, var(--accent)); }
+.app .re[data-early] { --re-color: var(--menu-t3, currentColor); }
+.app .re-svg { position: relative; display: block; overflow: visible; }
+.app .re-stroke { fill: none; stroke: var(--re-color); stroke-width: calc(var(--re-w) * var(--wm, 1) * 1px); stroke-linecap: round; stroke-linejoin: round; }
+.app .re-stroke[data-ghost] { stroke: var(--menu-t3, currentColor); }
+.app .re-hatch { fill: none; stroke: var(--re-color); stroke-width: calc(var(--re-w) * 0.55 * 1px); stroke-linecap: butt; }
+.app :where(.re-hatch) path.re-hatch-line { fill: none; }
+.app .re-bead { fill: var(--re-color); stroke: none; }
+.app .re-bead-core { fill: #fff; fill-opacity: .85; stroke: none; }
+/* The aura: a box centred on the emblem, 1 + spread times its size, painted inline with radial gradients (emblem.aura). It never takes a click and never shifts the layout. */
+.app .re-aura, .app .re-bloom { position: absolute; left: 50%; top: 50%; width: calc(var(--re-size) * (1 + var(--re-spread, 1))); height: calc(var(--re-size) * (1 + var(--re-spread, 1))); transform: translate(-50%, -50%); pointer-events: none; background-repeat: no-repeat; }
+.app .re-bloom { opacity: 0; }
+@media (forced-colors: active) { .app .re-aura, .app .re-bloom { display: none; } .app .re-stroke { stroke: CanvasText; } .app .re-body { fill: none; } }

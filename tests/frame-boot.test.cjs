@@ -22,7 +22,7 @@ const channels = Object.values(boot.CHANNELS);
 
 test('which questions a frame asks: websites and srcdoc get identity and farbling, the main frame scriptlets, the top frame page-risk, websites autoconsent', () => {
   const names = (href, main, top) => boot.questionsFor(href, main, top).map(([channel]) => channel.replace('acira:', ''));
-  assert.deepEqual(names('https://a.test/', true, true), ['chrome-identity', 'farbling', 'scriptlets', 'page-risk-config', 'autoconsent-setup']);
+  assert.deepEqual(names('https://a.test/', true, true), ['chrome-identity', 'farbling', 'scriptlets', 'page-risk-config', 'autoconsent-setup', 'zap-early']);
   assert.deepEqual(names('https://ads.test/x', false, false), ['chrome-identity', 'farbling', 'autoconsent-setup'], 'an iframe: no scriptlets, no page-risk');
   assert.deepEqual(names('about:srcdoc', false, false), ['chrome-identity', 'farbling'], 'a srcdoc frame is a website document for identity and farbling only');
   assert.deepEqual(names('about:blank', true, true), []);
@@ -40,12 +40,13 @@ test('one boot question answers what the five handlers would have answered, each
     'acira:page-risk-config': e => { e.returnValue = {enabled: true}; },
     'acira:page-risk-script': e => { e.returnValue = 'risk-script'; },
     'acira:autoconsent-setup': (e, main) => { e.returnValue = main ? {rules: 'r'} : null; },
+    'acira:zap-early': e => { e.returnValue = {css: '#x{display:none!important}', rules: []}; },
   });
   boot.install(ipc);
   const {answers, setCount} = ask(ipc, 'https://a.test/p', true, true);
   assert.equal(setCount, 1, 'the real event is answered exactly once');
-  assert.deepEqual(answers, {'acira:chrome-identity': 'identity-script', 'acira:farbling': 'farble:https://a.test/p', 'acira:scriptlets': ['s1:https://a.test/p'], 'acira:page-risk-config': {enabled: true}, 'acira:page-risk-script': 'risk-script', 'acira:autoconsent-setup': {rules: 'r'}});
-  assert.equal(calls.length, 6);
+  assert.deepEqual(answers, {'acira:chrome-identity': 'identity-script', 'acira:farbling': 'farble:https://a.test/p', 'acira:scriptlets': ['s1:https://a.test/p'], 'acira:page-risk-config': {enabled: true}, 'acira:page-risk-script': 'risk-script', 'acira:autoconsent-setup': {rules: 'r'}, 'acira:zap-early': {css: '#x{display:none!important}', rules: []}});
+  assert.equal(calls.length, 7);
   for (const call of calls) { assert.equal(call[2], 7, 'the handler sees the asking page as event.sender'); assert.equal(call[3], 'https://a.test/p', 'and the asking frame as event.senderFrame'); }
   assert.deepEqual(new Set(calls.map(c => c[0])), new Set(channels));
 });

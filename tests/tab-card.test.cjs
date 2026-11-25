@@ -187,7 +187,7 @@ test('one rule for card or tooltip, shared by the interface and the main process
  const tab={contentKind:'web',privacy:undefined,sleeping:false,risk:undefined,capturing:undefined};
  assert.equal(tabCardKind({tabHoverCard:'preview'},tab),'preview');assert.equal(tabCardKind(undefined,tab),'preview','the default');
  assert.equal(tabCardKind({tabHoverCard:'name'},tab),'name');assert.equal(tabCardKind({tabHoverCard:'off'},tab),null);
- assert.equal(tabCardKind({},{...tab,privacy:'tor'}),'name');assert.equal(tabCardKind({},tab,true),'name');assert.equal(tabCardKind({},{...tab,contentKind:'internal'}),'name');
+ assert.equal(tabCardKind({},{...tab,privacy:'tor'}),'name');assert.equal(tabCardKind({},tab,true),'name');assert.equal(tabCardKind({},{...tab,contentKind:'internal'}),null,'one of Acira\'s own pages keeps its tooltip: its name is all it has to say');assert.equal(tabCardKind({},{...tab,url:'acira://new'}),null);assert.equal(tabCardKind({tabHoverCard:'name'},{...tab,contentKind:'internal',url:'acira://settings'}),null);assert.equal(tabCardKind({},{...tab,url:'https://example.com/'}),'preview');
  assert.equal(tabCardKind({},{...tab,risk:{kind:'clickfix',title:'a',detail:'b'}}),null);assert.equal(tabCardKind({},{...tab,capturing:['camera']}),null);assert.equal(tabCardKind({},undefined),null);
  assert.equal(tabCardHost('https://www.example.com/a?b'),'example.com');assert.equal(tabCardHost('acira://settings'),'Acira');assert.equal(tabCardHost('nonsense'),'');
 });
@@ -242,5 +242,5 @@ test('the floor the interface sends is scaled with the anchor, and a press or dr
 
 test('the interface measures the floor from the top chrome and sends it with the tab box',()=>{
  const hook=fs.readFileSync(path.join(__dirname,'../src/ui/tabHoverCard.ts'),'utf8');
- assert.match(hook,/closest\('\.browser-shell'\)/);assert.match(hook,/cardSide\(row\), cardFloor\(row\)/);
+ assert.match(hook,/closest\('\.browser-shell'\)/);assert.match(hook,/side, cardFloor\(row\)/);assert.match(hook,/cardAnchor\(row, side\)/,'the card is placed against the sidebar edge (cardAnchorFor), not the row');
 });

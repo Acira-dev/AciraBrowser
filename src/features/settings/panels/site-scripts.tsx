@@ -43,7 +43,7 @@ export function SiteScriptsView({ status, busy, error, onSave }: { status: Profi
   const everywhere = status.mode === 'everywhere';
   const title = everywhere ? t('siteScripts.allowedSites') : t('siteScripts.blockedSites');
   return (
-    <SettingGroup title={t('siteScripts.title')} id="site-scripts">
+    <SettingGroup title={t('siteScripts.title')} id="site-scripts" fold foldDetail={t('settings.scriptsFoldDetail')}>
       <SettingRow id="site-scripts-everywhere" title={t('siteScripts.everywhere')} detail={t('siteScripts.everywhereDetail')}>
         <Switch label={t('siteScripts.everywhere')} checked={everywhere} disabled={busy} onChange={(on) => onSave({ mode: on ? 'everywhere' : 'default' })} />
       </SettingRow>
@@ -55,5 +55,5 @@ export function SiteScriptsView({ status, busy, error, onSave }: { status: Profi
   );
 }
 
-const panel: SettingsPanel = { section: 'Privacy', order: 91, Component: SiteScripts };
+const panel: SettingsPanel = { section: 'Protection', order: 91, placed: true, Component: SiteScripts };
 export default panel;

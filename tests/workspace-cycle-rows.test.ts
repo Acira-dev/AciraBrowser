@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cycledWorkspace } from '../src/runtime/workspaces';
 import { popupNaturalHeight } from '../src/ui/popup';
+import { MAX_WORKSPACES } from '../src/runtime/workspaces';
 
 const root = path.join(import.meta.dirname, '..');
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -42,9 +43,9 @@ test('the rows use the registry ids, their live keys and the shared row anatomy'
   assert.match(registry, /C\('prev-workspace','Previous workspace','Windows',\{action:'workspace-cycle',direction:-1\},\['Mod\+Alt\+PageUp'\]\)/);
 });
 
-test('the popover estimate adds the two rows from two workspaces on, and keeps the divider at eight', () => {
+test('the popover estimate adds the two rows from two workspaces on, and keeps the divider at the limit', () => {
   const at = (count: number) => popupNaturalHeight('workspace-menu', { ...(state(count, 0) as object), tabs: [], activeTabId: '', settings: {} } as never);
   assert.equal(at(2) - at(1), 44 + 60, 'one more workspace row and the two cycle rows');
   assert.equal(at(3) - at(2), 44);
-  assert.equal(at(8) - at(7), 44 - 39 + 9, 'at eight New workspace… goes, its divider stays for the cycle rows');
+  assert.equal(at(MAX_WORKSPACES) - at(MAX_WORKSPACES - 1), 44 - 39 + 9, 'at the limit New workspace… goes, its divider stays for the cycle rows');
 });

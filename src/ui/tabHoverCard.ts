@@ -3,7 +3,7 @@ import { runtime } from '../runtime/client';
 import { tabCardKind } from '../runtime/tabCard';
 import type { TabSession } from '../runtime/types';
 import { rootSidebarSide } from './sidebarSide';
-import { cardSideFor } from './tabCardSide';
+import { cardAnchorFor,cardSideFor } from './tabCardSide';
 
 /** The tab hover card (src/runtime/tabCard.ts, desktop/tab-card.cjs). The main process draws it and owns its timing; the
  * interface only says which tab the pointer is on, where that tab is, and when something (a press, a key, a scroll) ends it. */
@@ -38,6 +38,11 @@ export const cardSide = (row: HTMLElement): 'below' | 'right' | 'left' => {
   const box = row.getBoundingClientRect();
   return cardSideFor(sidebarRow, box.left + box.width / 2, window.innerWidth, rootSidebarSide());
 };
+/** What the card is placed against: a sidebar row's box reaching out to the sidebar's own edge on the side the card opens to (cardAnchorFor), a strip tab's box as it is. */
+export const cardAnchor = (row: HTMLElement, side: 'below' | 'right' | 'left'): { x: number; y: number; width: number; height: number } => {
+  const box = row.getBoundingClientRect(), sidebar = row.closest('.acira-sidebar')?.getBoundingClientRect() ?? null;
+  return cardAnchorFor({ x: box.x, y: box.y, width: box.width, height: box.height }, sidebar && { x: sidebar.x, y: sidebar.y, width: sidebar.width, height: sidebar.height }, side);
+};
 /** A saved page in the sidebar has no tab: its title and address ride on the row and the card is told them. */
 export const cardLabel = (row: HTMLElement): { title: string; host: string } | null => row.dataset.cardTitle === undefined ? null : { title: row.dataset.cardTitle, host: row.dataset.cardHost ?? '' };
 const rowKey = (row: HTMLElement): string | null => row.dataset.cardTitle === undefined ? row.dataset.tabId ?? null : `label:${row.dataset.cardTitle}
@@ -52,7 +57,7 @@ export const cardFloor = (row: HTMLElement): number => {
 };
 
 /** The row that answers the pointer with a card: with tab cards Off the strip and sidebar tabs keep their tooltips, while a saved page's card is its tooltip and stays. */
-const cardRow = (node: EventTarget | null): HTMLElement | null => { const row = tabRowOf(node); return row && tabHoverCardMode() === 'off' && row.dataset.cardTitle === undefined ? null : row; };
+const cardRow = (node: EventTarget | null): HTMLElement | null => { const row = tabRowOf(node); if (row?.closest('.acira-sidebar.is-mini:not([data-mini=open])')) return null; /* the rail names its items itself (miniRail.ts) */ return row && tabHoverCardMode() === 'off' && row.dataset.cardTitle === undefined ? null : row; };
 
 /** Watches the pointer over tab rows and tells the main process. Mounted once by App. */
 export function useTabHoverCard(enabled: boolean, activeTabId?: string | null): void {
@@ -75,8 +80,8 @@ export function useTabHoverCard(enabled: boolean, activeTabId?: string | null): 
       // A tab pressed to select it shows no card until the pointer leaves and comes back.
       if (pressed === id) return;
       pressed = null;
-      const box = row.getBoundingClientRect();
-      send('hover', id, { x: box.x, y: box.y, width: box.width, height: box.height }, cardSide(row), cardFloor(row), cardLabel(row));
+      const side = cardSide(row), box = cardAnchor(row, side);
+      send('hover', id, { x: box.x, y: box.y, width: box.width, height: box.height }, side, cardFloor(row), cardLabel(row));
     };
     const out = (event: PointerEvent) => {
       if (!current) return;

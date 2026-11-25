@@ -107,6 +107,18 @@ function createLivePrs({ file, sourceFor, now = Date.now, setTimer = setTimeout,
       notify(profile.id);
       return status(profile);
     },
+    /**
+     * A profile transfer brings the folder (its name and filters) to a computer that has none. It only writes the settings: no refresher starts and nothing asks
+     * GitHub until a window of the profile asks for the folder (`watch`), as after "Add live folder". Returns whether it was added (false: one was already there).
+     */
+    adopt(profile, folder) {
+      if (!validProfile(profile)) throw new Error('Live pull requests are for ordinary profiles.');
+      if (folderOf(profile.id)) return false;
+      (load().profiles[profile.id] ??= {}).folder = { name: model.folderName(folder?.name), filters: model.normalizeFilters(folder?.filters), hidden: {}, createdAt: now() };
+      save();
+      notify(profile.id);
+      return true;
+    },
     /** "Remove live folder": the settings and every timer go; nothing is left to ask GitHub. */
     remove(profile) {
       const entry = load().profiles[profile.id];

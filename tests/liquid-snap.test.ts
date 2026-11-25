@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { chipPose, createSim, liquidDistance, mergeAmount, liquidGeometry, liquidSprings, nearestOn, neckField, neckParams, neckRadius, parseColor, pickTarget, simStep, smin, stepSpring, strongest, tension, type LiquidTarget, type Pt } from '../src/ui/liquidSnap';
+import { chipPose, createSim, liquidDistance, mergeAmount, liquidGeometry, liquidSprings, nearestOn, neckField, neckParams, neckRadius, parseColor, pickLiquidTarget, pickTarget, simStep, smin, stepSpring, strongest, tension, type LiquidTarget, type Pt } from '../src/ui/liquidSnap';
 import { motionTokens } from '../src/ui/motionTokens';
 
 const zone: LiquidTarget = { key: 'zone', box: { left: 100, top: 10, right: 160, bottom: 50 }, radius: 3, owned: true };
@@ -160,4 +160,18 @@ test('R4-28: one liquid primitive on every carried chip, one small WebGL layer, 
   assert.match(css, /\.liquid-layer\{position:fixed;left:0;top:0;z-index:999;pointer-events:none;visibility:hidden/);
   assert.match(css, /\.tab-drag-preview::before\{opacity:calc\(var\(--chip-p,0\) \* \(1 - var\(--liquid-on,0\)\)\)/, 'the CSS plate hands over to the layer');
   assert.doesNotMatch(css.slice(css.indexOf('.liquid-layer')), /filter:url|feGaussianBlur/, 'no goo filter: the union is a distance field');
+});
+
+// Beta 14 drag speed pass (16 Nov): the chip's frame loop read the whole target list (every group header, workspace icon and split cell: a querySelectorAll and a
+// getBoundingClientRect each, after the frame's style writes) on EVERY frame of a drag, though a row carried inside the list is not a chip yet and picks nothing.
+test('the target list is read only while the chip can reach for one (a row carried in the list reads nothing per frame)', () => {
+  let reads = 0;
+  const targets = () => { reads++; return [zone]; };
+  assert.equal(pickLiquidTarget(false, { x: 130, y: 30 }, '', 14, targets), null, 'not engaged (the row is still a row)');
+  assert.equal(pickLiquidTarget(true, null, '', 14, targets), null, 'no pointer');
+  assert.equal(reads, 0, 'neither frame read the list');
+  assert.equal(pickLiquidTarget(true, { x: 130, y: 30 }, '', 14, targets)?.target.key, 'zone', 'engaged: the pick is the same as pickTarget over the list');
+  assert.equal(reads, 1);
+  assert.equal(pickLiquidTarget(true, { x: 130, y: 30 }, '', 14, targets, item => item.key !== 'zone'), null, 'the filter applies before the pick');
+  assert.equal(reads, 2);
 });

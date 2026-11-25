@@ -30,6 +30,8 @@ function resolveDefaultShortcut(input, platform = process.platform) {
   if(input.meta&&input.alt&&key==='arrowleft')return {action:'cycle-tab',direction:-1};
   if(input.meta&&input.alt&&key==='arrowright')return {action:'cycle-tab',direction:1};
   if(input.meta&&input.alt&&key==='b')return {action:'bookmarks'};
+  if(input.meta&&input.alt&&!shift&&key==='p')return input.isAutoRepeat?null:{action:'pip'}; // Option+Cmd+P · picture in picture (Option+P alone types a character)
+  if(input.meta&&input.alt&&!shift&&key==='z')return input.isAutoRepeat?null:{action:'zap'}; // Option+Cmd+Z · Zap element (Option+Z alone types a character)
   if(input.meta&&input.alt&&!shift&&key==='n')return {action:'tor-window'}; // Option+Cmd+N · New Tor window (Brave's Mac key; Option+Shift+N types a character)
   if(input.meta&&input.alt&&(key==='i'||key==='j'))return {action:'devtools'};
   if(input.meta&&!input.control&&!input.alt){
@@ -40,7 +42,7 @@ function resolveDefaultShortcut(input, platform = process.platform) {
    if(key==='e'&&!shift)return null;
   }
   // Ctrl+1–8: the Nth workspace (Alt+1–8 elsewhere; Option+digit types characters on a Mac).
-  if(input.control&&!input.meta&&!input.alt&&!shift&&/^[1-8]$/.test(key))return {action:'switch-workspace',index:Number(key)-1};
+  /* [1-8] = WORKSPACE_KEYS (src/runtime/workspaces.ts) */if(input.control&&!input.meta&&!input.alt&&!shift&&/^[1-8]$/.test(key))return {action:'switch-workspace',index:Number(key)-1};
   if(input.control&&!input.meta)return null;
  }
  // Ctrl+Alt+PageDown / PageUp: the next / previous workspace (R4-48 P1-5). Ctrl+PageDown is the next tab; adding Alt moves up a level. No auto-repeat: a held key would spin through them.
@@ -49,6 +51,7 @@ function resolveDefaultShortcut(input, platform = process.platform) {
  if(input.alt&&!mod){if(key==='t'&&shift&&!mac)return {action:'focus-toolbar'};if(key==='t')return input.isAutoRepeat?null:{action:'tabs'};
   // Option+arrows move by word and Option+letters type characters on macOS.
   if(mac)return null;
+  if(!shift&&key==='p')return input.isAutoRepeat?null:{action:'pip'}; // P · picture in picture (the now-playing card)
   // Alt+1–8: the Nth workspace (R3-57). Ctrl+1–9 is go to tab, Ctrl+Shift+1–6 the split layouts, so Alt is the free one.
   // Not the numeric keypad: Alt held while typing digits there is how Windows types a character by its code (Alt+0233 = é); those keys belong to the system, as in Chrome.
   if(!shift&&!/^Numpad\d$/.test(input.code||'')&&/^[1-8]$/.test(key))return input.isAutoRepeat?null:{action:'switch-workspace',index:Number(key)-1};
@@ -69,6 +72,7 @@ function resolveDefaultShortcut(input, platform = process.platform) {
   // Ctrl+Shift+1–6: the split layouts in the picker's order; Ctrl+Shift+0 leaves split view (digits stay physical).
   if(shift&&/^[1-6]$/.test(key))return {action:'split-layout',layout:['columns','rows','three-columns','top-two-bottom-one','left-one-right-two','grid'][Number(key)-1]};
   if(shift&&key==='0')return {action:'split-exit'};
+  if(shift&&key==='7')return input.isAutoRepeat?null:{action:'screenshot'}; // Beta 14 · Take screenshot (Ctrl/Cmd+Shift+S is Split view, +1–6 the split layouts); no auto-repeat: a held key would reopen the menu
   if(key==='l'&&shift)return {action:'seamless-mode'}; // R3-68 · Seamless (Ctrl+S is Save page; nothing with Ctrl+Alt, which is AltGr on many keyboards)
   if(key==='l'||key==='e'||key==='k')return {action:key==='k'&&shift?'palette':'address'};
   if(key==='f')return {action:shift?'focus-mode':'find'};
@@ -103,6 +107,7 @@ function resolveDefaultShortcut(input, platform = process.platform) {
  if(key==='f10'&&!mod&&!shift&&!input.alt)return {action:'focus-toolbar'};
  if(key==='f11')return {action:'fullscreen'};
  if(key==='f12')return {action:'devtools'};
+ if(key==='escape'&&shift&&!mod&&!input.alt)return {action:'task-manager'}; // Shift+Esc: Task manager (Chrome's key)
  if(key==='escape')return {action:'escape'};
  return null;
 }

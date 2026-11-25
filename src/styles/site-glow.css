@@ -4,25 +4,190 @@
    interface, so the washes only ever show beside the page. ---- */
 html[data-site-glow] .app.style-acira:not(.native-layer) { isolation: isolate; }
 .st-glow {
-  position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
-  background:
-    radial-gradient(ellipse 50% 170px at 70% 30px, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%),
-    radial-gradient(ellipse 55% 140px at 40% 100%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
+  position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
 }
-/* The left wash is the sidebar's own (siteGlowEngine.ts, AciraSidebar renders two): the same radial gradient, 150px in from the sidebar's outer edge, 16px past its inner edge so it
-   tapers into the gap beside the page as before. Inside the sidebar it slides, and fades, with the sidebar in every transition. */
+/* TWO SMALL LAYERS per fade, not one full-window layer (the washes were two radial gradients on a layer the size of the window; everything between them was alpha 0). Each band is exactly as tall as its wash plus a margin:
+   the top gradient ends in `transparent` at 76 % of its 170px vertical radius (159 px below its centre at 30px), the bottom one at 76 % of 140px (106 px above the window's bottom edge), so outside the bands the picture is
+   alpha 0 and a `screen` blend with alpha 0 changes nothing: the same pixels, and the dark-mode blend (which costs every fade frame the area it covers) now covers 340 px of height, not the window's. Both bands carry the same
+   opacity, transition and colours; their geometry is the old layer's (percentages of the same width, the centres at 30px from the top / on the bottom edge). */
+.st-glow[data-band=top] {
+  top: 0; height: 210px;
+  background: radial-gradient(ellipse 50% 170px at 70% 30px, var(--g2, transparent) 0%, color-mix(in srgb, var(--g2, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g2, transparent) 20%, transparent) 46%, transparent 76%);
+}
+.st-glow[data-band=bottom] {
+  bottom: 0; height: 130px;
+  background: radial-gradient(ellipse 55% 140px at 40% 100%, var(--g3, transparent) 0%, color-mix(in srgb, var(--g3, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g3, transparent) 20%, transparent) 46%, transparent 76%);
+}
+/* Beta 14 final round, item 5 (reported 03:20, circled: "a line at the bottom edge where the sidebar meets the page", in every option): the page card stands a few pixels above the window's bottom, and the bottom band's
+   light was drawn ONLY in that strip, from the sidebar's edge to the right: a lit line that began exactly where the sidebar ends (measured on a 2x composite, dark, Soft: the strip (27,32,44) against the sidebar's (22,23,26)
+   beside it; with the site colour Off both are (22,22,23)). The strip is the frame's own: one surface with the sidebar (frame.css), so the band is not drawn. The layers stay (the engine, its fades and the idle-layer rules are as
+   they were); a layer that does not paint costs nothing. */
+.st-glow[data-band=bottom] { display: none; }
+.st-glow[data-band=right] { display: none; }
+/* Beta 14 (reported 00:45, 18 Nov: YouTube full-in-window, Mini rail: the top bar and the rail took the video's warm light, the strip under the page and the strip beside it stayed dark): while a page FILLS the window the light goes round the whole
+   frame. siteGlowEngine.ts marks the bottom and right bands `data-fill` (App passes `fill` with the video's colour) and they are drawn, in the bottom band's colour (--g3) and with the layer's own opacity and idle rules (the fade of a band that comes in or goes out alone is the engine's), as an EVEN strip:
+   brightest at the window's edge, gone 32px in (the page card covers all but its 6px margin). The strip does not begin at the sidebar's edge in a step (the line the team circled at rest, item 5 above): it grows over the first 200px, and the
+   right strip over the first 120px from the top (the toolbar beside it has the top band's own light). With nothing filling, both bands are not drawn: the picture at rest is the one above. */
+.st-glow[data-band=bottom][data-fill], .st-glow[data-band=right][data-fill] { display: block; }
+.st-glow[data-band=bottom][data-fill] {
+  height: 32px;
+  background: linear-gradient(0deg, var(--g3, transparent) 0, color-mix(in srgb, var(--g3, transparent) 55%, transparent) 8px, transparent 32px);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, rgb(0 0 0 / .35) 70px, #000 200px);
+}
+.st-glow[data-band=right][data-fill] {
+  top: 0; bottom: 0; left: auto; right: 0; width: 32px;
+  background: linear-gradient(270deg, var(--g3, transparent) 0, color-mix(in srgb, var(--g3, transparent) 55%, transparent) 8px, transparent 32px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgb(0 0 0 / .35) 40px, #000 120px);
+}
+/* The sidebar on the right: every band is flipped (below), so the right band stands at the LEFT edge, beside the page card's other margin. */
+html[data-sidebar-side=right] .st-glow[data-band=right][data-fill] { left: 0; right: auto; }
+/* THE EDGE LIGHT (Beta 14, F5; it replaces the round blob). The left light is the sidebar's own (siteGlowEngine.ts, AciraSidebar renders two layers): a thin light on the sidebar's edge
+   where it meets the page, brightest beside the selected tab and travelling with it when the selection changes (--ab-edge-y: ui/edgeLight.ts writes the row's centre, gliding on the card's own
+   spring), lighting softly back into the sidebar with a long, gentle fall-off downward and a short one upward. Colour, Soft and Rich strength, the contrast gate and the fade between sites
+   all come from the engine; only the shape is drawn here. The layer itself is the clip (the light stops at the sidebar's edge: the page covers the rest); its two pseudo-elements are the light:
+   ::before the seam and the lights (one shape, uneven on purpose), ::after a second, smaller light on the same spot that carries the slow movement. Inside the sidebar it slides, and fades, with
+   the sidebar in every transition. The sidebar on the right mirrors it (--ab-ex: the seam's side). */
+/* The pseudo-elements exist only on a LIT rail (`data-lit`, written by siteGlowEngine.ts while the rail's light is showing or fading away): an idle layer has none, and no rule resolves a style for them. Every style recalculation of
+   the interface walks every element, and the Sidebar mode morph recalculates the whole tree on each frame (guard c2); the second layer waits at opacity 0 for most of its life and used to cost two generated boxes and an
+   endless animation for nothing. The look is the same: the pseudo-elements appear in the very recalculation that starts the rail's fade in, and go away after its fade out has ended. */
+/* An IDLE glow layer, a frame layer or a rail at opacity 0 with no fade running (no `data-lit`, siteGlowEngine.ts), is not kept on the compositor. With `will-change` at rest every idle layer was a
+   composited layer the size of the window, a compositor surface of its own (12.6 MB at 2x in dark, where it blends) and an overlap layer for everything drawn above it: three layers from the first colour on,
+   +50 MB of GPU memory against 13.8 (Beta 14 speed pass, RAM). Opacity 0 draws nothing, so the picture is the same; the layer that shows a glow keeps `will-change`, and a fade still starts from the
+   opacity computed a frame ago (its opacity transition puts the layer on the compositor for the fade). */
+.st-glow:not([data-lit]), .st-glow-rail:not([data-lit]) { will-change: auto; }
+/* Beta 14.1 (RAM): a LIT frame band at rest leaves the compositor too (`data-glow-still`, written by siteGlowEngine.ts once its fade has landed, taken off before any new fade). Kept as a layer of its own, the band under the frame's
+   content made that whole content a full-window layer ("overlap") plus the surfaces of its blend: about 40 MB of GPU memory on every page with a theme colour. Drawn with the frame's own layer it is the same picture; the fades are untouched. */
+.st-glow[data-lit][data-glow-still] { will-change: auto; }
+/* Beta 14.1 (RAM): the sidebar's edge light at rest leaves the compositor as well, but only in a window that has not been the active one for a while (`data-window-settled`, ui/edgeBreath.ts SETTLE_MS: a look at another
+   window and back changes no layer; the front layer's rails wear `data-glow-still` too, siteGlowEngine.ts). There the
+   light does not breathe (ui/edgeBreath.ts: only the active window breathes) and its layer cost about 25 MB of GPU memory more (Sidebar layout, a page with a theme colour). Drawn with the sidebar's own layer it is the
+   same picture. In the active window nothing changes: the selection's glide repaints the light every frame and the breathing animates it, both on its own layer as before. */
+:root[data-window-settled] .st-glow-rail[data-lit][data-glow-still] { will-change: auto; }
+@property --ab-edge-y { syntax: '<length>'; inherits: true; initial-value: 240px; }
 .st-glow-rail {
   position: absolute; top: 0; bottom: 0; left: 0; right: -16px; z-index: -1; pointer-events: none; opacity: 0; will-change: opacity;
-  background: radial-gradient(ellipse 360px 64% at 150px 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%);
+  clip-path: inset(0 16px 0 0); --ab-ex: 100%;
+}
+/* Above the page's top edge the sidebar borders the TOOLBAR, not the page: the edge light begins at that line (`--ab-top-y`, written by siteGlowEngine.placeEdgeTop) and grows to its own strength over 64px, so the light at the corner where the
+   sidebar and the toolbar meet is the toolbar's own (Beta 14, Ambient mode seams: the edge light used to end at the toolbar in a step of up to 24 levels, the field of the corner is now one). Only a rail that has a toolbar beside it carries it. */
+.st-glow-rail[data-top] {
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--ab-top-y, 0px), rgb(0 0 0 / .1) calc(var(--ab-top-y, 0px) + 16px), rgb(0 0 0 / .42) calc(var(--ab-top-y, 0px) + 35px), rgb(0 0 0 / .8) calc(var(--ab-top-y, 0px) + 52px), #000 calc(var(--ab-top-y, 0px) + 64px));
 }
 html[data-site-glow-tone=dark] .st-glow-rail { mix-blend-mode: screen; }
-/* An IDLE glow layer, a frame layer or a rail at opacity 0 with no fade running (no `data-lit`, siteGlowEngine.ts), is not kept on the compositor: with will-change at
-   rest every idle layer stayed a full-window composited layer after the first site colour, with a compositor surface of its own in dark (12.6 MB at 2x) and an overlap
-   layer above it. Opacity 0 draws nothing, so the picture is the same; a fade still starts from the opacity computed a frame ago. */
-.st-glow:not([data-lit]), .st-glow-rail:not([data-lit]) { will-change: auto; }
-html[data-sidebar-side=right] .st-glow-rail { left: -16px; right: 0; background-image: radial-gradient(ellipse 360px 64% at calc(100% - 150px) 46%, var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 52%, transparent) 22%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 46%, transparent 76%); }
+html[data-sidebar-side=right] .st-glow-rail { left: -16px; right: 0; clip-path: inset(0 0 0 16px); --ab-ex: 0%; }
+.st-glow-rail[data-lit]::before, .st-glow-rail[data-lit]::after { content: ''; position: absolute; inset: 0 16px 0 0; pointer-events: none; --ab-ty: var(--ab-edge-y); }
+html[data-sidebar-side=right] .st-glow-rail[data-lit]::before, html[data-sidebar-side=right] .st-glow-rail[data-lit]::after { inset: 0 0 0 16px; }
+/* Beta 14 chrome audit D02, the closed Mini rail's share (found by the final gate, 2 to 6 levels at 100 to 150 %): the Mini wash is a fixed layer 256px wide standing at the DOCKED sidebar's place behind the page card, clipped at x = 240.
+   Below the card (the 6px strip above the window's bottom edge) nothing covers it: it showed as a vertical STEP at x = 240 (light on its left, the plain frame on its right) 184px away from the rail. At rest (the rail
+   closed, no page filling: the rules in miniRail.css that move the wash apply only while one fills) the wash gives up its bottom 6px, which the card's own edge was hiding everywhere else. */
+:root:not([data-page-fill=on]):not([data-page-fill=leaving]) .app.style-acira:has(> .sb-mini-shade[data-mini=rail]) > .st-glow-rail.sb-mini-glow { clip-path: inset(0 16px 6px 0); }
+:root[data-sidebar-side=right]:not([data-page-fill=on]):not([data-page-fill=leaving]) .app.style-acira:has(> .sb-mini-shade[data-mini=rail]) > .st-glow-rail.sb-mini-glow { clip-path: inset(0 0 6px 16px); }
+.st-glow-rail[data-lit]::before {
+  background:
+    /* No seam line (frame at rest, the team 18 Nov: "no line to it, so it blends"): the edge light used to draw a 1px line up the sidebar's page-side edge, +16 to +22 levels over the frame at Soft and Rich; the light itself, beside the row and its long reach, is what is left. */
+    /* beside the row: the brightest part */
+    radial-gradient(ellipse 200px 150px at var(--ab-ex) var(--ab-ty), var(--g1, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 66%, transparent) 18%, color-mix(in srgb, var(--g1, transparent) 30%, transparent) 44%, color-mix(in srgb, var(--g1, transparent) 9%, transparent) 70%, transparent 100%),
+    /* the long reach: a tall narrow light, cut short above and left long below by the mask */
+    radial-gradient(ellipse 124px 900px at var(--ab-ex) calc(var(--ab-ty) + 40px), color-mix(in srgb, var(--g1, transparent) 80%, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 38%, transparent) 30%, color-mix(in srgb, var(--g1, transparent) 14%, transparent) 60%, transparent 100%),
+    /* a smaller light above, off-centre, so the whole is uneven */
+    radial-gradient(ellipse 132px 150px at var(--ab-ex) calc(var(--ab-ty) - 116px), color-mix(in srgb, var(--g1, transparent) 34%, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 13%, transparent) 46%, transparent 100%);
+  /* a fine grain in the alpha (it dithers the wash so it never bands), under the long, gentle vertical fall-off */
+  -webkit-mask-image: url('/edge-grain.svg'), linear-gradient(180deg, transparent calc(var(--ab-ty) - 250px), rgb(0 0 0 / .5) calc(var(--ab-ty) - 110px), #000 calc(var(--ab-ty) - 30px), #000 calc(var(--ab-ty) + 60px), rgb(0 0 0 / .64) calc(var(--ab-ty) + 240px), rgb(0 0 0 / .32) calc(var(--ab-ty) + 450px), rgb(0 0 0 / .11) calc(var(--ab-ty) + 640px), transparent calc(var(--ab-ty) + 820px)), linear-gradient(180deg, #000 calc(100% - 140px), transparent calc(100% - 6px));
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+/* the second light: a smaller one on the same spot. It moves, very slowly, in place: a drift (translateY -10px to 12px, a few percent of scale, 8.5s each way) and a swell (opacity .34 to 1,
+   6s each way), so a full swell is 12s and a full drift 17s and they never line up: an aura breathing, never a pulse or a sweep. Transform and opacity only, so the compositor does it and nothing
+   is repainted. It runs on the sample's own ease-in-out curve (b14-v3.css); since 14.1 its values change 30 times a second instead of at every refresh (see below the keyframes: the same curve, a quarter of the frames). It runs while html[data-edge-breathe=on] (ui/edgeBreath.ts: the window is the active one, motion is not Off, the battery is not low, a glow is showing, the person is there) and rests in place under =rest or is held under =still (below the keyframes): paused or
+   absent otherwise, with no will-change, so an idle or unfocused window pays nothing. */
+.st-glow-rail[data-lit]::after {
+  opacity: .66; transform-origin: var(--ab-ex) var(--ab-ty);
+  background:
+    radial-gradient(ellipse 156px 190px at var(--ab-ex) var(--ab-ty), color-mix(in srgb, var(--g1, transparent) 92%, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 40%, transparent) 40%, color-mix(in srgb, var(--g1, transparent) 12%, transparent) 70%, transparent 100%),
+    radial-gradient(ellipse 96px 440px at var(--ab-ex) calc(var(--ab-ty) + 150px), color-mix(in srgb, var(--g1, transparent) 60%, transparent) 0%, color-mix(in srgb, var(--g1, transparent) 20%, transparent) 52%, transparent 100%);
+}
+/* Beta 14.1 (battery): THE SAME BREATHING, UPDATED 30 TIMES A SECOND, NOT 120. Run smooth, the compositor made a new frame of the window at every display refresh for as long as the
+   window was active with a glow: 13 to 16 % of a core and 160 to 220 mW (shipped 14.0, Sidebar layout, a page with a theme colour), against 0.2 to 0.4 % and 2 mW with the light at rest.
+   The keyframes below are points ON the sample's own curve (ease-in-out = cubic-bezier(.42, 0, .58, 1), from translateY(-10px) scale(.96, .92) to translateY(12px) scale(1.07, 1.12) over
+   8.5s; opacity .34 to 1 over 6s; alternate, forever: the sample's values, b14-v3.css), and each stretch between two of them is walked in equal steps (steps(16) / steps(15)): 30.1 and 30
+   updates a second, each at most 0.16px of movement and 0.007 of opacity behind the smooth curve (tests/edge-light.test.ts checks it at every millisecond). 6.8 % of a core, about 74 mW
+   (14.0's Chromium 152); on 14.1's Chromium 156 the smooth light costs 16 to 22 % and 137 to 184 mW, this one 8 to 9.4 % and 97 to 107 mW. The plain stepped version of 13 Nov (steps(68) /
+   steps(48) on the two end values) left the curve: this one does not.
+   Beta 14.3 (battery, D130): ONE CLOCK FOR BOTH. The drift used to step every 33.2 ms (16 stretches of 16 steps over 8.5s) and the swell every 33.3 ms (12 of 15 over 6s): their
+   steps fell on different frames, so at a 120 Hz refresh the window was drawn and presented about 52 times a second (traced on 14.2: 54.5 draws and swaps a second in the GPU
+   process) for a light meant to change 30 times. The drift now has 17 stretches of 0.5s, each in 15 steps, as the swell's 12: both step on the same 1/30 s grid from the same
+   start, in both directions of the alternate (tests/edge-light.test.ts), so the light changes on 30 frames a second. Same curve: at most 0.11px of movement and 0.001 of scale
+   from the 14.2 drift at any instant, the swell unchanged. 14.2 line build, the breathing forced on, 20 s each: 8.0 % of a core -> 5.0 %, 48 -> 30 presented frames a second. */
+@keyframes ab-edge-drift {
+  0% { transform: translateY(-10px) scale(0.96, 0.92); animation-timing-function: steps(15, end); }
+  5.882353% { transform: translateY(-9.852px) scale(0.9607, 0.9213); animation-timing-function: steps(15, end); }
+  11.764706% { transform: translateY(-9.395px) scale(0.963, 0.9255); animation-timing-function: steps(15, end); }
+  17.647059% { transform: translateY(-8.611px) scale(0.9669, 0.9326); animation-timing-function: steps(15, end); }
+  23.529412% { transform: translateY(-7.491px) scale(0.9725, 0.9428); animation-timing-function: steps(15, end); }
+  29.411765% { transform: translateY(-6.04px) scale(0.9798, 0.956); animation-timing-function: steps(15, end); }
+  35.294118% { transform: translateY(-4.285px) scale(0.9886, 0.972); animation-timing-function: steps(15, end); }
+  41.176471% { transform: translateY(-2.282px) scale(0.9986, 0.9902); animation-timing-function: steps(15, end); }
+  47.058824% { transform: translateY(-0.113px) scale(1.0094, 1.0099); animation-timing-function: steps(15, end); }
+  52.941176% { transform: translateY(2.113px) scale(1.0206, 1.0301); animation-timing-function: steps(15, end); }
+  58.823529% { transform: translateY(4.282px) scale(1.0314, 1.0498); animation-timing-function: steps(15, end); }
+  64.705882% { transform: translateY(6.285px) scale(1.0414, 1.068); animation-timing-function: steps(15, end); }
+  70.588235% { transform: translateY(8.04px) scale(1.0502, 1.084); animation-timing-function: steps(15, end); }
+  76.470588% { transform: translateY(9.491px) scale(1.0575, 1.0972); animation-timing-function: steps(15, end); }
+  82.352941% { transform: translateY(10.611px) scale(1.0631, 1.1074); animation-timing-function: steps(15, end); }
+  88.235294% { transform: translateY(11.395px) scale(1.067, 1.1145); animation-timing-function: steps(15, end); }
+  94.117647% { transform: translateY(11.852px) scale(1.0693, 1.1187); animation-timing-function: steps(15, end); }
+  100% { transform: translateY(12px) scale(1.07, 1.12); }
+}
+@keyframes ab-edge-swell {
+  0% { opacity: 0.34; animation-timing-function: steps(15, end); }
+  8.333333% { opacity: 0.349; animation-timing-function: steps(15, end); }
+  16.666667% { opacity: 0.377; animation-timing-function: steps(15, end); }
+  25% { opacity: 0.4252; animation-timing-function: steps(15, end); }
+  33.333333% { opacity: 0.493; animation-timing-function: steps(15, end); }
+  41.666667% { opacity: 0.5768; animation-timing-function: steps(15, end); }
+  50% { opacity: 0.67; animation-timing-function: steps(15, end); }
+  58.333333% { opacity: 0.7632; animation-timing-function: steps(15, end); }
+  66.666667% { opacity: 0.847; animation-timing-function: steps(15, end); }
+  75% { opacity: 0.9148; animation-timing-function: steps(15, end); }
+  83.333333% { opacity: 0.963; animation-timing-function: steps(15, end); }
+  91.666667% { opacity: 0.991; animation-timing-function: steps(15, end); }
+  100% { opacity: 1; }
+}
+/* Beta 14.1: the light never jumps when it stops or goes on (ui/edgeBreath.ts; 14.0 removed the animation when the window lost focus: a one-frame step to the plain look,
+   and back to the start of the breath on return, D122). It starts `--ab-breath-at` into its breath (0 the first time). RESTING in the active window (no input for the
+   quiet time, desktop/input-rest.cjs, or a low battery) it is the same animation, paused where it is, keeping its layer: resting and waking change no pixel of it.
+   HELD in a window that has stayed away from being the active one (`data-window-settled`, after SETTLE_MS: until then it rests, so a look elsewhere and back changes
+   nothing) it has no animation and no layer (a paused animation keeps one alive: +11 MB of tiles and +35 MB of GPU memory in a background window, measured), drawn
+   with the values it had when it stopped; it starts again that far into its breath. Never breathed: its breath's first frame. */
+:root:is([data-edge-breathe=on], [data-edge-breathe=rest]) .st-glow-rail[data-lit]::after { animation: ab-edge-drift 8.5s linear infinite alternate, ab-edge-swell 6s linear infinite alternate; animation-delay: calc(var(--ab-breath-at, 0ms) * -1); will-change: transform, opacity; }
+:root[data-edge-breathe=rest] .st-glow-rail[data-lit]::after { animation-play-state: paused; }
+:root[data-edge-breathe=still] .st-glow-rail[data-lit]::after { opacity: var(--ab-still-op, .34); transform: var(--ab-still-tf, translateY(-10px) scale(.96, .92)); }
 html[data-site-glow-tone=dark] .st-glow { mix-blend-mode: screen; }
 /* The sidebar on the right (data-sidebar-side, sidebar-right): the washes mirror with it. */
 html[data-sidebar-side=right] .st-glow { transform: scaleX(-1); }
 /* High contrast and forced colours: no glow (the contrast gate is for the person's own finish). */
 @media (forced-colors: active), (prefers-contrast: more) { .st-glow, .st-glow-rail { display: none; } }
+@media (forced-colors: active), (prefers-contrast: more) { .st-glow[data-band][data-fill] { display: none; } }
+
+/* THE EDGE LIGHT ENDS WHERE THE CARD DOES (frame at rest). The long reach of the edge light runs down the sidebar for 820px below the selected row; in a window shorter than that it was still lit at the sidebar's bottom, beside the strip under the card, which has no edge light: a step of up to 10 levels
+   at the card's bottom-left corner. Both of its lights (::before above, ::after here) fade out over the last 134px above the card's bottom edge (the card stands 6px above the window's bottom edge in every layout), so the strip under the card and the sidebar beside it meet in the same tone. */
+.st-glow-rail[data-lit]::after { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 140px), transparent calc(100% - 6px)); }
+/* D160 (14.4): the edge light's breath lit the 6 px row under the page past the sidebar's foot with Ambient mode OFF too (the breath is the site glow's: its second layer carries its own foot fade,
+   and the breath moves it below the window), against the plain frame under the card: a step at the sidebar's foot. With Ambient mode on, D148 continues the light there (styles/ambient.css, "THE
+   SIDEBAR'S FOOT"); these are the same seven rules for the site glow with Ambient mode off: the docked sidebar clips with a path (its box and that row for 160 px past its edge) instead of overflow,
+   and its three rails reach 160 px past the edge in that row, their lights drawn whole about the seam, faded over the field's ramp, mirrored with the sidebar on the right. The same elements as the
+   light beside it, so one paint in every frame. Gated on the glow (`data-site-glow`, siteGlowEngine.ts) and NOT Ambient mode: with Ambient on none of these matches (D148's own rules do, unchanged);
+   with no glow none does (today's frame). tests/site-glow-foot-ambient-off.test.ts holds the two copies equal but for the gate. */
+:root[data-site-glow]:not([data-ambient-mode]) .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) { overflow: visible; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% + 160px) calc(100% - 6px), calc(100% + 160px) 100%, 0 100%); }
+:root[data-site-glow]:not([data-ambient-mode])[data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) { clip-path: polygon(0 0, 100% 0, 100% 100%, -160px 100%, -160px calc(100% - 6px), 0 calc(100% - 6px)); }
+:root[data-site-glow]:not([data-ambient-mode]) .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail {
+  right: -160px; --ab-ex: calc(100% - 160px);
+  clip-path: polygon(0 0, calc(100% - 160px) 0, calc(100% - 160px) calc(100% - 6px), 100% calc(100% - 6px), 100% 100%, 0 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%);
+}
+:root[data-site-glow]:not([data-ambient-mode]) .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-top] {
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--ab-top-y, 0px), rgb(0 0 0 / .1) calc(var(--ab-top-y, 0px) + 16px), rgb(0 0 0 / .42) calc(var(--ab-top-y, 0px) + 35px), rgb(0 0 0 / .8) calc(var(--ab-top-y, 0px) + 52px), #000 calc(var(--ab-top-y, 0px) + 64px)), linear-gradient(90deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+:root[data-site-glow]:not([data-ambient-mode]) .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-lit]::before, :root[data-site-glow]:not([data-ambient-mode]) .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-lit]::after { inset: 0; }
+:root[data-site-glow]:not([data-ambient-mode])[data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail { left: -160px; right: 0; --ab-ex: 160px; clip-path: polygon(160px 0, 100% 0, 100% 100%, 0 100%, 0 calc(100% - 6px), 160px calc(100% - 6px)); -webkit-mask-image: linear-gradient(270deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%); }
+:root[data-site-glow]:not([data-ambient-mode])[data-sidebar-side=right] .app.style-acira:not(.native-layer) > .ed-rail.acira-sidebar.is-expanded:not(.is-peek, .is-mini) > .st-glow-rail[data-top] { -webkit-mask-image: linear-gradient(180deg, transparent var(--ab-top-y, 0px), rgb(0 0 0 / .1) calc(var(--ab-top-y, 0px) + 16px), rgb(0 0 0 / .42) calc(var(--ab-top-y, 0px) + 35px), rgb(0 0 0 / .8) calc(var(--ab-top-y, 0px) + 52px), #000 calc(var(--ab-top-y, 0px) + 64px)), linear-gradient(270deg, #000 calc(100% - 160px), rgb(0 0 0 / .844) calc(100% - 120px), rgb(0 0 0 / .5) calc(100% - 80px), rgb(0 0 0 / .156) calc(100% - 40px), transparent 100%); }

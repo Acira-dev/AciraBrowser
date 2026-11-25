@@ -1,0 +1,41 @@
+{
+  "_about": "Beta 14: the built-in image search services (right-click an image, Search for this image; Settings, Search, Search images with). THE ONE PLACE TO UPDATE when a service changes its entry points. `byAddress`: where the service is opened with the picture's public https address (%s, percent-encoded); null when its by-address link no longer lands on results. `upload`: how the picture's bytes are sent when it cannot go by address (a blob: or data: picture, one behind a login, on the local network, with a signed address): the multipart `field`, `as` 'file' or 'base64', and how the answer becomes a results address: `result` 'redirect' (the answer redirects to it) or 'json' (the answer names the picture, `resultUrl` takes its place at %s from `jsonPath`). null when no upload entry point is known to work. `hosts`: the only hosts a results address may have. Every entry was fetched live on `checked` with a plain synthetic picture; `note` says what was seen.",
+  "services": [
+    {
+      "id": "lens",
+      "name": "Google Lens",
+      "byAddress": "https://lens.google.com/uploadbyurl?url=%s",
+      "upload": { "url": "https://lens.google.com/v3/upload?re=df&ep=gsbubb", "field": "encoded_image", "as": "file", "result": "redirect" },
+      "hosts": ["www.google.com", "lens.google.com"],
+      "checked": "2026-11-13",
+      "note": "by address: 303 to a google.com/search results page; upload: 303 to a results page"
+    },
+    {
+      "id": "tineye",
+      "name": "TinEye",
+      "byAddress": "https://tineye.com/search?url=%s",
+      "upload": null,
+      "hosts": ["tineye.com"],
+      "checked": "2026-11-13",
+      "note": "by address: 200; upload: POST /search answers 405 (the site is a web app now) and its upload endpoint could not be found from the test network, so a picture that needs an upload gets a notice"
+    },
+    {
+      "id": "yandex",
+      "name": "Yandex",
+      "byAddress": "https://yandex.com/images/search?rpt=imageview&url=%s",
+      "upload": { "url": "https://yandex.com/images/search?rpt=imageview&format=json&request=%7B%22blocks%22%3A%5B%7B%22block%22%3A%22b-page_type_search-by-image__link%22%7D%5D%7D", "field": "upfile", "as": "file", "result": "json", "jsonPath": "blocks.0.params.originalImageUrl", "resultUrl": "https://yandex.com/images/search?rpt=imageview&url=%s" },
+      "hosts": ["yandex.com"],
+      "checked": "2026-11-13",
+      "note": "by address: 200; upload: JSON naming the stored picture (originalImageUrl), which the by-address form takes"
+    },
+    {
+      "id": "bing",
+      "name": "Bing",
+      "byAddress": null,
+      "upload": { "url": "https://www.bing.com/images/search?view=detailv2&iss=sbiupload&FORM=SBIHMP&sbisrc=ImgDropper&idpbck=1", "field": "imageBin", "as": "base64", "result": "redirect" },
+      "hosts": ["www.bing.com"],
+      "checked": "2026-11-13",
+      "note": "by address: every form tried (imgurl:, searchbyimage) lands on the Images home page, not on results, so Bing always goes by upload; upload: 302 to a results page"
+    }
+  ]
+}

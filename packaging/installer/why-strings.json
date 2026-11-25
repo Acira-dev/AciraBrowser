@@ -1,0 +1,95 @@
+{
+ "note": "Beta 14, the plan (the Windows uninstaller's optional one-tap reason). The sentences of the 'why' card of the uninstall launcher (AciraUninstall.cs) in the 12 languages Acira ships and English. Read by scripts/uninstall-why-art-main.cjs, which renders each language into the art (the launcher embeds pictures, not text). `codes` is the closed list of reasons the usage function accepts (supabase/functions/usage/handler.mjs UNINSTALL_REASONS, desktop/browser-services/usage-facts.cjs UNINSTALL_REASONS): the launcher sends one of these words, never the sentence. `reasons[i]` is the label of `codes[i]`; the card shows them in this order, four to a row, then `skip`. A label has to fit a 120 px button at 10.5 px or more (the art script stops otherwise). The sentences are written for this release and want a native reader before they ship.",
+ "codes": ["slow", "crashes", "missing-feature", "not-clear", "switched-back", "just-trying", "other"],
+ "en": {
+  "lang": "en", "dir": "ltr",
+  "title": "Why are you removing Acira?",
+  "status": "Optional, one tap. We send only this answer, nothing that identifies you.",
+  "reasons": ["Too slow", "It crashed", "Missing a feature", "Confusing", "Switched back", "Just trying it", "Something else"],
+  "skip": "Skip"
+ },
+ "es": {
+  "lang": "es", "dir": "ltr",
+  "title": "¿Por qué quitas Acira?",
+  "status": "Opcional, un toque. Solo enviamos esta respuesta, nada que te identifique.",
+  "reasons": ["Muy lento", "Se bloquea", "Falta una función", "Confuso", "Volví a otro", "Solo probaba", "Otro motivo"],
+  "skip": "Omitir"
+ },
+ "fr": {
+  "lang": "fr", "dir": "ltr",
+  "title": "Pourquoi supprimer Acira ?",
+  "status": "Facultatif, un seul geste. Seule cette réponse est envoyée, rien qui vous identifie.",
+  "reasons": ["Trop lent", "Plantages", "Fonction absente", "Pas clair", "Retour à un autre", "Juste un essai", "Autre raison"],
+  "skip": "Passer"
+ },
+ "de": {
+  "lang": "de", "dir": "ltr",
+  "title": "Warum entfernst du Acira?",
+  "status": "Optional, ein Tipp. Gesendet wird nur diese Antwort, nichts, was dich identifiziert.",
+  "reasons": ["Zu langsam", "Abstürze", "Funktion fehlt", "Unklar", "Zurückgewechselt", "Nur getestet", "Sonstiges"],
+  "skip": "Überspringen"
+ },
+ "pt": {
+  "lang": "pt-BR", "dir": "ltr",
+  "title": "Por que você está removendo o Acira?",
+  "status": "Opcional, um toque. Enviamos só esta resposta, nada que identifique você.",
+  "reasons": ["Muito lento", "Travamentos", "Falta recurso", "Confuso", "Voltei a outro", "Só testando", "Outro motivo"],
+  "skip": "Pular"
+ },
+ "it": {
+  "lang": "it", "dir": "ltr",
+  "title": "Perché rimuovi Acira?",
+  "status": "Facoltativo, un tocco. Inviamo solo questa risposta, nulla che ti identifichi.",
+  "reasons": ["Troppo lento", "Si blocca", "Manca funzione", "Poco chiaro", "Uso un altro", "Solo una prova", "Altro motivo"],
+  "skip": "Salta"
+ },
+ "ja": {
+  "lang": "ja", "dir": "ltr",
+  "title": "Acira を削除する理由は？",
+  "status": "任意・ワンタップ。送信されるのはこの回答だけで、あなたを特定する情報は送りません。",
+  "reasons": ["動作が遅い", "クラッシュする", "機能が足りない", "分かりにくい", "他に戻った", "試しただけ", "その他"],
+  "skip": "スキップ"
+ },
+ "zh": {
+  "lang": "zh-CN", "dir": "ltr",
+  "title": "为什么要卸载 Acira？",
+  "status": "可选，只需轻点一下。只会发送这个回答，不含任何可识别你身份的信息。",
+  "reasons": ["速度太慢", "会崩溃", "缺少功能", "不好理解", "换回其他浏览器", "只是试试", "其他原因"],
+  "skip": "跳过"
+ },
+ "ar": {
+  "lang": "ar", "dir": "rtl",
+  "title": "لماذا تزيل Acira؟",
+  "status": "اختياري، بنقرة واحدة. نرسل هذه الإجابة فقط، دون أي شيء يحدد هويتك.",
+  "reasons": ["بطيء جدًا", "يتعطل", "ميزة ناقصة", "غير واضح", "عدت لمتصفح آخر", "مجرد تجربة", "سبب آخر"],
+  "skip": "تخطّي"
+ },
+ "hi": {
+  "lang": "hi", "dir": "ltr",
+  "title": "आप Acira क्यों हटा रहे हैं?",
+  "status": "वैकल्पिक, बस एक टैप। केवल यही उत्तर भेजा जाता है, आपकी पहचान बताने वाला कुछ नहीं।",
+  "reasons": ["बहुत धीमा", "क्रैश होता है", "सुविधा नहीं है", "समझ नहीं आया", "दूसरे ब्राउज़र पर", "बस आज़माया", "कोई और कारण"],
+  "skip": "छोड़ें"
+ },
+ "ko": {
+  "lang": "ko", "dir": "ltr",
+  "title": "Acira를 삭제하는 이유가 무엇인가요?",
+  "status": "선택 사항, 한 번만 누르세요. 이 답변만 전송되며 사용자를 식별할 정보는 보내지 않습니다.",
+  "reasons": ["너무 느려요", "자꾸 종료돼요", "기능이 없어요", "이해하기 어려워요", "다른 브라우저 사용", "그냥 써봤어요", "기타"],
+  "skip": "건너뛰기"
+ },
+ "ru": {
+  "lang": "ru", "dir": "ltr",
+  "title": "Почему вы удаляете Acira?",
+  "status": "Необязательно, одно нажатие. Отправляется только этот ответ, ничего, что вас идентифицирует.",
+  "reasons": ["Медленно", "Сбои", "Нет функции", "Непонятно", "Ушёл к другому", "Просто пробовал", "Другое"],
+  "skip": "Пропустить"
+ },
+ "tr": {
+  "lang": "tr", "dir": "ltr",
+  "title": "Acira’yı neden kaldırıyorsunuz?",
+  "status": "İsteğe bağlı, tek dokunuş. Yalnızca bu yanıt gönderilir, kimliğinizi belirten hiçbir şey gönderilmez.",
+  "reasons": ["Çok yavaş", "Çöküyor", "Özellik eksik", "Anlaşılmaz", "Geri döndüm", "Sadece denedim", "Başka neden"],
+  "skip": "Atla"
+ }
+}

@@ -56,6 +56,8 @@ test('Delete on a tab row moves focus to the row below, or above for the last on
   assert.equal(neighbourTabId(['a'], 'a'), undefined, 'the only tab has no neighbour');
   assert.equal(neighbourTabId(['a', 'b'], 'x'), undefined);
   const source = fs.readFileSync(new URL('../src/components/sidebar/AciraSidebar.tsx', import.meta.url), 'utf8');
-  const at = source.indexOf("event.key==='Delete'&&!pinned");
+  // Beta 14: a pinned row is put to sleep and stays, so its own Delete line keeps the keyboard on it; every other row hands focus on.
+  const at = source.indexOf("if(event.key==='Delete'){event.preventDefault();const root=");
   assert.ok(at > 0 && source.slice(at, at + 400).includes('keepTabFocus(next,tabFocusEnvironment())'), 'the Delete handler hands focus on');
+  assert.ok(source.indexOf("if(event.key==='Delete'&&pinned){") > 0 && source.indexOf("if(event.key==='Delete'&&pinned){") < at, 'a pinned row is handled first');
 });

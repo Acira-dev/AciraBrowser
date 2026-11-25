@@ -49,6 +49,8 @@ function isCode(name,last){
  *  function names and line numbers stay. */
 function scrub(text,{app=path.dirname(__dirname),profile=null,home=os.homedir(),temp=os.tmpdir()}={}){
  let out=String(text);
+ /* a profile transfer code (five words from the transfer word list) never reaches main.log, whatever error text it was in (desktop/transfer/code.cjs) */
+ try{out=require('./transfer/code.cjs').maskCodes(out);}catch{/* the scrub below still runs */}
  const roots=[[app,'<app>'],[profile,'<profile>'],[temp,'<temp>'],[home,'<home>']].filter(([folder])=>folder).flatMap(([folder,name])=>spellings(folder).map(spelling=>[spelling,name])).sort((a,b)=>b[0].length-a[0].length);
  for(const [spelling,name] of roots)out=out.replace(new RegExp(escape(spelling)+'(?=$|[\\\\/\'"\\s:),])','gi'),name);
  // a person's own files under their home or temp folder: everything after it goes too, to the end of that part of the message

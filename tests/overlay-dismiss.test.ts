@@ -8,6 +8,8 @@ test('R4-22 every menu and panel closes on a tab change; only the tab viewer and
   for (const kind of ['menu', 'more-tools', 'profile', 'accounts', 'extensions', 'bookmarks', 'protection', 'split', 'zoom', 'tab-context', 'downloads', 'vpn'])
     assert.equal(overlayOutlivesTabChange(kind), false, kind);
   assert.equal(overlayOutlivesTabChange('tabs'), true);
+  assert.equal(overlayOutlivesTabChange('switcher'), true, 'D188: the Ctrl+Tab viewer stays up while Next tab switches the page under it, step after step');
+  assert.equal(overlayOutlivesLayoutChange('switcher'), true);
   assert.equal(overlayOutlivesTabChange('suggestions', true), true);
   assert.equal(overlayOutlivesTabChange('suggestions', false), false);
   assert.equal(overlayOutlivesTabChange(null), false);

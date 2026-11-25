@@ -20,10 +20,10 @@ const card: LayoutNumbers = { col: 240, hdr: 6, mt: 0, mr: 6, mb: 6, ml: 0, radi
 const mover = (id: string, first: number[], last: number[], extra: Partial<Mover> = {}): Mover => ({ id, first: { x: first[0], y: first[1], width: first[2], height: first[3] }, last: { x: last[0], y: last[1], width: last[2], height: last[3] }, attach0: false, attach1: false, bow: 0, resizes: false, xDelay: 0, yDelay: 0, ...extra });
 const sidebarOf = (items: Mover[], reverse: boolean) => reverse ? items.map(m => ({ ...m, first: m.last, last: m.first, attach0: m.attach1, attach1: m.attach0 })) : items;
 
-// tabs on top (Full), tabs in the sidebar with the toolbar row, Compact with tabs on top
+// tabs on top (Full), Compact with tabs on top. (Tabs in the sidebar with the toolbar row, Sidebar <-> Sidebar + address, is the row morph since Beta 14.0: the field goes UNDER the page there on
+// purpose, and its own tests hold it to "nothing crosses anything": tests/sidebar-row-morph.test.ts.)
 const scenes = {
   'tabs on top': { a: flat, b: card, items: () => [mover('back', [12, 40, 28, 28], [78, 4, 28, 28]), mover('forward', [44, 40, 28, 28], [134, 4, 28, 28]), mover('reload', [76, 40, 28, 28], [106, 4, 28, 28]), mover('address', [240, 40, 720, 28], [8, 38, 224, 28], { resizes: true, attach1: true })] },
-  'tabs in the sidebar': { a: { ...card, hdr: 36 }, b: card, items: () => [mover('toggle', [252, 4, 28, 28], [204, 4, 28, 28]), mover('back', [288, 4, 28, 28], [78, 4, 28, 28]), mover('forward', [328, 4, 28, 28], [134, 4, 28, 28]), mover('reload', [368, 4, 28, 28], [106, 4, 28, 28]), mover('address', [400, 4, 560, 28], [8, 38, 224, 28], { resizes: true, attach1: true })] },
   'Compact, tabs on top': { a: { ...flat, hdr: 32 }, b: card, items: () => [mover('back', [92, 2, 28, 28], [78, 4, 28, 28]), mover('forward', [122, 2, 28, 28], [134, 4, 28, 28]), mover('reload', [152, 2, 28, 28], [106, 4, 28, 28]), mover('address', [431, 3, 412, 26], [8, 38, 224, 28], { resizes: true, attach1: true })] },
 } as const;
 
@@ -172,7 +172,7 @@ test('the layout message may carry the morph\'s lag and hold; the page glide sta
   assert.throws(() => validateLayout({ views: [], visible: true, pageEdgeLag: { y: 9000 } }, state));
   assert.throws(() => validateLayout({ views: [], visible: true, pageHold: 'yes' }, state));
   const main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(main, /next\.pageHold===true&&animated\)emitBrowser\(\{type:'page-glide',at:Date\.now\(\)\}\)/);
+  assert.match(main, /next\.pageHold===true&&animated(?:&&!entry\.dockSlide)?\)emitBrowser\(\{type:'page-glide',at:Date\.now\(\)\}\)/);
   assert.match(main, /next\.pageHold===true\)&&next\.views\.length===1/, 'the held glide is for any view, one page');
 });
 
@@ -183,7 +183,7 @@ test('the engine keeps off the other transitions and restores everything it set 
   assert.match(src, /item\.el\.style\.translate = item\.translate; item\.el\.style\.opacity = item\.opacity;/, 'inline styles go back to what they were');
   const client = readFileSync(new URL('../src/runtime/client.ts', import.meta.url), 'utf8');
   assert.match(client, /morph&&startSidebarMorph\(\(\)=>flushSync\(applyNow\),morph\)/, 'the snapshot plays as the morph');
-  assert.match(client, /applyNow=\(\)=>\{apply\(next\);if\(morph\)syncRail\(next\);/, 'the profile\'s tabs switch goes in the same render, however the switch is played');
+  assert.match(client, /applyNow=\(\)=>\{apply\(next\);if\(morph\|\|turn\)syncRail\(next\);/, 'the profile\'s tabs switch goes in the same render, however the switch is played');
   assert.match(client, /if\(kind==='layout'&&sidebarMorphRunning\(\)&&startSidebarMorph\(update,sidebarMorphDirection\(\)\)\)return;/, 'a layout switch asked for while it plays joins it');
   assert.match(client, /'sidebar\.mode'\]\)/, 'the local press starts it on the press frame');
 });
@@ -195,7 +195,7 @@ test('the bare state (sidebar away, nothing above the page) still works: focus w
   assert.match(app, /effectiveMode!=='standard'\|\|topBarHidden\|\|sbHeader==='bare'\)&&<NavigationProgress/, 'a page loading shows its line where the address field is not drawn');
   assert.match(app, /const addrStrip = sbChrome \? windowFullscreen \? 0 : addressStripHeight\(/, 'a fullscreen window has no strip');
   assert.match(client, /const stale=!!optimistic\.current&&next\.revision<optimistic\.current\.base\+optimistic\.current\.count,morph=stale\?null:morphOf\(latest\.current,next\)/, 'a snapshot older than the local switch is never a morph');
-  assert.match(client, /if\(\(action\.type==='sidebar\.mode'&&direction\)\|\|\(action\.type==='settings\.update'&&toolbarHidesOrReturns\(base,next\)\)\)modeSwitch\(settle,'layout'\);else settle\(\);/, 'a morph that cannot play falls back to the view transition, not to a cut (and Hide the toolbar turned on or off is a layout switch too)');
+  assert.match(client, /if\(\(action\.type==='sidebar\.mode'&&\(direction\|\|sidebarLayoutChanged\(base,next\)\)\)\|\|\(action\.type==='settings\.update'&&toolbarHidesOrReturns\(base,next\)\)\)modeSwitch\(settle,'layout'\);else settle\(\);/, 'a morph that cannot play falls back to the view transition, not to a cut (and Hide the toolbar turned on or off is a layout switch too)');
   const engine = readFileSync(new URL('../src/ui/sidebarMorph.ts', import.meta.url), 'utf8');
   assert.match(engine, /catch \(error\) \{ abort\(\); throw error; \}/, 'a failed start leaves the plain window');
   assert.match(engine, /setVar\(m, m\.bar, '--sm-hdr'/, 'the bookmarks row reads the header\'s height from its own element');

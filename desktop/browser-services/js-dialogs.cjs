@@ -44,7 +44,7 @@ function createJsDialogs({controllers,t,now=()=>Date.now()}){
    const asking=owner.controller.sitePrompt.showMessageBox({
     type:'question',message:t('sitePrompt.says',{host:host||wc.getURL()}),detail:payload.message.slice(0,MAX_MESSAGE),
     buttons:kind==='alert'?[labels[1]]:labels,defaultId:kind==='alert'?0:1,cancelId:0,
-    site:{centered:true,contents:wc,host:host||'',...(kind==='prompt'?{input:{value:String(payload.initial||'').slice(0,MAX_INITIAL)}}:{}),...(offerMute?{mute:{label:t('sitePrompt.stopDialogs')}}:{}),stale:()=>wc.isDestroyed()},
+    site:{centered:true,says:true,contents:wc,host:host||'',...(kind==='prompt'?{input:{value:String(payload.initial||'').slice(0,MAX_INITIAL)}}:{}),...(offerMute?{mute:{label:t('sitePrompt.stopDialogs')}}:{}),stale:()=>wc.isDestroyed()},
    });
    asking.then(result=>{
     if(result.muted===true)record.muted=true;

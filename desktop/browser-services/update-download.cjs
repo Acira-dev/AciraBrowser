@@ -300,18 +300,71 @@ async function download({url,mirrors=[],first=0,firstByte=FIRST_BYTE,onSource=()
  *  with EPERM, EBUSY or EACCES. electron-updater tries a busy file again for 30 s; so does the hand-over (about 1.5 s here), instead of failing the whole update into its retry ladder. */
 const HELD=new Set(['EPERM','EBUSY','EACCES']);
 async function untilFree(step,{tries=8,wait=250}={}){for(let attempt=1;;attempt++){try{return await step();}catch(error){if(!HELD.has(error?.code)||attempt>=tries)throw error;await new Promise(resolve=>setTimeout(resolve,wait));}}}
-async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null,helper=null,retry={}}){
+/** D149 (14.3): Windows refuses to delete or replace a setup that is still running or open (the setup of an EARLIER failed try, or a scanner holding it), and every setup has the same name
+ *  (AciraBrowserSetup.exe), so one held file used to fail every later hand-over with EBUSY, for ever. Now a stale entry that is still held after the tries is LEFT where it is, and the new file
+ *  goes in under a name the held one cannot block (AciraBrowserSetup-1.exe, -2, ...): update-info.json names it, and electron-updater installs the file that update-info.json names
+ *  (DownloadedUpdateHelper.getValidCachedUpdateFile), whatever the feed calls it. sweepStale() removes the left files on a later launch, once they are free. A hand-over that still cannot
+ *  finish (the new file or update-info.json is held) fails with ERR_UPDATE_LOCKED, which the interface words as "restart the computer".
+ *  `files` replaces file calls (tests: macOS does not lock a file the way Windows does). */
+const locked=error=>HELD.has(error?.code)?Object.assign(new Error(error.message),{code:'ERR_UPDATE_LOCKED',held:error.code}):error;
+function otherName(name,taken){
+ const ext=path.extname(name),stem=name.slice(0,name.length-ext.length),has=new Set([...taken].map(entry=>entry.toLowerCase()));
+ for(let n=1;;n++){const candidate=`${stem}-${n}${ext}`;if(!has.has(candidate.toLowerCase()))return candidate;}
+}
+async function handOver({file,pendingDir,name,sha512,isAdminRightsRequired=false,blockMap=null,helper=null,retry={},files={}}){
  if(path.basename(name)!==name||!name)throw new Error('The update file name is not valid.');
+ const io={...fsp,...files};
  if(helper)await helper.clear();
- await fsp.mkdir(pendingDir,{recursive:true});
- // whatever else is in the folder is a stale download (electron-updater empties it the same way when it starts a new one)
- for(const entry of await fsp.readdir(pendingDir))await untilFree(()=>fsp.rm(path.join(pendingDir,entry),{recursive:true,force:true}),retry);
- const target=path.join(pendingDir,name);
- try{await untilFree(()=>fsp.rename(file,target),retry);}catch(error){if(error.code!=='EXDEV')throw error;await untilFree(()=>fsp.copyFile(file,target),retry);await fsp.rm(file,{force:true}).catch(()=>{});}
- await fsp.writeFile(path.join(pendingDir,'update-info.json'),JSON.stringify({fileName:name,sha512,isAdminRightsRequired:isAdminRightsRequired===true}));
- if(blockMap)await fsp.writeFile(path.join(pendingDir,'current.blockmap'),blockMap);
+ await io.mkdir(pendingDir,{recursive:true});
+ // whatever else is in the folder is a stale download (electron-updater empties it the same way when it starts a new one); one that is held stays and does not fail the update
+ const left=[];
+ for(const entry of await io.readdir(pendingDir)){
+  try{await untilFree(()=>io.rm(path.join(pendingDir,entry),{recursive:true,force:true}),retry);}
+  catch(error){if(!HELD.has(error?.code))throw error;left.push(entry);}
+ }
+ const leaf=left.some(entry=>entry.toLowerCase()===name.toLowerCase())?otherName(name,left):name,target=path.join(pendingDir,leaf);
+ try{await untilFree(()=>io.rename(file,target),retry);}catch(error){if(error.code!=='EXDEV')throw locked(error);try{await untilFree(()=>io.copyFile(file,target),retry);}catch(copyError){throw locked(copyError);}await io.rm(file,{force:true}).catch(()=>{});}
+ try{await untilFree(()=>io.writeFile(path.join(pendingDir,'update-info.json'),JSON.stringify({fileName:leaf,sha512,isAdminRightsRequired:isAdminRightsRequired===true})),retry);}catch(error){throw locked(error);}
+ // the blockmap only makes the NEXT update differential: a held one costs that, not this update
+ if(blockMap)await io.writeFile(path.join(pendingDir,'current.blockmap'),blockMap).catch(()=>{});
  discard(path.dirname(file));
  return target;
+}
+/** D149: removes what handOver() had to leave (a file that was held then): everything in pending/ except update-info.json, current.blockmap and the file update-info.json names. Never throws; a file
+ *  that is still held stays for the next launch. `busy()` true (a hand-over is under way) does nothing. Returns the names removed. */
+async function sweepStale({pendingDir,retry={tries:1},busy=null,files={}}){
+ const io={...fsp,...files},gone=[];
+ try{
+  if(typeof busy==='function'&&busy())return gone;
+  const info=readJson(path.join(pendingDir,'update-info.json')),keep=new Set(['update-info.json','current.blockmap']);
+  if(info&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName)keep.add(info.fileName);
+  for(const entry of await io.readdir(pendingDir)){
+   if(keep.has(entry))continue;
+   try{await untilFree(()=>io.rm(path.join(pendingDir,entry),{recursive:true,force:true}),retry);gone.push(entry);}catch{/* still held: next launch */}
+  }
+ }catch{/* no folder, nothing to do */}
+ return gone;
+}
+/** 14.0: an update that is INSTALLED is no longer needed in electron-updater's cache. Nothing cleaned it: pending/ kept the whole file (a Mac's update zip is about 255 MB, a Linux AppImage
+ *  about 262 MB) until the next update replaced it, and on a Mac electron-updater also copied every update to <cache>/update.zip, its base for a differential download (another 255 MB, and
+ *  Acira's Mac feed has never had a blockmap: 0 of the 17 blockmaps on the public releases are a Mac zip's, so that copy was never used).
+ *  Removes pending/ only when update-info.json names a file whose version is the one now RUNNING or older (a newer update that waits there is kept, and so is anything this cannot read), and, on a Mac, update.zip.
+ *  A Windows setup stays: the next differential update plans from it. Nothing else in the cache folder is touched (our own partial lives in acira-partial). Never throws: a file that cannot go is left for the next launch.
+ *  `lowerThan(a,b)` is update-feeds.cjs's version order; returns {removed:[names], bytes}. */
+const INSTALLED_NAME=/^[A-Za-z]+-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+?)?)-(?:arm64-|x64-)?(?:mac|linux)\b/; // AciraBrowser-0.1.0-beta.14-mac-arm64-update.zip, AciraBrowser-0.1.0-beta.14-linux-x86_64.AppImage
+async function tidyInstalled({cacheDir,version,platform,lowerThan,retry={}}){
+ const done={removed:[],bytes:0};
+ if(!(platform==='darwin'||platform==='linux')||typeof cacheDir!=='string'||!path.isAbsolute(cacheDir)||typeof lowerThan!=='function')return done;
+ const take=async(file,label)=>{const size=sizeOf(file);try{await untilFree(()=>fsp.rm(file,{recursive:true,force:true}),retry);}catch{return;}done.removed.push(label);done.bytes+=size;};
+ try{
+  const pending=path.join(cacheDir,'pending'),info=readJson(path.join(pending,'update-info.json'));
+  const name=info&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName?info.fileName:null,theirs=name&&INSTALLED_NAME.exec(name)?.[1];
+  if(theirs&&!lowerThan(String(version),theirs)){
+   for(const entry of await fsp.readdir(pending))await take(path.join(pending,entry),'pending/'+entry);
+  }
+  if(platform==='darwin'&&fs.existsSync(path.join(cacheDir,'update.zip')))await take(path.join(cacheDir,'update.zip'),'update.zip');
+ }catch{/* an unreadable cache is left as it is */}
+ return done;
 }
 /** True when the pending folder already holds this exact file (a launch that downloaded it whole and quit before installing). electron-updater checks its SHA-512 itself. */
 function handedOver({pendingDir,sha512,size}){
@@ -319,4 +372,4 @@ function handedOver({pendingDir,sha512,size}){
  return Boolean(info&&info.sha512===sha512&&typeof info.fileName==='string'&&path.basename(info.fileName)===info.fileName&&sizeOf(path.join(pendingDir,info.fileName))===size);
 }
 
-module.exports={download,mirrorsOf,networkFailure,shortOfSpace,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL,FIRST_BYTE,MAX_MIRRORS};
+module.exports={tidyInstalled,sweepStale,download,mirrorsOf,networkFailure,shortOfSpace,handOver,handedOver,received,progressOf,discard,hashFile,ownDir,readBlockMap,blockMapSize,diffPlan,downloaded,saveMaps,loadMaps,DIR_NAME,PART,META,MAP_MAX,STALL,FIRST_BYTE,MAX_MIRRORS};

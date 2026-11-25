@@ -20,7 +20,7 @@ async function readAddressRect({contents,scale=1}){
  const f=scale>0?scale:1;return {x:r.x*f,y:r.y*f,width:r.width*f,height:r.height*f};
 }
 
-function createWindowPasswords({service,WebContentsView,getWindow,getState,pages,pageOwner,viewBounds,dispatch,isDark,reducedMotion,privateMode,chromeContents=()=>null,uiScale=()=>1}){
+function createWindowPasswords({service,WebContentsView,getWindow,getState,pages,pageOwner,viewBounds,dispatch,isDark,reducedMotion,privateMode,chromeContents=()=>null,uiScale=()=>1,filled=()=>{},ask=null}){
  let bridge=null,frame=null;
  function ensure(){
   if(bridge)return bridge;
@@ -28,7 +28,9 @@ function createWindowPasswords({service,WebContentsView,getWindow,getState,pages
    boundsOf:viewBounds,
    zoomOf:tabId=>{try{return pages.get(tabId)?.view.webContents.getZoomFactor()||1;}catch{return 1;}},
    onChoose:index=>bridge.choose(index),onAction:name=>bridge.action(name),onDismiss:()=>bridge.hide(),
-   isDark,reducedMotion,anchorOf:()=>readAddressRect({contents:chromeContents(),scale:uiScale()})});
+   isDark,reducedMotion,anchorOf:()=>readAddressRect({contents:chromeContents(),scale:uiScale()}),
+   /* Beta 14: the Save / Update password prompt is the interface's frosted glass (the site prompt's question); this window's view keeps the suggestion list */
+   ask,contentsOf:tabId=>{try{return pages.get(tabId)?.view.webContents||null;}catch{return null;}}});
   bridge=createPageBridge({
    service:service(),
    ownerOf:event=>{
@@ -44,6 +46,7 @@ function createWindowPasswords({service,WebContentsView,getWindow,getState,pages
     focus:tabId=>{try{pages.get(tabId)?.view.webContents.focus();}catch{}},
    },
    notify:text=>dispatch({type:'toast',text}),
+   filled,
   });
   return bridge;
  }

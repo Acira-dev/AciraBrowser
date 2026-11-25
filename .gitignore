@@ -3,11 +3,13 @@ node_modules/
 dist/
 desktop/runtime.cjs
 desktop/i18n.cjs
+desktop/season-overlay.js
 desktop/ui-preload.cjs
 desktop/browser-services/autoconsent-preload.cjs
+desktop/browser-services/autoconsent-library.js
 .profile/
 .preview-profile/
-.qa-profiles/
+.qa-profiles
 qa/artifacts/
 release/
 *.log

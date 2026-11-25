@@ -17,7 +17,7 @@ const me = [{ email: "sam@example.com" }];
 
 test("suggestions offer every importable source, browsers people move from most first", () => {
   const list = profileSuggestions(
-    [source("zen", "Zen"), source("ff", "Firefox"), source("work", "Chrome"), source("arc", "Arc"), source("edge", "Edge"), source("odd", "Vivaldi"), source("home", "Chrome")],
+    [source("zen", "Zen"), source("ff", "Firefox"), source("work", "Chrome"), source("arc", "Arc"), source("edge", "Edge"), source("odd", "Midori"), source("home", "Chrome")],
     { profiles: me },
   );
   assert.deepEqual(ids(list), ["work", "home", "edge", "arc", "ff", "zen", "odd"]);
@@ -68,4 +68,13 @@ test("the line under a suggestion names its browser, and its email only when tha
   assert.equal(suggestionDetail({ browser: "Chrome", name: "Work", email: "sam@studio.example" }), "Chrome · sam@studio.example");
   assert.equal(suggestionDetail({ browser: "Firefox", name: "sam@example.com", email: "Sam@example.com" }), "Firefox");
   assert.equal(suggestionDetail({ browser: "Edge", name: "Personal" }), "Edge");
+});
+
+test("Beta 14 J: Opera, Vivaldi, Safari and the other Firefox browsers rank after the common ones, and Safari (it needs macOS permission) is never suggested", () => {
+  const list = profileSuggestions(
+    [source("saf", "Safari", { permission: "needed" }), source("zen", "Zen"), source("viv", "Vivaldi"), source("opx", "Opera GX"), source("op", "Opera"), source("chr", "Chrome"), source("lw", "LibreWolf")],
+    { profiles: me },
+  );
+  assert.deepEqual(ids(list), ["chr", "op", "opx", "viv", "zen", "lw"]);
+  assert.deepEqual(suggestionCategories({ available: all, permission: "needed" }), []);
 });

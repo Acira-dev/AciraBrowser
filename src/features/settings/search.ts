@@ -163,20 +163,58 @@ export function searchSettingsDetailed(entries: readonly SettingsEntry[], query:
   const exact = rank(entries, query, context, limit);
   if (exact.length) return { hits: exact };
   const corrected = correctQuery(entries, query);
-  if (!corrected) return { hits: [] };
-  const hits = rank(entries, corrected, context, Math.min(limit, FUZZY_LIMIT));
-  return hits.length ? { hits, corrected } : { hits: [] };
+  if (corrected) {
+    const hits = rank(entries, corrected, context, Math.min(limit, FUZZY_LIMIT));
+    if (hits.length) return { hits, corrected };
+  }
+  // Beta 14.4: the words are there, in different settings: the closest few, as typed (and with a typo corrected when that finds more).
+  const partial = rankPartial(entries, query, context, Math.min(limit, FUZZY_LIMIT));
+  if (partial.length) return { hits: partial };
+  const partialCorrected = corrected ? rankPartial(entries, corrected, context, Math.min(limit, FUZZY_LIMIT)) : [];
+  return partialCorrected.length ? { hits: partialCorrected, corrected } : { hits: [] };
 }
 
 /** Ranked, as-you-type results. Stable: equal scores keep registry order. */
 export const searchSettings = (entries: readonly SettingsEntry[], query: string, context: SettingsContext, limit = 8): SettingsHit[] => searchSettingsDetailed(entries, query, context, limit).hits;
 
+/* Beta 14.4: a shortcut command ("Shortcut: Toggle sidebar") ranks below the settings that match as well, unless the person asks for keys:
+   "hide sidebar" leads with Show sidebar, "clear history" with Clear browsing data. */
+const KEY_WORDS = new Set(['shortcut', 'shortcuts', 'key', 'keys', 'keyboard', 'hotkey', 'hotkeys', 'keybinding', 'keybindings']);
+const SHORTCUT_PENALTY = 80;
+const asksForKeys = (query: string) => words(fold(query)).some((word) => KEY_WORDS.has(word));
+const ranked = (entry: SettingsEntry, score: number, keys: boolean) => (!keys && entry.id.startsWith('shortcut-') ? score - SHORTCUT_PENALTY : score);
+
 function rank(entries: readonly SettingsEntry[], query: string, context: SettingsContext, limit: number): SettingsHit[] {
+  const keys = asksForKeys(query);
   return entries
     .filter((entry) => isAvailable(entry, context))
     .map((entry, index) => ({ hit: scoreEntry(entry, query), index }))
     .filter((item): item is { hit: SettingsHit; index: number } => Boolean(item.hit))
-    .sort((a, b) => b.hit.score - a.hit.score || a.index - b.index)
+    .map((item) => ({ ...item, order: ranked(item.hit.entry, item.hit.score, keys) }))
+    .sort((a, b) => b.order - a.order || a.index - b.index)
     .slice(0, limit)
     .map((item) => item.hit);
+}
+
+/** Beta 14.4: when no entry has every word ("transparent sidebar": the words sit in different settings), the entries that match the most words,
+ *  a rare word counting for more than a common one ("transparent" says more than "sidebar"). At least half of the words must match. */
+function rankPartial(entries: readonly SettingsEntry[], query: string, context: SettingsContext, limit: number): SettingsHit[] {
+  const tokens = words(fold(query)).filter((token) => token.length >= 3);
+  if (tokens.length < 2) return [];
+  const keys = asksForKeys(query);
+  const available = entries.filter((entry) => isAvailable(entry, context));
+  // Each word on its own, capped at a title-word match: a one-word title's own bonus would let the common word outrank the rare one.
+  const scores = tokens.map((token) => available.map((entry) => Math.min(100, scoreEntry(entry, token)?.score ?? 0)));
+  const rarity = scores.map((list) => Math.log(1 + available.length / Math.max(1, list.filter((score) => score > 0).length)));
+  const needed = Math.ceil(tokens.length / 2);
+  return available
+    .map((entry, index) => {
+      let matched = 0, total = 0;
+      scores.forEach((list, at) => { if (list[index] > 0) { matched++; total += list[index] * rarity[at]; } });
+      return { entry, index, matched, total: ranked(entry, total, keys) };
+    })
+    .filter((item) => item.matched >= needed)
+    .sort((a, b) => b.matched - a.matched || b.total - a.total || a.index - b.index)
+    .slice(0, limit)
+    .map((item) => ({ entry: item.entry, score: item.total }));
 }

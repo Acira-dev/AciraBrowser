@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Search, Undo2, X } from '../../../components/AppIcons';
+import { noteUse } from '../../metrics/noteUse';
+import { Plus, Search, Undo2, X } from '../../../components/AppIcons';
 import { runtime } from '../../../runtime/client';
 import type { ShortcutCommand } from '../../../runtime/nativeCore';
 import { isMac } from '../../../ui/platform';
@@ -19,9 +20,10 @@ import {groupShortcutCommands, asksForMediaKey} from '../../../ui/shortcutGroups
  *  reserved keys are explained there and recording carries on. Main captures the keys (desktop/shortcut-registry.cjs), so nothing
  *  runs while recording. */
 
+/** `target` is the key being changed in place, or null while another key is being added to the command. */
 type Edit =
-  | { id: string; state: 'recording'; held: string[]; refused?: { keys: string; reason: string }; tries: number }
-  | { id: string; state: 'clash'; accelerator: string; owner: string };
+  | { id: string; state: 'recording'; target: string | null; held: string[]; refused?: { keys: string; reason: string }; tries: number }
+  | { id: string; state: 'clash'; target: string | null; accelerator: string; owner: string };
 
 const MAC_GLYPHS: Record<string, string> = { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Cmd: '⌘' };
 /** A Mac's delete key is Backspace (⌫); forward delete (fn+delete) is Delete (⌦). The caps show the key that runs the binding. */
@@ -83,32 +85,34 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
     idle.current = window.setTimeout(() => { if (current.current?.state === 'recording') finish(); }, IDLE_MS);
   }, [finish]);
 
-  const begin = useCallback((id: string) => {
+  const begin = useCallback((id: string, target: string | null) => {
     setError('');
-    const next: Edit = { id, state: 'recording', held: [], tries: 0 };
+    const next: Edit = { id, state: 'recording', target, held: [], tries: 0 };
     current.current = next;
     setEdit(next);
     keepAlive();
-    void native({ type: 'shortcuts.record-start' }).catch((failure) => { setError(readable(failure)); finish(); });
+    void native({ type: 'shortcuts.record-start', id }).catch((failure) => { setError(readable(failure)); finish(); });
   }, [finish, keepAlive]);
 
-  const assign = useCallback(async (id: string, accelerator: string, replace = false) => {
+  const assign = useCallback(async (id: string, accelerator: string, target: string | null, replace = false) => {
     try {
-      const result = (await native({ type: 'shortcuts.set', id, accelerator, replace })).shortcuts;
+      const result = (await native({ type: 'shortcuts.set', id, accelerator, replace, ...(target === null ? { add: true } : { instead: target }) })).shortcuts;
       if (result?.ok) { finish(); load(); return; }
-      if (result?.code === 'conflict' && result.conflict) { const next: Edit = { id, state: 'clash', accelerator, owner: commandLabel(result.conflict.id, result.conflict.label) }; current.current = next; setEdit(next); return; }
+      if (result?.code === 'conflict' && result.conflict) { const next: Edit = { id, state: 'clash', target, accelerator, owner: commandLabel(result.conflict.id, result.conflict.label) }; current.current = next; setEdit(next); return; }
       // Refused after all (the registry changed under us): say why and listen again.
-      const next: Edit = { id, state: 'recording', held: [], refused: { keys: accelerator, reason: result?.message ?? t('shortcuts.keysRefused') }, tries: Date.now() };
+      const next: Edit = { id, state: 'recording', target, held: [], refused: { keys: accelerator, reason: result?.message ?? t('shortcuts.keysRefused') }, tries: Date.now() };
       current.current = next; setEdit(next);
-      void native({ type: 'shortcuts.record-start' }).catch(() => undefined);
+      void native({ type: 'shortcuts.record-start', id }).catch(() => undefined);
     } catch (failure) { finish(); setError(readable(failure)); }
   }, [finish, load]);
 
-  const clear = useCallback((id: string) => {
+  /** Takes one key off a command; its other keys stay. */
+  const remove = useCallback((id: string, accelerator: string) => {
     finish();
-    void native({ type: 'shortcuts.clear', id }).then(load, (failure) => setError(readable(failure)));
+    void native({ type: 'shortcuts.remove', id, accelerator }).then(load, (failure) => setError(readable(failure)));
   }, [finish, load]);
 
+  useEffect(() => { noteUse('shortcutsEditorOpened'); }, []);
   useEffect(() => {
     load();
     const off = runtime.subscribeBrowser((event) => {
@@ -118,20 +122,21 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
       keepAlive();
       if (event.pending) { const next: Edit = { ...editing, held: event.held ?? [] }; current.current = next; setEdit(next); return; }
       if (event.cancel) return finish();
-      if (event.clear) return clear(editing.id);
+      // Backspace on a key being changed removes that key; while adding there is nothing to remove, so it only stops.
+      if (event.clear) return editing.target === null ? finish() : remove(editing.id, editing.target);
       if (!event.valid || !event.accelerator) {
         const next: Edit = { ...editing, held: [], refused: { keys: event.accelerator ?? '', reason: event.reason ?? t('shortcuts.keysRefused') }, tries: editing.tries + 1 };
         current.current = next; setEdit(next); return;
       }
-      if (event.conflict && event.conflict.id !== editing.id) { const next: Edit = { id: editing.id, state: 'clash', accelerator: event.accelerator, owner: commandLabel(event.conflict.id, event.conflict.label) }; current.current = next; setEdit(next); return; }
-      void assign(editing.id, event.accelerator);
+      if (event.conflict && event.conflict.id !== editing.id) { const next: Edit = { id: editing.id, state: 'clash', target: editing.target, accelerator: event.accelerator, owner: commandLabel(event.conflict.id, event.conflict.label) }; current.current = next; setEdit(next); return; }
+      void assign(editing.id, event.accelerator, editing.target);
     });
     return () => {
       off();
       window.clearTimeout(idle.current);
       if (current.current?.state === 'recording') void native({ type: 'shortcuts.record-stop' }).catch(() => undefined);
     };
-  }, [load, finish, clear, assign, keepAlive]);
+  }, [load, finish, remove, assign, keepAlive]);
 
   // Leaving the window, clicking elsewhere, or Esc on a clash ends the edit, so keys never stay captured behind your back.
   useEffect(() => {
@@ -166,7 +171,7 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
       <div className="sk-toolbar" data-setting="shortcuts-editor">
         <label className="sk-search">
           <Search size={16} />
-          <input type="search" aria-label={t("shortcuts.searchShortcuts")} placeholder={t("shortcuts.searchCommandsOrKeys")} spellCheck={false} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.preventDefault(); setQuery(''); } }} />
+          <input type="search" className="ab-input" aria-label={t("shortcuts.searchShortcuts")} placeholder={t("shortcuts.searchCommandsOrKeys")} spellCheck={false} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.preventDefault(); setQuery(''); } }} />
           {query && <button type="button" className="st-search-clear" aria-label={t("shortcuts.clearSearch")} onClick={() => setQuery('')}><X size={14} /></button>}
         </label>
         {changed > 0 && <button type="button" className="sk-chip" aria-pressed={onlyChanged} onClick={() => setOnlyChanged((value) => !value)}>{t("shortcuts.changed")} <span className="tabular">{changed}</span></button>}
@@ -180,9 +185,10 @@ function Shortcuts({ state: browser }: SettingsPanelProps) {
             {list.length === 0 && category === 'Extensions' && <div className="st-row"><div className="st-copy"><p>{t("shortcuts.noExtensionShortcuts")}</p></div></div>}
             {list.map((command) => (
               <ShortcutRow key={command.id} command={command} edit={edit?.id === command.id ? edit : null}
-                onBegin={() => { if (current.current?.id !== command.id || current.current.state === 'clash') begin(command.id); }}
+                onBegin={(target) => { const now = current.current; if (now?.id !== command.id || now.state === 'clash' || now.target !== target) begin(command.id, target); }}
+                onRemove={(accelerator) => remove(command.id, accelerator)}
                 onReset={() => void run({ type: 'shortcuts.reset', id: command.id })}
-                onReplace={(accelerator) => void assign(command.id, accelerator, true)}
+                onReplace={(accelerator, target) => void assign(command.id, accelerator, target, true)}
                 onCancel={finish} />
             ))}
             {category === 'Extensions' && list.some(asksForMediaKey) && <div className="st-row"><div className="st-copy"><p>{t("shortcuts.mediaKeysNote")}</p></div></div>}
@@ -208,7 +214,7 @@ function ShortcutGroup({ title, signature, id, children }: { title: string; sign
   );
 }
 
-function ShortcutRow({ command, edit, onBegin, onReset, onReplace, onCancel }: { command: ShortcutCommand; edit: Edit | null; onBegin: () => void; onReset: () => void; onReplace: (accelerator: string) => void; onCancel: () => void }) {
+function ShortcutRow({ command, edit, onBegin, onRemove, onReset, onReplace, onCancel }: { command: ShortcutCommand; edit: Edit | null; onBegin: (target: string | null) => void; onRemove: (accelerator: string) => void; onReset: () => void; onReplace: (accelerator: string, target: string | null) => void; onCancel: () => void }) {
   const state = edit?.state ?? 'idle';
   const noteId = useId();
   const field = useRef<HTMLButtonElement>(null);
@@ -223,34 +229,42 @@ function ShortcutRow({ command, edit, onBegin, onReset, onReplace, onCancel }: {
   }, [edit?.state === 'recording' ? edit.tries : -1]);
   useEffect(() => { if (state === 'clash') replace.current?.focus({ preventScroll: true }); else if (state === 'recording') field.current?.focus({ preventScroll: true }); }, [state]);
 
-  const [first, ...more] = command.bindings;
-  const keysLabel = first ? command.bindings.map(spoken).join(', ') : t("shortcuts.notSet");
+  const keys = command.bindings;
+  const keysLabel = keys.length ? keys.map(spoken).join(', ') : t("shortcuts.notSet");
   const mac = isMac();
+  /** The field a key is typed into: where the key being changed was, or after the others when one is being added. */
+  const editing = (
+    <button ref={field} type="button" className="sk-keys" data-state={state} aria-label={t("shortcuts.changeKeysFor", { command: command.label, keys: keysLabel })} aria-describedby={noteId} onClick={() => onBegin(edit?.target ?? null)}>
+      {edit?.state === 'recording' ? (
+        <span className="sk-field" data-bad={refused && !edit.held.length ? true : undefined}>
+          {edit.held.length ? <Caps parts={edit.held.map((key) => (mac && MAC_GLYPHS[key]) || KEY_NAMES[key] || key)} /> : refused?.keys ? <Caps accel={refused.keys} /> : <span className="sk-placeholder">{t("shortcuts.pressKeys")}</span>}
+          <i className="sk-caret" aria-hidden="true" />
+        </span>
+      ) : edit ? <span className="sk-field" data-clash><Caps accel={edit.accelerator} /></span> : null}
+    </button>
+  );
+  const adding = edit !== null && edit.target === null;
   return (
     <div className="st-row sk-row" data-setting={`shortcut-${command.id}`} data-shortcut={command.id} data-state={state} data-changed={command.customized || undefined}>
       <div className="st-copy">
         <span className="st-title">{command.label}</span>
         {command.customized && <p>{t("shortcuts.defaultKeys", { keys: command.defaults.length ? command.defaults.map(spoken).join(', ') : t("shortcuts.none") })}</p>}
       </div>
-      <div className="sk-control">
+      <div className="sk-control" data-count={keys.length}>
         {command.customized && state === 'idle' && (
           <button type="button" className="sk-reset" aria-label={t("shortcuts.resetCommand", { command: command.label })} title={command.defaults.length ? t("shortcuts.resetTo", { keys: spoken(command.defaults[0]) }) : t("shortcuts.resetToNoShortcut")} onClick={onReset}><Undo2 size={14} /></button>
         )}
-        <button ref={field} type="button" className="sk-keys" data-state={state} aria-label={t("shortcuts.changeKeysFor", { command: command.label, keys: keysLabel })} aria-describedby={state === 'idle' ? undefined : noteId} onClick={onBegin}>
-          {edit?.state === 'recording' ? (
-            <span className="sk-field" data-bad={refused && !edit.held.length ? true : undefined}>
-              {edit.held.length ? <Caps parts={edit.held.map((key) => (mac && MAC_GLYPHS[key]) || KEY_NAMES[key] || key)} /> : refused?.keys ? <Caps accel={refused.keys} /> : <span className="sk-placeholder">{t("shortcuts.pressKeys")}</span>}
-              <i className="sk-caret" aria-hidden="true" />
-            </span>
-          ) : edit?.state === 'clash' ? (
-            <span className="sk-field" data-clash><Caps accel={edit.accelerator} /></span>
-          ) : first ? (
-            <>
-              <Caps accel={first} />
-              {more.length > 0 && <span className="sk-more" title={t("shortcuts.alsoKeys", { keys: more.map(spoken).join(', ') })}>+{more.length}</span>}
-            </>
-          ) : <span className="sk-unset">{t("shortcuts.notSet")}</span>}
-        </button>
+        {keys.length > 0 && !adding && state === 'idle' && (
+          <button type="button" className="sk-reset sk-add" aria-label={t("shortcuts.addKey", { command: command.label })} title={t("shortcuts.addKey", { command: command.label })} onClick={() => onBegin(null)}><Plus size={14} /></button>
+        )}
+        {keys.map((accel) => edit && edit.target === accel ? <span key={accel} className="sk-key">{editing}</span> : (
+          <span key={accel} className="sk-key">
+            <button type="button" className="sk-keys" data-state="idle" aria-label={t("shortcuts.changeOneKey", { command: command.label, keys: spoken(accel) })} onClick={() => onBegin(accel)}><Caps accel={accel} /></button>
+            {!edit && <button type="button" className="sk-remove" aria-label={t("shortcuts.removeKey", { command: command.label, keys: spoken(accel) })} title={t("shortcuts.removeKey", { command: command.label, keys: spoken(accel) })} onClick={() => onRemove(accel)}><X size={10} className="sk-remove-icon" /></button>}
+          </span>
+        ))}
+        {adding && <span className="sk-key">{editing}</span>}
+        {!keys.length && !adding && <button type="button" className="sk-keys" data-state="idle" aria-label={t("shortcuts.changeKeysFor", { command: command.label, keys: keysLabel })} onClick={() => onBegin(null)}><span className="sk-unset">{t("shortcuts.notSet")}</span></button>}
       </div>
       {edit && (
         <div ref={note} id={noteId} className="sk-note" data-tone={edit.state === 'clash' ? 'clash' : refused ? 'bad' : undefined} role={refused || edit.state === 'clash' ? 'alert' : 'status'}>
@@ -258,12 +272,12 @@ function ShortcutRow({ command, edit, onBegin, onReset, onReplace, onCancel }: {
             <>
               <span>{t("shortcuts.alreadyUsed", { owner: edit.owner })}</span>
               <span className="sk-note-actions">
-                <button ref={replace} type="button" className="st-button primary" onClick={() => onReplace(edit.accelerator)}>{t("shortcuts.replace3")}</button>
+                <button ref={replace} type="button" className="st-button primary" onClick={() => onReplace(edit.accelerator, edit.target)}>{t("shortcuts.replace3")}</button>
                 <button type="button" className="st-button" onClick={onCancel}>{t("dialog.cancel")}</button>
               </span>
             </>
           ) : refused ? <span>{refused.reason}</span> : (
-            <span><KeySentence text={t("shortcuts.recordHint")} keys={{ clear: mac ? '⌫' : t("shortcuts.backspace"), cancel: t("app.esc") }} /></span>
+            <span><KeySentence text={edit.target === null && keys.length > 0 ? t("shortcuts.recordHintAdd") : t("shortcuts.recordHint")} keys={{ clear: mac ? '⌫' : t("shortcuts.backspace"), cancel: t("app.esc") }} /></span>
           )}
         </div>
       )}

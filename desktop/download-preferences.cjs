@@ -39,23 +39,34 @@ function nextFreePath(folder,name,taken=()=>false,platform=process.platform){
 }
 
 function createDownloadPreferences({file,defaultFolder}){
- let value={askWhere:false,folder:''};
+ let value={askWhere:false,folder:'',offerFiles:true,offerFilesPrivate:false,lastSaveFolder:'',screenshotFolder:''};/* Beta 14 (D2): the folder the last Save dialog of a save the person started was answered in (never from a private or Tor window): the next one starts there. Not a setting: nothing in Settings changes it. */const listeners=new Set();/* Easy Files (Beta 14): offer recent files when a site asks for one, in normal windows (on) and in private windows (off). */
  // a damaged file is kept aside before the defaults can be saved over it (atomic-file.cjs readJsonFile)
  const saved=require('./atomic-file.cjs').readJsonFile(file,{maxBytes:8191});
- if(saved){if(typeof saved.askWhere==='boolean')value.askWhere=saved.askWhere;if(typeof saved.folder==='string'&&path.isAbsolute(saved.folder))value.folder=saved.folder;}
+ if(saved){if(typeof saved.askWhere==='boolean')value.askWhere=saved.askWhere;if(typeof saved.offerFiles==='boolean')value.offerFiles=saved.offerFiles;if(typeof saved.offerFilesPrivate==='boolean')value.offerFilesPrivate=saved.offerFilesPrivate;if(typeof saved.folder==='string'&&path.isAbsolute(saved.folder))value.folder=saved.folder;if(typeof saved.lastSaveFolder==='string'&&path.isAbsolute(saved.lastSaveFolder))value.lastSaveFolder=saved.lastSaveFolder;if(typeof saved.screenshotFolder==='string'&&path.isAbsolute(saved.screenshotFolder))value.screenshotFolder=saved.screenshotFolder;}
  const folderUsable=folder=>{try{return path.isAbsolute(folder)&&fs.statSync(folder).isDirectory();}catch{return false;}};
  const effectiveFolder=()=>value.folder&&folderUsable(value.folder)?value.folder:defaultFolder;
  function save(){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(value));fs.renameSync(file+'.tmp',file);}
- function get(){return {askWhere:value.askWhere,folder:effectiveFolder(),defaultFolder,customFolder:!!value.folder&&folderUsable(value.folder),folderMissing:!!value.folder&&!folderUsable(value.folder)};}
+ function get(){return {screenshotFolder:value.screenshotFolder&&folderUsable(value.screenshotFolder)?value.screenshotFolder:'',screenshotFolderMissing:!!value.screenshotFolder&&!folderUsable(value.screenshotFolder),askWhere:value.askWhere,offerFiles:value.offerFiles,offerFilesPrivate:value.offerFilesPrivate,folder:effectiveFolder(),defaultFolder,customFolder:!!value.folder&&folderUsable(value.folder),folderMissing:!!value.folder&&!folderUsable(value.folder)};}
  function set(patch){
   if(patch.askWhere!==undefined){if(typeof patch.askWhere!=='boolean')throw new Error('Choose whether to ask where to save each file.');value.askWhere=patch.askWhere;}
+  for(const key of ['offerFiles','offerFilesPrivate'])if(patch[key]!==undefined){if(typeof patch[key]!=='boolean')throw new Error('Choose whether to offer recent files.');value[key]=patch[key];}
   if(patch.folder!==undefined){
    if(patch.folder===null||patch.folder==='')value.folder='';
    else{if(typeof patch.folder!=='string'||patch.folder.length>1024||!folderUsable(patch.folder))throw new Error('Choose an existing folder on this computer.');value.folder=path.resolve(patch.folder);}
   }
-  save();return get();
+  /* Beta 14 (D3): the screenshots folder; empty (null) means "ask each time" */
+  if(patch.screenshotFolder!==undefined){
+   if(patch.screenshotFolder===null||patch.screenshotFolder==='')value.screenshotFolder='';
+   else{if(typeof patch.screenshotFolder!=='string'||patch.screenshotFolder.length>1024||!folderUsable(patch.screenshotFolder))throw new Error('Choose an existing folder on this computer.');value.screenshotFolder=path.resolve(patch.screenshotFolder);}
+  }
+  save();const next=get();for(const listener of [...listeners])try{listener(next);}catch{/* a listener never stops a save */}return next;
  }
+ /** Where the next Save dialog of a save the person started opens: the folder the last one was answered in, while it still exists, else ''. */
+ function lastSaveFolder(){return value.lastSaveFolder&&folderUsable(value.lastSaveFolder)?value.lastSaveFolder:'';}
+ /** The Save dialog of a save the person started was answered in this folder: the next one starts there (only an existing folder; kept across restarts). */
+ function rememberSaveFolder(folder){if(typeof folder!=='string'||!folderUsable(folder))return false;const resolved=path.resolve(folder);if(resolved===value.lastSaveFolder)return true;value.lastSaveFolder=resolved;try{save();}catch{/* a folder that cannot be remembered is only forgotten */}return true;}
  function destination(name,{taken}={}){return nextFreePath(effectiveFolder(),name,taken);}
- return {get,set,destination};
+ /** Easy Files listens for the two switches. Returns the way to stop listening. */function onChange(listener){listeners.add(listener);return()=>listeners.delete(listener);}
+ return {get,set,destination,lastSaveFolder,rememberSaveFolder,onChange};
 }
 module.exports={createDownloadPreferences,fitName,nextFreePath,deviceSafe,windowsNameUnits,extensionOf};

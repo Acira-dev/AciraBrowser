@@ -134,8 +134,11 @@
 /* Sidebar mode (outside Seamless): the sidebar arrives already holding the room for the block. The attribute above is published by the block a commit AFTER the
    sidebar mounts, and the layout in between is read once (the block places itself), so the padding ran 0 -> 80 over 450 ms, which dragged the favorites and the tab
    list through the address field for the first half of the slide. The block's own marker, the header's data-sbmode, is in the same commit as the sidebar. :where()
-   keeps the specificity of this fallback below the attribute rules (the open row's 108 still wins). */
-:root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode='block'])) > .ed-rail.acira-sidebar { padding-top: 80px; }
+   keeps the specificity of this fallback below the attribute rules (the open row's 108 still wins).
+   SEAMLESS (guard c3, 20 Nov): its header is no Sidebar mode header, so the same glide ran in the Seamless edge reveal and in Cmd+Shift+E: the tab rows rose through the
+   field for about 250 ms (the list's top 0 -> 76 px under a field standing at 38). The root's addr-side (App: the block is shown) comes in the same commit as the sidebar
+   in every layout, Seamless included: the room is held from that commit too. */
+:root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode='block']), :has(> .browser-root.addr-side)) > .ed-rail.acira-sidebar { padding-top: 80px; }
 :root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side][data-addr-open] { padding-top: 108px; transition: padding-top var(--addr-open-dur, 500ms) var(--addr-open-ease, ease); }
 :root:root:root .app.style-acira > .ed-rail.acira-sidebar.is-expanded[data-addr-side]::before { display: none; }
 :root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side] .sb-caption:not([data-filled]) { display: none; }
@@ -148,8 +151,7 @@
    the left edge (the existing edge reveal) or with Ctrl/Cmd+Shift+E and Ctrl/Cmd+L. */
 :root:root:root .browser-root .browser-shell[data-sbmode='bare'] { overflow: hidden; -webkit-app-region: drag; }
 :root:root:root .browser-root .browser-shell[data-sbmode='bare'] > .acira-persistent-toolbar { visibility: hidden; }
-:root:root:root .app.style-acira:has(.browser-shell[data-sbmode='bare']) .browser-root .browser-body > .page-area { margin: 0 6px 6px; border-radius: var(--geometry-pageRadius, 8px); box-shadow: 0 0 0 1px rgb(0 0 0 / .08); }
-:root:root:root .app.style-acira[data-chrome=dark]:has(.browser-shell[data-sbmode='bare']) .browser-root .browser-body > .page-area { box-shadow: 0 0 0 1px rgb(255 255 255 / .06); }
+:root:root:root .app.style-acira:has(.browser-shell[data-sbmode='bare']) .browser-root .browser-body > .page-area { margin: 0 6px 6px; border-radius: var(--geometry-pageRadius, 8px); }
 :root:root:root .app.style-acira:has(.browser-shell[data-sbmode='bare']) .browser-root .browser-body > .page-area :is(.page-content, .page-pane) { border-radius: inherit; }
 :root[data-window-fullscreen]:root:root:root .app.style-acira:has(.browser-shell[data-sbmode='bare']) .browser-root .browser-body > .page-area { margin: 0; border-radius: 0; box-shadow: none; }
 
@@ -192,3 +194,4 @@
    -follow keyframes, whose outline-offset the compositor cannot take): the block takes the same keyframes, or it would run a frame or more ahead of the sidebar it sits on. */
 :root:root[data-page-follow][data-mode-switch='layout'][data-block-slide='in']::view-transition-new(acira-toolbar) { animation-name: acira-sidebar-arrive-follow; }
 :root:root[data-page-follow][data-mode-switch='layout'][data-block-slide='out']::view-transition-old(acira-toolbar) { animation-name: acira-sidebar-leave-follow; }
+

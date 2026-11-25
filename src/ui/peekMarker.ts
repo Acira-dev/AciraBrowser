@@ -9,7 +9,8 @@ import { useSyncExternalStore } from 'react';
  * Main sends `peek-state` on every change (desktop/rewind/peek.cjs, `publish`): `peek` is null while none is open. A preview closes
  * as soon as its tab stops being the active one, so the marker only ever shows on the current tile or row.
  */
-export interface PeekMarker { sourceTabId: string; url: string; favicon: string; loading: boolean }
+/** `media`, `mediaAt`, `muted`, `mediaId` and `title`: what the preview's page plays, for the now-playing card (ui/previewMedia.ts); absent while it plays nothing. */
+export interface PeekMarker { sourceTabId: string; url: string; favicon: string; loading: boolean; media?: 'playing' | 'paused'; mediaAt?: number; muted?: boolean; mediaId?: string; title?: string }
 export interface PeekMarkerState { open: PeekMarker | null; leaving: PeekMarker | null }
 
 /** How long a closed preview's card stays mounted: a little over its slide back (172 ms base, 220 ms in Premium). */
@@ -24,11 +25,16 @@ export function peekMarkerFromEvent(raw: unknown): PeekMarker | null | undefined
 /** The same for the `{ peek }` main answers a `peek.state` request with. Pure. */
 export function peekMarkerFromState(peek: unknown): PeekMarker | null {
   if (!peek || typeof peek !== 'object') return null;
-  const p = peek as { sourceTabId?: unknown; url?: unknown; favicon?: unknown; loading?: unknown };
+  const p = peek as { sourceTabId?: unknown; url?: unknown; favicon?: unknown; loading?: unknown; media?: unknown; mediaAt?: unknown; muted?: unknown; mediaId?: unknown; title?: unknown };
   if (typeof p.sourceTabId !== 'string' || !p.sourceTabId || p.sourceTabId.length > 200) return null;
   const url = typeof p.url === 'string' && p.url.length <= 4096 ? p.url : '';
   const favicon = typeof p.favicon === 'string' && p.favicon.length <= MAX_ICON && /^(https?:|data:image\/)/i.test(p.favicon) ? p.favicon : '';
-  return { sourceTabId: p.sourceTabId, url, favicon, loading: p.loading === true };
+  const marker: PeekMarker = { sourceTabId: p.sourceTabId, url, favicon, loading: p.loading === true };
+  if ((p.media === 'playing' || p.media === 'paused') && typeof p.mediaId === 'string' && p.mediaId.length <= 220) {
+    marker.media = p.media; marker.mediaId = p.mediaId; marker.mediaAt = typeof p.mediaAt === 'number' && Number.isFinite(p.mediaAt) ? p.mediaAt : 0; marker.muted = p.muted === true;
+    marker.title = typeof p.title === 'string' ? p.title.slice(0, 300) : '';
+  }
+  return marker;
 }
 
 /** The state after a preview opens, changes or closes (`next` null). Pure: the clock that ends `leaving` is the store's. */
@@ -36,7 +42,7 @@ export function peekMarkerReduce(state: PeekMarkerState, next: PeekMarker | null
   if (!next) return state.open ? { open: null, leaving: state.open } : state;
   const replaced = state.open && state.open.sourceTabId !== next.sourceTabId ? state.open : null;
   const leaving = replaced ?? (state.leaving?.sourceTabId === next.sourceTabId ? null : state.leaving);
-  const same = state.open && state.open.sourceTabId === next.sourceTabId && state.open.url === next.url && state.open.favicon === next.favicon && state.open.loading === next.loading;
+  const same = state.open && state.open.sourceTabId === next.sourceTabId && state.open.url === next.url && state.open.favicon === next.favicon && state.open.loading === next.loading && state.open.media === next.media && state.open.mediaAt === next.mediaAt && state.open.muted === next.muted && state.open.title === next.title;
   return same && leaving === state.leaving ? state : { open: next, leaving };
 }
 

@@ -1,3 +1,4 @@
+import { tabIsPinned } from './pinnedFolders';
 import type { BrowserAction, BrowserSnapshot, TabSession } from './types';
 import { workspaceIdOf } from './workspaces';
 
@@ -18,7 +19,7 @@ export const TRAIL_LIMIT = 32;
 
 /** A tab that has no page now: it was put to sleep (by the Memory Saver or the person) or restored and never opened. */
 const asleep = (tab: TabSession): boolean => tab.sleeping === true;
-const resting = (tab: TabSession): boolean => !!tab.pinned || !!tab.favoriteId;
+const resting = (state: Pick<BrowserSnapshot, 'tabGroups'>, tab: TabSession): boolean => tabIsPinned(state, tab) || !!tab.favoriteId;
 
 /** The trail after `previous` became `next`: the tab that was on screen goes to its front, the tab now on screen and every closed tab leave it. */
 export function trailAfter(previous: BrowserSnapshot, next: BrowserSnapshot, forget: readonly string[] = []): string[] {
@@ -79,7 +80,7 @@ export function closeLanding(previous: BrowserSnapshot, next: BrowserSnapshot, c
     if (tab) return tab;
   }
   const order = previous.tabs.map(tab => tab.id);
-  return nearest(order, closed.id, mine, tab => !asleep(tab)) ?? nearest(order, closed.id, mine, tab => !resting(tab)) ?? nearest(order, closed.id, mine, () => true);
+  return nearest(order, closed.id, mine, tab => !asleep(tab)) ?? nearest(order, closed.id, mine, tab => !resting(previous, tab)) ?? nearest(order, closed.id, mine, () => true);
 }
 
 /** Where "Unload tab" on the tab on screen goes first: an AWAKE tab of its workspace (the trail, then the nearest), never one that must load. Undefined: nothing awake to go to. */

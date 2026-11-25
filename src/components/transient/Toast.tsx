@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { CheckMark, CrossMark } from '../CheckMark';
 import { Info, ShieldCheck, Sparkles, SparklesOff } from '../AppIcons';
 import { WorkspaceGlyph } from '../WorkspaceGlyph';
@@ -16,12 +16,14 @@ import { ownTextDirection } from '../../i18n/direction';
 export type ToastTone = 'error' | 'info' | 'status';
 export type { StatusIcon };
 /** `dismissible`: the toast stays until dismissed (errors, notices). Every toast can be dismissed from the × in its glyph spot. */
-export interface ToastRowModel { key: number | string; text: string; tone?: ToastTone; icon?: StatusIcon; actionLabel?: string; actionKey?: string; dismissible?: boolean }
+export interface ToastRowModel { key: number | string; text: string; tone?: ToastTone; icon?: StatusIcon; actionLabel?: string; actionKey?: string; dismissible?: boolean;
+  /** Beta 14 (screenshot): a small picture in the leading spot, a second line under the text, a second text action. */ image?: string; detail?: string; actionLabel2?: string }
 
 /* Geometry (keep in step with transient.css). */
 export const TOAST_MIN = 300, TOAST_MAX = 420, TOAST_LINE = 44, TOAST_TWO_LINES = 60, TOAST_GAP = 8, TOAST_PEEK = 10, TOAST_VISIBLE = 3;
 export const PILL_HEIGHT = 32, PILL_GAP = 8, PILL_MAX = 320;
 const LEAD = 36, TRAIL = 8; // padding 12 + icon 16 + gap 8; right padding.
+const LEAD_PICTURE = 12 + 44 + 10; // padding 12 + the 44px picture + gap 10 (a toast with a picture is always two lines high)
 /** Text width in the toast font (a hidden span, cached, so Inter's features count as they do on screen: canvas ignores them and
  *  the single-storey a is wider); a per-character estimate before fonts are ready or without a document. */
 const widths = new Map<string, number>();
@@ -38,11 +40,16 @@ function textWidth(text: string, font = '450 13px Inter, "Segoe UI", sans-serif'
   if (widths.size > 400) widths.clear(); widths.set(key, width); return width;
 }
 
-const actionWidth = (row: ToastRowModel) => row.actionLabel ? 8 + textWidth(row.actionLabel, '500 13px Inter, "Segoe UI", sans-serif', 7.4) + 16 + (row.actionKey ? 8 + textWidth(row.actionKey, '500 11px Inter, "Segoe UI", sans-serif', 6.2) + 8 : 0) : 0;
+const actionWidth = (row: ToastRowModel) => (row.actionLabel ? 8 + textWidth(row.actionLabel, '500 13px Inter, "Segoe UI", sans-serif', 7.4) + 16 + (row.actionKey ? 8 + textWidth(row.actionKey, '500 11px Inter, "Segoe UI", sans-serif', 6.2) + 8 : 0) : 0)
+  + (row.actionLabel2 ? textWidth(row.actionLabel2, '500 13px Inter, "Segoe UI", sans-serif', 7.4) + 16 : 0);
 
 /** A row's natural width and height: one line when the text fits beside its action within 420px, else two (clamped). The
  * × takes no width of its own: it lives in the glyph's spot (founder, 27 Oct). */
 export function toastRowSize(row: ToastRowModel) {
+  if (row.image) {   // title and detail on two lines beside the picture, the action(s) at the end
+    const fixed = LEAD_PICTURE + TRAIL + actionWidth(row), text = Math.max(textWidth(row.text, '500 13px Inter, "Segoe UI", sans-serif'), row.detail ? Math.min(textWidth(row.detail, '400 12px Inter, "Segoe UI", sans-serif'), 300) : 0);   // the detail may take two lines, so its width counts only up to 300
+    return { width: Math.round(Math.max(TOAST_MIN, Math.min(TOAST_MAX, fixed + text + 4))), height: TOAST_TWO_LINES };
+  }
   const fixed = LEAD + TRAIL + actionWidth(row), text = textWidth(row.text);
   const width = Math.round(Math.max(TOAST_MIN, Math.min(TOAST_MAX, fixed + text + 4)));
   return { width, height: fixed + text + 4 > TOAST_MAX ? TOAST_TWO_LINES : TOAST_LINE };
@@ -87,10 +94,24 @@ export function dismissOnEscape(event: KeyboardEvent<HTMLElement>, onDismiss?: (
 
 /** One toast: 16px icon column (the × on hover), text on the x = 36 edge, one text action (+ its key cap). */
 export function ToastCard({ row, action, onDismiss }: { row: ToastRowModel; action?: ReactNode; onDismiss?: () => void }) {
-  const { height } = toastRowSize(row);
+  const { height } = toastRowSize(row), text = useRef<HTMLSpanElement>(null);
+  // Beta 14: the icon, the text and the action are one group centred in the card. A message that wraps to two lines is narrowed to its longest line (a Range over its text, like the
+  // the reference design's sample), or its box would fill the card and leave nothing to centre. Measured before the first paint; again when the font arrives.
+  useLayoutEffect(() => {
+    const node = text.current; if (!node || row.image || typeof document === 'undefined') return;
+    const narrow = () => {
+      node.style.maxWidth = '';
+      if (height <= TOAST_LINE || !node.offsetWidth) return;
+      const scale = node.getBoundingClientRect().width / node.offsetWidth || 1, range = document.createRange(); range.selectNodeContents(node);
+      const longest = Math.ceil(range.getBoundingClientRect().width / scale) + 1;
+      if (longest > 2 && longest < node.offsetWidth) node.style.maxWidth = longest + 'px';
+    };
+    narrow(); void document.fonts?.ready.then(narrow);
+  }, [row.text, row.actionLabel, row.actionLabel2, row.image, height]);
   return <div className="t-toast" data-tone={row.tone} data-lines={height > TOAST_LINE ? 2 : 1} role={row.tone === 'error' ? 'alert' : 'status'} onKeyDown={event => dismissOnEscape(event, onDismiss)}>
-    <ToastLead tone={row.tone} icon={row.icon} onDismiss={onDismiss} />
-    <span className="t-text" title={row.text} dir={ownTextDirection(row.text)}>{row.text}</span>
+    {row.image ? <span className="t-thumb" aria-hidden="true"><img className="t-thumb-img" src={row.image} alt="" draggable={false} /></span> : <ToastLead tone={row.tone} icon={row.icon} onDismiss={onDismiss} />}
+    {row.image ? <span className="t-body"><span className="t-title" title={row.text} dir={ownTextDirection(row.text)}>{row.text}</span>{row.detail && <span className="t-detail" title={row.detail} dir={ownTextDirection(row.detail)}>{row.detail}</span>}</span>
+      : <span ref={text} className="t-text" title={row.text} dir={ownTextDirection(row.text)}>{row.text}</span>}
     {action}
   </div>;
 }

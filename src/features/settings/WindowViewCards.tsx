@@ -19,18 +19,35 @@ function Frame({ ids, children }: { ids: { wall: string }; children: ReactNode }
   </>;
 }
 
-/** The page under a chrome of `top` px (window y 14), square at the top, round at the bottom like the Tab layout cards. */
-const Page = ({ top }: { top: number }) => <path d={`M20 ${top}H180V103.5a7.5 7.5 0 0 1-7.5 7.5H27.5a7.5 7.5 0 0 1-7.5-7.5Z`} className="cc-page" />;
+/** The page under a chrome of `top` px (window y 14), square at the top, round at the bottom like the Tab layout cards. `left`: where it starts (Top + sidebar: after the shelf's column). */
+const Page = ({ top, left = 20 }: { top: number; left?: number }) => <path d={left > 20 ? `M${left} ${top}H176V102a5.5 5.5 0 0 1-5.5 5.5H${left + 5.5}A5.5 5.5 0 0 1 ${left} 102Z` : `M20 ${top}H180V103.5a7.5 7.5 0 0 1-7.5 7.5H27.5a7.5 7.5 0 0 1-7.5-7.5Z`} className="cc-page" />;
+/** Top + sidebar's column: the shelf's rows on the frame, left of the top bar and the page. */
+const ShelfColumn = () => <>
+  <path d="M29 22.5h.01M37 22.5h.01M45 22.5h.01M52 22.5h.01" className="cc-dot" />
+  <path d="M32 44h.01M32 57h.01M32 70h.01" className="cc-dot" />
+  <path d="M38 44h17M38 57h14M38 70h19" className="cc-bar" />
+  <path d="M30 98h4M32 96v4" className="cc-stroke" />
+</>;
 
-function PageText({ x = 34, y = 0 }: { x?: number; y: number }) {
+function PageText({ x = 34, y = 0, wide = true }: { x?: number; y: number; /** false: the narrower page of Top + sidebar */ wide?: boolean }) {
   return <>
-    <path d={`M${x} ${y}h52`} className="cc-bar cc-bar-strong cc-page-ink" />
-    <path d={`M${x} ${y + 13}h88M${x} ${y + 21}h74M${x} ${y + 29}h82`} className="cc-bar cc-page-ink" />
-    <rect x="132" y={y - 3} width="34" height="28" rx="5" className="cc-picture" />
+    <path d={`M${x} ${y}h${wide ? 52 : 34}`} className="cc-bar cc-bar-strong cc-page-ink" />
+    <path d={wide ? `M${x} ${y + 13}h88M${x} ${y + 21}h74M${x} ${y + 29}h82` : `M${x} ${y + 13}h60M${x} ${y + 21}h48M${x} ${y + 29}h56`} className="cc-bar cc-page-ink" />
+    <rect x={wide ? 132 : 140} y={y - 3} width={wide ? 34 : 26} height={wide ? 28 : 22} rx="5" className="cc-picture" />
   </>;
 }
 
 function Compact({ layout }: { layout: MiniLayout }) {
+  if (layout === 'top-sidebar') return <>
+    <ShelfColumn />
+    <rect x="66" y="14" width="110" height="20" className="cc-sheet" />
+    <Page top={34} left={66} />
+    <path d="M66 34.25H176" className="cc-hair" />
+    <path d="M76 24h.01" className="cc-dot cc-dot-accent" />
+    <path d="M85 24h12M103 24h8" className="cc-bar" />
+    <rect x="120" y="19" width="48" height="10" rx="5" className="cc-field" />
+    <PageText x={74} y={50} wide={false} />
+  </>;
   return <>
     <rect x="20" y="14" width="160" height="20" className="cc-sheet" />
     <Page top={34} />
@@ -51,6 +68,16 @@ function Compact({ layout }: { layout: MiniLayout }) {
 }
 
 function Focus({ layout }: { layout: MiniLayout }) {
+  if (layout === 'top-sidebar') return <>
+    <ShelfColumn />
+    <rect x="66" y="14" width="110" height="20" className="cc-sheet" />
+    <Page top={34} left={66} />
+    <path d="M66 34.25H176" className="cc-hair" />
+    <path d="M76 24h.01M84 24h.01" className="cc-dot" />
+    <rect x="94" y="19" width="62" height="10" rx="5" className="cc-field" />
+    <path d="M164 24h.01" className="cc-dot cc-dot-accent" />
+    <PageText x={74} y={50} wide={false} />
+  </>;
   return <>
     <rect x="20" y="14" width="160" height="20" className="cc-sheet" />
     <Page top={34} />

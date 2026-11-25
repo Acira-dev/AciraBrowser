@@ -139,8 +139,10 @@ function createSetupService({
             "INTEGRATION_UNAVAILABLE",
             "Browser import is unavailable in this build.",
           );
+        // A source that needs the person's permission first (Safari: macOS Full Disk Access) is imported from Settings, where the
+        // screen can explain it; setup never lists it and so never touches its folder on its own.
         return {
-          sources: await (context.importer.discoverAsync || context.importer.discover)(),
+          sources: (await (context.importer.discoverAsync || context.importer.discover)()).filter((source) => !source.permission),
           batches: batches(context),
         };
       case "imports.preview":
@@ -150,6 +152,8 @@ function createSetupService({
             "INTEGRATION_UNAVAILABLE",
             "Browser import is unavailable in this build.",
           );
+        if (context.importer.sourceInfo?.(text(request.sourceId))?.permission)
+          fail("INVALID_REQUEST", "Import this browser from Settings › Import & export.");
         return {
           preview: await context.importer.preview(text(request.sourceId)),
         };
@@ -176,6 +180,8 @@ function createSetupService({
         )
           fail("INVALID_REQUEST", "Select supported import categories.");
         text(request.sourceId);
+        if (context.importer.sourceInfo?.(request.sourceId)?.permission)
+          fail("INVALID_REQUEST", "Import this browser from Settings › Import & export.");
         store.update(context.profileId, { importInterrupted: true });
         const batch = await context.importer.run(
             request.sourceId,

@@ -2,6 +2,7 @@ import { isMac } from '../../../ui/platform';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { passwordsAvailable, pw, readable, type PwDenied, type PwFlags, type PwImportPreview, type PwItem, type PwNever, type PwStatus } from '../../passwords/client';
 import { SiteMark } from '../../rewind/RewindPage';
+import { EmailMasks } from '../../passwords/EmailMasks';
 import { useT } from '../../../i18n';
 import { SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
@@ -56,17 +57,17 @@ function Editor({ item, onClose, onChanged, say }: { item: PwItem | null; onClos
   const set = (key: keyof typeof fields) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields(previous => ({ ...previous, [key]: event.target.value }));
   const masked = item && !shown && !editing;
   return <div className="pw-editor" role="group" aria-label={item ? t('pwp.editorNamed', { host: item.host }) : t('pwp.addAria')} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
-    <label className="pw-field"><span>{t('pwp.website')}</span><input value={fields.origin} readOnly={!editing} spellCheck={false} onChange={set('origin')} autoFocus={!item}/></label>
-    <label className="pw-field"><span>{t('pwp.username')}</span><input value={fields.username} readOnly={!editing} spellCheck={false} autoComplete="off" onChange={set('username')}/></label>
+    <label className="pw-field"><span>{t('pwp.website')}</span><input className="ab-input" value={fields.origin} readOnly={!editing} spellCheck={false} onChange={set('origin')} autoFocus={!item}/></label>
+    <label className="pw-field"><span>{t('pwp.username')}</span><input className="ab-input" value={fields.username} readOnly={!editing} spellCheck={false} autoComplete="off" onChange={set('username')}/></label>
     <label className="pw-field"><span>{t('pwp.password')}</span>
       <span className="pw-secret">
-        <input type={shown || (editing && !item) ? 'text' : 'password'} value={masked ? '••••••••••••' : fields.password} readOnly={!editing || (!!item && !shown)} spellCheck={false} autoComplete="new-password" onChange={set('password')}/>
+        <input className="ab-input" type={shown || (editing && !item) ? 'text' : 'password'} value={masked ? '••••••••••••' : fields.password} readOnly={!editing || (!!item && !shown)} spellCheck={false} autoComplete="new-password" onChange={set('password')}/>
         {item && <Button kind="quiet" disabled={!!busy} onClick={() => { if (shown) { setShown(false); if (!editing) setFields(p => ({ ...p, password: '', note: '' })); } else void reveal(); }}>{busy === waiting ? waiting : shown ? t('pwp.hide') : t('pwp.show')}</Button>}
         {item && <Button kind="quiet" disabled={!!busy} onClick={() => void copy('password')}>{t('pwp.copy')}</Button>}
         {!item && <Button kind="quiet" onClick={() => void generate()}>{t('pwp.suggest')}</Button>}
       </span>
     </label>
-    {(editing || shown) && <label className="pw-field"><span>{t('pwp.note')}</span><textarea value={fields.note} readOnly={!editing} rows={2} onChange={set('note')}/></label>}
+    {(editing || shown) && <label className="pw-field"><span>{t('pwp.note')}</span><textarea className="ab-input" value={fields.note} readOnly={!editing} rows={2} onChange={set('note')}/></label>}
     <div className="pw-editor-actions">
       {item && <Button kind="quiet" disabled={!!busy} onClick={() => void copy('username')}>{t('pwp.copyUsername')}</Button>}
       {item && <Button kind="quiet" danger onBlur={() => setConfirmDelete(false)} onClick={() => { if (confirmDelete) void remove(); else setConfirmDelete(true); }}>{confirmDelete ? t('pwp.deletePassword') : t('pwp.deleteEllipsis')}</Button>}
@@ -83,7 +84,7 @@ function Passwords(props: SettingsPanelProps) {
   return <ProfilePasswords key={props.state.activeBrowserProfileId} {...props}/>;
 }
 
-function ProfilePasswords({ state }: SettingsPanelProps) {
+function ProfilePasswords({ state, dispatch }: SettingsPanelProps) {
   const t = useT(), waiting = t(isMac() ? 'pwp.waiting.mac' : 'pwp.waiting');
   const isPrivate = Boolean(state.browserProfiles.find(p => p.id === state.activeBrowserProfileId)?.private);
   const [status, setStatus] = useState<PwStatus | null>(null), [items, setItems] = useState<PwItem[]>([]), [never, setNever] = useState<PwNever[]>([]);
@@ -120,7 +121,7 @@ function ProfilePasswords({ state }: SettingsPanelProps) {
     {!unusable && <>
       <SettingGroup title={t('pwp.savedPasswords')} id="passwords-list">
         <div className="pw-bar">
-          <label className="pw-search" data-placeholder={t('pwp.search')}><svg viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25L13 13"/></svg><input type="search" placeholder={t('pwp.search')} aria-label={t('pwp.search')} value={query} onChange={event => setQuery(event.target.value)}/></label>
+          <label className="pw-search" data-placeholder={t('pwp.search')}><svg viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25L13 13"/></svg><input type="search" className="pw-search-input ab-input" placeholder={t('pwp.search')} aria-label={t('pwp.search')} value={query} onChange={event => setQuery(event.target.value)}/></label>
           <Button kind="primary" data-setting="passwords-add" onClick={() => { setAdding(true); setOpenId(''); }}>{t('pwp.addPassword')}</Button>
         </div>
         {summary.total > 0 && <p className="pw-summary" aria-live="polite">{summary.weak || summary.reused ? [summary.weak && t('pwp.weakCount', { count: summary.weak }), summary.reused && t('pwp.reusedCount', { count: summary.reused })].filter(Boolean).join(' · ') : t('pwp.allStrong', { count: summary.total })}<span>{t('pwp.checkedHere')}</span></p>}
@@ -139,8 +140,9 @@ function ProfilePasswords({ state }: SettingsPanelProps) {
         </div>)}
         {!items.length && !adding && <p className="pw-empty"><strong>{t('pwp.noSaved')}</strong><span>{t('pwp.noSavedBody')}</span></p>}
         {items.length > 0 && !shown.length && <p className="pw-empty"><span>{t('pwp.noMatch', { query: query.trim() })}</span></p>}
-        <p className="pw-live" role="status" aria-live="polite" data-bad={note?.bad || undefined}>{note?.text || ''}</p>
+        <p className="pw-live popup-status" role="status" aria-live="polite" data-bad={note?.bad || undefined}>{note?.text || ''}</p>
       </SettingGroup>
+      <EmailMasks dispatch={dispatch}/>
       <SettingGroup title={t('pwp.importExport')}>
         <SettingRow id="passwords-import" title={t('pwp.importCsv')} detail={t('pwp.importCsvDetail')}>
           <Button disabled={!!busy} onClick={() => void act<Answer & PwImportPreview>(t('pwp.choosing'), { type: 'passwords.import.preview' }, result => { if (result.unreadable) setNote({ text: result.unreadable, bad: true }); else { setImported(null); setPreview(result); } })}>{t('pwp.importBtn')}</Button>

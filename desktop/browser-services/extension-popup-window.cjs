@@ -75,6 +75,15 @@ const STALE_ECHO_MS = 1500;
 const SHOW_AFTER_LOAD_MS = 400, SHOW_AFTER_START_MS = 3000;
 // How long after a press on its own button closed an in-window popup the click that completes that press can still arrive (a slow click, a held button).
 const PRESS_MS = 1000;
+// How the popup looks again for a window that took the keyboard from it after its own blur (maybeClose): BLUR_CHECKS looks, BLUR_CHECK_MS apart (about half a second in all).
+const BLUR_CHECKS = 6, BLUR_CHECK_MS = 80;
+// After the load: the page's document must be still this long (its start-up is over) before the window is taken to the minimum size to be measured; never longer than the cap.
+const SETTLE_QUIET_MS = 50, SETTLE_CAP_MS = 300;
+// After the reset to the minimum: a page that had already reported a size (during the wait above) and whose size is the same in the minimum window sends no second report (Blink reports only
+// when the size changes): it is shown with the size it reported after this long, instead of waiting for the fallback.
+const SHOW_UNCHANGED_MS = 100;
+const SETTLE_SCRIPT = `new Promise(resolve => { let last = performance.now(); const start = last, observer = new MutationObserver(() => { last = performance.now(); }); observer.observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
+  const look = () => { const now = performance.now(); if (now - last >= ${SETTLE_QUIET_MS} || now - start >= ${SETTLE_CAP_MS}) { observer.disconnect(); resolve(Math.round(now - start)); } else setTimeout(look, 10); }; look(); })`;
 
 /** The ozone platform Chromium was told to use (--ozone-platform / --ozone-platform-hint), '' when none was named. */
 function ozoneOf(electron) {
@@ -124,7 +133,7 @@ class ExtensionPopup extends EventEmitter {
     // Where the window system lets an app place windows the popup is a window of its own, as it always was; where it does not (Wayland) it is a view inside the
     // browser window (extension-popup-host.cjs). The page, its sizing, its events and its lifecycle are the same.
     this.hostKind = popupHostFor({platform, env, ozone: ozoneOf(electron), learned: learned()});
-    const pagePreferences = {session: opts.session, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true};
+    const pagePreferences = {session: opts.session, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true, backgroundThrottling: false};   // (a hidden popup page's timers run as they do on screen: its start-up is waited for below)
     if (this.hostKind === 'parent') {
       this.view = new WebContentsView({webPreferences: pagePreferences});
       this.view.setBackgroundColor('#ffffff');
@@ -338,14 +347,36 @@ class ExtensionPopup extends EventEmitter {
   maybeClose = () => {
     // DevTools open beside a popup, or the focus in another application, keep it open (the library's rule).
     if (this.webContents && !this.webContents.isDestroyed() && this.webContents.isDevToolsOpened()) return;
+    if (this.closeIfAnotherWindowHasFocus()) return;
+    // Chromium closes the popup the moment another window of the browser is activated (ExtensionPopup::OnWidgetActivationChanged). Here the popup's blur comes first, and on Windows the
+    // window that takes the keyboard (a pop-out the extension opened with chrome.windows.create) says so a few milliseconds LATER: at the blur no window had focus, the popup stayed, and
+    // the pop-out and the popup were on screen together (D157). The popup that is still without the keyboard is looked at again for a moment.
+    this.armBlurCheck(BLUR_CHECKS);
+  };
+
+  /** Is a window of Acira other than this popup's own the one that has the keyboard? Then the popup closes (and says why in the trace). */
+  closeIfAnotherWindowHasFocus() {
     const {BaseWindow, BrowserWindow} = this.electron;
     const windows = [...BaseWindow.getAllWindows(), ...(BrowserWindow ? BrowserWindow.getAllWindows() : [])];
-    const focused = windows.find(window => { try { return window.isFocused(); } catch { return false; } });
-    if (!focused) { trace('toolbar popup stays: no window of Acira has focus', this.extensionId); return; }
+    const focused = windows.find(window => { try { return window !== this.window && window.isFocused(); } catch { return false; } });
+    if (!focused) { trace('toolbar popup stays: no window of Acira has focus', this.extensionId); return false; }
     let title = ''; try { title = String(focused.getTitle()).slice(0, 40); } catch { /* gone */ }
     trace('toolbar popup closes: focus moved to another window of Acira', this.extensionId, {id: focused.id, title});
     this.closeBecause('focus moved');
-  };
+    return true;
+  }
+
+  armBlurCheck(rounds) {
+    clearTimeout(this.blurTimer);
+    if (rounds <= 0 || this.destroyed) return;
+    this.blurTimer = setTimeout(() => {
+      this.blurTimer = undefined;
+      if (this.destroyed || !this.window) return;
+      try { if (this.window.isFocused()) return; } catch { /* gone */ }   // the popup has the keyboard again (a click back into it): nothing to close
+      if (!this.closeIfAnotherWindowHasFocus()) this.armBlurCheck(rounds - 1);
+    }, BLUR_CHECK_MS);
+    this.blurTimer.unref?.();
+  }
 
   destroy = () => {
     if (this.destroyed) return;
@@ -354,6 +385,7 @@ class ExtensionPopup extends EventEmitter {
     clearTimeout(this.fitTimer);
     clearTimeout(this.echoTimer);
     clearTimeout(this.showTimer);
+    clearTimeout(this.blurTimer);
     this.verifying = undefined;
     this.follower.stop();
     for (const [contents, handler] of this.pressWatch || []) { try { if (!contents.isDestroyed()) contents.off('before-mouse-event', handler); } catch { /* gone */ } }
@@ -365,7 +397,13 @@ class ExtensionPopup extends EventEmitter {
     const contents = this.webContents, window = this.window;
     this.window = undefined;
     if (contents && !contents.isDestroyed() && contents.isDevToolsOpened()) contents.closeDevTools();
-    if (window && !window.isDestroyed()) { window.off('closed', this.destroy); window.destroy(); }
+    if (window && !window.isDestroyed()) {
+      window.off('closed', this.destroy);
+      // Windows draws a closing window as a fading copy of itself (the system's close animation): the popup stood there see-through for a moment with the page showing through it (D157).
+      // A window with no opacity left has nothing to fade: it is made invisible first, then taken away.
+      if (this.platform === 'win32' && this.hostKind === 'window') { try { window.setOpacity?.(0); } catch { /* a window that cannot */ } }
+      window.destroy();
+    }
     // A window does not close the page of a view it held: without this the extension's popup page would live on, hidden.
     if (contents && !contents.isDestroyed()) contents.close();
     this.emit('gone');
@@ -402,11 +440,27 @@ class ExtensionPopup extends EventEmitter {
   async load(url) {
     try { await this.webContents.loadURL(url); } catch (error) { this.loadFailed = true; console.error(error); }
     if (this.destroyed) return;
+    // The page's own start-up gets to finish in the window it was loaded in (800 x 600, hidden). Bitwarden reads window.innerHeight ONCE, a few milliseconds after its load event (an
+    // asynchronous start), and adds a class for it: under 300 px "body-3xs", whose min-height is 240. The reset to 25 x 25 below followed the load at once; when that read fell inside the
+    // 25 px window the popup was 240 px tall (the page's rows cut, its bar over them) for as long as it was open (D157, a member's recording). Chromium never shows a page its own reset.
+    await this.settle();
+    if (this.destroyed) return;
     this.loadedAt = Date.now();
     this.echoUntil = Date.now() + ECHO_MS;
     this.setSize({width: BOUNDS.minWidth, height: BOUNDS.minHeight});
-    this.armShow(this.showFallbackMs);
+    this.armShow(this.reported ? Math.min(this.showFallbackMs, SHOW_UNCHANGED_MS) : this.showFallbackMs);
     this.follower.loaded();   // from here the page may shrink (Blink's rule): the follower's watch starts (at once if the popup is on screen already, else when it shows)
+  }
+
+  /**
+   * Waits, after the load event, until the page's document has been still for SETTLE_QUIET_MS (no node added, removed or changed), at most SETTLE_CAP_MS: a page that does nothing after
+   * its load is waited for that long only. Read-only: the page is only watched. A page that cannot be asked (a test's stand-in) is not waited for.
+   */
+  async settle() {
+    const contents = this.webContents;
+    if (!contents || contents.isDestroyed() || typeof contents.executeJavaScript !== 'function') return;
+    let timer;
+    try { await Promise.race([contents.executeJavaScript(SETTLE_SCRIPT), new Promise(resolve => { timer = setTimeout(resolve, SETTLE_CAP_MS + 60); })]); } catch { /* a page that is going away */ } finally { clearTimeout(timer); }
   }
 
   isDestroyed() { return this.destroyed; }

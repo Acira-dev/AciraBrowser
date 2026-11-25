@@ -1,0 +1,137 @@
+/* Beta 14: dialogs, prompts and notifications in frosted glass. The values are the reference design's sample (the dialogs sample, dlg-glass.css):
+   one glass, one rim, one shadow, one button set, one 4/8 spacing scale. The glass itself (the page's colours blooming through, blurred 32 px) is the pop-up system's frozen snapshot, drawn by
+   PopupSurface; this file is the card's content and the surface's finish. Every selector ends in a class (tests/costly-selectors). */
+.dlg{--ink:rgb(242 242 246/.96);--ink-2:rgb(236 237 242/.66);--ink-3:rgb(236 237 242/.46);
+ --well:rgb(255 255 255/.055);--well-line:rgb(255 255 255/.085);--hair:rgb(255 255 255/.08);--hover:rgb(255 255 255/.07);
+ --tile:rgb(255 255 255/.94);--tile-ink:#16171a;--accent:#8fb0ff;--accent-ink:#b9ccff;--check:rgb(16 18 28);
+ --dlg-ring:1.5px solid color-mix(in srgb,var(--accent) 72%,transparent);--ease:cubic-bezier(.2,0,0,1);
+ position:relative;box-sizing:border-box;color:var(--ink);font:400 13px/1.45 var(--font-ui,Inter,system-ui,sans-serif);-webkit-font-smoothing:antialiased;user-select:none;cursor:default}
+.dlg[data-theme=light]{--ink:rgb(12 12 16/.9);--ink-2:rgb(12 12 16/.6);--ink-3:rgb(12 12 16/.45);
+ --well:rgb(255 255 255/.5);--well-line:rgb(0 0 0/.07);--hair:rgb(0 0 0/.07);--hover:rgb(0 0 0/.045);--accent:#3b6eea;--accent-ink:#2f5fd8;--check:#fff}
+.dlg,.dlg-row,.dlg-col,.dlg-foot,.dlg-end,.dlg-sites,.dlg-tile,.dlg-fav,.dlg-more,.dlg-btn,.dlg-chk,.dlg-chk-input,.dlg-title,.dlg-sub{box-sizing:border-box}
+/* the sample's one typeface rule: Inter with cv11 and ss03 on the card's text; the elements that set the `font` shorthand (buttons, icon tiles, the +N chip) drop it, as they do in the sample */
+.dlg,.dlg-title,.dlg-sub,.dlg-chk{font-feature-settings:'cv11','ss03'}
+/* The app forces its typeface features on every element (styles.css `*{font-feature-settings:...!important}`). In the sample the elements with a `font` shorthand (buttons, icon tiles, the +N chip) have none: plain Inter, tracking -.003em. */
+.dlg .dlg-btn,.dlg .dlg-fav,.dlg .dlg-more{font-feature-settings:normal!important}
+.dlg .dlg-btn{letter-spacing:-.003em!important}
+.dlg-pad{padding:24px}
+.dlg-row{display:flex;align-items:center;gap:12px;min-width:0}
+.dlg-col{display:flex;flex-direction:column;min-width:0}
+.dlg-title{font-size:17px;line-height:22px;font-weight:580;letter-spacing:-.017em;color:var(--ink);text-wrap:balance}
+.dlg-sub{font-size:13px;line-height:19px;color:var(--ink-2);margin-top:2px;text-wrap:pretty}
+.dlg-foot{display:flex;align-items:center;gap:8px;margin-top:24px}
+.dlg-end{margin-left:auto;display:flex;gap:8px}
+/* the app's mark and the sites' icons */
+.dlg-tile{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;color:var(--ink-2);background:var(--well);box-shadow:inset 0 0 0 1px var(--well-line),inset 0 1px 0 rgb(255 255 255/.06)}
+.dlg-tile-app{background:linear-gradient(180deg,rgb(255 255 255/.10),rgb(255 255 255/.03))}
+.dlg-tile .dlg-ico{width:20px;height:20px;stroke-width:1.5}
+.dlg .dlg-tile-app{width:44px;height:44px}
+.dlg-mark{width:26px;height:26px;display:block}
+.dlg-fav{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--tile);box-shadow:0 0 0 .5px rgb(0 0 0/.18),0 1px 2px rgb(0 0 0/.18);color:var(--tile-ink);font:600 12px/1 var(--font-ui,Inter,system-ui,sans-serif);overflow:hidden}
+.dlg-fav-img{width:16px;height:16px;display:block}
+.dlg-more{flex:none;display:grid;place-items:center;height:28px;padding:0 12px;border-radius:8px;background:var(--well);box-shadow:inset 0 0 0 1px var(--well-line);font:500 12px/1 var(--font-ui,Inter,system-ui,sans-serif);color:var(--ink-2)}
+.dlg-sites{display:flex;align-items:center;gap:6px;margin-top:16px}
+/* buttons: flat fills only, no ring, no border, no shadow, no lift; hover and press shift the tone */
+.dlg-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 16px;border:0;border-radius:10px;font:500 13.5px/1 var(--font-ui,Inter,system-ui,sans-serif);letter-spacing:-.003em;white-space:nowrap;color:var(--ink);background:transparent;cursor:default;outline:none;transition:background-color 140ms var(--ease),color 140ms var(--ease)}
+.dlg-btn-primary{color:#0b0b0d;background:#e8e8eb}
+.dlg-btn-primary:hover{background:#f7f7f9}
+.dlg-btn-primary:active{background:#d6d6db}
+.dlg[data-theme=light] .dlg-btn-primary{color:#fff;background:#17171a}
+.dlg[data-theme=light] .dlg-btn-primary:hover{background:#2c2c31}
+.dlg[data-theme=light] .dlg-btn-primary:active{background:#000}
+.dlg-btn-glass{background:rgb(255 255 255/.10);box-shadow:inset 0 0 0 .5px rgb(255 255 255/.10)}
+.dlg-btn-glass:hover{background:rgb(255 255 255/.16)}
+.dlg-btn-glass:active{background:rgb(255 255 255/.06)}
+.dlg[data-theme=light] .dlg-btn-glass{background:rgb(255 255 255/.58);box-shadow:inset 0 0 0 .5px rgb(0 0 0/.06)}
+.dlg[data-theme=light] .dlg-btn-glass:hover{background:rgb(255 255 255/.85)}
+.dlg[data-theme=light] .dlg-btn-glass:active{background:rgb(255 255 255/.4)}
+.dlg-btn-danger{color:#fff;background:#e5534b}
+.dlg-btn-danger:hover{background:#ee5f57}
+.dlg-btn-danger:active{background:#cf453d}
+.dlg-btn-quiet{color:var(--ink-2)}
+.dlg-btn-quiet:hover{background:var(--hover);color:var(--ink)}
+.dlg-btn-quiet:active{background:color-mix(in srgb,var(--hover) 60%,transparent);color:var(--ink)}
+.dlg-btn-icon{width:32px;height:32px;padding:0;border-radius:9px;color:var(--ink-3)}
+.dlg-btn-icon:hover{background:var(--hover);color:var(--ink)}
+.dlg-x{position:absolute;top:12px;right:12px}
+/* the keyboard's ring only (the card turns data-keys on at the first Tab, never after a click): 1.5 px, the accent at 72 %, 2 px outside, following the control's radius */
+/* the app's global `.app.style-acira :is(button,a,[role=separator]):focus-visible{outline-color:var(--focus-ring)}` reads --focus-ring as a colour and ties this rule: our own name, and one more class of weight (found in testing: the ring read grey) */
+:root .dlg[data-keys] .dlg-btn:focus-visible,:root .dlg[data-keys] .dlg-chk-input:focus-visible{outline:var(--dlg-ring);outline-offset:2px}
+/* the quiet checkbox row (the same 36 line as the buttons) */
+.dlg-chk{display:inline-flex;align-items:center;gap:8px;height:36px;font-size:13px;color:var(--ink-2)}
+.dlg-chk-input{appearance:none;margin:0;width:16px;height:16px;border-radius:5px;flex:none;position:relative;outline:none;background:var(--well);box-shadow:inset 0 0 0 1px rgb(255 255 255/.2);transition:background-color 140ms var(--ease),box-shadow 140ms var(--ease)}
+.dlg[data-theme=light] .dlg-chk-input{box-shadow:inset 0 0 0 1px rgb(0 0 0/.22)}
+.dlg-chk:hover .dlg-chk-input{box-shadow:inset 0 0 0 1px var(--ink-3)}
+.dlg-chk-input:checked{background:var(--ink);box-shadow:none}
+.dlg-chk-input:checked::after{content:"";position:absolute;inset:0;background:var(--check);-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.2 8.3l2.4 2.4 5.2-5.4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.2 8.3l2.4 2.4 5.2-5.4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+/* centred dialogs from a site (alert, confirm, prompt: "{host} says"): a 40 px site icon, the host quiet above the message, an optional field */
+.dlg-fav-xl{width:40px;height:40px;border-radius:12px}
+.dlg-fav-img-xl{width:22px;height:22px}
+.dlg-k{font-size:12px;line-height:16px;color:var(--ink-3);letter-spacing:.005em}
+.dlg-title-md{font-size:14.5px;line-height:20px;font-weight:540;letter-spacing:-.01em;margin-top:4px}
+.dlg-field{display:flex;align-items:center;height:36px;margin-top:16px;padding:0 12px;border-radius:10px;background:var(--well);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 34%,transparent),0 0 0 3px color-mix(in srgb,var(--ink) 7%,transparent);font-size:13.5px;color:var(--ink)}
+.dlg-field-input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:inherit;font:inherit;padding:0}
+.dlg-btn-red{color:var(--danger)}
+.dlg-tile-danger{color:var(--danger);background:color-mix(in srgb,var(--danger) 13%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--danger) 24%,transparent)}
+.dlg{--danger:#ff8f86;--warn:#f5c26b}
+.dlg[data-theme=light]{--danger:#c8322b;--warn:#b7791f}
+/* the prompt family (anchored under the address field, radius 20): padding 16, a bold short title, one quiet line, a 36 px tile or site icon with its badge, 32 px buttons */
+.dlg-pad-p{padding:16px}
+.dlg-row-start{align-items:flex-start}
+.dlg-title-sm{font-size:13.5px;line-height:18px;font-weight:600;letter-spacing:-.008em}
+.dlg-host{font-weight:650}
+.dlg-sub-k{font-size:12.5px;line-height:17px;margin-top:2px;color:var(--ink-2);opacity:.85;letter-spacing:.005em;text-wrap:wrap}
+.dlg-tilewrap{position:relative;flex:none}
+.dlg-fav-lg{width:36px;height:36px;border-radius:10px}
+.dlg-fav-img-lg{width:20px;height:20px}
+.dlg-badge{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;box-shadow:0 0 0 2px rgb(var(--badge-ring)),0 1px 3px rgb(0 0 0/.3)}
+.dlg{--badge-ring:16 18 28}
+.dlg[data-theme=light]{--badge-ring:250 250 252}
+.dlg-ico{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.dlg-ico-badge{width:11px;height:11px;stroke-width:2}
+.dlg-tile-accent{width:36px;height:36px;border-radius:10px;color:var(--accent-ink,var(--accent));background:linear-gradient(180deg,rgb(255 255 255/.16),rgb(255 255 255/.05));box-shadow:inset 0 0 0 .5px rgb(255 255 255/.18),inset 0 1px 0 rgb(255 255 255/.22),0 1px 2px rgb(0 0 0/.22),0 4px 10px -4px rgb(0 0 0/.35)}
+.dlg[data-theme=light] .dlg-tile-accent{background:linear-gradient(180deg,#fff,rgb(246 246 249));box-shadow:0 0 0 .5px rgb(0 0 0/.12),inset 0 1px 0 #fff,0 1px 2px rgb(0 0 0/.08),0 4px 10px -4px rgb(0 0 0/.14)}
+.dlg-tile-accent .dlg-ico{width:18px;height:18px}
+.dlg-foot-p{margin-top:16px}
+.dlg-pad-p .dlg-btn{height:32px;padding:0 16px;border-radius:10px;font-size:13px}
+.dlg-pad-p .dlg-btn-icon{width:28px;height:28px;padding:0;border-radius:9px}
+.dlg-pad-p .dlg-x{top:10px;right:10px}
+.dlg-pad-p .dlg-chk{height:32px;font-size:12.5px}
+/* the surface's finish (the popup material under the card): his frost f2, inner light, rim and shadow. The pop-up system's own rules are strong (provider and formation states), so the dialog's are !important and
+   scoped to the surface the card marks with data-dlg. */
+.app .acira-popup-surface[data-dlg]{--popup-rim-shadow:inset 0 0 0 1px rgb(255 255 255/.14),inset 0 1px 0 rgb(255 255 255/.30),inset 0 -1px 0 rgb(0 0 0/.18);
+ --float-shadow:0 0 0 .5px rgb(0 0 0/.55),0 2px 6px -1px rgb(0 0 0/.24),0 18px 40px -12px rgb(0 0 0/.52),0 40px 64px -34px rgb(0 0 0/.5)}
+.app .acira-popup-surface[data-dlg=light]{--popup-rim-shadow:inset 0 0 0 1px rgb(0 0 0/.08),inset 0 1px 0 rgb(255 255 255/.95),inset 0 -1px 0 rgb(0 0 0/.05);
+ --float-shadow:0 0 0 .5px rgb(0 0 0/.14),0 2px 6px -1px rgb(0 0 0/.08),0 18px 40px -12px rgb(0 0 0/.22),0 40px 64px -34px rgb(0 0 0/.2)}
+.app .acira-popup-surface[data-dlg-family=dialog]{--geometry-materialRadius:16px}
+.app .acira-popup-surface[data-dlg-family=prompt]{--geometry-materialRadius:20px}
+.app .acira-popup-surface[data-dlg] .popup-material{box-shadow:var(--popup-rim-shadow),var(--float-shadow)!important}
+.app .acira-popup-surface[data-dlg] .popup-backdrop-sources{filter:blur(32px) saturate(2.4) brightness(.64)!important}
+.app .acira-popup-surface[data-dlg=light] .popup-backdrop-sources{filter:blur(32px) saturate(1.9) brightness(1.06)!important}
+.app .acira-popup-surface[data-dlg] .popup-backdrop-tint{background:rgb(16 18 28/var(--dlg-tint,.32))!important}
+.app .acira-popup-surface[data-dlg=light] .popup-backdrop-tint{background:rgb(250 250 252/var(--dlg-tint,.36))!important}
+.app .acira-popup-surface[data-dlg] .popup-backdrop-base{background:rgb(22 23 27)!important}
+.app .acira-popup-surface[data-dlg=light] .popup-backdrop-base{background:rgb(240 240 243)!important}
+.app .acira-popup-surface[data-dlg] .popup-material{background:linear-gradient(180deg,rgb(255 255 255/.09),rgb(255 255 255/.02) 40%,rgb(255 255 255/0) 70%)!important}
+.app .acira-popup-surface[data-dlg=light] .popup-material{background:linear-gradient(180deg,rgb(255 255 255/.5),rgb(255 255 255/.08) 45%,rgb(255 255 255/0) 70%)!important}
+/* glass opacity at the ends of its range and reduce transparency (the pop-up's "opaque" provider takes no snapshot): his solid in the theme colour, never see-through */
+.app .acira-popup-surface[data-dlg][data-material-provider=opaque] .popup-backdrop-base{background:#1c1d22!important}
+.app .acira-popup-surface[data-dlg=light][data-material-provider=opaque] .popup-backdrop-base{background:#f7f7f9!important}
+.app .acira-popup-surface[data-dlg][data-material-provider=opaque] .popup-backdrop-tint{background:transparent!important}
+/* his solid halves the inner light (`body.solid .g>.mat>.inner{opacity:.5}`): the same gradient at half the alpha under the opaque and native providers (found in testing solid matrix: the top strip read 46 instead of 37) */
+.app .acira-popup-surface[data-dlg][data-material-provider=opaque] .popup-material,.app .acira-popup-surface[data-dlg][data-material-provider=native] .popup-material{background:linear-gradient(180deg,rgb(255 255 255/.045),rgb(255 255 255/.01) 40%,rgb(255 255 255/0) 70%)!important}
+.app .acira-popup-surface[data-dlg=light][data-material-provider=opaque] .popup-material,.app .acira-popup-surface[data-dlg=light][data-material-provider=native] .popup-material{background:linear-gradient(180deg,rgb(255 255 255/.25),rgb(255 255 255/.04) 45%,rgb(255 255 255/0) 70%)!important}
+.app .acira-popup-surface[data-dlg][data-material-provider=native] .popup-sheet-material{background:#1c1d22}
+.app .acira-popup-surface[data-dlg=light][data-material-provider=native] .popup-sheet-material{background:#f7f7f9}
+
+/* Beta 14: the sign-in card (the sample's "auth"): a note row in the warn colour, then labelled fields; the focused field wears the ring the sample's `.field.on` does. */
+.dlg-warn{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;border-radius:10px;background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--warn);font-size:12.5px}
+.dlg-warn-ico{flex:none;width:16px;height:16px}
+.dlg-group{margin-top:16px}.dlg-group+.dlg-group{margin-top:12px}
+.dlg-lbl{display:block;font-size:12px;line-height:16px;color:var(--ink-3);margin:0 0 6px 2px}
+.dlg-group .dlg-field{margin-top:0;box-shadow:inset 0 0 0 1px var(--well-line)}
+.dlg-group .dlg-field:focus-within{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 34%,transparent),0 0 0 3px color-mix(in srgb,var(--ink) 7%,transparent)}
+/* the card itself takes focus when it opens (Esc and Enter work at once) and never draws the browser's own ring: it showed a thick blue line round the whole card whenever the last input was the keyboard */
+.dlg:focus,.dlg:focus-visible{outline:none}
+/* a long text (an extension's list of what it can access, a form-resubmit paragraph) keeps its line breaks and scrolls inside the card; the card fits a 1280 x 720 window */
+.dlg-sub{white-space:pre-line;max-height:min(340px,calc(100vh - 250px));overflow-y:auto}

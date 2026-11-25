@@ -1,0 +1,27 @@
+/* Beta 14: a seal that can be looked at closer. The picture is the seal itself: no plate, no glow, no shadow. The enlarge is a transform (no layout), so nothing around it moves. */
+.app .seal-closer { position: relative; display: grid; place-items: center; flex: none; padding: 0; border: 0; background: none; color: inherit; cursor: zoom-in; border-radius: 50%; }
+.app .seal-closer[data-open] { cursor: zoom-out; }
+.app .seal-closer[data-always] { cursor: default; }
+.app .seal-closer:focus-visible { outline: 2px solid var(--focus-ring-color, var(--accent)); outline-offset: 2px; }
+.app .seal-closer-rest { display: grid; place-items: center; transform-origin: 50% 50%; transition: transform 320ms cubic-bezier(.2, 0, 0, 1), opacity 0s; }
+.app[data-motion-speed='off'] .seal-closer-rest,
+.app[data-reduced-motion='true'] .seal-closer-rest { transition: none; }
+@media (prefers-reduced-motion: reduce) { .app .seal-closer-rest { transition: none; } }
+/* Beta 14, look closer's tilt (reported 15 Nov 19:40): the frame sits exactly over the still (the same coin framing, sealStyle) and fades in over it, and out again on the way back: nothing cuts. */
+.app .seal-closer-rest, .app .seal-closer-tilt { grid-area: 1 / 1; }
+.app .seal-closer-tilt { display: block; pointer-events: none; user-select: none; opacity: 0; transition: opacity 180ms linear; }
+.app .seal-closer-tilt[data-ready] { opacity: 1; }
+/* The flat still must not stay under the turning coin (reported 17 Nov 01:36: a flat copy shows behind the tilt, the rim "EST. 2026" doubled): once the tilt picture is up it IS the seal, so the still goes the moment the tilt picture has finished fading in (a cross-fade of two layers would dip: 180 ms delay, then gone), and
+   comes back at once, under the tilt picture's fade-out, when the seal returns. The still stays whenever the frames are not up (reduced motion, a number the frames do not carry, frames not loaded yet). */
+.app .seal-closer[data-tilt] .seal-closer-rest { opacity: 0; transition: transform 320ms cubic-bezier(.2, 0, 0, 1), opacity 0s linear 180ms; }
+.app[data-motion-speed='off'] .seal-closer-tilt,
+.app[data-reduced-motion='true'] .seal-closer-tilt { transition: none; }
+
+/* Beta 14, the look-closer is the live 3D coin (SealCloser.tsx): its canvas sits exactly over the still (the same coin framing, sealStyle), fades in over it at the still's own pose, and the still goes the
+   moment the fade has finished (no flat copy under the turning coin, as with the tilt frames); on the way back the still returns at once under the fade-out. */
+.app .seal-closer-live { grid-area: 1 / 1; display: block; pointer-events: none; user-select: none; opacity: 0; transition: opacity 180ms linear; }
+.app .seal-closer-live[data-ready] { opacity: 1; }
+.app .seal-closer-live .seal-closer-canvas { display: block; width: 100%; height: 100%; }
+.app .seal-closer[data-live] .seal-closer-rest { opacity: 0; transition: transform 320ms cubic-bezier(.2, 0, 0, 1), opacity 0s linear 180ms; }
+.app[data-motion-speed='off'] .seal-closer-live,
+.app[data-reduced-motion='true'] .seal-closer-live { transition: none; }

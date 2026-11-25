@@ -1,0 +1,10 @@
+/* Beta 14: the list behind the sidebar row's "more" button (components/ExtensionMoreList.tsx), the menu rows of the other menus. */
+:root:root:root .browser-popup.popup-content-extension-more>.popup-header{display:none}
+.extension-more-list{display:flex;flex-direction:column;gap:2px;box-sizing:border-box;max-height:328px;padding:4px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.extension-more-list:hover{scrollbar-width:thin}
+/* The rows are the menus' own (popup-menu.css .menu-row: 30 px, 8 px in, 16 px icon, the name takes the rest); only what is the list's own is here. */
+.extension-more-row{text-align:start}
+.extension-more-name{text-align:start}
+.extension-more-badge{flex:none;box-sizing:border-box;max-width:64px;height:14px;padding:0 4px;border-radius:3px;font-size:9px;font-weight:400;line-height:14px;overflow:hidden;white-space:nowrap;box-shadow:0 0 1px 1px rgb(0 0 0 / .2)}
+.extension-more-row[aria-disabled=true]{opacity:.4;filter:grayscale(1)}
+.extension-more-empty{padding:12px;color:var(--chrome-muted,inherit);font-size:13px}

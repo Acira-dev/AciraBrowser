@@ -40,7 +40,10 @@ export function TabGroupHeader({group,count,tab,tabs,groups,labelWidth,leadingSp
    onContextMenu={event=>{event.preventDefault();event.stopPropagation();clear();const b=event.currentTarget.getBoundingClientRect();onContext(tab.id,{x:b.x,y:b.y,width:b.width,height:b.height},true);}}
    onKeyDown={event=>{if(editor.editing)return;if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();onContext(tab.id,bounds(),true);}else if(event.altKey){const move=groupKeyboardDrop(tabs,groups,group.id,event.key);if(move){event.preventDefault();dispatch(move);}}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)){event.preventDefault();onNavigateKey(event.key);}}}>
    {editor.editing?<GroupNameInput group={group} groups={groups} onSave={name=>dispatch({type:'tab.group.update',id:group.id,patch:{name}})} onCancel={()=>{editor.stop();requestAnimationFrame(()=>header.current?.querySelector('button')?.focus({preventScroll:true}));}}/>:
-    <TabGroupBadge reducedMotion={reducedMotion} standalone group={group} collapsed={group.collapsed} count={count} onMove={point=>{clear();const drop=groupDropAtPoint(viewport.current,point,tab.id,tabs,groups);if(drop)dispatch(drop);}} onToggle={()=>{clear();onPreview?.(tab.id,bounds(),false,true);dispatch({type:'tab.group.update',id:group.id,patch:{collapsed:!group.collapsed}});}}/>}
+    <TabGroupBadge reducedMotion={reducedMotion} standalone group={group} collapsed={group.collapsed} count={count} onMove={point=>{clear();const drop=groupDropAtPoint(viewport.current,point,tab.id,tabs,groups);if(drop)dispatch(drop);}} onTrack={point=>{
+   // The tray a release would nest this group into takes the same mark a tab joining a group does; moving off, or releasing, takes it away.
+   const mark=point?groupDropAtPoint(viewport.current,point,tab.id,tabs,groups):null;const into=mark?.type==='tab.drop'&&mark.wholeGroup?mark.parentGroupId:null;
+   for(const node of viewport.current?.querySelectorAll<HTMLElement>('[data-group-tray]')||[])node.toggleAttribute('data-group-drop-target',!!into&&node.dataset.groupTray===into);}} onToggle={()=>{clear();onPreview?.(tab.id,bounds(),false,true);dispatch({type:'tab.group.update',id:group.id,patch:{collapsed:!group.collapsed}});}}/>}
   </motion.div>;
 }
 

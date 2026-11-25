@@ -1,0 +1,14 @@
+/* The miniature in a Settings > Appearance > Active border card. The ring itself is drawn by styles/active-border.css (the .ab-demo-* surfaces are in its lists);
+   this file only lays the three miniatures out on the card, in the person's own theme (--cc-*: the same tokens the other choice cards' pictures use). */
+.ab-demo { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 7%; padding: 7% 8%; background: var(--cc-frame); }
+.ab-demo-tiles { display: flex; gap: 5%; height: 26%; }
+.ab-demo-tile, .ab-demo-row, .ab-demo-field { position: relative; display: block; box-sizing: border-box; }
+.ab-demo-tile { flex: 1; border-radius: 5px; background: rgb(var(--cc-chrome-ink) / .07); }
+.ab-demo-tile[data-ab-demo] { background: color-mix(in oklab, var(--accent, #3b6eea) 13%, var(--cc-sheet)); box-shadow: var(--ab-seat); }
+.ab-demo-row { height: 22%; border-radius: 5px; display: flex; align-items: center; gap: 6%; padding: 0 6%; background: var(--cc-sheet); box-shadow: var(--ab-top), var(--ab-seat); }
+.ab-demo-i { flex: none; width: 9px; height: 9px; border-radius: 3px; background: var(--accent, #3b6eea); }
+.ab-demo-b { display: block; height: 3px; border-radius: 2px; background: rgb(var(--cc-chrome-ink) / .5); }
+.ab-demo-row > .ab-demo-b { flex: 1; max-width: 62%; }
+.ab-demo-field { height: 20%; border-radius: 4px; display: flex; align-items: center; padding: 0 8%; background: color-mix(in srgb, var(--cc-sheet) 80%, rgb(var(--cc-chrome-ink) / .08)); }
+.ab-demo-field > .ab-demo-b { width: 48%; background: rgb(var(--cc-chrome-ink) / .42); }
+:root[data-active-border=plain] .ab-demo-row, .ab-demo-row[data-ab-demo=plain] { box-shadow: var(--ab-seat); }

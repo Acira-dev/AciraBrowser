@@ -37,12 +37,12 @@ export const sidebarPeekOf = (settings: { sidebarPeek?: Partial<SidebarPeek> } |
 export const hideToolbarOn = (settings: { hideToolbar?: boolean; verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, view: WindowView): boolean =>
   settings?.hideToolbar === true && settings.verticalTabs === true && settings.addressInSidebar !== true && view !== 'seamless';
 
-/** Sidebar + address (tabs and the address bar both in the sidebar) in Full (13.5): the sidebar is the top of the window there, the address field, Back, Reload, Forward and the
- * window's own buttons all sit in it, so it cannot be closed: no button, no key, no command closes it, and a saved window that has it closed gets it open again. Seamless is the one
- * view that hides it (it has no docked sidebar to close: the left edge brings it). Compact and Focus are the same window as Full in that layout (ui/sidebarMode.ts viewsOfLayout), so
- * they hold it open too. Pure and shared: the renderer, the reducer and main (through the runtime bundle) read it from here. */
-export const sidebarHeldOpen = (settings: { verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, view: WindowView): boolean =>
-  settings?.verticalTabs === true && settings.addressInSidebar === true && view !== 'seamless';
+/** Sidebar + address (tabs and the address bar both in the sidebar) used to HOLD ITS SIDEBAR OPEN (13.5: the address field, Back, Reload, Forward and the window's own buttons sit in it, so no button, key or command
+ * closed it, and a saved window that had it closed got it open again). Beta 14 (the reference design notes, 17 Nov) drops the rule: the sidebar closes there like in every sidebar layout, with the sidebar button back at the
+ * end of the Back / Reload / Forward row, and what a closed sidebar is follows "When the sidebar is closed" (Mini or Hidden; with Hidden or Seamless it comes back from the window's edge, Ctrl/Cmd+Shift+E or Ctrl/Cmd+L).
+ * Nothing is held open any more. The function and the three that use it (`sidebarHeldOpenIn`, `withSidebarHeldOpen`, `patchKeepingSidebarOpen`) stay as the one place a rule like this would live, answering "no" for
+ * every layout, so each caller (the reducer, main, the interface, Settings) keeps its shape; they can be deleted in 14.1. Pure and shared: the renderer, the reducer and main (through the runtime bundle) read it from here. */
+export const sidebarHeldOpen = (_settings: { verticalTabs?: boolean; addressInSidebar?: boolean } | null | undefined, _view: WindowView): boolean => false;
 
 /** `sidebarHeldOpen` for a window: an installed web app's window (windowUi.app, set by main) shows no sidebar whatever the layout says (it is the bare, chromeless window an app is), so nothing holds it open there. */
 export const sidebarHeldOpenIn = (settings: { verticalTabs?: boolean; addressInSidebar?: boolean } & Legacy | null | undefined, windowUi: Pick<WindowUi, 'view' | 'app'>): boolean =>

@@ -1,4 +1,5 @@
 import { motionTokens, type MotionTokenId } from './motionTokens';
+import { publishedAppMotionScale } from './rootMirror';
 
 /** The split surfaces' springs for framer-motion, read from the one token table (`motionTokens.ts`; research
  *  docs/launch/research/APPLE_MORPH_RESEARCH.md 3.1 and 3.2), so the split, the carried chip and the rest of the app are one
@@ -10,8 +11,12 @@ import { motionTokens, type MotionTokenId } from './motionTokens';
  *  Spatial tokens may carry bounce; opacity never does. */
 export type SplitMotionToken = MotionTokenId;
 
-/** The global speed multiplier, read from .app when a surface opens (1 when unset). */
+/** The global speed multiplier, read from .app when a surface opens (1 when unset). Beta 14 (smoothness B1): the value App renders into `.app`'s
+ *  inline `--motion-scale` is published in the same commit (rootMirror.ts), so this no longer forces a style recalculation (17 per tab click);
+ *  before App has rendered, or outside it, the computed style is read as before. */
 export function motionScale(): number {
+  const published = publishedAppMotionScale();
+  if (published !== null && typeof document !== 'undefined' && document.querySelector('.app')) return Number.isFinite(published) ? Math.max(0, published) : 1;
   const node = typeof document === 'undefined' ? null : document.querySelector('.app') ?? document.documentElement, value = node ? parseFloat(getComputedStyle(node).getPropertyValue('--motion-scale')) : NaN;
   return Number.isFinite(value) ? Math.max(0, value) : 1;
 }

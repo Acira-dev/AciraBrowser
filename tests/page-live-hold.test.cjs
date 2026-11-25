@@ -91,7 +91,7 @@ test('the layout bridge takes a view\'s hold size and refuses a bad one',()=>{
 const strip=text=>text.replace(/\/\*[\s\S]*?\*\//g,'');
 test('main places a view that carries a hold with placeLive (only in a layout sent at once, a page already on screen) and lets it go when the hold stops coming',()=>{
  const main=strip(fs.readFileSync(path.join(__dirname,'..','desktop','main.cjs'),'utf8'));
- assert.match(main,/const live=!!rect\.hold&&next\.pageImmediate===true&&visible&&wasVisible&&!entry\.slideRun;/,'never over main\'s own glide of the page: a rectangle sent at once during it becomes the glide\'s new end, as before');
+ assert.match(main,/const live=(?:!entry\.dockSlide&&)?!!rect\.hold&&next\.pageImmediate===true&&visible&&wasVisible&&!entry\.slideRun;/,'never over main\'s own glide of the page: a rectangle sent at once during it becomes the glide\'s new end, as before');
  assert.match(main,/if\(live\)placeLive\(entry,bounds,rect\.hold,slideClock,pageRadius\);else\{const animated=/);
  assert.match(main,/if\(entry\.liveHold&&!live\)endLive\(entry,slideClock\);\}else if\(entry\.liveHold\)endLive\(entry,slideClock\);/,'a view without the hold, or no longer in the layout, is let go');
 });
@@ -99,8 +99,8 @@ test('main places a view that carries a hold with placeLive (only in a layout se
 test('the interface sends the hold only while it moves the page itself, never with reduced motion or main\'s own glide',()=>{
  const app=fs.readFileSync(path.join(__dirname,'..','src','App.tsx'),'utf8'),motion=fs.readFileSync(path.join(__dirname,'..','src','ui','sharedMotion.ts'),'utf8');
  assert.match(app,/if \(fields\.pageImmediate === true && !s\.reducedMotion && \(document\.documentElement\.dataset\.pageLive !== undefined \|\| performance\.now\(\) < toolbarEasingUntil\.current\)\)/);
- assert.match(app,/let goal = pageFollowSize\(view\.tabId\); if \(!goal\) \{ goal = eased\.get\(view\.tabId\) \?\? \{ width: view\.bounds\.width, height: view\.bounds\.height \+ rise \}; eased\.set\(view\.tabId, goal\); \}/,'the pane\'s measured end size, else the page as it stands plus the toolbar height still to go (never the geometry model: wrong for a split), taken once per ease');
- assert.match(app,/if \(easingHolds\.current\.until !== toolbarEasingUntil\.current\) easingHolds\.current = \{ until: toolbarEasingUntil\.current, sizes: new Map\(\) \};/,'a new ease starts a new estimate');
+ assert.match(app,/let goal = pageFollowSize\(view\.tabId\); if \(!goal\) \{ const was = easeFrom\?\.views\.get\(view\.tabId\); goal = eased\.get\(view\.tabId\) \?\? \(easeFrom && was \? toolbarEaseEnd\(was, easeFrom\.header, headerHeight\) : \{ width: view\.bounds\.width, height: view\.bounds\.height \+ rise \}\); eased\.set\(view\.tabId, goal\); \}/,'the pane\'s measured end size, else (D123) where the page stood before the ease plus the height the toolbar gives up, else the page as it stands plus the toolbar height still to go (never the geometry model: wrong for a split), taken once per ease');
+ assert.match(app,/if \(easingHolds\.current\.until !== toolbarEasingUntil\.current\) easingHolds\.current = \{ until: toolbarEasingUntil\.current, sizes: new Map\(\), from: measuredBefore\.current \};/,'a new ease starts a new estimate, from the layout measured before it (D123)');
  assert.match(app,/rise = headerNow === undefined \? 0 : Math\.max\(0, Math\.round\(headerNow - headerHeight\)\)/);
  assert.match(app,/if \(!topSeam && toolbarWasSeamless\.current && !s\.reducedMotion\) toolbarEasingUntil\.current = performance\.now\(\) \+ TOOLBAR_EASE_HOLD_MS;/,'leaving Seamless opens the window');
  assert.match(app,/if \(headerHeight !== toolbarWasHeight\.current && !s\.reducedMotion\) toolbarEasingUntil\.current = performance\.now\(\) \+ TOOLBAR_EASE_HOLD_MS;/,'so does any change of the toolbar\'s height (Sidebar mode in or out, Full and Compact)');
@@ -109,4 +109,22 @@ test('the interface sends the hold only while it moves the page itself, never wi
  const follow=motion.slice(motion.indexOf('function followPage('),motion.indexOf('function followPage(')+3000);
  assert.ok(follow.indexOf('followSizes = new Map(')<follow.indexOf('Object.assign(style, from)'),'the end sizes are measured on the new layout, before the old box is applied');
  assert.match(follow,/window\.dispatchEvent\(new Event\(PAGE_FOLLOW_END\)\)/);
+});
+
+// D96 (19 Nov 2026, regression guard c8 on the 2500-card page): the toolbar coming back, the interface first moved the page itself (one live rectangle, with the hold) and a few frames later
+// handed it to main's glide. The glide let the held layout go at its start, so the page laid out once at the live rectangle (1034x743, +41 ms) and once more at the end (1034x714, +420 ms).
+// Now the glide keeps the live movement's held layout and lets it go when it lands: one layout.
+test('a live movement handed over to a glide: the layout stays held through the glide and is let go only after it lands', () => {
+ const hidden={x:240,y:6,width:1034,height:744},shown={x:240,y:36,width:1034,height:714},r=rig([hidden]),p=r.panes[0];
+ placeLive(p.entry,{x:240,y:7,width:1034,height:743},sizeOf(shown),r.clock,8); r.advance(8);
+ endLive(p.entry,r.clock);   // main says the movement ended (the next layout carries no hold) before it hands the page to the glide
+ placePageBounds(p.entry,shown,true,r.clock,1000/120,'slide',{duration:.2,bounce:0},8,false,1,null);
+ const releasedAt=()=>p.calls.findIndex(c=>c[0]==='release');
+ r.advance(60);
+ assert.equal(releasedAt(),-1,'not let go at the glide\'s start (that laid the page out at the live rectangle)');
+ r.advance(1000);
+ assert.deepEqual(p.view.bounds,shown,'the glide lands');
+ const rel=releasedAt(),lastBounds=p.calls.map(c=>c[0]).lastIndexOf('bounds');
+ assert.ok(rel>lastBounds,'let go after the last rectangle: the page lays out once, at its final size');
+ assert.equal(p.calls.filter(c=>c[0]==='hold').length,1,'held once, at the larger size');
 });

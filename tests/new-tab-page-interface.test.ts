@@ -32,8 +32,8 @@ test('it never wears the loading dots; a website does',()=>{
   assert.equal(tabShowsLoading({...loading,...site}),true);
 });
 
-test('its hover card is the name card, as a New Tab\'s, never a picture of the page',()=>{
-  assert.equal(tabCardKind({},{...page,privacy:undefined,sleeping:false}),'name');
+test('its hover is the plain tooltip, as a New Tab\'s (Acira\'s own pages carry no card since the sweep, c270e5fe9), never a picture of the page',()=>{
+  assert.equal(tabCardKind({},{...page,privacy:undefined,sleeping:false}),null);
   assert.equal(tabCardKind({},{...site,privacy:undefined,sleeping:false}),'preview');
 });
 

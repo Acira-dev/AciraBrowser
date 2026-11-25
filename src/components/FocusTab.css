@@ -1,0 +1,25 @@
+/* Beta 14: the Focus row's one chip (FocusTab.tsx). It is the compact strip's chip (CompactTabs.css): this file only says how the one chip sits in the row. */
+.acira-compact-tabs[data-single=true]{flex:0 1 168px;width:auto;min-width:40px;max-width:168px;height:36px}
+.acira-compact-tabs[data-single=true]>.acira-compact-tab{flex:1 1 auto;width:100%;min-width:0}
+/* The raised fill behind the current tab is the chip's own (the compact strip's travelling pill, here standing still); the chip is its own stacking context, so it sits behind the face. */
+.acira-compact-tab.focus-tab>.focus-tab-fill{left:0;top:0;width:100%;height:100%;z-index:-1}
+/* The face is a layer: a tab switch fades the leaving face out over the arriving one in the same box (AnimatePresence pop layout makes the leaving one absolute). */
+.acira-compact-tab.focus-tab>.acira-compact-tab-inner{position:relative}
+.acira-compact-tab.focus-tab>.acira-compact-tab-inner[inert]{pointer-events:none}
+/* Room for it: the × of the current tab is always there (the full strip's current tab shows one), no longer a hover that the icon hides. A tight chip folds to the icon (below). */
+@container(min-width:88px){
+  .acira-compact-tab.focus-tab .acira-compact-tab-close{opacity:1;pointer-events:auto}
+}
+/* Below that the name would be a letter and an ellipsis: the chip folds to its site icon (the compact chip's own threshold, 88px), and the close button goes. There is no × over the icon on hover here, as a compact
+   chip has: the one chip is also the whole row's tab, and a click on its icon must never close it. Ctrl+W, the middle button and the tab menu close it. */
+@container(max-width:87px){
+  .acira-compact-tab.focus-tab .acira-compact-tab-label{display:none}
+  .acira-compact-tab.focus-tab>.acira-compact-tab-inner{justify-content:center;padding:0}
+  .acira-compact-tab.focus-tab .acira-compact-tab-close{display:none}
+}
+/* The tab-list button of the Focus row carries the strip's own equaliser while another tab plays (the same small dot matrix a tab shows on its icon), so music is never a mystery. */
+.toolbar-tab-overview[data-sound=playing]>.tab-sound-meter[data-variant=badge]{display:block;position:absolute;right:3px;bottom:4px;pointer-events:none}
+/* The name is cut with a clean ellipsis (the brief), not the strip's 20px fade: the fade belongs to a title that can scroll under the pointer (the marquee), and this one stays put. The title text is inline so the
+   label's own text-overflow can take it (an inline-block is atomic and would be dropped whole). */
+.acira-compact-tabs[data-single=true]>.acira-compact-tab.focus-tab .acira-compact-tab-label{text-overflow:ellipsis;-webkit-mask-image:none;mask-image:none}
+.acira-compact-tabs[data-single=true]>.acira-compact-tab.focus-tab .tab-title-text{display:inline}

@@ -12,6 +12,11 @@
 const ACTIVATE_DELAY_MS = 120;
 const RETRY_MS = 50;
 const RETRIES = 12;
+/** E7 (17 Nov): the interface keeps `window.__aciraPointerHeld` true from a primary press to its release (src/ui/pageFocus.ts). A press that chose a tab may be the start of
+ *  a drag: the page it chose is presented a few ms later and, given the keyboard then, blurred the interface window under the drag, which ended it before it moved. */
+const POINTER_HELD_PROBE = 'window.__aciraPointerHeld===true';
+const HOLD_POLL_MS = 40;
+const HOLD_MAX_MS = 60000;
 
 /** Is this element one that is typed in (a text field, a contenteditable rename, a combobox)? Runs inside the interface page too: the probes
  * below send its source along with theirs. */
@@ -30,6 +35,8 @@ function interfaceKeepsFocus(doc, textField = isTextField) {
   const el = doc && doc.activeElement;
   if (!el || el === doc.body || el === doc.documentElement) return false;
   if (textField(el)) return true;
+  // The open Favorites panel holds the keyboard itself (Esc folds it) and folds when the interface loses it: a click that came with the window's activation must not have it taken to the page 120 ms later.
+  try { if (el.matches('.sb-apps-panel') === true) return true; } catch { /* cannot say */ }
   // A press with the mouse leaves a button focused but not `:focus-visible`; Tab, F6 and the arrow keys do.
   try { return el.matches(':focus-visible') === true; } catch { return false; }
 }
@@ -107,9 +114,10 @@ function createFocusGate({active, give, usable = () => true}) {
  * is nowhere. Chromium falls back to the contents' own initial focus (BrowserView::RestoreFocus -> WebContents::RestoreFocus /
  * SetInitialFocus). Here: whatever holds the keyboard after the platform's restore stays when it is live and on screen; else, in order, an
  * open Link preview, an open menu or panel, the interface when it held the keyboard as the window was left (the person was typing there: the
- * field keeps its text and caret), else whatever else held it then when it is still live and on screen (13.10: an extension's side panel,
- * the other page of a split view: the keys land where they were), the page on screen, else the interface. Called synchronously from the
- * window's own 'focus' event, so a press that came with the activation (a click in the address field) lands after it and wins, as it does in Chromium.
+ * field keeps its text and caret), else whatever else held it then when it is still live and on screen (Beta 14: a side panel site, an
+ * extension's side panel, the DevTools dock, the other page of a split view: the keys land where they were), the page on screen, else the
+ * interface. Called synchronously from the window's own 'focus' event, so a press that came with the activation (a click in the address
+ * field) lands after it and wins, as it does in Chromium.
  * env: focused the web contents holding the keyboard now (null: nowhere), usable(contents) is it live and on screen in this window, preview,
  * popup, ui, page the candidates (null when absent), held who held the keyboard when the window was left.
  */
@@ -150,6 +158,8 @@ function createPageFocus({window, chrome, page, blocked = () => false, focus, wi
     if (!live(ui) || !interfaceHolds(ui)) return false;
     try { return (await ui.executeJavaScript(typingProbe(tabId))) === true; } catch { return false; }
   };
+  /** Is a pointer button held in the interface? */
+  const pointerHeld = async ui => { try { return (await ui.executeJavaScript(POINTER_HELD_PROBE)) === true; } catch { return false; } };
   return {
     /** A press chose a page. The tab may still be on its way to the screen (a switch, a new tab), so look a few times. */
     chose() {
@@ -201,6 +211,12 @@ function createPageFocus({window, chrome, page, blocked = () => false, focus, wi
       if (!live(ui) || !interfaceHolds(ui)) { focus(contents); return; }     // the interface does not hold the keyboard: nothing to protect
       void (async () => {
         if (await typingHere(tabId)) return;
+        // A press that chose this tab may be held (the start of a drag): the keyboard stays in the interface until the button is released, then the page takes it. Bounded: a release
+        // that never reports itself holds it for HOLD_MAX_MS at most.
+        for (let waited = 0; waited < HOLD_MAX_MS && live(ui) && await pointerHeld(ui); waited += HOLD_POLL_MS) {
+          await new Promise(resolve => timers.setTimeout(resolve, HOLD_POLL_MS));
+          if (!still()) return;
+        }
         const shown = page();
         if (!shown || shown.id !== tabId || shown.contents !== contents || !shown.visible || !live(contents) || !still()) return;
         focus(contents);
@@ -210,4 +226,4 @@ function createPageFocus({window, chrome, page, blocked = () => false, focus, wi
   };
 }
 
-module.exports = {createPageFocus, createFocusGate, activationTarget, interfaceKeepsFocus, isTextField, typingFor, typingProbe, INTERFACE_FOCUS_PROBE, ACTIVATE_DELAY_MS, RETRY_MS, RETRIES};
+module.exports = {POINTER_HELD_PROBE, HOLD_POLL_MS, HOLD_MAX_MS, createPageFocus, createFocusGate, activationTarget, interfaceKeepsFocus, isTextField, typingFor, typingProbe, INTERFACE_FOCUS_PROBE, ACTIVATE_DELAY_MS, RETRY_MS, RETRIES};

@@ -1,0 +1,74 @@
+/* Noël, the opt-in Christmas theme. Everything here hangs on <html data-noel>: with the theme off none of it is in the page.
+   The rule of the theme: it adds light and snow, never a line (no ring, no hairline on any plate). */
+@property --noel-wr { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
+/* ---- frost and the cushion's picture, on a plate (the selected tab, the address field, New Tab's search box, a Favorite) ---- */
+.noel-fx { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.noel-fx::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: var(--noel-frost-dark, none) repeat-x 0 0 / 300px 36px;
+  -webkit-mask-image: radial-gradient(circle calc(var(--noel-wr) + .5px) at var(--noel-mx, -99px) var(--noel-my, -99px), transparent 0 55%, #000 100%);
+  mask-image: radial-gradient(circle calc(var(--noel-wr) + .5px) at var(--noel-mx, -99px) var(--noel-my, -99px), transparent 0 55%, #000 100%);
+  transition: --noel-wr .9s cubic-bezier(.2, 0, 0, 1), opacity .4s ease; }
+.app[data-appearance=light] .noel-fx::before { background-image: var(--noel-frost-light, none); }
+:root[data-noel-frost] .noel-fx::before { opacity: 1; }
+/* it clears where the pointer rests, and grows back; on the address field and New Tab's search box it clears while you type */
+[data-noel-host]:hover > .noel-fx::before { --noel-wr: 46px; transition: --noel-wr .18s ease-out, opacity .4s ease; }
+[data-noel-host]:focus-within > .noel-fx:is([data-kind=addr], [data-kind=ntp])::before { opacity: 0; }
+.noel-fx[data-kind=addr]::before { background-position: -37px 0; background-size: 300px 32px; }
+.noel-fx[data-kind=ntp]::before { background-position: -160px 0; background-size: 300px 38px; }
+.noel-fx[data-kind=fav]::before { background-size: 300px 36px; opacity: 0; }
+:root[data-noel-frost] .noel-fx[data-kind=fav]::before { opacity: .9; }
+.noel-cushion { position: absolute; left: 0; top: -9px; width: 100%; height: 18px; pointer-events: none; }
+/* An inside cap (the address field, New Tab's search, the strip's pill) lies within its plate's own outline: the same corner radius, and inside the focus ring's inner edge
+   while the plate has focus (the ring's own timing, so the cap is never left under the ring). The controller sets --noel-r and --noel-ring-w from the plate. */
+.noel-cushion[data-clip] { --noel-ring: 0px; clip-path: inset(var(--noel-ring) var(--noel-ring) 0 var(--noel-ring) round max(0px, calc(var(--noel-r, 0px) - var(--noel-ring)))); transition: clip-path var(--ab-in, .2s) var(--ab-in-ease, ease); }
+[data-noel-host]:focus-within > .noel-fx > .noel-cushion[data-clip] { --noel-ring: var(--noel-ring-w, 0px); }
+[data-reduced-motion=true] .noel-cushion[data-clip] { transition: none; }   /* the controller sets the real top and height (a tab's snow sits on top of its plate, the address field's inside its top edge) */
+/* the address bar lays its children out in flow (frost-preview.css: position relative, z-index 1): the frost is the first thing under them */
+:root[data-noel] .app .address-bar > .noel-fx { position: absolute; inset: 0; z-index: 0; }
+/* while a card glides to another tab it carries the plate and its snow: the row's own copy waits (the card is gone in the frame the row lands) */
+[data-glide] > .noel-fx { visibility: hidden; }
+[data-reduced-motion=true] .noel-fx::before, .app.opaque-glass .noel-fx::before { transition: none; }
+/* Reduced transparency: a flat cool tint, no texture */
+.app.opaque-glass .noel-fx::before { background-image: linear-gradient(180deg, rgba(214, 232, 255, .20), rgba(214, 232, 255, 0) 70%); }
+.app.opaque-glass[data-appearance=light] .noel-fx::before { background-image: linear-gradient(180deg, rgba(110, 160, 230, .22), rgba(110, 160, 230, 0) 70%); }
+
+/* ---- the sidebar's snow and drift: the bottom-most things in the sidebar ---- */
+.noel-snow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+.noel-drift { position: absolute; left: 0; bottom: 0; width: 100%; height: 22px; pointer-events: none; z-index: -1; }
+
+/* ---- the flat Santa hat on the profile picture ---- */
+/* --noel-pic: the picture's size; the hat is drawn for a 22 px picture (the sidebar's foot) and scales with it, so New Tab's 28 px picture wears the same hat (reported 24 Nov) */
+.noel-hatted { --noel-pic: 22px; position: relative; display: inline-flex; flex: none; font-style: normal; overflow: visible; }
+.noel-hat { position: absolute; left: calc(var(--noel-pic, 22px) * -3 / 22); top: calc(var(--noel-pic, 22px) * -6 / 22); width: calc(var(--noel-pic, 22px) * 30 / 22); height: calc(var(--noel-pic, 22px) * 30 / 22); pointer-events: none; overflow: visible; display: none; }
+:root[data-noel-hat] .noel-hat { display: block; }
+.noel-hat .cap { fill: #d8363f; } .noel-hat .fold { fill: #b3242f; }
+.noel-hat .band { fill: none; stroke: #f5f6f8; stroke-width: 3.6; stroke-linecap: round; } .noel-hat .pom { fill: #f5f6f8; }
+.noel-hat .bandline { fill: none; stroke: transparent; stroke-width: 4.8; stroke-linecap: round; }
+.app[data-appearance=light] .noel-hat .bandline { stroke: rgba(40, 50, 70, .16); } .app[data-appearance=light] .noel-hat .pom { stroke: rgba(40, 50, 70, .16); stroke-width: .6; }
+:root[data-noel-new] .noel-hat { animation: noel-hat-on .7s cubic-bezier(.2, 1.4, .4, 1) both; }
+[data-reduced-motion=true] .noel-hat { animation: none !important; }
+@keyframes noel-hat-on { from { transform: translateY(-9px) rotate(-8deg); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
+
+/* ---- the tree ---- */
+/* The tree is a fifth button in the foot's row: while it is there the row closes up (24 px buttons with no gaps; the icons keep their 16 px), so the profile's name stays whole at
+   Standard as it is without the theme (at 240: 60 px for the name, "Personal" needs 54). Narrow hides the name as it always has; Wide has room to spare. */
+:root[data-noel] .app.style-acira .acira-sidebar .sb-foot-icons { gap: 0; }
+:root[data-noel] .app.style-acira .acira-sidebar .sb-foot-icon { width: 24px; }
+:root[data-noel] .app.style-acira .acira-sidebar .sb-foot-profile { padding-inline-end: 6px; }
+.noel-tree-icon { width: 20px; height: 20px; overflow: visible; }
+.noel-tree .tr { fill: color-mix(in srgb, currentColor 7%, transparent); stroke: currentColor; stroke-width: 1.45; stroke-linejoin: round; stroke-linecap: round; }
+.noel-tree .star { fill: url(#noel-gold); stroke: rgba(150, 105, 40, .6); stroke-width: .5; stroke-linejoin: round; transform-box: fill-box; transform-origin: center; }
+.noel-tree .glowdot { opacity: 1; } .app[data-appearance=light] .noel-tree .glowdot { opacity: .55; }
+.noel-tree[data-glint] .star { animation: noel-glint .9s ease-out; }
+@keyframes noel-glint { 0% { transform: scale(1); } 30% { transform: scale(1.5) rotate(20deg); filter: brightness(1.35); } 100% { transform: scale(1); } }
+[data-reduced-motion=true] .noel-tree .star { animation: none !important; }
+
+@media (forced-colors: active) { .noel-fx, .noel-snow, .noel-drift, .noel-hat { display: none !important; } }
+/* a tab being dragged: its preview carries the snow (the row's own waits where the tab was), and the snow thins as the preview shrinks to a chip */
+[data-sidebar-drag-source] > .noel-fx { visibility: hidden; }
+/* The Mini rail (D152) shows the selected row only as its tile: the row's full-width frost and snow stood past the tile to the rail's edge. They fade with the collapse
+   (data-mini rail / closing) and come back with the expand or a hover open (data-mini open), over the morph's own short time, so nothing pops. */
+.app.style-acira .acira-sidebar.is-mini .sb-tab:not(.tab-drag-preview) .noel-fx[data-kind=sel] { transition: opacity .16s ease; }
+.app.style-acira .acira-sidebar.is-mini:not([data-mini=open]) .sb-tab:not(.tab-drag-preview) .noel-fx[data-kind=sel] { opacity: 0; }
+.tab-drag-preview > .noel-fx { opacity: var(--row-p, 1); }

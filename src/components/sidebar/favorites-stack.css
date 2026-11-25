@@ -1,0 +1,184 @@
+/* ---------- The Favorites stack and the panel it grows into (Beta 14, L2 to L5) ----------
+   Reference: the team's tuning page, with his final values (L2):
+   {"plate":22,"radius":50,"squircle":true,"iconColour":83,"iconSquare":62,"iconMark":71,"count":3,"stepX":5.25,"stepY":-3.25,"front":"bottom-left","scaleStep":0,"dimFirst":0,"dimStep":0,
+    "frontVeil":0,"fadeStep":0,"plateStyle":"mixed","tint":100,"borderW":0.5,"borderOpDark":0.5,"borderOpLight":0.12,"rim":true,"cut":0,"shadow":false,"feather":17,"featherScope":"coloured",
+    "dot":false,"fan":3,"lift":0,"turn":3.5,"frontShift":6,"fanMs":500}
+   What they mean here: no outer tile, each icon on its own 22px plate with 50% squircle corners; three show; no scaling, no dimming, no gradient, no gloss, no shadow, no gap cut between
+   plates, and no transparency (a plate never lets the one behind show through); a .5px border (50% black in dark, 12% in light) and a faint inner rim in dark; no dot under the stack.
+   Spacing (the team's final pick, 13 Nov, "T2 4 / 2.5"): each plate behind steps 4px to the side and 2.5px down from the one in front (the 5.25 / 3.25 of the JSON above was the first
+   take): the two numbers --step-x / --step-y below, snapped to whole device pixels (favoritesStack.ts snapStack) so every step is identical at 100%, 125% and 150%.
+   Hover (APPROVED by the team, 13 Nov, l/stack_hover_final.mp4): a hand of cards. The whole hand eases 6px to the left, then the plates turn about ONE shared pivot, equal steps of 3.5 degrees
+   (front 0, middle 3.5, back 7), so their centres sit on one arc at equal 11.25px chords. Speed (the team, same day: fast both ways, nowhere near half a second): about 200ms to open and
+   160ms to close at Premium, on the pace setting (quicker at Fast).
+   See .sb-stack-i for the pivot (tests/favorites-stack.test.ts re-derives the geometry from these numbers). */
+.app.style-acira .ed-rail.acira-sidebar{--ps:22px;--sb-plate-neutral:rgb(255 255 255);--sb-plate-flip:rgb(44 46 52);--sb-plate-edge:0 0 0 .5px rgb(0 0 0 / .12);--sb-plate-rim:none}
+.app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-plate-neutral:rgb(56 57 63);--sb-plate-flip:rgb(255 255 255);--sb-plate-edge:0 0 0 .5px rgb(0 0 0 / .5);--sb-plate-rim:inset 0 0 0 .5px rgb(255 255 255 / .1)}
+/* the stack box is the front plate. --ssx / --ssy are the steps snapped to whole device pixels and --sfx / --sfy move the box onto the device grid (favoritesStack.ts snapStack), so every
+   layer is offset from the one in front by the same number of screen pixels at 100%, 125% and 150%. The group is centred in its slot by half of what peeks out. */
+.app.style-acira .acira-sidebar .sb-stack{--step-x:4px;--step-y:2.5px;position:relative;display:block;width:var(--ps);height:var(--ps);pointer-events:none;
+ transform:translate(calc(var(--ssx,var(--step-x)) * -1),calc(var(--ssy,var(--step-y)) * -1));left:var(--sfx,0px);top:var(--sfy,0px)}
+.app.style-acira .acira-sidebar .sb-stack[data-count='2']{transform:translate(calc(var(--ssx,var(--step-x)) * -.5),calc(var(--ssy,var(--step-y)) * -.5))}
+/* the fan's pivot (the approved sample's numbers): ONE point for every layer, 184.2px from the front plate's centre and 9 degrees left of straight below it. All three layers share the front
+   plate's box, so one transform-origin in that box (the plate's centre is at 11px 11px; the pivot is at -17.82px 192.93px) is the same point for all of them. R = 11.25 / (2 sin 1.75 degrees)
+   makes the 3.5 degree steps equal 11.25px chords: with the hand's 6px ease to the left the plates' centres land at (-6, 0), (+5.05, +2.10) and (+15.96, +4.87) from the front plate's resting
+   centre (the middle one 2.5px further left, the back one 0.7px further right than the earlier take). Rest and hover are the same function list (translate, rotate), so every layer swings on
+   its arc in one interpolation. The sample's own curves: the fan opens on cubic-bezier(.2,.7,.2,1) and leaves on cubic-bezier(.8,0,.8,.3) (the open's curve time-reversed, so the way back is the exact reverse of the way out); the brief's text changes only the
+   durations: 200ms open, 160ms close at Premium (the sample's 500ms is too slow), on the pace setting. */
+.app.style-acira .acira-sidebar .sb-stack-i{position:absolute;inset:0;--fan-ox:-17.82px;--fan-oy:192.93px;--fan-ms:160ms;transform-origin:var(--fan-ox) var(--fan-oy);transform:translate(0px,0px) rotate(0deg);transition:transform calc(var(--fan-ms) * var(--motion-pace,1)) cubic-bezier(.8,0,.8,.3)}
+.app.style-acira .acira-sidebar .sb-stack-i[data-depth='0']{z-index:3}
+.app.style-acira .acira-sidebar .sb-stack-i[data-depth='1']{z-index:2;transform:translate(var(--ssx,var(--step-x)),var(--ssy,var(--step-y))) rotate(0deg)}
+.app.style-acira .acira-sidebar .sb-stack-i[data-depth='2']{z-index:1;transform:translate(calc(var(--ssx,var(--step-x)) * 2),calc(var(--ssy,var(--step-y)) * 2)) rotate(0deg)}
+/* the fan, unless the stack holds its rest pose: data-no-fan (favoritesStack.ts holdFan) is set when the panel has just folded away under a pointer that rests where the stack comes back, or
+   under the keyboard's focus, and lasts until the pointer leaves the stack (or the focus does): the fan and the tooltip wait for the pointer to come back, so nothing changes after the settle */
+.app.style-acira .acira-sidebar .sb-app-stack:not([data-no-fan]):is(:hover,:focus-visible) .sb-stack-i{--fan-ms:200ms;transition-timing-function:cubic-bezier(.2,.7,.2,1)}
+.app.style-acira .acira-sidebar .sb-app-stack:not([data-no-fan]):is(:hover,:focus-visible) .sb-stack-i[data-depth='0']{transform:translate(-6px,0px) rotate(0deg)}
+.app.style-acira .acira-sidebar .sb-app-stack:not([data-no-fan]):is(:hover,:focus-visible) .sb-stack-i[data-depth='1']{transform:translate(-6px,0px) rotate(3.5deg)}
+.app.style-acira .acira-sidebar .sb-app-stack:not([data-no-fan]):is(:hover,:focus-visible) .sb-stack-i[data-depth='2']{transform:translate(-6px,0px) rotate(7deg)}
+.app.style-acira .acira-sidebar[data-reduced-motion] .sb-stack-i{transition-duration:.01s}
+/* no outer tile: the button is only the hit area */
+.app.style-acira .acira-sidebar .sb-app-stack,.app.style-acira .acira-sidebar .sb-app-stack:hover,.app.style-acira .acira-sidebar .sb-app-stack[aria-current=page]{background:transparent;box-shadow:none}
+/* the selected Favorite sits at the front of the stack with the selected look: the active border's tile ring on the front plate (styles/active-border.css, earlier work' tokens) */
+/* The stack's active marker is quiet and neutral (the team's notes, 17 Nov, E3): the ring on the front plate is the ink colour at about half strength, never the site's colour, and Rich adds no glow to it (sidebar.css, active-border.css). The stack hands the colour to its plates as a plain variable (the plates are not .sb-app, and --sb-site does not inherit). */
+.app.style-acira .acira-sidebar .sb-app-stack{--sb-stack-ring:var(--sb-site)}
+.app.style-acira .acira-sidebar .sb-stack-i>.sb-plate{box-shadow:var(--sb-plate-edge)}
+/* plates: 50% squircle corners (a plain rounded square where corner-shape is not known), one flat fill, a .5px border, no cut ring, no shadow */
+.app.style-acira .acira-sidebar .sb-plate{position:relative;display:grid;place-items:center;width:var(--ps);height:var(--ps);border-radius:29%;overflow:hidden;background:var(--sb-plate-neutral);box-shadow:var(--sb-plate-edge)}
+@supports(corner-shape:squircle){.app.style-acira .acira-sidebar .sb-plate{border-radius:50%;corner-shape:squircle}}
+.app.style-acira .acira-sidebar .sb-plate::after{content:'';position:absolute;inset:0;border-radius:inherit;corner-shape:inherit;pointer-events:none;box-shadow:var(--sb-plate-rim)}
+/* the icon's own background, extended to the plate: the shape melts into it and only the mark is left */
+.app.style-acira .acira-sidebar .sb-plate[data-plate=bleed]{background:var(--plate)}
+/* contrast guard: a dark mark on the dark neutral, or a light one on the light neutral, takes the other neutral (a light logo never lands on a light plate) */
+.app.style-acira[data-chrome=dark] .acira-sidebar .sb-plate[data-plate=neutral][data-ink=dark],.app.style-acira:not([data-chrome=dark]) .acira-sidebar .sb-plate[data-plate=neutral][data-ink=light]{background:var(--sb-plate-flip)}
+/* icon sizes: a bare mark 71% of the plate; on a coloured plate 83% (its square edge feathered 17% into the plate); a full-square icon 62% (feathered the same). A full square with no
+   single background colour (Instagram's gradient) is drawn edge to edge, clipped to the plate's shape, on the neutral plate. */
+.app.style-acira .acira-sidebar .sb-plate>.site-identity-icon{width:calc(var(--ps) * .71);height:calc(var(--ps) * .71);border-radius:0;object-fit:contain}
+.app.style-acira .acira-sidebar .sb-plate>.sb-app-initial{font-size:11px;line-height:1}
+.app.style-acira .acira-sidebar .sb-plate[data-plate=bleed]>.site-identity-icon{width:calc(var(--ps) * .83);height:calc(var(--ps) * .83);
+ mask-image:linear-gradient(90deg,#0000,#000 17%,#000 83%,#0000),linear-gradient(180deg,#0000,#000 17%,#000 83%,#0000);mask-composite:intersect}
+.app.style-acira .acira-sidebar .sb-plate[data-plate=bleed][data-full]>.site-identity-icon{width:calc(var(--ps) * .62);height:calc(var(--ps) * .62)}
+.app.style-acira .acira-sidebar .sb-plate[data-plate=bleed][data-full][data-edge]>.site-identity-icon{width:100%;height:100%;mask-image:none}
+/* the flight's copy of the stack (favoritesStack.ts stackGhost): the stack button's own classes and markup, laid over the panel at the real button's box */
+.app.style-acira .acira-sidebar .sb-apps-panel .sb-stack-ghost{pointer-events:none;margin:0}
+/* the copy wears the focus ring the real stack wears (sidebar.css .sb-app:focus-visible) when the keyboard is on it */
+.app.style-acira .acira-sidebar .sb-apps-panel .sb-stack-ghost[data-ring]{outline:2px solid var(--sb-ring);outline-offset:-2px}
+
+/* ---------- The panel (L4) ----------
+   The stack itself expands into a panel over the Favorites area, the grid's own width and tile size, at least three rows tall, scrolling inside when there are more. One plain,
+   uniform surface that is only the live theme token (it follows theme changes while open), with no heavy shadow: no heavier than the selected tab card. Nothing lies under it: the
+   sections below move down out of its way (and up, with Favorites at the bottom), so nothing is ever overlapped. */
+.app.style-acira .acira-sidebar .sb-apps-region[data-panel]{z-index:40}
+.app.style-acira .acira-sidebar .sb-apps-panel,.app.style-acira .acira-sidebar .sb-apps-panel-shade{position:absolute;left:6px;right:6px;top:2px;border-radius:10px;height:calc(var(--rows) * 46px - 6px + 12px)}
+.app.style-acira .acira-sidebar .sb-apps-panel[data-bottom],.app.style-acira .acira-sidebar .sb-apps-panel-shade[data-bottom]{top:auto;bottom:2px}
+.app.style-acira .acira-sidebar .sb-apps-panel-shade{z-index:1;pointer-events:none;box-shadow:0 0 0 .5px rgb(0 0 0 / .08),0 1px 2px rgb(0 0 0 / .04)}
+.app.style-acira[data-chrome=dark] .acira-sidebar .sb-apps-panel-shade{box-shadow:0 0 0 .5px rgb(255 255 255 / .07),0 1px 2px rgb(0 0 0 / .22)}
+.app.style-acira .acira-sidebar .sb-apps-panel{z-index:2;display:flex;flex-direction:column;padding:6px;isolation:isolate;-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-apps-panel:focus-visible{outline:0}
+.app.style-acira .acira-sidebar .sb-apps-panel-surface{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;background:rgb(var(--ink) / .045);
+ mask-image:linear-gradient(#000,#000)}
+.app.style-acira[data-chrome=dark] .acira-sidebar .sb-apps-panel-surface{background:rgb(var(--ink) / .055)}
+.app.style-acira .acira-sidebar .sb-apps-panel-scroll{position:relative;z-index:4;flex:none;height:calc(var(--rows) * 46px - 6px);overflow-x:hidden;overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain;border-radius:6px;
+ --fade-a:linear-gradient(#000,#000);--fade-b:linear-gradient(#000,#000);
+ mask-image:var(--fade-a),var(--fade-b);mask-composite:intersect}
+.app.style-acira .acira-sidebar .sb-apps-panel-scroll::-webkit-scrollbar{display:none}
+/* rows scrolled out of view fade at the edge they leave by */
+.app.style-acira .acira-sidebar .sb-apps-panel-scroll[data-fade~=top]{--fade-a:linear-gradient(180deg,transparent 0,rgb(0 0 0 / .3) 8px,#000 26px)}
+.app.style-acira .acira-sidebar .sb-apps-panel-scroll[data-fade~=bottom]{--fade-b:linear-gradient(0deg,transparent 0,rgb(0 0 0 / .3) 8px,#000 26px)}
+.app.style-acira .acira-sidebar .sb-apps-panel-scroll[data-fade~=top][data-fade~=bottom]{--fade-a:linear-gradient(180deg,transparent 0,#000 26px,#000 calc(100% - 26px),transparent);--fade-b:linear-gradient(#000,#000)}
+/* the scroll indicator: hidden at rest, it fades in while the list scrolls and when the pointer comes near the edge it sits on, and fades out again */
+.app.style-acira .acira-sidebar .sb-apps-panel-thumb{position:absolute;right:2px;top:6px;width:3px;border-radius:1.5px;background:rgb(var(--ink) / .3);pointer-events:none;opacity:0;transition:opacity .5s var(--sb-ease) .12s}
+.app.style-acira .acira-sidebar .sb-apps-panel-thumb[data-show]{opacity:1;transition:opacity .2s var(--sb-ease)}
+.app.style-acira .acira-sidebar[data-reduced-motion] .sb-apps-panel-thumb{transition-duration:.01s;transition-delay:0s}
+/* inside the panel the Favorites look exactly like normal Favorite tiles (no plates); the "add a Favorite" slot is a dashed tile with a plus */
+.app.style-acira .acira-sidebar .sb-apps-region .sb-apps-panel .sb-apps-panel-grid>.sb-app.sb-app-add{opacity:1;color:var(--sb-muted);outline:1px dashed rgb(var(--ink) / .2);outline-offset:-1px;background:transparent}
+.app.style-acira .acira-sidebar .sb-apps-panel .sb-app-add:hover{color:var(--sb-fg);outline-color:rgb(var(--ink) / .34)}
+/* the stack's layers and their stand-in's are layers (the sample's r5, favorites-stack.css 384): the stack and its copy are drawn the same way, so the plates are the same pixels on the first frame of the open
+   (the copy was a layer, the stack was painted into the sidebar: up to 141/255 along the turned plates' edges at 125%). The turn is drawn by the compositor, as in the approved sample. The snap's sub-pixel
+   correction moves the stack's layout box (left / top), not a translate, so each layer starts on a whole device pixel. */
+.app.style-acira .acira-sidebar .sb-stack-i{will-change:transform}
+/* the open panel is one layer for as long as it is up (the sample's r5, 401) */
+.app.style-acira .acira-sidebar .sb-apps-panel{will-change:opacity}
+/* the panel's tiles and their icons are layers for as long as the panel is up (not only while they move). Their arrival (open) and their exit (close) animate transform and opacity, which
+   makes each its own layer; a layer that exists only while it moves is drawn at a different sub-pixel origin than the same tile painted into the sidebar, so at 125% and 150% the corner arcs of
+   the tiles changed by up to 5/255 in the very frame the motion ended (measured: 39 pixels at 150%). As permanent layers they are drawn the same way in the last animated frame, in the settled
+   panel and in the first frame of the close. They exist only while the panel does (about 20 small layers). */
+.app.style-acira .acira-sidebar .sb-apps-panel-grid>.sb-app,.app.style-acira .acira-sidebar .sb-apps-panel-grid>.sb-app>.site-identity-icon,.app.style-acira .acira-sidebar .sb-apps-panel-grid>.sb-app>.sb-app-initial{will-change:transform}
+/* the panel's shadow ring is a layer for as long as the panel is up: its opacity animates (it comes in with the open's last stretch and goes first in the close), and a layer that exists only while it animates draws the
+   panel's four corner arcs a hair differently (up to 2/255 on about 40 pixels) in the first frame of the close than the settled panel does. */
+.app.style-acira .acira-sidebar .sb-apps-panel-shade{will-change:opacity}
+/* the fold pill: below the panel, outside it (about 7px under it), on its own small material; it hangs above the panel with Favorites at the bottom. Its glyph (two chevrons meeting in the
+   middle: a fold, not an arrow) is symmetric, so it is the same either way up; on hover (or keyboard focus) each chevron nudges 1.5px toward the middle and back, 300ms (FavoritesPanel.tsx nudgeFold). */
+.app.style-acira .acira-sidebar .sb-apps-panel-handle{position:absolute;left:50%;top:calc(100% + 7px);width:36px;height:16px;margin:0 0 0 -18px;padding:0;border:0;border-radius:8px;display:grid;place-items:center;color:var(--sb-muted);cursor:pointer;
+ background:color-mix(in srgb,var(--sb-tile),rgb(var(--ink)) 7%);transition:background-color .18s var(--sb-ease),width .2s var(--sb-strong),margin .2s var(--sb-strong),color .18s var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-apps-panel-handle:is(:hover,:focus-visible){width:44px;margin-left:-22px;background:color-mix(in srgb,var(--sb-tile),rgb(var(--ink)) 15%);color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-apps-panel-handle:focus-visible{outline:0}
+.app.style-acira .acira-sidebar .sb-apps-panel-handle>.sb-apps-panel-fold{width:12px;height:12px}
+.app.style-acira .acira-sidebar .sb-apps-panel[data-bottom] .sb-apps-panel-handle{top:auto;bottom:calc(100% + 7px)}
+/* the pill has its own band: while the panel is open the divider under the Favorites fades out and everything below moves down by the pill's 17px (and by what the panel hangs
+   past the grid: --sb-panel-push), a composited translate in step with the open and the close; the section clips what moves, so nothing slides over the footer */
+/* the list's direct children are named (.sb-ext-row, .sb-ws-title, .sb-scroll, .sb-active-peek, .sb-jump: AciraSidebar.tsx): a rule ending in `>*` is tried on every element of the interface at every recalc.
+   The sidebar carries data-fav-panel (open | closing) and data-fav-bottom while the panel is out (favoritesStack.ts markPanel): plain attributes, not a descendant lookup from the sidebar root, so
+   the sidebar's style work stays what it was while it opens, closes and morphs between modes */
+.app.style-acira .acira-sidebar[data-fav-panel] .sb-sep-fav,.app.style-acira .acira-sidebar[data-fav-panel] .sb-favorites-bottom>.sb-sep{transition:opacity .3s var(--sb-ease)}
+.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap>.sb-ext-row,.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap>.sb-ws-title,.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap>.sb-scroll,.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap>.sb-active-peek,.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap>.sb-jump{transition:translate calc(.5s * var(--motion-pace,1)) cubic-bezier(.2,.7,.2,1)}
+.app.style-acira .acira-sidebar[data-fav-panel] .sb-sections-wrap{transition:padding-bottom calc(.5s * var(--motion-pace,1)) cubic-bezier(.2,.7,.2,1)}
+/* the clip is only needed while rows are pushed past the list's edge. The close brings them home before its end and drops the clip then (data-fav-home, favoritesStack.ts rowsHome): a clip
+   that came off with the motion's last frame changed how the rows' text edges are drawn at 125% (up to 8/255 along a strip of the list), a change after the settle */
+.app.style-acira .acira-sidebar[data-fav-panel]:not([data-fav-home]) .sb-sections-wrap{overflow:clip}
+.app.style-acira .acira-sidebar[data-fav-panel=open] .sb-sep-fav,.app.style-acira .acira-sidebar[data-fav-panel=open] .sb-favorites-bottom>.sb-sep{opacity:0}
+/* Favorites at the top: the rows move down. At the bottom the list is shortened instead, so no row is pushed out of sight above it: its scroll area ends where the pill's band begins. */
+.app.style-acira .acira-sidebar[data-fav-panel=open]:not([data-fav-bottom]) .sb-sections-wrap>.sb-ext-row,.app.style-acira .acira-sidebar[data-fav-panel=open]:not([data-fav-bottom]) .sb-sections-wrap>.sb-ws-title,.app.style-acira .acira-sidebar[data-fav-panel=open]:not([data-fav-bottom]) .sb-sections-wrap>.sb-scroll,.app.style-acira .acira-sidebar[data-fav-panel=open]:not([data-fav-bottom]) .sb-sections-wrap>.sb-active-peek,.app.style-acira .acira-sidebar[data-fav-panel=open]:not([data-fav-bottom]) .sb-sections-wrap>.sb-jump{translate:0 calc(17px + var(--sb-panel-push,0px))}
+.app.style-acira .acira-sidebar[data-fav-panel=open][data-fav-bottom] .sb-sections-wrap{padding-bottom:calc(17px + var(--sb-panel-push,0px))}
+.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap>.sb-ext-row,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap>.sb-ws-title,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap>.sb-scroll,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap>.sb-active-peek,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sections-wrap>.sb-jump,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-sep-fav,.app.style-acira .acira-sidebar[data-reduced-motion][data-fav-panel] .sb-favorites-bottom>.sb-sep{transition-duration:.01s}
+
+/* ---------- Forming (L5) ----------
+   The surface always carries a mask (above: an opaque one): a layer with a mask is drawn through another path than one without, and the rounded corners of the same shape come out a few levels
+   different (up to 6/255 at the four corners, measured), so a mask that is switched off when the motion ends would be a visible change at the very end. With one always on, the forming mask is only
+   swapped for another opaque mask when the panel settles: the same picture.
+   While the panel forms, its material is cut by a soft rectangle that grows from the stack (favoritesStack.ts). --ml/--mt/--mr/--mb are the rectangle's edges, px in from the panel's box
+   (negative = past it); --mo is how far its soft edge reaches outside; --mi is the band inside it over which the Favorites disperse and the material condenses. The material rises on a
+   smoothstep from -mo to +mi. The panel's tiles and the plates flying into them are whole inside the rectangle (--mi2: 0); --sml.. are the rectangle in the scroller's box (inset 6px). */
+/* The front's variables are registered lengths that are NOT inherited: they are written on the layers that read them (favoritesStack.ts), and a write restyles those layers, not the whole panel subtree
+ (an inherited custom property restyled ~220 elements every frame of the motion). Same values, same readers, same picture. */
+@property --ml{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mt{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mr{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mb{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mi{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mo{syntax:'<length>';inherits:false;initial-value:0px}
+@property --mi2{syntax:'<length>';inherits:false;initial-value:0px}
+@property --ms{syntax:'<length>';inherits:false;initial-value:0px}
+@property --sml{syntax:'<length>';inherits:false;initial-value:0px}
+@property --smt{syntax:'<length>';inherits:false;initial-value:0px}
+@property --smr{syntax:'<length>';inherits:false;initial-value:0px}
+@property --smb{syntax:'<length>';inherits:false;initial-value:0px}
+@property --gl{syntax:'<length>';inherits:false;initial-value:0px}
+@property --gt{syntax:'<length>';inherits:false;initial-value:0px}
+@property --gr{syntax:'<length>';inherits:false;initial-value:0px}
+@property --gb{syntax:'<length>';inherits:false;initial-value:0px}
+.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-apps-panel-surface,.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-flight,.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-apps-panel-scroll{
+ --mi2:calc(var(--mi) * .35);--ms:calc(var(--mo) + var(--mi2));
+ mask-image:
+  linear-gradient(90deg,#0000 calc(var(--ml) - var(--mo)),#00000028 calc(var(--ml) - var(--mo) + var(--ms) * .25),#00000080 calc(var(--ml) - var(--mo) + var(--ms) * .5),#000000d7 calc(var(--ml) - var(--mo) + var(--ms) * .75),#000 calc(var(--ml) + var(--mi2)),#000 calc(100% - var(--mr) - var(--mi2)),#000000d7 calc(100% - var(--mr) + var(--mo) - var(--ms) * .75),#00000080 calc(100% - var(--mr) + var(--mo) - var(--ms) * .5),#00000028 calc(100% - var(--mr) + var(--mo) - var(--ms) * .25),#0000 calc(100% - var(--mr) + var(--mo))),
+  linear-gradient(180deg,#0000 calc(var(--mt) - var(--mo)),#00000028 calc(var(--mt) - var(--mo) + var(--ms) * .25),#00000080 calc(var(--mt) - var(--mo) + var(--ms) * .5),#000000d7 calc(var(--mt) - var(--mo) + var(--ms) * .75),#000 calc(var(--mt) + var(--mi2)),#000 calc(100% - var(--mb) - var(--mi2)),#000000d7 calc(100% - var(--mb) + var(--mo) - var(--ms) * .75),#00000080 calc(100% - var(--mb) + var(--mo) - var(--ms) * .5),#00000028 calc(100% - var(--mb) + var(--mo) - var(--ms) * .25),#0000 calc(100% - var(--mb) + var(--mo))),
+  var(--fade-a,linear-gradient(#000,#000)),var(--fade-b,linear-gradient(#000,#000));
+ mask-composite:intersect}
+.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-apps-panel-scroll{--ml:var(--sml);--mt:var(--smt);--mr:var(--smr);--mb:var(--smb)}
+.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-flight,.app.style-acira .acira-sidebar .sb-apps-panel[data-forming] .sb-apps-panel-scroll{--mi2:0px}
+.app.style-acira .acira-sidebar .sb-apps-panel>.sb-flight{position:absolute;inset:0;z-index:5;pointer-events:none}
+/* closing: the plates flying home and the panel's last tiles are not cut by the retreating front (they are already inside it) */
+.app.style-acira .acira-sidebar .sb-apps-panel[data-forming][data-closing] .sb-flight{mask-image:none}
+/* the list keeps its own edge fade through the close (the rows scrolled out of view fade at the edge they leave by): a close that dropped it turned the faded top row crisp in the first frame (97/255 over the row) */
+.app.style-acira .acira-sidebar .sb-apps-panel[data-forming][data-closing] .sb-apps-panel-scroll{mask-image:var(--fade-a),var(--fade-b);mask-composite:intersect}
+/* A grid with a stack is always under a mask (an opaque one) too, for the reason the panel's surface is: the hole that cuts the front out of it appears when the panel opens and goes when it has closed, and a
+   mask that is switched off at the end changes how the rounded corners of every tile under it are drawn, a few levels, at 125% and 150%. With one always on, the hole is only another mask. */
+.app.style-acira .acira-sidebar .sb-apps[data-stacked]{mask-image:linear-gradient(#000,#000)}
+/* the real Favorites end at the front (a 2px ramp): inside it the disperser draws them. --gl/--gt/--gr/--gb are the front in the grid's own box. */
+.app.style-acira .acira-sidebar .sb-apps[data-forming-hole]{
+ mask-image:linear-gradient(#000,#000),linear-gradient(90deg,#0000 var(--gl),#000 calc(var(--gl) + 2px),#000 calc(100% - var(--gr) - 2px),#0000 calc(100% - var(--gr))),linear-gradient(180deg,#0000 var(--gt),#000 calc(var(--gt) + 2px),#000 calc(100% - var(--gb) - 2px),#0000 calc(100% - var(--gb)));
+ mask-composite:exclude,intersect}
+/* the WebGL copy of the Favorites sits in the panel under the material; the haze copies carry the menus' fixed blur */
+.app.style-acira .acira-sidebar .sb-apps-panel>.sb-disperse{position:absolute;left:0;top:0;z-index:1;pointer-events:none}
+.app.style-acira .acira-sidebar .sb-apps-panel>.sb-haze{position:absolute;inset:0;pointer-events:none}
+.app.style-acira .acira-sidebar .sb-apps-panel>.sb-haze-over{z-index:5}
+/* while the panel is open the Favorites behind it are out of reach, not just out of sight (while it folds they are a drop target again: a Favorite dragged out of the panel lands on them) */
+.app.style-acira .acira-sidebar .sb-apps-region[data-panel=open] .sb-apps:not(.sb-apps-panel-grid){pointer-events:none}

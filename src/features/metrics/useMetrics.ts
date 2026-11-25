@@ -36,13 +36,16 @@ export function useMetrics({newSetup = false}: {newSetup?: boolean} = {}) {
   const dismissOffNotice = useCallback(() => setOffNotice(false), []);
   useEffect(() => {
     let alive = true;
-    const first = runtime.service(newSetup ? {type: 'metrics.set', enabled: true, onlyIfUnset: true} : { type: 'metrics.status' }).then((result) => (latest = result.metrics));
-    first.then((result) => { if (alive) setStatus(result); }).catch((reason) => { if (alive) setProblem(message(reason)); });
-    return () => { alive = false; };
+    const read = () => runtime.service(newSetup ? {type: 'metrics.set', enabled: true, onlyIfUnset: true} : { type: 'metrics.status' }).then((result) => (latest = result.metrics));
+    read().then((result) => { if (alive) setStatus(result); }).catch((reason) => { if (alive) setProblem(message(reason)); });
+    // Beta 14: the notice, Settings and acira://usage hear each other (an X, a link, a switch in another window)
+    const off = runtime.subscribeBrowser?.((event) => { if (event.type === 'usage-changed') runtime.service({ type: 'metrics.status' }).then((result) => { if (alive && result.metrics) { latest = result.metrics; setStatus(latest); } }).catch(() => undefined); });
+    return () => { alive = false; off?.(); };
   }, [newSetup]);
-  const set = useCallback(async (enabled: boolean) => {
+  /** `where` is carried by the `off` message when this switches sharing off (settings, notice, setup). */
+  const set = useCallback(async (enabled: boolean, where: 'setup' | 'settings' | 'notice' = 'settings') => {
     setBusy(true); setProblem('');
-    try { latest = (await runtime.service({ type: 'metrics.set', enabled })).metrics; setStatus(latest); setOffNotice(!enabled); } catch (reason) { setProblem(message(reason)); } finally { setBusy(false); }
+    try { latest = (await runtime.service({ type: 'metrics.set', enabled, where })).metrics; setStatus(latest); setOffNotice(!enabled); } catch (reason) { setProblem(message(reason)); } finally { setBusy(false); }
   }, []);
   /** R4-61: "Ask me now and then how features are working". */
   const setAskRatings = useCallback(async (enabled: boolean) => {

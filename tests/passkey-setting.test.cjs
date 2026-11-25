@@ -53,7 +53,7 @@ test('the main process answers the guard and applies the header in every session
  const blocking=read('desktop/content-blocking.cjs');
  assert.match(blocking,/ipcMain\.on\('acira:passkeys-allowed',event=>\{event\.returnValue=passkeysAllowed\(\);\}\)/);
  assert.match(blocking,/const passkeysAllowed=\(\)=>privacyPlus\.get\(\)\.passkeys===true/,'only an explicit yes is a yes');
- assert.match(blocking,/pipeline\.useHeaders\(passkeyPolicy\)/,'every attached session (ordinary, private, secured, Tor) gets the header');
+ assert.match(blocking,/pipeline\.useHeaders\(passkeyPolicy,\{scope:'documents'\}\)/,'every attached session (ordinary, private, secured, Tor) gets the header');
  assert.match(blocking,/passkeyPolicy=details=>passkeyPolicyPatch\(details,passkeysAllowed\(\)\)/);
  const guard=read('desktop/browser-services/passkey-guard-preload.cjs');
  assert.match(guard,/sendSync\('acira:passkeys-allowed'\)===true/);
@@ -83,7 +83,7 @@ test('Settings > Privacy has the row (switch off unless on), it is searchable, a
  }
 });
 
-test('Settings › Privacy shows the passkeys row, and search offers it, on Windows and Linux, never on a Mac (it did nothing there)',async()=>{
+test('Settings › Protection shows the passkeys row, and search offers it, on Windows and Linux, never on a Mac (it did nothing there)',async()=>{
  const panel=read('src/features/settings/panels/anti-tracking.tsx'),entries=read('src/features/settings/entries/privacy.ts');
  assert.match(panel,/\{!isMac\(\) && <Passkeys disabled=\{disabled\} \/>\}/);
  assert.match(entries,/\]\)\.filter\(\(entry\) => entry\.id !== 'passkeys' \|\| !isMac\(\)\);/);
@@ -92,8 +92,9 @@ test('Settings › Privacy shows the passkeys row, and search offers it, on Wind
  const platforms=[['MacIntel',false],['Win32',true],['Linux x86_64',true]],drawn=await Promise.all(platforms.map(([platform])=>draw(platform)));
  platforms.forEach(([platform,shown],index)=>{
   const {sections,registry}=drawn[index];
-  assert.ok(sections.Privacy.includes('Phishing and malware protection'),platform+': Privacy is drawn');
-  assert.equal(sections.Privacy.includes('Passkeys and security keys'),shown,platform+': the row');
+  // Beta 14.4: phishing protection and passkeys are on Protection (what Acira blocks or guards).
+  assert.ok(sections.Protection.includes('Phishing and malware protection'),platform+': Protection is drawn');
+  assert.equal(sections.Protection.includes('Passkeys and security keys'),shown,platform+': the row');
   assert.equal(registry.includes('Passkeys and security keys'),shown,platform+': Settings search');
  });
 });

@@ -9,8 +9,11 @@ export interface FilterListsStatus{source:string;updatedAt:number|null;lastAttem
 export interface ReaderArticle{available:true;url:string;profileId:string;private:boolean;title:string;byline:string;siteName:string;language:string;direction:'ltr'|'rtl';html:string;readingMinutes:number}
 export interface ExtensionToolbarTarget{supported:boolean;profileId:string|null;partition:string|null;webContentsId:number|null;pinnedIds:string[];actionIds:string[]}
 
-export interface PersonalArtwork{id:string;name:string;url:string;width:number;height:number;bytes:number}
-export interface PersonalArtworkLibrary{profileId:string;private:boolean;assets:PersonalArtwork[];addedId?:string;cancelled?:boolean}
+export interface PersonalArtwork{id:string;name:string;url:string;/** 14.1: a 480 px card picture for Settings (desktop/workspace-artwork.cjs thumb). */thumb?:string;width:number;height:number;bytes:number}
+/** 14.4 live wallpaper: the profile's own video (desktop/workspace-video.cjs). `url` is the file, `still` its first frame. */
+export interface OwnVideo{id:string;name:string;codec:string;mime:string;width:number;height:number;duration:number;powerEfficient:boolean;url:string;still:string}
+export interface OwnVideoAnswer{profileId?:string;private?:boolean;video?:OwnVideo|null;cancelled?:boolean;pending?:{id:string;name:string;codec:string;mime:string;bytes:number;url:string}}
+export interface PersonalArtworkLibrary{profileId:string;private:boolean;assets:PersonalArtwork[];addedId?:string;/** 14.1: every picture added by one choice (several files at once), and how many of the chosen files could not be added. */addedIds?:string[];skipped?:number;cancelled?:boolean}
 
 export interface ForgetSitePreview{origin:string;cookieScope:string;storageScope:string;profileId:string;private:boolean;counts:{history:number;closedTabs:number;closedHistoryEntries:number;cookies:number;permissions:number};preserved:string[];notice:string}
 export interface ForgetSiteResult extends SiteClearResult{origin?:string;cookieScope?:string;preserved?:string[];filesDeleted?:boolean}

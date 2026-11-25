@@ -22,8 +22,8 @@ test('a split card in a group loses the indent from its width (margin, not a tra
   assert.match(members, /margin-left:var\(--sb-group-indent\)/); assert.match(members, /min-width:0/);
   assert.doesNotMatch(members, /transform|(^|;)width:/);
   const list = rule(S + '.sb-group-members');
-  assert.match(list, /--sb-rail-x:13px/);
-  assert.match(list, /--sb-group-indent:calc\(var\(--sb-rail-x\) \+ 2px \+ 6px\)/, 'rows start right of the 2px rail with the 6px text inset as their gap');
+  assert.match(list, /--sb-rail-x:calc\(14px - var\(--ng-w,2px\) \/ 2\)/, 'the group\'s line sits under its folder: 13px at 100% (Beta 14 AE: two device pixels wide)');
+  assert.match(list, /--sb-group-indent:21px/, 'rows start right of the rail with the 6px text inset as their gap: 13 + 2 + 6 = 21px, as it was (item24 keeps a top-level group\'s rows where they are; only an inner group\'s own tabs use the width-based indent, folders.css)');
   assert.match(rule(S + '.sb-group-members::before'), /left:var\(--sb-rail-x\)/);
   assert.ok(!css.includes('.sb-group-members>.sb-tab>.sb-tab-main,'), 'member rows no longer fake the indent with padding inside a full-width fill');
 });

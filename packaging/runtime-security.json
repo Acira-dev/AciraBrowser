@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "supportedMajor": 44,
-  "minimumVersion": "44.9.1",
+  "supportedMajor": 45,
+  "minimumVersion": "45.0.0",
   "advisories": [
     {
       "id": "GHSA-jr5w-w6x2-84p9",
@@ -13,13 +13,13 @@
   ],
   "selectedRuntime": {
     "qualified": true,
-    "version": "44.9.3",
-    "chromium": "152.0.7977.167",
-    "node": "24.22.0",
-    "executableSha256": "61f45e6f522c666c6156222680712870b38f3a4acbd2e847b987f53ddb613544",
-    "archiveSha256": "41a1ffa0541cb0f2c9b9fe920dd2cef1793ad0ea2ada1a9582958880f4d1b23c",
-    "qualification": "Frontend staged/installed native checks and preserved preview identity; independent16encrypted-session+3Reader checks pass on exact hash. Package/installer and full release gates remain separate.",
+    "version": "45.2.1",
+    "chromium": "156.0.8078.75",
+    "node": "24.22.1",
+    "executableSha256": "32e357fc856feadd1e51531f47811d2621483e5a58815eb4999154d7c9baea3b",
+    "archiveSha256": "7c342aee45d5b4ccafe5dfe9037028796b082735a576e21e2b4e2d8422ebb727",
+    "qualification": "Windows laptop, 21 Nov 2026, from 47d06e4b4: release run b141w3 (build-only runner, at the team's word) passed every release gate: windows-browser-flows, sidebar-hover-overlay, the runtime policy, the candidate and portable-package native runs, the Widevine twin, the sealed VMP-signed copy, release-alive and the installer. Unit group node: 6718 tests, 6609 pass, 1 named Windows test fault, 108 skipped; group serial stopped partway at the team's word; group tsx not run.",
     "qualificationSource": "docs/workstreams/frontend-runtime-ready.json"
   },
-  "status": "Exact frontend-qualified44.9.3Windows executable independently verified after root install; independent immutable package qualification follows."
+  "status": "Exact frontend-qualified 45.2.1 Windows executable independently verified after root install; independent immutable package qualification follows."
 }

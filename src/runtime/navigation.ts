@@ -6,7 +6,7 @@ import { PUBLIC_SUFFIX_TLDS } from './publicSuffixTlds';
 
 
 export interface NavigationTarget {url:string;contentKind:TabContentKind;query?:string;error?:string;/** A typed address that got https by default; the native layer may retry over http if the site has no secure endpoint. */httpsFirst?:boolean}
-export const INTERNAL_PAGES:readonly InternalPage[]=['locked','home','history','settings','downloads','bookmarks','rewind','routines'];
+export const INTERNAL_PAGES:readonly InternalPage[]=['locked','home','history','settings','downloads','bookmarks','rewind','routines','usage'];
 const searchUrls: Record<SearchEngine, string> = { google: 'https://www.google.com/search', duckduckgo: 'https://duckduckgo.com/', bing: 'https://www.bing.com/search' };
 
 /** The engine a typed search in this tab uses. A Tor tab always searches with DuckDuckGo (Tor Browser's default; Tor windows already do), whatever the
@@ -99,4 +99,4 @@ export function withoutCredentials<T>(url: T): T {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return url;
   try { const parsed = new URL(url); if (!parsed.username && !parsed.password) return url; parsed.username = ''; parsed.password = ''; return parsed.href as T; } catch { return url; }
 }
-export function navigationTitle(url:string):string{if(url.startsWith('acira://'))return ({locked:'Locked',new:'New tab',home:'Home',history:'History',settings:'Settings',downloads:'Downloads',bookmarks:'Bookmarks',rewind:'Rewind',routines:'Tab sets'} as Record<string,string>)[url.slice(8)]||'Acira';try{return new URL(url).hostname;}catch{return 'New tab';}}
+export function navigationTitle(url:string):string{if(url.startsWith('acira://'))return ({locked:'Locked',new:'New tab',home:'Home',history:'History',settings:'Settings',downloads:'Downloads',bookmarks:'Bookmarks',rewind:'Rewind',routines:'Tab sets',usage:'Anonymous usage'} as Record<string,string>)[url.slice(8)]||'Acira';try{return new URL(url).hostname;}catch{return 'New tab';}}

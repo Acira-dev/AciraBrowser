@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, Moon, Palette, PenLine, Plus, SlidersHorizontal, Trash2, Users } from '../../components/AppIcons';
 import { securedRequest } from './securedClient';
 import { WorkspacePlaybackGlyph } from '../../components/WorkspacePlaybackGlyph';
@@ -11,6 +11,8 @@ import { sleepAction, workspaceSleepTabs } from '../../runtime/tabSleepMenu';
 import { openWorkspacePopupFromPopup, takeWorkspaceTarget } from '../../ui/workspaceTarget';
 import { CYCLE_COMMANDS, SpaceIdentity, cycleKey, nameIn, shownColor, shownName, workspaceKey } from './WorkspaceSwitcher';
 import { commandLabel } from '../../ui/shortcutKeys';
+import { TabsLayoutRow } from '../../components/BrowserMenu';
+import { useRevealOpenRow } from './revealOpenRow';
 import '../../styles/workspaces.css';
 import { t } from '../../i18n';
 
@@ -19,11 +21,12 @@ import { t } from '../../i18n';
  * chip; wireframe 3): a scope line (which profile, shared sign-ins), every workspace with its tab count (or "empty", a sound
  * mark, "window 2" when another window shows it), its key and a check on the open one; New workspace…; the open
  * workspace's own actions; and the way to Profiles for separate sign-ins. `context` is the right-click menu of one
- * workspace: Rename…, Icon and color…, Delete workspace. Delete asks once, in place, when the workspace has pages open
+ * workspace: Rename…, Icon and color…, Move left / Move right (14.3), Delete workspace. Delete asks once, in place, when the workspace has pages open
  * (P0-8), and always leaves an Undo.
  */
 export function WorkspaceMenu({ state, dispatch, close, mode }: { state: BrowserSnapshot; dispatch: (action: BrowserAction) => void; close: () => void; mode: 'list' | 'context' }) {
-  const [target] = useState(() => mode === 'context' ? takeWorkspaceTarget() : null), [confirming, setConfirming] = useState(false);
+  const [target] = useState(() => mode === 'context' ? takeWorkspaceTarget() : null), [confirming, setConfirming] = useState(false), root = useRef<HTMLDivElement>(null);
+  useRevealOpenRow(root, '[role=menuitemradio][aria-checked=true]');
   // With profiles as spaces this lists the profiles (the space switcher), with no workspace to make, rename or delete.
   const spaces = profilesAsSpaces(state), list = windowWorkspaces(state), counts = state.workspaceTabCounts ?? workspaceCounts(state);
   // The sidebar's own menu (right-click on its empty space or on the workspace row): New workspace… (Add profile… with profiles as spaces) and Customize sidebar….
@@ -58,8 +61,10 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
   if (sidebar) return <div className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
     {canNew && <><button type="button" role="menuitem" className="acira-menu-row" data-workspace-new onClick={makeOne}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t(spaces ? 'profiles.add' : 'workspaces.new')}</span><span /></button><hr className="acira-menu-sep" /></>}
     <button type="button" role="menuitem" className="acira-menu-row" onClick={() => { close(); void runtime.browserCommand({ type: 'ui', tabId: state.activeTabId, action: 'customize-sidebar' }); }}><SlidersHorizontal className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('sidebarcustomize.customizeSidebar')}</span><span /></button>
+    {/* Beta 14: the Tabs layout as a row of icons, the same choice as the main menu's Tabs row. */}
+    <hr className="acira-menu-sep" /><TabsLayoutRow state={state} dispatch={dispatch} close={close} />
   </div>;
-  return <div className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
+  return <div ref={root} className="ws-menu" role="menu" aria-label={t('workspaces.panel')}>
     {mode === 'context' && canNew && !spaces && <><button type="button" role="menuitem" className="acira-menu-row" data-workspace-new onClick={makeOne}><Plus className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.new')}</span><span /></button><hr className="acira-menu-sep" /></>}
     {mode === 'list' && <>
       <div className="ws-menu-head" role="presentation">
@@ -90,6 +95,14 @@ export function WorkspaceMenu({ state, dispatch, close, mode }: { state: Browser
     {!spaces && !locked && <>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('name')}><PenLine className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.rename')}</span><span /></button>
       <button type="button" role="menuitem" className="acira-menu-row" disabled={!subject} onClick={() => edit('icon')}><Palette className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('workspaces.iconColor')}</span><span /></button>
+      {/* 14.3 (a member's "Organised workspaces"): the workspace changes place in the switcher's row, one step at a time; greyed at the row's ends. Left and right are what the row shows: in a right-to-left interface the first workspace is on the right. */}
+      {mode === 'context' && subject && list.length > 1 && (() => {
+        const at = list.indexOf(subject), rtl = typeof document !== 'undefined' && document.documentElement.dir === 'rtl', step = (side: 'left' | 'right'): -1 | 1 => (side === 'left') !== rtl ? -1 : 1;
+        return (['left', 'right'] as const).map(side => {
+          const by = step(side), Icon = side === 'left' ? ArrowLeft : ArrowRight, end = at + by < 0 || at + by >= list.length;
+          return <button key={side} type="button" role="menuitem" className="acira-menu-row" data-workspace-move={side} disabled={end} onClick={() => { dispatch({ type: 'workspace.move', id: subject.id, by }); close(); }}><Icon className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t(side === 'left' ? 'workspaces.moveLeft' : 'workspaces.moveRight')}</span><span /></button>;
+        });
+      })()}
       {sleepers.length > 0 && <button type="button" role="menuitem" className="acira-menu-row" data-workspace-sleep onClick={() => { const sleep = sleepAction(sleepers); if (sleep) dispatch(sleep); close(); }}><Moon className="acira-menu-icon" size={16} /><span className="acira-menu-title">{t('tabsleep.menuWorkspace')}</span><span /></button>}
     </>}
     {!spaces && subject && list[0]?.id !== subject.id && <>

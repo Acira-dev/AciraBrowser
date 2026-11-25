@@ -38,6 +38,27 @@ test('a press that is not on such a control does not',()=>{
   assert.equal(choosesPage({...press(row),target:{}}),false,'a target that cannot say');
 });
 
+// Beta 14, the team 17 Nov: a press on the Favorites stack opens the panel that holds the folded Favorites. The stack is a `.sb-app` too, so it chose a page: main handed the keyboard to the page, the interface
+// lost it in the same breath, and the panel (it folds when the interface loses the keyboard) shut as it opened; a second click then landed on the stack again, and so on. The selector is read here as the real
+// `closest()` reads it: a comma list of `[role="x"]` and `.class` parts, with `.class:not(.other)`.
+type El={classes:string[];role?:string};
+const partMatches=(part:string,el:El)=>{
+  const role=part.match(/^\[role="([\w-]+)"\]$/);if(role)return el.role===role[1];
+  const cls=part.match(/^\.([\w-]+)(?::not\(\.([\w-]+)\))?$/);if(!cls)throw Error('a selector part this test cannot read: '+part);
+  return el.classes.includes(cls[1])&&!(cls[2]&&el.classes.includes(cls[2]));
+};
+const picks=(el:El)=>PAGE_PICK_SELECTOR.split(',').map(part=>part.trim()).some(part=>partMatches(part,el));
+
+test('the Favorites stack opens a panel and chooses no page; every other Favorites tile still does',()=>{
+  assert.equal(picks({classes:['sb-app','sb-app-stack']}),false,'the stack tile');
+  assert.equal(picks({classes:['sb-app','sb-app-stack','sb-stack-ghost']}),false,'the stack\'s stand-in during the motion');
+  assert.equal(picks({classes:['sb-app']}),true,'a Favorite in the grid or in the panel');
+  assert.equal(picks({classes:['sb-app','sb-app-add']}),true,'the add tile keeps its behaviour');
+  assert.equal(picks({classes:['sb-tab-main']}),true);
+  assert.equal(picks({classes:[],role:'tab'}),true);
+  assert.equal(picks({classes:['sb-apps-panel']}),false,'the panel itself');
+});
+
 test('keyboard activation keeps the focus where the person is navigating (Enter or Space on a focused tab reports detail 0)',()=>{
   assert.equal(choosesPage(press(row,{detail:0})),false);
 });
@@ -59,12 +80,12 @@ test('controls inside a tab (close, mute, a rename field) are their own thing',(
 
 test('every class and role in the selector is still drawn by a component (a renamed class would silently stop the rule)',()=>{
   const read=(file:string)=>readFileSync(new URL('../src/'+file,import.meta.url),'utf8');
-  const sidebar=read('components/sidebar/AciraSidebar.tsx'),media=read('components/sidebar/SidebarMedia.tsx'),frost=read('features/FrostWorkspace.tsx');
+  const sidebar=read('components/sidebar/AciraSidebar.tsx'),media=read('components/sidebar/NowPlaying.tsx'),frost=read('features/FrostWorkspace.tsx');
   for(const name of ['sb-tab-main','sb-app','sb-bookmark','sb-group-header'])assert.ok(sidebar.includes(name),name);
-  assert.ok(media.includes('sb-media-main'));
+  for(const name of ['np-art','np-gotab'])assert.ok(media.includes(name),name);
   for(const name of ['ed-rail-tab','ed-rail-app','ed-rail-tab-group-name'])assert.ok(frost.includes(name),name);
   for(const file of ['components/BrowserTabsHorizontal.tsx','components/CompactTabs.tsx'])assert.ok(read(file).includes('role="tab"'),file);
-  for(const name of ['.sb-tab-main','.sb-app','.sb-bookmark','.sb-group-header','.sb-media-main','.ed-rail-tab','.ed-rail-app','.ed-rail-tab-group-name','[role="tab"]'])
+  for(const name of ['.sb-tab-main','.sb-app','.sb-bookmark','.sb-group-header','.np-art','.np-gotab','.ed-rail-tab','.ed-rail-app','.ed-rail-tab-group-name','[role="tab"]'])
     assert.ok(PAGE_PICK_SELECTOR.includes(name),name);
 });
 

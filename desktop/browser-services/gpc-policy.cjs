@@ -1,5 +1,8 @@
 'use strict';
-const FEATURE='GlobalPrivacyControlForce',QUALIFIED={electron:'44.9.3',chrome:'152.0.7977.167'};
+// QUALIFIED is the runtime the engine feature was proven on. An unqualified runtime throws, and native-network-preferences early() then fails closed (no browsing until it is fixed):
+// every engine move must re-run qa/engine-verify.mjs (GPC on: navigator.globalPrivacyControl true, Sec-GPC: 1 on documents and subresources). 20 Nov 2026: Electron 45.2.1 / Chromium 156.0.8078.75,
+// identical to 44.9.3 / 152.0.7977.167 in every probe (out/ev in the an earlier build, engine report).
+const FEATURE='GlobalPrivacyControlForce',QUALIFIED={electron:'45.2.1',chrome:'156.0.8078.75'};
 function configureGlobalPrivacyControl({app,enabled,versions=process.versions}){
  if(typeof enabled!=='boolean')throw new Error('Choose a boolean Global Privacy Control setting.');
  if(app.isReady())throw new Error('Global Privacy Control is an application startup choice. Restart Acira to change it.');

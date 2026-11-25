@@ -102,7 +102,7 @@ function createTabSleep({adapter,settings,now=Date.now,freezeAfterMs=5*60*1000,d
   if(item?.frozen){item.frozen=false;try{await adapter.unfreeze(id);}catch{}}
   return await adapter.protectedReason(tab,choice,options?.explicit?{explicit:true}:undefined)||null;
  }
- return {sweep,touch,sleepNow,check,frozen:id=>!!records.get(id)?.frozen};
+ return {sweep,sleepNow,touch,check,frozen:id=>!!records.get(id)?.frozen};
 }
 const SLEEP_NOW_BATCH=4;
 /** Why a tab stayed awake, in the few kinds the toast can say plainly: 'screen' (it is the tab on screen), 'media' (sound, camera, microphone, screen, video, picture-in-picture),
@@ -148,4 +148,15 @@ async function inspectLive(wc,ms=1500,appRestored=false){
  if(found&&found.safe===false&&found.select===true&&await untouched()){const [second,again]=await Promise.all([within(Promise.resolve(wc.executeJavaScript(sleepProbe(true)))),untouched()]);if(again)found=second;}
  return found;
 }
-module.exports={underPressure,inspectPage,sleepProbe,inspectLive,SELECT_WORLD,SELECT_RECORD,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};
+// A page whose title or icon changes while it is in the background is kept awake (Chromium's rule: chat and mail unread counts). The change counts
+// only for a hidden page that has finished loading and has been left alone for BACKGROUND_UPDATE_GRACE_MS: since it was last on screen, since it
+// was opened, and since its page last finished loading. Up to 14.0 the clock was "last on screen" alone, which is nothing for a tab opened in the
+// background and never looked at: the first title it set while loading marked it for good, so the sweep and every bulk Unload skipped it until
+// somebody looked at it once.
+const BACKGROUND_UPDATE_GRACE_MS=10000;
+function countsAsBackgroundUpdate({visible,discarding,loading,shownAt,openedAt,loadedAt,now}){
+ if(visible||discarding||loading)return false;
+ const since=Math.max(Number(shownAt)||0,Number(openedAt)||0,Number(loadedAt)||0);
+ return since>0&&now-since>BACKGROUND_UPDATE_GRACE_MS;
+}
+module.exports={underPressure,inspectPage,sleepProbe,inspectLive,SELECT_WORLD,SELECT_RECORD,createTabSleep,memorySaverChoice,normalizeSite,neverSleeps,stayAwakeKind,countsAsBackgroundUpdate,BACKGROUND_UPDATE_GRACE_MS,KEEP_ALIVE,DEFAULTS,IDLE_CHOICES};

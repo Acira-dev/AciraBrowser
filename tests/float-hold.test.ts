@@ -105,6 +105,63 @@ test('nothing is placed when nothing can be said: not Seamless, a split, a morph
   assert.equal(placeFloat(during({ views: [] }), remembered), null);
   const resized = placeFloat(during({ viewport: { width: 1200, height: 923 } }), remembered);
   assert.equal(resized?.kind, 'card', 'another window size: the old rest is not held');
-  const other = placeFloat(during({ views: [{ tabId: 'b', bounds: card }] }), remembered);
-  assert.equal(other?.kind, 'card', 'another page: its own pane, not the old page\'s rest');
+});
+
+// D128 (22 Nov, 14.1): a tab CHOSEN WHILE THE FLOAT WAS OUT (a Favorite's tile, a row, a New Tab shortcut) is laid out only with a float flag, no layout at rest follows the hide, so the memory holds the page
+// that was on screen before it and nothing for the chosen one. The pane's own rectangle during a float is BESIDE the sidebar ({240,6,..} in the log): `placeFloat` used to answer nothing for the unknown page and
+// the page was laid out beside the sidebar at the choosing click and at every reveal after it (resizes 2 / 3 per reveal and hide; Favorite and normal tab alike).
+const beside = { x: 246, y: 6, width: 1182, height: 911 };   // the pane's rectangle while a 240 sidebar floats over it (measured: the page area is the window onto it)
+const chosen = (extra: Partial<FloatLayoutInput> = {}): FloatLayoutInput => ({ ...base, floating: true, flags: { side: true, top: false }, pageBounds: rest, views: [{ tabId: 'b', bounds: beside }], measuredView: beside, ...extra });
+
+test('D128: a page chosen while the float was out (no rest of its own) takes the place the remembered page rested in, at the choosing click and at every reveal after it', () => {
+  const remembered = remember(base);
+  assert.equal(remembered.views.has('b'), false);
+  for (const extra of [{}, { floating: false, edgeTransition: true }, { flags: { side: false, top: true }, floating: false }, { floating: false, flags: { side: true, top: false } }] as Partial<FloatLayoutInput>[]) {
+    const placed = placeFloat(chosen(extra), remembered);
+    assert.equal(placed?.kind, 'rest', JSON.stringify(extra));
+    assert.deepEqual(placed?.pageBounds, rest);
+    assert.deepEqual(placed?.views[0].bounds, card, 'the remembered page\'s own place, never the pane beside the sidebar');
+    assert.equal(placed?.views[0].tabId, 'b');
+  }
+});
+
+test('D128: the page the memory knows is placed exactly as before (its own place, the rest\'s view)', () => {
+  const remembered = remember(base);
+  const own = placeFloat(chosen({ views: [{ tabId: 'a', bounds: beside }] }), remembered);
+  assert.equal(own?.kind, 'rest');
+  assert.deepEqual(own?.views[0].bounds, remembered.views.get('a'));
+  // a memory made of two different places: the page that is in it gets its own, the page that is not gets nothing guessed
+  const two: RestSent = { ...remembered, views: new Map([['a', card], ['c', { ...card, width: 700 }]]) };
+  assert.deepEqual(placeFloat(chosen({ views: [{ tabId: 'c', bounds: beside }] }), two)?.views[0].bounds, { ...card, width: 700 });
+  assert.equal(placeFloat(chosen(), two)?.kind === 'rest', false, 'a memory of several pages says nothing about a page it does not hold');
+});
+
+test('D128: nothing else changes for a page chosen under the float: at rest the rest is not imposed, a split / morph / pinned edge / another window size still answer as before', () => {
+  const remembered = remember(base);
+  assert.equal(placeFloat(chosen({ floating: false, flags: { side: false, top: false }, edgeTransition: false, pageBounds: rest }), remembered), null, 'no float, no edge: never touched');
+  assert.equal(placeFloat(chosen({ split: true }), remembered), null);
+  assert.equal(placeFloat(chosen({ morph: true }), remembered), null);
+  assert.equal(placeFloat(chosen({ pinned: true }), remembered), null);
+  assert.equal(placeFloat(chosen({ measuredView: undefined }), remembered), null);
+  assert.equal(placeFloat(chosen({ seamless: false }), remembered), null);
+  assert.equal(placeFloat(chosen({ views: [{ tabId: 'b', bounds: beside }, { tabId: 'c', bounds: beside }] }), remembered), null);
+});
+
+test('D128 + window resized while the float is out, then a tile click: another window size is not held for the new page either (the card, not a stale rest)', () => {
+  const remembered = remember(base);
+  const placed = placeFloat(chosen({ viewport: { width: 1480, height: 923 }, pageBounds: { x: 6, y: 6, width: 1480, height: 911 } }), remembered);
+  assert.notEqual(placed?.kind, 'rest');
+  assert.notDeepEqual(placed?.views[0].bounds, card, 'never the old size\'s place');
+  assert.deepEqual(placeFloat(chosen({ viewport: { width: 1480, height: 923 }, pageBounds: full }), remembered)?.views[0].bounds, beside, 'what the card is while the float is out (the DOM\'s own pane), as for any page in another window size');
+});
+
+test('D128 + round 4 for a page the memory does not know: a Full-view rest (the start-up layout) is not held, nor is an empty memory, nor a toolbar-pushed page rectangle', () => {
+  const stale: RestSent = { pageBounds: full, views: new Map([['a', full]]), width: 1440, height: 923 };
+  const fromStale = placeFloat(chosen({ pageBounds: full }), stale);
+  assert.equal(fromStale?.kind, 'card');
+  assert.deepEqual(fromStale?.views[0].bounds, beside, 'the pane\'s own rectangle, never {0,72,..}');
+  assert.equal(placeFloat(chosen({ pageBounds: rest }), null), null, 'no memory at all: the layout goes as measured, as in 14.1');
+  const early = placeFloat(chosen({ floating: false, flags: { side: false, top: true }, pageBounds: full }), null);
+  assert.equal(early?.kind, 'card');
+  assert.deepEqual(early?.pageBounds, beside);
 });

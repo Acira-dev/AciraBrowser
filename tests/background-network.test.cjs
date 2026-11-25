@@ -160,7 +160,7 @@ test('main.cjs: the context is an in-memory session with no cache, follows the p
   assert.match(main, /createUpdateRoute\(\{session:target,getSharedState:\(\)=>sharedState,getLastProfileId:\(\)=>lastNormalController\?\.profileId,liveStatus:profile=>contentBlocking\.proxy\.status\(session\.fromPartition\(profile\.partition\)\),liveRoute:profile=>contentBlocking\.proxy\.nativeRoute\(session\.fromPartition\(profile\.partition\)\)/);
   assert.match(main, /allowed:\(\)=>nativeNetwork\.isReady\(\)&&!\(profileCleanup&&!profileCleanup\.uiNetworkAllowed\(\)\)/);
   assert.match(main, /backgroundNetwork:\{download:\(\.\.\.args\)=>backgroundNetwork\(\)\.download\(\.\.\.args\),downloadText:\(\.\.\.args\)=>backgroundNetwork\(\)\.downloadText\(\.\.\.args\),fetchText:\(\.\.\.args\)=>backgroundNetwork\(\)\.fetchText\(\.\.\.args\)\}/);
-  assert.match(main, /function updateRoute\(\)\{const \{session\}=require\('electron'\),proxy=/, 'the update check\'s own route is as it was');
+  assert.match(main, /function makeUpdateRoute\(\)\{const \{session\}=require\('electron'\),proxy=/, 'the update check\'s own route is as it was (Beta 14 D made it single: updateRoute() hands out one makeUpdateRoute())');
   const blocking = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'content-blocking.cjs'), 'utf8');
   assert.equal((blocking.match(/backgroundNetwork\?\{(?:download|fetchText):backgroundNetwork\.(?:download|downloadText|fetchText)\}:\{\}/g) || []).length, 3, 'the filter lists, the threat lists and the allow-list');
   assert.match(blocking, /allowlist:siteAllowlist,\.\.\.\(backgroundNetwork\?\{download:backgroundNetwork\.downloadText\}:\{\}\)/, 'the threat lists take the TEXT downloader, as downloadList answers');

@@ -13,6 +13,12 @@ html[data-platform=darwin] .fs-lights { display: flex; }
 .app:has(.browser-shell:is([data-layout=compact], [data-layout=focus])) > .fs-lights { --lights-row: 32px; }
 /* Seamless with its top bar away has no lights, as the real ones go with it (platform.updateCaption); the bar brings them back. */
 .app:has(.browser-shell[data-seamless=hidden]) > .fs-lights { display: none; }
+/* ...and they come and go WITH it: while the bar's slab drops in or lifts away (seamless.css, acira-edge-shell) they ride the same drop, lift and fade.
+   As part of the page's root picture they stood at their place from the first frame, over the back and forward buttons of the address row while
+   the tab row was still above the window (the team, Beta 14 on 13.10, fullscreen Seamless). */
+:root[data-mode-switch='edge'][data-edge-toolbar='slab']:not([data-fr-finale]) .app:not(:has(>.setup-dialog)) > .fs-lights { view-transition-name: acira-fs-lights; }
+:root:root[data-mode-switch='edge']::view-transition-new(acira-fs-lights):only-child { animation: edge-drop var(--edge-ms) var(--edge-ease) both, edge-fade-in calc(var(--edge-ms) * .3) ease-out both; }
+:root:root[data-mode-switch='edge']::view-transition-old(acira-fs-lights):only-child { opacity:1; animation: edge-lift var(--edge-ms) var(--edge-ease) both, edge-fade-out calc(var(--edge-ms) * .4) ease-in calc(var(--edge-ms) * .6) both; }
 
 .fs-light {
   box-sizing: border-box; width: calc(14 * var(--pt)); height: calc(14 * var(--pt)); margin: 0; padding: 0; border: 0; border-radius: 50%;

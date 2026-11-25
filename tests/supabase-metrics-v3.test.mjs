@@ -44,7 +44,8 @@ test('schema 3 keeps every schema-2 field and adds the rest of the audit, every 
   const row = validate(full(), NOW);
   assert.ok(row);
   assert.equal(row.schema_version, 3);
-  assert.deepEqual(Object.keys(row).sort(), [...DAILY_COLUMNS].sort(), 'a full message writes exactly every schema-3 column');
+  const v3columns = ['day', 'install_id', 'app_version', 'channel', 'platform', 'arch', 'language', 'schema_version', ...Object.keys(ENUMS).map(snake), ...USES.map((name) => 'use_' + snake(name))];
+  assert.deepEqual(Object.keys(row).sort(), v3columns.sort(), 'a full message writes exactly every schema-3 column');
 });
 
 test('schema 3: base fields required, each fact optional (NULL), any unknown key, wrong value or wrong bucket refused', () => {
@@ -65,18 +66,18 @@ test('schema 3: base fields required, each fact optional (NULL), any unknown key
   assert.equal(bad((v) => { v.tabsOpen = '37'; }), null, 'no exact tab count');
   assert.equal(bad((v) => { v.day = '2026-10-27T13:45:00Z'; }), null, 'no time of day');
   assert.equal(bad((v) => { v.installId = SAMPLE_ID; }), null, 'the placeholder id is never stored');
-  assert.equal(bad((v) => { v.schema = 4; }), null);
+  assert.equal(bad((v) => { v.schema = 5; }), null);
   assert.equal(validate({ ...full(), schema: 2 }, NOW), null, 'schema-3 fields are not schema 2');
 });
 
 test('the longest schema-3 message fits the 2 KB limit and needs more than the old 1 KB (why the limit was raised)', () => {
-  const longest = { ...BASE, appVersion: '1234.1234.1234-' + 'a'.repeat(9) };
+  const longest = { ...BASE, appVersion: '1234.1234.1234-beta.99' };
   for (const [field, list] of Object.entries(ENUMS)) longest[field] = list.reduce((a, b) => (b.length > a.length ? b : a));
   for (const field of USES) longest[field] = '10+';
   assert.ok(validate(longest, NOW));
   const bytes = new TextEncoder().encode(JSON.stringify(longest)).length;
-  assert.ok(bytes > 1024 && bytes < MAX_BYTES, `longest message is ${bytes} bytes`);
-  assert.equal(MAX_BYTES, 2048);
+  assert.ok(bytes > 1024 && bytes < 2048, `longest message is ${bytes} bytes`);
+  assert.equal(MAX_BYTES, 10240, 'the limit is 10 KB: 8 KB when Beta 14\'s own features were added to schema 4, 10 KB when the fifteen Insider names joined (tests/supabase-metrics-v4.test.mjs computes its longest message)');
 });
 
 test('rating messages: exactly feature, stars 1-5, app version, OS family and day; no id, no text', () => {
@@ -87,7 +88,7 @@ test('rating messages: exactly feature, stars 1-5, app version, OS family and da
   for (const feature of ['split view', 'https://example.org', 'other', '', 7]) assert.equal(validateRating(rating({ feature }), NOW), null, 'feature ' + feature);
   for (const extra of ['installId', 'comment', 'text', 'url', 'arch', 'language', 'channel']) assert.equal(validateRating(rating({ [extra]: 'x' }), NOW), null, extra);
   for (const key of Object.keys(rating())) { const value = rating(); delete value[key]; assert.equal(validateRating(value, NOW), null, key + ' required'); }
-  assert.equal(validateRating(rating({ schema: 2 }), NOW), null); assert.equal(validateRating(rating({ day: '2026-10-29' }), NOW), null);
+  assert.equal(validateRating(rating({ schema: 2 }), NOW), null); assert.equal(validateRating(rating({ day: '2026-10-30' }), NOW), null);
   assert.equal(validateRating(rating({ platform: 'android' }), NOW), null); assert.equal(validateRating(rating({ appVersion: 'x' }), NOW), null);
   assert.ok(new TextEncoder().encode(JSON.stringify(rating({ feature: 'newTabArtwork', appVersion: '1234.1234.1234-' + 'a'.repeat(9) }))).length < RATING_MAX_BYTES);
 });
@@ -169,7 +170,7 @@ test('restStore: ratings go to feature_ratings, the probe reads zero rows of nam
 });
 
 test('deploy: the dry run lists v1 -> v3, the salt secret and both message-type probes; the health checks pass against the real handler', async () => {
-  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql', '20261102000000_site_reports.sql', '20261103000000_usage_churn.sql']);
+  assert.deepEqual(await migrationFiles(), ['20261025000000_usage_metrics.sql', '20261026000000_usage_metrics_v2.sql', '20261027000000_usage_metrics_v3.sql', '20261102000000_site_reports.sql', '20261103000000_usage_churn.sql', '20261113000000_usage_schema4.sql', '20261116000000_usage_installs.sql']);
   const logs = []; const original = console.log; console.log = (...args) => logs.push(args.join(' '));
   try { await deploy({ SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst', SUPABASE_ACCESS_TOKEN: 'sbp_SECRETVALUE' }, ['--dry-run']); } finally { console.log = original; }
   const plan = logs.join('\n');
@@ -182,7 +183,8 @@ test('deploy: the dry run lists v1 -> v3, the salt secret and both message-type 
   console.log = () => {};
   try { await smoke('https://x.supabase.co/functions/v1/usage', fetchImpl, { attempts: 1, wait: 0 }); } finally { console.log = original; }
   assert.equal(store.rows.length + store.ratings.length, 0, 'the health checks store nothing');
-  assert.equal(healthChecks(DAY).length, 8, 'two more for the uninstall message (tests/supabase-usage-churn.test.mjs)');
+  assert.equal(healthChecks(DAY).length, 14, 'two more for the uninstall message (tests/supabase-usage-churn.test.mjs), four more for the off and survey messages (tests/supabase-metrics-v4.test.mjs), two for the uninstaller\'s one-tap reason (a reason off the list is refused, schema 4 with a reason is probed)');
+  assert.ok(healthChecks(DAY).some(([label]) => /uninstall with a reason that is not on the list is refused/.test(label)) && healthChecks(DAY).some(([label]) => /uninstall probe with the one-tap reason/.test(label)));
   await assert.rejects(smoke('https://x.supabase.co/functions/v1/usage', async () => new Response(null, { status: 204 }), { attempts: 1, wait: 0 }), /Health check failed/);
 });
 

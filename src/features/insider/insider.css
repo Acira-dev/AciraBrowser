@@ -1,0 +1,52 @@
+/* Beta 14: the Insider pop-up. PLAIN PLACEHOLDERS on purpose (the welcome's and the Insider steps' look is still being designed): the design system's own pieces only, nothing invented. */
+.app .ins { position: relative; box-sizing: border-box; padding: 24px; min-width: 0; }   /* C1: the same 24 on all four sides (30 to the glass edge with the pop-up's 4 and the body's 2); C6: on the 4 px grid */
+.app .ins-close { position: absolute; inset-block-start: 12px; inset-inline-end: 12px; }
+.app .ins-body { transition: opacity 130ms linear; }
+.app .ins-body[data-leaving] { opacity: 0; }
+.app .ins-screen { display: flex; flex-direction: column; gap: 12px; min-width: 0; animation: ins-in 180ms linear; }
+@keyframes ins-in { from { opacity: 0; } to { opacity: 1; } }
+.app :where(.ins-screen) h2.ins-title { margin: 0 0 4px; font: 500 16px/22px var(--font-ui); padding-inline-end: 28px; }
+.app .ins-text { margin: 0; font: 400 13px/18px var(--font-ui); color: var(--menu-t2); }
+.app .ins-notes { white-space: pre-wrap; max-height: 180px; overflow: auto; }
+.app .ins-show { align-items: center; text-align: center; gap: 12px; }
+.app :where(.ins-show) h2.ins-title { padding-inline-end: 0; margin: 4px 0 0; }
+.app .ins-center { text-align: center; }
+.app .ins-field { display: flex; flex-direction: column; gap: 6px; margin-block-start: 6px; }
+.app .ins-label { margin: 0; font: 500 12px/16px var(--font-ui); }
+.app :where(.ins-field) input.ins-input { box-sizing: border-box; width: 100%; min-width: 0; height: 34px; padding: 0 12px; border: 1px solid var(--menu-line); border-radius: 6px; background: transparent; color: inherit; font: 500 14px/1 var(--font-ui); letter-spacing: .04em; font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.app :where(.ins-field) input.ins-input::placeholder { color: var(--menu-t3); letter-spacing: .04em; }
+.app :where(.ins-field) input.ins-input:focus-visible { outline: 2px solid var(--focus-ring-color, var(--accent)); outline-offset: 2px; }
+.app :where(.ins-field) input.ins-input[aria-invalid] { border-color: var(--danger); }
+/* One calm line under the field; it keeps its height so a result never moves the buttons. */
+.app .ins-line { margin: 0; min-height: 16px; font: 400 12px/16px var(--font-ui); color: var(--menu-t2); }
+.app .ins-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-block-start: 6px; }
+.app .ins-buttons-start { justify-content: flex-start; }
+.app .ins-after { align-self: stretch; }
+.app .ins-made { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--menu-line); }
+.app .ins-code { margin: 0; font: 560 22px/28px var(--font-ui); letter-spacing: .06em; font-variant-numeric: tabular-nums; user-select: text; }
+.app .ins-list-title { margin: 6px 0 0; }
+.app .ins-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow: auto; }
+.app .ins-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 26px; font: 400 13px/18px var(--font-ui); }
+.app .ins-item-code { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.app .ins-item-state { font-size: 12px; color: var(--menu-t3); }
+.app .ins-item[data-state=used] .ins-item-state { color: var(--menu-t2); }
+.app[data-motion-speed='off'] .ins-screen,
+.app[data-reduced-motion='true'] .ins-screen { animation: none; }
+.app[data-motion-speed='off'] .ins-body,
+.app[data-reduced-motion='true'] .ins-body { transition: none; }
+.app .ins-wait { min-height: 300px; }
+/* The Insider build's activation, quiet states: a refused build says so in one calm, dimmer line; the welcome's seal step holds its space while the first-run activation is still out, so nothing jumps. */
+.app .ins-quiet { color: var(--menu-t3); }
+.app .ins-wait-seal { min-height: 236px; }
+.app .ins-card { gap: 8px; }
+/* Beta 14 rule 4 + AK: the activation sheet is a card of the glass dialog family (src/features/dialogs/dialogs.css); these are its own few lines. The profile's name under the question stays on
+   one line; the answer's calm line is flat until it has words (a live region, so it stays in the page); the activated card stands centred, its Done at the end as every dialog's is. */
+.dlg .ins-sheet-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlg .ins-sheet-line { margin-top: 8px; }
+.dlg .ins-sheet-line:empty { margin-top: 0; }
+.dlg .ins-sheet-picture { flex: none; }
+.dlg-pad.ins-sheet-wait { min-height: 151px; }
+.dlg.ins-sheet-done { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.dlg .ins-sheet-center { text-align: center; }
+.ins-sheet-done .dlg-title { margin-top: 12px; }
+.ins-sheet-done .dlg-foot { align-self: stretch; }

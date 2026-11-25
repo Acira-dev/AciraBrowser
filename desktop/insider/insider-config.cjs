@@ -20,10 +20,13 @@ const SHIPPED = Object.freeze({
   // The Insider update feed (rule 8): the same function, `feed/<channel file>`, each request signed for its own path; it is filled at publish time.
   feed: 'https://lzdndhalljkmqabbtruv.supabase.co/functions/v1/insider/feed/',
   keys: Object.freeze([Object.freeze({ kid: 'insider-2026-11', publicKey: 'DDXEvzCyVMhYG7Ywl6N3LOchj_IE5MlLM344y87ei4U' })]),
-  // The first Insider build (founder, 16 Nov): every ordinary profile without a certificate asks for the next number once, quietly (insider-service.cjs autoEnroll).
-  autoEnroll: true,
-  // Invites are closed in the first Insider build (co-founder B1, 17 Nov): no invite service yet. The pop-up shows a disabled button and a note, and no request is made. Switching them on is this one flag.
-  invitesOpen: false,
+  // OFF from Beta 14.4 (the team's logic, 24 Nov: "when people download the 14.4 public one ... new insiders ... we're gonna give them keys"): a profile no longer enrols itself. The first Insider builds (14.0 to 14.3, the team 16 Nov)
+  // asked for the next number once, quietly; on a public build that would make every profile an Insider. A profile that already holds a pass keeps it untouched; new Insiders enter the key they are given (About > Extras, the profile menu's
+  // "Enter Insider code", a personal link). The mechanism stays in insider-service.cjs (autoEnroll) behind this flag.
+  autoEnroll: false,
+  // Invites are OPEN from the public 14.4 (reported 24 Nov: "a member invites a friend; the friend enters the code and gets a number and a card"). A Founding Contributor (No. 1 to 100) has 3 codes, an Insider (No. 101 and up) 2; the server owns the counts and has its own switch
+  // (insider_enrollment.invites_open): while it is shut, an invite answers none_left (with `closed` where the function passes it on) and the screen stays calm. Closed in the first Insider build (the reference design B1, 17 Nov): this one flag.
+  invitesOpen: true,
 });
 
 const parseKeys = (text) => String(text || '').split(',').map((item) => item.trim()).filter(Boolean).map((item) => { const at = item.indexOf(':'); return at > 0 ? { kid: item.slice(0, at), publicKey: item.slice(at + 1) } : null; }).filter(Boolean);

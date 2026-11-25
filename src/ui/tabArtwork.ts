@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { randomPainting, type NewTabPreferences } from './newTabPreferences';
+import { randomPick, rotationInterval } from './artworkPicks';
 
 /**
  * "Another image" belongs to the tab where it was pressed. Hiding the image, a custom image, the collection and the change
@@ -17,6 +18,8 @@ export type TabArtworkPick = {
   excludeId: string;
   /** Built-in paintings: this tab's own painting ('' for a remote collection). */
   artwork: string;
+  /** "Only my picks": this tab's own pick, an id from the person's picks ('' otherwise). */
+  chosen: string;
 };
 
 const picks = new Map<string, TabArtworkPick>();
@@ -26,8 +29,9 @@ const limit = 64;
 const emit = () => listeners.forEach(listener => listener());
 
 /** Everything about the profile's choices that a tab-local pick must stay under. */
-export const artworkSignature = (profile: string, privateMode: boolean, prefs: Pick<NewTabPreferences, 'collection' | 'artwork' | 'daily' | 'hourly' | 'perTab' | 'collectionSeed'>) =>
-  [profile, privateMode ? 'private' : 'normal', prefs.collection, prefs.artwork, prefs.daily, prefs.hourly, prefs.perTab, prefs.collectionSeed].join('|');
+export const artworkSignature = (profile: string, privateMode: boolean, prefs: Pick<NewTabPreferences, 'collection' | 'artwork' | 'daily' | 'hourly' | 'perTab' | 'collectionSeed'> & Partial<Pick<NewTabPreferences, 'rotation' | 'picks' | 'ownImages'>>) =>
+  // The picks only matter while the rotation uses them: ticking the picture you are looking at under "All pictures" must not change this tab.
+  [profile, privateMode ? 'private' : 'normal', prefs.collection, prefs.artwork, prefs.daily, prefs.hourly, prefs.perTab, prefs.collectionSeed, prefs.rotation === 'picks' && rotationInterval(prefs) ? 'picks:' + (prefs.picks ?? []).join(',') : '', ...(prefs.ownImages && prefs.ownImages !== 'off' ? ['own:' + prefs.ownImages] : [])].join('|');
 
 export function tabArtworkPick(tabId: string, signature: string): TabArtworkPick | null {
   const pick = picks.get(tabId);
@@ -40,8 +44,18 @@ export function tabArtworkPick(tabId: string, signature: string): TabArtworkPick
  */
 export function shuffleTabArtwork(tabId: string, profile: string, signature: string, remote: string | null, currentId: string, random: () => number = Math.random, uuid: () => string = () => crypto.randomUUID()): TabArtworkPick {
   const pick: TabArtworkPick = remote
-    ? { profile, signature, seed: uuid(), excludeId: currentId.startsWith(remote + ':') ? currentId : '', artwork: '' }
-    : { profile, signature, seed: '', excludeId: '', artwork: randomPainting(currentId, random).id };
+    ? { profile, signature, seed: uuid(), excludeId: currentId.startsWith(remote + ':') ? currentId : '', artwork: '', chosen: '' }
+    : { profile, signature, seed: '', excludeId: '', artwork: randomPainting(currentId, random).id, chosen: '' };
+  return remember(tabId, pick);
+}
+
+/** "Another image" while the rotation uses the person's picks: a different one of them, for this tab only. */
+export function shuffleTabPick(tabId: string, profile: string, signature: string, pool: readonly string[], currentId: string, random: () => number = Math.random): TabArtworkPick | null {
+  const chosen = randomPick(pool, currentId, random);
+  return chosen ? remember(tabId, { profile, signature, seed: '', excludeId: '', artwork: '', chosen }) : null;
+}
+
+function remember(tabId: string, pick: TabArtworkPick): TabArtworkPick {
   picks.delete(tabId); // re-insert at the end: the oldest pick is the first key
   picks.set(tabId, pick);
   while (picks.size > limit) picks.delete(picks.keys().next().value as string);

@@ -617,13 +617,13 @@ test('the idle views are dropped and the interface scale rebuilds them', async (
 });
 
 // ---------------------------------------------------------------------------------------------------------- Windows and Linux
-test('Windows and Linux are untouched: the controller, the native monitor and the page snapshot are all Mac only', () => {
+test('the Mac keeps its own path: the native monitor and the macOS switch are Mac only, the system switch never decides elsewhere', () => {
   const main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
-  assert.match(main, /const swipeNav=process\.platform==='darwin'\?\(\(\)=>\{/, 'main makes the controller on a Mac only');
-  assert.match(main, /if\(swipeNav\)watchScroll\(/);
-  assert.match(main, /if\(swipeNav\)pageBridge\.on\('acira:swipe-facts'/);
+  assert.match(main, /const swipeNav=\['darwin','win32','linux'\]\.includes\(process\.platform\)\?\(\(\)=>\{/, 'Windows and Linux have a controller too (tests/touchpad-phases.test.cjs)');
+  assert.match(main, /if\(swipeNav&&process\.platform==='darwin'\)watchScroll\(/, 'but only a Mac reads the native scroll monitor');
+  assert.match(main, /swipe\.swipeEnabled\(process\.platform,require\('electron'\)\.systemPreferences\)/, 'the macOS switch decides on a Mac');
   const preload = fs.readFileSync(path.join(__dirname, '../desktop/page-input-preload.cjs'), 'utf8');
-  assert.match(preload, /if\(process\.platform==='darwin'&&process\.isMainFrame\)\{\n let lastSent/, 'the page snapshot listener is added on a Mac only');
+  assert.match(preload, /if\(\(process\.platform==='darwin'\|\|process\.platform==='win32'\|\|process\.platform==='linux'\)&&process\.isMainFrame\)\{\n let lastSent/, 'the page snapshot listener is the same on every system');
   const material = fs.readFileSync(path.join(__dirname, '../desktop/mac-material.cjs'), 'utf8');
   assert.match(material, /if\(process\.platform==='darwin'\)\{\n try\{bridge=require/, 'the native module is a Mac thing');
   assert.equal(swipeEnabled('win32', {isSwipeTrackingFromScrollEventsEnabled: () => true}), false);

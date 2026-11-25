@@ -185,7 +185,7 @@ test('the repositories list: All repositories, then each repository seen with it
 test('it is wired in: the sidebar draws the folder first among the list rows, the popup kind exists with its width and its place, the sidebar menu offers it only in the sidebar, nothing is on by default', () => {
   const sidebar = read('src/components/sidebar/AciraSidebar.tsx');
   assert.match(sidebar, /const body=\[\.\.\.\(newTabsTop\?\[newTab\]:\[\]\),\s*<LiveFolder key="live-folder"/);
-  assert.match(read('desktop/validation.cjs'), /'favorite-edit', 'live-folder', 'split'/);
+  assert.match(read('desktop/validation.cjs'), /'favorite-edit', 'favorite-context', 'live-folder', 'split'/);
   const app = read('src/App.tsx');
   assert.match(app, /kind === 'live-folder' && <LiveFolderMenu/); assert.match(app, /state\.settings\.verticalTabs && <LiveFolderStripRow/);
   const popup = read('src/ui/popup.ts');

@@ -26,6 +26,8 @@
   & .nc-permission .nc-mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   & .nc-form { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1.6fr) auto; gap: 8px; align-items: center; margin-top: 14px; }
   & .nc-form .st-input { width: 100%; }
+  & .nc-form .nc-form-suggest { grid-column: 1 / span 3; }
+  & .nc-engine-suggest { display: block; font-size: 11px; line-height: 14px; overflow: hidden; text-overflow: ellipsis; opacity: .8; }
   & .nc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   & .nc-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 4px 0 8px; border: 1px solid var(--st-edge); border-radius: 4px; font-size: 12px; background: var(--st-field); }
   & .nc-chip button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 3px; color: var(--st-muted); }
@@ -33,5 +35,6 @@
   @container (max-width: 560px) {
     & .nc-engine, & .nc-permission, & .nc-form { grid-template-columns: 1fr auto; }
     & .nc-engine > :nth-child(3), & .nc-engine > :nth-child(2) { grid-column: 1 / -1; }
+    & .nc-form .nc-form-suggest { grid-column: 1 / -1; }
   }
 }

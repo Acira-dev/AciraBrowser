@@ -57,11 +57,14 @@ function acquire(wc, owner = '') {
   return lease;
 }
 
+/** Whether a lease other than `except` wants the page's cross-process frames (Easy Files sets `lease.frames`): Website appearance then leaves Target.setAutoAttach on when it lets go. */
+function wantsFrames(wc, except = null) { const state = registry.get(wc); if (!state) return false; for (const lease of state.leases) if (lease !== except && !lease.over && lease.frames === true) return true; return false; }
+
 /** Whether we hold the session (any lease), and how many. */
 function held(wc) { const state = registry.get(wc); return state ? state.leases.size : 0; }
 
 /** Leases that only describe how a page looks and are held for as long as the page lives: Website appearance (13.3) keeps one on every tab it tells a colour scheme. */
-const PASSIVE = ['appearance'];
+const PASSIVE = ['appearance', /* Easy Files (Beta 14): its file-chooser watch is held for as long as the page is in use */ 'easy-files'];
 
 /**
  * Is somebody ELSE using this page's debugger (13.5, tab sleep)? True when a debugger is attached that is not our session (Tor, a hidden cookie page, any other client),
@@ -79,4 +82,4 @@ function inUseByOthers(wc, passive = PASSIVE) {
   } catch { return true; }
 }
 
-module.exports = {acquire, held, inUseByOthers, PASSIVE};
+module.exports = {acquire, held, inUseByOthers, wantsFrames, PASSIVE};

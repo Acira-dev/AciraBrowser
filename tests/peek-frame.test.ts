@@ -51,3 +51,26 @@ test('the tab card arrives on the spatial and effects springs, leaves on the eff
   assert.match(html,/state\.picture\.startsWith\('data:image\/jpeg;base64,'\)/,'only a JPEG data URL can be shown');
   assert.match(html,/-webkit-line-clamp:2/,'a long title takes two lines, then ends in a fade-free clamp');
 });
+
+test('the chip and the column of icon buttons ride the card\'s own opening, are at least 28px, and use only the labels the frame already has', () => {
+  const {html} = load('../desktop/rewind/peek-frame.html');
+  // they sit in #extras, a box the size of the card that scales on the card's own spring; each rides a corner of the aperture's moving box and fades in as it nears the card
+  assert.match(html, /<div id="extras">/);
+  const card = html.slice(html.indexOf('<div id="card"'), html.indexOf('<div id="notice"'));
+  for (const id of ['side', 'rail', 'more', 'chip', 'r-close', 'r-tab', 'r-split', 'r-copy', 'back2', 'reload2']) assert.match(card, new RegExp(`id="${id}"`), id + ' is in the card\'s box');
+  assert.match(html, /play\(card,\[\{clipPath:apertureAt\(state\.link,g\),transform:'scale\(\.94\)'\}/, 'the card is what opens');
+  assert.match(html, /play\(\$\(id\),\[\{translate:at\},\{translate:'0px 0px'\}\],grow,\{opening:true\}\)/, 'the chip and the column ride on the card\'s own spring, no spring of their own');
+  assert.match(html, /play\(\$\('extras'\),\[\{transform:'scale\(\.94\)'\},\{transform:'none'\}\],grow,\{opening:true\}\)/);
+  assert.match(html, /button\.rail\{width:32px;height:32px/);assert.match(html, /#chip button\.icon\{width:28px;height:28px/);assert.match(html, /button\.icon\{width:28px;height:28px\}/);
+  // every one of the four column buttons and the chip's two say what they do from the app's catalog labels, and no new text exists in the page
+  for (const cmd of ['close', 'tab', 'split', 'copy', 'back', 'reload']) assert.match(html, new RegExp(`data-cmd="${cmd}"`));
+  assert.match(html, /tipAll\('tab',name\.tab,keys\.tab\)/);assert.match(html, /tipAll\('split',name\.split,keys\.split\)/);assert.match(html, /tipAll\('close',name\.close,keys\.close\)/);
+  const text = html.slice(html.indexOf('<body>')).replace(/<script>[\s\S]*<\/script>/, '').replace(/<style>[\s\S]*<\/style>/, '').replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, '').trim();
+  assert.equal(text, '', 'the markup carries no words of its own: every word comes from the catalog labels');
+  assert.doesNotMatch(/#rail,#more,#chip\{[^}]*(border|outline)/.exec(html)?.[0] ?? '', /border|outline/, 'no drawn line on the plates');
+  // the card has no drawn line: its edge is the scrim and a soft shadow, and it is curved like the page card
+  assert.match(html, /#shadow\{[^}]*border-radius:12px;box-shadow:var\(--lift\)/);assert.match(html, /#surface\{[^}]*inset:2px;border-radius:10px/, 'the surface sits 2px inside the page view, so no fringe shows on the curve');
+  assert.doesNotMatch(/--lift:[^;]*;/.exec(html)?.[0] ?? '', /0 0 0 1px/, 'no ring in the shadow');
+  assert.doesNotMatch(html.slice(html.indexOf('#shadow{'), html.indexOf('#shadow{') + 400), /var\(--line\)|var\(--highlight\)/, 'no hairline or highlight on the card');
+  assert.match(html, /APERTURE_END='inset\(0px 0px 0px 0px round 12px\)'/, 'the aperture ends exactly on the card\'s box and curve: no frame has a clip taller than the card and narrower than it');
+});

@@ -5,8 +5,8 @@
 // A question main did not answer here (no handler, or it gave no answer) is simply asked the old way by its preload, so no feature changes: same handler, same event, same answer.
 // What each preload asks for a frame (mirrors the preloads' own conditions):
 //   chrome-identity, farbling: websites and srcdoc frames        scriptlets: the main frame of a website        page-risk: the top frame of a website (the script only when it is on)
-//   autoconsent-setup: websites
-const CHANNELS = Object.freeze({identity: 'acira:chrome-identity', farbling: 'acira:farbling', scriptlets: 'acira:scriptlets', riskConfig: 'acira:page-risk-config', riskScript: 'acira:page-risk-script', consent: 'acira:autoconsent-setup'});
+//   autoconsent-setup: websites                                   zap-early (zap-preload.cjs): the main frame of a website
+const CHANNELS = Object.freeze({identity: 'acira:chrome-identity', farbling: 'acira:farbling', scriptlets: 'acira:scriptlets', riskConfig: 'acira:page-risk-config', riskScript: 'acira:page-risk-script', consent: 'acira:autoconsent-setup', zap: 'acira:zap-early'});
 const BOOT = 'acira:frame-boot';
 
 /** The questions a frame's preloads ask, as [channel, arguments] in the order they asked them. Pure. */
@@ -16,6 +16,7 @@ function questionsFor(href, mainFrame, topFrame) {
   if (mainFrame && http) list.push([CHANNELS.scriptlets, [href]]);
   if (topFrame && http) list.push([CHANNELS.riskConfig, []]);
   if (http) list.push([CHANNELS.consent, [mainFrame]]);
+  if (mainFrame && http) list.push([CHANNELS.zap, []]);   // Beta 14, Zap: this site's removed parts (null for the many sites with none), hidden before the first paint
   return list;
 }
 

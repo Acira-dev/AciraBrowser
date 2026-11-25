@@ -6,7 +6,7 @@ import { SIDEBAR_SIZES, sizeOf } from '../src/runtime/sidebarSizes';
 
 // The Mac's window buttons (desktop/platform.cjs trafficLightPosition {12,12}: three 12 px buttons 20 px apart) end at x 64. Nothing may be drawn over them, in any layout, and
 // the Windows-only rules of beta.13 (the caption notch, the nav row in the corner, the Windows strip) must never change the Mac. Measured on the real Mac platform
-// (previews/beta13/review/mac-traffic-lights.png): the smallest clearance in every layout is 8 px (Sidebar mode, Narrow) or more.
+//: the smallest clearance in every layout is 8 px (Sidebar mode, Narrow) or more.
 const read = (path: string) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const LIGHTS_RIGHT = 64;
 

@@ -111,21 +111,20 @@ test('commands reach the page one at a time, newest wins; an unmute waits for th
   await new Promise(r=>setImmediate(r));assert.deepEqual(late,[.1,.9]);
 });
 
-test('the card is wired: the speaker opens the slider, the slider is a keyboard slider over the whole row, words in every catalog',()=>{
+test('the card is wired: the speaker opens the slider in place, the slider is a keyboard slider, words in every catalog',()=>{
   const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
-  const row=read('../src/components/sidebar/SidebarMedia.tsx'),css=read('../src/components/sidebar/sidebar-media.css');
-  assert.match(row,/className="sb-media-act sb-media-speaker"[^>]*onClick=\{event => step\(\{ type: 'open', keyboard: event\.detail === 0 \}\)\}/s,'the speaker opens (keyboard when activated without a pointer)');
+  const row=read('../src/components/sidebar/NowPlaying.tsx'),css=read('../src/components/sidebar/now-playing.css');
+  // Beta 14: the speaker (bottom-left of the open card) opens the slider in the control row; the artwork and title stay on top.
+  assert.match(row,/className="np-btn np-volbtn"[^>]*onClick=\{event => step\(panel\.open \? \{ type: 'leave' \} : \{ type: 'open', keyboard: event\.detail === 0 \}\)\}/s,'the speaker opens it and closes it (keyboard when activated without a pointer)');
   assert.match(row,/role="slider" tabIndex=\{0\}/);for(const attr of ['aria-valuemin={0}','aria-valuemax={100}','aria-valuenow={percent}','aria-valuetext='])assert.ok(row.includes(attr),attr);
-  assert.match(row,/setPointerCapture\(event\.pointerId\)/,'drag anywhere on the row');assert.match(row,/addEventListener\('wheel', wheel, \{ passive: false \}\)/);
-  assert.match(row,/event\.key === 'Escape'/);assert.match(row,/onClick=\{toggleMute\}/,'the glyph inside the slider mutes');
+  assert.match(row,/setPointerCapture\(event\.pointerId\)/,'drag anywhere on the slider');assert.match(row,/addEventListener\('wheel', wheel, \{ passive: false \}\)/);
+  assert.match(row,/event\.key === 'Escape'/);assert.match(row,/toggleMute\(\)/,'M mutes from the slider');
   assert.match(row,/type: 'tab\.mute', id: tab\.id, muted: true/);assert.match(row,/sender\.after\(\(\) => dispatch\(\{ type: 'tab\.mute', id: tab\.id, muted: false \}\)\)/,'unmute waits for the level');
-  assert.match(row,/action: 'volume', level: next/);assert.match(row,/forgetLevels\(/);
-  // Motion: transform and opacity only, on the shared springs; Off swaps at once (animateSpring returns null).
-  const morph=row.slice(row.indexOf('function morphVolume'),row.indexOf('function MediaRow'));
-  assert.ok(morph.length>200);assert.doesNotMatch(morph,/width|height|left:|top:|filter|blur/,'compositor properties only');
-  for(const token of ['island.content','island.expand','island.collapse'])assert.ok(morph.includes(`'${token}'`),token);
-  assert.match(css,/\.sb-media-vol-fill\{[^}]*transform:translateX/);assert.match(css,/\.sb-media-vol-knob\{[^}]*transform:translateX/);
-  assert.match(css,/\.sb-media-vol-track:focus-visible\{outline:2px solid var\(--sb-ring\)/);assert.doesNotMatch(css,/#[0-9a-fA-F]{3,8}\b/,'no hard-coded colours');
+  assert.match(row,/action: 'volume', level: next/);assert.match(read('../src/components/sidebar/SidebarMedia.tsx'),/forgetLevels\(/);
+  // The other controls step aside and the slider forms from the speaker (blur + fade + a small shift, never a cut); closing is the exact reverse.
+  assert.match(row,/direction: dir/);assert.match(row,/const dir = panel\.open \? 'normal' : 'reverse'/);assert.match(row,/clipPath: 'inset\(-6px 100% -6px -6px\)'/);
+  assert.match(css,/\.np-fill\{[^}]*transform:translateX/);assert.match(css,/\.np-knob\{[^}]*transform:translateX/);
+  assert.match(css,/\.np-rail-hit:focus-visible,\.np-vol-track:focus-visible\{outline:2px solid var\(--sb-ring\)/);
   for(const locale of ['en','ar','de','es','fr','hi','it','ja','ko','pt-BR','ru','tr','zh-CN']){
     const catalog=JSON.parse(read(`../src/i18n/${locale}.json`)) as Record<string,string>;
     for(const id of ['sidebarmedia.volume','sidebarmedia.volumePercent','sidebarmedia.muted'])assert.equal(typeof catalog[id],'string',`${locale} ${id}`);

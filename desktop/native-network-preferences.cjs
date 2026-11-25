@@ -16,7 +16,8 @@ function createNativeNetworkPreferences({directory,app,fileSystem=fs}){
   assertReady(){if(!early||!ready||error)throw Error(error||'Native network settings are not ready.');},
   status,
   isReady:()=>early&&ready&&!error,
-  save(value){const checked=choice(value);if(value.cookies===undefined)checked.cookies=saved.cookies;const temp=file+'.'+randomUUID()+'.tmp';try{fileSystem.mkdirSync(directory,{recursive:true});fileSystem.writeFileSync(temp,JSON.stringify({version:1,choice:checked}),{encoding:'utf8',flag:'wx',mode:0o600});fileSystem.renameSync(temp,file);}catch{throw Error('Network preferences could not be saved. Check that Acira can write to its profile and try again.');}finally{try{fileSystem.unlinkSync(temp);}catch{}}saved=checked;return status();}
+  /* Beta 14.4: a save may carry only what its page changes ({gpc} from Protection, {dns} from Connection) and is merged with what is saved, so a stale copy in another Settings tab never writes over the other choice. */
+  save(value){if(value&&typeof value==='object'&&!Array.isArray(value)){const keys=Object.keys(value);if(keys.length===1&&(keys[0]==='gpc'||keys[0]==='dns'))value={...structuredClone(saved),...value};}const checked=choice(value);if(value.cookies===undefined)checked.cookies=saved.cookies;const temp=file+'.'+randomUUID()+'.tmp';try{fileSystem.mkdirSync(directory,{recursive:true});fileSystem.writeFileSync(temp,JSON.stringify({version:1,choice:checked}),{encoding:'utf8',flag:'wx',mode:0o600});fileSystem.renameSync(temp,file);}catch{throw Error('Network preferences could not be saved. Check that Acira can write to its profile and try again.');}finally{try{fileSystem.unlinkSync(temp);}catch{}}saved=checked;return status();}
  };
 }
 module.exports={createNativeNetworkPreferences,choice};

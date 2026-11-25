@@ -212,3 +212,18 @@ test('the renderer descriptor request for a popup that already closed is answere
  assert.throws(()=>f.broker.describe({...f.wc,id:99},3),'a surface that is not registered still fails');
  assert.throws(()=>f.broker.describe(f.wc,'3'),'an id that is not an integer still fails');
 });
+
+test('a snapshot that was discarded because the layout moved during the capture does not use up its box: the popup may ask again for the same box (a measured popup laid out, moved and came back; the second ask was refused and the glass fell back to a whole-window frame)',async()=>{
+ const f=snapshotFixture();let finish;const pending=new Promise(resolve=>{finish=resolve;});f.setCapture(()=>pending);
+ const first=f.broker.snapshot(f.wc,9);assert.equal(f.calls.length,2);
+ const home=f.context;f.setContext({...home,target:{...home.target,height:197}});   // the box moves while the frame is taken ...
+ finish(fakeImage());assert.deepEqual(await first,{id:9,sources:[]},'the frame is discarded');
+ f.setContext(home);f.setCapture(()=>Promise.resolve(fakeImage()));                    // ... and is back where it was
+ const again=await f.broker.snapshot(f.wc,9);assert.equal(again.sources.length,2,'the same box is asked for again and delivered');
+ assert.deepEqual(await f.broker.snapshot(f.wc,9),{id:9,sources:[]},'a delivered frame still uses its box up (no second copy of the same pixels)');
+});
+test('a snapshot that failed in the native capture does not use up its box either',async()=>{
+ const f=snapshotFixture();f.setCapture(async()=>{throw new Error('capture failed');});
+ assert.deepEqual(await f.broker.snapshot(f.wc,9),{id:9,sources:[]});
+ f.setCapture(()=>Promise.resolve(fakeImage()));assert.equal((await f.broker.snapshot(f.wc,9)).sources.length,2);
+});

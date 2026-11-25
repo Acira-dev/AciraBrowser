@@ -145,4 +145,4 @@ const shapes={
 } satisfies Record<string,ReactNode>;
 export type EditorIconName=keyof typeof shapes;
 export function EditorShape({name}:{name:EditorIconName}){return shapes[name];}
-export function EditorGlyph({name}:{name:EditorIconName}){return <svg className="ed-editor-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">{shapes[name]}</svg>;}
+export function EditorGlyph({name,className}:{name:EditorIconName;className?:string}){return <svg className={className?`ed-editor-icon ${className}`:"ed-editor-icon"} width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">{shapes[name]}</svg>;}

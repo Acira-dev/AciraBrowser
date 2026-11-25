@@ -29,7 +29,9 @@
  */
 const STALE_MS = 1500;
 const SLIDE_SETTLE_MS = 1500;
-const QUIET_OVERLAYS = new Set(['toast', 'zoom']);
+// 'switcher' (Beta 14): the Ctrl+Tab viewer is a centred panel over the page and moves nothing of it; in "Next tab" order every press has to show its page in the step the key arrives while the viewer is up,
+// and releasing Ctrl switches under the viewer's leaving animation (the sample: "the page underneath switches on the first frame").
+const QUIET_OVERLAYS = new Set(['toast', 'zoom', 'switcher']);
 
 const single = layout => !!layout && Array.isArray(layout.views) && layout.views.length === 1 ? layout.views[0] : null;
 /** Key order does not matter when two layouts are compared. */

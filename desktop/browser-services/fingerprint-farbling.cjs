@@ -8,7 +8,7 @@
 //    ios/browser/brave_shields/resources/farbling.ts
 //  - hardwareConcurrency = 2 + round((real - 2) * scale): ios/browser/brave_shields/resources/farbling.ts
 // Differences from Brave, all forced by running as page JavaScript instead of inside Blink: the pixel HMAC covers at most
-// 256 KB of evenly spaced samples (speed), wrappers are patched to print as native functions but remain detectable by
+// 512 bytes of evenly spaced samples (speed), wrappers are patched to print as native functions but remain detectable by
 // determined scripts, and a copy of the canvas is perturbed instead of the internal bitmap.
 const { createHmac, randomBytes } = require('node:crypto'), { getDomain } = require('tldts');
 const { nativeAuthenticationContext } = require('./authentication-compatibility.cjs');
@@ -47,32 +47,66 @@ function inject(cfg, win, covered) {
     const patch = (proto, name, make) => { const d = Object.getOwnPropertyDescriptor(proto, name); if (!d || typeof d.value !== 'function') return; const original = d.value; Object.defineProperty(proto, name, { ...d, value: wrap(make(original), original) }); };
     const patchGetter = (proto, name, compute) => { const d = Object.getOwnPropertyDescriptor(proto, name); if (!d || !d.get) return; const original = d.get; Object.defineProperty(proto, name, { ...d, get: wrap({ [`get ${name}`]() { return compute(Reflect.apply(original, this, [])); } }[`get ${name}`], original) }); };
     // --- SHA-256 / HMAC (synchronous: canvas reads are synchronous) ---
-    const K = new Uint32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
-    const sha256 = bytes => {
-      const length = bytes.length, padded = new Uint8Array((((length + 9 + 63) >> 6) << 6)); padded.set(bytes); padded[length] = 0x80;
-      const view = new DataView(padded.buffer); view.setUint32(padded.length - 8, Math.floor(length / 0x20000000)); view.setUint32(padded.length - 4, (length << 3) >>> 0);
-      const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]), w = new Uint32Array(64);
-      const rotr = (x, n) => (x >>> n) | (x << (32 - n));
-      for (let offset = 0; offset < padded.length; offset += 64) {
-        for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
-        for (let i = 16; i < 64; i++) { const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10); w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0; }
-        let [a, b, c, d, e, f, g, hh] = h;
-        for (let i = 0; i < 64; i++) { const t1 = (hh + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0, t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0; hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0; }
-        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
-      }
-      const out = new Uint8Array(32), ov = new DataView(out.buffer); for (let i = 0; i < 8; i++) ov.setUint32(i * 4, h[i]); return out;
-    };
-    const hmac = (key, data) => { const block = new Uint8Array(64); block.set(key.length > 64 ? sha256(key) : key); const inner = new Uint8Array(64 + data.length), outer = new Uint8Array(96); for (let i = 0; i < 64; i++) { inner[i] = block[i] ^ 0x36; outer[i] = block[i] ^ 0x5c; } inner.set(data, 64); outer.set(sha256(inner), 64); return sha256(outer); };
+    const K = new Int32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
     const tokenBytes = Uint8Array.from(cfg.token.match(/../g).map(x => parseInt(x, 16)));
+    // 14.0: the same HMAC-SHA256, bit for bit (the tests compare it with node's crypto), without the allocations: the key's two padded blocks are hashed once per page and their states kept, the message is read in place,
+    // one reusable work buffer, every step in 32-bit integers. A 512-byte sample is 10 block compressions (it was 12, plus about 14 typed arrays and a copy of the sample, per read).
+    const W = new Int32Array(64), IV = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const compress = (s, u8, o) => {
+      for (let i = 0; i < 16; i++, o += 4) W[i] = (u8[o] << 24) | (u8[o + 1] << 16) | (u8[o + 2] << 8) | u8[o + 3];
+      for (let i = 16; i < 64; i++) { const x = W[i - 15], y = W[i - 2]; W[i] = (((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10)) + W[i - 7] + (((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3)) + W[i - 16] | 0; }
+      let a = s[0], b = s[1], c = s[2], d = s[3], e = s[4], f = s[5], g = s[6], h = s[7];
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) + ((e & f) ^ (~e & g)) + K[i] + W[i]) | 0, t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      s[0] = (s[0] + a) | 0; s[1] = (s[1] + b) | 0; s[2] = (s[2] + c) | 0; s[3] = (s[3] + d) | 0; s[4] = (s[4] + e) | 0; s[5] = (s[5] + f) | 0; s[6] = (s[6] + g) | 0; s[7] = (s[7] + h) | 0;
+    };
+    const tail = new Uint8Array(128);
+    const finish = (s, u8, o, len, total) => { // the last (partial) block of a message of `total` bytes, padded: one or two blocks
+      const rest = len - o, end = rest < 56 ? 64 : 128, hiBits = Math.floor(total / 0x20000000), loBits = (total << 3) >>> 0;
+      tail.fill(0); for (let i = 0; i < rest; i++) tail[i] = u8[o + i]; tail[rest] = 0x80;
+      tail[end - 8] = hiBits >>> 24; tail[end - 7] = (hiBits >>> 16) & 255; tail[end - 6] = (hiBits >>> 8) & 255; tail[end - 5] = hiBits & 255;
+      tail[end - 4] = loBits >>> 24; tail[end - 3] = (loBits >>> 16) & 255; tail[end - 2] = (loBits >>> 8) & 255; tail[end - 1] = loBits & 255;
+      compress(s, tail, 0); if (end === 128) compress(s, tail, 64);
+    };
+    const stateBytes = (s, out) => { for (let i = 0; i < 8; i++) { out[i * 4] = s[i] >>> 24; out[i * 4 + 1] = (s[i] >>> 16) & 255; out[i * 4 + 2] = (s[i] >>> 8) & 255; out[i * 4 + 3] = s[i] & 255; } return out; };
+    const digestOf = bytes => { const s = Int32Array.from(IV); let o = 0; for (; o + 64 <= bytes.length; o += 64) compress(s, bytes, o); finish(s, bytes, o, bytes.length, bytes.length); return stateBytes(s, new Uint8Array(32)); };
+    const keyed = (key, pad) => { const block = new Uint8Array(64); block.set(key.length > 64 ? digestOf(key) : key); for (let i = 0; i < 64; i++) block[i] ^= pad; const s = Int32Array.from(IV); compress(s, block, 0); return s; };
+    const innerStart = keyed(tokenBytes, 0x36), outerStart = keyed(tokenBytes, 0x5c), inner = new Int32Array(8), outer = new Int32Array(8), outerBlock = new Uint8Array(64), mac = new Uint8Array(32);
+    outerBlock[32] = 0x80; outerBlock[62] = 0x03; // the outer message is the 64-byte key block and the 32-byte inner digest: 768 bits = 0x0300
+    const hmac = sample => { // sample: a Uint8Array; the result is a reused 32-byte buffer, read before the next call
+      inner.set(innerStart); let o = 0; for (; o + 64 <= sample.length; o += 64) compress(inner, sample, o);
+      finish(inner, sample, o, sample.length, 64 + sample.length);
+      stateBytes(inner, outerBlock); outer.set(outerStart); compress(outer, outerBlock, 0);
+      return stateBytes(outer, mac);
+    };
     // --- Brave's pixel perturbation ---
-    const U64 = (1n << 64n) - 1n, TOP = 0xC000000000000000n, lfsr = v => ((v >> 1n) | (((v << 62n) ^ (v << 61n)) & TOP)) & U64;
+    // 14.0: the same perturbation at a fraction of the cost. A read used to hash up to 256 KB of pixels through a JavaScript HMAC-SHA256 and then step a BigInt generator 512 times: 219 us for a 50 x 50 read, 3.1 ms
+    // for a 250 x 250 one, and in MotionMark's Images test (one 50 x 50 read per canvas per frame) the SHA-256 alone was 65 % of the page's main thread (12 % of bare Electron's score). Now (1) at most HASH_BYTES of the pixels are
+    // hashed, evenly spaced with an odd stride so every colour channel counts, and a read of that many bytes or fewer is hashed whole and gets exactly the noise it always got; (2) the 64-bit generator runs on two 32-bit
+    // halves (the same values, bit for bit). What the noise is does not change: a deterministic function of the per-site, per-session key and of the pixels, 512 flips of the lowest bit of a colour channel, never alpha.
+    // (3) The generator's remainders never use % on the 32-bit halves: a half above 2^31 is a double in V8 and a double % is a call into the C library (about 13 ns, six of them per step: 40 of the 47 us of a 50 x 50 read).
+    // v % 3 is the sum of the two 16-bit halves of each half % 3 (65536 is 1 mod 3), and v % pixels is x - floor(x / pixels) * pixels, exact because x < 2^46 and the quotient's spacing (below 2^-6 / pixels) is finer than 1 / pixels.
+    const HASH_BYTES = 512;
     const perturb = data => {
       if (!data || data.length < 4) return;
-      const pixels = Math.floor(data.length / 4), cap = 262144, sample = data.length > cap ? new Uint8Array(cap) : data;
-      if (sample !== data) { const stride = Math.floor(data.length / cap); for (let i = 0; i < cap; i++) sample[i] = data[i * stride]; }
-      const key = hmac(tokenBytes, sample === data ? new Uint8Array(data.buffer, data.byteOffset, data.length) : sample), count = BigInt(pixels);
-      let v = 0n; for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(key[i]);
-      for (const byte of key) { let bit = byte; for (let j = 0; j < 16; j++) { if (j % 8 === 0) bit = byte; const channel = Number(v % 3n), index = 4 * Number(v % count) + channel; data[index] = data[index] ^ (bit & 1); bit >>= 1; v = lfsr(v); } }
+      const pixels = Math.floor(data.length / 4), sample = data.length > HASH_BYTES ? new Uint8Array(HASH_BYTES) : data;
+      if (sample !== data) { const stride = Math.floor(data.length / HASH_BYTES) | 1; for (let i = 0; i < HASH_BYTES; i++) sample[i] = data[(i * stride) % data.length]; }
+      const key = hmac(sample === data ? new Uint8Array(data.buffer, data.byteOffset, data.length) : sample);
+      // v is the 64-bit state of the original: v = key[7] .. key[0] (little endian), then v = (v >> 1) | (((v << 62) ^ (v << 61)) & TOP) every step
+      let lo = (key[0] | (key[1] << 8) | (key[2] << 16) | (key[3] << 24)) >>> 0, hi = (key[4] | (key[5] << 8) | (key[6] << 16) | (key[7] << 24)) >>> 0;
+      const twoTo32 = 4294967296 % pixels;
+      for (const byte of key) {
+        let bit = byte;
+        for (let j = 0; j < 16; j++) {
+          if (j % 8 === 0) bit = byte;
+          const channel = ((((hi >>> 16) + (hi & 0xffff)) % 3) + (((lo >>> 16) + (lo & 0xffff)) % 3)) % 3, mix = (hi - Math.floor(hi / pixels) * pixels) * twoTo32 + (lo - Math.floor(lo / pixels) * pixels), index = 4 * (mix - Math.floor(mix / pixels) * pixels) + channel;
+          data[index] = data[index] ^ (bit & 1); bit >>= 1;
+          const t62 = (lo & 1) ^ ((lo >>> 1) & 1), t63 = ((lo >>> 1) & 1) ^ ((lo >>> 2) & 1);
+          lo = ((lo >>> 1) | (hi << 31)) >>> 0; hi = ((hi >>> 1) | (t62 << 30) | (t63 << 31)) >>> 0;
+        }
+      }
     };
     const MAX_PIXELS = 8 * 1024 * 1024;
     // --- Canvas ---

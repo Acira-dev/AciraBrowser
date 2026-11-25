@@ -163,8 +163,8 @@ async function verifyPayload() {
 const fixtureDatabase=await captureFixtureDatabase(identity);
 let generated = fixture;
 const replaceRequired=(before,after)=>{assert.ok(generated.includes(before),'Owner fixture shape changed: '+before);generated=generated.replaceAll(before,after);};
-for(const helper of ['prepared-native','native-helpers','palette-native-identity']){
- const before="'./"+helper+".mjs'";if(helper==='palette-native-identity'&&!generated.includes(before))continue;
+for(const helper of ['prepared-native','native-helpers','palette-native-identity','release-close-card']){
+ const before="'./"+helper+".mjs'";if((helper==='palette-native-identity'||helper==='release-close-card')&&!generated.includes(before))continue;
  replaceRequired(before,JSON.stringify(pathToFileURL(path.resolve('qa',helper+'.mjs')).href));
 }
 replaceRequired('import {launchPreparedNative} from '+JSON.stringify(pathToFileURL(path.resolve('qa/prepared-native.mjs')).href)+';','');

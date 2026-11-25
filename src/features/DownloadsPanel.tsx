@@ -1,3 +1,4 @@
+import { LineIcon } from '../components/LineIcon';
 import type { ReactNode } from 'react';
 import type { BrowserDownload, BrowserSnapshot } from '../runtime/types';
 import { runtime } from '../runtime/client';
@@ -27,8 +28,10 @@ function PanelRow({ item, act, reduced, onOpened }: { item: BrowserDownload; act
       ? <button type="button" className="acira-menu-row acira-menu-row-identity dl-panel-main" aria-label={t('dl.openAria', { name: item.name })} onClick={() => { void act(item.id, 'open'); onOpened(); }}>{body}</button>
       : <div className="acira-menu-row acira-menu-row-identity dl-panel-main">{body}</div>}
     <span className="dl-panel-acts">
-      {item.status === 'Downloading' && item.canPause && button(t('dl.pauseAria', { name: item.name }), <Pause size={14}/>, () => void act(item.id, 'pause'))}
-      {item.status === 'Paused' && item.canResume && button(t('dl.resumeAria', { name: item.name }), <Play size={14}/>, () => void act(item.id, 'resume'))}
+      {/* One button for Pause and Resume: the same element stays mounted, so its icon morphs between the two bars and the triangle (section G). */}
+      {((item.status === 'Downloading' && item.canPause) || (item.status === 'Paused' && item.canResume)) && (item.status === 'Paused'
+        ? button(t('dl.resumeAria', { name: item.name }), <LineIcon name="play" size={14}/>, () => void act(item.id, 'resume'))
+        : button(t('dl.pauseAria', { name: item.name }), <LineIcon name="pause" size={14}/>, () => void act(item.id, 'pause')))}
       {!running && item.status !== 'Ready' && (item.canResume ? button(t('dl.resume'), <Play size={14}/>, () => void act(item.id, 'resume')) : item.canRetry && button(t('dl.retry'), <RotateCw size={14}/>, () => void act(item.id, 'retry')))}
       {item.status === 'Ready' && item.canShow && button(t('dl.showAria', { name: item.name }), <FolderOpen size={14}/>, () => void act(item.id, 'show'))}
       {deletable && button(t('dl.deleteAria', { name: item.name }), <Trash2 size={14}/>, () => void act(item.id, 'delete'), true)}

@@ -10,12 +10,14 @@ const held = new Set<string>();
 
 /** The tile of this favorite is held back while its copy is on the way. */
 export const favoriteMorphing = (appId: string) => held.has(appId);
-export const favoriteTile = (appId: string) => document.querySelector<HTMLElement>(`.acira-sidebar .sb-apps [data-app-id="${CSS.escape(appId)}"]`);
+/** The tile a new favorite lands on. One that is folded into the stack (past the places before it, Beta 14) has no tile in the grid: the copy lands on the stack, which lists the folded ones. */
+export const favoriteTile = (appId: string) => document.querySelector<HTMLElement>(`.acira-sidebar .sb-apps [data-app-id="${CSS.escape(appId)}"]`)
+  ?? document.querySelector<HTMLElement>(`.acira-sidebar .sb-apps > .sb-app-stack[data-folded~="${CSS.escape(appId)}"]`);
 export const holdFavoriteTile = (appId: string) => { held.add(appId); };
 export function releaseFavoriteTile(appId: string) {
   held.delete(appId);
   const tile = favoriteTile(appId);
-  if (tile) { tile.style.opacity = ''; tile.removeAttribute('data-morph'); tile.removeAttribute('data-motion-skip'); }
+  if (tile && !tile.classList.contains('sb-app-stack')) { tile.style.opacity = ''; tile.removeAttribute('data-morph'); tile.removeAttribute('data-motion-skip'); }
 }
 
 /** Where the new tile will be while it is not in the page yet: the slot the grid opened under the drag, else the first slot of the empty drop target. */

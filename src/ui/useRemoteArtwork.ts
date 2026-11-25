@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { runtime } from '../runtime/client';
 import type { CatalogArtwork } from './newTabPreferences';
+import { catalogFromRemote } from './useKeptPictures';
 
 /** One request per visible selection. The caller retains its decoded picture while this request loads or fails. */
 export function useRemoteArtwork(collection: string, seed: string, enabled: boolean, excludeId?: string) {
@@ -15,7 +16,7 @@ export function useRemoteArtwork(collection: string, seed: string, enabled: bool
     runtime.service({ type: 'artwork.remote', collection, seed, ...(excludeId ? { excludeId } : {}) }).then(result => {
       if (!alive) return;
       const picture = result.remoteArtwork;
-      setAnswer({ key, failed: !picture, picture: picture ? { id: picture.id, name: picture.name, src: picture.src, alt: picture.name, artist: picture.artist, date: picture.date, provider: picture.credit, rights: picture.license, source: picture.source } : null });
+      setAnswer({ key, failed: !picture, picture: picture ? catalogFromRemote(picture) : null });
     }).catch(() => { if (alive) setAnswer({ key, picture: null, failed: true }); });
     return () => { alive = false; };
   }, [collection, seed, active, excludeId, key]);

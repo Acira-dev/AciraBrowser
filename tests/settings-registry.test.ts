@@ -23,7 +23,8 @@ test('registry entries are well formed and unique', () => {
 
 test('individual controls rank first for the requirement examples', () => {
   assert.equal(top('opacity')[0], 'glass-opacity');
-  assert.equal(top('transparency')[0], 'reduce-transparency');
+  assert.equal(top('transparency')[0], 'glass-opacity'); // Beta 14.4: the team's own example; Reduce transparency follows
+  assert.equal(top('transparency')[1], 'reduce-transparency');
   assert.deepEqual(top('artwork').slice(0, 2), ['newtab-artwork', 'newtab-art']);
   assert.equal(top('zoom')[0], 'page-zoom');
   // "Answer cookie banners with Reject" and "Hide cookie banners" are cookie controls too, so they may lead; the clear-on-exit controls must follow them.

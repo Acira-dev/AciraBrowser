@@ -8,9 +8,12 @@ export { SIDEBAR_SIZES, SIDEBAR_SIZE_BREAKS, SIDEBAR_SIZE_ORDER, sizeOf, snapSid
  * While dragging, `--sidebar-width` on the document root previews the width without a round trip. */
 export const SIDEBAR_WIDTH={min:SIDEBAR_SIZES.narrow,max:SIDEBAR_SIZES.wide,initial:SIDEBAR_SIZES.standard};
 export const clampSidebarWidth=(value:number)=>Math.round(Math.max(SIDEBAR_WIDTH.min,Math.min(SIDEBAR_WIDTH.max,Number.isFinite(value)?value:SIDEBAR_WIDTH.initial)));
+/** Beta 14.0 (F4, the design): dragging the edge more than this far (CSS px) below Narrow and letting go collapses the sidebar the way the collapse button does (Mini where the layout has it, Hidden in Sidebar + address). Not for the Shelf: it has the rail below Narrow. */
+export const SIDEBAR_COLLAPSE_PAST = 40;
+export const dragCollapses = (raw: number, min: number = SIDEBAR_WIDTH.min): boolean => raw < min - SIDEBAR_COLLAPSE_PAST;
 /** Past min/max the edge keeps following the pointer with growing resistance (at most 24px), then springs back. */
-export function rubberBandWidth(raw:number){
- const limit=raw>SIDEBAR_WIDTH.max?SIDEBAR_WIDTH.max:raw<SIDEBAR_WIDTH.min?SIDEBAR_WIDTH.min:null;if(limit===null)return raw;
+export function rubberBandWidth(raw:number,min:number=SIDEBAR_WIDTH.min){
+ const limit=raw>SIDEBAR_WIDTH.max?SIDEBAR_WIDTH.max:raw<min?min:null;if(limit===null)return raw;
  const over=raw-limit;return limit+Math.sign(over)*24*(1-Math.exp(-Math.abs(over)/80));
 }
 /** The width the pointer gives the sidebar while its edge is dragged: the grip is on the sidebar's page-side edge, so on the left it follows the pointer

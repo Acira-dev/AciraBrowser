@@ -6,12 +6,13 @@ import type { SplitLayoutId } from '../../runtime/splitLayout';
 export const changeLayoutActions=(group:{id:string;layout:SplitLayoutId},layout:SplitLayoutId):BrowserAction[]=>
  [{type:'split.group.select',id:group.id},...(layout!==group.layout?[{type:'split.layout',layout} as BrowserAction]:[])];
 
-/** The hover "+" on a tab group's header (R3-49): a new tab right after the group's last tab, joined to the group; a
- * collapsed group opens first so the new tab shows. The tab id is chosen here so both actions name it. */
+/** The hover "+" on a tab group's header (R3-49): a new tab right after the group's last tab, in the group; a collapsed group opens so the
+ * new tab shows. ONE action (14.1, tester 21 Nov): `tab.new` names the group and the reducer opens the tab inside it (runtime/tabGroups.ts
+ * joinNewTab, which also opens the group). It used to be a `tab.new` and then a `tab.group.assign`: the interface draws `tab.new` on the press
+ * frame and the join only when main answered, so for a frame or two the tab was a loose tab at the end of the list, drawn above the folder
+ * ("new tabs at the top"), before it jumped into the group. The tab id is chosen here so the interface and main name it alike. */
 export const newTabInGroupActions=(group:{id:string;collapsed?:boolean},lastMemberId:string|undefined,profileId:string,tabId:string):BrowserAction[]=>[
- ...(group.collapsed?[{type:'tab.group.update',id:group.id,patch:{collapsed:false}} as BrowserAction]:[]),
- {type:'tab.new',id:tabId,browserProfileId:profileId,...(lastMemberId?{afterId:lastMemberId}:{})},
- {type:'tab.group.assign',tabIds:[tabId],groupId:group.id},
+ {type:'tab.new',id:tabId,browserProfileId:profileId,...(lastMemberId?{afterId:lastMemberId}:{}),groupId:group.id},
 ];
 
 /** The tabs that just arrived at the end of the sidebar's list as NEW tabs (founder, 24 Oct: with "new tabs at the top" a new tab shows under the

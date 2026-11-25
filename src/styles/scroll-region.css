@@ -7,17 +7,19 @@
 .popup-content-profile .profile-row strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .popup-fixed-search,.popup-fixed-footer{flex:none;min-width:0}
 .browser-popup .popup-fixed-search .popup-search{position:relative;flex:none}
-.popup-fixed-footer{padding-top:10px}
+.popup-fixed-footer{padding-top:12px}
 .popup-content-tabs .scroll-region{flex:1 1 auto}
 .popup-content-tabs .popup-fixed-footer .menu-row{min-height:38px}
 
-/* No stock scrollbar in a popup (V02): the native bar is hidden and a thin overlay thumb sits inside the radius, 3px from
-   the material edge, 6px clear of the corners. It shows while the list is hovered or scrolling (160ms fade) and takes
-   no width, so rows keep their columns. */
+/* No stock scrollbar in a popup (V02): the native bar is hidden and a thin overlay thumb (EdgeThumb.tsx) sits inside the radius, 3px from
+   the material edge, 6px clear of the corners. Rule 12: it shows only while the list scrolls or with the pointer within 22px of its edge,
+   then fades; it takes no width, so rows keep their columns. */
 .scroll-region{position:relative}
 .scroll-region>.popup-scroll{scrollbar-width:none}
 .scroll-region>.popup-scroll::-webkit-scrollbar{display:none}
-.scroll-region>.scroll-thumb{position:absolute;top:0;right:-1px;width:4px;border-radius:2px;background:color-mix(in srgb,currentColor 32%,transparent);pointer-events:none;opacity:1;transition:opacity 160ms cubic-bezier(.23,1,.32,1),width 120ms cubic-bezier(.23,1,.32,1)}
-.scroll-region>.scroll-thumb[data-idle]{opacity:0}
-.scroll-region:hover>.scroll-thumb{opacity:1}
-.scroll-region>.scroll-thumb[hidden]{display:none}
+
+/* The shared edge thumb (EdgeThumb.tsx): hidden at rest, in at .2s, out at .5s after a short wait (the Favorites panel's own timings). */
+.edge-thumb{position:absolute;top:0;right:2px;width:3px;border-radius:1.5px;background:var(--edge-thumb,color-mix(in srgb,currentColor 32%,transparent));pointer-events:none;opacity:0;transition:opacity .5s cubic-bezier(.2,0,0,1) .12s}
+.edge-thumb[data-show]{opacity:1;transition:opacity .2s cubic-bezier(.2,0,0,1)}
+.app[data-reduced-motion='true'] .edge-thumb{transition-duration:.01s;transition-delay:0s}
+.scroll-region>.edge-thumb{right:-1px;width:4px;border-radius:2px}

@@ -166,7 +166,8 @@ test('a tab a page opened outlives that page and leaves no dead entry behind whe
   const handler = main.slice(at, main.indexOf('mainWindow.contentView.addChildView(view,1);', at));
   // a view whose contents are gone has no webContents: the entry must leave `pages` at once, before anything walks them (closing the window does)
   assert.ok(handler.includes('removePageView(entry);pages.delete(tab.id);'), 'the page entry is dropped when its contents are destroyed');
-  assert.ok(handler.includes("dispatch({type:'tab.close',id:tab.id})"), 'and the tab leaves the strip');
+  // remove: a page closing its own tab removes it even when pinned (Beta 14 keeps a pinned tab only on the person's close: src/runtime/pinnedClose.ts)
+  assert.ok(handler.includes("dispatch({type:'tab.close',id:tab.id,remove:true})"), 'and the tab leaves the strip');
   assert.ok(handler.includes('entry.closing'), 'a close the browser itself is running is left to closePage');
 });
 

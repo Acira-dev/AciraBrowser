@@ -85,7 +85,7 @@ test('the window is the library\'s (frameless, a child of the browser window, fi
   assert.equal(mac.window.options.skipTaskbar, true);
   assert.equal(mac.window.options.show, false);
   assert.deepEqual([mac.window.options.transparent, mac.window.options.hasShadow, mac.window.options.roundedCorners], [true, true, false]);
-  assert.deepEqual(mac.view.options.webPreferences, {session: {name: 'session'}, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true});
+  assert.deepEqual(mac.view.options.webPreferences, {session: {name: 'session'}, sandbox: true, nodeIntegration: false, nodeIntegrationInWorker: false, contextIsolation: true, enablePreferredSizeMode: true, backgroundThrottling: false});   // (D157: the popup's page keeps its timers while the window is hidden: its start-up is waited for)
   assert.deepEqual(mac.view.calls.slice(0, 2), [['background', '#ffffff'], ['radius', 10]]);  // 8 x 1.25, as the menus
   assert.equal(mac.window.contentView.children[0], mac.view);
   const win = fixture({platform: 'win32'});

@@ -17,6 +17,8 @@ export type BookmarkTarget=
  |{kind:'zone';section:string}
  /** The sidebar edge's own menu (`node:sidebar-size`, a word-and-dash id main accepts): Narrow, Standard, Wide with the current one ticked. */
  |{kind:'size'}
+ /** The now-playing card's own menu (`node:media-pip`): the one switch, Picture-in-picture when I switch tabs (the same setting as Settings > Tabs). */
+ |{kind:'media'}
  /** A folder's contents as a menu (a folder button on the bookmarks bar, `folderMenuRef`): its pages and folders, a folder opening in place. */
  |{kind:'contents';node:BookmarkNode};
 
@@ -26,6 +28,8 @@ export const ZONE_REF='node:zone-';
 export const zoneRef=(section:string)=>ZONE_REF+section;
 /** The sidebar edge's size menu (right-click on the edge, or the menu key on it). */
 export const SIZE_REF='node:sidebar-size';
+/** The now-playing card's menu (right-click on the card, or the menu key with its picture-in-picture button focused). */
+export const MEDIA_REF='node:media-pip';
 /** A folder's contents menu: `node:open.<folder id>`. Main takes word characters, dots and dashes in a menu ref (validation.cjs), and
  *  no bookmark id has a dot (core's uid and the importers make `<kind>-<uuid>`), so this never names a bookmark itself. */
 export const FOLDER_MENU_REF='node:open.';
@@ -35,6 +39,7 @@ export function bookmarkTarget(ref:string,nodes:BookmarkNode[],profileId:string)
  const mine=nodes.filter(node=>node.browserProfileId===profileId);
  if(ref==='node:root')return {kind:'root'};
  if(ref===SIZE_REF)return {kind:'size'};
+ if(ref===MEDIA_REF)return {kind:'media'};
  if(ref.startsWith(ZONE_REF))return {kind:'zone',section:ref.slice(ZONE_REF.length)};
  if(ref.startsWith('node:new:')){const id=ref.slice(9);return {kind:'new',parentId:id!=='root'&&mine.some(node=>node.id===id&&!node.url)?id:null};}
  if(ref.startsWith(FOLDER_MENU_REF)){const node=mine.find(item=>item.id===ref.slice(FOLDER_MENU_REF.length)&&!item.url);return node?{kind:'contents',node}:null;}

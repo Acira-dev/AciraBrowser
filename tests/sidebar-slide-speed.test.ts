@@ -36,17 +36,20 @@ test('the pace: 1 at Premium and Off, .5 in Fast (half of Premium); main reads i
   // The interface sends motionSpeed = 1 / --motion-scale (App.tsx); Off sends 1.
   for (const [speed, scale] of [['premium', 1.7], ['fast', .6]] as const) assert.ok(Math.abs(layoutPace(1 / scale) - motionPaceOf(speed)) < 1e-9, speed);
   assert.equal(layoutPace(1), 1); assert.equal(layoutPace(undefined), 1); assert.equal(layoutPace('nonsense'), 1);
-  assert.match(read('desktop/main.cjs'), /placePageBounds\(entry,bounds,animated,[^;]*,layoutPace\(next\.motionSpeed\),next\.pageEdgeLag\);/);
+  assert.match(read('desktop/main.cjs'), /placePageBounds\(entry,bounds,animated,[^;]*,layoutPace\(next\.motionSpeed\),(?:entry\.dockSlide\?undefined:)?next\.pageEdgeLag(?:,!entry\.dockSlide&&next\.pageSwitch===true&&globalThis\.__d134Undo!==true)?\);/);
 });
 
-/** Drives placePageBounds frame by frame (60 Hz) and returns when its last frame ran (ms) and where the page was halfway through. */
+/** The page waits 2.5 display frames when a column OPENS (desktop/page-motion.cjs OPEN_LEAD_FRAMES: the interface's picture reaches the screen that long after main's setBounds; tests/page-motion-open-lead.test.cjs pins it): the glide's own length is counted from there. */
+const OPEN_WAIT = Math.round(1000 / 60 * 2.5);
+
+/** Drives placePageBounds frame by frame (60 Hz) and returns when its last frame ran (ms, after the wait) and where the page was halfway through. */
 function glideMs(pace?: number) {
   let now = 0, queued: (() => void) | null = null, last = 0, half = NaN;
   const view = { bounds: { x: 0, y: 36, width: 1280, height: 764 } as Record<string, number>, getBounds() { return { ...this.bounds }; }, setBounds(next: Record<string, number>) { this.bounds = { ...next }; }, setBorderRadius() {} };
   const clock = { now: () => now, later: (fn: () => void) => { queued = fn; return 1; }, cancel: () => { queued = null; } };
   placePageBounds({ view }, { x: 240, y: 36, width: 1280, height: 764 }, true, clock, 1000 / 60, 'slide', undefined, undefined, false, pace);
   const series: [number, number][] = [];
-  for (let i = 0; i < 400 && queued; i++) { now += 1000 / 60; const fn = queued; queued = null; (fn as () => void)(); last = now; series.push([now, view.bounds.x]); if (Number.isNaN(half) && now >= (pace ?? 1) * 240) half = view.bounds.x; }
+  for (let i = 0; i < 400 && queued; i++) { now += 1000 / 60; const fn = queued; queued = null; (fn as () => void)(); last = now - OPEN_WAIT; series.push([now - OPEN_WAIT, view.bounds.x]); if (Number.isNaN(half) && now - OPEN_WAIT >= (pace ?? 1) * 240) half = view.bounds.x; }
   assert.deepEqual(view.bounds, { x: 240, y: 36, width: 1280, height: 764 });
   /** Where the page was `ms` into the glide, between two frames (a glide of 240 ms has 14 of them: a frame is 7% of it). */
   const xAt = (ms: number) => { for (let i = 1; i < series.length; i++) if (series[i][0] >= ms) { const [t0, x0] = series[i - 1], [t1, x1] = series[i]; return x0 + (x1 - x0) * (ms - t0) / (t1 - t0); } return series[series.length - 1][1]; };
@@ -55,11 +58,13 @@ function glideMs(pace?: number) {
 
 test('the native page lands with the sidebar: 480 ms at Premium, 240 ms in Fast', () => {
   const premium = glideMs(1), fast = glideMs(.5), unset = glideMs();
-  assert.ok(premium.last >= 480 && premium.last < 480 + 17, `Premium ends at ${premium.last}`);
-  assert.ok(fast.last >= 240 && fast.last < 240 + 17, `Fast ends at ${fast.last}`);
+  // (D97: an edge that gives room takes its place one display frame after its curve's end, so the last frame is one frame later: here 60 Hz, 17 ms.)
+  assert.ok(premium.last >= 480 && premium.last < 480 + 17 + 17, `Premium ends at ${premium.last}`);
+  assert.ok(fast.last >= 240 && fast.last < 240 + 17 + 17, `Fast ends at ${fast.last}`);
   // The same curve, quicker: halfway through its own length each is about 90% of the way (the spring's sample at .5 is .9083). Premium's
   // frame at 60 Hz is 3% of its glide, Fast's 7%, so Fast is read between its frames.
-  for (const [name, run, ms] of [['Premium', premium, 240], ['Fast', fast, 120]] as const) { const at = run.xAt(ms); assert.ok(at > 240 * .85 && at < 240 * .96, `${name} halfway at ${at}`); }
-  for (const f of [.25, .5, .75]) assert.ok(Math.abs(fast.xAt(f * 240) - premium.xAt(f * 480)) < 4, `the same curve at ${f * 100}% of the length`);
+  for (const [name, run, ms] of [['Premium', premium, 240], ['Fast', fast, 120]] as const) { const at = run.xAt(ms + 2000 / 60); assert.ok(at > 240 * .85 && at < 240 * .96, `${name} halfway at ${at}`); }
+  // (D97: the page's whole points come two display frames after the curve, a frame being a time, not a share of the glide: read two frames on, halfway and here, it is the same curve.)
+  for (const f of [.25, .5, .75]) assert.ok(Math.abs(fast.xAt(f * 240 + 2000 / 60) - premium.xAt(f * 480 + 2000 / 60)) < 4, `the same curve at ${f * 100}% of the length`);
   assert.deepEqual([unset.last, unset.half], [premium.last, premium.half], 'without a pace, the Premium length');
 });

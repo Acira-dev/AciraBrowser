@@ -29,3 +29,13 @@ export function hideToolbarTipSeen(profileId: string): boolean {
 export function rememberHideToolbarTip(profileId: string): void {
   try { localStorage.setItem(`${HIDE_TIP}:${profileId}`, '1'); } catch { /* the line may show again; harmless */ }
 }
+
+/** Beta 14: with "Show the hidden sidebar when the mouse touches" set to Never, one small line says which shortcut brings the sidebar back, once per profile (nobody loses their sidebar). */
+const REVEAL_TIP = 'acira-sidebar-reveal-never-tip';
+export function revealNeverTipSeen(profileId: string): boolean {
+  try { return localStorage.getItem(`${REVEAL_TIP}:${profileId}`) === '1'; } catch { return true; }
+}
+export function rememberRevealNeverTip(profileId: string): void {
+  try { localStorage.setItem(`${REVEAL_TIP}:${profileId}`, '1'); } catch { /* the line may show again; harmless */ }
+}
+

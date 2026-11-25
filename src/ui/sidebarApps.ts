@@ -4,10 +4,12 @@ import {favoriteTabOf} from '../runtime/favoriteTabs';
 import {tabListed} from '../runtime/favoriteTabsRule';
 import type {Settings} from '../runtime/types';
 import { t } from '../i18n';
+import { DEFAULT_STACK_LIMIT,validStackLimit,type StackLimitChoice } from './favoritesStackLimit';
 /** Profile-scoped sidebar apps (pinned sites above the tab list). Private windows keep them in memory only. */
 export type SidebarApp={id:string;url:string;title:string;icon?:string};
 /** `place`: where the tiles sit in the sidebar. Only 'bottom' is written (top is the default and stays absent), so older records and tests read the same. */
-export type SidebarApps={apps:SidebarApp[];hidden:boolean;seeded:boolean;place?:'bottom'};
+/** `limit`: Favorites before the stack (ui/favoritesStackLimit.ts, Settings › Tabs › Sidebar › Favorites). Only a choice other than the default (12) is written, so older records read the same. */
+export type SidebarApps={apps:SidebarApp[];hidden:boolean;seeded:boolean;place?:'bottom';limit?:StackLimitChoice};
 export const SIDEBAR_APPS_MAX=24;
 const KEY='acira-sidebar-apps',EVENT='acira-sidebar-apps',memory=new Map<string,SidebarApps>(),cached=new Map<string,{raw:string|null;value:SidebarApps}>();
 const EMPTY:SidebarApps={apps:[],hidden:false,seeded:false};
@@ -29,13 +31,26 @@ export function droppedLink(uriList:string,html='',plain=''):{url:string;title?:
  const title=text&&!/^https?:\/\//i.test(text)?text.slice(0,80):undefined;
  return title?{url,title}:{url};
 }
+/** The drop effect a drop zone answers a drag with. A drop effect the drag's source did not allow (`effectAllowed`) cancels the drop: Chromium delivers no `drop`, the
+ * pointer shows "not allowed" and the dragged item slides back. A bookmark is dragged with 'copyMove' (the bar and the sidebar's list), so a zone that always said 'link'
+ * refused it; this gives `preferred` when the source allows it, else the first of link, copy, move that it does. Pure. */
+export function allowedDropEffect(effectAllowed:string,preferred:'link'|'copy'|'move'):'link'|'copy'|'move'{
+ const allowed=effectAllowed||'uninitialized',ok=(effect:string)=>allowed==='all'||allowed==='uninitialized'||allowed.toLowerCase().includes(effect);
+ return ok(preferred)?preferred:(['link','copy','move'] as const).find(ok)??preferred;
+}
+/** What a dragged bookmark carries besides its own id: the address as a link (text/uri-list and text/plain) and an anchor with the bookmark's name (text/html), the way a link dragged from a page does, so a drop on Favorites makes a favorite with the bookmark's name. */
+export function setBookmarkLinkData(transfer:{setData:(type:string,data:string)=>void},url:string,title:string){
+ transfer.setData('text/uri-list',url);transfer.setData('text/plain',url);
+ const name=title.trim().slice(0,80),escape=(text:string)=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ if(name)transfer.setData('text/html',`<a href="${escape(url)}">${escape(name)}</a>`);
+}
 export const appHost=(url:string)=>{try{return new URL(url).hostname.replace(/^www\./,'');}catch{return '';}};
 /** Only already-local images are kept: data URLs from the tab, never a remote address to fetch later. */
 const localIcon=(icon:unknown)=>typeof icon==='string'&&/^data:image\/(png|x-icon|vnd\.microsoft\.icon|svg\+xml|jpeg|webp|gif);base64,/i.test(icon)&&icon.length<=96*1024?icon:undefined;
 function clean(raw:unknown):SidebarApps{
  if(!raw||typeof raw!=='object')return EMPTY;const value=raw as Record<string,unknown>,ids=new Set<string>(),apps:SidebarApp[]=[];
  for(const item of Array.isArray(value.apps)?value.apps:[]){if(apps.length>=SIDEBAR_APPS_MAX||!item||typeof item!=='object')continue;const app=item as Record<string,unknown>,url=typeof app.url==='string'?normalizeAppUrl(app.url):null,id=typeof app.id==='string'?app.id:'';if(!url||!id||ids.has(id))continue;ids.add(id);apps.push({id,url,title:(typeof app.title==='string'&&app.title.trim()?app.title.trim():appHost(url)||url).slice(0,80),icon:localIcon(app.icon)});}
- return {apps,hidden:value.hidden===true,seeded:value.seeded===true,...(value.place==='bottom'?{place:'bottom' as const}:{})};
+ return {apps,hidden:value.hidden===true,seeded:value.seeded===true,...(value.place==='bottom'?{place:'bottom' as const}:{}),...(validStackLimit(value.limit)&&value.limit!==DEFAULT_STACK_LIMIT?{limit:value.limit}:{})};
 }
 function read(profile='',privateMode=false):SidebarApps{
  const id=scope(profile,privateMode);if(memory.has(id))return memory.get(id)!;
@@ -92,6 +107,8 @@ export function noteReleasedTab(appId:string,tabId:string){
 export function moveSidebarApp(profile:string,privateMode:boolean,id:string,index:number){
  update(profile,privateMode,value=>{const from=value.apps.findIndex(app=>app.id===id);if(from<0)return value;const apps=[...value.apps],[app]=apps.splice(from,1);apps.splice(Math.max(0,Math.min(apps.length,index)),0,app);return {...value,apps};});
 }
+/** Settings › Tabs › Sidebar › Favorites › Favorites before the stack: 6, 9, 12 (the default, stored as nothing), 16, 20 or 'all'. */
+export const setSidebarAppsLimit=(profile:string,privateMode:boolean,limit:StackLimitChoice)=>update(profile,privateMode,value=>{if((value.limit??DEFAULT_STACK_LIMIT)===limit)return value;const{limit:_old,...rest}=value;return limit===DEFAULT_STACK_LIMIT?rest:{...rest,limit};});
 export const setSidebarAppsHidden=(profile:string,privateMode:boolean,hidden:boolean)=>update(profile,privateMode,value=>({...value,hidden}));
 /** Settings > Tabs > Sidebar > Favorites: the tiles at the top of the sidebar (the default) or at the bottom, above the profile row. */
 export const setSidebarAppsPlace=(profile:string,privateMode:boolean,place:'top'|'bottom')=>update(profile,privateMode,value=>{if((value.place==='bottom')===(place==='bottom'))return value;const{place:_old,...rest}=value;return place==='bottom'?{...rest,place:'bottom'}:rest;});
@@ -124,12 +141,12 @@ export function appClickPlan<T extends {id:string;url:string;browserProfileId:st
  if(tab.id!==activeTabId)return {kind:'select',tabId:tab.id};
  return tab.url!==app.url?{kind:'home',tabId:tab.id}:{kind:'none'};
 }
-/** Whether a tab shows in the sidebar's tab list. A favorite's tab does (the default), unless Settings › Tabs › Sidebar › Favorites keeps it only in its tile
- * (runtime/favoriteTabsRule.ts). Then it is left out whenever its tile exists: the keys, the counts and Close other tabs already leave it out (main reads the
- * same rule), so a row for it was a row nothing else agreed on. Every favorite has a tile in the grid (no "+N" fold since 13.7), so the tab is always reachable
- * from it. Only a tab with no tile at all is listed like any tab, so none is ever out of reach: with Favorites switched off, or once its favorite is gone
- * (until the sidebar hands the tab back). */
-export const listedInSidebar=(tab:{favoriteId?:string},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>)=>{
+/** Whether a tab shows in the sidebar's tab list. A favorite's tab does only when Settings › Tabs › Sidebar › Favorites lists it (runtime/favoriteTabsRule.ts; Off, tiles only, is
+ * the default since Beta 14). Otherwise it is left out whenever its tile exists: the counts, the keys and Close other tabs agree on what the rows are (main reads the same rule).
+ * Every favorite has a tile, in the grid or in the stack's panel (ui/favoritesStackLimit.ts), so the tab is always reachable from it; the keys and the counts include it too.
+ * Only a tab with no tile at all is listed like any tab, so none is ever out of reach: with Favorites switched off, or once its favorite is gone (until the sidebar hands the tab back). */
+export const listedInSidebar=(tab:{favoriteId?:string;blank?:true},favorites:Pick<SidebarApps,'apps'|'hidden'>,settings:Pick<Settings,'favoriteTabsInList'|'verticalTabs'>)=>{
+ if(tab.blank===true)return false;// 14.1: the empty page a close can show is never a row (runtime/emptyPage.ts)
  if(tabListed(tab,settings)||favorites.hidden)return true;
  return !favorites.apps.some(app=>app.id===tab.favoriteId);// its favorite is gone
 };

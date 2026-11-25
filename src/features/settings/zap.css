@@ -1,0 +1,14 @@
+/* Settings > Privacy > Removed parts (panels/zap.tsx). Rows are the Settings rows (settings.css): hairlines between a site's parts, 48px, the button on the right.
+   Only what they lack is here: the search field's room, a site's quiet heading, the empty line. Tokens only. */
+.zap-search { margin: 4px 0 12px; }
+.zap-empty { margin: 2px 0 0; max-width: 56ch; font-size: 13px; line-height: 20px; color: var(--st-muted); text-wrap: pretty; }
+.zap-search + .zap-empty { margin-top: 0; }
+.zap-list > .zap-site-group + .zap-site-group { margin-top: 20px; }
+/* A site: its name as a quiet heading (the Settings group-label size), and its own Restore all as a quiet button on the right. */
+.zap-host { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 2px; }
+:where(.zap-host) > h3.zap-host-name { min-width: 0; margin: 0; font: 500 12px/16px var(--font-ui, inherit); color: var(--st-muted); overflow-wrap: anywhere; }
+.zap-host > .st-button { flex: none; margin-inline-end: -10px; }
+/* The foot: Clear all, which asks once on the same row (the question replaces nothing else on the page). */
+.zap-foot { margin-top: 12px; }
+.zap-foot > .st-copy:empty { display: none; }
+.zap-foot > .st-control { margin-inline-start: auto; }

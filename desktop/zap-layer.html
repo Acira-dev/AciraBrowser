@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Zap</title>
+<style>
+/* Zap (Beta 14): the picker's layer. A transparent native view over the page, under the popups, made while a person is choosing what to remove. It draws the outline of the
+   part under the pointer and the bar at the bottom, takes every click, wheel turn and key (so none of them reaches the page: no link opens, no button fires) and tells main
+   where the pointer is. The page cannot see it, style it or block it: it is another view, not part of the page. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important}
+:root{
+ --accent:#3b6eea;--ui:1;--speed:1;
+ --bar:rgb(28 28 31/.9);--menu:rgb(28 28 31);--ink:rgb(237 237 239/.92);--ink-2:rgb(237 237 239/.62);--line:rgb(255 255 255/.12);
+ --shadow:0 0 0 1px rgb(0 0 0/.5),0 1px 2px rgb(0 0 0/.22),0 8px 24px -6px rgb(0 0 0/.45),0 24px 56px -16px rgb(0 0 0/.4);
+ --ease:cubic-bezier(.16,1,.3,1);color-scheme:dark;
+}
+body.light{
+ --bar:rgb(255 255 255/.9);--menu:rgb(255 255 255);--ink:rgb(29 31 36/.9);--ink-2:rgb(29 31 36/.62);--line:rgb(0 0 0/.09);
+ --shadow:0 0 0 1px rgb(0 0 0/.06),0 1px 2px rgb(0 0 0/.06),0 8px 24px -6px rgb(0 0 0/.14),0 24px 56px -16px rgb(0 0 0/.16);
+ color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;font:500 13px/1.3 Inter,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;cursor:crosshair}
+#stage{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+/* The outline: Divider fade (section F), the one look of the active borders that colours only the top and bottom edges and thins toward the corners, in the accent, with a faint
+   tint of the same colour inside. It glides from part to part (position and size ease together); while it follows a part that moves, it follows with no delay. */
+#outline{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:opacity calc(140ms*var(--speed)) var(--ease);will-change:transform,width,height}
+#outline[data-on="1"]{opacity:1}
+#outline[data-glide="1"]{transition:opacity calc(140ms*var(--speed)) var(--ease),transform calc(170ms*var(--speed)) var(--ease),width calc(170ms*var(--speed)) var(--ease),height calc(170ms*var(--speed)) var(--ease)}
+#outline .tint{position:absolute;inset:0;border-radius:var(--r,3px);transition:border-radius calc(170ms*var(--speed)) var(--ease);background:color-mix(in oklab,var(--accent) 11%,transparent)}
+#outline .ring{position:absolute;inset:-2px 0;border-radius:var(--r,3px);transition:border-radius calc(170ms*var(--speed)) var(--ease);border-style:solid;border-width:2px 0;border-color:transparent;
+ background:linear-gradient(90deg,color-mix(in oklab,var(--accent) 8%,transparent) 0%,color-mix(in oklab,var(--accent) 92%,transparent) 22%,color-mix(in oklab,var(--accent) 92%,transparent) 78%,color-mix(in oklab,var(--accent) 8%,transparent) 100%) border-box;
+ -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}   /* top and bottom only: no sides */
+body[data-keys="1"] #outline .tint{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent) 70%,transparent)}   /* moving with the keyboard: the same hairline the active borders add (without it they fail 3:1) */
+/* The bar: small, glass, at the bottom of the page. */
+#bar{position:absolute;left:50%;bottom:calc(14px*var(--ui));display:flex;align-items:center;gap:calc(10px*var(--ui));height:calc(36px*var(--ui));padding:0 calc(6px*var(--ui)) 0 calc(16px*var(--ui));border-radius:calc(10px*var(--ui));
+ background:var(--bar);box-shadow:var(--shadow),0 0 0 1px var(--line);color:var(--ink);font-size:calc(13px*var(--ui));white-space:nowrap;transform:translate(-50%,calc(8px*var(--ui)));opacity:0;
+ transition:opacity calc(160ms*var(--speed)) var(--ease),transform calc(180ms*var(--speed)) var(--ease),bottom calc(200ms*var(--speed)) var(--ease)}
+#bar[data-lift="1"]{bottom:calc(110px*var(--ui))}   /* while the "Removed . Undo" toast is up (it sits at the same place) the bar rests above it */
+#bar[data-on="1"]{opacity:1;transform:translate(-50%,0)}
+#bar button{all:unset;box-sizing:border-box;display:grid;place-items:center;width:calc(24px*var(--ui));height:calc(24px*var(--ui));border-radius:calc(6px*var(--ui));color:var(--ink-2);cursor:default;transition:background-color 100ms var(--ease),color 100ms var(--ease)}
+#bar button:hover{background:color-mix(in oklab,var(--ink) 9%,transparent);color:var(--ink)}
+#bar button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#bar svg{width:calc(12px*var(--ui));height:calc(12px*var(--ui))}
+/* The menu a right-click opens while picking: the bar's glass, rows like the page menu's. It only offers a choice: opening it does not stop picking. */
+#menu:focus{outline:none}
+#menu{position:absolute;left:0;top:0;min-width:calc(208px*var(--ui));padding:calc(4px*var(--ui));border-radius:calc(10px*var(--ui));background:var(--menu);box-shadow:var(--shadow),0 0 0 1px var(--line);color:var(--ink);font-size:calc(13px*var(--ui));cursor:default;
+ opacity:0;visibility:hidden;transform:translateY(calc(-3px*var(--ui)));filter:blur(4px);transition:opacity calc(110ms*var(--speed)) var(--ease),transform calc(140ms*var(--speed)) var(--ease),filter calc(140ms*var(--speed)) var(--ease),visibility 0s calc(140ms*var(--speed))}
+#menu[data-open="1"]{opacity:1;visibility:visible;transform:none;filter:none;transition-delay:0s}
+#menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:calc(24px*var(--ui));width:100%;height:calc(30px*var(--ui));padding:0 calc(10px*var(--ui));border-radius:calc(6px*var(--ui));cursor:default;white-space:nowrap}
+#menu button[hidden]{display:none}
+#menu button:hover,#menu button:focus-visible{background:color-mix(in oklab,var(--ink) 8%,transparent)}
+#menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#menu kbd{font:inherit;color:var(--ink-2)}
+body.reduced *{transition-duration:90ms!important}
+body.reduced #bar{transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div id="stage"><div id="outline" data-on="0"><div class="tint"></div><div class="ring"></div></div></div>
+<div id="bar" role="status" data-on="0"><span id="msg">Click to remove · Esc or right-click to stop</span><button id="close" type="button" aria-label="Stop"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg></button></div>
+<div id="menu" role="menu" tabindex="-1" data-open="0"><button type="button" role="menuitem" id="m-stop"><span id="m-stop-t">Stop zapping</span><kbd>Esc</kbd></button><button type="button" role="menuitem" id="m-undo" hidden><span id="m-undo-t">Undo last removal</span><kbd id="m-undo-k">Ctrl+Z</kbd></button></div>
+<script>
+(() => {
+  const outline = document.getElementById('outline'), bar = document.getElementById('bar'), msg = document.getElementById('msg'), close = document.getElementById('close');
+  const menu = document.getElementById('menu'), stopItem = document.getElementById('m-stop'), undoItem = document.getElementById('m-undo');
+  const send = message => { try { window.zapLayer.command(message); } catch { /* the window is closing */ } };
+  let ready = false, hadRect = false, pending = null, raf = 0, wheel = 0, wheelAt = 0, lastKey = 0, undoable = false, swallow = false, overMenu = false;
+  const menuOpen = () => menu.dataset.open === '1';
+  /** The menu opens at the pointer, kept inside the page area; opening it only offers the choice (picking goes on). */
+  function openMenu(x, y) {
+    undoItem.hidden = !undoable;
+    menu.dataset.open = '1';
+    const box = menu.getBoundingClientRect(), left = Math.max(4, Math.min(innerWidth - box.width - 4, x)), top = Math.max(4, Math.min(innerHeight - box.height - 4, y));
+    menu.style.left = left + 'px'; menu.style.top = top + 'px';
+    send({type: 'menu', open: true});
+    try { menu.focus({preventScroll: true}); } catch { /* the view has no focus */ }   // the menu itself, not a row: opened with the mouse it shows no ring; the arrows move to the rows
+  }
+  function closeMenu(tell = true) {
+    if (!menuOpen()) return;
+    menu.dataset.open = '0';
+    if (tell) send({type: 'menu', open: false});
+  }
+  function apply(state) {
+    const root = document.documentElement;
+    // Only what a message carries: the outline, the lift and the menu come as small messages that must not reset the look (light, interface scale, speed) the full one set.
+    if ('dark' in state) document.body.classList.toggle('light', state.dark === false);
+    if ('reduced' in state) document.body.classList.toggle('reduced', state.reduced === true);
+    if (state.accent) root.style.setProperty('--accent', state.accent);
+    if ('ui' in state) root.style.setProperty('--ui', String(state.ui || 1));
+    if ('speed' in state) root.style.setProperty('--speed', String(state.speed || 1));
+    if (typeof state.message === 'string') msg.textContent = state.message;
+    if (typeof state.close === 'string') close.setAttribute('aria-label', state.close);
+    if (typeof state.menuStop === 'string') document.getElementById('m-stop-t').textContent = state.menuStop;
+    if (typeof state.menuUndo === 'string') document.getElementById('m-undo-t').textContent = state.menuUndo;
+    if (typeof state.undoKey === 'string') document.getElementById('m-undo-k').textContent = state.undoKey;
+    if ('undoable' in state) { undoable = state.undoable === true; undoItem.hidden = !undoable; }
+    if (state.menu === 'close' || state.barOn === false) closeMenu(false);
+    if ('barOn' in state) bar.dataset.on = state.barOn ? '1' : '0';
+    if ('lift' in state) bar.dataset.lift = state.lift ? '1' : '0';
+    if ('rect' in state) {
+      const rect = state.rect;
+      if (!rect || rect.width < 1 || rect.height < 1) { outline.dataset.on = '0'; }
+      else {
+        // The first outline after none appears where it is (no glide from nowhere); moving to another part glides; following the same part is immediate.
+        outline.dataset.glide = hadRect && state.moved ? '1' : '0';
+        outline.style.transform = 'translate(' + rect.x + 'px,' + rect.y + 'px)'; outline.style.width = rect.width + 'px'; outline.style.height = rect.height + 'px';
+        if (Array.isArray(state.radius) && state.radius.length === 4) outline.style.setProperty('--r', state.radius.map(value => Math.round(value * 10) / 10 + 'px').join(' '));
+        outline.dataset.on = '1'; hadRect = true;
+      }
+      if (!rect) hadRect = false;
+    }
+    if ('keys' in state) document.body.dataset.keys = state.keys ? '1' : '0';
+  }
+  window.zapLayer.onState(apply);
+  // Pointer: at most one message a frame.
+  addEventListener('pointermove', event => { if (menuOpen() && menu.contains(event.target)) { pending = null; if (!overMenu) { overMenu = true; send({type: 'leave'}); } return; }   // over the menu the pointer is not over a part: no outline under it
+    overMenu = false; pending = {type: 'move', x: event.clientX, y: event.clientY}; document.body.dataset.keys = '0'; if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (pending) { send(pending); pending = null; } }); }, true);
+  addEventListener('pointerleave', () => send({type: 'leave'}), true);
+  addEventListener('mouseup', event => {
+    if (event.button !== 0 || event.target === close || close.contains(event.target) || menu.contains(event.target)) return;
+    event.preventDefault();
+    if (swallow) { swallow = false; return; }   // the press that closed the menu is not a click on a part
+    send({type: 'commit', x: event.clientX, y: event.clientY});
+  }, true);
+  addEventListener('mousedown', event => {
+    if (!close.contains(event.target) && !menu.contains(event.target)) event.preventDefault();
+    if (event.button === 0 && menuOpen() && !menu.contains(event.target)) { closeMenu(); swallow = true; }
+  }, true);
+  addEventListener('contextmenu', event => {
+    event.preventDefault();
+    if (bar.contains(event.target) || menu.contains(event.target)) return;
+    openMenu(event.clientX, event.clientY);
+  }, true);
+  stopItem.addEventListener('click', () => { closeMenu(false); send({type: 'stop'}); });
+  undoItem.addEventListener('click', () => { closeMenu(); send({type: 'undo'}); });
+  // The wheel widens (up) or narrows (down): one step for each turn of about a click of the wheel, never faster than one step in 70 ms.
+  addEventListener('wheel', event => {
+    event.preventDefault();
+    closeMenu();
+    wheel += event.deltaMode === 0 ? event.deltaY : event.deltaY * 40;
+    const now = performance.now();
+    if (Math.abs(wheel) >= 36 && now - wheelAt >= 70) { send({type: 'level', delta: wheel < 0 ? 1 : -1}); wheel = 0; wheelAt = now; }
+    else if (now - wheelAt > 400) wheel = event.deltaY;
+  }, {capture: true, passive: false});
+  addEventListener('keydown', event => {
+    const mod = event.metaKey || event.ctrlKey;
+    if (menuOpen()) {
+      // Inside the menu: Escape closes the menu only (the next Escape stops), the arrows move between the rows, Enter takes the row.
+      const rows = [stopItem, undoItem].filter(item => !item.hidden), at = rows.indexOf(document.activeElement);
+      if (event.key === 'Escape') { event.preventDefault(); closeMenu(); return; }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const next = event.key === 'ArrowDown' ? (at < 0 ? 0 : (at + 1) % rows.length) : (at < 0 ? rows.length - 1 : (at - 1 + rows.length) % rows.length); rows[next].focus({preventScroll: true}); return; }
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (at >= 0) rows[at].click(); return; }   // nothing chosen yet: nothing happens
+    }
+    if (event.key === 'Escape') { event.preventDefault(); send({type: 'stop'}); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); document.body.dataset.keys = '1'; send({type: 'level', delta: 1, keys: true}); }
+    else if (event.key === 'ArrowDown') { event.preventDefault(); document.body.dataset.keys = '1'; send({type: 'level', delta: -1, keys: true}); }
+    else if (event.key === 'Enter') { event.preventDefault(); send({type: 'commit', keys: true}); }
+    else if (mod && !event.shiftKey && event.key.toLowerCase() === 'z') { event.preventDefault(); send({type: 'undo'}); }
+    // The wheel widens and narrows the pick, so the page scrolls by keyboard while picking (a part below the fold would otherwise be out of reach).
+    else if (event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)) { event.preventDefault(); send({type: 'scroll', dir: 1}); }
+    else if (event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)) { event.preventDefault(); send({type: 'scroll', dir: -1}); }
+    else if (event.key === 'End') { event.preventDefault(); send({type: 'scroll', dir: 2}); }
+    else if (event.key === 'Home') { event.preventDefault(); send({type: 'scroll', dir: -2}); }
+  }, true);
+  close.addEventListener('click', () => send({type: 'stop'}));
+  window.zapLayer.ready?.();
+  send({type: 'ready'});
+})();
+</script>
+</body>
+</html>

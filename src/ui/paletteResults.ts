@@ -4,7 +4,7 @@ import { windowViewDetail } from './windowViewText';
 import { t } from '../i18n';
 /** Command bar contents (bible §5.4, F39). Pure: the component supplies the registry, tabs in recently-used order,
  * history, Acira pages and the recent command ids. */
-export interface PaletteCommand { id: string; label: string; category: string; shortcut?: string; /** A workspace row: the workspace's own name, so a query equal to it ranks the row first (13.5, hunt-e 11). */ name?: string }
+export interface PaletteCommand { id: string; label: string; category: string; shortcut?: string; /** A workspace row: the workspace's own name, so a query equal to it ranks the row first (13.5, hunt-e 11). */ name?: string; /** English words that also find the command without being part of its name ("move", "transfer"); never shown. */ keywords?: readonly string[] }
 export interface PaletteTab { id: string; title: string; url: string; favicon?: string }
 export interface PaletteLink { url: string; title: string }
 interface Base { key: string; title: string; indices: number[]; meta: string; score: number; /** 13.5 (hunt-e 11): a command that closes or ends things without a question, and the query does not clearly name it. It is listed after the rest and Enter never runs it by default. */ guard?: true; /** R3-65: one plain sentence under a command that is easy to confuse with another (Focus mode vs Compact toolbar). */ hint?: string }
@@ -12,11 +12,14 @@ export type PaletteItem =
   | Base & { kind: 'command'; command: PaletteCommand }
   | Base & { kind: 'tab'; tab: PaletteTab }
   | Base & { kind: 'history' | 'page'; url: string; favicon?: string }
-  | Base & { kind: 'web'; query: string };
+  | Base & { kind: 'web'; query: string }
+  | Base & { kind: 'setting'; setting: string };
 export interface PaletteSection { key: string; label: string; items: PaletteItem[] }
 /** The tabs of one other workspace, searched with the query (R4-48 P1-2): they show as a section named for the workspace, below this workspace's own tabs. */
 export interface PaletteWorkspaceTabs { id: string; name: string; tabs: PaletteTab[] }
-export interface PaletteInput { query: string; commands: PaletteCommand[]; tabs: PaletteTab[]; activeTabId: string; history: PaletteLink[]; pages: PaletteLink[]; recent: string[]; otherTabs?: PaletteWorkspaceTabs[] }
+/** Beta 14.4: a Settings row the settings search found for the query (its own ranking, words and languages): title, where it lives, its id. */
+export interface PaletteSetting { id: string; title: string; place: string }
+export interface PaletteInput { query: string; commands: PaletteCommand[]; tabs: PaletteTab[]; activeTabId: string; history: PaletteLink[]; pages: PaletteLink[]; recent: string[]; otherTabs?: PaletteWorkspaceTabs[]; settings?: PaletteSetting[] }
 
 export const commandPrefix = '>';
 export const hostOf = (url: string) => { try { const parsed = new URL(url); return parsed.protocol === 'acira:' ? '' : parsed.host.replace(/^www\./, ''); } catch { return ''; } };
@@ -36,8 +39,10 @@ const WORKSPACE_NAMED = 100;
 const clearlyNames = (query: string, entry: PaletteCommand, all: PaletteCommand[]) => { const q = norm(query); return (q.includes(' ') || q === norm(labelOf(entry))) && norm(labelOf(entry)).startsWith(q) && all.every(other => other.id === entry.id || !norm(labelOf(other)).startsWith(q)); };
 // R3-65 / R3-68: the four views, each said in the one sentence Settings uses.
 const HINTS: Record<string, () => string> = { 'view-full': () => windowViewDetail('full'), 'compact-toolbar': () => windowViewDetail('compact'), 'focus-mode': () => windowViewDetail('focus'), 'seamless-mode': () => windowViewDetail('seamless') };
+/** A keyword that holds the whole query (not scattered letters) finds the command, below any match in its name. */
+const byKeyword = (entry: PaletteCommand, query: string) => { const q = query.trim().toLowerCase(); return q && entry.keywords?.some(word => word.includes(q)) ? { score: 40, indices: [] as number[] } : null; };
 const command = (entry: PaletteCommand, query: string, all: PaletteCommand[] = []): PaletteItem | null => {
-  const label = labelOf(entry), match = fuzzyMatch(query, label) || (query ? (() => { const byCategory = fuzzyMatch(query, `${entry.category} ${label}`); return byCategory && { score: byCategory.score - 20, indices: [] }; })() : null);
+  const label = labelOf(entry), match = fuzzyMatch(query, label) || (query ? (() => { const byCategory = fuzzyMatch(query, `${entry.category} ${label}`); return byCategory && { score: byCategory.score - 20, indices: [] }; })() || byKeyword(entry, query) : null);
   const named = !!query && entry.name !== undefined && norm(entry.name) === norm(query), held = DESTRUCTIVE_COMMANDS.has(entry.id) && !clearlyNames(query, entry, all);
   return match && { kind: 'command', key: `command:${entry.id}`, title: label, indices: match.indices, meta: entry.shortcut || '', score: match.score + (named ? WORKSPACE_NAMED : 0), command: entry, ...(held ? { guard: true as const } : {}), ...(HINTS[entry.id] ? { hint: HINTS[entry.id]!() } : {}) };
 };
@@ -51,11 +56,17 @@ const link = (kind: 'history' | 'page', entry: PaletteLink, query: string): Pale
   const match = byTitle && (!byUrl || byTitle.score >= byUrl.score - 5) ? byTitle : byUrl && { score: byUrl.score - 5, indices: [] };
   return match && { kind, key: `${kind}:${entry.url}`, title, indices: match.indices, meta: hostOf(entry.url), score: match.score, url: entry.url };
 };
+/** A setting row: matched by the settings search (so its synonyms and languages count); its title is underlined where the letters match. Below an equal tab or command. */
+const SETTING_SCORE = 30;
+const settingItem = (entry: PaletteSetting, query: string, at: number): PaletteItem => {
+  const match = fuzzyMatch(query, entry.title);
+  return { kind: 'setting', key: `setting:${entry.id}`, title: entry.title, indices: match?.indices ?? [], meta: entry.place, score: Math.max(match?.score ?? 0, SETTING_SCORE) - at, setting: entry.id };
+};
 // A held-back row (see `guard`) comes after every other row of its list, whatever it scores.
 const ranked = (items: (PaletteItem | null)[], limit: number) => (items.filter(Boolean) as PaletteItem[]).sort((a, b) => +!!a.guard - +!!b.guard || b.score - a.score).slice(0, limit);
 const calm = (items: PaletteItem[]) => [...items.filter(item => !item.guard), ...items.filter(item => item.guard)];
 
-export function paletteSections({ query: raw, commands, tabs, activeTabId, history, pages, recent, otherTabs = [] }: PaletteInput): PaletteSection[] {
+export function paletteSections({ query: raw, commands, tabs, activeTabId, history, pages, recent, otherTabs = [], settings = [] }: PaletteInput): PaletteSection[] {
   const commandsOnly = raw.trimStart().startsWith(commandPrefix), query = (commandsOnly ? raw.trimStart().slice(1) : raw).trim();
   const byId = new Map(commands.map(entry => [entry.id, entry]));
   const recentCommands = recent.map(id => byId.get(id)).filter(Boolean) as PaletteCommand[];
@@ -86,6 +97,8 @@ export function paletteSections({ query: raw, commands, tabs, activeTabId, histo
     ...otherRows,
     { key: 'commands', label: t("paletteresults.commands"), items: ranked(commands.map(entry => { const item = command(entry, query, commands); return item && { ...item, score: item.score + (recent.includes(entry.id) ? 8 : 0) }; }), 6) },
     { key: 'pages', label: t("browsersettings.acira"), items: ranked(pageRows.map(entry => link('page', entry, query)), 3) },
+    // Beta 14.4: "transparency", "tab size", "hide sidebar" typed here open Settings on that row.
+    { key: 'settings', label: t("browsermenu.settings"), items: settings.slice(0, 2).map((entry, at) => settingItem(entry, query, at)) },
     { key: 'history', label: t("browsermenu.history"), items: ranked(history.filter(entry => !openUrls.has(entry.url) && !seen.has(entry.url) && seen.add(entry.url)).map(entry => link('history', entry, query)), 5) },
   ].filter(section => section.items.length);
   // A section sorts by its best row that Enter may run; one with only held-back rows goes after the web row, so Enter never closes tabs by accident.

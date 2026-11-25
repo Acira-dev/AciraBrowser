@@ -210,8 +210,8 @@ test('wiring: the setting reaches the toolbar, the sidebar, the Settings row and
   assert.match(css, /@property --addr-t/);
   assert.match(css, /\.ed-rail\.acira-sidebar\[data-addr-side\]\[data-addr-open\] \{ padding-top: 108px;/, 'the content makes way for the open row');
   assert.match(css, /--addr-open-dur[^;]*;/, 'the sidebar uses the morph\'s own time');
-  // Where the address bar lives is the third answer of the Tabs choice (tests/sidebar-mode.test.ts), in Appearance › Layout and Tabs alike: it has no row of its own any more.
-  assert.match(settings, /<TabLayoutRow layout=\{tabLayout\} onChange=\{chooseTabLayout\} columns=\{4\} \/>/);
+  // Where the address bar lives is the third answer of the Tabs choice (tests/sidebar-mode.test.ts), in Settings › Tabs only: it has no row of its own any more.
+  assert.match(settings, /<TabLayoutRow layout=\{tabLayout\} onChange=\{chooseTabLayout\} \/>/);
   assert.match(settings, /tabLayout !== "sidebar-address"/, 'the Seamless top-edge switch is hidden when there is no top edge');
   assert.match(main, /edges:\(\)=>state\.settings\.addressInSidebar&&state\.settings\.verticalTabs\?\{top:false,side:true\}/, 'no top edge in Seamless');
 });

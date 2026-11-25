@@ -80,6 +80,8 @@
 /* R3-26 the morph between split layouts (SplitMorphLayer): boxes move and reshape with transforms only; a page that is still just a tile shows its title on a glass wash. */
 .app .split-morph-layer{z-index:7;background:var(--surface-alt,var(--frame,transparent))}
 .app .split-morph-box{position:absolute;left:0;top:0;overflow:hidden;contain:layout paint;will-change:transform,opacity;backface-visibility:hidden}
+.app .split-morph-backing{animation:split-morph-backing calc(150ms*var(--motion-scale,1)) var(--ease-out,ease-out) both}
+@keyframes split-morph-backing{from{opacity:0}to{opacity:1}}
 .app .split-morph-still{display:block;max-width:none;object-fit:cover;object-position:top left;user-select:none}
 .app .split-morph-tile{position:relative;overflow:hidden;background:color-mix(in srgb,var(--glass) 94%,transparent);box-shadow:var(--split-hairline)}
 .app .split-morph-tile[data-arriving]>.split-morph-still{position:absolute;inset:0;width:100%;height:100%}

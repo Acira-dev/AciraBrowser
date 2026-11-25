@@ -25,8 +25,9 @@ test('Focus view keeps a silent listener for action.openPopup() and an extension
   assert.match(actions, /silent\?:boolean/);
   // Switching to Focus re-renders the toolbar's copy as the silent one (the same instance: both sit at the same place of the same row): its effect has to run again, or the buttons it built
   // before stay in the hidden strip and the event presses one of them, in a box of 0 x 0 (a popup in the window's top-left corner, seen in the real app with a pinned extension).
-  assert.match(actions, /list\?\.remove\(\);\};\n \},\[signature,silent\]\);/);
-  assert.match(actions, /if\(silent\|\|!host\|\|/, 'a silent copy builds no buttons');
+  // (Beta 14: the list is a kept one now: this effect releases it and takes it again when `silent` flips, and a tab switch no longer rebuilds it.)
+  assert.match(actions, /\},\[wanted,target\?\.partition,keepAs,silent\]\);/);
+  assert.match(actions, /const wanted=!silent&&/, 'a silent copy builds no buttons');
   assert.match(actions, /hidden=\{silent\|\|!target\?\.supported/, 'and is hidden');
   // the first Acira menu button that is drawn (a copy that is not drawn has no box); a silent copy has no button strip of its own, so without one the popup hangs from the window's right end
   assert.match(actions, /edge=silent\?null:root\.current\?\.getBoundingClientRect\(\),menu=silent\?\[\.\.\.document\.querySelectorAll\('\.toolbar-menu-control'\)\]\.map\(node=>node\.getBoundingClientRect\(\)\)\.find\(box=>box\.width>0&&box\.height>0\):null/);

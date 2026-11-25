@@ -72,3 +72,24 @@
 .appearance-panel>.appearance-section:first-child{padding:4px 4px 0}
 .appearance-panel>.appearance-section+.appearance-section{padding:0 8px 0 32px}
 .app .appearance-more>svg{width:12px;height:12px}
+/* 14.1 Your colours in the Finish row (GlassFinishPicker): the same square swatch as the 12 (its light tone over its deep tone), a remove mark on
+   hover or keyboard focus, and the dashed + tile that opens Acira's own picker. */
+.own-swatch-item{position:relative;width:var(--swatch-size,24px);height:var(--swatch-size,24px)}
+.own-swatch-remove{position:absolute;top:-6px;right:-6px;z-index:1;display:grid;place-items:center;width:14px;height:14px;padding:0;border:0;border-radius:7px;background:rgb(var(--ink) / .78);color:var(--sheet,#fff);font:600 11px/1 var(--font-ui,Inter);box-shadow:0 0 0 1.5px var(--sheet,#fff);opacity:0;transform:scale(.8);pointer-events:none;transition:opacity var(--dur-ui,150ms) var(--ease-ui,ease),transform var(--dur-ui,150ms) var(--ease-ui,ease)}
+.own-swatch-item:hover>.own-swatch-remove,.own-swatch-item:focus-within>.own-swatch-remove{opacity:1;transform:none;pointer-events:auto}
+.own-swatch-remove:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:1px}
+.finish-swatch.own-swatch-add{display:grid;place-items:center;background:transparent;color:rgb(var(--ink) / .62);box-shadow:inset 0 0 0 1px rgb(var(--ink) / .24)}
+.finish-swatch.own-swatch-add:hover{color:rgb(var(--ink) / .85);box-shadow:inset 0 0 0 1px rgb(var(--ink) / .36),0 3px 8px -3px rgb(0 0 0 / .4)}
+@media (prefers-reduced-motion:reduce){.own-swatch-remove{transition:none}}
+.app[data-reduced-motion=true] .own-swatch-remove{transition:none}
+/* 14.1 Settings > Appearance > Gradient colours (features/settings/OwnGradientChips.tsx): round chips in each colour's frame tone, their place in the
+   field shown as a small number. */
+.own-gradient{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.own-chip{position:relative;display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:11px;background:var(--chip);box-shadow:inset 0 0 0 1px rgb(var(--ink) / .2);color:rgb(var(--ink) / .7)}
+.own-chip[aria-pressed=true],.own-chip[data-main]{box-shadow:inset 0 0 0 1px rgb(var(--ink) / .2),0 0 0 2px var(--sheet,#fff),0 0 0 3.5px var(--focus-ring-color,var(--accent))}
+.own-chip:focus-visible{outline:2px solid var(--focus-ring-color,var(--accent));outline-offset:2px}
+.own-chip-order{position:absolute;right:-5px;bottom:-5px;min-width:13px;height:13px;border-radius:7px;background:rgb(var(--ink) / .8);color:var(--sheet,#fff);font:600 9px/13px var(--font-ui,Inter);text-align:center;font-variant-numeric:tabular-nums}
+.own-chip-add{background:transparent;box-shadow:inset 0 0 0 1px rgb(var(--ink) / .24)}
+/* 14.1: the well's button opens Acira's own picker (it covers the well as the colour input used to). */
+.appearance-color-well>.appearance-color-pick{position:absolute;inset:0;width:100%;height:100%;padding:0;margin:0;border:0;border-radius:6px;background:transparent;cursor:default}
+.appearance-color-pick:focus-visible{outline:2px solid var(--selection-marker);outline-offset:3px}

@@ -44,7 +44,7 @@ test('the Bookmarks page, the bookmark editor, the sidebar and the folder menu u
   assert.match(manager, /\(node\.url \? node\.title : folderTitle\(node\)\)/);
   assert.match(manager, /if \(next && next !== node\.title && next !== title\(node\)\) dispatch/);
   assert.match(read('src/features/BookmarkEditor.tsx'), /<span>\{folderTitle\(item\)\}<\/span>/);
-  assert.match(read('src/components/sidebar/AciraSidebar.tsx'), /\{folderTitle\(node\)\|\|'Untitled folder'\}/);
+  assert.match(read('src/components/sidebar/AciraSidebar.tsx'), /\{folderTitle\(node\)\|\|t\('bm\.untitled'\)\}/);
   const menu = read('src/components/sidebar/BookmarkMenu.tsx');
   assert.match(menu, /initial=\{folderTitle\(node\)\}/);
   assert.match(menu, /if\(title!==folderTitle\(node\)\)dispatch\(\{type:'bookmark\.rename'/);

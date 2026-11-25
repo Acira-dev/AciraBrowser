@@ -58,7 +58,8 @@ test('every tab row uses the one rule: sidebar, horizontal strip, compact strip,
   assert.doesNotMatch(sidebar,/useLoadingSignal\([^)]*active/,'the sidebar no longer gates the dots on the current tab');
   assert.doesNotMatch(sidebar,/useLoadingSignal\([^)]*progress/,'nor on progress, which main withholds off screen');
   const app=read('src/App.tsx');
-  assert.match(app,/renderIcon=\{t => tabShowsLoading\(t\)\?<span className="tab-agent-icon"><DotMatrix preset="loader"/,'compact strip (R5-11: the loader, in the full text colour)');
+  assert.match(app,/const chipIcon = \(t: TabSession\) => tabShowsLoading\(t\)\?<span className="tab-agent-icon"><DotMatrix preset="loader"/,'compact strip (R5-11: the loader, in the full text colour)');
+  assert.match(app,/renderIcon=\{chipIcon\}/,'the compact chips and (Beta 14 AA) the Focus chip draw the same icon');
   assert.doesNotMatch(app,/<span className="tab-agent-icon"[^>]*><DotMatrix preset="pulse"/,'R5-11: no strip shows the sparse pulse as its loading signal');
   assert.match(app,/\{tabShowsLoading\(t\) \? <span className="tab-agent-icon"/,'horizontal strip');
   assert.match(read('src/components/sidebar/TabSwitcher.tsx'),/tabShowsLoading\(tab\)\?<DotMatrix/,'tab viewer');

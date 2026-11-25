@@ -32,6 +32,13 @@ test('hiding a section adds it once and keeps the rest', () => {
   assert.deepEqual(hidden.order, start.order);
 });
 
+test('an Edit favorite request from a Favorite\'s menu names the Favorite, and only a plain id', () => {
+  const now = 1_000_000;
+  assert.deepEqual(parseSidebarRequest(JSON.stringify({ kind: 'edit-favorite', appId: 'app-12', at: now }), now), { kind: 'edit-favorite', appId: 'app-12' });
+  for (const bad of [{ kind: 'edit-favorite', at: now }, { kind: 'edit-favorite', appId: 7, at: now }, { kind: 'edit-favorite', appId: 'a b"]', at: now }, { kind: 'edit-favorite', appId: 'app-1', at: now - 60_000 }])
+    assert.equal(parseSidebarRequest(JSON.stringify(bad), now), null, JSON.stringify(bad));
+});
+
 test('a request from a menu is read only when it is fresh and well formed', () => {
   const now = 1_000_000;
   assert.deepEqual(parseSidebarRequest(JSON.stringify({ kind: 'customize', at: now }), now), { kind: 'customize' });
@@ -88,7 +95,7 @@ test('every section\'s header and the New tab menu offer the two rows; single ro
   // Zone headers (Bookmarks keeps its own menu, which now ends with the rows) and Favorites' free space open the section menu.
   assert.match(sidebar, /openBookmarkMenu\(zoneRef\(id\)/);
   assert.match(sidebar, /openBookmarkMenu\(zoneRef\('favorites'\)/);
-  assert.match(sidebar, /closest\('\.sb-app,\.sb-app-editor'\)/, 'a favorite tile keeps Edit favorite');
+  assert.match(sidebar, /closest\('\.sb-app,\.sb-app-editor,\.sb-apps-panel'\)/, 'a favorite tile keeps Edit favorite');
   assert.match(bookmarkMenu, /sectionActions\(row,sidebarWindowId\(state\),'bookmarks',close\)/);
   assert.match(app, /state\.settings\.verticalTabs && <><hr\/>\{sectionActions\(row, sidebarWindowId\(state\), 'tabs', close\)\}/, 'the tab bar menu, in the sidebar only');
   // The menu rows are the menu's own, with the catalog's words.

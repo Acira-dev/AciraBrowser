@@ -127,7 +127,7 @@ export function WorkspaceEditor({ state, dispatch, close }: { state: BrowserSnap
     {adding && <>
       <span className="bm-edit-label" id="ws-edit-start">{t('workspaces.startWith')}</span>
       <Segmented label={t('workspaces.startWith')} value={start} options={options} onChange={setStart} />
-      <p className="ws-edit-note" aria-live="polite">{note}</p>
+      <p className="ws-edit-note popup-status" aria-live="polite">{note}</p>
       <div className="ws-edit-lock"><span><strong>{t('workspaces.lockThis')} <span className="ws-beta">{t('workspaces.beta')}</span></strong><small>{t('workspaces.editorLockNote')}</small></span><button type="button" role="switch" className="shields-switch" aria-label={t('workspaces.lockThis')} aria-checked={locked} onClick={() => setLocked(value => !value)}><span aria-hidden="true" /></button></div>
       <p className="ws-edit-scope">{t('workspaces.scopeNote', { profile: profile?.name ?? '' })} <button type="button" className="ws-edit-link" onClick={() => { openSettings(state, dispatch, { section: 'Profiles' }); close(); }}>{t('workspaces.scopeLink')}</button></p>
     </>}

@@ -160,6 +160,13 @@ export function iconColor(site: string, src: string | undefined, persist = true)
   return undefined;
 }
 
+/** True while an icon's colour is being read (not read yet, and not unreadable): a caller that must not flicker waits for the answer. */
+export function iconPending(site: string, src: string | undefined): boolean {
+  if (!src) return false;
+  const key = keyOf(site, src);
+  return pending.has(key) || (!memory.has(key) && load()[key] === undefined);
+}
+
 /** For a list of icons (`key` names the result, `site` is what the answer is remembered under, with the icon's fingerprint): their colours,
  * filled in as the reads finish. Re-renders when one does. */
 export function useIconColors(items: readonly { key: string; site: string; src?: string }[], persist = true): Record<string, IconColor | null | undefined> {

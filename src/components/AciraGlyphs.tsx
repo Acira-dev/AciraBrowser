@@ -34,6 +34,11 @@ const glyphs = {
   spectrum: [stroke('M12 2.5V8'), stroke('M12 16V21.5'), stroke('M2.5 12H8'), stroke('M16 12H21.5'), stroke('M5.8 5.8L8.3 8.3'), stroke('M15.7 15.7L18.2 18.2'), stroke('M18.2 5.8L15.7 8.3'), stroke('M8.3 15.7L5.8 18.2'), dot(12, 12)],
   // Tabs: a frame with a raised tab notch.
   tabs: [stroke('M3.5 20V4.5H10.5V8H20.5V20Z'), stroke('M10.5 8H3.5')],
+  // Beta 14.4 Settings › Layout (a window and its top bar) and Settings › Sidebar (a window and its side column), in the same stroke family.
+  layout: [stroke('M3.5 4.5H20.5V19.5H3.5Z'), stroke('M3.5 9H20.5')],
+  sidebar: [stroke('M3.5 4.5H20.5V19.5H3.5Z'), stroke('M9.5 4.5V19.5')],
+  // Beta 14.4 Settings › Protection: a shield, chamfered like the privacy and about marks.
+  protection: [stroke('M12 3.5L19.5 6.5V12.5L15.5 18L12 20.5L8.5 18L4.5 12.5V6.5Z')],
   // Accessibility: figure built from a dot and three bars.
   accessibility: [dot(12, 4.5), stroke('M4.5 9H19.5'), stroke('M12 9V14'), stroke('M12 14L8 20.5'), stroke('M12 14L16 20.5')],
   // About: chamfered frame with an i.

@@ -14,11 +14,15 @@ const web = url => /^https?:/i.test(String(url || ''));
 const kind = mime => String(mime || '').split(';')[0].trim().toLowerCase() || 'unknown type';
 
 function createNavigationRescue({ now = Date.now, record = () => {} } = {}) {
-  const saves = new Map(), tried = new Map();
+  const saves = new Map(), tried = new Map(), saveAs = new Map();
   let recorder = record;
-  const prune = () => { const at = now(); for (const [url, when] of saves) if (at - when > SAVE_WINDOW) saves.delete(url); };
+  const prune = () => { const at = now(); for (const [url, when] of saves) if (at - when > SAVE_WINDOW) saves.delete(url); for (const [url, when] of saveAs) if (at - when > SAVE_WINDOW) saveAs.delete(url); };
   /** The person asked to save this address (a Save command): the download that follows is never rescued. */
   function expectSave(url) { if (typeof url === 'string' && url) { prune(); saves.set(url, now()); } }
+  /** The person chose "Save image / link / media as…" for this address (Beta 14, D2): the download that follows asks where to save, whatever "Ask where to save each file" says. */
+  function markSaveAs(url) { if (typeof url === 'string' && url) { prune(); saveAs.set(url, now()); } }
+  /** The download engine asks, with the addresses of one download (the first of its chain, the last, the current one): true once for an address marked above. */
+  function takeSaveAs(urls) { prune(); let found = false; for (const url of urls || []) if (typeof url === 'string' && saveAs.delete(url)) found = true; return found; }
   function note(text) { try { recorder('Navigation saved as a download', new Error(text)); } catch { /* logging never breaks a download */ } }
   /** {url, mime, disposition, tabUrl, wcId} → true when the download is to be cancelled and the address loaded in the tab instead. */
   function shouldRescue({ url, mime, disposition, tabUrl, wcId } = {}) {
@@ -34,7 +38,7 @@ function createNavigationRescue({ now = Date.now, record = () => {} } = {}) {
     note(`a fresh tab's ${kind(mime)} load became a download (not an attachment, nobody asked to save it): it was cancelled and the address loaded in the tab instead`);
     return true;
   }
-  return { expectSave, shouldRescue, setRecorder(next) { if (typeof next === 'function') recorder = next; } };
+  return { expectSave, markSaveAs, takeSaveAs, shouldRescue, setRecorder(next) { if (typeof next === 'function') recorder = next; } };
 }
 
 /** One per main process: the download engine asks it, the Save commands tell it, main.cjs gives it main.log. */

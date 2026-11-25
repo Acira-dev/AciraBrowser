@@ -92,10 +92,15 @@ function createPopupHold({ window, shown, geometry, now = Date.now }) {
   return hold;
 }
 
+/** One listener that hears every toolbar popup of an extension as it opens (main.cjs counts it for the usage message: the fact only, never which extension). It can never get in the way of the popup. */
+let popupListener = null;
+function onExtensionPopup(listener) { popupListener = typeof listener === 'function' ? listener : null; }
+
 /** 'browser-action-popup-created': the popup goes to the window it belongs to (a window that is closed gets nothing). */
 function noteExtensionPopup(popup) {
   try {
     if (!popup) return;
+    try { if (popupListener) popupListener(popup); } catch { /* counting is never a reason to lose the popup */ }
     for (const hold of holdsNow()) {
       let win = null;
       try { win = hold.window(); } catch { win = null; }
@@ -105,4 +110,4 @@ function noteExtensionPopup(popup) {
   } catch { /* a hold that cannot be taken is never a reason to lose the popup */ }
 }
 
-module.exports = { zonesFor, createPopupHold, noteExtensionPopup, OPENING_MS, LEEWAY };
+module.exports = { zonesFor, createPopupHold, noteExtensionPopup, onExtensionPopup, OPENING_MS, LEEWAY };

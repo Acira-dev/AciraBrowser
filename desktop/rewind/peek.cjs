@@ -9,7 +9,11 @@
 // (the page is not a tab yet), so "Open as tab" is the way to grant them.
 const path=require('node:path');
 const FRAME=path.join(__dirname,'peek-frame.html'),FRAME_PRELOAD=path.join(__dirname,'peek-frame-preload.cjs');
-const WIDTH=.78,HEIGHT=.86,HEADER=44,RADIUS=8;
+const WIDTH=.78,HEIGHT=.86,HEADER=36,RADIUS=12;
+// The look (14.5): a small chip over the card's top-left corner (back, reload, the address) and a column of four icon buttons beside its right edge, the page filling the card.
+// Both are drawn by the frame outside the card's box and ride the card's own opening (peek-frame.html). Where there is no room for them (the page area is too narrow beside the card or
+// too short above it) the card keeps its size and a slim HEADER-high bar over the page carries the same buttons as icons.
+const RAIL_PLATE=38,RAIL_GAP=8,RAIL_NEED=RAIL_GAP+RAIL_PLATE+8,CHIP_ROOM=40;
 // The frame grows the card on a spring (popover.grow, bible §4 Morph) and tells main when it is formed; the page view
 // appears on the formed card. These bound how long the native views wait for the frame if it is slow or gone.
 const REVEAL_MS=700,EXIT_MS=460;
@@ -33,13 +37,15 @@ function peekFailure(code,url){
 }
 const keys=()=>{const mod=process.platform==='darwin'?'Cmd':'Ctrl';return {close:'Esc',tab:`${mod}+Enter`,split:`${mod}+Shift+Enter`,back:'Alt+Left',reload:`${mod}+R`};};
 
-/** The card centred in the page area: a 44px header (drawn by the frame) over the page view, which sits 1px inside the
- * card on its sides and bottom so the card's hairline shows around it. Pure; coordinates are the window's. */
-function peekGeometry(page){
+/** The card centred in the page area, and the page view exactly on it (no ring: the card is a curve, rounded like the page card, with a soft shadow; the frame's surface sits 2px inside the view so no fringe shows on the curve). `layout` is 'rail' when the chip and the column fit around the card
+ * (the page then fills the card), else 'bar': a HEADER-high bar (drawn by the frame) over the page view. The card is the same size either way. Pure; coordinates are the window's. */
+function peekGeometry(page,{rtl=false}={}){
  if(!page||!(page.width>0)||!(page.height>0))return null;
  const width=Math.max(320,Math.min(page.width-32,Math.round(page.width*WIDTH))),height=Math.max(240,Math.round(page.height*HEIGHT));
  const x=Math.round(page.x+(page.width-width)/2),y=Math.round(page.y+(page.height-height)/2);
- return {frame:{x:page.x,y:page.y,width:page.width,height:page.height},card:{x:x-page.x,y:y-page.y,width,height},header:HEADER,view:{x:x+1,y:y+HEADER,width:width-2,height:height-HEADER-1}};
+ const layout=(page.width-width)/2>=RAIL_NEED&&(page.height-height)/2>=CHIP_ROOM?'rail':'bar',header=layout==='rail'?0:HEADER;
+ const view=layout==='rail'?{x,y,width,height}:{x,y:y+header,width,height:height-header};
+ return {frame:{x:page.x,y:page.y,width:page.width,height:page.height},card:{x:x-page.x,y:y-page.y,width,height},header,layout,rtl:Boolean(rtl),view};
 }
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
 /** Where on the card a window point is (the preview grows from the clicked link), clamped to the card. Pure. */
@@ -73,15 +79,17 @@ function peekKey(input,platform=process.platform){
  return null;
 }
 
-function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},dismissMenu=()=>{},pageCreated=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
- let current=null;const adopted=new Map();
+function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},download=()=>{},pageBounds,configure=()=>{},pagePreload,partitionOf,reducedMotion=()=>false,motionSpeed=()=>'premium',accent=()=>undefined,tabsWebPreferences={},focusSource=()=>{},resolveIcon=()=>{},storedIcon=()=>'',contextMenu=()=>{},dismissMenu=()=>{},pageCreated=()=>{},attachMedia=()=>{},copyText=text=>require('electron').clipboard.writeText(text)}){
+ let current=null;const adopted=new Map();const mediaIdOf=p=>'peek:'+p.sourceTabId;
  /** The page menu the preview opened goes away (main closes it only when it is the preview's own menu); never throws, the menu is an extra. */
  const menuGone=()=>{try{dismissMenu();}catch{/* the preview goes on */}};
  /** The icon this computer already keeps for the link's site (the favicon store), so a site seen before shows its icon at once; '' when there is none. */
  const stored=(profileId,url)=>{try{const icon=storedIcon(profileId,url);return typeof icon==='string'&&icon.length<=MAX_ICON?icon:'';}catch{return '';}};
  const accentOf=()=>{const value=accent();return typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value)?value:'#3b6eea';};
- const frameState=p=>({geometry:p.geometry,title:p.wc.isDestroyed()?'':p.wc.getTitle(),url:p.wc.isDestroyed()?p.url:p.wc.getURL(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),notice:p.notice||'',link:cardLink(p.geometry,p.origin),speed:reducedMotion()?'off':motionSpeed(),reducedMotion:reducedMotion(),revealed:Boolean(p.revealed),failure:p.failure||null,download:p.download?{name:p.download.name,url:p.download.url}:null,copied:Boolean(p.copiedAt&&Date.now()-p.copiedAt<COPIED_MS),dark:darkChrome(),accent:accentOf(),labels:labels(),keys:keys()});
- const publish=()=>{const p=current;emit({type:'peek-state',peek:p?{sourceTabId:p.sourceTabId,url:p.wc.isDestroyed()?p.url:p.wc.getURL()||p.url,title:p.wc.isDestroyed()?'':p.wc.getTitle(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),favicon:p.favicon||'',bounds:p.geometry?.view||null}:null});if(p&&!p.frame.webContents.isDestroyed())p.frame.webContents.send('acira:peek-frame-state',frameState(p));};
+ const frameState=p=>({geometry:p.geometry,title:p.wc.isDestroyed()?'':p.wc.getTitle(),url:p.wc.isDestroyed()?p.url:p.wc.getURL(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),notice:p.notice||'',link:cardLink(p.geometry,p.origin),speed:reducedMotion()?'off':motionSpeed(),reducedMotion:reducedMotion(),revealed:Boolean(p.revealed),failure:p.failure||null,download:p.download?{name:p.download.name,url:p.download.url}:null,copied:Boolean(p.copiedAt&&Date.now()-p.copiedAt<COPIED_MS),dark:darkChrome(),accent:accentOf(),labels:labels(),keys:keys(),layout:p.geometry?.layout||'bar',header:p.geometry?.header??HEADER,dir:p.geometry?.rtl?'rtl':'ltr'});
+ /** What the preview's page plays, for the sidebar's now-playing card (a preview is not a tab: its row is told with the preview's own state). */
+ const mediaOf=p=>p.media&&(p.media.state==='playing'||p.media.state==='paused')&&!p.wc.isDestroyed()?{mediaId:mediaIdOf(p),media:p.media.state,mediaAt:p.media.at||0,muted:p.wc.isAudioMuted()}:{};
+ const publish=()=>{const p=current;emit({type:'peek-state',peek:p?{sourceTabId:p.sourceTabId,url:p.wc.isDestroyed()?p.url:p.wc.getURL()||p.url,title:p.wc.isDestroyed()?'':p.wc.getTitle(),loading:!p.wc.isDestroyed()&&p.wc.isLoading(),canGoBack:!p.wc.isDestroyed()&&p.wc.navigationHistory.canGoBack(),favicon:p.favicon||'',bounds:p.geometry?.view||null,...mediaOf(p)}:null});if(p&&!p.frame.webContents.isDestroyed())p.frame.webContents.send('acira:peek-frame-state',frameState(p));};
  /** The page view shows once the frame's card has formed (or the frame took too long). */
  function reveal(p){clearTimeout(p.revealTimer);clearTimeout(p.capTimer);if(current!==p||p.wc.isDestroyed()||p.revealed)return;p.revealed=true;p.view.setVisible?.(!p.failure&&!p.download);publish();}
  /** Formed (the card is open, or the frame is slow) and painted (the page has a document, or it is slow): then the page shows. */
@@ -120,6 +128,9 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   const on=(emitter,name,fn)=>{emitter.on(name,fn);p.listeners.push(()=>emitter.removeListener(name,fn));};
   configure(wc.session,source.browserProfileId);
   try{pageCreated(wc,source);}catch{/* a preview opens even when its appearance could not be set */}
+  // Its sound reaches the now-playing card like a tab's, by the preview's own id (desktop/media-controls.cjs follows the page's events); the same page keeps its state when it becomes a tab (attach hands it over).
+  p.media={state:null,at:0};
+  try{attachMedia(mediaIdOf(p),wc,patch=>{if(!patch)return;if(Object.hasOwn(patch,'media'))p.media.state=patch.media||null;if(typeof patch.mediaAt==='number')p.media.at=patch.mediaAt;if(current===p)publish();},{muted:()=>!wc.isDestroyed()&&wc.isAudioMuted(),unseen:()=>false});}catch{/* a preview plays without a card */}
   wc.setWebRTCIPHandlingPolicy?.('default_public_interface_only');
   // A link that asks for a new tab stays in the peek; real popups are refused (nothing escapes).
   // Thin scrollbars have no end buttons, so nothing is cut at the rounded corner (QA M33). Kept for removal on promotion.
@@ -175,6 +186,7 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
  function promote(mode){
   const p=current;if(!p||p.wc.isDestroyed())return {ok:false,code:'closed'};
   const url=webURL(p.wc.getURL())||p.url,title=p.wc.getTitle();
+  p.muted=p.wc.isAudioMuted();
   current=null;clearTimeout(p.revealTimer);clearTimeout(p.capTimer);clearTimeout(p.copiedTimer);menuGone();detach(p);if(p.thinKey)p.wc.removeInsertedCSS(p.thinKey).catch(()=>{});p.view.setVisible?.(true);p.wc.setWindowOpenHandler(()=>({action:'deny'}));p.view.setBorderRadius?.(0);
   const before=new Set(getState().tabs.map(t=>t.id));
   // ensurePage takes this view instead of creating one; the reducer only learns the address.
@@ -184,6 +196,8 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
   if(!fresh){adopted.delete('next');try{getWindow()?.contentView.removeChildView(p.view);}catch{}p.wc.close();publish();return {ok:false,code:'failed'};}
   if(adopted.get('next')===claim){adopted.delete('next');adopted.set(fresh.id,claim);}
   if(title)dispatch({type:'tab.update',id:fresh.id,patch:{title}});
+  // A preview the person had muted stays muted as a tab (the tab's own state decides, and it would unmute the page).
+  if(p.muted)dispatch({type:'tab.mute',id:fresh.id,muted:true});
   if(mode==='split'){const split=getState().windowUi?.split;if(split?.tabIds.includes(p.sourceTabId)&&split.tabIds.length<4)dispatch({type:'split.add',tabId:fresh.id});else dispatch({type:'split.open',tabIds:[p.sourceTabId,fresh.id]});
    // The peeked page is the one being read: it becomes the current pane, so the toolbar, Ctrl+W and Close tab all mean it (founder bug 27 Oct:
    // it stayed in the background and closing "it" closed the page it came from).
@@ -203,18 +217,23 @@ function createPeek({WebContentsView,getWindow,getState,dispatch,emit=()=>{},dow
  function fromPage(sender,url,ownerTabId,origin=null){if(current&&sender===current.wc){const target=webURL(url);if(target)current.wc.loadURL(target).catch(()=>{});return true;}if(ownerTabId)return open({url,sourceTabId:ownerTabId,origin}).ok;return false;}
  function handle(request){
   if(!request||typeof request!=='object'||typeof request.type!=='string')throw new Error('Invalid peek request.');
-  const allowed={'peek.open':['url','tabId'],'peek.close':[],'peek.promote':[],'peek.split':[],'peek.state':[]}[request.type];
+  const allowed={'peek.open':['url','tabId'],'peek.close':[],'peek.promote':[],'peek.split':[],'peek.state':[],'peek.mute':['muted']}[request.type];
   if(!allowed)throw new Error('Unknown peek request.');for(const key of Object.keys(request))if(key!=='type'&&!allowed.includes(key))throw new Error('Unexpected peek request field.');
   if(request.type==='peek.open'){const state=getState();return open({url:request.url,sourceTabId:typeof request.tabId==='string'?request.tabId:state.activeTabId});}
   if(request.type==='peek.close')return {ok:close()};
   if(request.type==='peek.promote')return promote('tab');
   if(request.type==='peek.split')return promote('split');
-  const p=current;return {ok:true,peek:p?{sourceTabId:p.sourceTabId,url:p.wc.getURL()||p.url,title:p.wc.getTitle(),loading:p.wc.isLoading(),favicon:p.favicon||'',bounds:p.geometry?.view||null}:null};
+  if(request.type==='peek.mute'){const p=current;if(!p||p.wc.isDestroyed()||typeof request.muted!=='boolean')return {ok:false};p.wc.setAudioMuted(request.muted);publish();return {ok:true};}
+  const p=current;return {ok:true,peek:p?{sourceTabId:p.sourceTabId,url:p.wc.getURL()||p.url,title:p.wc.getTitle(),loading:p.wc.isLoading(),favicon:p.favicon||'',bounds:p.geometry?.view||null,...mediaOf(p)}:null};
  }
  /** The tab a preview page came from, when `wc` is the open preview's own page; null for any other contents (the context menu and the downloads act for that tab). */
  function sourceOf(wc){return current&&current.wc===wc&&!wc.isDestroyed()?current.sourceTabId:null;}
  /** The preview's own page while it holds the screen (shown, no error or download card): where the keyboard goes back to when a menu or popup over it closes. */
  function focusTarget(){const p=current;return p&&p.revealed&&!p.failure&&!p.download&&!p.wc.isDestroyed()?p.wc:null;}
- return {open,close,promote,adopt,relayout,onState,fromPage,handle,sourceOf,focusTarget,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
+ /** The open preview's sound as the card's main-sound rule reads a tab's (Alt+P): {id, media, mediaAt}, or none. */
+ function mediaTabs(){const p=current;const m=p&&!p.wc.isDestroyed()?mediaOf(p):{};return m.media?[{id:m.mediaId,media:m.media,mediaAt:m.mediaAt}]:[];}
+ /** The id the open preview's page is followed by (the card's commands name it), or null. */
+ function mediaId(){return current?mediaIdOf(current):null;}
+ return {open,close,promote,adopt,relayout,onState,fromPage,handle,sourceOf,focusTarget,mediaTabs,mediaId,get active(){return Boolean(current);},get webContents(){return current?.wc||null;}};
 }
 module.exports={createPeek,peekGeometry,cardOrigin,cardLink,peekKey,peekFailure,HEADER};

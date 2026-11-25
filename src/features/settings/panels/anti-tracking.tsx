@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { runtime } from '../../../runtime/client';
 import type { AntiTrackingChoice, AntiTrackingStatus, SafeBrowsingStatus } from '../../../runtime/nativeNetwork';
 import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
@@ -10,7 +10,7 @@ import { t, translateText } from '../../../i18n';
 
 const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '') : t('connection.error.generic'));
 
-function AntiTracking({ disabled }: { disabled: boolean }) {
+export function AntiTracking({ disabled, fold, children }: { disabled: boolean; fold?: boolean; /** Beta 14.4: Send Global Privacy Control, the same kind of choice, in this group */ children?: ReactNode }) {
   const [status, setStatus] = useState<AntiTrackingStatus>();
   const [problem, setProblem] = useState('');
   useEffect(() => {
@@ -24,7 +24,7 @@ function AntiTracking({ disabled }: { disabled: boolean }) {
   }, []);
   const settings = status?.settings;
   return (
-    <SettingGroup title={t("antiTracking.antiTracking")}>
+    <SettingGroup title={t("antiTracking.antiTracking")} fold={fold} foldDetail={fold ? t('settings.antiTrackingFoldDetail') : undefined}>
       <SettingRow id="anti-cname" title={t("privacy.blockHiddenTrackers")} detail={status ? translateText(status.notes.cname) : t('antiTracking.cnameDetail')}>
         <Switch label={t("antiTracking.blockTrackersHiddenBehindA")} checked={settings?.cnameUncloaking ?? true} disabled={disabled || !settings} onChange={(next) => void change({ cnameUncloaking: next })} />
       </SettingRow>
@@ -42,6 +42,7 @@ function AntiTracking({ disabled }: { disabled: boolean }) {
       </SettingRow>
       {settings?.fingerprint === 'strict' && <SettingNote>{t("antiTracking.strictAlsoReportsGenericGraphics")}</SettingNote>}
       {problem && <SettingNote>{problem}</SettingNote>}
+    {children}
     </SettingGroup>
   );
 }
@@ -56,7 +57,8 @@ const WORDS: Record<string, string> = {
 
 /** The one switch for phishing and malware warnings (R4-07): its own row at the top of Privacy & security, with the same name and
  * explanation as setup's Privacy step, reading and writing the same `phishingLists` choice through `antitracking.set`. */
-export function PhishingProtection({ disabled }: { disabled: boolean }) {
+/** `bare`: the row alone, for Privacy › Phishing and malware (Beta 14.4: it was an untitled block of its own). */
+export function PhishingProtection({ disabled, bare }: { disabled: boolean; bare?: boolean }) {
   const [status, setStatus] = useState<AntiTrackingStatus>();
   const [problem, setProblem] = useState('');
   useEffect(() => {
@@ -75,17 +77,18 @@ export function PhishingProtection({ disabled }: { disabled: boolean }) {
     setProblem('');
     try { setStatus((await runtime.service({ type: 'antitracking.set', patch: { phishingLists: next } })).antiTracking); } catch (reason) { setProblem(message(reason)); }
   };
-  return (
-    <SettingGroup>
+  const rows = (
+    <>
       <SettingRow id="phishing-lists" title={t("privacy.phishingProtection")} detail={detail} info={t("setup.phishing.info")}>
         <Switch label={t("privacy.phishingProtection")} checked={status?.settings.phishingLists ?? true} disabled={disabled || !status} onChange={(next) => void change(next)} />
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
-    </SettingGroup>
+    </>
   );
+  return bare ? rows : <SettingGroup>{rows}</SettingGroup>;
 }
 
-function PhishingLists({ disabled }: { disabled: boolean }) {
+export function PhishingLists({ disabled, children, after, fold }: { disabled: boolean; children?: ReactNode; /** rows after the scam-page row (Safe Browsing with your own key) */ after?: ReactNode; fold?: boolean }) {
   const [status, setStatus] = useState<AntiTrackingStatus>();
   const [problem, setProblem] = useState('');
   useEffect(() => {
@@ -98,11 +101,13 @@ function PhishingLists({ disabled }: { disabled: boolean }) {
     try { setStatus((await runtime.service({ type: 'antitracking.set', patch: { pageWarnings: next } })).antiTracking); } catch (reason) { setProblem(message(reason)); }
   };
   return (
-    <SettingGroup title={t("antiTracking.phishingAndMalware")}>
+    <SettingGroup title={t("settings.scamsGroup")} fold={fold} foldDetail={fold ? t('settings.phishingFoldDetail') : undefined}>
+      {children}
       <SettingRow id="page-warnings" title={t("privacy.warnAboutScamPages")} detail={isMac() ? t('antiTracking.pageWarningsDetailMac') : t('antiTracking.pageWarningsDetail')}>
         <Switch label={t("privacy.warnAboutScamPages")} checked={status?.settings.pageWarnings ?? true} disabled={disabled || !status} onChange={(next) => void changePage(next)} />
       </SettingRow>
       {problem && <SettingNote>{problem}</SettingNote>}
+      {after}
       <SettingNote>{t("antiTracking.usesThreePublicListsDownloaded")}</SettingNote>
     </SettingGroup>
   );
@@ -111,7 +116,7 @@ function PhishingLists({ disabled }: { disabled: boolean }) {
 /** "Passkeys and security keys" (28 Oct): off for everyone until they turn it on. Reads and writes the `passkeys` choice through `antitracking.set`; the passkey guard
  * in every web frame asks the main process at each call, so turning it off applies to open pages at once. Pages loaded while it was off carry a Permissions-Policy
  * header denying passkeys (the engine's own backstop), so turning it on reaches them after a reload: the note says so. */
-function Passkeys({ disabled }: { disabled: boolean }) {
+export function Passkeys({ disabled }: { disabled: boolean }) {
   const [status, setStatus] = useState<AntiTrackingStatus>();
   const [problem, setProblem] = useState('');
   const [justOn, setJustOn] = useState(false);
@@ -125,7 +130,7 @@ function Passkeys({ disabled }: { disabled: boolean }) {
     try { setStatus((await runtime.service({ type: 'antitracking.set', patch: { passkeys: next } })).antiTracking); setJustOn(next); } catch (reason) { setProblem(message(reason)); }
   };
   return (
-    <SettingGroup>
+    <SettingGroup title={t("settings.passkeysGroup")}>
       <SettingRow id="passkeys" title={t("privacy.passkeysAndSecurityKeys")} detail={t("privacy.passkeysDetail")}>
         <Switch label={t("privacy.passkeysAndSecurityKeys")} checked={status?.settings.passkeys ?? false} disabled={disabled || !status} onChange={(next) => void change(next)} />
       </SettingRow>
@@ -135,7 +140,8 @@ function Passkeys({ disabled }: { disabled: boolean }) {
   );
 }
 
-function SafeBrowsing({ disabled }: { disabled: boolean }) {
+/** `bare`: the row alone, for Protection › Scams, phishing and malware (Beta 14.4: one group for the three). */
+export function SafeBrowsing({ disabled, bare }: { disabled: boolean; bare?: boolean }) {
   const [status, setStatus] = useState<SafeBrowsingStatus>();
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -155,13 +161,26 @@ function SafeBrowsing({ disabled }: { disabled: boolean }) {
     : status.state === 'error' ? t('antiTracking.safeBrowsingError', { error: status.lastError ?? t('antiTracking.safeBrowsingListsFailed') })
     : t('protection.phishing.listDownloading');
   return (
-    <SettingGroup title={t("antiTracking.googleSafeBrowsingOptional")} fold>
+    bare ? <>
       <SettingRow id="safe-browsing-key" title={t("privacy.safeBrowsingWithYourOwn")} detail={detail} stacked>
         {status?.hasKey ? (
           <button type="button" className="st-button" disabled={disabled || busy} onClick={() => void run({ type: 'safebrowsing.clear-key' })}>{t("antiTracking.removeKey")}</button>
         ) : (
           <div style={{ display: 'flex', gap: 8, width: '100%', minWidth: 0 }}>
-            <input className="st-input" style={{ flex: 1, minWidth: 0 }} type="password" autoComplete="off" spellCheck={false} aria-label={t("antiTracking.googleSafeBrowsingApiKey")} placeholder={t("antiTracking.pasteYourGoogleSafeBrowsing")} value={key} disabled={disabled || busy} onChange={(event) => setKey(event.target.value)} />
+            <input className="st-input ab-input" style={{ flex: 1, minWidth: 0 }} type="password" autoComplete="off" spellCheck={false} aria-label={t("antiTracking.googleSafeBrowsingApiKey")} placeholder={t("antiTracking.pasteYourGoogleSafeBrowsing")} value={key} disabled={disabled || busy} onChange={(event) => setKey(event.target.value)} />
+            <button type="button" className="st-button primary" disabled={disabled || busy || !key.trim()} onClick={() => void run({ type: 'safebrowsing.set-key', key })}>{t("antiTracking.turnOn")}</button>
+          </div>
+        )}
+      </SettingRow>
+      {problem && <SettingNote>{problem}</SettingNote>}
+      <SettingNote>{t("antiTracking.anExtraForPeopleWho")}</SettingNote>
+    </> : <SettingGroup title={t("antiTracking.googleSafeBrowsingOptional")} fold>
+      <SettingRow id="safe-browsing-key" title={t("privacy.safeBrowsingWithYourOwn")} detail={detail} stacked>
+        {status?.hasKey ? (
+          <button type="button" className="st-button" disabled={disabled || busy} onClick={() => void run({ type: 'safebrowsing.clear-key' })}>{t("antiTracking.removeKey")}</button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, width: '100%', minWidth: 0 }}>
+            <input className="st-input ab-input" style={{ flex: 1, minWidth: 0 }} type="password" autoComplete="off" spellCheck={false} aria-label={t("antiTracking.googleSafeBrowsingApiKey")} placeholder={t("antiTracking.pasteYourGoogleSafeBrowsing")} value={key} disabled={disabled || busy} onChange={(event) => setKey(event.target.value)} />
             <button type="button" className="st-button primary" disabled={disabled || busy || !key.trim()} onClick={() => void run({ type: 'safebrowsing.set-key', key })}>{t("antiTracking.turnOn")}</button>
           </div>
         )}
@@ -186,5 +205,5 @@ function Panel({ state }: SettingsPanelProps) {
   );
 }
 
-const panel: SettingsPanel = { section: 'Privacy', order: 21, Component: Panel };
+const panel: SettingsPanel = { section: 'Protection', order: 21, placed: true, Component: Panel };
 export default panel;

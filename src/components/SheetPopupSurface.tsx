@@ -4,10 +4,11 @@ import type {PopupSurfaceProps} from './PopupSurface';
 import {runtime} from '../runtime/client';
 import {designTokens} from '../ui/designSystem';
 import {popupMorphMilliseconds} from '../ui/popupTransition';
-import {formationDialogMs,formationFrames,formationLayerFrames,formationLayerPaint,formationOpenMs,restingFormation,type FormationPaint} from '../ui/sheetFormation';
+import {dialogVapor,easyFilesPlan,easyFilesProgress,easyFilesVapor,formationDialogMs,formationEase,formationFrames,formationLayerFrames,formationLayerPaint,formationOpenMs,restingFormation,type FormationPaint} from '../ui/sheetFormation';
 import {tabViewerTokens} from '../ui/theme';
-import {frequentScale,kick,motionScaleOf,motionSpeed,springEasing,springFor,springNow,type MotionTokenId} from '../ui/sharedMotion';
+import {frequentScale,kick,motionScaleOf,motionScales,motionSpeed,springEasing,springFor,springNow,type MotionTokenId} from '../ui/sharedMotion';
 import {usePopupBackdrop,type BackdropVideo} from '../ui/usePopupBackdrop';
+import {useToastFrost} from '../ui/useToastFrost';
 import {keyboardInput} from '../ui/inputModality';
 import {popupMaterialProvider} from '../ui/popupMaterial';
 import {pickRowFor} from './popupPick';
@@ -38,14 +39,36 @@ function BackdropSources({videos}:{videos:BackdropVideo[]}) {
 // Frequent popups (right-click menus, palette, Ctrl+Tab, suggestions, find, zoom) and keyboard-opened ones skip the haze,
 // never the motion (founder rule: quick but beautiful, never zero): the glass settles in 110ms from the input frame and the
 // rows run the short cascade (below). Reduced motion (Animation speed None) is a cut, no fade; closes finish within the native retirement budget.
-const quickOpenMs=110,reducedOpenMs=0,closeMs=130;   // None (Reduce motion) opens at once: 0 (it was a 90ms fade until 6 Nov)
+const quickOpenMs=110,reducedOpenMs=0,closeMs=130;
+// Section O (Beta 14, rule 12): the address suggestions list's glass arrives out of the same blur-and-fade as what is on it, from its first frame, and leaves the same
+// way backwards: the website's own vapor (blur 5px, 220ms). ONLY the list: every other quick popup keeps today's 110ms with dense glass (the vapor fade pass across
+// menus is "still being designed" in the Beta 14 brief, so it is not started here).
+// The list's numbers are design milliseconds at the default speed (Premium): the stretch that speed puts on a frequent popup is divided out here and applied again below,
+// so Premium shows exactly 220ms in and 130ms out, Fast shows them shorter, and Off is the reduced path.
+const premiumStretch=frequentScale(motionScales.premium),suggestionsOpenMs=220/premiumStretch,suggestionsCloseMs=130/premiumStretch,suggestionsBlurPx=5,vaporCurve:[number,number,number,number]=[.22,1,.36,1];   // None (Reduce motion) opens at once: 0 (it was a 90ms fade until 6 Nov)
+// Easy Files (Beta 14, approved look): the content's vapor. A copy of the content, blurred once (a static 12px filter, never animated), lies on it and
+// crossfades with it: opening, the sharp content comes in as the copy goes (blur 12 to 0); leaving, the same animation runs backwards. `from` is how far the
+// vapor had got (0 gone, 1 formed), so a turn-around continues from the painted frame instead of jumping to either end.
+function contentVapor(plane:HTMLElement,opening:boolean,duration:number,from:number):()=>void{
+  const sharp=plane.querySelector<HTMLElement>(':scope > .popup-contents:not([data-vapor-layer])');if(!sharp||!duration)return()=>{};
+  const copy=sharp.cloneNode(true) as HTMLElement;copy.dataset.vaporLayer='';copy.setAttribute('aria-hidden','true');copy.inert=true;
+  copy.style.cssText+=`;position:absolute;left:${sharp.offsetLeft}px;top:${sharp.offsetTop}px;width:${sharp.offsetWidth}px;height:${sharp.offsetHeight}px;filter:blur(${easyFilesVapor.blurPx}px);pointer-events:none;will-change:opacity`;
+  for(const el of copy.querySelectorAll('[id],[autofocus],[tabindex],a,button,input')){el.removeAttribute('id');el.removeAttribute('autofocus');el.setAttribute('tabindex','-1');}
+  sharp.after(copy);
+  const ease=`cubic-bezier(${easyFilesVapor.fade.join(',')})`,options={duration,easing:ease,fill:'both' as const,direction:opening?'normal' as const:'reverse' as const};
+  const animations=[sharp.animate([{opacity:0},{opacity:1}],options),copy.animate([{opacity:1},{opacity:0}],options)];
+  for(const animation of animations)animation.currentTime=opening?from*duration:(1-from)*duration;
+  let ended=false;const end=()=>{if(ended)return;ended=true;for(const animation of animations)animation.cancel();copy.remove();};
+  if(opening)Promise.all(animations.map(animation=>animation.finished)).then(end,end);
+  return end;
+}
 // R4-17: the tab viewer (Alt+T or its toolbar button) keeps a visible formation at every speed except Off (Premium ≈325 /
 // 240 ms perceptual, Fast ≈0.6× of that); the glass is dense from the input frame. Founder, 27 Oct ("let it open from center
 // outwards"; tabViewerMotion.ts): no aperture and no top-down cascade any more. The plane scales up from 96% around the
 // sheet's centre on the `tabViewer.open` spring (with the launch kick), whatever opened it, while the rows form from the
 // middle outwards; the close scales back into the centre on `tabViewer.close`. The plan lasts as long as the spring settles.
 const tabViewerSpring=(opening:boolean)=>{const speed=motionSpeed(),spec=springFor(opening?'tabViewer.open':'tabViewer.close',speed);return spec?springCurve(spec,opening?kick[speed]*Math.PI*2/spec.duration:0):null;};
-const instantPopupKinds=new Set(["switcher","palette","suggestions","find","zoom","tab-context","group-context","split-context","strip-context","bookmark-context","toolbar-context","group-preview"]);
+const instantPopupKinds=new Set(["switcher","palette","suggestions","find","zoom","tab-context","group-context","split-context","strip-context","noel-context","bookmark-context","favorite-context","toolbar-context","group-preview"]);
 // A native glass sheet primes its decoded still before the first visible frame.
 // Acquisition is independent of motion; cold acquisition latency is measured
 // separately from the formation, never disguised as an opaque opening plate.
@@ -67,12 +90,14 @@ const replaying=new WeakSet<Element>();
 // Frequent and keyboard-opened popups run the short cascade (8ms, capped at 60ms, 100ms rows) without the haze. GPU only:
 // every row animates its own opacity and transform, and a haze row is a small layer whose blur is fixed, never animated
 // (bible §3.9); the copy is removed when the cascade ends.
+/** How long after its own natural end a cascade that has still not ended is ended by force (see the safety in cascade()): far longer than any hitch of a machine that does draw frames. */
+export const cascadeSafetyMs=350;
 const cascadeTiming={signature:{stagger:14,cap:90,row:120},quick:{stagger:8,cap:60,row:100}},hazeBlurPx=4,cascadeRise=3,cascadeEase='cubic-bezier(.16,1,.3,1)';
 const rowLike='button,a,input,select,textarea,label,details,hr,h1,h2,h3,h4,p,[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=option],[role=separator],.menu-row,.acira-menu-row,.tab-result-row,.palette-row';
 const riders='hr,[role=separator],.acira-menu-sep,.menu-sep,.acira-sep,.palette-section,[class*=section-label],[class*=menu-label]';
 /** A popup's rows in reading order: its header and search, then its body flattened through wrappers and groups. A
  * separator or section label joins the row after it (a trailing one joins the last row). */
-function cascadeRows(contents:HTMLElement,footer=false):HTMLElement[][]{
+export function cascadeRows(contents:HTMLElement,footer=false):HTMLElement[][]{
   const groups:HTMLElement[][]=[],pending:HTMLElement[]=[];
   const shown=(el:Element):el is HTMLElement=>el instanceof HTMLElement&&!el.hasAttribute('data-motion-skip')&&el.getClientRects().length>0;
   const add=(el:HTMLElement)=>{if(el.matches(riders)&&!el.querySelector(rowLike)){pending.push(el);return;}groups.push([...pending.splice(0),el]);};
@@ -92,7 +117,7 @@ let hazeWarm=false;
 function warmHaze(plane:HTMLElement){if(hazeWarm||plane.closest('[data-popup-warmup]'))return;/* the overlay's idle dry run (App.tsx OverlayWarmup) is never painted, so it must not mark the blurred-layer path warm */hazeWarm=true;const dot=document.createElement('div');dot.setAttribute('aria-hidden','true');dot.style.cssText=`position:absolute;left:30px;top:30px;width:12px;height:12px;background:currentColor;filter:blur(${hazeBlurPx}px);opacity:.01;pointer-events:none`;plane.append(dot);dot.animate([{opacity:.01},{opacity:.02}],{duration:48}).finished.then(()=>dot.remove(),()=>dot.remove());}
 // centreOut (the tab viewer, tabViewerMotion.ts): each row's delay grows with its distance from the sheet's centre and it
 // starts a little nearer the centre, so the rows bloom outwards from the middle; never top to bottom.
-function cascade(plane:HTMLElement,{haze:wanted,quick,upward,scale=1,centreOut=false}:{haze:boolean;quick:boolean;upward:boolean;scale?:number;centreOut?:boolean}):()=>void{
+export function cascade(plane:HTMLElement,{haze:wanted,quick,upward,scale=1,centreOut=false}:{haze:boolean;quick:boolean;upward:boolean;scale?:number;centreOut?:boolean}):()=>void{
   const haze=wanted&&hazeWarm;
   const sharp=plane.querySelector<HTMLElement>(':scope > .popup-contents:not([data-vapor-layer])');if(!sharp)return()=>{};
   const base=quick?cascadeTiming.quick:cascadeTiming.signature,timing={stagger:base.stagger*scale,cap:base.cap*scale,row:base.row*scale},order=(groups:HTMLElement[][])=>upward?groups.reverse():groups;
@@ -110,8 +135,12 @@ function cascade(plane:HTMLElement,{haze:wanted,quick,upward,scale=1,centreOut=f
   rows.forEach((group,i)=>{for(const el of group)animations.push(el.animate([{opacity:0,transform:lifts[i]},{opacity:1,transform:'none'}],{duration:timing.row,delay:delays[i],easing:cascadeEase,fill:'backwards'}));});
   // The input frame carries only the glass and the rows' start; the haze copy is built one frame later, its rows in step
   // with the sharp ones (negative delays), so the first frame presents as early as it can.
-  let copy:HTMLElement|null=null,frame=0,ended=false;const startedAt=performance.now();
-  const end=()=>{if(ended)return;ended=true;cancelAnimationFrame(frame);for(const animation of animations)animation.cancel();copy?.remove();delete plane.dataset.forming;if(wanted&&plane.isConnected)warmHaze(plane);};
+  let copy:HTMLElement|null=null,frame=0,ended=false,calm=false,safety:ReturnType<typeof setTimeout>|undefined;const startedAt=performance.now();
+  const end=()=>{if(ended)return;ended=true;clearTimeout(safety);cancelAnimationFrame(frame);for(const animation of animations)animation.cancel();copy?.remove();delete plane.dataset.forming;if(wanted&&!calm&&plane.isConnected)warmHaze(plane);};
+  // Safety (a Linux tester's 13.10 recording: every row blank, only a late-mounted row drawn): where the frame ticks for the popup are starved the rows' animations never advance, `finished` never settles, and the rows (which start from
+  // opacity 0) stay invisible for good. A healthy open ends here by itself at the end of its last row (the timer below is then cleared and never runs); a stalled one is ended `safetyMs` after that natural end: ending cancels every
+  // animation, so the rows are as styled (drawn), the haze copy is gone and the plane stops saying it is forming. Never earlier than the natural end, so the motion on a healthy machine is untouched; no haze warm-up on this path.
+  safety=setTimeout(()=>{calm=true;end();},Math.ceil(Math.max(0,...delays)+timing.row)+cascadeSafetyMs);
   const settle=()=>{Promise.all(animations.map(animation=>animation.finished)).then(end,end);};
   const addHaze=()=>{
     if(ended||!sharp.isConnected)return;
@@ -146,14 +175,16 @@ function apertureAnimation(node:HTMLElement,{width,height,origin,opening,centere
   const velocity=opening?kick[speed]*Math.PI*2/spec.duration:0,{duration,easing}=springEasing(spec,1,velocity);
   return node.animate([{clipPath:from},{clipPath:to}],{duration,easing,fill:'both'});
 }
-export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=false,overlayId,appearance,sizePending=false,keyboard=false,from,children}:PopupSurfaceProps) {
+/** A passive surface's scene (sceneKey ends in its kind): never a panel to morph from or into. */
+const passiveScene=(key:string)=>/:(?:toast|zoom|group-preview)$/.test(key);
+export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=false,overlayId,appearance,sizePending=false,keyboard=false,vaporOrigin,from,children}:PopupSurfaceProps) {
   // Selection can publish a new page context before the host close arrives.
   // Record departure before the callback so this frozen glass can finish exiting.
   const [departingScene,setDepartingScene]=useState<string>();
   const [sharpOnly,setSharpOnly]=useState(()=>matchMedia('(forced-colors: active), (prefers-contrast: more)').matches);
   useEffect(()=>{const media=matchMedia('(forced-colors: active), (prefers-contrast: more)'),update=()=>setSharpOnly(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const [present,safeToRemove]=usePresence(),inactive=closing||!present||departingScene===sceneKey,reduced=state.settings.reducedMotion||sharpOnly;
-  const root=useRef<HTMLDivElement>(null),plane=useRef<HTMLDivElement>(null),material=useRef<HTMLDivElement>(null),mist=useRef<HTMLDivElement>(null),formed=useRef(false),lastScene=useRef(sceneKey),phase=useRef<'hidden'|'opening'|'open'|'closing'>('hidden'),finish=useRef(()=>{}),vapor=useRef(()=>{}),painted=useRef<FormationPaint>({}),apertureRef=useRef<Animation|null>(null);
+  const root=useRef<HTMLDivElement>(null),plane=useRef<HTMLDivElement>(null),material=useRef<HTMLDivElement>(null),mist=useRef<HTMLDivElement>(null),formed=useRef(false),lastScene=useRef(sceneKey),phase=useRef<'hidden'|'opening'|'open'|'closing'>('hidden'),finish=useRef(()=>{}),vapor=useRef(()=>{}),painted=useRef<FormationPaint>({}),apertureRef=useRef<Animation|null>(null),/* Easy Files: where its vapor stands (0 gone, 1 formed), so a close during the open (or the reverse) turns round on the painted frame */efAt=useRef(0);
   const pendingPick=useRef<{row:HTMLElement;timer:ReturnType<typeof setTimeout>}|null>(null),pickContext=useRef({inactive,sceneKey});
   pickContext.current={inactive,sceneKey};
   const cancelPick=useCallback(()=>{const pending=pendingPick.current;if(!pending)return;clearTimeout(pending.timer);delete pending.row.dataset.picked;pendingPick.current=null;if(root.current)delete root.current.dataset.pick;},[]);
@@ -163,14 +194,24 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
   const [ready,setReady]=useState(false),[interactive,setInteractive]=useState(false),[settled,setSettled]=useState(false);
   const context=[state.activeBrowserProfileId,state.activeTabId,state.windowUi.split?.tabIds.join(','),state.settings.interfaceScale].join(':');
   const primedContext=useRef(context),contextPrimed=primedContext.current===context,visibleReady=ready&&(contextPrimed||inactive);
-  const backdrop=usePopupBackdrop({id:overlayId,enabled:native&&!state.settings.reducedTransparency,closing:inactive,context});
-  const provider=popupMaterialProvider({native,reducedTransparency:state.settings.reducedTransparency,status:backdrop.status,opaque:backdrop.opaque,visible:visibleReady});
+  /* Beta 14: the welcome has no glass of its own (the whole window frosts behind it, desktop/welcome-frost.cjs) */const welcome=sceneKey.endsWith(':welcome');
+  const backdrop=usePopupBackdrop({id:overlayId,enabled:native&&!state.settings.reducedTransparency&&!welcome,closing:inactive,context,geometryKey:`${geometry.bounds.x},${geometry.bounds.y},${geometry.bounds.width},${geometry.bounds.height}`});
+  const provider=welcome?'opaque':popupMaterialProvider({native,reducedTransparency:state.settings.reducedTransparency,status:backdrop.status,opaque:backdrop.opaque,visible:visibleReady});
   useLayoutEffect(()=>{
     if(contextPrimed||inactive)return;
     // A new context cannot display the old frozen pixels or an opaque warming
     // plate. Re-prime before its first visible frame; an old close may finish.
     primedContext.current=context;vapor.current();formed.current=false;painted.current={};phase.current='hidden';setReady(false);setInteractive(false);setSettled(false);
   },[context,contextPrimed,inactive]);
+  // A toast, the zoom figure and a group's preview are passive surfaces, not a panel (main's host says the same, desktop/composition.cjs placeFloating):
+  // a popup taking over from one, or one taking over from a popup, opens fresh in its own place. It morphed from the other's box instead, so
+  // Profiles opened from its chip flew in from the toast's corner (the team, Beta 14 on 13.10: "glitches and then shows"). Popup to popup still morphs.
+  const shownScene=useRef(sceneKey),passiveSwitch=shownScene.current!==sceneKey&&passiveScene(shownScene.current)!==passiveScene(sceneKey);
+  useLayoutEffect(()=>{
+    const was=shownScene.current;shownScene.current=sceneKey;
+    if(inactive||was===sceneKey||passiveScene(was)===passiveScene(sceneKey))return;
+    vapor.current();formed.current=false;painted.current={};phase.current='hidden';setReady(false);setInteractive(false);setSettled(false);
+  },[sceneKey,inactive]);
   const [sizeLate,setSizeLate]=useState(false);
   useEffect(()=>{setSizeLate(false);if(!sizePending||inactive)return;const timer=setTimeout(()=>setSizeLate(true),sizeWaitMs);return()=>clearTimeout(timer);},[sizePending,inactive,overlayId]);
   const materialReady=(contextPrimed||inactive)&&provider!=='pending'&&(ready||!sizePending||sizeLate);
@@ -219,13 +260,27 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
     const speed=reduced?1:motionScaleOf(state.settings),stretch=instant||keyed?frequentScale(speed):speed;
     // A toast host leaves at once: its cards have already left on their own spring, and the bare host holds no material to fade.
     const viewerSpring=tabViewer?tabViewerSpring(!inactive):null;
-    const duration=tabViewer?viewerSpring?.duration??reducedOpenMs:(inactive?(keyed||sceneKey.endsWith(':toast')?0:closeMs):reduced?reducedOpenMs:quick?quickOpenMs:centered?formationDialogMs:formationOpenMs)*(reduced?1:stretch);
+    // The plane (glass, mist and everything drawn on it) carries opacity, focus and rise on ONE curve, so the glass is never denser than its content, in either
+    // direction. Only where the glass is Acira's own (a native-material fallback or a page-drawn popup keeps today's look) and never for the tab viewer or a toast.
+    const suggestionsKind=kind==='suggestions',glassVapor=suggestionsKind&&!tabViewer&&!reduced&&provider!=='css'&&!sceneKey.endsWith(':toast')&&(inactive?instant:quick),vaporBlur=suggestionsBlurPx;
+    // Beta 14: a dialog or a prompt forms and leaves as the reference design's sample does (dialogVapor): one flat plane, no cascade, no reveal clip, the exit is the entrance backwards.
+    const dialogKind=kind in dialogVapor.kinds,dialogVaporOn=dialogKind&&!tabViewer&&!reduced&&provider!=='css'&&!sceneKey.endsWith(':toast'),dialogEase=(x:number)=>formationEase(x,dialogVapor.curve),dialogRise=dialogKind?dialogVapor.kinds[kind].rise:0;
+    // Easy Files (approved look): the vapor, in and out on one clock, 150ms x the motion speed setting (the sample's own `stretch`: the house shortens it for a key press, as for every popup). Esc and a click away leave the same way: never a cut.
+    const ef=kind==='easy-files'&&!reduced;
+    const duration=ef?easyFilesVapor.ms*stretch:tabViewer?viewerSpring?.duration??reducedOpenMs:dialogVaporOn?dialogVapor.ms*speed:(inactive?((keyed&&!(glassVapor&&suggestionsKind))||sceneKey.endsWith(':toast')?0:glassVapor&&suggestionsKind?suggestionsCloseMs:closeMs):reduced?reducedOpenMs:quick?(glassVapor&&suggestionsKind?suggestionsOpenMs:quickOpenMs):centered?formationDialogMs:formationOpenMs)*(reduced?1:stretch);
     // The signature open (cascade, above): the glass is on screen from the input frame (.7, scale .985, its frost
     // thickening out of the mist) and the rows form on their own clock; reduced motion is a cut (a zero-length plan paints its last frame at once).
     // Keyboard, 100x/day and centred panels (Alt+T) open dense: dark from their first frame in dark, never a grey plate.
-    const glassFloor=quick||centered&&!inactive?1:0;
-    const signature=!inactive&&!switching&&!reversing&&!reduced&&!sceneKey.endsWith(':toast');
-    const lift=quick?3:4,plan=formationFrames({start,closing:inactive,switching,reversing,continuing:phase.current==='opening'||phase.current==='open',reduced:inactive?quiet:reduced,duration,firstDelay:0,enterOpacity:reduced?0:glassFloor?.9:quick?.8:.7,rowStart:1,stagger:0,count:0,blur:0,enterScale:tabViewer?tabViewerScale:.985,exitScale:tabViewer?tabViewerScale:.98,exitBlur:0,...(viewerSpring?{curve:viewerSpring.at}:{}),rise:centered?0:geometry.origin.y>.5?lift:-lift,exitRise:centered?0:geometry.origin.y>.5?2:-2});
+    const glassFloor=glassVapor?0:quick||centered&&!inactive?1:0;
+    const signature=!inactive&&!switching&&!reversing&&!reduced&&!sceneKey.endsWith(':toast')&&!dialogVaporOn;
+    const lift=quick||glassVapor?3:4,rise=centered?0:geometry.origin.y>.5?lift:-lift,vaporScale=suggestionsKind?1:.985,vaporEase=(x:number)=>formationEase(x,vaporCurve);
+    // Where the vapor stands now (0 gone, 1 formed): a turn-around plays from there, forwards to open and backwards to leave, never from either end.
+    const efD=duration,efF=ef?(phase.current==='opening'||phase.current==='closing'?efAt.current:inactive?1:0):0;
+    const plan=ef?easyFilesPlan(duration,inactive,efF):formationFrames({start,closing:inactive,switching,reversing,continuing:phase.current==='opening'||phase.current==='open',reduced:inactive?quiet:reduced,duration,firstDelay:0,enterOpacity:reduced?0:glassFloor?.9:quick?.8:.7,rowStart:1,stagger:0,count:0,blur:0,enterScale:tabViewer?tabViewerScale:.985,exitScale:tabViewer?tabViewerScale:.98,exitBlur:0,...(viewerSpring?{curve:viewerSpring.at}:{}),rise:centered?0:geometry.origin.y>.5?lift:-lift,exitRise:centered?0:geometry.origin.y>.5?2:-2,
+     // the vapor (above): one curve for opacity, focus and rise, in and out
+     ...(glassVapor?{unified:true,reduced:false,enterOpacity:0,blur:vaporBlur,enterScale:vaporScale,exitScale:vaporScale,exitBlur:vaporBlur,exitRise:rise,curve:inactive?(time:number)=>1-vaporEase(1-time/duration):(time:number)=>vaporEase(time/duration)}:{}),
+     // a dialog or a prompt (the sample's own vapor, src/ui/sheetFormation.ts dialogVapor)
+     ...(dialogVaporOn?{unified:true,reduced:false,enterOpacity:0,blur:dialogVapor.blurPx,enterScale:dialogVapor.scale,exitScale:dialogVapor.scale,exitBlur:dialogVapor.blurPx,rise:dialogRise,exitRise:dialogRise,curve:inactive?(time:number)=>1-dialogEase(1-time/duration):(time:number)=>dialogEase(time/duration)}:{})});
     phase.current=inactive?'closing':'opening';setInteractive(!inactive);setSettled(false);
     // A local backdrop-filter must sample outside its parent: for the CSS provider the plate itself carries the glass
     // progress, never its wrapper. Captured and native material ride the wrapper with the frozen frost inside it.
@@ -235,38 +290,39 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
     // glass itself is dense from the input frame (it fades only with the sheet, on close or in reduced motion).
     const contents=provider==='css'?node.querySelector<HTMLElement>('.popup-contents'):null,frost=!!contents&&!inactive&&!reduced;
     const layered=(layers:ReturnType<typeof formationLayerPaint>)=>!contents?layers:{plane:{opacity:1,transform:'none'},material:{...layers.material,opacity:frost?1:layers.material.opacity*layers.plane.opacity,transform:`${layers.plane.transform} ${layers.material.transform}`},mist:{...layers.mist,opacity:layers.mist.opacity*layers.plane.opacity}};
-    const paint=(value:FormationPaint,rest=false)=>{painted.current=value;const base=formationLayerPaint(value,glassFloor),layers=layered(base);Object.assign(node.style,layers.plane);if(contents){contents.style.opacity=String(base.plane.opacity);contents.style.transform=rest?'none':base.plane.transform;}Object.assign(glass.style,layers.material);Object.assign(haze.style,layers.mist);if(rest){node.style.transform='none';glass.style.transform='none';}};
+    const paint=(value:FormationPaint,rest=false)=>{painted.current=value;const base=formationLayerPaint(value,glassFloor,glassVapor||dialogVaporOn,dialogVaporOn),layers=layered(base);Object.assign(node.style,layers.plane);if(contents){contents.style.opacity=String(base.plane.opacity);contents.style.transform=rest?'none':base.plane.transform;}Object.assign(glass.style,layers.material);Object.assign(haze.style,layers.mist);if(rest){node.style.transform='none';glass.style.transform='none';}};
     // The plane's own motion (the rise and the 1.5% condense) rides on the glass and the text instead, about the same corner: a running transform on an
     // ancestor of the glass keeps its backdrop-filter from sampling the page until it ends (the sharp page showed through for ~300ms, then the frost came).
     if(contents)contents.style.transformOrigin=glass.style.transformOrigin=`${(from??geometry.origin).x*100}% ${(from??geometry.origin).y*100}%`;
     const startedAt=performance.now();
     let cancelled=false,done=false,timer:ReturnType<typeof setTimeout>|undefined;
-    const complete=()=>{if(done||cancelled)return;done=true;clearTimeout(timer);paint(plan.final,!inactive);formed.current=!inactive;phase.current=inactive?'hidden':'open';setSettled(!inactive);if(inactive){vapor.current();if(!present)safeToRemove?.();}else root.current?.dispatchEvent(new Event('acira-popup-ready',{bubbles:true}));};
+    const complete=()=>{if(done||cancelled)return;done=true;if(ef)efAt.current=inactive?0:1;clearTimeout(timer);paint(plan.final,!inactive);formed.current=!inactive;phase.current=inactive?'hidden':'open';setSettled(!inactive);if(inactive){vapor.current();if(!present)safeToRemove?.();}else root.current?.dispatchEvent(new Event('acira-popup-ready',{bubbles:true}));};
     paint(plan.at(0));
-    if(signature){vapor.current();vapor.current=cascade(node,{haze:!quick,quick,upward:geometry.origin.y===1,scale:stretch,centreOut:tabViewer});}else if(reduced||inactive)vapor.current();
+    if(ef){vapor.current();vapor.current=contentVapor(node,!inactive,efD,efF);}else if(signature&&!welcome){/* Beta 14: the welcome reveals itself (its own rise after the frost starts); the rows cascade of the other pop-ups would show its subtitle, coin hint and progress dots over the still-sharp window for 100-400 ms first (found in the sample, which has it) */vapor.current();vapor.current=cascade(node,{haze:!quick,quick,upward:geometry.origin.y===1,scale:stretch,centreOut:tabViewer});}else if(reduced||inactive)vapor.current();
     if(!plan.duration){complete();return()=>{cancelled=true;};}
-    const layers=formationLayerFrames(plan,glassFloor),options={duration:plan.duration,easing:'linear',fill:'forwards' as const};
+    const layers=formationLayerFrames(plan,glassFloor,glassVapor||dialogVaporOn,dialogVaporOn),options={duration:plan.duration,easing:'linear',fill:'forwards' as const};
     const origin=from??geometry.origin,opening=!inactive;
     const previousAperture=apertureRef.current,apertureFor=(el:HTMLElement,pad:number)=>apertureAnimation(el,{width:geometry.bounds.width,height:geometry.bounds.height,origin,opening,centered:geometry.origin.x===.5&&geometry.origin.y===.5,previous:previousAperture,tabViewer,pad});
-    const aperture=!quiet&&!switching&&!tabViewer&&provider!=='native'&&!sceneKey.endsWith(':toast')?(contents?apertureFor(glass,0):apertureFor(node,24)):null;
+    const aperture=!ef&&!quiet&&!switching&&!tabViewer&&provider!=='native'&&!sceneKey.endsWith(':toast')&&!dialogVaporOn?(contents?apertureFor(glass,0):apertureFor(node,24)):null;
     apertureRef.current=aperture;
     const followers=aperture&&contents?[contents,haze].flatMap(el=>{const follow=apertureFor(el,0);return follow?[follow]:[];}):[];
     const planeFrames=layers.plane,materialFrames=contents?layers.material.map((frame,i)=>({...frame,opacity:frost?1:frame.opacity*layers.plane[i].opacity,transform:`${layers.plane[i].transform} ${frame.transform}`})):layers.material,mistFrames=contents?layers.mist.map((frame,i)=>({...frame,opacity:frame.opacity*layers.plane[i].opacity})):layers.mist;
     const animations=[...(contents?[]:[node.animate(planeFrames,options)]),glass.animate(materialFrames,options),haze.animate(mistFrames,options),...(contents?[contents.animate(layers.plane.map(({offset,opacity,transform})=>({offset,opacity,transform})),options)]:[]),...(aperture?[aperture]:[]),...followers];
     const hold=Math.max(plan.duration,Number(aperture?.effect?.getComputedTiming().endTime)||0);
     finish.current=()=>{complete();animations.forEach(animation=>animation.cancel());vapor.current();};timer=setTimeout(()=>{complete();animations.forEach(animation=>animation.cancel());},hold+16);
-    return()=>{if(!done)paint(plan.at(Math.min(plan.duration,performance.now()-startedAt)));cancelled=true;clearTimeout(timer);animations.forEach(animation=>animation.cancel());finish.current=()=>{};};
+    return()=>{if(!done){const elapsed=Math.min(plan.duration,performance.now()-startedAt);paint(plan.at(elapsed));if(ef&&efD)efAt.current=easyFilesProgress(efD,inactive,efF,elapsed);}cancelled=true;clearTimeout(timer);animations.forEach(animation=>animation.cancel());finish.current=()=>{};};
   },[visibleReady,inactive,reduced,sceneKey]);
   const centered=geometry.origin.x===.5&&geometry.origin.y===.5,formationOrigin=sceneKey.endsWith(':tabs')?tabViewerOrigin:from??geometry.origin;
-  const x=geometry.bounds.x,y=geometry.bounds.y,morphSpeed=motionScaleOf(state.settings),morph=formed.current?popupMorphMilliseconds(reduced,morphSpeed>0?1/morphSpeed:1)/1000:0;
+  const x=geometry.bounds.x,y=geometry.bounds.y,morphSpeed=motionScaleOf(state.settings),morph=formed.current&&!passiveSwitch?popupMorphMilliseconds(reduced,morphSpeed>0?1/morphSpeed:1)/1000:0;
   // R3-70: preserve upstream popover spring while retaining the existing identity material.
   const plateSpring=springNow('popover.grow');
   const identity=/(?:^|:)(?:profile|extensions)$/.test(sceneKey);
   const popupSettings=identity?{...state.settings,glassOpacity:Math.max(state.settings.glassOpacity??64,designTokens.material.identityTint*100)}:state.settings;
   const popupDark=appearance?appearance==='dark':state.settings.appearance==='dark'||state.settings.appearance==='system'&&matchMedia('(prefers-color-scheme: dark)').matches;
   const appearanceTokens=appearance||identity?tabViewerTokens(popupSettings,popupDark):{};
+  useToastFrost({root,enabled:sceneKey.endsWith(':toast'),videos:backdrop.videos,status:backdrop.status,dark:popupDark,glass:popupSettings.glassOpacity??64});   // Beta 14: the toast's frosted glass (ui/toastFrost.ts)
   return <motion.div ref={root} className={`popup-surface acira-popup-surface sheet-popup ${centered?'centered-tab-surface ':''}${native?'native-popup-surface':'local-popup'}`}
-    data-identity-material={identity||undefined} data-material-warming={backdrop.status==='pending'||undefined} data-material-priming={!formed.current||undefined} data-formation-ready={settled||undefined} data-bare={sceneKey.endsWith(':toast')||undefined} data-size-pending={!visibleReady&&sizePending||undefined} data-popup-appearance={appearance} data-material-provider={provider} data-material-frame={provider==='live'?'frozen':undefined} data-sheet-origin={centered?'center':`${geometry.origin.y>.5?'bottom':'top'}-${geometry.origin.x>.5?'right':'left'}`} data-preparing={!visibleReady||undefined}
+    data-panel-vapor={(sceneKey.split(':').pop()==='suggestions'&&!reduced&&provider!=='css')||undefined} data-identity-material={identity||undefined} data-material-warming={backdrop.status==='pending'||undefined} data-material-priming={!formed.current||undefined} data-formation-ready={settled||undefined} data-bare={sceneKey.endsWith(':toast')||undefined} data-size-pending={!visibleReady&&sizePending||undefined} data-popup-appearance={appearance} data-material-provider={provider} data-material-frame={provider==='live'?'frozen':undefined} data-sheet-origin={centered?'center':`${geometry.origin.y>.5?'bottom':'top'}-${geometry.origin.x>.5?'right':'left'}`} data-preparing={!visibleReady||undefined}
     inert={inactive||!visibleReady||!interactive||undefined} style={{...appearanceTokens,position:'absolute',visibility:!visibleReady?'hidden':undefined,pointerEvents:inactive||!interactive?'none':undefined,'--popup-x':`${x}px`,'--popup-y':`${y}px`} as CSSProperties}
     initial={false} animate={{left:x,top:y,width:geometry.bounds.width,height:geometry.bounds.height}} transition={morph>0&&plateSpring?{type:'spring',duration:plateSpring.duration,bounce:0}:{duration:0}}
     onUpdate={value=>{if(typeof value.left==='number')root.current?.style.setProperty('--popup-x',`${value.left}px`);if(typeof value.top==='number')root.current?.style.setProperty('--popup-y',`${value.top}px`);}}
@@ -290,7 +346,7 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
       finish.current();
     }} onKeyDownCapture={event=>{cancelPick();if(event.key!=='Escape')finish.current();}}
     onMouseDown={event=>event.stopPropagation()}>
-    <div ref={plane} className="popup-sheet-plane" style={{'--formation-origin':`calc(24px + (100% - 48px) * ${formationOrigin.x}) calc(24px + (100% - 48px) * ${formationOrigin.y})`} as CSSProperties}>
+    <div ref={plane} className="popup-sheet-plane" style={{'--formation-origin':`calc(24px + (100% - 48px) * ${formationOrigin.x}) calc(24px + (100% - 48px) * ${formationOrigin.y})`,...(dialogVapor.kinds[sceneKey.split(':').pop()||'']?.origin?{'--formation-origin':vaporOrigin||dialogVapor.kinds[sceneKey.split(':').pop()||''].origin}:{})} as CSSProperties}>
       <div ref={mist} className="popup-sheet-mist" aria-hidden="true"/>
       <div ref={material} className="popup-sheet-material" aria-hidden="true">{(provider==='live'||provider==='opaque'||provider==='pending')&&<div className="popup-backdrop-clip" aria-hidden="true"><div className="popup-backdrop-base"/><div className="popup-captured-material" data-shown={backdrop.status==='live'&&!backdrop.opaque||undefined}><BackdropSources videos={backdrop.videos}/><div className="popup-backdrop-tint"/></div></div>}
       <div className="popup-material" aria-hidden="true" style={{inset:24}}/></div>

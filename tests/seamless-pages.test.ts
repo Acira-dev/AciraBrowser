@@ -37,6 +37,8 @@ g.document = {
 
 const require = createRequire(import.meta.url);
 const edge = require('../src/ui/chromeEdge.ts') as typeof import('../src/ui/chromeEdge');
+// Beta 14 smoothness (B3): the float's values live in their own rule for the pictures and the overlay pieces (src/ui/edgeVars.ts), not on <html> or .app.
+const edgeVars = require('../src/ui/edgeVars.ts') as typeof import('../src/ui/edgeVars');
 edge.installChromeEdge(); edge.bindEdgeTab('active');
 const paint = async () => {for(let frame=0;frame<8;frame++)await Promise.resolve();};
 const say = async (side: boolean, top = false) => {listener?.({ type: 'chrome-edge', side, top, pinned: { side: false, top: false } });await paint();};
@@ -75,14 +77,14 @@ for (const kind of kinds) {
 // A split's panes keep their resting place under a floating sidebar (the page area is the window onto them), so the card's edge, its corner pieces and the clip travel
 // were measured at the panes' own left (6) instead of the sidebar's edge: the card's corners stood square at the sidebar and its pieces sat beneath it.
 test('Seamless split: beside the floating sidebar the card is cut where the sidebar meets it, as a single page is', async () => {
-  const mask = () => /d='([^']*)'/.exec(decodeURIComponent(app.style.getPropertyValue('--sf-corner-mask')))?.[1] ?? 'none';
+  const mask = () => /d='([^']*)'/.exec(decodeURIComponent(edgeVars.edgeVar('--sf-corner-mask')))?.[1] ?? 'none';
   panes = [{ rect: rect(6, 6, 630, 808), tabId: 'left', label: 26 }, { rect: rect(644, 6, 630, 808), tabId: 'right', label: 26 }];
   areaRect = rect(6, 6, 1268, 808); edge.setEdgeFloatable(true, true); await reset();
   await say(true);
-  assert.equal(app.style.getPropertyValue('--sf-corner-x'), '6px', 'at rest the card starts at its own left edge');
+  assert.equal(edgeVars.edgeVar('--sf-corner-x'), '6px', 'at rest the card starts at its own left edge');
   // The sidebar's layout arrives: the area is the card beside it (246), the panes have not moved.
   areaRect = rect(246, 6, 1028, 808); edge.refreshEdgeFloat();
-  assert.equal(app.style.getPropertyValue('--sf-corner-x'), '246px', 'the corner pieces stand at the sidebar edge, not under it');
+  assert.equal(edgeVars.edgeVar('--sf-corner-x'), '246px', 'the corner pieces stand at the sidebar edge, not under it');
   assert.equal(mask(), '', 'a title strip over the top: the frame tint is already there, no piece doubles it');
   // The toolbar shows too: the area starts under it, the strip is covered, and the corner piece stands at the card's top as on a single page.
   areaRect = rect(246, 40, 1028, 774); edge.refreshEdgeFloat();
@@ -94,7 +96,7 @@ test('Seamless split: beside the floating sidebar the card is cut where the side
 // sidebar, which already tints that column itself (a dark stripe across the sidebar, 26 against 41 in dark); the corners between two panes stayed square, and the upper one's bottom corner
 // got a piece over the split's ground (a dark wedge).
 test('Seamless split: stacked panes leave the sidebar column untinted by the frame, cut each pane round at its edge, and give only the card\'s bottom corner a piece', async () => {
-  const decoded = (name: string) => decodeURIComponent(app.style.getPropertyValue(name));
+  const decoded = (name: string) => decodeURIComponent(edgeVars.edgeVar(name));
   panes = [{ rect: rect(6, 6, 1268, 380), tabId: 'top', label: 26 }, { rect: rect(7, 392, 1267, 422), tabId: 'bottom', label: 26 }];
   areaRect = rect(6, 6, 1268, 808); edge.setEdgeFloatable(true, false, true); await reset();
   await say(true);
@@ -182,7 +184,7 @@ test('Seamless (R4-59): a reveal or hide moves the toolbar as one layer; no cont
   assert.match(edgeSource, /'--sf-rim-shift-to', arriving \|\| stays \? '0px' : away/);
   // A sidebar pinned first, the top bar floated in after: the travel an earlier reveal left would cut 234px off the page's left edge (bare glass in the gap), and the frame's veil, whose
   // hole began at the page beside the sidebar, covered the pinned column under the sidebar's own copy (a darker column below the bar).
-  assert.match(edgeSource, /if \(edge\.pinned\.side\) root\.style\.setProperty\('--sf-sidebar-travel', '0px'\);/);
+  assert.match(edgeSource, /if \(edge\.pinned\.side\) setEdgeVar\('--sf-sidebar-travel', '0px'\);/);
   // (`pr` is the page's rect on the side the sidebar is on: the mirror image of the window for a sidebar on the right, see paintPageHoles.)
   assert.match(edgeSource, /under = \(h: Hole\) => snapPx\(pr!\.left\) < h\.x \|\| \(edge\.pinned\.side && h\.x > 0\)/);
   // A sidebar leaving (Compact, Focus or Seamless): the card line's stroke up the sidebar's edge is dropped before the old picture is taken. Its picture is held still while only the clip follows the
@@ -241,7 +243,7 @@ test('None: the edge reveals and hides at once, with no view transition and no f
   await say(false); watch();
   assert.equal(seen.has('edgeFade'), false, 'no fade attribute');
   assert.equal(seen.has('modeSwitch'), false, 'no view transition');
-  assert.equal(root.style.getPropertyValue('--edge-ms'), '', 'no edge duration was set');
+  assert.equal(edgeVars.edgeVar('--edge-ms'), '', 'no edge duration was set');
   assert.equal(root.style.getPropertyValue('--edge-fade-ms'), '');
   await reset();
 });

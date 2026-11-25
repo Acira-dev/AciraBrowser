@@ -32,7 +32,7 @@ const settingsFiles = [
   'src/features/FilterListSettings.tsx', 'src/features/accounts/ProfileManager.tsx', 'src/features/profile-privacy/ProfileCleanupSettings.tsx',
   'src/features/connection/VpnPanel.tsx', 'src/features/metrics/UsageOffNotice.tsx', 'src/features/metrics/UsageSent.tsx',
   'src/features/tor/TorLevel.tsx', 'src/features/tor/TorOnion.tsx', 'src/features/workspaces/SecuredSettings.tsx',
-  'src/features/import-export/ImportPanel.tsx', 'src/features/import-export/ExtensionReinstall.tsx',
+  'src/features/import-export/ImportPanel.tsx', 'src/features/import-export/TransferRows.tsx', 'src/features/import-export/ExtensionReinstall.tsx',
   'src/components/AppearanceControls.tsx', 'src/components/MenuCustomizer.tsx', 'src/components/PageZoomControls.tsx', 'src/components/ExtensionManager.tsx',
   'src/components/WorkspaceCoverPicker.tsx', 'src/components/SettingInfo.tsx',
   'src/ui/toolbarMenu.ts', 'src/ui/windowViewText.ts', 'src/ui/shortcutGroups.ts', 'src/ui/shortcutKeys.ts', 'src/ui/webApps.ts', 'src/ui/releaseVersion.ts',
@@ -50,6 +50,8 @@ test('Settings source files keep every readable string in the catalog', () => {
 const settingsIds = [...new Set(settingsFiles.flatMap(file => [...fs.readFileSync(path.join(root, file), 'utf8').matchAll(/["'`]([A-Za-z][\w-]*(?:\.[\w-]+)+)["'`]/g)].map(match => match[1])).filter(id => id in en))];
 /** Words the catalogs keep as they are (names, units, key names). A message longer than this that reads the same as English was not translated. */
 const sameInEveryLanguage = (text: string) => (text.replace(/\{[^{}]*\}/g, '').match(/[A-Za-zÀ-ɏ]{3,}/g) ?? []).length < 3;
+/** Translations that read like an English line Settings shows for another message (a homograph), by language and the message they translate. */
+const HOMOGRAPHS: readonly (readonly [string, string])[] = [['fr', 'sidebar.sizeWide']];
 /** Messages that read the same as English on purpose, and where. */
 const SAME_AS_ENGLISH: Record<string, readonly string[]> = {
   'connection.bridges.placeholder': others, // an example Tor bridge line
@@ -101,6 +103,8 @@ test('every Settings section, in every language, shows no English the catalog do
         if (text === format('en', en[id], params)) kept.add(text);
       }
     }
+    // A word that is the language's own and happens to be an English line too (14.3: English "Large" is the Tab size; French "Large" is the sidebar's Wide, sidebar.sizeWide).
+    for (const [lang, id] of HOMOGRAPHS) if (lang === code && messages[id]) kept.add(messages[id]);
     const shown = Object.entries(results[code].sections).flatMap(([section, lines]) => lines.map(line => [section, line])).concat(results[code].registry.map(line => ['search', line]));
     for (const [section, line] of shown) {
       if (!english.has(line) || !/[A-Za-z]{3}/.test(line) || kept.has(line) || NAMES.has(line) || data.has(line) || looksLikeData(line)) continue;

@@ -32,7 +32,7 @@ function cleanGroups(list,tabIds){
  for(const group of Array.isArray(list)?list:[]){
   if(!group||typeof group!=='object'||typeof group.id!=='string'||!ID.test(group.id)||seen.has(group.id))continue;
   const name=text(group.name,GROUP_MAX).trim();if(!name)continue;seen.add(group.id);
-  out.push({id:group.id,name,color:COLORS.has(group.color)?group.color:'none',collapsed:group.collapsed===true,...(typeof group.lastActiveTabId==='string'&&tabIds.has(group.lastActiveTabId)?{lastActiveTabId:group.lastActiveTabId}:{})});
+  out.push({id:group.id,name,color:COLORS.has(group.color)?group.color:'none',...(typeof group.auto==='boolean'?{auto:group.auto}:{}),...(typeof group.parentGroupId==='string'&&ID.test(group.parentGroupId)?{parentGroupId:group.parentGroupId}:{}),collapsed:group.collapsed===true,...(typeof group.lastActiveTabId==='string'&&tabIds.has(group.lastActiveTabId)?{lastActiveTabId:group.lastActiveTabId}:{})});
   if(out.length>=MAX_GROUPS)break;
  }
  return out;

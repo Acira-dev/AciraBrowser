@@ -90,5 +90,6 @@ test('each address is resolved once: a ranking repeated over the same history re
 
 test('the window ranks only while the field is in use or its list is open', () => {
   assert.ok(app.includes("const suggestionsWanted = addressFocused || overlay === 'suggestions' || ntpOn;"), '13.10: or the New Tab page\'s search box is the field the list serves');
-  assert.ok(app.includes("const suggestions = suggestionsWanted ? rankAddressSuggestions(suggestionText, state, 8, { commands: addressCommands }) : []"));
+  // Beta 14: the search engine's suggestions are added after the person's own ranking, inside the same condition: nothing is ranked or merged while the field is not in use.
+  assert.ok(app.includes("const suggestions = suggestionsWanted ? withEngineSuggestions(rankAddressSuggestions(suggestionText, state, 8, { commands: addressCommands }), engineSuggest"));
 });

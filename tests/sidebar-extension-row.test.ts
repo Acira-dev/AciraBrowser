@@ -17,22 +17,24 @@ const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('the row exists, is a labelled group, and is hidden (no padding, no empty box) while there is nothing pinned to show', () => {
   const html = renderToStaticMarkup(createElement(SidebarExtensions, { tab: null }));
-  assert.match(html, /<div class="sb-ext-row" role="group" aria-label="[^"]+" hidden="">/);
+  assert.match(html, /<div class="sb-ext-row" role="group" aria-label="[^"]+" title="[^"]+" hidden="">/);
   assert.doesNotMatch(html, /<button/);
 });
 
-test('the sidebar draws the row first in its content, above the workspace title and the tab list, and not while it is being customized', () => {
+test('the sidebar draws the row as a block (the top edge by default: above the workspace title and the tab list; or in the list; or off), and not while it is being customized', () => {
   const source = read('src/components/sidebar/AciraSidebar.tsx');
-  assert.match(source, /import \{ SidebarExtensions \} from '\.\/SidebarExtensions';/);
-  assert.match(source, /<div className="sb-sections-wrap">\{!customizing&&<SidebarExtensions tab=\{current\}\/>\}\{!customizing&&<WorkspaceTitle state=\{state\}(?: count=\{[^}]+\})?\/>\}/);
+  assert.match(source, /import \{ SidebarExtensions,SidebarExtensionsWarm \} from '\.\/SidebarExtensions';/);
+  assert.match(source, /:id==='extensions'\?\(extPlace==='sidebar'\?<SidebarExtensions key=\{id\} tab=\{current\} place=\{zone\}\/>:null\)/, 'drawn once: only where the toolbar\'s copy is not on screen (ui/pinnedExtensionPlace.ts)');
+  assert.match(source, /<div className="sb-sections-wrap">\{extInWrap&&edge\('extensions','top'\)\}\{!shelf&&<WorkspaceTitle state=\{state\}(?: count=\{[^}]+\})?\/>\}/, 'in the default shape the row is still the first child of the sections wrapper');
+  assert.match(source, /customizing\?<SidebarCustomize [\s\S]*?:<>/, 'the blocks are not drawn while Customize sidebar is open');
 });
 
-test('it is the toolbar\'s own list: the same hook (the profile\'s pinned ids in the toolbar\'s order, private windows through their own session), 12 buttons at most, and the toolbar keeps its copy', () => {
+test('it is the toolbar\'s own list: the same hook (the profile\'s pinned ids in the toolbar\'s order, private windows through their own session), one line of buttons (the rest behind the "more" button), and the toolbar keeps its copy', () => {
   const row = read('src/components/sidebar/SidebarExtensions.tsx');
   assert.match(row, /useExtensionToolbar\(tab\)/);
-  assert.match(row, /<BrowserExtensionActions target=\{target\} limit=\{12\} handlesPopupEvents=\{false\}\/>/);
+  assert.match(row, /<BrowserExtensionActions target=\{target\} limit=\{fit\.visible\} handlesPopupEvents=\{false\} keepAs="sidebar" more=\{tab\?\{tabId:tab\.id\}:undefined\}\/>/, 'the row names itself, so its buttons are kept while the sidebar is hidden (AD1); the line holds what fits and the rest is behind the "more" button (AD2)');
   const toolbar = read('src/App.tsx');
-  assert.match(toolbar, /<BrowserExtensionActions target=\{extensionTarget\}\/>/, 'the toolbar still draws its pinned buttons');
+  assert.match(toolbar, /<BrowserExtensionActions target=\{extensionTarget\} silent=\{extPlace==='sidebar'\}\/>/, 'the toolbar still draws its pinned buttons, and is silent (it still answers a shortcut and action.openPopup) where the sidebar\'s row stands in for it');
   const hook = read('src/ui/useExtensionToolbar.ts');
   assert.match(hook, /extensions\.toolbar-target/);
   const buttons = read('src/components/BrowserExtensionActions.tsx');
@@ -46,13 +48,13 @@ test('only the toolbar\'s copy answers action.openPopup() and an extension\'s sh
   assert.match(buttons, /\[target\?\.partition,target\?\.webContentsId,target\?\.supported,limit,handlesPopupEvents,silent\]/);
 });
 
-test('the row\'s styles use no physical left or right (the sidebar on the right and right-to-left languages lay it out as the left one), wrap instead of scrolling, and hide with the row', () => {
+test('the row\'s styles use no physical left or right (the sidebar on the right and right-to-left languages lay it out as the left one), stay on one line (Beta 14 AD2: what does not fit is behind the "more" button), and hide with the row', () => {
   const css = read('src/components/sidebar/sidebar.css');
   const rules = css.split('\n').filter(line => line.includes('.sb-ext-row'));
   assert.ok(rules.length >= 4, 'the row has its rules');
   for (const rule of rules) assert.doesNotMatch(rule, /(^|[^-a-z])(left|right)\s*:|margin-(left|right)|padding-(left|right)|text-align:\s*(left|right)/, rule);
   assert.ok(rules.some(rule => /\[hidden\]\{display:none\}/.test(rule)));
-  assert.ok(rules.some(rule => /flex-wrap:wrap/.test(rule)));
+  assert.ok(rules.some(rule => /flex-wrap:nowrap/.test(rule)), 'one line');
   assert.doesNotMatch(read('src/styles/sidebar-right.css'), /sb-ext-row/, 'nothing to mirror: the row sits like every other row of the sidebar');
 });
 
@@ -70,11 +72,12 @@ test('while the toolbar\'s hook asks again (it answers null at every tab switch 
   assert.equal(keepTarget(null, null, tab), null, 'nothing to keep yet');
 });
 
-test('the row keeps its height while its buttons are rebuilt at a tab switch (a new page id rebuilds the engine\'s list; without a minimum the tab list jumped up 30 px for a frame or two)', () => {
+test('the row has its own fixed height whatever its buttons are doing (they are no longer rebuilt at a tab switch, and a reveal brings the row with its buttons: AD1) and however many are pinned (one line: AD2)', () => {
   const css = read('src/components/sidebar/sidebar.css');
   const rule = css.split('\n').find(line => /\.sb-ext-row:not\(\[hidden\]\)\{/.test(line));
   assert.ok(rule, 'a rule for the shown row');
   assert.match(rule, /box-sizing:border-box/);
-  assert.match(rule, /min-height:40px/, 'the row\'s own height: 30 px buttons, 2 px above and 8 px below');
-  assert.match(css, /\.sb-ext-row\{flex:none;display:flex;align-items:center;padding:2px 14px 8px;/, 'the padding the minimum is made from');
+  assert.match(rule, /height:40px/, 'the row\'s own height: 30 px buttons, 2 px above and 8 px below');
+  assert.doesNotMatch(rule, /min-height/, 'a height, not a minimum a second line could grow past');
+  assert.match(css, /\.sb-ext-row\{flex:none;display:flex;align-items:center;padding:2px 14px 8px;/, 'the padding the height is made from');
 });

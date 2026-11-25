@@ -38,13 +38,14 @@ test('turning it on or off is a layout switch (one page layout, not the header\'
 
 const entry = ((await import('../src/features/settings/entries/core')).default as SettingsEntry[]).find((item) => item.id === 'hide-toolbar');
 const ctx = (patch: Partial<SettingsContext>): SettingsContext => ({ customGlassColors: false, privateProfile: false, desktop: true, websiteOpen: false, ...patch });
-test('it has its own search entry in Appearance > Layout, found by the words people use, shown only where the row is', () => {
+// Beta 14.4: its home is Layout › Window view, and it is always listed (off, with the reason, where there is no toolbar of its kind to hide), so search finds it in every layout.
+test('it has its own search entry in Layout > Window view, found by the words people use, in every layout', () => {
   assert.ok(entry, 'registered');
-  assert.deepEqual([entry!.section, entry!.group], ['Appearance', 'Layout']);
+  assert.deepEqual([entry!.section, entry!.group], ['Layout', 'Window view']);
   assert.equal(entry!.title, en['windowview.hideToolbar']);
   for (const word of ['hide toolbar', 'top bar', 'toolbar only']) assert.ok(entry!.aliases?.includes(word) || entry!.title.toLowerCase().includes(word), word);
   assert.equal(isAvailable(entry!, ctx({ hideToolbarRow: true })), true);
-  assert.equal(isAvailable(entry!, ctx({})), false);
+  assert.equal(isAvailable(entry!, ctx({})), true);
 });
 
 test('its words are in the catalog: the title and detail mirror the closed sidebar\'s "Rest the pointer at the left edge"', () => {

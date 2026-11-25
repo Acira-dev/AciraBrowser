@@ -56,10 +56,22 @@ test('wired in: the download engine asks before anything else, the Save commands
   assert.match(head, /rescue\.shouldRescue\(\{url,mime:read\(item,'getMimeType',''\),disposition:read\(item,'getContentDisposition',''\),tabUrl,wcId:wc\.id\}\)\)\{event\.preventDefault\(\);/);
   assert.match(engine, /rescue=require\('\.\/navigation-rescue\.cjs'\)\.shared/);
   const commands = fs.readFileSync(path.join(root, 'desktop/browser-services/context-commands.cjs'), 'utf8');
-  assert.match(commands, /const download=url=>\{require\('\.\/navigation-rescue\.cjs'\)\.shared\.expectSave\(url\);if\(typeof owner\.downloadURL==='function'\)owner\.downloadURL\(url\);else wc\.downloadURL\(url\);\};/);
+  assert.match(commands, /const download=url=>\{const rescue=require\('\.\/navigation-rescue\.cjs'\)\.shared;rescue\.expectSave\(url\);rescue\.markSaveAs\(url\);[^\n]*if\(typeof owner\.downloadURL==='function'\)owner\.downloadURL\(url\);else wc\.downloadURL\(url\);\};/);
   const main = fs.readFileSync(path.join(root, 'desktop/main.cjs'), 'utf8');
   assert.match(main, /navigation-rescue\.cjs'\)\.shared\.setRecorder\(\(kind,error\)=>processErrors\.record\(kind,error\)\)/);
   assert.match(main, /shared\.expectSave\(url\);wc\.downloadURL\(url\);/, "the link preview's Download is a save too");
   assert.match(main, /processErrors\.record\('Page stopped'/);
   assert.match(main, /app\.on\('child-process-gone'/);
+});
+
+test('a "Save … as…" mark is taken once, by any address of the download, and expires', () => {
+  let at = 1000;
+  const rescue = createNavigationRescue({ now: () => at });
+  rescue.markSaveAs('https://a.example/pic.png');
+  assert.equal(rescue.takeSaveAs(['https://elsewhere/x', 'https://a.example/pic.png']), true, 'the first of the chain, the last or the current one matches');
+  assert.equal(rescue.takeSaveAs(['https://a.example/pic.png']), false, 'taken once');
+  rescue.markSaveAs('https://b.example/clip.mp4'); at += 31000;
+  assert.equal(rescue.takeSaveAs(['https://b.example/clip.mp4']), false, 'a mark that was never used does not shield a later, plain download');
+  assert.equal(rescue.takeSaveAs(undefined), false);assert.equal(rescue.takeSaveAs([]), false);
+  rescue.markSaveAs(''); rescue.markSaveAs(5); assert.equal(rescue.takeSaveAs(['', 5]), false);
 });

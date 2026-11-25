@@ -1,5 +1,7 @@
 .nt-personal-library { margin: 16px 0; padding-top: 8px; border-top: 1px solid var(--st-line); }
-.nt-personal-toolbar { display: flex; justify-content: flex-end; padding: 8px 0 12px; }
+.nt-personal-toolbar { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 12px; }
+/* 14.1: how many of the 12, or that the New Tab cycles through them */
+.nt-personal-count { min-width: 0; color: var(--st-muted); font-size: 12px; line-height: 16px; }
 .nt-personal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 2px 0 12px; }
 .nt-personal-item { position: relative; min-width: 0; }
 .nt-personal-item > .cc-card { width: 100%; height: 100%; }

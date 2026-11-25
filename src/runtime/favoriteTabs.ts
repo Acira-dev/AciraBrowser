@@ -31,14 +31,15 @@ export function settleFavoriteTabs(s: BrowserSnapshot, previous?: BrowserSnapsho
 
 export { favoriteTabsInList, favoriteTabsOnlyInTile, tabListed };
 
-/** The tabs the list on screen shows, in order: the open workspace's, less a favorite's tab that Settings keep only in its tile (the default since 13.9). What
+/** The tabs the list on screen shows, in order: the open workspace's, less a favorite's tab that Settings keep only in its tile (the default since Beta 14). What
  *  "move tab" walks, since only these have a place to move to. */
 export const rowTabs = (state: BrowserSnapshot): TabSession[] => workspaceTabs(state).filter(tab => tabListed(tab, state.settings));
 /** The tabs Ctrl+1…9, Ctrl+PageDown/PageUp, Ctrl+Shift+PageDown/PageUp and Ctrl+Tab's Next tab walk: the open workspace's, in order. A favorite's tab that lives only in
- *  its tile is a tab like any other (13.9): the keys reach it and the counts include it. It comes after the rows of the list, so Ctrl+1…8 still land on the
+ *  its tile is a tab like any other (Beta 14, H): the keys reach it and the counts include it. It comes after the rows of the list, so Ctrl+1…8 still land on the
  *  rows exactly as the numbers drawn on them say, nothing shifts for anyone who never opens a favorite, and the next tab after the last row is the first of the tiles'
  *  tabs; the last tab (Ctrl+9) is the last of them. Tile-only tabs keep the order of the window's tab list among themselves. */
 export const listedTabs = (state: BrowserSnapshot): TabSession[] => {
   const all = workspaceTabs(state), rows = all.filter(tab => tabListed(tab, state.settings));
-  return rows.length === all.length ? rows : [...rows, ...all.filter(tab => !tabListed(tab, state.settings))];
+  // 14.1: the empty page a close can show (runtime/emptyPage.ts) is not a row (tabListed) and no tab for the keys or the count either
+  return rows.length === all.length ? rows : [...rows, ...all.filter(tab => !tabListed(tab, state.settings) && tab.blank !== true)];
 };

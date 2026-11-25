@@ -350,7 +350,7 @@ html[data-material=acrylic] .app.style-acira .address-bar { backdrop-filter:none
 .app.style-acira .popup-contents { box-sizing:border-box;border-radius:inherit; }
 /* Popup geometry is measured in window coordinates; the in-page host must match it. */
 .app.style-acira .local-overlay-scrim { position:fixed; inset:0; z-index:40; }
-.app.style-acira .menu-row { min-height:30px; padding:5px 9px; border-radius:6px; font-size:13px; line-height:18px; gap:10px; }
+.app.style-acira .menu-row { min-height:30px; padding:4px 8px; border-radius:6px; font-size:13px; line-height:18px; gap:8px; }
 .app.style-acira .menu-row:hover { background:rgb(var(--ink) / 0.024); }
 .app.style-acira .menu-row kbd { font-size:12px; color:var(--ed-muted); }
 .app.style-acira .browser-popup { color:var(--ed-ink); }
@@ -522,7 +522,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira :is(.
 /* One continuous chrome:no divider between the sidebar and the header. Only the white page has an edge. */
 .app.style-acira .browser-root,.app.style-acira:has(.ed-rail:not(.is-expanded)) .browser-root { border-left:0; }
 /* Pages are rounded white sheets on the chrome; native website views use the same radius. */
-.app.style-acira .browser-body>.page-area { border-radius:var(--geometry-pageRadius); overflow:hidden; box-shadow:0 0 0 1px rgb(var(--ink) / .07),0 1px 3px rgb(var(--shade) / .05); }
+.app.style-acira .browser-body>.page-area { border-radius:var(--geometry-pageRadius); overflow:clip; box-shadow:none; } /* D140: clip, not hidden: the page area is the window onto the page and never a scroller (a focus under a floating sidebar scrolled it) */
 .app.style-acira .browser-body>.page-area :is(.page-content,.page-pane) { border-radius:inherit; }
 .app.style-acira .browser-shell { border-bottom-color:transparent; }
 html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .browser-shell { border-bottom-color:transparent; }
@@ -598,7 +598,7 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 .app.style-acira .ed-search-glass:hover { background:var(--input-hover); }
 .app.style-acira .ed-search-glass::before { display:none; }
 /* Focus remains visible while editing; fill/depth are not the only indication. */
-.app.style-acira .ed-search-glass:focus-within { background:var(--input-fill); border-color:transparent; outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:var(--field-shadow); }
+.app.style-acira .ed-search-glass:focus-within { background:var(--input-fill); border-color:transparent; outline:none; box-shadow:var(--field-shadow); }   /* the ring is the Active border's (styles/active-border.css) */
 .app.style-acira :is(.ed-list-search,.task-list-toolbar label,.browser-settings .bs-toolbar>label) { border:1px solid var(--input-edge); background:var(--input-fill); box-shadow:none; border-radius:6px; transition:background-color .2s,box-shadow .2s; }
 .app.style-acira :is(.ed-list-search,.task-list-toolbar label,.browser-settings .bs-toolbar>label):focus-within { background:var(--input-fill); outline:2px solid var(--focus-ring); outline-offset:1px; box-shadow:none; }
 .app.style-acira .ed-search-glass>.address-field input::placeholder { color:var(--text-placeholder); }
@@ -727,8 +727,8 @@ html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira .ed-r
 /* One veil per region, side by side rather than stacked: the sidebar's own color (the finish unless a sidebar
    color is chosen) and the chrome's, so a custom sidebar never thickens the glass. */
 html:is([data-material=acrylic],[data-material=vibrancy]) .app.style-acira:not(.native-layer) { background:
- linear-gradient(180deg,rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-top)),rgb(var(--sidebar-rgb,var(--chrome-rgb)) / var(--chrome-veil-bottom))) 0 0/var(--navigation-width,0px) 100% no-repeat,
- linear-gradient(180deg,rgb(var(--chrome-rgb) / var(--chrome-veil-top)),rgb(var(--chrome-rgb) / var(--chrome-veil-bottom))) var(--navigation-width,0px) 0/100% 100% no-repeat; }
+ linear-gradient(180deg,rgb(var(--frame-top-rgb,var(--sidebar-rgb,var(--chrome-rgb))) / var(--chrome-veil-top)),var(--frame-mid-veil,)rgb(var(--frame-bottom-rgb,var(--sidebar-rgb,var(--chrome-rgb))) / var(--chrome-veil-bottom))) 0 0/var(--navigation-width,0px) 100% no-repeat,
+ linear-gradient(180deg,rgb(var(--frame-top-rgb,var(--chrome-rgb)) / var(--chrome-veil-top)),var(--frame-mid-veil,)rgb(var(--frame-bottom-rgb,var(--chrome-rgb)) / var(--chrome-veil-bottom))) var(--navigation-width,0px) 0/100% 100% no-repeat; }
 /* Windows swaps acrylic for a flat grey while the window is inactive; a veil over that grey reads muddy, so
    the chrome shows its own finish color until the window is active again and the glass returns. */
 /* Windows transparency effects off (Energy saver or the user) drop acrylic just like an inactive window: paint an

@@ -64,7 +64,7 @@ const COMMANDS=[
  C('split-exit','Exit split view','Split view',{action:'split-exit'},['Mod+Shift+0']),
  C('switch-profile','Switch profile','Windows',{action:'profile'},['Mod+Shift+M']),
  // Workspaces (R3-57): Alt+1–8 is free (Ctrl+1–9 is go to tab, Ctrl+Shift+1–6 the split layouts); on a Mac Option+digit types characters, so Ctrl.
- ...Array.from({length:8},(_,i)=>C(`switch-workspace-${i+1}`,`Go to workspace ${i+1}`,'Windows',{action:'switch-workspace',index:i},[`Alt+${i+1}`],[`Ctrl+${i+1}`])),
+ /* 1-8 = WORKSPACE_KEYS (src/runtime/workspaces.ts): the digits, 9 is the last tab; workspaces 9-16 have no number key */...Array.from({length:8},(_,i)=>C(`switch-workspace-${i+1}`,`Go to workspace ${i+1}`,'Windows',{action:'switch-workspace',index:i},[`Alt+${i+1}`],[`Ctrl+${i+1}`])),
  // Next / previous workspace (R4-48 P1-5): Ctrl+PageDown is the next tab, Alt added moves between workspaces. Ctrl+Alt+PageDown/Up is free everywhere else in the table.
  C('next-workspace','Next workspace','Windows',{action:'workspace-cycle',direction:1},['Mod+Alt+PageDown']),
  C('prev-workspace','Previous workspace','Windows',{action:'workspace-cycle',direction:-1},['Mod+Alt+PageUp']),
@@ -78,6 +78,7 @@ const COMMANDS=[
  C('command-palette','Command search','Navigation',{action:'palette'},['Mod+Shift+K']),
  C('find','Find in page','Page',{action:'find'},['Mod+F']),
  C('ai-free','Turn AI-free mode on or off','Page',{action:'ai-free'},['Mod+Shift+X']),
+ C('zap','Zap element (remove a part of the page)','Page',{action:'zap'},[],['Mod+Alt+Z']),   // Beta 14: Cmd+Option+Z on a Mac. Windows and Linux start with no key: the editor refuses Alt and Ctrl+Alt letters (they type characters on some keyboards) and the free Ctrl+Shift keys are the ones its tests keep for custom keys; the menu rows and the page menu are there, and any key can be given here
  C('find-next','Find next','Page',{action:'find-next',forward:true},['F3','Mod+G']),
  C('find-prev','Find previous','Page',{action:'find-next',forward:false},['Shift+F3','Mod+Shift+G']),
  C('print','Print','Page',{action:'print'},['Mod+P']),
@@ -103,9 +104,18 @@ const COMMANDS=[
  // A Mac's delete key is Backspace (⌫): the stock Mac key is that one, so the key shown is a key every Mac keyboard has (the resolver also takes ⌦).
  C('clear-data','Clear browsing data','Library',{action:'clear-data'},['Mod+Shift+Delete'],['Mod+Shift+Backspace']),
  C('settings','Settings','Browser',{action:'settings'},['Mod+,']),
+ // Beta 14 (AF) side panel sites: unassigned by default, set in the shortcuts editor. A key opens (or closes) the n-th pinned site of the profile, with or without the sidebar showing.
+ C('side-panel-add','Add page to side panel','Browser',{action:'side-panel-add'},[]),
+ C('side-panel-1','Open side panel site 1','Browser',{action:'side-panel-site',index:0},[]),C('side-panel-2','Open side panel site 2','Browser',{action:'side-panel-site',index:1},[]),C('side-panel-3','Open side panel site 3','Browser',{action:'side-panel-site',index:2},[]),
+ C('side-panel-4','Open side panel site 4','Browser',{action:'side-panel-site',index:3},[]),C('side-panel-5','Open side panel site 5','Browser',{action:'side-panel-site',index:4},[]),C('side-panel-6','Open side panel site 6','Browser',{action:'side-panel-site',index:5},[]),
+ C('task-manager','Task manager','Browser',{action:'task-manager'},['Shift+Esc']), // Chrome's key; Esc alone still closes dialogs and stops loading
  C('menu','Open menu','Browser',{action:'menu'},['Alt+F','Alt+E'],[]),
  C('focus-toolbar','Focus the toolbar','Browser',{action:'focus-toolbar'},['Alt+Shift+T','F10'],['F10']),
  C('open-file','Open a file…','Browser',{action:'open-file'},['Mod+O']),
+ // Beta 14: the now-playing card's picture-in-picture button, from the keyboard (the main card's video). Option+letter types a character on a Mac, so there it is Cmd+Option+P.
+ C('pip','Picture in picture','Page',{action:'pip'},['Alt+P'],['Mod+Alt+P']),
+ // Beta 14: the page screenshot's menu (Area / Visible page / Full page). The brief's Ctrl/Cmd+Shift+S is Split view and Ctrl/Cmd+Shift+2 is the Top and bottom split layout, so it is Ctrl/Cmd+Shift+7: the nearest digit with no use on any platform.
+ C('screenshot','Take screenshot','Page',{action:'screenshot'},['Mod+Shift+7']),
 ];
 const BY_ID=new Map(COMMANDS.map(c=>[c.id,c]));
 /** Commands another module owns as a set under one id prefix (one per saved routine). Replaced whole; stock commands are untouchable. */
@@ -143,6 +153,8 @@ const expand=(accel,platform)=>canonical(accel,platform);
 // On a Mac the delete key (Backspace) is ⌫ and forward delete (fn+delete) is ⌦, as macOS menus print them.
 const display=(accel,platform)=>accel.split('+').map(part=>platform==='darwin'?({Ctrl:'⌃',Alt:'⌥',Shift:'⇧',Cmd:'⌘',Backspace:'⌫',Delete:'⌦'}[part]||part):part).join(platform==='darwin'?'':' + ');
 
+/** Keys one command may hold (Focus address bar ships with five). */
+const MAX_KEYS=6;
 const PARKED_ID=/^ext:/,PARKED_MAX=400,PARKED_ID_MAX=300;   // ids of extension commands (desktop/browser-services/ext-api/commands.cjs PREFIX)
 const RESERVED_COMBOS=new Set(['Ctrl+C','Ctrl+V','Ctrl+X','Ctrl+A','Ctrl+Z','Ctrl+Y','Ctrl+Shift+Z','Ctrl+Insert','Shift+Insert','Shift+Delete','Alt+Tab','Alt+Shift+Tab','Ctrl+Alt+Tab','Alt+F4','Alt+Esc','Alt+Space','Alt+Enter','Ctrl+Alt+Delete','Ctrl+Esc','Cmd+C','Cmd+V','Cmd+X','Cmd+A','Cmd+Z','Cmd+Shift+Z','Cmd+Q','Cmd+H','Cmd+M','Cmd+Tab','Cmd+Space']);
 /** Returns null when an accelerator may be assigned, otherwise {code,message}. */
@@ -177,6 +189,10 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
  const claimedByExtensions=()=>extensionKeys??=new Set(COMMANDS.filter(c=>c.dynamic&&String(c.id).startsWith('ext:')).flatMap(rawDefaults));
  const defaultsOf=command=>command.dynamic?rawDefaults(command):rawDefaults(command).filter((accel,index)=>index===0||!claimedByExtensions().has(accel));
  const bindingsOf=command=>custom.has(command.id)?custom.get(command.id):defaultsOf(command);
+ // A command's OWN factory key is always that command's to take back (D132: the Task manager's Shift+Esc ends in Esc, which nobody may be given, so once
+ // changed it could not be typed back in and a saved file lost it at load). The rule itself is untouched: every other key, and this key for every
+ // other command, is judged as before. Not for an extension's or a routine's command: the keys those suggest are not Acira's own.
+ const blockedFor=(accel,id)=>{const command=BY_ID.get(id);return command&&!command.dynamic&&supported(command)&&rawDefaults(command).includes(accel)?null:restriction(accel,platform);};
  function effective(){const map=new Map();for(const command of availableCommands())for(const accel of bindingsOf(command))if(!map.has(accel))map.set(accel,command.id);return map;}
  function view(command){const bindings=bindingsOf(command);return {id:command.id,label:command.label,category:command.category,defaults:defaultsOf(command),defaultsDisplay:defaultsOf(command).map(a=>display(a,platform)),bindings,display:bindings.map(a=>display(a,platform)),customized:custom.has(command.id),reserved:Boolean(command.action&&require('./key-routing.cjs').RESERVED.has(command.action.action)),unbound:bindings.length===0,...(command.note?{note:command.note}:{})};}
  const list=()=>availableCommands().map(view);
@@ -192,9 +208,9 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
   if(Array.isArray(bindings['tab-switcher'])&&!Object.hasOwn(bindings,'tab-viewer')){const all=bindings['tab-switcher'],tabKey=a=>/(^|\+)Tab$/i.test(String(a).trim()),switcher=all.filter(tabKey),{['tab-switcher']:_old,...rest}=bindings;bindings={...rest,'tab-viewer':all.filter(a=>!tabKey(a)),...(switcher.length||!all.length?{'tab-switcher':switcher}:{})};}
   const next=new Map(),seen=new Map();
   for(const [id,value] of Object.entries(bindings)){
-   if(!supported(BY_ID.get(id))||!Array.isArray(value)||value.length>4)continue;
+   if(!supported(BY_ID.get(id))||!Array.isArray(value)||value.length>MAX_KEYS)continue;
    const accels=[];
-   for(const raw of value){const accel=canonical(raw,platform);if(!accel||restriction(accel,platform))continue;if(seen.has(accel))continue;seen.set(accel,id);accels.push(accel);}
+   for(const raw of value){const accel=canonical(raw,platform);if(!accel||blockedFor(accel,id))continue;if(seen.has(accel))continue;seen.set(accel,id);accels.push(accel);}
    // A list the person wrote but none of whose keys can be used (a key this platform or this version refuses, or one another command already has) leaves the command on
    // its default: only an empty list in the file clears it.
    if(value.length&&!accels.length)continue;
@@ -226,16 +242,31 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
  }
  function conflictFor(accel,id){const owner=effective().get(accel);return owner&&owner!==id?BY_ID.get(owner):null;}
 
- /** Assign one accelerator to a command (replacing its bindings). Conflicts are refused unless replace is true. */
- function set(id,value,{replace=false}={}){
+ /** Assign an accelerator to a command. By default it replaces the command's keys (what the extension code and older callers rely on);
+  *  `add` keeps the keys it has and adds this one (Settings › Shortcuts "+"), `instead` swaps one of its keys for this one in place (a click on a key).
+  *  Conflicts are refused unless replace is true, and then only THAT key leaves the other command (its other keys stay). */
+ function set(id,value,{replace=false,add=false,instead=null}={}){
   const command=BY_ID.get(id);if(!supported(command))return {ok:false,code:'unknown',message:tm("nativeCore.unknownCommand")};
   const accel=canonical(value,platform);if(!accel)return {ok:false,code:'invalid',message:tm("shortcutRegistry.thatKeyCombinationCouldNot")};
-  const blocked=restriction(accel,platform);if(blocked)return {ok:false,...blocked};
+  const blocked=blockedFor(accel,id);if(blocked)return {ok:false,...blocked};
+  const own=bindingsOf(command),old=instead?canonical(instead,platform):null;
+  let next=[accel];
+  if(old&&own.includes(old))next=own.map(a=>a===old?accel:a).filter((a,at,all)=>all.indexOf(a)===at);
+  else if(add||old)next=own.includes(accel)?own:[...own,accel];
+  if(next.length>MAX_KEYS)return {ok:false,code:'full',message:tm("shortcutRegistry.aCommandCanHaveAtMost",{count:MAX_KEYS})};
   const conflict=conflictFor(accel,id);
   if(conflict&&!replace)return {ok:false,code:'conflict',message:tm("shortcutRegistry.platformIsAlreadyUsedBy", { platform: display(accel,platform), label: conflict.label }),conflict:{id:conflict.id,label:conflict.label}};
   if(conflict)custom.set(conflict.id,bindingsOf(conflict).filter(a=>a!==accel));
-  custom.set(id,[accel]);save();onChange();
+  custom.set(id,next);save();onChange();
   return {ok:true,binding:accel,display:display(accel,platform),replaced:conflict?{id:conflict.id,label:conflict.label}:null,commands:list()};
+ }
+ /** Take one key off a command and leave the others (the × on a key in Settings). The command may end with no key: it then reads "Not set". */
+ function removeKey(id,value){
+  const command=BY_ID.get(id);if(!supported(command))return {ok:false,code:'unknown',message:tm("nativeCore.unknownCommand")};
+  const accel=canonical(value,platform),own=bindingsOf(command);
+  if(!accel||!own.includes(accel))return {ok:false,code:'invalid',message:tm("shortcutRegistry.thatKeyCombinationCouldNot")};
+  custom.set(id,own.filter(a=>a!==accel));save();onChange();
+  return {ok:true,commands:list()};
  }
  function clear(id){if(!supported(BY_ID.get(id)))return {ok:false,code:'unknown',message:tm("nativeCore.unknownCommand")};custom.set(id,[]);save();onChange();return {ok:true,commands:list()};}
  function reset(id){if(!supported(BY_ID.get(id)))return {ok:false,code:'unknown',message:tm("nativeCore.unknownCommand")};
@@ -263,7 +294,8 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
  }
 
  // Recording captures the next accelerator without running it.
- function startRecording(owner){recording={owner,until:now()+recordingTtlMs};return {ok:true};}
+ // `forId`: the command whose key is being recorded (Settings sends it), so the pressed key is judged for that command (its own factory key is accepted).
+ function startRecording(owner,forId=null){recording={owner,forId:typeof forId==='string'&&BY_ID.has(forId)?forId:null,until:now()+recordingTtlMs};return {ok:true};}
  function stopRecording(){recording=null;return {ok:true};}
  const isRecording=()=>Boolean(recording&&recording.until>now())||(recording=null,false);
  /** Modifiers held after this key event, in display order (the key being pressed counts, the one being released doesn't). */
@@ -274,7 +306,7 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
   return MODIFIERS.filter(m=>held.has(m));
  }
  function describe(accel,forId){
-  if(!accel)return null;const blocked=restriction(accel,platform),conflict=conflictFor(accel,forId);
+  if(!accel)return null;const blocked=blockedFor(accel,forId),conflict=conflictFor(accel,forId);
   return {accelerator:accel,display:display(accel,platform),valid:!blocked,reason:blocked?.message||null,code:blocked?.code||null,conflict:conflict?{id:conflict.id,label:conflict.label}:null};
  }
 
@@ -290,7 +322,7 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
    const accel=accelFromInput(input,platform,keyOf);
    // Plain Backspace (or Delete) clears the shortcut; plain Esc cancels.
    if(accel==='Backspace'||accel==='Delete')return {action:'record-key',accelerator:null,valid:false,reason:null,conflict:null,cancel:false,clear:true};
-   return {action:'record-key',...(describe(accel,null)||{accelerator:null,valid:false,reason:tm("shortcutRegistry.thatKeyCombinationCouldNot")}),cancel:accel==='Esc'};
+   return {action:'record-key',...(describe(accel,recording.forId)||{accelerator:null,valid:false,reason:tm("shortcutRegistry.thatKeyCombinationCouldNot")}),cancel:accel==='Esc'};
   }
   if(input.type!=='keyDown')return null;
   const accel=accelFromInput(input,platform,keyOf);
@@ -308,7 +340,7 @@ function createShortcutRegistry({file,platform=process.platform,arch=process.arc
   return base;
  }
  load();
- return {platform,setDynamic(prefix,commands){setDynamicCommands(prefix,commands);extensionKeys=null;load();onChange();},/* the combinations the system or the editing keys own (Ctrl+C, Alt+Tab ...): never an extension's; Alt+letter and the like, which a person may not record, an extension may still suggest */reservedKey:accel=>RESERVED_COMBOS.has(accel),list,set,clear,reset,resetAll,forgetParked,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
+ return {platform,setDynamic(prefix,commands){setDynamicCommands(prefix,commands);extensionKeys=null;load();onChange();},/* the combinations the system or the editing keys own (Ctrl+C, Alt+Tab ...): never an extension's; Alt+letter and the like, which a person may not record, an extension may still suggest */reservedKey:accel=>RESERVED_COMBOS.has(accel),list,set,removeKey,clear,reset,resetAll,forgetParked,exportJson,importJson,startRecording,stopRecording,isRecording,describe,resolve,load,effective,get commands(){return availableCommands();},canonical:value=>canonical(value,platform),
   /** A command's first key as menus print it ("Alt+←", "Ctrl+Shift+T"; "⇧⌘T" on macOS), or undefined when it has none. */
   menuKey(id){const command=BY_ID.get(id),first=command&&bindingsOf(command)[0];if(!first)return undefined;if(platform==='darwin')return display(first,platform);const arrows={Left:'←',Right:'→',Up:'↑',Down:'↓',PageUp:'PgUp',PageDown:'PgDn'};return first.split('+').map(key=>arrows[key]||key).join('+');},
   /** Label -> accelerator display for toolbar hints. */

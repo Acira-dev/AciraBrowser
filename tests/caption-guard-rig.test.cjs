@@ -42,7 +42,7 @@ test('c7 judge, negative control on the code under test: beta.13.1\'s caption co
 test('c7 is registered in the guard, needs --win, and skips without it', only, () => {
   const guard = fs.readFileSync(path.join(__dirname, '..', 'qa', 'regression-guard', 'guard.mjs'), 'utf8'), check = fs.readFileSync(path.join(__dirname, '..', 'qa', 'regression-guard', 'checks', 'c7-caption.mjs'), 'utf8');
   assert.match(guard, /c7: 'c7-caption\.mjs'/);
-  assert.match(guard, /opt\('checks', 'c1,c2,c3,c4,c5,c6,c7'\)/);
+  assert.match(guard, /opt\('checks', 'c1,c2,c3,c4,c5,c6,c7(?:,c\d+)*'\)/);   // c7 stays in the default list; later cases (c8, the toolbar coming back on a heavy page) follow it
   assert.match(check, /if \(!ctx\.win\) return \{pass: true, skipped: true/);
   for (const word of ['maximise', 'un-maximise', 'resize', 'appearance switch', 'interface reload', 'full screen in', 'full screen out', 'minimise', 'restore']) assert.ok(check.includes(`'${word}'`), word);
   for (const view of ['full', 'compact', 'focus', 'seamless']) assert.ok(fs.readFileSync(path.join(__dirname, '..', 'qa', 'regression-guard', 'lib', 'caption.mjs'), 'utf8').includes(`view: '${view}'`), view);

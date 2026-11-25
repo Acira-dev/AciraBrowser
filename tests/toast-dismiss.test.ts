@@ -128,7 +128,7 @@ test('Esc dismisses the focused toast; other keys do nothing', () => {
 
 test('over a website the overlay forwards the dismiss for that toast, and an emptied stack lets go of its hold', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(app, /const done = \(\) => void runtime\.browserCommand\(\{ type: 'ui', tabId: state\.activeTabId, action: 'toast-dismiss', \.\.\.\(row \? \{ toastId: row\.id \} : \{\}\) \}\); return <ToastCard row=\{model\} action=\{row && <ToastAction action=\{row\.action\} dispatch=\{dispatch\} onDone=\{done\}\/>\} onDismiss=\{done\}\/>/);
+  assert.match(app, /const done = \(\) => void runtime\.browserCommand\(\{ type: 'ui', tabId: state\.activeTabId, action: 'toast-dismiss', \.\.\.\(row \? \{ toastId: row\.id \} : \{\}\) \}\); return <ToastCard row=\{model\} action=\{row && \(row\.action2 \? <span className="t-actions">.*<ToastAction action=\{row\.action\} dispatch=\{dispatch\} onDone=\{done\}\/>.*<\/span> : <ToastAction action=\{row\.action\} dispatch=\{dispatch\} onDone=\{done\}\/>\)\} onDismiss=\{done\}\/>/);  // Beta 14: the screenshot toast's second action sits beside the first
   assert.match(app, /if \(typeof event\.toastId === 'number'\) toastState\.dismissId\(event\.toastId\)/);
   assert.match(app, /if \(!list\.length && timers\.held\(\)\) hold\(false\)/);
 });

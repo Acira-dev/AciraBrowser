@@ -29,10 +29,14 @@
 const fs=require('node:fs'),path=require('node:path'),{EventEmitter}=require('node:events'),{createRetry}=require('./network-retry.cjs'),fetched=require('./update-download.cjs');
 const feedRules=require('./update-feeds.cjs'),hosts=require('./update-hosts.cjs');
 // Where it asks (beta.11 on, docs/launch/UPDATE_HOST.md): update.acirabrowser.com first, then the frozen GitHub feed when the first gives no usable answer
-// (update-feeds.cjs has the rules). Pickup: 20 s after launch, then every 2 hours (up to 10 minutes later, so the installs do not ask together), again when the
+// (update-feeds.cjs has the rules). Pickup: the first look as soon as the first window is on screen (Beta 14; it used to wait 20 s), then every 2 hours (up to 10 minutes later, so the installs do not ask together), again when the
 // computer wakes or a window gets focus after 2 hours without an answer (nudge), and at the pace a document asks for with nextCheckSeconds (10 minutes to 24 hours).
 // Update traffic says only "AciraUpdater" (no version, no system), and never sends the install's staging id: the share is decided on this computer.
-const CHECK_DELAY=20*1000,CHECK_EVERY=2*60*60*1000,CHECK_JITTER=10*60*1000,HINT_MIN=10*60*1000,HINT_MAX=24*60*60*1000,NUDGE_QUIET=5*60*1000;
+// The first look (Beta 14): FIRST_SETTLE after the first window is on screen, so the look never shares the start-up (the window is already shown, its first frames
+// are not), and never later than FIRST_CAP after start when no window shows (a hidden test run, a window that failed). The proxy of the profile may still be being
+// applied that early (FIRST_CAP_TEST: a test run, whose window may be hidden and never announce itself, does not wait 15 s): the launch look waits ROUTE_WAIT for it (asking again every ROUTE_POLL) instead of failing into the 2-minute retry; every other look still fails at once.
+const FIRST_SETTLE=250,FIRST_CAP=15*1000,FIRST_CAP_TEST=2000,ROUTE_WAIT=8*1000,ROUTE_POLL=200;
+const CHECK_EVERY=2*60*60*1000,CHECK_JITTER=10*60*1000,HINT_MIN=10*60*1000,HINT_MAX=24*60*60*1000,NUDGE_QUIET=5*60*1000;
 const UPDATE_USER_AGENT='AciraUpdater';
 // A failed check or download (offline at start, a dropped connection) tries again 2, 10 and 30 minutes later and as soon as the network comes back or the
 // Mac wakes (network-retry.cjs), instead of at the next regular round. Nothing new is shown: the status says 'error' as before until an attempt succeeds.
@@ -63,14 +67,15 @@ const dropped=error=>['ERR_UPDATE_STALLED','ERR_UPDATE_SHORT','ERR_UPDATE_FIRST_
 const resumable=error=>!error?.exhausted&&dropped(error);
 /** What kind of trouble an error is. 'offline' (no network, a quiet line), 'feeds' (no address gave a newer document), 'server' (a 5xx) and 'stuck' are expected on a bad day and
  *  count towards the last-resort path only in numbers (ANY_FAILURES); every other kind is a "hard" failure (HARD_FAILURES). */
-const SOFT_KINDS=new Set(['offline','feeds','server','stuck','other']);
+const SOFT_KINDS=new Set(['offline','feeds','server','stuck','other','locked']);
 /** The three causes the interface words for itself (status.cause): the connection (a page or a 404 where the file should be included), a file that did not pass its check (damaged, refused), anything else. */
-const causeOf=kind=>['offline','feeds','server','stuck','proxy','route','tls','clock','portal','missing'].includes(kind)?'network':['damaged','signature'].includes(kind)?'file':'other';
+const causeOf=kind=>['offline','feeds','server','stuck','proxy','route','tls','clock','portal','missing'].includes(kind)?'network':['damaged','signature'].includes(kind)?'file':kind==='locked'?'locked':'other';
 function kindOf(error){
  const code=String(error?.code||''),text=String(error?.message||error||'');
  if(code==='ERR_UPDATER_INVALID_SIGNATURE')return 'signature';
  if(['ERR_CHECKSUM_MISMATCH','ERR_UPDATE_SIZE','ERR_UPDATE_DAMAGED'].includes(code))return 'damaged';
  if(code==='ERR_UPDATE_DISK'||code==='ENOSPC'||code==='EDQUOT'||/ENOSPC|no space left/i.test(text))return 'disk';
+ if(code==='ERR_UPDATE_LOCKED')return 'locked'; // D149: a file in the updater's folder is held by Windows (an earlier setup that still runs, a scanner)
  if(code==='ERR_UPDATE_ROUTE')return 'route';
  if(code==='ERR_UPDATE_PORTAL')return 'portal';
  if(code==='ERR_UPDATE_INSTALL')return 'install';
@@ -220,10 +225,10 @@ function closeUpdaterConnections(){try{const {session}=require('electron');void 
 /** Replacing an AppImage removes it and moves the new one in: both need its folder (and the file) to be writable. null when they are. */
 function appImageProblem(file){try{fs.accessSync(path.dirname(file),fs.constants.W_OK);fs.accessSync(file,fs.constants.W_OK);return null;}catch(error){return error?.code==='ENOENT'?null:'Move the Acira AppImage to a folder you can write to to use automatic updates.';}} // (a path that is not there cannot be judged: left to electron-updater)
 function hasInstalledWindowsUninstaller(directory,qa=false){const names=qa?['Uninstall Acira Browser QA.exe','Uninstall AciraBrowserQA.exe']:['Uninstall Acira Browser.exe','Uninstall AciraBrowser.exe'];return names.some(name=>fs.existsSync(path.join(directory,name)));}
-/** The Insider feed's answer for an Insider who was removed (or moved to another key): 403 with {"result":"revoked"}. electron-updater keeps the body in the error's description (and quotes it
- *  into the message); the read-only look puts it in the message. */
+/** Beta 14 rules 7 and 8: the Insider feed's answer for an Insider who was removed (or moved to another key): 403 with {"result":"revoked"}. electron-updater keeps the body in the error's
+ *  description (and quotes it into the message); the read-only look puts it in the message. */
 function insiderRevokedAnswer(error){const status=Number(error?.statusCode??error?.status);return status===403&&/\\?"result\\?"\s*:\s*\\?"revoked\\?"/.test(String(error?.description??'')+'\n'+String(error?.message??''));}
-function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevoked=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,holdBypassEvery=HOLD_BYPASS_EVERY,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE}){
+function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevoked=()=>{},beforeInstall=async()=>{},autoUpdater,dir=app.getPath('userData'),platform=process.platform,env=process.env,now=Date.now,schedule=setTimeout,cancel=clearTimeout,every=setInterval,network=null,uninstallerPresent=()=>hasInstalledWindowsUninstaller(path.dirname(process.execPath),qaBuild),qaBuild=require('../build-identity.cjs').qa,testBuild=require('../build-identity.cjs').test===true,macAvailability=()=>require('./mac-app-update.cjs').macUpdateAvailability({app}),fetch:updateFetch=null,macArm64:arm64Mac=null,stall=fetched.STALL,askWithin=ASK_WITHIN,freshFor=FRESH_FOR,quitAsk=QUIT_ASK,checkWithin=CHECK_WITHIN,closeConnections=closeUpdaterConnections,route=null,updateSignature=null,random=Math.random,resources=process.resourcesPath,readConfig=null,tidySession=null,feedProvider=null,appImageCheck=appImageProblem,stuckAfter=STUCK_AFTER,staleFor=STALE_FOR_MANUAL,installWithin=INSTALL_WITHIN,pauseLasts=PAUSE_LASTS,damagedHold=DAMAGED_HOLD,holdBypassEvery=HOLD_BYPASS_EVERY,guardSchedule=setTimeout,guardCancel=clearTimeout,room=null,firstByte=fetched.FIRST_BYTE,shown=require('../startup-trace.cjs').shown,routeWait=ROUTE_WAIT,routePoll=ROUTE_POLL}){
  const file=path.join(dir,'updater.json');
  const testing=Boolean(env.ACIRA_UPDATE_TEST),stubbed=testing&&Boolean(env.ACIRA_UPDATE_STUB);
  if(stubbed&&env.ACIRA_UPDATE_TEST_PLATFORM==='win32')platform='win32'; // test-only: the stand-in updater takes the Windows route (setup, differential) on any computer
@@ -264,7 +269,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
  if(lastRun!==version||(saved.pending&&!pending)||(saved.download&&!held)||(saved.trouble&&!trouble)||(saved.attempt&&!attempt))try{persist();}catch{} // remember this version as the one that ran, so the note never shows for it again
  const installed=platform==='win32'&&app.isPackaged&&uninstallerPresent();
  // a QA build (its own identity, desktop/build-identity.cjs) never updates itself: the update would be the real Acira's installer
- const unsupported=stubbed?null:!app.isPackaged?'Updates apply to the installed app, not a development run.':qaBuild&&!env.ACIRA_UPDATE_TEST?'Updates are off in QA builds.':env.ACIRA_BROWSER_TEST_DATA&&!env.ACIRA_UPDATE_TEST?'Updates are off while running with a test profile.':platform==='darwin'?macAvailability():platform==='linux'?(env.APPIMAGE?appImageCheck(env.APPIMAGE):'Automatic updates require the AppImage installation.'):platform!=='win32'?'Automatic updates are unavailable on this platform.':!installed?'This is a portable copy. Download new versions from the releases page.':null;
+ const unsupported=stubbed?null:!app.isPackaged?'Updates apply to the installed app, not a development run.':testBuild?'Updates are off in this test copy.':qaBuild&&!env.ACIRA_UPDATE_TEST?'Updates are off in QA builds.':env.ACIRA_BROWSER_TEST_DATA&&!env.ACIRA_UPDATE_TEST?'Updates are off while running with a test profile.':platform==='darwin'?macAvailability():platform==='linux'?(env.APPIMAGE?appImageCheck(env.APPIMAGE):'Automatic updates require the AppImage installation.'):platform!=='win32'?'Automatic updates are unavailable on this platform.':!installed?'This is a portable copy. Download new versions from the releases page.':null;
  // transferred/total (bytes) and speed (bytes a second) describe the download in progress; notes are the found version's plain-text release notes (from the
  // feed, so they can be read while it downloads). pausable: Acira's own download is running (or paused), so the interface offers pause and resume.
  // A copy that cannot update itself but is an ordinary installed app (a Mac run from a disk image or Downloads, a read-only folder, a Windows portable copy, a Linux AppImage in a
@@ -276,6 +281,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
  const percentOf=(done,total)=>total?Math.max(0,Math.min(100,Math.round(done/total*100))):0;
  // Paused when Acira last quit: it starts paused, with the bytes it has, and looks for nothing until Resume.
  if(held?.paused&&!unsupported){const here=held.dir?fetched.progressOf(held.dir,held):{transferred:0,total:held.size};Object.assign(state,{status:'paused',available:held.version,total:here.total,transferred:here.transferred,progress:percentOf(here.transferred,here.total),notes:held.notes,pausable:true});}
+ let installError=false; // the last failure came while Install now was under way (fail)
  let updater=null,started=false,installing=false,promptedFor=null,welcomed=false,shownPercent=-1,shownAt=0,failedRound=false;
  // round: the download being run (a pause or a newer start makes every older one stop where it is); resuming: the person asked for this download
  // (Resume), so the look that has to come first (after a relaunch) keeps showing it as downloading and starts it whatever the automatic setting is.
@@ -300,7 +306,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
  // answered. watchdog: electron-updater's own download, given up when quiet.
  let background=null,handing=null,looking=false,asking=null,answeredAt=-Infinity,watchdog=null;
  // Pickup (see the top of this file): nextTimer is the pending regular check; hintMs the pace the last document asked for (nextCheckSeconds); lastLook when a look last began;
- // firstRan: the first check, 20 s after start, has happened (a wake or a focus before that does not start one earlier).
+ // firstRan: the first check, just after the first window shows (start()), has begun (a wake or a focus before that does not start one earlier).
  let nextTimer=null,hintMs=null,lastLook=-Infinity,firstRan=false;
  const arm64=()=>typeof arm64Mac==='function'?arm64Mac():testing&&env.ACIRA_UPDATE_TEST_ARCH?env.ACIRA_UPDATE_TEST_ARCH==='arm64':(armMac??=macArm64());
  const retry=createRetry({run:()=>{void check();},schedule,cancel,now,watch:network});
@@ -326,7 +332,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
  const wantsPrompt=()=>state.status==='ready'&&state.available!==null&&promptedFor!==state.available;
  // The first launch on a new version: its notes, shown once in a popup (only when the feed had notes; without them a quiet toast says it, see main announceUpdate).
  const wantsWelcome=()=>Boolean(whatsNew?.notes)&&!welcomed;
- const status=()=>({...state,autoDownload,channel,testersFeed,supported:!unsupported,reason:unsupported,lastResort:lastResort(),interrupted:state.status==='error'&&Boolean(state.available)&&(state.total!==null||held!==null)/* held: a download was begun; the 8 Nov incident got 0 bytes, so no progress had ever been reported */,cause:state.status==='error'&&trouble?causeOf(trouble.kind):null,retry:{failures:trouble?.count||0,at:retryAt},prompt:wantsPrompt(),welcome:wantsWelcome(),whatsNew:whatsNew?{version:whatsNew.version,notes:whatsNew.notes}:null});
+ const status=()=>({...state,autoDownload,channel,testersFeed,supported:!unsupported,reason:unsupported,lastResort:lastResort(),installFailed:state.status==='error'&&installError&&Boolean(state.available),interrupted:state.status==='error'&&Boolean(state.available)&&(state.total!==null||held!==null)/* held: a download was begun; the 8 Nov incident got 0 bytes, so no progress had ever been reported */,cause:state.status==='error'&&trouble?causeOf(trouble.kind):null,retry:{failures:trouble?.count||0,at:retryAt},prompt:wantsPrompt(),welcome:wantsWelcome(),whatsNew:whatsNew?{version:whatsNew.version,notes:whatsNew.notes}:null});
  const changed=()=>{watch();try{onChange(status());}catch{/* the interface refreshes on its next look */}};
  // Something that is 'checking' or 'downloading' and shows no sign of life (a byte, a new state) for stuckAfter starts again from a clean check, whatever it was waiting for.
  function watch(){
@@ -369,7 +375,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   // A signed build's updates are checked for Acira's signature by Acira's own helper: electron-updater's own check would start a script host.
   if(platform==='win32'&&!stubbed&&'verifyUpdateCodeSignature' in updater)updater.verifyUpdateCodeSignature=updateSignature||require('../windows-helper.cjs').updateSignatureCheck({packaged:app?.isPackaged});
   // Acira downloads the file itself (startDownload: resumable, pausable); electron-updater finds updates, then takes the finished file from its cache.
-  updater.autoDownload=false;updater.autoInstallOnAppQuit=missed<3;updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false; /* each release carries latest.yml (Stable) and beta.yml (Beta); setting a channel turns allowDowngrade on, so it is reset */ updater.logger=null;
+  updater.autoDownload=false;if(platform==='darwin')updater.disableDifferentialDownload=true; /* 14.0: a Mac's feed has never had a blockmap (0 of the 17 on the public releases), so electron-updater's differential never ran, yet its MacUpdater still copied every downloaded zip to <cache>/update.zip, 255 MB of nothing; Windows keeps its own differential (update-download.cjs diffPlan), Linux has none */updater.autoInstallOnAppQuit=missed<3;updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false; /* each release carries latest.yml (Stable) and beta.yml (Beta); setting a channel turns allowDowngrade on, so it is reset */ updater.logger=null;
   if(!stubbed)tidyUpdateSession();
   chooseFeeds();
   // A whole update ('ready') stays what the person is offered while Acira looks again (Windows checks while it waits): the same version found again,
@@ -428,6 +434,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   // any failed check ("Cannot check for updates: …"). With no look of Acira's under way it belongs to that abandoned check and changes nothing: it used
   // to turn a waiting update into 'error' (the pill and Install now gone, and on Windows the quit's ask skipped).
   updater.on('error',(error,message)=>{if(asking)return asking.finish(null);if(!looking&&/^Cannot check for updates/.test(String(message||'')))return;fail(error);});
+  tidied=tidyInstalledUpdate(); /* once, when the updater is first made (the first look, a few seconds after launch), never on the launch path */
   return updater;
  }
  /** The addresses this build asks, in order (update-hosts.cjs): the one its app-update.yml names, then the frozen GitHub feed when that is the new host; only
@@ -439,11 +446,11 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
    return list;
   }
   if(stubbed)return [];
-  // While the profile holds a valid Insider certificate (insider-service.cjs feedAuth: only after a code was accepted), the Insider feed is the one address asked, and EACH request is signed by that
-  // profile as rule 3 says (Acira-Key, Acira-Ts, Acira-Sig over that request's own path, and Acira-Cert), for addresses on the Insider feed's own origin only. No extra request: it is the update check
-  // that already happens. When the feed answers `revoked` (403 {"result":"revoked"}) the certificate goes and the next look asks the ordinary list below. A profile with no certificate never gets here.
+  // Beta 14 rule 8: while the Insider channel is on (and the profile's certificate is valid: insider-service.cjs feedAuth), the Insider feed is the one address asked, and EACH request is signed
+  // by that profile as rule 3 says (Acira-Key, Acira-Ts, Acira-Sig over that request's own path, and Acira-Cert). No extra request: it is the update check that already happens. When the feed
+  // answers `revoked` (403 {"result":"revoked"}) the certificate goes (rule 7) and the next look asks the ordinary list below. Nothing is named in a build that has no Insider feed.
   const insider=(()=>{try{return insiderAuth();}catch{return null;}})();
-  if(insider&&typeof insider.url==='string'&&/^https?:\/\//.test(insider.url))return [{name:'insider',quietWhenEmpty:true,url:insider.url.endsWith('/')?insider.url:insider.url+'/',headers:url=>{try{const now=insiderAuth();return now&&typeof now.headers==='function'&&url?now.headers(String(url),'GET'):undefined;}catch{return undefined;}},onError:error=>{if(insiderRevokedAnswer(error))try{insiderRevoked(insider.profileId);}catch{/* the next look asks again */}}}];
+  if(insider&&typeof insider.url==='string'&&/^https?:\/\//.test(insider.url))return [{name:'insider',url:insider.url.endsWith('/')?insider.url:insider.url+'/',headers:url=>{try{const now=insiderAuth();return now&&typeof now.headers==='function'&&url?now.headers(String(url),'GET'):undefined;}catch{return undefined;}},onError:error=>{if(insiderRevokedAnswer(error))try{insiderRevoked(insider.profileId);}catch{/* the next look asks again */}}}];
   let text=null;
   try{text=readConfig?readConfig():fs.readFileSync(path.join(resources||'','app-update.yml'),'utf8');}catch{/* no app-update.yml: electron-updater's own default */}
   return hosts.feedsFor({primary:hosts.feedUrlFromConfig(text),testers:testersFeed});
@@ -476,7 +483,9 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   }
   const retryable=error?.code!=='ERR_UPDATER_INVALID_SIGNATURE'; // a setup not signed by the application owner: another try gets the same file
   if(state.status==='ready'&&(looking||background)){if(background){background=null;if(retryable)failed(error);}changed();return;}
-  endInstall();state.status='error';state.error=friendly(error);if(retryable)failed(error);changed();
+  // D141: an error that arrives while Install now is under way is about the INSTALL (the setup could not be started): the file is whole on disk.
+  // The status says so (installFailed), so the row does not call it a download that failed.
+  installError=installing;endInstall();state.status='error';state.error=friendly(error);if(retryable)failed(error);changed();
  }
  /** Stops the newer download behind a whole update (its bytes stay, for a later start). */
  function stopBehind(){if(!background)return;background=null;round++;job?.controller.abort();job=null;}
@@ -511,11 +520,21 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   Promise.resolve().then(lookUp).catch(()=>{}).then(()=>{if(asking===mine)asking=null;reply();});
   return promise;
  }
+ /** Asks the route to confirm itself. The launch look (patient) asks again every routePoll, for up to routeWait, while the profile's connection settings are still
+  *  being applied (ERR_UPDATE_ROUTE: nothing was sent): the look now starts seconds earlier than it used to, and a failure here would cost the 2-minute retry. Every
+  *  other look, and a look that was given up, ends at once with the error, as before. */
+ async function confirmed(patient,gaveUp=()=>false){
+  for(let left=Math.ceil(routeWait/routePoll);;left--){
+   try{await route();return;}
+   catch(error){if(!patient||error?.code!=='ERR_UPDATE_ROUTE'||left<=0||gaveUp())throw error;}
+   await new Promise(resolve=>{const timer=setTimeout(resolve,routePoll);timer.unref?.();});
+  }
+ }
  /** One check of electron-updater's, by the profile's route (a route that is not confirmed sends nothing and rejects). electron-updater's own request
   *  timeout waits for a 'socket' event that Electron's net requests never emit, so on a dead connection its check never ended: 'checking' (or an ask)
   *  until Acira restarted, and every later check was handed that same check back. After checkWithin it is given up: electron-updater forgets it, so the
   *  next check asks again; its connections are closed when no download of Acira's shares them; and it counts as a failed look (the retries go on). */
- function lookUp(){
+ function lookUp(patient=false){
   return new Promise((resolve,reject)=>{
    let hung=null,gaveUp=false;
    const timer=setTimeout(()=>{
@@ -524,7 +543,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
     if(!job)closeConnections();
     reject(Object.assign(new Error('The update check got no answer. It tries again later.'),{code:'ERR_UPDATE_CHECK_TIMEOUT'}));
    },checkWithin);timer.unref?.();
-   Promise.resolve().then(async()=>{setup();if(route)await route();if(gaveUp)return null;/* the route took the whole time: no check after the look ended */hung=updater.checkForUpdates();return hung;}).then(resolve,reject).finally(()=>clearTimeout(timer));
+   Promise.resolve().then(async()=>{setup();if(route)await confirmed(patient,()=>gaveUp);if(gaveUp)return null;/* the route took the whole time: no check after the look ended */hung=updater.checkForUpdates();return hung;}).then(resolve,reject).finally(()=>clearTimeout(timer));
   });
  }
  // electron-updater's own download (the fallback) has no inactivity limit: a connection that goes quiet would hold 'downloading', and skip every later
@@ -536,6 +555,8 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   current.timer=setTimeout(()=>{if(watchdog!==current)return;watchdog=null;try{current.token?.cancel();}catch{}fail(Object.assign(new Error('The update download stopped. It starts again at the next try.'),{code:'ERR_UPDATE_STALLED'}));},stall);current.timer.unref?.();
  }
  // Progress is real (bytes counted as they arrive); the interface hears of it when the percent moves, never faster than PROGRESS_EVERY.
+ // the last byte is here, or the figure the person reads has reached 100 (the last half of a percent): no pause from then on (D131)
+ const atLastByte=()=>state.progress>=100||(state.total>0&&state.transferred>=state.total);
  function progressed(progress){
   if(state.status==='paused'||state.status==='ready')return;
   alive();
@@ -543,10 +564,21 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   if(resumed){if(resumed.from===null)resumed.from=transferred??0;else if((transferred??0)>resumed.from)resumed=null;} // bytes are coming again: the Resume took
   state.status='downloading';state.progress=Math.max(0,Math.min(100,Math.round(Number.isFinite(progress?.percent)?progress.percent:total?transferred/total*100:0)));
   state.transferred=transferred;state.total=total;state.speed=count(progress?.bytesPerSecond);
-  const at=now();if(state.progress!==shownPercent&&(at-shownAt>=PROGRESS_EVERY||state.progress===100||shownPercent<0)){shownPercent=state.progress;shownAt=at;changed();}
+  // D131 (14.4): the figure reads 100 or the last byte is here (what is left is the SHA-512 check): a pause now would leave "paused, 100 %", often with a whole file. It is no longer offered (every window hears of it) and pause() refuses it.
+  const flip=state.pausable&&atLastByte();if(flip)state.pausable=false;
+  const at=now();if(flip||state.progress!==shownPercent&&(at-shownAt>=PROGRESS_EVERY||state.progress===100||shownPercent<0)){shownPercent=state.progress;shownAt=at;changed();}
+ }
+ /** 14.0: the update that was installed is no longer needed in electron-updater's cache (update-download.cjs tidyInstalled says what goes and what stays): a Mac or Linux launch removes
+  *  pending/ when it holds the version now running or an older one, and a Mac's update.zip. Runs once, when setup() first makes the updater. It cannot take a fresh download: that is always a NEWER version than the one running (the version guard), and with the differential off (above) a Mac no longer writes update.zip. */
+ let tidied=Promise.resolve(null);
+ function tidyInstalledUpdate(){
+  // D149 (14.3): Windows leaves nothing of an installed update to remove (the setup stays for the next differential), but a stale setup that was HELD at a hand-over stays in pending/ beside the new one: removed once it is free
+  if(platform==='win32')return cacheOf().then(where=>where?fetched.sweepStale({pendingDir:where.pending,busy:()=>handing!==null}):null).catch(()=>null);
+  if(platform!=='darwin'&&platform!=='linux')return Promise.resolve(null);
+  return cacheOf().then(where=>where?fetched.tidyInstalled({cacheDir:where.cache,version,platform,lowerThan}):null).catch(()=>null);
  }
  const cacheOf=async()=>{try{const helper=await updater.getOrCreateDownloadHelper?.();return helper?.cacheDir&&helper.cacheDirForPendingUpdate&&typeof helper.clear==='function'?{cache:helper.cacheDir,dir:path.join(helper.cacheDir,fetched.DIR_NAME),pending:helper.cacheDirForPendingUpdate,helper}:null;}catch{return null;}};
- /** The headers of one request for the update's files. From the Insider feed each request is signed for its OWN address (the signature covers the path; an address off the Insider feed's origin gets none), so callers pass the URL; a download asks again for every request it makes (update-download.cjs takes a function). */
+ /** The headers of one request for the update's files. From the Insider feed (rule 8) each request is signed for its OWN address (the signature covers the path), so callers pass the URL; a download asks again for every request it makes (update-download.cjs takes a function). */
  const requestHeaders=url=>{try{const provider=updater.updateInfoAndProvider?.provider,base=provider&&typeof updater.computeRequestHeaders==='function'?{...updater.computeRequestHeaders(provider)}:{accept:'*/*'};if(provider?.answeredBy==='insider'&&url){const now=insiderAuth();const signed=now&&typeof now.headers==='function'?now.headers(String(url),'GET'):null;if(signed)Object.assign(base,signed);}return base;}catch{return {accept:'*/*'};}};
  // Windows: only what changed since the installed version's setup. The NSIS installer keeps a copy of itself in electron-updater's cache
  // (installer.exe), and the blockmap published with each setup says which of its blocks the new one shares. The installed version's blockmap is looked
@@ -738,8 +770,8 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   if(fromPending)void Promise.resolve().then(()=>where.helper.clear()).catch(()=>{});
   resumed=null;fail(error);
  }
- async function check({manual=false}={}){
-  if(unsupported)return checkOnly?peek():status();
+ async function check({manual=false,launch=false}={}){
+  if(unsupported)return checkOnly?peek(launch):status();
   // A person's own "Check for updates" breaks what is stuck (no sign of life for staleFor) and ends a pause; an automatic check leaves both alone (a pause, until it expires).
   if(manual&&['checking','downloading'].includes(state.status)&&now()-aliveAt>=staleFor)unstick();
   if(asking)return status(); // Install now (or the end of a download) is asking the feed right now
@@ -748,15 +780,15 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   // Mac, 'ready': a downloaded update waits for Install now. Checking again hands it to Squirrel.Mac a second time, which either fails (status 'error':
   // the pill and Install now disappear) or stages a second install under the first. The first check after the restart finds anything newer.
   if(platform==='darwin'&&state.status==='ready')return status();
-  return look(manual);
+  return look(manual,launch);
  }
  /** The read-only look of a copy that cannot update itself: the same addresses and rules (update-feeds.cjs), nothing downloaded, no retry ladder (the next round asks again). */
- async function peek(){
+ async function peek(patient=false){
   if(looking)return status();
   looking=true;lastLook=now();
   try{
    const feeds=feedList();if(!feeds.length)return status();
-   if(route)await route();
+   if(route)await confirmed(patient);
    net??=updaterFetch();
    const channelFile=(channel==='beta'?'beta':'latest')+(platform==='darwin'?'-mac':platform==='linux'?'-linux':'')+'.yml';
    const read=await feedRules.readChannel({feeds,channelFile,current:version,floor:()=>null,
@@ -768,10 +800,10 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   finally{looking=false;}
   return status();
  }
- async function look(byPerson=false){
+ async function look(byPerson=false,launch=false){
   failedRound=false;looking=true;lastLook=now();alive();retryAt=null;personAsked=byPerson;
   // route: the check leaves by the active profile's route (its proxy); a route that is not confirmed sends nothing and counts as a failed look
-  try{await lookUp();}catch(error){fail(error);}finally{looking=false;personAsked=false;}
+  try{await lookUp(launch);}catch(error){fail(error);}finally{looking=false;personAsked=false;}
   return status();
  }
  // Settings' Download, when updates are not downloaded automatically
@@ -779,7 +811,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
  /** Pause: the download stops where it is and keeps its bytes. The pause is kept in updater.json: a quit and relaunch starts paused, and nothing is
   *  looked for or downloaded until Resume. Only Acira's own download pauses (pausable); electron-updater's could only start again from zero. */
  function pause(){
-  if(unsupported||state.status!=='downloading'||!state.pausable)return status();
+  if(unsupported||state.status!=='downloading'||!state.pausable||atLastByte())return status(); // (D131: not once the last byte is here, whatever the interface asked)
   round++;job?.controller.abort();job=null;resuming=false;resumed=null;
   state.status='paused';state.speed=null;
   if(held){Object.assign(held,{paused:true,pausedAt:now()});try{persist();}catch{}}
@@ -811,7 +843,7 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   if(wasPaused)changed();
   if(updater){updater.allowPrerelease=channel==='beta';updater.channel=channel==='beta'?'beta':'latest';updater.allowDowngrade=false;}return status();
  }
- /** The Insider channel was turned on (a code was accepted), or the certificate that held it was lost (insider-service.cjs): what was found on the other feed is forgotten and the next look asks the feed that is now the right one. */
+ /** The Insider channel was turned on, or a pass that was holding it was lost (insider-service.cjs): what was found on the other feed is forgotten and the next look asks the feed that is now the right one. */
  function insiderChanged(){
   const wasPaused=state.status==='paused';stopBehind();
   if(wasPaused){fetched.discard(held?.dir);held=null;Object.assign(state,{progress:null,transferred:null,total:null,speed:null,notes:'',pausable:false,error:null});}
@@ -905,8 +937,17 @@ function createAppUpdater({app,onChange=()=>{},insiderAuth=()=>null,insiderRevok
   if(at-lastLook<NUDGE_QUIET||at-answeredAt<CHECK_EVERY)return false;
   void check();return true;
  }
- // and while an update waits (Windows; a Mac's waits with Squirrel.Mac and is not looked at again), every READY_RECHECK, so a pulled build is dropped
- function start(){if(started||unsupported&&!checkOnly)return;started=true;const first=schedule(()=>{firstRan=true;void check();armNext();},stubbed?1500:CHECK_DELAY);first?.unref?.();if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}}
- return {status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,installCancelled,claimPrompt,claimWelcome,start,whatsNewInfo,insiderChanged,atQuit};
+ /** The first look: FIRST_SETTLE after the first window is on screen (the `shown` promise: startup-trace.cjs), or FIRST_CAP after start at the latest when none shows. */
+ function start({after=shown}={}){
+  if(started||unsupported&&!checkOnly)return;started=true;
+  let settleTimer=null,capTimer=null,begun=false;
+  const begin=()=>{if(begun)return;begun=true;if(settleTimer!==null){cancel(settleTimer);settleTimer=null;}if(capTimer!==null){cancel(capTimer);capTimer=null;}firstRan=true;void check({launch:true});armNext();};
+  const settle=()=>{if(begun||settleTimer!==null)return;settleTimer=schedule(begin,FIRST_SETTLE);settleTimer?.unref?.();};
+  if(after&&typeof after.then==='function'){capTimer=schedule(begin,testing?FIRST_CAP_TEST:FIRST_CAP);capTimer?.unref?.();after.then(settle,settle);}else settle();
+  // and while an update waits (Windows; a Mac's waits with Squirrel.Mac and is not looked at again), every READY_RECHECK, so a pulled build is dropped
+  if(platform!=='darwin'){const again=every(()=>{if(state.status==='ready')void check();},READY_RECHECK);again?.unref?.();}
+ }
+ /* cameFrom: the version that ran before this launch (null on a fresh install or a build that predates it): Beta 14's one-time welcome is owed only to a profile that came from 13.x or older (insider-service.cjs markWelcomeOwed) */
+ return {tidied:()=>tidied,status,check,nudge,download,pause,resume,setAutoDownload,setChannel,install,installCancelled,claimPrompt,claimWelcome,start,whatsNewInfo,cameFrom:()=>lastRun,insiderChanged,atQuit};
 }
-module.exports={createAppUpdater,insiderRevokedAnswer,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,CHECK_DELAY,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};
+module.exports={createAppUpdater,insiderRevokedAnswer,createStubUpdater,kindOf,friendly,notesText,STUCK_AFTER,STALE_FOR_MANUAL,INSTALL_WITHIN,PAUSE_LASTS,DAMAGED_HOLD,HOLD_BYPASS_EVERY,DOWNLOAD_PAGE,NOTES_MAX,updateFile,macArm64,lowerThan,CHECK_EVERY,CHECK_JITTER,FIRST_SETTLE,FIRST_CAP,FIRST_CAP_TEST,ROUTE_WAIT,ROUTE_POLL,NUDGE_QUIET,UPDATE_USER_AGENT,CHANNELS,READY_RECHECK,QUIT_ASK,CHECK_WITHIN};

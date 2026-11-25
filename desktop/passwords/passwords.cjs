@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const {createVault,VaultError}=require('./vault.cjs');
+const {createMasks,MaskError,calm}=require('./masks.cjs');
 const {displayHost,normalizeOrigin}=require('./origin-match.cjs');
 const {parseLogins,exportLogins,LIMITS:CSV_LIMITS}=require('./csv.cjs');
 const {assess,reuseCounts}=require('./strength.cjs');
@@ -17,8 +18,11 @@ const CLIPBOARD_CLEAR_MS=30000,IMPORT_TTL_MS=5*60000;
 class RequestError extends Error{constructor(message){super(message);this.name='RequestError';}}
 const bad=message=>{throw new RequestError(message);};
 
-function createPasswords({dir,keys,gate,clipboard,confirm,pickOpen,pickSave,trash=null,now=Date.now,timers={setTimeout,clearTimeout},fsApi=fs}){
+function createPasswords({dir,keys,gate,clipboard,confirm,pickOpen,pickSave,trash=null,maskFetch=null,maskOrigins={},now=Date.now,timers={setTimeout,clearTimeout},fsApi=fs}){
  const vault=createVault({dir,keys,now});
+ // Email masks (masks.cjs): `maskFetch(profileId)` is the route to the mask service; without one every mask request says it can't connect.
+ const masks=createMasks({vault,now,timers,testOrigins:maskOrigins,fetchFor:maskFetch||(async()=>{throw new MaskError('network',tr('pw.mask.err.route','The connection settings aren’t confirmed yet, so Acira sent nothing. Try again in a moment.'));})});
+ const maskAnswer=async work=>{try{return {passwords:{masks:await work()}};}catch(error){if(error instanceof MaskError)return {passwords:{error:{code:error.code,message:error.message}}};return {passwords:{error:{code:'unexpected',message:calm()}}};}};
  const settingsFile=path.join(dir,'settings.json');
  let settings=readSettings();
  let clearTimer=null,imports=new Map();
@@ -152,6 +156,18 @@ function createPasswords({dir,keys,gate,clipboard,confirm,pickOpen,pickSave,tras
      try{fsApi.writeFileSync(target,exportLogins(vault.all(profileId)),{mode:0o600});}catch{return {passwords:{unreadable:tr('pw.err.cantSave','The file couldn’t be saved there.')}};}
      return {passwords:{exported:count,name:path.basename(target)}};
     }
+    // --- email masks (masks.cjs). The key is never in an answer: status carries {connected, provider, switches, count} only. ---
+    case 'masks.status':exact(request,[]);return {passwords:{masks:{...masks.status(profileId),items:masks.list(profileId)}}};
+    case 'masks.connect':exact(request,['provider','key']);return maskAnswer(async()=>({...await masks.connect(profileId,{provider:request.provider,key:request.key}),items:masks.list(profileId)}));
+    case 'masks.disconnect':{
+     exact(request,[]);const state=masks.status(profileId);if(!state.connected)return {passwords:{masks:{...state,items:[]}}};
+     const sure=await confirm(ctx.window,{message:tr('pw.mask.dialog.disconnectTitle','Disconnect {service}?',{service:state.name}),detail:tr('pw.mask.dialog.disconnectDetail','Acira forgets your key and this list of masks. The masks stay at {service} and keep forwarding mail until you switch them off there.',{service:state.name}),confirmLabel:tr('pw.mask.dialog.disconnect','Disconnect'),destructive:true});
+     if(!sure)return {passwords:{cancelled:true}};
+     return {passwords:{masks:{...masks.disconnect(profileId),items:[]}}};
+    }
+    case 'masks.settings':{exact(request,['offer','note']);for(const key of ['offer','note'])if(request[key]!==undefined&&typeof request[key]!=='boolean')bad('Choose on or off.');return maskAnswer(async()=>({...masks.settings(profileId,{offer:request.offer,note:request.note}),items:masks.list(profileId)}));}
+    case 'masks.enable':{exact(request,['id','enabled']);if(typeof request.enabled!=='boolean')bad('Choose on or off.');const id=idOf(request.id);return maskAnswer(async()=>({...masks.status(profileId),items:await masks.setEnabled(profileId,id,request.enabled)}));}
+    case 'masks.delete':{exact(request,['id']);const id=idOf(request.id);return maskAnswer(async()=>({...masks.status(profileId),items:await masks.remove(profileId,id)}));}
     default:bad('Unknown request.');
    }
   }catch(error){
@@ -160,6 +176,6 @@ function createPasswords({dir,keys,gate,clipboard,confirm,pickOpen,pickSave,tras
    throw new RequestError(tr('pw.err.vault','Something went wrong with the password vault.'));
   }
  }
- return {handle,vault,gate,get enabled(){return settings.enabled;},lock(){gate.lock();pruneImports();imports.clear();},removeProfile(id){for(const [token,entry] of imports)if(entry.profileId===id)imports.delete(token);return vault.removeProfile(id);},check};
+ return {handle,vault,gate,masks,get enabled(){return settings.enabled;},lock(){gate.lock();pruneImports();imports.clear();},removeProfile(id){for(const [token,entry] of imports)if(entry.profileId===id)imports.delete(token);return vault.removeProfile(id);},check};
 }
 module.exports={createPasswords,RequestError,CLIPBOARD_CLEAR_MS};

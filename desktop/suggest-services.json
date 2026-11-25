@@ -1,0 +1,90 @@
+{
+  "_about": "Beta 14: the built-in search suggestion services (Settings, Search, \"Get suggestions from\"). One address per service, %s where the typed text goes, HTTPS only. `hosts` are the search sites whose own engine entry uses this service (stock or added by the person, e.g. Kagi), so such an engine finds it without a suggestion address of its own. Every address was fetched live on `checked` (reply shape: [\"typed\",[\"one\",\"two\"]]); they change, so this is the one place to update. Read by desktop/search-suggest.cjs and src/runtime/searchSuggest.ts.",
+  "services": [
+    {
+      "id": "duckduckgo",
+      "name": "DuckDuckGo",
+      "url": "https://duckduckgo.com/ac/?q=%s&type=list",
+      "hosts": [
+        "duckduckgo.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape, content type application/javascript (so the reply is read by shape, never by content type); sets no cookie"
+    },
+    {
+      "id": "brave",
+      "name": "Brave Search",
+      "url": "https://search.brave.com/api/suggest?q=%s",
+      "hosts": [
+        "search.brave.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape on the first check; every later check from the same address (a few requests, three seconds apart) answered 429 (too many requests), so it is a service that limits by address: re-check from another network"
+    },
+    {
+      "id": "startpage",
+      "name": "Startpage",
+      "url": "https://www.startpage.com/suggestions?q=%s&format=opensearch",
+      "hosts": [
+        "www.startpage.com",
+        "startpage.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "answered 204 (no content) for every text from the test network; the OpenSearch address its own site advertises (format=opensearch). Re-check from another network"
+    },
+    {
+      "id": "ecosia",
+      "name": "Ecosia",
+      "url": "https://ac.ecosia.org/autocomplete?q=%s&type=list",
+      "hosts": [
+        "www.ecosia.org",
+        "ecosia.org"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape; one first request in four answered 503 (its CDN challenge) and the next ones 200; sets a CDN cookie that is never kept"
+    },
+    {
+      "id": "qwant",
+      "name": "Qwant",
+      "url": "https://api.qwant.com/api/suggest/?q=%s&client=opensearch",
+      "hosts": [
+        "www.qwant.com",
+        "qwant.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape through the opensearch client; the v3 address answers another JSON shape (not used)"
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "url": "https://suggestqueries.google.com/complete/search?client=firefox&q=%s",
+      "hosts": [
+        "www.google.com",
+        "google.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape plus an extra object; sets a NID cookie that is never kept"
+    },
+    {
+      "id": "bing",
+      "name": "Bing",
+      "url": "https://api.bing.com/osjson.aspx?query=%s",
+      "hosts": [
+        "www.bing.com",
+        "bing.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape plus extra objects; sets nine cookies that are never kept"
+    },
+    {
+      "id": "kagi",
+      "name": "Kagi",
+      "url": "https://kagisuggest.com/api/autosuggest?q=%s",
+      "hosts": [
+        "kagi.com"
+      ],
+      "checked": "2026-11-13",
+      "note": "200, OpenSearch shape; the address a Kagi user gave us (kagisuggest.com, a separate domain with no Kagi session); kagi.com/api/autosuggest answers the same"
+    }
+  ]
+}

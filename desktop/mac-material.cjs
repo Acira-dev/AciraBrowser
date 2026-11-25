@@ -44,4 +44,38 @@ function unwatchScroll(window){
  if(!bridge?.unwatchScroll||!window||window.isDestroyed())return false;
  try{return !!bridge.unwatchScroll(window.getNativeWindowHandle());}catch{return false;}
 }
-module.exports={setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip,windowOnActiveSpace,watchScroll,unwatchScroll};
+// Every NSWindow of the process as [{class, level, behavior, visible, onActiveSpace, ...}] (read only; the rigs and the picture-in-picture Space fix use it). [] when unavailable.
+function nativeWindows(){
+ if(!bridge?.nativeWindows)return [];
+ try{return JSON.parse(bridge.nativeWindows());}catch{return [];}
+}
+// Chromium's own small video window (picture in picture) may join the Space of a fullscreen window and every other Space (mac-material.mm pipSpaces). Returns how many windows were changed.
+function pipOverFullscreen(){
+ if(!bridge?.pipSpaces)return 0;
+ try{return JSON.parse(bridge.pipSpaces()).length;}
+ catch(error){if(!warningShown){console.warn('Mac picture in picture Spaces:',error.message);warningShown=true;}return 0;}
+}
+/** Beta 14.0: where the video's small pop-out window is now ({number, x, y, width, height} in AppKit points, origin at the bottom left of the primary display), or null (none on screen, or not macOS). */
+function pipFrame(any=false){
+ if(!bridge?.pipFrame)return null;
+ try{return JSON.parse(bridge.pipFrame(any===true));}
+ catch(error){if(!warningShown){console.warn('Mac picture in picture frame:',error.message);warningShown=true;}return null;}
+}
+/** Puts the pop-out window at this frame (AppKit points). 1 when it was moved. */
+function pipPlace(x,y,width,height){
+ if(!bridge?.pipPlace)return 0;
+ try{return bridge.pipPlace(x,y,width,height)|0;}
+ catch(error){if(!warningShown){console.warn('Mac picture in picture place:',error.message);warningShown=true;}return 0;}
+}
+/** Beta 14.0: the pop-out window is made transparent until it is placed (never longer than 250 ms: the native side puts it back by itself). 1 when a window was held. */
+function pipHold(){
+ if(!bridge?.pipHold)return 0;
+ try{return bridge.pipHold()|0;}
+ catch(error){if(!warningShown){console.warn('Mac picture in picture hold:',error.message);warningShown=true;}return 0;}
+}
+function pipRelease(){
+ if(!bridge?.pipRelease)return 0;
+ try{return bridge.pipRelease()|0;}
+ catch(error){if(!warningShown){console.warn('Mac picture in picture release:',error.message);warningShown=true;}return 0;}
+}
+module.exports={pipFrame,pipPlace,pipHold,pipRelease,pipOverFullscreen,nativeWindows,setMaterialAppearance,inspectMaterial,setOverlayMaterial,hideFullscreenStrip,windowOnActiveSpace,watchScroll,unwatchScroll};

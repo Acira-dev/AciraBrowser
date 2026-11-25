@@ -25,6 +25,15 @@
  *  the key: 'wait' (a first digit now waiting: do not run Go to tab), 'taken' (a second digit, already acted on: run nothing) or
  *  'flushed' (a waiting digit acted just before this key). `typed` is the waiting digit, for the numbers on screen. */
 const HOLD_MS = 140;
+/** A modifier key-down that arrives while the hold already runs, no longer after the last one than this, is the key repeating, whether or not the platform marked it
+ *  (Beta 14, the team 12 Nov: "if Ctrl stays held for a long while, the numbers disappear and glitch badly"). The OS repeats a held key every 33 to 500 ms, after a first pause of
+ *  up to a second. A repeat that came without `isAutoRepeat` was taken for a new press: it ended the numbers 0.4 s into the repeats (hide, then a new wait of HOLD_MS that the next
+ *  repeat restarted, 30 times a second), and they never came back until Ctrl was let go and pressed again. Longer than this since the last modifier event, a key-down is a new press
+ *  again (a release that was never heard, see LINGER_MS, must not keep the next hold from showing its numbers). */
+const REPEAT_GAP = 1100;
+/** The first repeat of a held key comes after the OS's repeat delay (250 ms at the shortest, on Windows); an unmarked key-down sooner than this after the press is a NEW press whose
+ *  release was lost (Chromium drops a key-up after a handled shortcut), and it starts over as it always did. */
+const FIRST_REPEAT_MIN = 240;
 /** After a number key the numbers stay at most this long unless the modifier's release is heard. Main handles Ctrl/Cmd+digit and stops the
  *  key (the page never sees it), and Chromium then drops every key-up until the next key-down on that page: when the tab does not change
  *  (it is already the current one, or there is none with that number) the focus stays on the same page and the release never arrives. */
@@ -32,10 +41,10 @@ const LINGER_MS = 500;
 /** How long a first digit waits for its second. */
 const CHORD_MS = 1500;
 
-function createTabNumberHold({ platform = process.platform, delay = HOLD_MS, linger = LINGER_MS, chord = CHORD_MS, setTimer = setTimeout, clearTimer = clearTimeout, isNumberKey, digitOf, naturalDigit, tabCount, select, onChange, onTyped } = {}) {
+function createTabNumberHold({ platform = process.platform, now = Date.now, repeatGap = REPEAT_GAP, delay = HOLD_MS, linger = LINGER_MS, chord = CHORD_MS, setTimer = setTimeout, clearTimer = clearTimeout, isNumberKey, digitOf, naturalDigit, tabCount, select, onChange, onTyped } = {}) {
   const mac = platform === 'darwin', modifier = mac ? 'Meta' : 'Control';
   // idle: the modifier is up (or lost); waiting: down alone, timer running; shown: numbers on screen; spent: down, but another key came first.
-  let phase = 'idle', timer = null, lingerTimer = null, chordTimer = null, typed = null, acted = false;
+  let phase = 'idle', timer = null, lingerTimer = null, chordTimer = null, typed = null, acted = false, lastDownAt = -Infinity, repeating = false;
   const stopTimer = () => { if (timer !== null) { clearTimer(timer); timer = null; } if (lingerTimer !== null) { clearTimer(lingerTimer); lingerTimer = null; } };
   /** The waiting first digit is over: gone from the screen, and (when `act`) carried out as a tab of its own. */
   const finishChord = act => {
@@ -67,9 +76,13 @@ function createTabNumberHold({ platform = process.platform, delay = HOLD_MS, lin
     // Chromium drops the first key-up after a key-down that main handled (Ctrl+3 is one: the page never sees it), so a modifier
     // released first can go unheard. Every key event says whether the modifier is still down: when it says not, the hold is over.
     if (input.key !== modifier && phase !== 'idle' && (mac ? input.meta : input.control) === false) { settle('idle'); return undefined; }
-    if (input.type === 'keyUp') { if (input.key === modifier) settle('idle'); return undefined; }
+    if (input.type === 'keyUp') { if (input.key === modifier) { lastDownAt = -Infinity; repeating = false; settle('idle'); } return undefined; }
     if (input.key === modifier) {
-      if (input.isAutoRepeat) return undefined; // Windows and Linux repeat a held Ctrl (main also sends one itself, to get the release heard)
+      const at = now(), gap = at - lastDownAt, stillDown = (mac ? input.meta : input.control) !== false;
+      // Windows and Linux repeat a held Ctrl (main also sends one itself, to get the release heard). A repeat that came unmarked is told by the key being down already: after the
+      // OS's repeat delay, then every few tens of ms. A digit waiting for its second is the one case left to the old rule (main's own marked repeat serves it, and a lost release is likely there).
+      if (input.isAutoRepeat || phase !== 'idle' && typed === null && stillDown && gap < repeatGap && (repeating || gap >= FIRST_REPEAT_MIN)) { lastDownAt = at; repeating = true; return undefined; }
+      lastDownAt = at; repeating = false;
       settle('idle');
       if (!alone(input)) { phase = 'spent'; return undefined; }
       phase = 'waiting';
@@ -132,4 +145,4 @@ function createTabNumberHold({ platform = process.platform, delay = HOLD_MS, lin
   };
 }
 
-module.exports = { createTabNumberHold, HOLD_MS, LINGER_MS, CHORD_MS };
+module.exports = { createTabNumberHold, HOLD_MS, LINGER_MS, CHORD_MS, REPEAT_GAP, FIRST_REPEAT_MIN };

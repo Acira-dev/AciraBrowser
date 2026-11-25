@@ -191,7 +191,7 @@ details[open] > summary .acira-menu-chevron {
   padding: 4px;
 }
 /* Panels have no title bar and no ×: the first row is content; Esc and click-away close. */
-:root:root:root .browser-popup:is(.popup-content-profile, .popup-content-security, .popup-content-tor, .popup-content-extensions, .popup-content-appearance, .popup-content-downloads, .popup-content-protection, .popup-content-vpn, .popup-content-update, .popup-content-whats-new) > .popup-header {
+:root:root:root .browser-popup:is(.popup-content-profile, .popup-content-security, .popup-content-tor, .popup-content-extensions, .popup-content-appearance, .popup-content-downloads, .popup-content-task-manager, .popup-content-protection, .popup-content-vpn, .popup-content-update, .popup-content-whats-new, .popup-content-transfer, .popup-content-easy-files, .popup-content-noel-context) > .popup-header {
   display: none;
 }
 /* Panels that keep a header (the tab viewer's "Your tabs 3"): a quiet label on the text edge. */
@@ -199,7 +199,7 @@ details[open] > summary .acira-menu-chevron {
   height: 32px;
   min-height: 32px;
   padding: 0 4px;
-  padding-inline-start: 36px;
+  padding-inline-start: 8px;   /* C5a: the title starts on the row icons' edge (4 + 8 = 12 from the glass), not 40 */
 }
 :root:root:root .browser-popup .popup-header > strong {
   flex: 1;
@@ -408,7 +408,7 @@ details[open] > summary .acira-menu-chevron {
 :root:root:root .toast-row + .toast-row {
   flex-basis: 49px;
   height: 49px;
-  padding-top: 9px;
+  padding-top: 8px;
   border-top: 0;
   background: var(--menu-sep) center 4px / 100% 1px no-repeat;
 }
@@ -465,13 +465,13 @@ details[open] > summary .acira-menu-chevron {
   gap: 8px;
 }
 :root:root:root .browser-popup.popup-content-palette .palette-section {
-  padding-inline-start: 32px;
+  padding-inline-start: 8px;   /* C5a: on the row icons' edge */
 }
 /* ── Tab viewer (Alt+T; founder, 25 Oct: "clearer"; M07): the header, the search text and the row titles share the one
    x = 36 edge; the header is in full ink (its count and Alt+T stay quiet); the search is a field (a 1px ring, 32px)
    set apart from the rows rather than another row; no "New tab" footer, which repeated the New tab page's own row. ── */
 :root:root:root .browser-popup.popup-content-tabs > .popup-header {
-  padding-inline-start: 32px;
+  padding-inline-start: 8px;   /* C5a: on the row icons' edge */
   padding-inline-end: 8px;
 }
 :root:root:root .browser-popup.popup-content-tabs > .popup-header > strong {
@@ -492,8 +492,9 @@ details[open] > summary .acira-menu-chevron {
   background: transparent;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent);
 }
-:root:root:root .browser-popup.popup-content-tabs .popup-search:focus-within {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
+/* the focus ring is the Active border's (styles/active-border.css); the resting edge above stays */
+@media (forced-colors: active) {
+  :root:root:root .browser-popup .popup-search:focus-within { outline: 2px solid Highlight; outline-offset: -2px; }
 }
 :root:root:root .browser-popup.popup-content-tabs .popup-search > svg {
   color: var(--menu-t2, var(--text-2));
@@ -681,4 +682,33 @@ details[open] > summary .acira-menu-chevron {
 :root:root:root .app[data-reduced-motion=true] .browser-popup.popup-content-menu::after {
   animation: menu-scroll-cue linear both !important;
   animation-timeline: --menu-scroll !important;
+}
+
+/* C5b (the team notes, 17 Nov): a focused field showed only a top and a bottom line (the Active border's "Divider fade" fades to nothing at both ends and these fields had no edge at rest). They get the tab viewer's field look: a faint full edge at rest (14 %),
+   stronger while focused (22 %), a rounded box (8 px), so all four sides read. The palette's old hairline under the field is gone. */
+:root:root:root .browser-popup.popup-content-palette .popup-fixed-search {
+  margin: 0 -4px;
+  padding: 0;
+  border-bottom: 0;
+  background: none;
+}
+:root:root:root .browser-popup.popup-content-palette .popup-search {
+  box-sizing: border-box;
+  height: 40px;
+  margin: 4px 4px 6px;
+  padding: 0 12px;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+}
+:root:root:root .browser-popup.popup-content-palette .popup-search:focus-within {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+}
+:root:root:root .browser-popup.popup-content-bookmarks .popup-search {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+}
+:root:root:root .browser-popup.popup-content-bookmarks .popup-search:focus-within {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
 }

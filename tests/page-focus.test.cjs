@@ -201,6 +201,13 @@ test('interfaceKeepsFocus: typing fields keep it, a button pressed with the mous
   assert.equal(interfaceKeepsFocus(doc(element({matches() { throw new Error('unsupported'); }}))), false);
 });
 
+test('interfaceKeepsFocus: the open Favorites panel keeps it, a Favorite pressed inside it does not (Beta 14: a click that came with the window\'s activation had the page take the keyboard 120 ms later, and the panel shut as it opened)', () => {
+  const panelRoot = element({matches: selector => selector === '.sb-apps-panel'});
+  assert.equal(interfaceKeepsFocus(doc(panelRoot)), true, 'a pointer open leaves the focus on the panel itself (FavoritesPanel.tsx), not :focus-visible');
+  assert.equal(vm.runInNewContext(INTERFACE_FOCUS_PROBE, {document: doc(panelRoot)}), true, 'and the script main sends says so');
+  assert.equal(interfaceKeepsFocus(doc(element({matches: selector => selector === '.sb-app'}))), false, 'a Favorite pressed inside the panel chooses a page: the page takes the keyboard as before');
+});
+
 test('the script main sends is that same function, and it runs on its own in the page', () => {
   const run = active => vm.runInNewContext(INTERFACE_FOCUS_PROBE, {document: doc(active)});
   assert.equal(run(element({tagName: 'INPUT', type: 'text'})), true);

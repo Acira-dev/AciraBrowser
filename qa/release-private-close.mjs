@@ -90,8 +90,9 @@ generated = generated.replace(
 );
 const prefix = `
 async function showReleaseWindows(app){await app.evaluate(({BaseWindow})=>{process.env.ACIRA_BROWSER_TEST_HIDDEN='0';for(const w of BaseWindow.getAllWindows()){w.setBounds({x:-2800,y:80,width:1400,height:900});w.setFocusable(false);w.setIgnoreMouseEvents(true);w.showInactive();}});}
-async function keepEditingRelease(app){const card=await poll(async()=>{for(const page of app.context().pages())if(page.url().includes('site-prompt.html'))try{if(await page.locator('#card').isVisible()&&await page.getByRole('button',{name:'Keep editing',exact:true}).isVisible())return page;}catch{}},Boolean,'Actual unsaved-work close card');assert.match(await card.locator('#sites').innerText(),/127\\.0\\.0\\.1/);await card.getByRole('button',{name:'Keep editing',exact:true}).click();await poll(()=>card.locator('#card').isVisible(),visible=>!visible,'Keep editing dismisses close card');await app.evaluate(()=>{process.env.ACIRA_BROWSER_TEST_HIDDEN='1';});}
+async function keepEditingRelease(app){const card=await unsavedWorkCard(app,'127.0.0.1');await card.keepEditing();await app.evaluate(()=>{process.env.ACIRA_BROWSER_TEST_HIDDEN='1';});}
 import {_electron} from 'playwright';
+import {unsavedWorkCard} from ${JSON.stringify(pathToFileURL(path.resolve("qa/release-close-card.mjs")).href)};
 import {initializeReleaseProfile} from ${JSON.stringify(pathToFileURL(path.resolve("qa/release-initialize-profile.mjs")).href)};
 import {qualifiedElectron} from ${JSON.stringify(pathToFileURL(path.resolve("qa/release-runtime.mjs")).href)};
 import {qualifyPackage,launchQualifiedPackage} from ${JSON.stringify(pathToFileURL(path.resolve("qa/accounts-qualified-packages.mjs")).href)};

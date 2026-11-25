@@ -55,7 +55,7 @@ function paintDisplay(nodes: readonly Text[], a: number, b: number) {
  * everything. Once the field shows the full address, the pointer is left to the browser. */
 export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur, onViewBlur, edited=true, onModifiedEnter, suggestionOpen=false,popupTrigger=false,activeSuggestionId,suggestionListId='address-suggestions',onSuggestionKeyDown,placeholder=t('addressfield.placeholder'),label=t('addressfield.label')}: {
   /** The address text at rest sits in the middle of the field and glides to the left edge while the field is in use (and back): its time and easing (ui/addressGlide.ts). `ms` 0 places it without a glide (Reduce motion, speed Off). Left out: the text stays at the left, as ever. */glide?: Glide;
-  centerWithin?: string; label?: string; placeholder?: string; inputRef: RefObject<HTMLInputElement | null>; value: string; onChange: (value: string) => void;
+  centerWithin?: string; label?: string; placeholder?: string; inputRef: RefObject<HTMLInputElement | null>; value: string; onChange: (value: string, inputType?: string) => void;
   onFocus: () => void; onBlur: (event:FocusEvent<HTMLInputElement>) => void; style: BrowserStyle; reducedMotion: boolean; speed: number;
   /** The interface's view has been without the keyboard for the suggestion list's grace while the field kept its edit (ui/addressEdit.ts): the list closes, nothing else. */onViewBlur?: () => void;
   /** The person has typed in the field (Chromium's user_input_in_progress): only then does a blur of the view keep the field as it is. Left out: always (a field that only ever shows what was typed). */edited?: boolean;
@@ -182,7 +182,7 @@ export function AddressField({glide, inputRef, value, onChange, onFocus, onBlur,
       onPointerCancel={event => {focusClick.current=null; const step = stepAddressGesture(gesture.current, {type:'cancel',pointerId:event.pointerId}); gesture.current = step.state; apply(step.effect, event.currentTarget);}}
       onLostPointerCapture={event => {if (gesture.current.kind !== 'press') return; const step = stepAddressGesture(gesture.current, {type:'cancel',pointerId:event.pointerId}); gesture.current = step.state; apply(step.effect, event.currentTarget);}}
       onClick={event => {const click=focusClick.current;focusClick.current=null;if(click&&!click.moved&&event.detail===1){event.currentTarget.select();fromStart(event.currentTarget);}}}
-      onChange={event => onChange(event.target.value)}
+      onChange={event => onChange(event.target.value, (event.nativeEvent as InputEvent).inputType)}
       onKeyDown={event => {
         if (gesture.current.kind === 'clicked') gesture.current = {kind:'idle'};
         if(event.nativeEvent.isComposing)return;

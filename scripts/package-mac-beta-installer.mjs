@@ -9,8 +9,9 @@ import {build} from 'esbuild';
 const require=createRequire(import.meta.url),run=promisify(execFile),plist=require('plist');
 const {walk,hashFile}=require('../packaging/macos/install-engine.cjs');
 const {buildInstallerPage}=require('../packaging/macos/installer-page.cjs');
-const {resealArguments,verifySigningDetails}=require('../packaging/macos/signing.cjs');
-const inputs=['scripts/package-mac-beta.mjs','scripts/package-mac-beta-installer.mjs','packaging/macos/installer-main.cjs','packaging/macos/installer-preload.cjs','packaging/macos/installer-page.cjs','packaging/macos/install-engine.cjs','packaging/macos/running-app.cjs','packaging/macos/strings.cjs','packaging/installer/strings.json','docs/launch/concepts/installer-creation.html'];
+const {resealArguments,nestedSignArguments,verifySigningDetails}=require('../packaging/macos/signing.cjs');
+const {brandHelpers,assertHelperNames}=require('../packaging/macos/helper-names.cjs');
+const inputs=['scripts/package-mac-beta.mjs','scripts/package-mac-beta-installer.mjs','packaging/macos/installer-main.cjs','packaging/macos/installer-preload.cjs','packaging/macos/installer-page.cjs','packaging/macos/install-engine.cjs','packaging/macos/running-app.cjs','packaging/macos/strings.cjs','packaging/macos/helper-names.cjs','packaging/macos/permission-texts.cjs','packaging/macos/signing.cjs','packaging/mac/entitlements.mac.inherit.plist','packaging/installer/strings.json','docs/launch/concepts/installer-creation.html'];
 
 // notarization: what the sealed ACIRA-INSTALLER-BUILD.json may say ('requested' when the caller sends the installer to Apple after this, else 'none');
 // payloadNotarized: whether the browser being archived was already notarized and stapled (package-mac-widevine.mjs does that first).
@@ -27,11 +28,16 @@ export async function packageBetaInstaller({repo,browser,output,source,version,p
  // beside the installer in the disk image.
  const omitted=new Set(['Contents/Resources/app','Contents/Resources/app.asar','Contents/Resources/app.asar.unpacked','Contents/Resources/tor','Contents/Resources/ACIRA-BUILD.json','Contents/Resources/app-update.yml','Contents/embedded.provisionprofile']);
  await fs.cp(browser,installer,{recursive:true,verbatimSymlinks:true,filter:file=>!omitted.has(path.relative(browser,file))});
- const infoFile=path.join(installer,'Contents/Info.plist'),info=plist.parse(await fs.readFile(infoFile,'utf8'));
+ const infoFile=path.join(installer,'Contents/Info.plist'),info=plist.parse(await fs.readFile(infoFile,'utf8')),browserName=info.CFBundleName;
  await fs.rename(path.join(installer,'Contents/MacOS',info.CFBundleExecutable),path.join(installer,'Contents/MacOS/AciraInstaller'));
  Object.assign(info,{CFBundleIdentifier:'computer.acira.installer',CFBundleName:'Acira Installer',CFBundleDisplayName:'Install Acira',CFBundleExecutable:'AciraInstaller'});
- for(const key of ['CFBundleURLTypes','CFBundleDocumentTypes','NSCameraUsageDescription','NSMicrophoneUsageDescription','ElectronAsarIntegrity'])delete info[key];
+ for(const key of ['CFBundleURLTypes','CFBundleDocumentTypes',...Object.keys(require('../packaging/macos/permission-texts.cjs').macPermissionTexts()),'ElectronAsarIntegrity'])delete info[key];
  await fs.writeFile(infoFile,plist.build(info));
+ // D139: the installer is a copy of the browser bundle under its own name, and the engine finds its helpers by the bundle's CFBundleName: the browser's
+ // helpers ("Acira Browser Helper...") are named "Acira Installer Helper..." here, or the installer would not start. The rename changes each helper's
+ // Info.plist and executable name, so those four small bundles are signed again (same identity, hardened runtime, the helpers' entitlements);
+ // the frameworks keep their signatures and the outer seal comes last, below.
+ for(const helper of await brandHelpers(installer,{from:browserName}))await run('/usr/bin/codesign',nestedSignArguments(helper.bundle,policy,path.join(repo,'packaging/mac/entitlements.mac.inherit.plist')));
  const application=path.join(resources,'app');await fs.mkdir(application);
  await build({entryPoints:[path.join(repo,'packaging/macos/installer-main.cjs')],outfile:path.join(application,'main.cjs'),bundle:true,platform:'node',format:'cjs',external:['electron','original-fs'],target:'node22'});
  await fs.copyFile(path.join(repo,'packaging/macos/installer-preload.cjs'),path.join(application,'installer-preload.cjs'));
@@ -50,5 +56,6 @@ export async function packageBetaInstaller({repo,browser,output,source,version,p
  const details=(await run('/usr/bin/codesign',['--display','--verbose=4',installer])).stderr;
  verifySigningDetails(details,policy);
  if(!details.includes('Identifier=computer.acira.installer\n'))throw Error('Installer signing identifier differs.');
+ await assertHelperNames(installer);
  return {installer,payloadArchiveSha256:payload.archiveSha256,payloadFiles:payload.entries.length,packagingInputs,installerSignatureVerified:true,installerNotarized:false};
 }

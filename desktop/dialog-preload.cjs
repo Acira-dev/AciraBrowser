@@ -4,5 +4,5 @@ const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('aciraDialog',{
  onInit:callback=>ipcRenderer.on('acira:dialog-init',(_event,payload)=>callback(payload)),
  ready:height=>ipcRenderer.send('acira:dialog-ready',height),
- respond:(index,selected,dismissed)=>ipcRenderer.send('acira:dialog-respond',index,selected,dismissed===true),
+ respond:(index,selected,dismissed,checked)=>ipcRenderer.send('acira:dialog-respond',index,selected,dismissed===true,checked===true),
 });

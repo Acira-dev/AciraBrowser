@@ -15,6 +15,8 @@
 const FILES = Object.freeze([
     'action-renderer.cjs',
     'action.cjs',
+    'browsing-data-renderer.cjs',
+    'browsing-data.cjs',
     'capture-renderer.cjs',
     'commands-renderer.cjs',
     'commands.cjs',
@@ -70,6 +72,8 @@ function modules() {
   return {
     'action-renderer.cjs'         : require('./action-renderer.cjs'),
     'action.cjs'                  : require('./action.cjs'),
+    'browsing-data-renderer.cjs': require('./browsing-data-renderer.cjs'),
+    'browsing-data.cjs'         : require('./browsing-data.cjs'),
     'capture-renderer.cjs'        : require('./capture-renderer.cjs'),
     'commands-renderer.cjs'       : require('./commands-renderer.cjs'),
     'commands.cjs'                : require('./commands.cjs'),

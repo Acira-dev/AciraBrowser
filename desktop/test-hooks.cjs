@@ -10,6 +10,14 @@
 // on a test profile (TEST_PROFILE_ENV), which on a packaged Mac build also gets the mock keychain. The table of every hook is in docs/launch/TEST_HOOKS.md.
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const HOOK_ENV = Object.freeze([
+  'ACIRA_OVERLAY_REST_MS', // how long the window must be hidden, minimised or out of the keyboard's focus before the popup layer's renderer rests (desktop/main.cjs overlay lifecycle; a rig sets seconds instead of the 10 minutes): test mode only
+  'ACIRA_JOBS_IN_WORKER', // 1 = the list jobs (engine build, threat-list parses) on a worker thread of main, not in a utility process (desktop/browser-services/job-process.cjs; a rig forces the old path): test mode only
+  'ACIRA_TEST_WEB_SWIPE', // a scripted run on a Mac drives the Windows / Linux two-finger swipe too (desktop/main.cjs webSwipe; the preloads hear --acira-web-swipe): test profile only
+  'ACIRA_PAGE_LEAD_FRAMES', // the page's wait when a sidebar column opens, in display frames (desktop/page-motion.cjs; a rig sets 0 to measure without it): test mode only
+  'ACIRA_PAGE_STEP_FRAMES', // how many display frames after its curve an edge that gives room takes each whole point (desktop/page-motion.cjs D97; a rig sets 0 for the before): test mode only
+  'ACIRA_PAGE_LAND_FRAMES', // how many display frames after its curve's end that edge takes its place (desktop/page-motion.cjs D97; a rig sets 0 for the before): test mode only
+  'ACIRA_PAGE_REFRESH_LOCK', // 0 = a growing page's steps on main's timer as before, not on the display's refresh (desktop/page-motion.cjs D112; a rig sets it for the before): test mode only
+  'ACIRA_DIALOG_CARD', // Beta 14: the old card view for a question (the interface's own dialog is the default; this is the fallback)
   'ACIRA_DEV', // the interface from the dev server at http://127.0.0.1:5194, which the browser bridge then trusts
   'ACIRA_PREVIEW_RECORD', // preview build records and process metadata written into the profile
   'ACIRA_UPDATE_TEST', 'ACIRA_UPDATE_FEED', 'ACIRA_UPDATE_FEED_FALLBACK', 'ACIRA_UPDATE_STUB', 'ACIRA_UPDATE_STUB_VERSION', 'ACIRA_UPDATE_STUB_NOTES', // another update feed, a stand-in updater
@@ -24,19 +32,32 @@ const HOOK_ENV = Object.freeze([
   'ACIRA_SITE_COLOR_PROBE', 'ACIRA_SITE_COLOR_PROBE_LOG', // the site-colour research probe (desktop/site-color-probe.cjs): reads page pixels and colours for a research log; a test profile only
   'ACIRA_SIMULATE_SYSTEM_THEME', // a pretend Linux desktop theme ({"dark":true,"accent":"#9141ac"}) for pictures and tests of Match my system theme
   // These already need a test profile where they are read; dropped too, so a later change that forgets that check stays safe.
-  'ACIRA_TEST_QUIET_NETWORK', 'ACIRA_TEST_TOR_SIMULATE_BLOCK', 'ACIRA_TEST_PASSKEY_STUB', 'ACIRA_TEST_DATABASE_CHOICE', 'ACIRA_TEST_SERVICES_DELAY_MS',
-  'ACIRA_TEST_LIVE_PRS', 'ACIRA_TEST_LIVE_PRS_TRACE', 'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT',
-  'ACIRA_INSIDER_ENDPOINT', 'ACIRA_INSIDER_FEED', 'ACIRA_INSIDER_PUBLIC_KEY', 'ACIRA_INSIDER_AUTO_ENROLL', 'ACIRA_INSIDER_INVITES_OPEN', // the Insider server's address, the Insider feed and the test public key(s): read only on a test profile (insider-config.cjs), dropped in real builds
+  'ACIRA_TEST_QUIET_NETWORK', 'ACIRA_TEST_TOR_SIMULATE_BLOCK', 'ACIRA_TEST_PASSKEY_STUB', 'ACIRA_TEST_DATABASE_CHOICE', 'ACIRA_TEST_SERVICES_DELAY_MS', 'ACIRA_TEST_SHOW_LAST_RESORT_MS' /* the window's last-resort show (show-fallback.cjs): shorter than 45 s, test profile only */,
+  'ACIRA_TEST_LIVE_PRS', 'ACIRA_TEST_LIVE_PRS_TRACE', 'ACIRA_TEST_PRIVATE_PREPARE', 'ACIRA_PASSWORDS_TEST_GATE', 'ACIRA_PASSWORDS_TEST_FILES', 'ACIRA_MASKS_TEST_ORIGINS', 'ACIRA_METRICS_ENDPOINT', 'ACIRA_SITE_REPORT_ENDPOINT', 'ACIRA_TRANSFER_ENDPOINT',
+  'ACIRA_FEEDBACK_REPORT_ENDPOINT', 'ACIRA_FEEDBACK_CONTRIBUTOR_ENDPOINT', 'ACIRA_FEEDBACK_DISCORD_INVITE', // Beta 14 feedback: where reports go and the Discord invitation; read only on a test profile (feedback-client.cjs endpoints()), dropped in real builds
+  'ACIRA_INSIDER_ENDPOINT', 'ACIRA_INSIDER_FEED', 'ACIRA_INSIDER_PUBLIC_KEY', 'ACIRA_INSIDER_AUTO_ENROLL', 'ACIRA_INSIDER_INVITES_OPEN', // Beta 14 Insider programme: the functions' address, the Insider feed and the test public key(s); read only on a test profile (insider-config.cjs), dropped in real builds
+  'ACIRA_RETURNING_MARK_FILE', // Beta 14: a file that stands in for the "installed here before" registry value / preferences value in a test profile (install-mark.cjs createReturningMark); a test profile never touches the real registry or preferences; dropped in real builds
+  'ACIRA_RANK_EMBLEM', // Beta 14 rank emblems (a proposal): the drawing a test profile shows instead of the dots (feedback-service.cjs emblem()); dropped in real builds
+  'ACIRA_FRESH_WELCOME', // Beta 14 fresh-install welcome: lets a test profile be treated as a first run (main.cjs, beside markWelcomeOwed); read only together with ACIRA_BROWSER_TEST_DATA; dropped in real builds, where a first run is fresh by itself
+  
   'ACIRA_SITE_ALLOWLIST_ENDPOINT', 'ACIRA_SITE_ALLOWLIST_FILE', 'ACIRA_EXT_NOTIFICATIONS_NATIVE', 'ACIRA_WINDOWS_BUILD',
   'ACIRA_BOOKMARK_TRACE', // logs each extension bookmark-store change (extension-bookmark-buffer.cjs), for rigs only
   'ACIRA_QA_FAST_SWITCH', // keeps an in-memory audit of every fast tab switch (fast-switch.cjs): what main presented against what the interface then sent; rigs only
   'ACIRA_POPUP_HOST', // 'window' | 'parent': an extension's toolbar popup as a window of its own or as a view inside the browser window (extension-popup-host.cjs), for rigs on a Mac; read only on a test profile
   'ACIRA_TEST_PASSWORD_STORE', // basic_text | unknown: the run sees Linux with no keyring, so website-session restore is off (session-cookie-restore.cjs storageForRun); read only on a test profile
+  'ACIRA_APPICON_URL', 'ACIRA_APPICON_FIRST_MS', 'ACIRA_APPICON_RUNNING_VERSION', // the app icon that changes without a new installer (desktop/app-icon-host.cjs): another address for the daily file (plain http on 127.0.0.1 only), a quick first look, and a pretended running version (for minVersion); each is read only on a test profile and dropped in a real build
+  'ACIRA_BILLBOARD_URL', 'ACIRA_BILLBOARD_TEST_KEY', 'ACIRA_BILLBOARD_EVERY_MS', // the billboard (browser-services/billboard.cjs): another address for the signed announcements file, an extra public key that would make a file signed by someone else count, a quick fetch rhythm; each is read only on a test profile and dropped in a real build, so neither an address nor a key can be overridden there
+  'ACIRA_UNSEEN_GATE_DEBUG', // logs each step of the unseen-page gate (desktop/unseen-media-gate.cjs: held, released, seen) to the console, for rigs only; dropped in a real build on the person's own profile
+  'ACIRA_LOAD_AHEAD_DEBUG', // logs each load-ahead step ("When Acira starts, load ahead", desktop/load-ahead.cjs) to the console, for rigs only; dropped in a real build on the person's own profile
   'ACIRA_POINTER_SOURCE', // 'events' | 'screen': where the edge reveal reads the pointer, the window's own pointer events (what Wayland needs) or screen.getCursorScreenPoint() (desktop/pointer-point.cjs); lets a Mac run the Wayland path in the real app; read only on a test profile
+  'ACIRA_SEAMLESS_GLASS', // '0': Beta 14.1: the glass float (the Seamless sidebar and top bar over the LIVE page, src/ui/chromeEdge.ts, data-seamless-glass-preview) is the default; '0' brings the 14.0 picture float back for a whole test run. Dropped in real builds
+  'ACIRA_EASY_FILES_SCREENSHOTS', 'ACIRA_EASY_FILES_CLIPBOARD', 'ACIRA_EASY_FILES_DIALOG_OK', 'ACIRA_EASY_FILES_LOG', // Easy Files (desktop/easy-files.cjs): the folder it lists instead of the system Screenshots folder, the picture it offers instead of the real clipboard, the rig's own stand-in for the system file window, a debug log; for rigs on a test profile only, dropped in real builds
 ]);
 // The other ACIRA_ names the shipped code reads, and why a real build keeps them (tests/test-hooks-packaged.test.cjs makes every new one
 // pick a list).
 const KEPT_ENV = Object.freeze({
+  ACIRA_NO_TOUCHPAD_SWIPE: 'turns the Windows / Linux two-finger swipe off whatever the setting says (a person\'s own off switch)',
+  ACIRA_TOUCHPAD_LOG: 'writes a local recording of the swipe\'s scroll numbers (no page data) for a person whose swipe misbehaves; desktop/touchpad-log.cjs',
   ACIRA_BROWSER_TEST_DATA: 'moves the profile to a test folder; dropped (TEST_PROFILE_ENV) when the folder is the person\'s own profile, inside it or a link to it',
   ACIRA_BROWSER_TEST_DOWNLOAD_DIR: 'moves downloads into a folder inside the test profile; dropped with ACIRA_BROWSER_TEST_DATA',
   ACIRA_STARTUP_TRACE: 'writes start-up timing marks to the file the launcher names',
@@ -54,6 +75,8 @@ const KEPT_ENV = Object.freeze({
   ACIRA_MEMORY_SAVER_DEBUG: 'console log only',
   ACIRA_PM_LOG: 'console log only',
   ACIRA_EDGE_TRACE: 'console log only',
+  ACIRA_EDGE_RASTER: 'chooses how the reveal\'s layers are rastered ahead (will, sliver, both, off; looks only)',
+  ACIRA_EDGE_WARM: 'chooses the first-transition warm-up (src/ui/edgeWarm.ts: real (the default), layers, root, blur, off); invisible either way, so a looks-only switch',
   ACIRA_CAPTURE_DEBUG: 'console log only',
   ACIRA_STORE_BAR_DEBUG: 'console log only',
   ACIRA_NO_FAST_SWITCH: 'turns the fast tab switch (fast-switch.cjs) off, a rig\'s "before"; the switch then waits for the interface as it did, never ends differently',

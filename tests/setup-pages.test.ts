@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 // M saw web tabs that never opened after first-run setup with Import (1 of 3 runs, not reproduced in 5 capped runs, qa/l-setup-import.mjs).
 // The code paths that could leave a tab without a page are kept from stopping each other; these checks keep that in place.
 const main=readFileSync(new URL('../desktop/main.cjs',import.meta.url),'utf8').replace(/\r/g,'');
-const body=(name:string)=>{const start=main.indexOf(name);assert.ok(start>=0,name+' exists');return main.slice(start,start+2600);};
+const body=(name:string)=>{const start=main.indexOf(name);assert.ok(start>=0,name+' exists');return main.slice(start,start+3200);};
 
 test('resuming after a profile is ready always makes its pages, even if restoring extensions fails',()=>{
   const resume=body('async function resumeCleanup(){');

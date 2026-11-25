@@ -1,15 +1,20 @@
 import { carriesHttpsFirst,navigationTitle,resolveNavigation } from '../runtime/navigation';
 import { siteIdentity } from '../runtime/sites';
-import { effectiveProviders,resolveSearch } from '../runtime/searchProviders';
+import { effectiveProviders,resolveSearch,type SearchProviders } from '../runtime/searchProviders';
+import { queryOfSearchUrl,SUGGEST_MAX_ROWS } from '../runtime/searchSuggest';
 import type { BrowserAction,BrowserSnapshot,SearchEngine } from '../runtime/types';
 import { bookmarksVisibleFrom,historyVisibleFrom,tabVisibleFrom } from './suggestionPrivacy';
 
 import { t } from '../i18n';
 import { answerFor } from './addressAnswers';
 import { matchCommands,type AddressCommand } from './addressCommands';
-export type AddressSuggestionKind='tab'|'bookmark'|'history'|'url'|'search'|'answer'|'command';
-/** An `answer` row (a calculation, a conversion, the time in a city) has no address: choosing it copies `copy`. A `command` row runs the registry command `commandId`, with its shortcut in `keys`. */
+export type AddressSuggestionKind='tab'|'bookmark'|'history'|'url'|'search'|'answer'|'command'|'suggestion';
+/** A `suggestion` row (Beta 14) is a plain-text suggestion from the search engine the person chose: its `title` is the text, its `url` the default engine's search for it, its `detail` the service's name. It only ever comes after the person's own rows. An `answer` row (a calculation, a conversion, the time in a city) has no address: choosing it copies `copy`. A `command` row runs the registry command `commandId`, with its shortcut in `keys`. */
 export interface AddressSuggestion {id:string;kind:AddressSuggestionKind;title:string;url:string;detail:string;tabId?:string;historyId?:string;copy?:string;commandId?:string;keys?:string}
+/** The typed row is ONE row for as long as it means the same thing (a search, or an address that is none of the stored pages): its id does not carry the text. The id is the row's React key and its
+ *  motion identity (ui/suggestionMotion.ts re-forms a row it has not placed), so an id that changed with every letter re-formed the whole row, the engine's name beside it too (blurred, faded in
+ *  again), once per keystroke (a member's report, 14.4). Now the row's node stays and only its text changes; a row that changes place, or becomes another kind of row, still re-forms. */
+export const TYPED_SEARCH_ID='typed:search',TYPED_URL_ID='typed:url';
 export const searchEngineName=(engine:SearchEngine)=>({google:'Google',duckduckgo:'DuckDuckGo',bing:'Bing'})[engine]||'Google';
 
 // Each address is resolved once, not at every keystroke (13.8: resolving every history visit again was about half of a 5000-visit ranking, which
@@ -39,13 +44,13 @@ function matchScore(query:string,title:string,url:string){
 
 /** Pure local ranking. Profile-specific history never crosses browsing profiles, and no source crosses a privacy line
  * (`suggestionPrivacy.ts`): an ordinary tab never names a private, Tor or secured tab; a Tor tab reads nothing ordinary. */
-export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'tabs'|'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'bookmarks'|'settings'>&Partial<Pick<BrowserSnapshot,'websiteLanguage'|'browserProfiles'>>,limit=8,extras:{commands?:readonly AddressCommand[];now?:Date}={}):AddressSuggestion[]{
+export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'tabs'|'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'bookmarks'|'settings'>&Partial<Pick<BrowserSnapshot,'websiteLanguage'|'browserProfiles'|'bookmarkNodes'>>,limit=8,extras:{commands?:readonly AddressCommand[];now?:Date}={}):AddressSuggestion[]{
  const query=input.trim().slice(0,4096),normalized=query.toLocaleLowerCase(),current=state.tabs.find(tab=>tab.id===state.activeTabId),profile=current?.browserProfileId||state.activeBrowserProfileId;
  const viewer=current??{browserProfileId:profile},history=historyVisibleFrom(state,viewer,state.browsingHistory),bookmarks=bookmarksVisibleFrom(state,viewer)?state.bookmarks:[];
  const candidates=new Map<string,{item:AddressSuggestion;score:number;order:number}>();let order=0;
- const add=(kind:AddressSuggestionKind,url:string,title:string,bonus:number,detail:string,tabId?:string,historyId?:string)=>{
+ const add=(kind:AddressSuggestionKind,url:string,title:string,bonus:number,detail:string,tabId?:string,historyId?:string,alsoMatching:readonly string[]=[])=>{
   const valid=normalizedUrl(url);if(!valid||valid==='acira://new')return;
-  const score=matchScore(normalized,title,valid);if(score<0)return;
+  const score=Math.max(matchScore(normalized,title,valid),...alsoMatching.map(text=>matchScore(normalized,text,valid)));if(score<0)return;
   const item:AddressSuggestion={id:`local:${valid}`,kind,title:title||navigationTitle(valid),url:valid,detail,...tabId?{tabId}:{},...historyId?{historyId}:{}};
   const previous=candidates.get(valid),candidate={item,score:score+bonus,order:order++};
   if(!previous||candidate.score>previous.score)candidates.set(valid,candidate);
@@ -53,7 +58,18 @@ export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'
  const alreadyOpen=t('addresssuggestions.alreadyOpen'),bookmarkLabel=t('addresssuggestions.bookmark'),fromHistory=t('addresssuggestions.fromHistory');
  state.tabs.forEach((tab,index)=>{if(tab.browserProfileId===profile&&tab.id!==state.activeTabId&&tabVisibleFrom(state,viewer,tab))add('tab',tab.url,tab.customTitle||tab.title,220-index,alreadyOpen,tab.id);});
  const historyTitles=new Map<string,string>();for(const visit of history)if(visit.browserProfileId===profile&&!historyTitles.has(visit.url))historyTitles.set(visit.url,visit.title);
- bookmarks.forEach((url,index)=>add('bookmark',url,historyTitles.get(url)||siteIdentity(url).label,150-index,bookmarkLabel));
+ // 14.4 (a member's report): a bookmark row wears the bookmark's OWN name, then the page's history title, then the site's label. Two bookmarks on one site used to read the
+ // same (the label, twice). The names come from this profile's own ordinary bookmarks, and only when the privacy rule above lets bookmarks be shown at all. An address saved under two
+ // names is one row (the list is keyed by address): the name that comes first in the bookmark list titles it, and the other names still find it.
+ const names=new Map<string,string[]>();
+ if(bookmarks.length)for(const node of state.bookmarkNodes??[]){
+  const name=node.title?.trim();if(!node.url||!name||node.tor||node.browserProfileId!==profile)continue;
+  const known=names.get(node.url);if(!known)names.set(node.url,[name]);else if(!known.includes(name))known.push(name);
+ }
+ bookmarks.forEach((url,index)=>{
+  const own=names.get(url)??[],historyTitle=historyTitles.get(url);
+  add('bookmark',url,own[0]||historyTitle||siteIdentity(url).label,150-index,bookmarkLabel,undefined,undefined,[...own.slice(1),...historyTitle?[historyTitle]:[]]);
+ });
  history.forEach((visit,index)=>{if(visit.browserProfileId===profile)add('history',visit.url,visit.title,100-Math.min(index,99),fromHistory,undefined,visit.id);});
  const local=[...candidates.values()].sort((a,b)=>b.score-a.score||a.order-b.order).map(candidate=>candidate.item);
  if(!query)return local.slice(0,limit);
@@ -64,8 +80,8 @@ export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'
  const target=resolveNavigation(query,engine,providers,state.websiteLanguage);
  let typed:AddressSuggestion|undefined;
  if(!target.error){
-  if(target.query){const resolved=resolveSearch(query,providers),provider=providers.engines.find(item=>item.id===resolved?.engineId);typed={id:`search:${query}`,kind:'search',title:query,url:target.url,detail:t("addresssuggestions.searchEngine", { engine: provider?.name||searchEngineName(engine) })};}
-  else typed=local.find(item=>item.url===target.url)??{id:`url:${target.url}`,kind:'url',title:addressDisplayUrl(target.url),url:target.url,detail:t("addresssuggestions.openAddress")};
+  if(target.query){const resolved=resolveSearch(query,providers),provider=providers.engines.find(item=>item.id===resolved?.engineId);typed={id:TYPED_SEARCH_ID,kind:'search',title:query,url:target.url,detail:t("addresssuggestions.searchEngine", { engine: provider?.name||searchEngineName(engine) })};}
+  else typed=local.find(item=>item.url===target.url)??{id:TYPED_URL_ID,kind:'url',title:addressDisplayUrl(target.url),url:target.url,detail:t("addresssuggestions.openAddress")};
  }
  const first=local.find(item=>item!==typed&&completesAddress(normalized,item.url))??(typed?.kind==='search'?knownSite(normalized,local):undefined);
  const ordered=[...first?[first]:[],...typed?[typed]:[],...local.filter(item=>item!==first&&item!==typed)];
@@ -119,8 +135,31 @@ export function addressSuggestionAction(suggestion:AddressSuggestion,switchToTab
  return {type:'tab.navigate',url:suggestion.url,...tabId?{tabId}:{},...typed!==undefined&&carriesHttpsFirst(resolveNavigation(typed),suggestion.url)?{httpsFirst:true}:{}};
 }
 
-/** Tab accepts a local completion without visiting it; Enter performs navigation. */
+/** What the search engine suggested for the typed text: the service's name and its plain-text suggestions (at most 5). */
+export interface EngineSuggestions{name:string;items:readonly string[]}
+/** The person's own rows first and unchanged, then the engine's suggestions as a group of their own (Beta 14): never above, never in between, so a row on screen never moves when one arrives.
+ *  A suggestion the list already shows (a history row's title, the text of a search results page in history, the typed row) is not shown twice. Choosing one searches for it with the default engine. */
+export function withEngineSuggestions(rows:AddressSuggestion[],engine:EngineSuggestions|null|undefined,providers:SearchProviders,typed:string):AddressSuggestion[]{
+ if(!engine?.items.length)return rows;
+ const shown=new Set<string>([typed.trim().replace(/\s+/g,' ').toLocaleLowerCase()]);
+ for(const row of rows){
+  shown.add(row.title.trim().toLocaleLowerCase());
+  if(row.kind==='history'||row.kind==='bookmark'){const text=queryOfSearchUrl(row.url,providers);if(text)shown.add(text.replace(/\s+/g,' ').toLocaleLowerCase());}
+ }
+ const extra:AddressSuggestion[]=[];
+ for(const text of engine.items){
+  const key=text.trim().replace(/\s+/g,' ').toLocaleLowerCase();
+  if(!key||shown.has(key))continue;
+  const resolved=resolveSearch(text,providers);if(!resolved)continue;
+  shown.add(key);extra.push({id:`engine:${text}`,kind:'suggestion',title:text,url:resolved.url,detail:engine.name});
+  if(extra.length===SUGGEST_MAX_ROWS)break;
+ }
+ return extra.length?[...rows,...extra]:rows;
+}
+
+/** Tab accepts a local completion without visiting it; Enter performs navigation. A search engine's suggestion puts its own text in the bar for editing (Tab or Right arrow). */
 export function addressCompletion(query:string,suggestion:AddressSuggestion):string|null{
+ if(suggestion.kind==='suggestion')return suggestion.title;
  if(suggestion.kind==='search'||suggestion.kind==='answer'||suggestion.kind==='command')return null;
  const value=addressDisplayUrl(suggestion.url),input=query.trim();
  // Only a visible prefix can be completed in place; anything else would replace the typed text.

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChevronRight, Search, X } from '../../components/AppIcons';
 import { useListMotion } from '../../ui/sharedMotion';
+import { revealWithin } from '../../ui/scrollReveal';
 import { breadcrumb, settingsRegistry, type SettingsContext, type SettingsEntry } from './registry';
 import { searchSettingsDetailed, type SettingsHit } from './search';
 
@@ -34,8 +35,11 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  /** D178: the word stays after a pick, so coming back to the box selects it (pasting or typing replaces it, the arrows keep it);
+   *  the click that focused the box must not put the caret back in place of the selection. */
+  const keepSelection = useRef(false);
   const trimmed = query.trim();
-  const result = useMemo(() => (trimmed ? searchSettingsDetailed(settingsRegistry, trimmed, context) : { hits: [] as SettingsHit[], corrected: undefined as string | undefined }), [trimmed, context.customGlassColors, context.privateProfile, context.desktop, context.websiteOpen, context.appearanceChanged, context.toolbarChanged, context.newTabChanged, context.stockSearch, context.verticalTabs, context.hideToolbarRow, context.sidebarClosable]);
+  const result = useMemo(() => (trimmed ? searchSettingsDetailed(settingsRegistry, trimmed, context) : { hits: [] as SettingsHit[], corrected: undefined as string | undefined }), [trimmed, context.customGlassColors, context.privateProfile, context.desktop, context.websiteOpen, context.appearanceChanged, context.toolbarChanged, context.newTabChanged, context.stockSearch, context.verticalTabs, context.hideToolbarRow, context.insiderChannel, context.sidebarClosable, context.miniRail]);
   const hits: SettingsHit[] = result.hits, corrected = result.corrected, marked = corrected ?? trimmed;
   const showList = open && Boolean(trimmed);
   const status = !trimmed ? '' : hits.length ? `${corrected ? `${t("settingssearch.showingFor", { query: corrected })}. ` : ''}${t('settingssearch.foundStatus', { count: hits.length })}` : t('settingssearch.noneFoundStatus', { query: trimmed });
@@ -51,7 +55,9 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
     return () => window.removeEventListener('acira:settings-focus-search', focus);
   }, []);
   useEffect(() => {
-    if (showList) root.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+    // The list scrolls, nothing around it (D177).
+    const item = showList ? resultsRef.current?.querySelector<HTMLElement>('[data-active="true"]') : null;
+    if (item && resultsRef.current) revealWithin(resultsRef.current, item);
   }, [active, showList]);
 
   const choose = (hit: SettingsHit | undefined) => {
@@ -97,7 +103,7 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
     >
       <div className="st-search-field" data-focused-within>
         <Search size={17} />
-        <input
+        <input className="ab-input"
           ref={input}
           role="combobox"
           aria-label={t("settingssearch.searchSettings")}
@@ -113,7 +119,16 @@ export function SettingsSearch({ query, onQuery, context, onSelect }: SettingsSe
             onQuery(event.target.value);
             setOpen(true);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={(event) => {
+            setOpen(true);
+            if (event.currentTarget.value) { event.currentTarget.select(); keepSelection.current = true; }
+          }}
+          onMouseUp={(event) => {
+            if (!keepSelection.current) return;
+            keepSelection.current = false;
+            event.preventDefault();
+          }}
+          onBlur={() => { keepSelection.current = false; }}
           onKeyDown={onKeyDown}
         />
         {!query && <kbd className="st-kbd" aria-hidden="true">/</kbd>}

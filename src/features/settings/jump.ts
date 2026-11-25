@@ -1,4 +1,5 @@
 import { anchorSelector, type SettingsEntry } from './registry';
+import { revealWithin } from '../../ui/scrollReveal';
 
 const focusable = 'input:not(:disabled):not([type=hidden]),button:not(:disabled),select:not(:disabled),textarea:not(:disabled),[role=switch]:not(:disabled),[role=combobox]:not(:disabled),summary,a[href],[tabindex="0"]';
 
@@ -40,7 +41,8 @@ export async function revealSetting(scope: HTMLElement, entry: SettingsEntry, re
   }
   // A fold that has just opened grows over a short transition: scrolling now would aim at a row that is still on its way down.
   if (opened) await settled(target);
-  target.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
+  // Inside the Settings page's own scroller only (D177): scrollIntoView also lifted the boxes around it, the interface's root included.
+  revealWithin(scope, target, { block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
   const focusTarget = () => {
     const control = target!.matches(focusable) ? target! : target!.querySelector<HTMLElement>(focusable);
     if (control) control.focus({ preventScroll: true });

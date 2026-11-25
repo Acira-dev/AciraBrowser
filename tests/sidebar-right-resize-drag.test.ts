@@ -96,7 +96,7 @@ test('the carried chip: on the right it forms 10px past the sidebar\'s left edge
 
 test('the sidebar wires all of it: the side reaches the grip, the drag tests and the carried chip', () => {
   const sidebar = source('../src/components/sidebar/AciraSidebar.tsx');
-  assert.match(sidebar, /<ResizeHandle width=\{width\} onChange=\{setWidth\} side=\{sidebarSideOf\(state\.settings\)\}\/>/);
+  assert.match(sidebar, /<ResizeHandle width=\{width\} onChange=\{setWidth\}(?: onCollapse=\{[^\n]*?\})? side=\{sidebarSideOf\(state\.settings\)\}(?: shelf=\{[^\n]*\})?\/>/);
   assert.match(sidebar, /draggedSidebarWidth\(side,drag\.current\.width,drag\.current\.x,event\.clientX\)/);
   assert.match(sidebar, /sidebarKeyWidth\(side,event\.key,width\)/);
   assert.doesNotMatch(sidebar, /point\.x<=sidebarRight\(\)|point\.x<=edge/, 'no test assumes the page is to the right of the sidebar');

@@ -17,10 +17,10 @@ export const restingFormation:FormationPaint=Object.fromEntries(formationPropert
 
 /** `enterOpacity` and `rowStart` let a fresh sheet open with its content already readable (founder, 25 Oct: menus open
  * at once; the material settles around the content); both default to 0, the full condensation. */
-export interface FormationOptions{start:FormationPaint;closing:boolean;switching:boolean;reversing:boolean;/** Material readiness can re-run a sheet already on screen. */continuing?:boolean;reduced?:boolean;duration:number;firstDelay:number;stagger:number;count:number;blur:number;enterScale:number;exitScale:number;exitBlur:number;rise?:number;exitRise?:number;enterOpacity?:number;rowStart?:number;/** The scale/blur/rise progress over elapsed ms (0 → 1) in place of the fixed ease: the tab viewer rides its spring token (tabViewerMotion.ts). */curve?:(ms:number)=>number}
+export interface FormationOptions{/** One curve for opacity, focus (blur), scale and rise, so the glass and everything on it arrive (and leave) as one piece (the quick popups, section O). */unified?:boolean;start:FormationPaint;closing:boolean;switching:boolean;reversing:boolean;/** Material readiness can re-run a sheet already on screen. */continuing?:boolean;reduced?:boolean;duration:number;firstDelay:number;stagger:number;count:number;blur:number;enterScale:number;exitScale:number;exitBlur:number;rise?:number;exitRise?:number;enterOpacity?:number;rowStart?:number;/** The scale/blur/rise progress over elapsed ms (0 → 1) in place of the fixed ease: the tab viewer rides its spring token (tabViewerMotion.ts). */curve?:(ms:number)=>number}
 /** `start` is the painted frame (fresh opens ignore it). Fresh opens condense from blur; reversals and
  * scene switches continue from what is on screen, so rapid toggles never jump. */
-export function formationFrames({start,closing,switching,reversing,continuing=false,reduced=false,duration,firstDelay,stagger,count,blur,enterScale,exitScale,exitBlur,rise=0,exitRise=0,enterOpacity=0,rowStart=0,curve}:FormationOptions) {
+export function formationFrames({unified=false,start,closing,switching,reversing,continuing=false,reduced=false,duration,firstDelay,stagger,count,blur,enterScale,exitScale,exitBlur,rise=0,exitRise=0,enterOpacity=0,rowStart=0,curve}:FormationOptions) {
  const fresh=!closing&&!reversing&&!switching&&!continuing,rows=Math.min(formationRows,Math.max(0,count));
  const initial:FormationPaint={...restingFormation,...start};
  if(fresh){initial['--formation-opacity']=enterOpacity;initial['--formation-blur']=reduced?0:blur;initial['--formation-scale']=reduced?1:enterScale;initial['--formation-y']=reduced?0:rise;}
@@ -36,7 +36,7 @@ export function formationFrames({start,closing,switching,reversing,continuing=fa
   const t=duration<=0?1:clamp01(time/duration),paint:FormationPaint={};
   const shape=reduced?t:curve&&duration>0?curve(Math.min(time,duration)):formationEase(t,closing?closeCurve:openCurve);
   // Opening: the glass is present early and soft; focus arrives on the slower blur/scale curve.
-  const fade=reduced?t:closing?formationEase(t,closeFade):formationEase(duration<=0?1:clamp01(time/(duration*.45)),fadeCurve);
+  const fade=unified&&!reduced?shape:reduced?t:closing?formationEase(t,closeFade):formationEase(duration<=0?1:clamp01(time/(duration*.45)),fadeCurve);
   paint['--formation-opacity']=mix(initial['--formation-opacity'],target.opacity,fade);
   paint['--formation-blur']=mix(initial['--formation-blur'],target.blur,shape);
   paint['--formation-scale']=mix(initial['--formation-scale'],target.scale,shape);
@@ -62,21 +62,60 @@ export function formationFrames({start,closing,switching,reversing,continuing=fa
 // screen from the input frame and thickens with the motion instead of switching on when it ends.
 // glassFloor: keyboard and 100x/day panels (Alt+T, palette) open dense from the first frame - their material never reads as a
 // lighter plate that darkens (founder, 26 Oct) - only the sheet's own short fade carries them in.
-export function formationLayerPaint(paint:FormationPaint,glassFloor=0){
+// `flat` (the dialog vapor): the glass and the mist stay put (dense glass, no ghost) and the whole plane carries opacity, focus, scale and rise, as the sample's `.it` does.
+export function formationLayerPaint(paint:FormationPaint,glassFloor=0,focus=false,flat=false){
  const scale=paint['--formation-scale']??1,y=paint['--formation-y']??0;
  const p=clamp01((scale-.96)/.04),remaining=1-p,glass=Math.max(clamp01(glassFloor),clamp01(1.4*p-.2));
  return{
-  plane:{opacity:paint['--formation-opacity']??1,transform:`translateY(${y}px) scale(${scale})`},
-  material:{opacity:glass,transform:`scale(${.985+.015*glass})`},
-  mist:{opacity:remaining*.9,transform:`scale(${1+remaining*.045})`},
+  plane:{opacity:paint['--formation-opacity']??1,transform:`translateY(${y}px) scale(${scale})`,...focus?{filter:(paint['--formation-blur']??0)>.01?`blur(${paint['--formation-blur']}px)`:'none'}:{}},
+  material:flat?{opacity:1,transform:'none'}:{opacity:glass,transform:`scale(${.985+.015*glass})`},
+  mist:flat?{opacity:0,transform:'none'}:{opacity:remaining*.9,transform:`scale(${1+remaining*.045})`},
  };
 }
-export function formationLayerFrames(plan:ReturnType<typeof formationFrames>,glassFloor=0){
+export function formationLayerFrames(plan:ReturnType<typeof formationFrames>,glassFloor=0,focus=false,flat=false){
  const steps=Math.max(2,Math.ceil(plan.duration/12));
- const frames=Array.from({length:steps+1},(_,i)=>({offset:i/steps,...formationLayerPaint(plan.at(plan.duration*i/steps),glassFloor)}));
+ const frames=Array.from({length:steps+1},(_,i)=>({offset:i/steps,...formationLayerPaint(plan.at(plan.duration*i/steps),glassFloor,focus,flat)}));
  return{
   plane:frames.map(({offset,plane})=>({offset,...plane})),
   material:frames.map(({offset,material})=>({offset,...material})),
   mist:frames.map(({offset,mist})=>({offset,...mist})),
  };
 }
+
+/**
+ * Easy Files (Beta 14, approved look): the pop-up opens with a blur-and-fade and a 4 px rise, 150 ms x the motion speed setting, and leaves the exact reverse.
+ *  - the plane's opacity follows cubic-bezier(.33, 0, .25, 1) over the first 85% (soft at both ends, so the open AND its reverse start and end gently);
+ *  - the 4 px rise follows the house open curve; there is no scale and the plane is not blurred (the content's blur is a separate copy: SheetPopupSurface contentVapor).
+ * `at(time)` is the painted frame; the surface plays it forward to open, backward to leave, and from the frame on screen when it turns round.
+ */
+/** Beta 14: the reference design's dialog and prompt vapor (the reference sample dlg-lab.html): opacity 0 -> 1, blur 10 -> 0, scale .975 -> 1 (a prompt also rises from 6 px above), 300 ms
+ * at Premium (176 ms x the speed scale 1.7), cubic-bezier(.2, 0, 0, 1); the exit is the same frames played backwards. desktop/composition.cjs holds its own copy of `ms` (a test keeps them equal). */
+export const dialogVapor={ms:176,blurPx:10,scale:.975,promptRisePx:6,curve:[.2,0,0,1] as [number,number,number,number],
+ /** The pop-up kinds that form this way. A prompt hangs from the address field: it rises from 6 px above and condenses about its left edge (24 px in); a centred dialog condenses about its centre.
+  * Another kind (the toolbar prompts) joins by being listed here and in desktop/composition.cjs DIALOG_VAPOR_KINDS (a test keeps both lists equal). */
+ kinds:{dialog:{rise:0,origin:''},prompt:{rise:-6,origin:'48px 24px'},/* the Update ready prompt (its own pop-up kind) hangs from the right, as the sample's prompt-right: it condenses about its right edge */update:{rise:-6,origin:'calc(100% - 48px) 24px'}} as Record<string,{rise:number;origin:string}>,
+ /** The sample's prompt-right (`calc(100% - 24px) 0` inside the card; the plane has 24 px of room round the card, so 48 px in from the edge and 24 px down): a prompt that hangs from the right end of the address field (Save password) takes it instead of its kind's left origin. */
+ rightOrigin:'calc(100% - 48px) 24px'};
+export const easyFilesVapor={ms:150,risePx:4,blurPx:12,fade:[.33,0,.25,1] as [number,number,number,number],fadeSpan:.85,rise:[.23,1,.32,1] as [number,number,number,number]};
+export function easyFilesFrames(duration:number){
+ const frameAt=(time:number):FormationPaint=>{
+  const t=duration<=0?1:clamp01(time/duration),paint:FormationPaint={};
+  paint['--formation-opacity']=duration<=0?1:formationEase(clamp01(time/(duration*easyFilesVapor.fadeSpan)),easyFilesVapor.fade);
+  paint['--formation-blur']=0;paint['--formation-scale']=1;
+  paint['--formation-y']=easyFilesVapor.risePx*(1-formationEase(t,easyFilesVapor.rise));
+  for(let i=0;i<formationRows;i++)paint['--formation-row-'+i]=1;
+  return paint;
+ };
+ const serialize=(paint:FormationPaint)=>Object.fromEntries(Object.entries(paint).map(([key,value])=>[key,lengthProperty(key)?value+'px':String(value)]));
+ const steps=Math.max(2,Math.ceil(duration/12)),frames=Array.from({length:steps+1},(_,i)=>({offset:i/steps,...serialize(frameAt(duration*i/steps))}));
+ return{duration,frames,final:frameAt(duration),serialize,at:frameAt};
+}
+
+/** The plan for one direction, starting at `from` (0 gone, 1 formed): opening plays the open frames forward from there, leaving plays the same frames backward from there.
+ *  A close during the open (or the reverse) therefore starts on the frame that is painted and never jumps to either end. */
+export function easyFilesPlan(duration:number,closing:boolean,from:number){
+ const open=easyFilesFrames(duration),start=clamp01(from)*duration;
+ return closing?{...open,duration:start,final:open.at(0),at:(time:number)=>open.at(Math.max(0,start-time))}:{...open,duration:duration-start,at:(time:number)=>open.at(Math.min(duration,start+time))};
+}
+/** Where the vapor stands after `elapsed` ms of a plan that started at `from`: the next direction starts here. */
+export const easyFilesProgress=(duration:number,closing:boolean,from:number,elapsed:number)=>duration>0?clamp01(closing?(clamp01(from)*duration-elapsed)/duration:(clamp01(from)*duration+elapsed)/duration):closing?0:1;

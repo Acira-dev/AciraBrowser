@@ -51,8 +51,10 @@ test('validate accepts exactly what the app sends and nothing else', () => {
   assert.equal(bad((v) => { v.arch = 'mips'; }), null);
   assert.equal(bad((v) => { v.language = 'en-GB'; }), null, 'language is two letters only');
   assert.equal(bad((v) => { v.language = 'EN'; }), null);
-  assert.equal(bad((v) => { v.day = '2026-10-27'; }), null, 'two days ahead');
-  assert.equal(bad((v) => { v.day = '2026-10-23'; }), null, 'two days behind');
+  assert.equal(bad((v) => { v.day = '2026-10-28'; }), null, 'three days ahead is dropped (Beta 14, B9: more than 2 days from the server\'s date)');
+  assert.equal(bad((v) => { v.day = '2026-10-22'; }), null, 'three days behind is dropped');
+  assert.ok(bad((v) => { v.day = '2026-10-27'; }), 'two days ahead is allowed (a clock a day or two out)');
+  assert.ok(bad((v) => { v.day = '2026-10-23'; }), 'two days behind is allowed (a long offline start)');
   assert.ok(bad((v) => { v.day = '2026-10-24'; }), 'yesterday is allowed (time zones, late sends)');
   assert.ok(bad((v) => { v.day = '2026-10-26'; }), 'tomorrow is allowed');
   assert.equal(bad((v) => { v.day = '2026-02-30'; }), null, 'impossible date');
@@ -66,8 +68,11 @@ test('the real client builds a message the function accepts (including the app v
   await metrics.set(true);
   const payload = (await metrics.status()).payload;
   assert.ok(validate(payload, NOW), JSON.stringify(payload));
-  assert.equal(payload.schema, 3);
-  assert.deepEqual(Object.keys(validate(payload, NOW)).sort(), [...DAILY_COLUMNS].sort(), 'the real client fills every column the function writes');
+  assert.equal(payload.schema, 4);
+  // A fact the client could not read (no install day, no cold start time, no billboard card yet) is left out, so the row may have fewer columns than the table; it never has one more.
+  const row = validate(payload, NOW);
+  for (const column of Object.keys(row)) assert.ok(DAILY_COLUMNS.includes(column), column + ' is a column the function writes');
+  for (const column of ['theme', 'window_view', 'use_downloads', 'minutes_active', 'first_ever', 'os_version', 'ever_used', 'crashes', 'update_result', 'notice_seen']) assert.ok(column in row || column === 'notice_seen', column + ' is filled by the real client');
 });
 
 test('handler: POST only, 204 on success, repeats are harmless, no body and no CORS ever', async () => {
@@ -89,7 +94,7 @@ test('handler: 400 for anything that is not exactly a valid message, including s
   assert.equal((await call(handler, { ...good(), appVersion: 'x'.repeat(600) })).status, 400);
   const padded = JSON.stringify(good()) + ' '.repeat(MAX_BYTES);
   assert.equal((await call(handler, padded)).status, 400, 'over 512 bytes');
-  assert.equal((await call(handler, good(), { headers: { 'content-length': '9000' } })).status, 400, 'declared size too big');
+  assert.equal((await call(handler, good(), { headers: { 'content-length': '11000' } })).status, 400, 'declared size too big');
   assert.equal(store.rows.size, 0);
 });
 
@@ -182,7 +187,7 @@ test('end to end: the real client opts in, sends over HTTP to the real handler, 
     assert.deepEqual(await metrics.maybeSend(), { sent: true });
     assert.equal(store.rows.size, 1);
     const [row] = [...store.rows.values()];
-    assert.deepEqual(Object.keys(row).sort(), [...DAILY_COLUMNS].sort()); assert.equal(row.schema_version, 3); assert.equal(row.theme, 'system', 'unconfigured facts fall back to the documented defaults');
+    for (const column of Object.keys(row)) assert.ok(DAILY_COLUMNS.includes(column), column + ' is a column the function writes'); assert.equal(row.schema_version, 4); assert.equal(row.theme, 'system', 'unconfigured facts fall back to the documented defaults');
     assert.equal(row.app_version, require('../package.json').version); assert.equal(row.language, 'en');
     assert.deepEqual(await metrics.maybeSend(), { sent: false, reason: 'already sent today' });
     assert.equal(await post(endpoint, '{}'), 400, 'a junk message is refused over the wire too');

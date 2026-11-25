@@ -11,9 +11,15 @@ const DOCUMENTS=Object.freeze(['latest.yml','beta.yml','latest-mac.yml','beta-ma
 const FOLDERS=Object.freeze(['','testers/','rehearsal/']);
 const STATIC=Object.freeze(['.nojekyll','404.html','CNAME','index.html','robots.txt','latest.yml','latest-mac.yml','linux/latest-linux.yml']);
 const MAX_FILE=200*1024,MAX_TOTAL=2*1024*1024;
+// 14.3: the app icon's daily file and pictures (desktop/browser-services/app-icon.cjs reads them): <folder>appicon/index.json (8 KB at most) and <folder>appicon/<name>.png (400 KB at most each), in the root, testers/ and
+// rehearsal/ like the channel documents. They have caps of their own (a few icon sets, never an installer) and the app's own readers check them: the document must be one the app accepts, every picture a document names must be
+// there with the size and hash the document says and be a sound PNG of the right size, and every other picture in the folder (an earlier set kept so a repeat costs nothing) must be a sound PNG of one of the three sizes.
+const APPICON_FILE=/^(?:testers\/|rehearsal\/)?appicon\/(?:index\.json|[a-z0-9][a-z0-9-]{0,60}\.png)$/,APPICON_TOTAL=3*1024*1024;
+const isAppIcon=name=>APPICON_FILE.test(name);
 
 /** Every path the site may hold. Anything else (an installer, a script, a stray file) is a problem. */
 const allowedPaths=()=>new Set([...STATIC,...FOLDERS.flatMap(folder=>DOCUMENTS.map(name=>folder+name))]);
+const isAllowed=(name,allowed)=>allowed.has(name)||isAppIcon(name);
 /** All files under dir as Map<posix path, Buffer>. */
 function listSite(dir){
  const files=new Map();
@@ -31,11 +37,13 @@ function checkSite(files,{parse}={}){
  const {usableDocument}=require('../desktop/browser-services/update-feeds.cjs');
  let total=0;
  for(const [name,bytes] of files){
+  if(!isAllowed(name,allowed))problems.push(name+' does not belong on the update site (allowed: the static files and the channel documents in the root, testers/ and rehearsal/, and appicon/ in each).');
+  if(isAppIcon(name))continue; // counted and checked below, with the app icon's own limits
   total+=bytes.length;
-  if(!allowed.has(name))problems.push(name+' does not belong on the update site (allowed: the static files and the channel documents in the root, testers/ and rehearsal/).');
   if(bytes.length>MAX_FILE)problems.push(name+' is '+bytes.length+' bytes; a channel document is a few KB.');
  }
  if(total>MAX_TOTAL)problems.push('The site is '+total+' bytes; it should be tiny.');
+ problems.push(...checkAppIcons(files));
  if(files.has('CNAME')&&files.get('CNAME').toString('utf8').trim()!==CNAME)problems.push('CNAME must say '+CNAME+'.');
  if(!files.has('CNAME'))problems.push('CNAME is missing: Pages would forget the domain.');
  if(!files.has('.nojekyll'))problems.push('.nojekyll is missing: Pages would run the files through Jekyll.');
@@ -60,10 +68,40 @@ function checkSite(files,{parse}={}){
  }
  return problems;
 }
+/** The problems with the app icon's folders (<folder>appicon/): see the note at the top. Uses the app's own document reader and picture checker, so "the site is right" means "an installed Acira accepts it". */
+function checkAppIcons(files){
+ const icon=require('../desktop/browser-services/app-icon.cjs'),problems=[],folders=new Set();
+ for(const name of files.keys())if(isAppIcon(name))folders.add(name.slice(0,name.indexOf('appicon/')));
+ for(const folder of folders){
+  const prefix=folder+'appicon/',mine=[...files].filter(([name])=>name.startsWith(prefix));
+  let total=0;for(const [,bytes] of mine)total+=bytes.length;
+  if(total>APPICON_TOTAL)problems.push(prefix+' holds '+total+' bytes; a few icon sets are enough (at most '+APPICON_TOTAL+').');
+  const referenced=new Set(),index=files.get(prefix+'index.json');
+  if(index){
+   if(index.length>icon.DOC_MAX)problems.push(prefix+'index.json is '+index.length+' bytes; the app reads at most '+icon.DOC_MAX+'.');
+   const read=icon.parseDocument(index.toString('utf8'));
+   if(!read.ok)problems.push(prefix+'index.json is not a document an installed Acira accepts ('+read.reason+').');
+   else if(read.doc.pictures)for(const [platform,block] of Object.entries(read.doc.pictures)){
+    referenced.add(prefix+block.file);
+    const bytes=files.get(prefix+block.file);
+    if(!bytes){problems.push(prefix+'index.json names '+block.file+' ('+platform+'), which is not in the folder.');continue;}
+    if(bytes.length!==block.size)problems.push(prefix+block.file+' is '+bytes.length+' bytes; index.json says '+block.size+'.');
+    if(icon.sha512Of(bytes)!==block.sha512)problems.push(prefix+block.file+' does not match the SHA-512 in index.json.');
+    const sound=icon.checkPng(bytes,{width:block.width,height:block.height});
+    if(!sound.ok)problems.push(prefix+block.file+' is not a sound '+block.width+' x '+block.height+' PNG ('+sound.reason+').');
+   }
+  }else if([...files.keys()].some(name=>name.startsWith(prefix)&&name.endsWith('.png')))problems.push(prefix+'has pictures but no index.json.');
+  for(const [name,bytes] of mine){
+   if(!name.endsWith('.png')||referenced.has(name))continue;
+   if(!Object.values(icon.SIZES).some(side=>icon.checkPng(bytes,{width:side,height:side}).ok))problems.push(name+' is not a sound 256, 512 or 1024 px PNG.');
+  }
+ }
+ return problems;
+}
 /** Writes the static files into dir (never deletes anything). Returns the paths written. */
 function writeStatic(dir){
  const written=[];
  for(const [name,bytes] of staticSite()){const target=path.join(dir,...name.split('/'));fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,bytes);written.push(name);}
  return written;
 }
-module.exports={SITE_DIR,CNAME,DOCUMENTS,FOLDERS,STATIC,allowedPaths,listSite,staticSite,checkSite,writeStatic};
+module.exports={SITE_DIR,CNAME,DOCUMENTS,FOLDERS,STATIC,APPICON_FILE,APPICON_TOTAL,allowedPaths,isAppIcon,listSite,staticSite,checkSite,checkAppIcons,writeStatic};

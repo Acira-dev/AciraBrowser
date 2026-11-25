@@ -10,12 +10,16 @@
   !define AC_PROGID "AciraBrowserQA.Url"
   !define AC_DATA_DIR "AciraBrowserQA"
   !define AC_APP_EXE "AciraBrowserQA.exe"
+  ; Beta 14 (brief B9): the "installed here before" marker that "delete my data" leaves (below). A QA build has its own, never read (QA builds send nothing).
+  !define AC_RETURN_KEY "Software\AciraBrowserQAInstalledBefore"
 !else
   !define AC_REG_KEY "Software\AciraBrowser"
   !define AC_REG_APP "Acira Browser"
   !define AC_PROGID "AciraBrowser.Url"
   !define AC_DATA_DIR "AciraBrowser"
   !define AC_APP_EXE "AciraBrowser.exe"
+  ; a key the uninstaller never removes (AC_REG_KEY is removed); the app reads it (desktop/browser-services/install-mark.cjs, WINDOWS_KEY) and the remover writes it too (AciraUninstall.cs)
+  !define AC_RETURN_KEY "Software\AciraBrowserInstalledBefore"
 !endif
 ;
 ; Where the Windows uninstaller sends its one usage message (Acira's usage function: desktop/browser-services/metrics-config.cjs has the same
@@ -24,7 +28,7 @@
 !ifdef ACIRA_QA
   !define AC_USAGE_HOST ""
 !else
-  !define AC_USAGE_HOST "kqioquxkyprnaupqocnx.supabase.co"
+  !define AC_USAGE_HOST "lzdndhalljkmqabbtruv.supabase.co"
 !endif
 !define AC_USAGE_PATH "/functions/v1/usage"
 ; Acira for Windows ships for x64 only (packaging/electron-builder.json); on an ARM PC that build runs as x64, which is what the app reports too.
@@ -41,6 +45,14 @@ ManifestDPIAware true
 Var acTheme
 Var acScale
 Var acWnd
+; D141: an update replaces the old version's files itself (AcOwnReplaceBegin and the functions after it)
+Var acOwnReplace    ; 1 = this run replaces the old files itself and has taken the old version's remover out of the registry; 2 = its move was tried
+Var acOldDir        ; the folder beside the install folder that holds the old version while the new one is installed ("" = nothing is moved)
+Var acOldUninstall  ; what the registry said before this run, written back whenever the old version stays or comes back
+Var acOldQuiet
+Var acOldVersion
+Var acOldUninstall2
+Var acOldQuiet2
 !define AC_W 560
 !define AC_H 340
 !define AC_TX 28
@@ -160,7 +172,12 @@ Function AcStyleBanner
   Call AcExtractHelper
   ; The progress line is drawn by a tiny helper (its own thread, per-pixel alpha), so it stays smooth while this thread extracts.
   ; Payload temp file first (copied out of the installer), then the install directory; see AciraProgress.cs.
+  ; D141: a program is started in the setup's working folder, and electron-builder's .onInit makes that the install folder. Windows will not
+  ; rename a folder a program is standing in, and the setup renames the old install folder on an update (AcOwnReplaceMove): the window's
+  ; program stands in the setup's own Temp folder instead. The working folder is put back for everything after.
+  SetOutPath "$PLUGINSDIR"
   Exec '"$PLUGINSDIR\acira-progress.exe" $acWnd $acTheme $acScale "$PLUGINSDIR\ac-done.flag" "$INSTDIR" ${ESTIMATED_SIZE} "$PLUGINSDIR\app-64.7z" "$EXEPATH"'
+  SetOutPath "$INSTDIR"
   Pop $9
   Pop $8
   Pop $7
@@ -212,6 +229,182 @@ FunctionEnd
   !endif
 !macroend
 
+!ifndef BUILD_UNINSTALLER
+; --- D147 / D149 (14.3): the running-app check must not wait for ever ---------------------------------------------------------------------------------------
+; electron-builder's check (_CHECK_APP_RUNNING with FIND_PROCESS, KILL_PROCESS and IS_POWERSHELL_AVAILABLE, allowOnlyOneInstallerInstance.nsh) starts PowerShell or
+; tasklist with nsExec::Exec and waits for it WITHOUT a limit. A PowerShell that never returns (WMI stuck, a scanner holding it) left the setup running in the
+; background for ever, with nothing on screen, and the setup holds its own file (AciraBrowserSetup.exe in the updater's pending folder): the next update could not
+; replace it (D149). The setup now has its own copy of the check in which every one of those programs gets AC_PROBE_MS, the same commands as the stock macros
+; (tests/windows-setup-probe-limit.test.cjs compares them with the template). A probe that does not answer in time is read as "not running": the setup goes on,
+; and what Acira would still hold stops the update at the own-replace step, which rolls back and exits with code 2 (D141), instead of waiting. The uninstaller pass keeps the stock check.
+!define AC_PROBE_MS 15000
+Var acPsPath
+Var acCmdPath
+Var acPsOff
+
+; Runs the command on the stack and leaves its exit code on the stack, or "timeout" (nothing came back in AC_PROBE_MS, nsExec stops waiting; the NSIS
+; documentation says it ends the program) or "error" (it could not be started). Registers are left as they were.
+Function AcProbe
+  Exch $0
+  nsExec::Exec /TIMEOUT=${AC_PROBE_MS} `$0`
+  Pop $0
+  Exch $0
+FunctionEnd
+
+; Stock IS_POWERSHELL_AVAILABLE plus the quote rule of AcQuoteInInstdir: $acPsOff is 0 when PowerShell can be used for the check, 1 when not (it did not answer,
+; is blocked by policy, or the install folder holds a quote that breaks the stock command). Sets the paths the other probes use.
+Function AcPowerShellProbe
+  Push $0
+  Push $1
+  StrCpy $acCmdPath "$SYSDIR\cmd.exe"
+  StrCpy $acPsPath "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
+  Push `"$acPsPath" -C "if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"`
+  Call AcProbe
+  Pop $0
+  ${If} $0 == 0
+    Push `"$acPsPath" -C "if ((Get-ExecutionPolicy -Scope Process) -eq 'Restricted') { exit 1 } else { exit 0 }"`
+    Call AcProbe
+    Pop $0
+  ${EndIf}
+  ${If} $0 != 0
+    StrCpy $0 1
+  ${EndIf}
+  Call AcQuoteInInstdir
+  Pop $1
+  ${If} $1 = 1
+    StrCpy $0 1
+  ${EndIf}
+  StrCpy $acPsOff $0
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; Stock FIND_PROCESS, on the stack: 0 when Acira runs, 1 when it does not (and when the probe gave no answer in time).
+Function AcFindAcira
+  Push $0
+  ${If} $acPsOff == 0
+    StrCpy $0 `"$acPsPath" -C "if ((Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')}).Count -gt 0) { exit 0 } else { exit 1 }"`
+  ${Else}
+    !ifdef INSTALL_MODE_PER_ALL_USERS
+      StrCpy $0 `"$acCmdPath" /C tasklist /FI "IMAGENAME eq ${PRODUCT_FILENAME}.exe" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${PRODUCT_FILENAME}.exe\""`
+    !else
+      StrCpy $0 `"$acCmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${PRODUCT_FILENAME}.exe" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${PRODUCT_FILENAME}.exe\""`
+    !endif
+  ${EndIf}
+  Push $0
+  Call AcProbe
+  Pop $0
+  ${If} $0 != 0
+    StrCpy $0 1
+  ${EndIf}
+  Exch $0
+FunctionEnd
+
+; Stock KILL_PROCESS; the force flag (0 or 1) is on the stack. The answer is not used.
+Function AcKillAcira
+  Exch $1
+  Push $0
+  ${If} $acPsOff == 0
+    ${If} $1 == 1
+      StrCpy $0 "-Force"
+    ${Else}
+      StrCpy $0 ""
+    ${EndIf}
+    StrCpy $1 `"$acPsPath" -C "Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')} | % { Stop-Process -Id $$_.ProcessId $0 }"`
+  ${Else}
+    ${If} $1 == 1
+      StrCpy $0 "/F"
+    ${Else}
+      StrCpy $0 ""
+    ${EndIf}
+    !ifdef INSTALL_MODE_PER_ALL_USERS
+      StrCpy $1 `taskkill /IM "${PRODUCT_FILENAME}.exe" /FI "PID ne $pid"`
+    !else
+      StrCpy $1 `"$acCmdPath" /C taskkill $0 /IM "${PRODUCT_FILENAME}.exe" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"`
+    !endif
+  ${EndIf}
+  Push $1
+  Call AcProbe
+  Pop $0
+  Pop $0
+  Pop $1
+FunctionEnd
+
+; Stock _CHECK_APP_RUNNING with Call AcFindAcira / Call AcKillAcira for FIND_PROCESS / KILL_PROCESS (a macro, not a Function: it shows electron-builder's
+; own message boxes, whose texts are only defined later). Its two waits for the person (the OK / Cancel box, the Retry / Cancel box) are as before and answer
+; themselves in a silent run (/SD). ${isUpdated} is not known yet where this file is read, AcUpdaterRun says the same.
+!macro AcCheckAppRunning
+  Call AcPowerShellProbe
+  ${GetProcessInfo} 0 $pid $1 $2 $3 $4
+  ${if} $3 != "${APP_EXECUTABLE_FILENAME}"
+    Call AcUpdaterRun
+    ${IfNot} ${Errors}
+      # allow app to exit without explicit kill
+      Sleep 300
+    ${endIf}
+    ClearErrors
+
+    Call AcFindAcira
+    Pop $R0
+    ${if} $R0 == 0
+      Call AcUpdaterRun
+      ${IfNot} ${Errors}
+        # allow app to exit without explicit kill
+        Sleep 1000
+        Goto acDoStopProcess
+      ${endIf}
+      ClearErrors
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK acDoStopProcess
+      Quit
+
+      acDoStopProcess:
+
+      DetailPrint "$(appClosing)"
+
+      Push 0
+      Call AcKillAcira
+      # to ensure that files are not "in-use"
+      Sleep 300
+
+      # Retry counter
+      StrCpy $R1 0
+
+      acLoop:
+        IntOp $R1 $R1 + 1
+
+        Call AcFindAcira
+        Pop $R0
+        ${if} $R0 == 0
+          # wait to give a chance to exit gracefully
+          Sleep 1000
+          Push 1
+          Call AcKillAcira # 1 = force kill
+          Call AcFindAcira
+          Pop $R0
+          ${if} $R0 == 0
+            DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
+            Sleep 2000
+          ${else}
+            Goto acNotRunning
+          ${endIf}
+        ${else}
+          Goto acNotRunning
+        ${endIf}
+
+        # App likely running with elevated permissions.
+        # Ask user to close it manually
+        ${if} $R1 > 1
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY acLoop
+          Quit
+        ${else}
+          Goto acLoop
+        ${endIf}
+      acNotRunning:
+    ${endIf}
+  ${endIf}
+!macroend
+!endif
+
 ; The one-click installer shows a small banner window; restyle it as soon as it exists, then run the standard running-app check.
 !macro customCheckAppRunning
   !ifndef BUILD_UNINSTALLER
@@ -221,21 +414,20 @@ FunctionEnd
     acNoBanner:
     ; before electron-builder runs the old version's uninstaller (uninstallOldVersion comes right after this check)
     Call AcDropBadUninstaller
-  !endif
-  !insertmacro IS_POWERSHELL_AVAILABLE
-  !ifndef BUILD_UNINSTALLER
     ; electron-builder's stock check puts the install folder inside a PowerShell single-quoted string (StartsWith('$INSTDIR', ...)). A single or typographic
     ; quote in it (a Windows user named O'Brien, Ma'ruf, Ra’ed) ends that string early, PowerShell cannot parse the line and exits 1, which the check reads
     ; as "Acira is not running": the old Acira is neither waited for nor closed, the old files are in use and the update does not take. With such a folder
-    ; the PowerShell way is off ($IsPowerShellAvailable: 0 = available) and the stock macros take their tasklist / taskkill branch, which names the program
+    ; the PowerShell way is off ($acPsOff: 0 = usable, AcPowerShellProbe) and the check takes its tasklist / taskkill branch, which names the program
     ; (AciraBrowser.exe, this user's) and never puts the folder in a command.
-    Call AcQuoteInInstdir
-    Pop $0
-    ${If} $0 = 1
-      StrCpy $IsPowerShellAvailable 1
-    ${EndIf}
+    ; D147 / D149 (14.3): the check is the setup's own copy of electron-builder's, every program it starts has a time limit (AC_PROBE_MS, above).
+    !insertmacro AcCheckAppRunning
+    ; D141: Acira is closed now. On an update the setup replaces the old files itself; electron-builder's uninstallOldVersion, which comes right
+    ; after this macro, then finds no remover in the registry and starts none (no program copied to Temp, none started from there).
+    Call AcOwnReplaceBegin
+  !else
+    !insertmacro IS_POWERSHELL_AVAILABLE
+    !insertmacro _CHECK_APP_RUNNING
   !endif
-  !insertmacro _CHECK_APP_RUNNING
 !macroend
 
 ; Electron 44 (Chromium 152) needs Windows 10 or later. electron-builder's own check stops at Windows 7, so Windows 7, 8 and 8.1 would install a browser
@@ -297,9 +489,20 @@ Function AcAskExisting
   InitPluginsDir
   File "/oname=$PLUGINSDIR\acira-choose.exe" "${BUILD_RESOURCES_DIR}\installer\acira-uninstall.exe"
   Delete "$PLUGINSDIR\ac-choice.txt"
+  ; D141: the question's program stands in the setup's own Temp folder, not in the install folder (see AcStyleBanner), and its start is
+  ; checked: when Windows will not start it (an antivirus that stops small unsigned programs in Temp) there is no 10 s wait for a window
+  ; that cannot come.
+  SetOutPath "$PLUGINSDIR"
+  ClearErrors
   Exec '"$PLUGINSDIR\acira-choose.exe" --choose "$INSTDIR" "${VERSION}" "$PLUGINSDIR\ac-choice.txt"'
+  IfErrors 0 acAskStarted
+  SetOutPath "$INSTDIR"
+  Goto acAskNoWindow
+  acAskStarted:
+  SetOutPath "$INSTDIR"
   ; Wait for the answer. The question stays up until the installer's own card covers it, so the answer comes first and the window
-  ; leaves later. If the window was seen and is gone without an answer, that is Cancel; if it never shows in 10 s, install as before.
+  ; leaves later. If the window was seen and is gone without an answer, that is Cancel; if it never shows in 10 s, the setup decides
+  ; without it (acAskNoWindow).
   StrCpy $2 0
   StrCpy $3 0
   acAskWait:
@@ -312,7 +515,7 @@ Function AcAskExisting
     ${ElseIf} $3 = 1
       Goto acAskAnswered
     ${ElseIf} $2 > 250
-      Goto acAskGo
+      Goto acAskNoWindow
     ${EndIf}
     Goto acAskWait
   acAskAnswered:
@@ -333,6 +536,19 @@ Function AcAskExisting
     SetErrorLevel 1223
   ${EndIf}
   Quit
+  acAskNoWindow:
+  ; D141: the question could not be asked. The setup decides the way the card would have let the person: an older or the same Acira is
+  ; replaced, a NEWER one is left alone (the card offers only Open and Cancel over a newer Acira; going on here installed the older setup over it).
+  ReadRegStr $4 SHELL_CONTEXT "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}" "DisplayVersion"
+  ClearErrors
+  Push $4
+  Push "${VERSION}"
+  Call AcVersionNewer
+  Pop $4
+  ${If} $4 = 1
+    SetErrorLevel 1223
+    Quit
+  ${EndIf}
   acAskGo:
   Pop $4
   Pop $3
@@ -392,6 +608,8 @@ Function AcQuoteInInstdir
   Pop $1
   Exch $0
 FunctionEnd
+
+
 
 ; 1 on the stack when the file is a Windows program (at least 64 KB, an MZ header, a PE header where it points) or cannot be read (nothing is
 ; deleted on a guess); 0 when it is cut short, zero bytes or damaged. Bytes only: FileReadWord needs a Unicode build.
@@ -487,11 +705,332 @@ Function AcDropBadUninstaller
   Pop $1
   Pop $0
 FunctionEnd
+
+; --- D141 (22 Nov 2026): an update replaces the old version's files itself, and never starts the old version's remover ---------------------------
+; An antivirus (Malwarebytes, "MachineLearning/Anomalous") stopped an Insider's update at the old version's remover: electron-builder copies the
+; installed AciraRemove.exe to Temp as old-uninstaller.exe and starts it there, and that program copies the real uninstaller to Temp and starts
+; that. Both are small unsigned programs in a random Temp folder, and every Acira on people's disks has them, so no later setup could help by
+; being signed. Since this version the setup does that work itself, with its own file and registry commands and no program at all:
+;   1. AcOwnReplaceBegin (after Acira is closed): takes the remover's two values out of the registry, so electron-builder's uninstallOldVersion
+;      finds none and returns at once, as it has since beta.12 for a damaged remover (AcDropBadUninstaller).
+;   2. AcOwnReplaceMove (customUnInstallCheck, after the template has decided about the shortcuts with the old program still in place): the whole
+;      install folder is renamed to "<install folder>.old-<number>" beside it. One rename: either the whole old version moved or nothing did, and
+;      Windows refuses it while any file in it is open, which is the test that Acira is really closed. Beside the install folder, so it is the
+;      same disk whatever disk Temp is on.
+;   3. The template installs the new version into the now empty folder: no file of the old version is where anything could load it.
+;   4. AcOwnReplaceCheck (first thing in customInstall): the new files are there, or AcOwnReplaceBack puts the old version back.
+;   5. AcOwnReplaceDone (last thing in customInstall): the side folder goes.
+; Whenever the old version stays or comes back, the registry values are written back and the setup leaves with exit code 2, exactly as it did when
+; the old remover failed (customUnInstallCheck). A run that was ended between 2 and 5 (the PC switched off, the setup ended) is put right by the next
+; run before anything else (AcOwnReplaceRecover).
+; What is touched: the install folder and its "<install folder>.old-<number>" side folder, nothing else. A side folder is only ever removed or
+; moved back when it carries this setup's own mark file; a folder of that name that is not ours is skipped and another number is used. Acira's
+; data is in the roaming application-data folder, not in the install folder, and no command here names it.
+; Not replaced this way, on purpose: a first install (nothing there), a repair of the same version and an install over a damaged remover
+; (both as before), and any run with the switch below.
+; THE SWITCH BACK (for the Windows laptop, if a step here turns out wrong): the setup argument --acira-old-uninstaller, or the environment
+; variable ACIRA_SETUP_OLD_UNINSTALLER=1 (it reaches a setup that the updater starts), or AC_OWN_REPLACE_OFF defined at build time (the next line
+; without its semicolon, or ACIRA_BUILD_OWN_REPLACE_OFF=1 in the build's environment): the setup then runs the old version's remover as every
+; version before did.
+;!define AC_OWN_REPLACE_OFF
+; The same switch without touching this file, for a build made again from the same tag: ACIRA_BUILD_OWN_REPLACE_OFF=1 in the environment of
+; the build ("$%NAME%" is the build computer's environment, read when the setup is compiled).
+!if "$%ACIRA_BUILD_OWN_REPLACE_OFF%" == "1"
+  !ifndef AC_OWN_REPLACE_OFF
+    !define AC_OWN_REPLACE_OFF
+  !endif
+!endif
+!define AC_OLD_MARK "acira-old-version.txt"
+!define AC_OLD_DONE "acira-old-version.done"
+
+; The registry values of the old version's remover (and its version), back as this run found them. Only values this run read are written.
+Function AcOwnReplaceRegistryBack
+  ${If} $acOldUninstall != ""
+    WriteRegStr SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "UninstallString" "$acOldUninstall"
+  ${EndIf}
+  ${If} $acOldQuiet != ""
+    WriteRegStr SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "QuietUninstallString" "$acOldQuiet"
+  ${EndIf}
+  ${If} $acOldVersion != ""
+    WriteRegStr SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "DisplayVersion" "$acOldVersion"
+  ${EndIf}
+  !ifdef UNINSTALL_REGISTRY_KEY_2
+    ${If} $acOldUninstall2 != ""
+      WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "UninstallString" "$acOldUninstall2"
+    ${EndIf}
+    ${If} $acOldQuiet2 != ""
+      WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "QuietUninstallString" "$acOldQuiet2"
+    ${EndIf}
+  !endif
+  ClearErrors
+FunctionEnd
+
+; The old version comes back from its side folder ($acOldDir): what the new install had put in the install folder goes, the side folder is
+; renamed back, the registry values return. Nothing is removed unless the side folder is there with this setup's mark (a whole old version);
+; when Windows will not give the install folder back in five tries, the old version stays in its side folder and the next setup run puts it
+; back first (AcOwnReplaceRecover).
+Function AcOwnReplaceBack
+  Push $0
+  StrCmp $acOldDir "" acObLeave
+  IfFileExists "$acOldDir\${AC_OLD_MARK}" 0 acObLeave
+  ; the setup's own working folder is the install folder by now (SetOutPath): step out of it, or Windows will not let the folder go
+  SetOutPath "$PLUGINSDIR"
+  StrCpy $0 0
+  acObTry:
+    IntOp $0 $0 + 1
+    RMDir /r "$INSTDIR"
+    ClearErrors
+    Rename "$acOldDir" "$INSTDIR"
+    IfErrors 0 acObBack
+    IntCmp $0 5 acObLeave 0 acObLeave
+    Sleep 1000
+    Goto acObTry
+  acObBack:
+  Delete "$INSTDIR\${AC_OLD_MARK}"
+  StrCpy $acOldDir ""
+  SetOutPath "$INSTDIR"
+  acObLeave:
+  Call AcOwnReplaceRegistryBack
+  ClearErrors
+  Pop $0
+FunctionEnd
+
+; What an earlier run of this setup left beside the install folder, numbers 1 to 9 (a new side folder takes the lowest free number):
+; - with the "done" mark: that run finished its install and could not remove all of it (a file held open): it goes;
+; - with the first mark: that run was ended before it finished. The side folder is a whole old version (its mark changes before anything in it
+;   is removed). If the install folder is whole (the program and its app archive are there) that run got its files in and the side folder is
+;   left over; if not, the old version comes back, and this run then updates it.
+; A folder with neither mark is not this setup's and is never touched.
+Function AcOwnReplaceRecover
+  Push $0
+  StrCpy $0 0
+  acOrrNext:
+    IntOp $0 $0 + 1
+    IntCmp $0 9 0 0 acOrrEnd
+    IfFileExists "$INSTDIR.old-$0\${AC_OLD_DONE}" acOrrLeftOver
+    IfFileExists "$INSTDIR.old-$0\${AC_OLD_MARK}" 0 acOrrNext
+    IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acOrrComeBack
+    IfFileExists "$INSTDIR\resources\app.asar" 0 acOrrComeBack
+    ClearErrors
+    Rename "$INSTDIR.old-$0\${AC_OLD_MARK}" "$INSTDIR.old-$0\${AC_OLD_DONE}"
+    IfErrors acOrrNext acOrrLeftOver
+  acOrrComeBack:
+    StrCpy $acOldDir "$INSTDIR.old-$0"
+    Call AcOwnReplaceBack
+    StrCpy $acOldDir ""
+    Goto acOrrNext
+  acOrrLeftOver:
+    RMDir /r "$INSTDIR.old-$0"
+    Goto acOrrNext
+  acOrrEnd:
+  ClearErrors
+  Pop $0
+FunctionEnd
+
+; After Acira is closed, before electron-builder looks for the old version's remover. Sets $acOwnReplace to 1 when this run replaces the old files
+; itself: an Acira is installed, a remover is registered for it, its version is another than this setup's, and the switch back is not used.
+Function AcOwnReplaceBegin
+  StrCpy $acOwnReplace 0
+  StrCpy $acOldDir ""
+  StrCpy $acOldUninstall ""
+  StrCpy $acOldQuiet ""
+  StrCpy $acOldVersion ""
+  StrCpy $acOldUninstall2 ""
+  StrCpy $acOldQuiet2 ""
+  !ifdef AC_OWN_REPLACE_OFF
+    Return
+  !endif
+  Push $0
+  Push $1
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "--acira-old-uninstaller" $1
+  IfErrors 0 acOrbEnd
+  ReadEnvStr $1 "ACIRA_SETUP_OLD_UNINSTALLER"
+  ClearErrors
+  StrCmp $1 "1" acOrbEnd
+  StrCmp $INSTDIR "" acOrbEnd
+  Call AcOwnReplaceRecover
+  ; a first install: nothing to replace
+  IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acOrbEnd
+  ReadRegStr $acOldUninstall SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "UninstallString"
+  ReadRegStr $acOldQuiet SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "QuietUninstallString"
+  ReadRegStr $acOldVersion SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "DisplayVersion"
+  !ifdef UNINSTALL_REGISTRY_KEY_2
+    ReadRegStr $acOldUninstall2 SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "UninstallString"
+    ReadRegStr $acOldQuiet2 SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "QuietUninstallString"
+  !endif
+  ClearErrors
+  ; no remover registered (AcDropBadUninstaller just took a damaged one away): the setup installs over the old files, as before
+  StrCmp "$acOldUninstall$acOldUninstall2" "" acOrbEnd
+  ; a repair of the same version: as before
+  StrCmp $acOldVersion "${VERSION}" acOrbEnd
+  DeleteRegValue SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "UninstallString"
+  DeleteRegValue SHELL_CONTEXT "${AC_OLD_UNINSTALL_KEY}" "QuietUninstallString"
+  !ifdef UNINSTALL_REGISTRY_KEY_2
+    DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "UninstallString"
+    DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" "QuietUninstallString"
+  !endif
+  StrCpy $acOwnReplace 1
+  acOrbEnd:
+  ClearErrors
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; The old version's folder is moved aside in one rename. Error flag set = it could not be (a file in it is still open, no free name, the mark
+; could not be written): nothing is moved, the registry values are back, the old version is whole. Clear = $acOldDir names the side folder.
+Function AcOwnReplaceMove
+  Push $0
+  Push $1
+  StrCpy $acOldDir ""
+  ; the lowest free name: a file or a folder that already has it, ours or not, is not touched here
+  StrCpy $0 0
+  acOrmName:
+    IntOp $0 $0 + 1
+    IntCmp $0 99 0 0 acOrmFailed
+    IfFileExists "$INSTDIR.old-$0" acOrmName
+  ; the setup's own working folder is the install folder (electron-builder's .onInit): Windows will not rename a folder a program is
+  ; standing in, so the setup steps out first (the template's SetOutPath $INSTDIR, right after this, makes the new, empty folder)
+  SetOutPath "$PLUGINSDIR"
+  StrCpy $1 0
+  acOrmTry:
+    IntOp $1 $1 + 1
+    ClearErrors
+    Rename "$INSTDIR" "$INSTDIR.old-$0"
+    IfErrors 0 acOrmMoved
+    IntCmp $1 5 acOrmFailed 0 acOrmFailed
+    Sleep 1000
+    Goto acOrmTry
+  acOrmMoved:
+  ; the mark that makes the side folder this setup's own, and a way back for a later run: without it the folder goes straight back
+  ClearErrors
+  FileOpen $1 "$INSTDIR.old-$0\${AC_OLD_MARK}" w
+  IfErrors acOrmUnmarked
+  FileWrite $1 "${VERSION}"
+  FileClose $1
+  StrCpy $acOldDir "$INSTDIR.old-$0"
+  ClearErrors
+  Pop $1
+  Pop $0
+  Return
+  acOrmUnmarked:
+  ClearErrors
+  Rename "$INSTDIR.old-$0" "$INSTDIR"
+  acOrmFailed:
+  Call AcOwnReplaceRegistryBack
+  ; the old version stays: the working folder is its folder again, as it was (the old Acira that Install now reopens starts from it)
+  IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acOrmOut
+  SetOutPath "$INSTDIR"
+  acOrmOut:
+  Pop $1
+  Pop $0
+  SetErrors
+FunctionEnd
+
+; First thing after the new files are written. Error flag set = they are not all there (the program or its app archive is missing) and the old
+; version was put back; clear = the new version is in place (or this run moved nothing).
+Function AcOwnReplaceCheck
+  ClearErrors
+  StrCmp $acOldDir "" acOrcEnd
+  IfFileExists "$INSTDIR\${AC_APP_EXE}" 0 acOrcBack
+  IfFileExists "$INSTDIR\resources\app.asar" acOrcEnd
+  acOrcBack:
+  Call AcOwnReplaceBack
+  SetErrors
+  acOrcEnd:
+FunctionEnd
+
+; Last thing of a finished install: the side folder goes. Its mark changes first, so a folder that is being removed is never taken for a whole
+; old version; if the mark cannot be changed nothing is removed (the next run decides, AcOwnReplaceRecover).
+Function AcOwnReplaceDone
+  StrCmp $acOldDir "" acOrdEnd
+  ClearErrors
+  Rename "$acOldDir\${AC_OLD_MARK}" "$acOldDir\${AC_OLD_DONE}"
+  IfErrors acOrdEnd
+  RMDir /r "$acOldDir"
+  acOrdEnd:
+  StrCpy $acOldDir ""
+  ClearErrors
+FunctionEnd
+
+; Takes a string off the stack; leaves its first run of digits on top ("" when it has none) and what follows that run below it.
+Function AcNextNumber
+  Exch $0
+  Push $1
+  Push $2
+  Push $3
+  StrCpy $2 ""
+  acNnNext:
+    StrCpy $1 $0 1
+    StrCmp $1 "" acNnEnd
+    ; a digit reads back as itself, anything else as 0
+    IntOp $3 $1 + 0
+    StrCmp $3 $1 0 acNnOther
+    StrCpy $2 "$2$1"
+    StrCpy $0 $0 "" 1
+    Goto acNnNext
+  acNnOther:
+    StrCmp $2 "" 0 acNnEnd
+    StrCpy $0 $0 "" 1
+    Goto acNnNext
+  acNnEnd:
+  StrCpy $1 $2
+  Pop $3
+  Pop $2
+  Exch $1
+  Exch
+  Exch $0
+  Exch
+FunctionEnd
+
+; Push A, push B, call: 1 on the stack when version A is newer than version B, else 0. The numbers in each are compared in order
+; ("0.1.0-beta.14.1" is 0, 1, 0, 14, 1), and a version that goes on where the other ends is the newer one (14.1 over 14). Enough for Acira's
+; beta versions; the question card (AciraChoose.cs) has the full rule and is what people normally get.
+Function AcVersionNewer
+  Exch $1
+  Exch
+  Exch $0
+  Push $2
+  Push $3
+  Push $4
+  StrCpy $4 0
+  acVnNext:
+    Push $0
+    Call AcNextNumber
+    Pop $2
+    Pop $0
+    Push $1
+    Call AcNextNumber
+    Pop $3
+    Pop $1
+    StrCmp $2 "" acVnEnd
+    StrCmp $3 "" acVnNewer
+    IntCmp $2 $3 acVnNext acVnEnd acVnNewer
+  acVnNewer:
+  StrCpy $4 1
+  acVnEnd:
+  StrCpy $0 $4
+  Pop $4
+  Pop $3
+  Pop $2
+  Exch
+  Pop $1
+  Exch $0
+FunctionEnd
 !endif
 
 ; Acira-owned per-user capabilities only. Windows chooses defaults through its UI.
 !macro customInstall
   !ifndef BUILD_UNINSTALLER
+    ; D141: the new files are written. If this run moved the old version aside and the new one is not all there, the old one is back by now
+    ; and the setup leaves as it does when the old version could not be removed.
+    Call AcOwnReplaceCheck
+    ${If} ${Errors}
+      StrCpy $R0 2
+      DetailPrint `The new files are incomplete: the previous version was put back.`
+      !insertmacro AcLeaveWithOldVersion
+    ${EndIf}
     Call AcStage2
     ; Branded uninstall question for Settings > Apps. QuietUninstallString stays the real uninstaller, and the launcher hands any /S run
     ; (the updater removing the previous version) straight to the real uninstaller, so silent paths never see a window.
@@ -518,7 +1057,19 @@ FunctionEnd
   WriteRegStr HKCU "Software\Classes\${AC_PROGID}" "URL Protocol" ""
   WriteRegStr HKCU "Software\Classes\${AC_PROGID}\DefaultIcon" "" '$\"$INSTDIR\${AC_APP_EXE}$\",0'
   WriteRegStr HKCU "Software\Classes\${AC_PROGID}\shell\open\command" "" '$\"$INSTDIR\${AC_APP_EXE}$\" $\"%1$\"'
+  !ifndef ACIRA_QA
+    ; acira:// (the personal Insider link acira://insider/activate?t=...): Windows starts Acira with the link in its command line, or hands it to the running Acira as a second
+    ; instance (desktop/insider/insider-link.cjs). 17 Nov: it was never registered, so a link clicked outside Acira went nowhere. The real Acira only: a QA install never writes its keys.
+    WriteRegStr HKCU "Software\Classes\acira" "" "URL:Acira link"
+    WriteRegStr HKCU "Software\Classes\acira" "URL Protocol" ""
+    WriteRegStr HKCU "Software\Classes\acira\DefaultIcon" "" '$\"$INSTDIR\${AC_APP_EXE}$\",0'
+    WriteRegStr HKCU "Software\Classes\acira\shell\open\command" "" '$\"$INSTDIR\${AC_APP_EXE}$\" $\"%1$\"'
+  !endif
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  !ifndef BUILD_UNINSTALLER
+    ; D141: the install is finished: the old version's side folder goes
+    Call AcOwnReplaceDone
+  !endif
 !macroend
 
 ; Uninstaller: a short branded splash (not when run silently, e.g. by the updater), then an optional data removal question.
@@ -590,6 +1141,10 @@ FunctionEnd
 ;   app's User-Agent (Acira/<version>), no cookies, no redirects, no sign-in, no keep-alive. Each step has a short limit (name lookup 1 s,
 ;   connection 1 s, sending 1 s, answer 1.5 s), so it can never hold the uninstall up for more than a few seconds; offline it fails at once.
 ;   No retry, the answer is not read, nothing is written to disk or the registry, and whatever happens the uninstall goes on.
+; - The optional one-tap reason (Beta 14, the plan): the branded remover (packaging/installer/AciraUninstall.cs, the card people see from Settings > Apps) asks
+;   "Why are you removing Acira?" before it removes anything, and only while sharing is on, and runs this uninstaller with /ACIRA_REASON=<word> after a tap.
+;   Exactly one of the seven words the usage function accepts goes into the message (schema 4 adds `reason`); anything else, or Skip (no option at all), sends
+;   the message as before (schema 1, no reason). The card does no network work: the only wait is the one POST above, with the same short limits.
 Function un.AcUsageUninstalled
   Push $0
   Push $1
@@ -601,6 +1156,7 @@ Function un.AcUsageUninstalled
   Push $7
   Push $8
   Push $9
+  Push $R8
   Push $R9
   ; an update, or a setup run over this version, is not an uninstall (${isUpdated} reads --updated; it uses $R9)
   ${If} ${isUpdated}
@@ -650,7 +1206,28 @@ Function un.AcUsageUninstalled
   IntFmt $5 "%02u" $5
   IntFmt $6 "%02u" $6
   StrCpy $4 "$4-$5-$6"
+  ; the reason the person tapped on the remover's card, if any: only one of the seven closed words (the same list as UNINSTALL_REASONS in the usage function), else none
+  ${GetParameters} $0
+  ${GetOptions} $0 "/ACIRA_REASON=" $R8
+  ${If} ${Errors}
+    StrCpy $R8 ""
+  ${EndIf}
+  ClearErrors
+  StrCmpS $R8 "slow" acReasonKnown
+  StrCmpS $R8 "crashes" acReasonKnown
+  StrCmpS $R8 "missing-feature" acReasonKnown
+  StrCmpS $R8 "not-clear" acReasonKnown
+  StrCmpS $R8 "switched-back" acReasonKnown
+  StrCmpS $R8 "just-trying" acReasonKnown
+  StrCmpS $R8 "other" acReasonKnown
+  StrCpy $R8 ""
+  acReasonKnown:
+  StrCmp $R8 "" acUsageNoReason
+  StrCpy $5 '{"schema":4,"event":"uninstall","installId":"$3","appVersion":"${VERSION}","platform":"win32","arch":"${AC_USAGE_ARCH}","day":"$4","reason":"$R8"}'
+  Goto acUsageBuilt
+  acUsageNoReason:
   StrCpy $5 '{"schema":1,"event":"uninstall","installId":"$3","appVersion":"${VERSION}","platform":"win32","arch":"${AC_USAGE_ARCH}","day":"$4"}'
+  acUsageBuilt:
   StrLen $6 $5
   StrCpy $7 0
   StrCpy $8 0
@@ -684,6 +1261,7 @@ Function un.AcUsageUninstalled
   acUsageDone:
   ClearErrors
   Pop $R9
+  Pop $R8
   Pop $9
   Pop $8
   Pop $7
@@ -746,12 +1324,18 @@ FunctionEnd
       MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete your Acira data on this PC (profiles, bookmarks, history, saved sign-ins)?$\n$\nChoose No to keep it for a future install." IDNO acKeepData
     ${EndIf}
     RMDir /r "$APPDATA\${AC_DATA_DIR}"
+    ; Beta 14 (brief B9, accurate counts): "delete my data" leaves one yes/no marker for this Windows account, "Acira was installed here before": no id, no date, no version. The app reads it on its next
+    ; first-ever message and says `returning`, so a wipe and reinstall is counted as a returning install, not as a new person. Listed on acira://usage.
+    WriteRegDWORD HKCU "${AC_RETURN_KEY}" "InstalledBefore" 1
     acKeepData:
   ${EndIf}
   ReadRegStr $R0 HKCU "${AC_REG_KEY}" "InstallLocation"
   ${If} $R0 == $INSTDIR
     DeleteRegValue HKCU "Software\RegisteredApplications" "${AC_REG_APP}"
     DeleteRegKey HKCU "Software\Classes\${AC_PROGID}"
+    !ifndef ACIRA_QA
+      DeleteRegKey HKCU "Software\Classes\acira"
+    !endif
     DeleteRegKey HKCU "${AC_REG_KEY}"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   ${EndIf}
@@ -764,9 +1348,28 @@ FunctionEnd
 ; atomically). Install now (--force-run) opens that old version again, so nobody is left with a closed browser; its updater still holds the
 ; download. Labels come from LogicLib: the macro is inserted for both registry roots.
 !macro customUnInstallCheck
+  ; D141: this run replaces the old files itself (AcOwnReplaceBegin took the remover out of the registry, so none was started and $R0 is 0).
+  ; The move comes here, after the template has decided about the shortcuts with the old program still in place. It is tried once: the macro
+  ; is inserted for both registry roots.
+  ${If} $acOwnReplace = 1
+    StrCpy $acOwnReplace 2
+    Call AcOwnReplaceMove
+    ${If} ${Errors}
+      StrCpy $R0 2
+    ${Else}
+      StrCpy $R0 0
+    ${EndIf}
+    ClearErrors
+  ${EndIf}
   ${IfNot} ${Errors}
   ${AndIf} $R0 != 0
     DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    !insertmacro AcLeaveWithOldVersion
+  ${EndIf}
+!macroend
+; AcLeaveWithOldVersion: the setup ends with the old version in place (exit code 2). Used when the old version's remover failed (above) and,
+; D141, when this setup's own replacement could not move the old files or found the new ones incomplete and put the old version back.
+!macro AcLeaveWithOldVersion
     Push $R1
     Push $R2
     ${GetParameters} $R1
@@ -785,7 +1388,6 @@ FunctionEnd
     Pop $R1
     SetErrorLevel 2
     Quit
-  ${EndIf}
 !macroend
 !macro customUnInstallCheckCurrentUser
   !insertmacro customUnInstallCheck

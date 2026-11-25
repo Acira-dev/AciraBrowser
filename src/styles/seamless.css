@@ -19,20 +19,23 @@
    the page is a card 6px in from the window's edges, radius 8 (the native page view takes the same radius, layout pageRadius), with the
    window's own colour showing round it as the frame. With the toolbar shown the card starts under it (no gap at the top), as Full's
    sidebar card does (sidebar.css). The 6px is a step on the spacing scale and the radius the page token. */
-:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0 6px 6px; border-radius: var(--geometry-pageRadius, 8px); box-shadow: 0 0 0 1px rgb(0 0 0 / .08); }
-:root .app[data-chrome=dark]:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { box-shadow: 0 0 0 1px rgb(255 255 255 / .06); }
+:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0 6px 6px; border-radius: var(--geometry-pageRadius, 8px); }
 /* A pinned sidebar docks the page beside it with its own page-area margins, which beat this rule on specificity: the card stood flush against the window's top edge (inset 0, the other three sides 6). Ported from upstream 94791f7b. */
 :root:root .app.style-acira:has(.browser-shell[data-seamless='hidden']) .browser-root .browser-body > .page-area { margin-top: 6px; }
 :root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area :is(.page-content, .page-pane) { border-radius: inherit; }
 /* Fullscreen (ui/windowFullscreen.ts marks the root): the page is the whole screen. No 6px frame, no corners and no ring, in every Seamless
    state (hidden, toolbar or sidebar shown, sidebar pinned); the native page view gets radius 0 from the layout (App.tsx pageCardRadius). */
 :root[data-window-fullscreen]:root:root .app:has(.browser-shell[data-seamless]) .browser-root .browser-body > .page-area { margin: 0; border-radius: 0; box-shadow: none; }
+/* Beta 14 (reported 16 Nov, fullscreen: "the corners were curved, and then they became square ... It should keep curved"): with the toolbar standing over the page, the page's edge
+   under it is a card edge as in a window. The slide rounds its two top corners (the page's clip, sidebar-overlay.css); at rest they were square, so they switched at both ends of every
+   reveal and hide. They keep the page radius under the shown toolbar; the screen's own bottom edge stays square. */
+:root[data-window-fullscreen]:root:root .app:has(.browser-shell[data-seamless='shown']) .browser-root .browser-body > .page-area { border-top-left-radius: var(--geometry-pageRadius, 8px); border-top-right-radius: var(--geometry-pageRadius, 8px); }
 
 /* R4-24 Tier A, the side: the sidebar floats over the page (ui/chromeEdge.ts setFloat; main raises the interface over the page views).
    The window's background moves onto a fixed layer with the page's rect cut out (the copy and the mask are set from JS when the float
    starts), the page placeholder is hidden, and the sidebar becomes a card 6px in from the window's edges: radius 8, the sidebar's finish
    (the same top lift the opaque finish uses), a hairline and the soft layered shadow. The page under it never moves. */
-:root[data-edge-float='native'] .app.style-acira { background: none !important; }
+:root[data-edge-float='native'] .app.style-acira { background-image: none !important; background-color: transparent !important; } /* not the shorthand: sidebar-overlay.css */
 :root[data-edge-float='native'] .app.style-acira::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: var(--sf-bg-image); background-size: var(--sf-bg-size); background-position: var(--sf-bg-position); background-repeat: var(--sf-bg-repeat); background-color: var(--sf-bg-color); -webkit-mask: var(--sf-mask) 0 0 / 100% 100% no-repeat; mask: var(--sf-mask) 0 0 / 100% 100% no-repeat; }
 :root[data-edge-float='native'] .app .browser-body > .page-area { visibility: hidden; }
 :root[data-edge-float='native'] .app .browser-body > .page-area .page-pane[data-pane]:not([data-web]) { visibility: visible; }
@@ -124,6 +127,57 @@
 :root:root[data-mode-switch='edge']::view-transition-old(acira-toolbar):only-child { opacity:1; }
 :root:root[data-mode-switch='edge']::view-transition-new(acira-toolbar) { animation: none; opacity: 1; }
 
+/* D1: THE PANEL'S CONTENT IS UNCOVERED BY ITS EDGE, IT DOES NOT SLIDE IN AHEAD OF IT (`data-edge-content=still`, chromeEdge applyEdge; the team's video, 18 Nov: a lone x at the window's edge before the sidebar
+   appears, then the tab list arriving cut on the left). The whole sidebar was one picture translated in from outside the window, so its RIGHT end came first: the active row's close button, 8 px from the
+   panel's edge, stood alone at the window's edge, and every row showed its tail before its start. The rule: nothing of a row shows before the row's own leading edge is in. So the picture stands still at
+   the sidebar's place and the WINDOW it is seen through travels: the image-pair carries the sidebar's slide and clips to its own box, the picture inside slides back by the same amount on the same clock.
+   Both are bare transforms that cancel exactly, so the content does not move by a pixel and the edge is where the sidebar's edge is: the first thing uncovered is each row's start, the close button last.
+   (Fading the row's controls in over the last third of the travel would have hidden the x and left every title cut on the left.) What belongs to the EDGE still travels with it: the sidebar's light,
+   the page's corners, the card's line. A hide is the same backwards. Not in Sidebar + address, where the window buttons and the address block ride the panel; and only where a row starts at the window's
+   edge (the sidebar on the left in a left-to-right language, on the right in a right-to-left one): on the other side the slide already brings each row's start in first, and the reveal would bring its tail.
+   (D78, 19 Nov: tried there and taken out again. With the content standing still on that side every row came tail first, 'ocs' before 'Docs'; the slide stays, on purpose.)
+   THE WINDOW'S SIDES ARE PULLED IN BY A HUNDREDTH OF A PIXEL. The slide lands on whole device pixels (chromeEdge pixelSteps), but its stops are written with six decimals, so half of them stand up to
+   0.0002 px past the pixel. A picture drawn there still lands on the pixel; a clip that ends there takes in the whole next one: the sidebar's fill, unlit, lay over the page's first column and the corner
+   piece for that frame (14 of 57 stepped frames, and the first frame of a real reveal). Pulled in by more than that error and far less than a pixel, the window ends on the pixel in every frame. */
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=in]::view-transition-image-pair(acira-sidebar) { clip-path: inset(0 .01px); animation: var(--edge-ms) var(--edge-ease) both sb-slide-in; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=out]::view-transition-image-pair(acira-sidebar) { clip-path: inset(0 .01px); animation: var(--edge-ms) var(--edge-ease) both sb-slide-out; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=in]::view-transition-new(acira-sidebar):only-child { animation-name: sb-unslide-in; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=out]::view-transition-old(acira-sidebar):only-child { animation-name: sb-unslide-out; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-sidebar-overlay]::view-transition-image-pair(acira-sidebar) { animation-timing-function: var(--edge-ease-px, var(--edge-ease)); }
+@keyframes sb-unslide-in { from { transform: var(--sb-unslide-from, translateX(100%)); } }
+@keyframes sb-unslide-out { to { transform: var(--sb-unslide-from, translateX(100%)); } }
+/* the way back, for every start the slide can have (`--sb-slide-from`: sidebar.css, sidebar-right.css, sidebar-overlay.css): the same length, the other way */
+:root[data-sidebar-side=right] { --sb-unslide-from: translateX(-100%); }
+:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition { --sb-unslide-from: translateX(var(--sf-sidebar-travel, 100%)); }
+:root[data-sidebar-side=right][data-mode-switch='edge'][data-sidebar-overlay]::view-transition { --sb-unslide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%))); }
+:root:is([data-edge-raster=sliver], [data-edge-raster=both])[data-mode-switch=edge][data-sidebar-overlay]::view-transition { --sb-unslide-from: translateX(calc(var(--sf-sidebar-travel, 100%) - 2px)); }
+:root:is([data-edge-raster=sliver], [data-edge-raster=both])[data-sidebar-side=right][data-mode-switch=edge][data-sidebar-overlay]::view-transition { --sb-unslide-from: translateX(calc(-1 * var(--sf-sidebar-travel, 100%) + 2px)); }
+/* D59: IN MOTION THE LIGHT LIES UNDER THE ROWS, AS AT REST (the team, 19 Nov, on the real takes of the bright page: "a wave of tint": the W favourite's icon read 98,84,83 on its first uncovered frame against
+   55,67,118 at rest, red 43 over, and every icon got it as the edge passed). At rest the sidebar's light is a layer under its rows (z-index -1). In an edge reveal or hide the light is a picture of its own,
+   because it must ride with the sidebar's EDGE while D1 keeps the rows still; and a picture of its own is drawn after the sidebar's, whose picture held the fill AND the rows: the light lay over the icons, the
+   titles and the tiles for the frames in which its bright zone passed them. The pictures are drawn in the order their elements are painted, and the light's layer is painted before the sidebar's content. So
+   the sidebar's CONTENT BLOCKS get pictures of their own (the favourites, which stand inside a caption that has no box of its own, the separator, the list, the foot: its direct children that hold rows, four to eight of them, never one per row; each is as wide as
+   the sidebar): they fall after the light. Fill, light, rows, as at rest. They move exactly as the sidebar's picture does: slid whole where the rows slide (above), uncovered by the edge where D1 keeps
+   them still (the image-pair carries the slide and clips its sides to the pixel, the picture inside slides back). The names are the engine's own per element (`match-element`), one class for the rules. A profile's reveal
+   (features/transfer) lifts every name; these are given only under `data-mode-switch='edge'`, and the reveal runs under its own value, so they are never on then (tests/transfer-reveal-names).
+   Only while the light is on (off, the sidebar is one picture as before), and never a layer of the light, the site glow, the live glass or the resize handle. */
+:root[data-ambient-light][data-mode-switch='edge'][data-mode-switch][data-mode-switch]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-expanded>:not(.st-glow-rail,.st-amb-side,.st-amb-head,.sb-live-glass,.sb-resize,.sb-caption,.sb-mini-line,.sb-mini-expand,.sb-mini-keep),
+:root[data-ambient-light][data-mode-switch='edge'][data-mode-switch][data-mode-switch]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog))>.ed-rail.acira-sidebar.is-expanded>.sb-caption>.sb-apps-region { view-transition-name: match-element !important; view-transition-class: sb-block; }
+:root:root[data-mode-switch='edge']::view-transition-new(.sb-block):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-in; }
+:root:root[data-mode-switch='edge']::view-transition-old(.sb-block):only-child { animation: var(--edge-ms) var(--edge-ease) both sb-slide-out; }
+:root:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition-new(.sb-block):only-child,
+:root:root[data-mode-switch='edge'][data-sidebar-overlay]::view-transition-old(.sb-block):only-child { animation-timing-function: var(--edge-ease-px, var(--edge-ease)); }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=in]::view-transition-image-pair(.sb-block) { clip-path: inset(-64px .01px); animation: var(--edge-ms) var(--edge-ease) both sb-slide-in; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=out]::view-transition-image-pair(.sb-block) { clip-path: inset(-64px .01px); animation: var(--edge-ms) var(--edge-ease) both sb-slide-out; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=in]::view-transition-new(.sb-block):only-child { animation-name: sb-unslide-in; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-edge-side=out]::view-transition-old(.sb-block):only-child { animation-name: sb-unslide-out; }
+:root:root[data-mode-switch='edge'][data-edge-content='still'][data-sidebar-overlay]::view-transition-image-pair(.sb-block) { animation-timing-function: var(--edge-ease-px, var(--edge-ease)); }
+/* (the sidebar staying while the top bar comes or goes: its blocks hold an old and a new picture of the same thing; the one taken with the bar standing is drawn, as for the sidebar's own picture) */
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-old(.sb-block),
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-new(.sb-block) { animation:none; opacity:0; }
+:root[data-mode-switch='edge'][data-edge-top='in']::view-transition-new(.sb-block),
+:root[data-mode-switch='edge'][data-edge-top='out']::view-transition-old(.sb-block) { animation:none; opacity:1; mix-blend-mode:normal; }
+
 /* The address field and Compact's tab strip glide by their left edge alone, from the offset chromeEdge measures (--edge-*-dx): the UA group
    animation also animates their width, which cannot run on the compositor, so they started a frame after the buttons beside them and the
    tab-count icon sat on the field in the first frame. Their pictures are anchored left and never stretch, so the width moved nothing visible. */
@@ -132,6 +186,33 @@
 @keyframes edge-glide-address { from { translate: var(--edge-address-dx, 0px) 0; } }
 @keyframes edge-glide-tabs { from { translate: var(--edge-tabs-dx, 0px) 0; } }
 
+/* THE ADDRESS FIELD WHILE THE SIDEBAR COMES OR GOES (`data-edge-side`, chromeEdge applyEdge; the team, 18 Nov: nothing is drawn twice).
+   The field's width follows the sidebar and its text is centred, so the text, the star and the box's far end are in different places in the old field and the new one. Its two pictures were anchored left
+   and CROSS-FADED (`:not(:only-child)` does not match these pseudo-elements, so view-morph.css's "never two copies crossfading" never applied): the address stood twice, 77 pt apart, for a third of the
+   slide, and in a hide the new, wider picture hung over the buttons right of the field with its star travelling across them. As in a layout switch (view-morph.css), the field is now a BACKGROUND that
+   morphs from the old box to the new one, and its parts are controls of their own: the page-information button rides the left edge with the buttons before it, the star and the zoom figure keep their
+   end, the text glides from where it was to where it will be (`--edge-text-dx`, chromeEdge setAddressMorph). Every part moves by `translate` or `transform` alone on the edge's clock: all of it
+   stays on the compositor, in step with the sidebar. Where the toolbar is one slab (Seamless) the rule above this block unnames all of it, these parts too. */
+:root[data-mode-switch='edge'][data-edge-side]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .address-bar>.address-security { view-transition-name: acira-addr-security; view-transition-class: acira-control; }
+:root[data-mode-switch='edge'][data-edge-side]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .address-bar>.address-star { view-transition-name: acira-addr-star; view-transition-class: acira-control; }
+:root[data-mode-switch='edge'][data-edge-side]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .address-bar>.address-zoom-indicator { view-transition-name: acira-addr-zoom; view-transition-class: acira-control; }
+:root[data-mode-switch='edge'][data-edge-side]:not([data-fr-finale]) .app.style-acira:not(:has(>.setup-dialog)) .browser-shell>.acira-persistent-toolbar .address-bar>.address-field { view-transition-name: acira-addr-text; }
+/* the box: the new picture alone, stretched from the old box's width while its left edge glides (edge-glide-address, above); its own round ends are its shape, nothing clips it */
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-image-pair(acira-address) { overflow: visible; clip-path: none; }
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-address) { animation: none; opacity: 0; }
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-address) { width: 100%; height: 100%; object-fit: fill; transform-origin: 0 0; opacity: 1; mix-blend-mode: normal; animation: edge-morph-address var(--edge-ms, 200ms) var(--edge-ease, ease-out) both; }
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-address):only-child { opacity: 1; }
+@keyframes edge-morph-address { from { transform: scaleX(var(--edge-address-sx, 1)); } }
+/* the parts: one picture each, the new one, from the first frame (never a cross-fade of two) */
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-addr-security), :root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-addr-star),
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-addr-zoom), :root:root[data-mode-switch='edge'][data-edge-side]::view-transition-old(acira-addr-text) { animation: none; opacity: 0; }
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-addr-security), :root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-addr-star),
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-addr-zoom), :root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-addr-text) { animation: none; opacity: 1; mix-blend-mode: normal; }
+/* the text: its group has its final size from the first frame and glides by `translate` alone, like the box */
+:root[data-mode-switch='edge'][data-edge-side]::view-transition-group(acira-addr-text) { animation-name: edge-glide-addr-text; animation-fill-mode: both; }
+:root:root[data-mode-switch='edge'][data-edge-side]::view-transition-new(acira-addr-text) { width: auto; height: 100%; object-fit: none; object-position: left center; }
+@keyframes edge-glide-addr-text { from { translate: var(--edge-text-dx, 0px) 0; } }
+
 /* Animation None (Reduce motion, or a system that asks for less motion): no view transition at all (chromeEdge startEdgeTransition), what appears is there at once. */
 
 /* The View group in the toolbar menu (MenuChoice): the choice's check takes the column the switches use, and a shortcut ends before it. */
@@ -139,3 +220,11 @@
 :root:root:root .browser-popup .menu-choice > kbd { margin-left: 8px; margin-right: 0; }
 :root:root:root .browser-popup:has(.menu-toggle) .menu-row.menu-choice > kbd { margin-right: 0; }
 :root:root:root .browser-popup .menu-choice[aria-checked='true'] > :is(svg, .ed-editor-icon):first-child { color: var(--toggle-on, var(--accent)); }
+
+/* Beta 14.0 D34: "Hide the toolbar" with the sidebar in Mini. The toolbar (and its sidebar button) is off screen at rest, so the rail carries its own expand button: the sidebar glyph just above the footer, centred on the rail's icon line, mirrored on the right. It is shown only while the toolbar is not on screen (App sets data-toolbar-away on the root), so a toolbar the pointer brought down is the only control. Same glyph, place and tooltip as the toolbar's button; nothing new designed. */
+.app.style-acira .acira-sidebar .sb-mini-expand{display:none}
+:root[data-toolbar-away] .app.style-acira .acira-sidebar.is-mini:not(.is-mini-docked)[data-mini=rail] .sb-mini-expand{all:unset;position:absolute;left:8px;bottom:58px;width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--sb-muted,currentColor);-webkit-app-region:no-drag;cursor:pointer;z-index:4}
+:root[data-toolbar-away] .app.style-acira .acira-sidebar.is-mini:not(.is-mini-docked)[data-mini=rail] .sb-mini-expand:hover{background:var(--sb-hover);color:var(--sb-fg,currentColor)}
+:root[data-toolbar-away] .app.style-acira .acira-sidebar.is-mini:not(.is-mini-docked)[data-mini=rail] .sb-mini-expand:focus-visible{outline:2px solid var(--st-ring,var(--accent,#3b6eea));outline-offset:-2px}
+.app.style-acira .acira-sidebar .sb-mini-expand .sb-mini-expand-ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+:root[data-sidebar-side=right] .app.style-acira .acira-sidebar .sb-mini-expand .sb-mini-expand-ico{transform:scaleX(-1)}

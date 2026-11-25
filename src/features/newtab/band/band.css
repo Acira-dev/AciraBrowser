@@ -1,0 +1,68 @@
+/* The notice band on the new-tab page (Beta 14, sections C and D). Flat, quiet, one card at a time, in the page's own tokens (see new-tab-page.css): the search field's surface and
+   hairline, 8px radius, the page's text colours and motion curve. Inter through the inherited font, nothing else. It leaves the way it came: the slot's height and blur are animated by
+   NoticeBand.tsx, and it takes no room in the page's layout, so nothing around it jumps. */
+/* The layer the card lives in (NewTabPage.tsx): over the page, a little under its top edge, taking no room in the page's own layout, so nothing below it moves when the card comes or goes. It lets every press through
+   except the card's own. Over the painting (full background) the page's art controls sit at the top right: on a narrow page the card steps below them. */
+.nt-band-top { position: absolute; z-index: 3; inset-block-start: 16px; inset-inline: 16px; display: flex; justify-content: center; pointer-events: none; }
+.nt-band-top .nt-band-slot { pointer-events: auto; width: min(640px, 100%); }
+@container (max-width: 980px) { .nt-page[data-style=full] .nt-band-top { inset-block-start: 56px; } }
+.nt-band-slot { align-self: center; display: grid; grid-template-rows: 1fr; width: min(640px, 100%); min-width: 0; }
+.nt-band-clip { min-height: 0; min-width: 0; overflow: clip; overflow-clip-margin: 6px; }
+.app.style-acira .nt-page .nt-band-card {
+  position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; box-sizing: border-box; padding: 12px 8px 12px 16px;
+  border: 1px solid var(--nt-field-line); border-radius: 8px; background: var(--nt-field); box-shadow: var(--nt-field-rim); color: var(--text-primary);
+}
+.nt-band-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.nt-band-title { margin: 0; font-size: var(--text-13, 13px); line-height: 18px; font-weight: var(--weight-560, 560); letter-spacing: -.005em; }
+.nt-band-body { margin: 0; max-width: 56ch; font-size: var(--text-12, 12px); line-height: 17px; color: var(--nt-text-2); text-wrap: pretty; }
+.nt-band-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 6px; }
+.nt-band-confirm { margin: 0; padding: 2px 0; font-size: var(--text-13, 13px); line-height: 20px; color: var(--text-primary); }
+.app.style-acira .nt-page .nt-band-action {
+  margin: 0 -6px; padding: 2px 6px; border: 0; border-radius: var(--radius-control, 4px); background: transparent; box-shadow: none; color: var(--text-primary); font: inherit;
+  font-size: var(--text-12, 12px); line-height: 18px; font-weight: 500; text-decoration: underline; text-decoration-color: rgb(var(--ink) / .32); text-underline-offset: 3px; cursor: pointer;
+  transition: background-color 120ms var(--nt-ease), text-decoration-color 120ms var(--nt-ease);
+}
+.app.style-acira .nt-page .nt-band-confirm .nt-band-action { margin: 0 0 0 4px; }
+.app.style-acira .nt-page .nt-band-action:hover { background: var(--nt-hover); text-decoration-color: currentColor; }
+.app.style-acira .nt-page .nt-band-action:active { background: var(--nt-press); }
+.app.style-acira .nt-page .nt-band-action:focus-visible, .app.style-acira .nt-page .nt-band-close:focus-visible { outline: 2px solid var(--nt-ring); outline-offset: 1px; }
+.app.style-acira .nt-page .nt-band-close {
+  display: grid; place-items: center; flex: none; width: 28px; height: 28px; margin: -4px 0 0; padding: 0; border: 0; border-radius: var(--radius-control, 4px); background: transparent; box-shadow: none; color: var(--nt-text-2); cursor: pointer;
+  transition: background-color 120ms var(--nt-ease), color 120ms var(--nt-ease);
+}
+.app.style-acira .nt-page .nt-band-close:hover { background: var(--nt-hover); color: var(--text-primary); }
+.app.style-acira .nt-page .nt-band-close:active { background: var(--nt-press); }
+/* The one primary action a card may have (tone 'primary'): flat, filled with the page's neutral primary colour (neutral-primary.css, the same fill as the search submit), no underline. */
+.app.style-acira .nt-page .nt-band-action[data-tone=primary] { margin: 0; padding: 3px 12px; background: var(--np-bg); color: var(--np-fg); text-decoration: none; font-weight: 560; }
+.app.style-acira .nt-page .nt-band-action[data-tone=primary]:hover { background: var(--np-hover); }
+.app.style-acira .nt-page .nt-band-action[data-tone=primary]:active { background: var(--np-press, var(--np-hover)); }
+/* Card styles the billboard can ask for (section D): flat colour only, never a gradient. */
+.app.style-acira .nt-page .nt-band-card[data-style=accent] { background: color-mix(in srgb, var(--accent, #3b82f6) 9%, var(--nt-field)); border-color: color-mix(in srgb, var(--accent, #3b82f6) 28%, var(--nt-field-line)); }
+.app.style-acira .nt-page .nt-band-card[data-style=update] { border-color: color-mix(in srgb, var(--accent, #3b82f6) 22%, var(--nt-field-line)); }
+/* Over a painting (the full-background setting) it is light on dark glass, as the workspace title is. */
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-card { background: rgb(18 20 25 / .68); color: #fff; border-color: rgb(255 255 255 / .14); box-shadow: none; -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-body, .app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-close { color: rgb(255 255 255 / .74); }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-action, .app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-confirm { color: #fff; }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-action:hover, .app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-close:hover { background: rgb(255 255 255 / .12); }
+/* Over a painting the card is dark glass, so the primary action is a white fill with dark text (the neutral fill would be the same near-white as the text there). */
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-action[data-tone=primary] { background: #fff; color: #0e0e10; }
+.app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-action[data-tone=primary]:hover { background: rgb(255 255 255 / .86); }
+@media (max-width: 420px) { .app.style-acira .nt-page .nt-band-card { padding-left: 12px; } }
+/* Noël's offer (band/noelOfferCard.ts): Christmas red, flat, the same in dark and light (and over a painting); the snowflake mark beside the text, a gold line for the season,
+   the snowfall choice as a small segmented control, "Turn it on" a warm white fill, "Not now" a quiet link. */
+.app.style-acira .nt-page .nt-band-card[data-style=noel], .app.style-acira .nt-page[data-style=full][data-art=on] .nt-band-card[data-style=noel] {
+  --noel-red: #7a1622; padding: 14px 8px 14px 14px; gap: 14px; background: var(--noel-red); border-color: rgb(255 255 255 / .1); box-shadow: 0 1px 2px rgb(0 0 0 / .18); color: #fff;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.nt-band-mark { flex: none; width: 44px; height: 44px; margin-top: 2px; background: url('../../../season/snowflake-mark-ice.svg') center / contain no-repeat; filter: drop-shadow(0 0 6px rgb(255 255 255 / .18)); }
+.nt-band-eyebrow { font-size: 10.5px; line-height: 14px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #e8c37a; }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-body, .app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-close { color: rgb(255 255 255 / .76); }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-close:hover, .app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-action:not([data-tone=primary]):hover { background: rgb(255 255 255 / .12); color: #fff; }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-action { color: #fff; text-decoration-color: rgb(255 255 255 / .4); }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-action[data-tone=primary] { background: #fff7ea; color: #5a0f18; }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-action[data-tone=primary]:hover { background: #fff; }
+.app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-action:focus-visible, .app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-close:focus-visible, .app.style-acira .nt-page .nt-band-card[data-style=noel] .nt-band-option:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.nt-band-choice { display: inline-flex; align-self: flex-start; gap: 2px; margin-top: 8px; padding: 2px; border-radius: 6px; background: rgb(0 0 0 / .22); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08); }
+.app.style-acira .nt-page .nt-band-option { margin: 0; padding: 3px 10px; border: 0; border-radius: 4px; background: transparent; box-shadow: none; color: rgb(255 255 255 / .74); font: inherit; font-size: var(--text-12, 12px); line-height: 18px; cursor: pointer; transition: background-color 120ms var(--nt-ease), color 120ms var(--nt-ease); }
+.app.style-acira .nt-page .nt-band-option:hover { color: #fff; }
+.app.style-acira .nt-page .nt-band-option[data-on] { background: rgb(255 255 255 / .16); color: #fff; font-weight: 560; }

@@ -1,0 +1,17 @@
+/* Beta 14 section G: the single-line icon set. The motion is Web Animations (ui/lineIconPlay.ts); this file only gives the drawing its box. */
+.li-icon { display: block; flex-shrink: 0; pointer-events: none; overflow: visible; }
+/* At rest an icon is its few paths (.li-rest, one per stroke). While it moves, the player adds its parts (.li-g, a group of paths, each a .li-p) and marks the resting path .li-hide for that time, then takes the parts away.
+   Every rule below is keyed by a class only the live parts carry: a resting icon is never tried against any of them (a rule keyed by `path`, or by `.li-rest` behind an attribute on the svg, is matched
+   against every path of the interface on every style recalc). */
+.li-hide { visibility: hidden; }
+/* Every moving part turns or scales about the icon's centre, never about the page's corner. Only the live parts carry this: a resting icon has no rule to match beyond its box. */
+.li-icon > .li-g, .li-icon > .li-g > .li-p, .li-icon > .li-ghost { transform-box: view-box; transform-origin: 8px 8px; }
+/* A faint copy of the icon sits under a redraw (added and removed by the player) so the button is never empty while the line runs. */
+.li-icon > .li-ghost { pointer-events: none; }
+/* No transition on a drawing: the motion is the animation, and Off means the state just swaps. */
+.li-icon > .li-g > .li-p { transition: none; }
+/* The saved star changes colour while its fill floods in (the old glyph did the same on .toolbar-icon): one calm change, at the pace of the
+   line motion, none when motion is off. The rules are keyed by `.li-star`, a class only the star icon carries (ToolbarIcon): the other icons are not tried against them. */
+.address-star .li-star { transition: color calc(.22s * var(--motion-pace, 1)) cubic-bezier(.3, 0, .2, 1); }
+.app[data-reduced-motion=true] .address-star .li-star { transition: none; }
+@media (prefers-reduced-motion: reduce) { .address-star .li-star { transition: none; } }

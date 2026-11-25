@@ -1,5 +1,7 @@
 import { designTokens } from './designSystem';
-export const popupExitMilliseconds=(reducedMotion:boolean,speed=1)=>reducedMotion?0:designTokens.motion.vaporExit/Math.max(.1,speed);
+import { dialogVapor } from './sheetFormation';
+/** How long a closing popup's scene is kept. A dialog or a prompt (Beta 14) leaves on its own 176 ms x speed vapor (the exit is the entrance backwards) and a beat more, so the last frame is never cut. */
+export const popupExitMilliseconds=(reducedMotion:boolean,speed=1,kind?:string)=>reducedMotion?0:kind!==undefined&&kind in dialogVapor.kinds?dialogVapor.ms/Math.max(.1,speed)+80:designTokens.motion.vaporExit/Math.max(.1,speed);
 export const popupMorphMilliseconds=(reducedMotion:boolean,speed=1)=>reducedMotion?0:designTokens.motion.morph/Math.max(.1,speed);
 
 /** Keep one material present while its geometry and keyed content morph.

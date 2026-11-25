@@ -50,8 +50,11 @@ test('phishing and malware protection is a real switch in setup and the first ro
   assert.doesNotMatch(steps, /className="fr-row fr-noicon fr-fact"/, 'the read-only "On" row is gone');
   assert.match(antiTracking, /id="phishing-lists" title=\{t\("privacy\.phishingProtection"\)\}[^>]*info=\{t\("setup\.phishing\.info"\)\}/);
   assert.match(antiTracking, /patch: \{ phishingLists: next \}/);
-  const privacy = settings.slice(settings.indexOf('section === "Privacy" && ('));
-  assert.ok(privacy.indexOf('<PhishingProtection') > 0 && privacy.indexOf('<PhishingProtection') < privacy.indexOf('<ProfilePrivacy'), 'first on the page');
+  const privacy = settings.slice(settings.indexOf('section === "Protection" && ('));
+  // Beta 14.4 (the team's pick for the team): phishing and malware protection is on Protection, the first row of "Scams, phishing and malware",
+  // right after Ads and trackers and Anti-tracking (it was an untitled block at the top of Privacy, R4-07); its own named, searchable row.
+  const order = ['<ProtectionGroup', '<AntiTracking', '<PhishingLists', '<PhishingProtection', '<Https'].map((tag) => privacy.indexOf(tag));
+  assert.ok(order.every((at, index) => at > 0 && (index === 0 || at > order[index - 1])), `the order on the page: ${order.join(', ')}`);
   const entry = read('src/features/settings/entries/privacy.ts');
   const line = entry.split('\n').find((item) => item.includes("id: 'phishing-lists'"))!;
   for (const word of ['phishing', 'malware', 'safe browsing', 'dangerous sites']) assert.ok(line.includes(`'${word}'`), `searchable by ${word}`);
@@ -102,12 +105,13 @@ test('stacked setup groups are separated by a general-sibling rule, so nothing b
   const css = read('src/features/onboarding/onboarding.css').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(css, /\.fr-group ~ \.fr-group \{\s*margin-top: 24px;\s*\}/);
   assert.doesNotMatch(css, /\.fr-group \+ \.fr-group/, 'the adjacent-sibling form loses the gap as soon as a sheet anchor or notice sits between the groups');
-  // The Privacy step really is two groups with the sheet's anchor between them (the case the adjacent rule missed).
+  // Beta 14 (brief section C): the Privacy step is one group of protections, then the sheet's anchor, then the one quiet usage line (no second group, no switch).
   const start = steps.indexOf('<div className="fr-privacy-controls">');
   const next = steps.slice(start).search(/\n(?:export )?function /);
   const privacy = steps.slice(start, next > 0 ? start + next : undefined);
-  assert.equal((privacy.match(/<div className="fr-group">/g) ?? []).length, 2);
-  assert.match(privacy, /<\/div>\s*\{sheet && <ConnectionSheet[^\n]*\n[\s\S]*?<div className="fr-group">/);
+  assert.equal((privacy.match(/<div className="fr-group">/g) ?? []).length, 1);
+  assert.match(privacy, /<\/div>\s*\{sheet && <ConnectionSheet[^\n]*\n[\s\S]*?<p className="fr-note fr-usage-line">/);
+  assert.doesNotMatch(privacy, /setup\.usage\.title|usage\.set\(/, 'no switch for usage sharing in setup');
 });
 
 // R4-03: the setup avatar ring is a deliberate ring with a gap.
@@ -118,7 +122,7 @@ test('the setup profile ring is an outline with a gap, on the setup avatar only'
 
 test('29 Oct: after setup chose "No image", picking a picture or a collection in Settings turns the artwork back on', () => {
   const ntp = read('src/features/NewTabSettings.tsx');
-  assert.match(ntp, /update\(\{ \.\.\.artworkCollectionChoice\(collection, prefs\.artwork\), modules: \{ \.\.\.prefs\.modules, artwork: true \} \}\)/, 'a collection');
+  assert.match(ntp, /update\(\{ \.\.\.artworkCollectionChoice\(collection, prefs\.artwork\), (?:ownImages: [^,]+, )?modules: \{ \.\.\.prefs\.modules, artwork: true \} \}\)/, 'a collection');
   assert.match(ntp, /update\(\{ artwork: value as typeof prefs\.artwork, daily: false,[^}]*modules: \{ \.\.\.prefs\.modules, artwork: true \} \}\)/, 'one picture');
   assert.match(cover, /artwork: pick !== "none"/, 'setup still turns it off for "No image"');
 });

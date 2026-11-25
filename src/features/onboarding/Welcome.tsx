@@ -33,6 +33,7 @@ export function Welcome({
   onReady,
   language,
   onLanguage,
+  onBringOver,
 }: {
   tone: "dark" | "light";
   reduced: boolean;
@@ -44,12 +45,15 @@ export function Welcome({
   /** The interface language setting ("system" follows Windows) and how to change it. */
   language: string;
   onLanguage: (language: string) => void;
+  /** "Coming from another computer? Bring your Acira over.": the receive flow (transfer/ReceiveFlow) in the setup card. */
+  onBringOver?: () => void;
 }) {
   const t = useT();
   const root = useRef<HTMLDivElement>(null),
     lockup = useRef<HTMLDivElement>(null),
     lede = useRef<HTMLParagraphElement>(null),
     actions = useRef<HTMLDivElement>(null),
+    note = useRef<HTMLParagraphElement>(null),
     ready = useRef(onReady);
   ready.current = onReady;
   useEffect(() => ready.current?.(), []);
@@ -78,6 +82,7 @@ export function Welcome({
     ];
     play(lede.current, rise, LEDE, 0.45);
     play(actions.current, rise, ACTIONS, 0.45);
+    play(note.current, rise, ACTIONS + 0.1, 0.45);
     return () => animations.forEach((animation) => animation.cancel());
   }, [reduced]);
   return (
@@ -101,6 +106,14 @@ export function Welcome({
             <ArrowRight size={14} />
           </button>
         </div>
+        {onBringOver && (
+          <p ref={note} className="fr-w-note">
+            {t("transfer.setup.linkLead")}{" "}
+            <button className="fr-link fr-inline-link" type="button" disabled={busy} onClick={onBringOver}>
+              {t("transfer.setup.linkAction")}
+            </button>
+          </p>
+        )}
       </div>
       <LanguagePicker value={language} onChange={onLanguage} />
     </>

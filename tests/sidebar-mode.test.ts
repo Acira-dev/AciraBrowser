@@ -35,8 +35,14 @@ test('existing settings map to a layout exactly, with no migration', () => {
   // both on (Sidebar mode on): Sidebar + address, the window it always was
   assert.equal(tabsLayoutOf({ verticalTabs: true, addressInSidebar: true }), 'sidebar-address');
   // and the layout reads back the same pair
-  assert.deepEqual(tabsLayouts.map(tabsLayoutSettings), [{ tabs: false, address: false }, { tabs: true, address: false }, { tabs: true, address: true }]);
-  for (const layout of tabsLayouts) { const { tabs, address } = tabsLayoutSettings(layout); assert.equal(tabsLayoutOf({ verticalTabs: tabs, addressInSidebar: address }), layout); }
+  // Beta 14: the Shelf (Top + sidebar) is the second answer: tabs along the top and `shelf` on. Tabs in the sidebar win over it.
+  assert.equal(tabsLayoutOf({ verticalTabs: false, shelf: true }), 'top-sidebar');
+  assert.equal(tabsLayoutOf({ shelf: true }), 'top-sidebar');
+  assert.equal(tabsLayoutOf({ verticalTabs: true, shelf: true }), 'sidebar', 'a stale flag never beats the tabs being in the sidebar');
+  assert.equal(tabsLayoutOf({ verticalTabs: true, addressInSidebar: true, shelf: true }), 'sidebar-address');
+  assert.deepEqual(tabsLayouts, ['top', 'top-sidebar', 'sidebar', 'sidebar-address']);
+  assert.deepEqual(tabsLayouts.map(tabsLayoutSettings), [{ tabs: false, address: false, shelf: false }, { tabs: false, address: false, shelf: true }, { tabs: true, address: false, shelf: false }, { tabs: true, address: true, shelf: false }]);
+  for (const layout of tabsLayouts) { const { tabs, address, shelf } = tabsLayoutSettings(layout); assert.equal(tabsLayoutOf({ verticalTabs: tabs, addressInSidebar: address, shelf }), layout); }
 });
 
 test('moving the address bar into or out of the sidebar is one sidebar.mode action: the same morph Sidebar mode always played', () => {
@@ -63,13 +69,24 @@ test('the morph plays for every pair that moves the address bar, and for no othe
 });
 
 test('between Top and Sidebar nothing but what the Tabs card always wrote: both settings and the profile\'s tabs switch', () => {
-  const state = createInitialState();
+  // (Beta 14.0, layout morph: with the sidebar closed in this window. Where it stands open the switch is ONE sidebar.mode action and plays as the row morph, the column opening or closing, and the
+  // window writes the profile's tabs switch inside the morph's own render: the test below this one.)
+  const state = withSettings(createInitialState(), {}, { workspaceOpen: false, webWorkspaceOpen: false });
   const profile = state.tabs[0].browserProfileId;
   assert.deepEqual(run(state, 'sidebar'), [{ type: 'settings.update', patch: { verticalTabs: true, addressInSidebar: false } }]);
   assert.equal(readRailPrefs(profile, false).tabs, true, 'the rail switch is written in the same step, as the card did');
   const side = withSettings(state, { verticalTabs: true });
   assert.deepEqual(run(side, 'top'), [{ type: 'settings.update', patch: { verticalTabs: false, addressInSidebar: false } }]);
   assert.equal(readRailPrefs(profile, false).tabs, false);
+});
+
+test('between Top and Sidebar with the sidebar standing open: ONE sidebar.mode action, the row morph with the column, the tabs switch inside the morph (Beta 14.0)', () => {
+  const state = createInitialState(), open = (s: BrowserSnapshot) => withSettings(s, {}, { workspaceOpen: true, webWorkspaceOpen: true });
+  const profile = state.tabs[0].browserProfileId, before = readRailPrefs(profile, false).tabs;
+  assert.deepEqual(run(open(state), 'sidebar'), [{ type: 'sidebar.mode', tabs: true, address: false }]);
+  assert.equal(readRailPrefs(profile, false).tabs, before, 'not written ahead: the window writes it in the morph\'s render (runtime/client.ts syncRail)');
+  assert.deepEqual(run(open(withSettings(state, { verticalTabs: true })), 'top'), [{ type: 'sidebar.mode', tabs: false, address: false }]);
+  assert.deepEqual(run(open(withSettings(state, { verticalTabs: false, addressInSidebar: true })), 'sidebar'), [{ type: 'sidebar.mode', tabs: true, address: false }], 'a leftover address flag is cleared by the same action (Sidebar is Sidebar, not Sidebar mode)');
 });
 
 test('the profile\'s tabs switch is not written before the morph: it follows inside it (runtime/client.ts)', () => {
@@ -83,14 +100,14 @@ test('the profile\'s tabs switch is not written before the morph: it follows ins
 test('picking the layout already shown sends nothing; a leftover address flag is cleared by the first pick', () => {
   const state = createInitialState();
   for (const layout of tabsLayouts) {
-    const { tabs, address } = tabsLayoutSettings(layout);
-    assert.deepEqual(run(withSettings(state, { verticalTabs: tabs, addressInSidebar: address }), layout), [], layout);
+    const { tabs, address, shelf } = tabsLayoutSettings(layout);
+    assert.deepEqual(run(withSettings(state, { verticalTabs: tabs, addressInSidebar: address, shelf }), layout), [], layout);
   }
   // tabs along the top with the old switch's address flag left on: it shows as Along the top, and the pick writes both so the next Sidebar pick starts clean
   const leftover = withSettings(state, { verticalTabs: false, addressInSidebar: true });
   assert.equal(tabsLayoutOf(leftover.settings), 'top');
   assert.deepEqual(run(leftover, 'top'), [{ type: 'settings.update', patch: { verticalTabs: false, addressInSidebar: false } }]);
-  assert.deepEqual(run(leftover, 'sidebar'), [{ type: 'settings.update', patch: { verticalTabs: true, addressInSidebar: false } }], 'Sidebar is Sidebar, not Sidebar mode');
+  assert.deepEqual(run(withSettings(leftover, {}, { workspaceOpen: false, webWorkspaceOpen: false }), 'sidebar'), [{ type: 'settings.update', patch: { verticalTabs: true, addressInSidebar: false } }], 'Sidebar is Sidebar, not Sidebar mode (sidebar closed; open: the test above)');
 });
 
 test('a private window writes its tabs switch to memory only', () => {
@@ -98,7 +115,7 @@ test('a private window writes its tabs switch to memory only', () => {
   const base = state.browserProfiles[0];
   const priv = { ...base, id: 'profile-private', private: true };
   const tab = { ...state.tabs[0], browserProfileId: priv.id };
-  const private_ = { ...state, browserProfiles: [...state.browserProfiles, priv], tabs: [tab], activeTabId: tab.id };
+  const private_ = withSettings({ ...state, browserProfiles: [...state.browserProfiles, priv], tabs: [tab], activeTabId: tab.id }, {}, { workspaceOpen: false, webWorkspaceOpen: false });   // (the sidebar closed: open, the window writes it in the morph's render, through the same private store)
   run(private_, 'sidebar');
   assert.equal([...store.keys()].some((key) => key.includes('profile-private')), false, 'nothing in browser storage');
   assert.equal(readRailPrefs(priv.id, true).tabs, true);
@@ -135,30 +152,31 @@ test('the choice is the same in the four places and they share the one function'
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
   const row = read('../src/features/settings/TabLayoutRow.tsx'), panel = read('../src/features/settings/panels/sidebar.tsx'), settings = read('../src/features/BrowserSettings.tsx'), menu = read('../src/components/BrowserMenu.tsx'), app = read('../src/App.tsx'), yours = read('../src/features/onboarding/MakeItYours.tsx'), rows = read('../src/features/settings/SidebarRows.tsx');
   // the three cards
-  assert.match(row, /value: 'toolbar'[\s\S]*value: 'sidebar'[\s\S]*value: 'sidebar-address', label: t\('yours\.tabsSideAddress'\)/);
-  // Appearance › Layout and Settings › Tabs use one component and one function
+  assert.match(row, /value: 'toolbar'[\s\S]*value: 'top-sidebar', label: t\('yours\.tabsTopSide'\)[\s\S]*value: 'sidebar'[\s\S]*value: 'sidebar-address', label: t\('yours\.tabsSideAddress'\)/);
+  // The card is in Settings › Tabs only (Appearance › Layout has an "Also in Tabs" row), and it writes through the one function
   assert.match(settings, /setTabsLayout\(state, dispatch, layout === "toolbar" \? "top" : layout\)/);
-  assert.equal([...settings.matchAll(/<TabLayoutRow /g)].length, 2, 'Appearance › Layout and Tabs');
+  assert.equal([...settings.matchAll(/<TabLayoutRow /g)].length, 1, 'Tabs only');
   // the switch and its rows are gone, everywhere
   for (const gone of ['SidebarModeRow', 'AddressInSidebarRow', 'setSidebarMode', 'sidebarModePlan', 'sidebarmode.title', 'windowview.addressInSidebar']) for (const [name, source] of Object.entries({ row, panel, settings, menu, app, yours, rows })) assert.ok(!source.includes(gone), `${name} still has ${gone}`);
   assert.ok(!/id="sidebar-mode"|id="address-in-sidebar"/.test(panel + rows + settings), 'no row with the old ids');
-  // Window view: only the views that look different in the layout, at the card size of four
-  assert.match(settings, /viewsOfLayout\(layoutChoice\)\.map\(\(mode\) => \(\{ value: mode, label: windowViewName\(mode\), art: <MiniView view=\{mode\} layout=\{tabLayout\} \/> \}\)\)/);
+  // Window view: all four cards; the views that do not look different in the layout are dimmed with a reason (settings/layoutAvailability.ts)
+  assert.match(settings, /windowViews\.map\(\(mode\) => \(\{ value: mode, label: windowViewName\(mode\), art: <MiniView view=\{mode\} layout=\{tabLayout\} \/>, disabled: unavailableViews\(layoutChoice\)\.includes\(mode\) \}\)\)/);
   assert.match(settings, /value=\{shownView\(layoutChoice, windowView\)\}/);
   // the menu: one Tabs segment with three icon cells, no Sidebar mode row, the menu closes after the pick
-  assert.match(menu, /\{id:'sidebar-address',tip:t\("yours\.tabsSideAddress"\)/);
+  assert.match(menu, /\{id:'sidebar-address' as const,tip:t\("yours\.tabsSideAddress"\)/);
   assert.ok(!/MenuToggle[^\n]*sidebarmode/.test(menu));
   assert.match(app, /setTabsLayout: \(layout: TabsLayout\) => \{ setTabsLayout\(state, dispatch, layout\); close\(\);/, 'the Acira menu closes after the pick: the window re-arranges and the menu would cover the sidebar');
   // setup: three answers, and the view list follows the layout
-  assert.match(yours, /\["sidebar-address", t\("yours\.tabsSideAddress"\)\]/);
+  assert.match(yours, /setupTabsLayouts\(\)\.map\(\(id\) => \[id, t\(tabsLayoutName\[id\]\)\] as const\)/, 'the same four names as the cards; the setup flow offers the first three until the picker step is switched on (setupLayoutFlag.ts)');
   assert.match(yours, /onChange=\{\(value\) => setTabsLayout\(state, dispatch, value\)\}/);
   assert.match(yours, /viewsOfLayout\(layout, \["full", "compact", "seamless"\]\)/);
 });
 
 test('search finds the Tabs choice by the words the old Sidebar mode and address bar rows used', () => {
-  const core = readFileSync(new URL('../src/features/settings/entries/core.ts', import.meta.url), 'utf8');
+  const core = readFileSync(new URL('../src/features/settings/entries/sidebar.ts', import.meta.url), 'utf8');
   const entry = core.split('\n').find((line) => line.includes("id: 'sidebar-only-tabs'")) ?? '';
-  for (const word of ['sidebar mode', 'sidebar only', 'everything in sidebar', 'address bar', 'url bar', 'address bar in sidebar', 'arc style', 'zen style']) assert.ok(entry.includes(`'${word}'`), word);
+  // Beta 14.4: plain "address bar" and "url bar" lead with Hide the toolbar and the search engine (the team); the card keeps "address bar in sidebar".
+  for (const word of ['sidebar mode', 'sidebar only', 'everything in sidebar', 'address bar in sidebar', 'arc style', 'zen style']) assert.ok(entry.includes(`'${word}'`), word);
 });
 
 test('the new label is in every language, and the strings the old rows used are gone from all of them', () => {

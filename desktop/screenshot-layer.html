@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Screenshot</title>
+<style>
+/* Beta 14: the area layer of the page screenshot. A transparent layer over the page view (never part of the picture): the page dims softly, the dragged box stays clear,
+   its size in pixels shows at its corner. The dim fades in and fades out on the same symmetric curve, so the way out is the exact reverse of the way in; nothing cuts,
+   nothing jumps when the box is let go. Inter, the browser's one typeface (the file the interface loads). */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('../dist/fonts/InterVariable.woff2') format('woff2')}
+*,::before,::after{font-feature-settings:'cv11','ss03'!important;box-sizing:border-box}
+:root{--dim:rgb(0 0 0/.36);--ring:rgb(255 255 255/.95);--ring-out:rgb(0 0 0/.34);--pill:rgb(28 28 32/.90);--pill-ink:rgb(244 244 246/.96);--pill-rim:rgb(255 255 255/.10);--fade:180ms;--curve:cubic-bezier(.45,0,.55,1);color-scheme:dark}
+body.light{--dim:rgb(12 14 20/.28);--pill:rgb(255 255 255/.94);--pill-ink:rgb(29 31 36/.92);--pill-rim:rgb(0 0 0/.10);color-scheme:light}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font:500 12px/16px Inter,system-ui,sans-serif;user-select:none;-webkit-user-select:none}
+body{position:relative;cursor:crosshair}
+body.cover{cursor:default}
+#dims{position:absolute;inset:0;opacity:0;transition:opacity var(--fade) var(--curve);pointer-events:none}
+body.on #dims{opacity:1}
+#dims i{position:absolute;background:var(--dim);display:block}
+#box{position:absolute;display:none;pointer-events:none;box-shadow:0 0 0 1px var(--ring),0 0 0 2px var(--ring-out);opacity:0;transition:opacity var(--fade) var(--curve)}
+body.on #box{opacity:1}
+#size,#hint{position:absolute;display:none;padding:0 7px;height:22px;line-height:22px;border-radius:6px;background:var(--pill);color:var(--pill-ink);box-shadow:inset 0 0 0 1px var(--pill-rim),0 2px 10px rgb(0 0 0/.22);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity var(--fade) var(--curve)}
+#size{z-index:3}
+body.on #size.show,body.on #hint.show{opacity:1}
+#hint{top:14px;left:50%;transform:translateX(-50%);height:28px;line-height:28px;padding:0 12px;border-radius:8px;font-weight:500}
+#cover{position:absolute;inset:0;width:100%;height:100%;display:none;object-fit:fill;pointer-events:none}
+@media (prefers-reduced-motion:reduce){:root{--fade:80ms}}
+</style>
+</head>
+<body>
+<img id="cover" alt="">
+<div id="dims"><i id="dt"></i><i id="db"></i><i id="dl"></i><i id="dr"></i></div>
+<div id="box"></div>
+<div id="size"></div>
+<div id="hint" dir="auto"></div>
+<script>
+(()=>{
+ const $=id=>document.getElementById(id),body=document.body;
+ const dt=$('dt'),db=$('db'),dl=$('dl'),dr=$('dr'),box=$('box'),size=$('size'),hint=$('hint'),cover=$('cover');
+ let scale=1,mode='',start=null,rect=null,finished=false,W=0,H=0;
+ const place=(el,x,y,w,h)=>{el.style.left=x+'px';el.style.top=y+'px';el.style.width=Math.max(0,w)+'px';el.style.height=Math.max(0,h)+'px';};
+ /* the four panels round the clear box: with no box the top panel is the whole layer */
+ const dim=r=>{W=innerWidth;H=innerHeight;if(!r){place(dt,0,0,W,H);place(db,0,0,0,0);place(dl,0,0,0,0);place(dr,0,0,0,0);return;}
+  place(dt,0,0,W,r.y);place(db,0,r.y+r.height,W,H-r.y-r.height);place(dl,0,r.y,r.x,r.height);place(dr,r.x+r.width,r.y,W-r.x-r.width,r.height);};
+ const draw=r=>{dim(r);if(!r){box.style.display='none';size.classList.remove('show');return;}
+  box.style.display='block';place(box,r.x,r.y,r.width,r.height);
+  const w=Math.round(r.width*scale),h=Math.round(r.height*scale);size.textContent=w+' × '+h;size.style.display='block';size.classList.add('show');
+  const sw=size.offsetWidth,sh=size.offsetHeight;let x=r.x+r.width-sw,y=r.y+r.height+8;   /* under the box, flush with its right corner; above it when there is no room below */
+  if(y+sh>H-4)y=Math.max(4,r.y-sh-8);if(y<4)y=r.y+r.height-sh-8;
+  x=Math.min(Math.max(4,x),W-sw-4);size.style.left=x+'px';size.style.top=y+'px';};
+ const norm=(a,b)=>{const x=Math.max(0,Math.min(a.x,b.x)),y=Math.max(0,Math.min(a.y,b.y)),x2=Math.min(W,Math.max(a.x,b.x)),y2=Math.min(H,Math.max(a.y,b.y));return {x,y,width:x2-x,height:y2-y};};
+ const send=(type,detail)=>window.screenshotLayer.send(type,detail);
+ const cancel=()=>{if(finished)return;finished=true;send('cancelled');};
+ addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();cancel();}},true);
+ addEventListener('contextmenu',event=>{event.preventDefault();cancel();},true);
+ addEventListener('pointerdown',event=>{if(mode!=='area'||finished||event.button!==0)return;start={x:event.clientX,y:event.clientY};rect=null;hint.classList.remove('show');try{document.documentElement.setPointerCapture(event.pointerId);}catch{}event.preventDefault();});
+ addEventListener('pointermove',event=>{if(!start||finished)return;rect=norm(start,{x:event.clientX,y:event.clientY});draw(rect);});
+ addEventListener('pointerup',event=>{if(!start||finished||event.button!==0)return;const r=norm(start,{x:event.clientX,y:event.clientY});start=null;
+  if(r.width<4||r.height<4){rect=null;draw(null);hint.classList.add('show');return;}   /* a click, not a box: keep waiting */
+  rect=r;draw(r);finished=true;send('picked',r);});
+ addEventListener('pointercancel',()=>{if(start&&!finished){start=null;rect=null;draw(null);hint.classList.add('show');}});
+ window.screenshotLayer.onState(state=>{
+  if(!state||typeof state!=='object')return;
+  if(state.mode==='area'){mode='area';scale=Number(state.scale)>0?Number(state.scale):1;body.classList.toggle('light',state.dark===false);body.classList.remove('cover');finished=false;start=null;rect=null;
+   hint.textContent=String(state.hint||'').slice(0,160);hint.style.display=hint.textContent?'block':'none';hint.classList.add('show');draw(null);
+   requestAnimationFrame(()=>requestAnimationFrame(()=>body.classList.add('on')));focus();}
+  else if(state.mode==='cover'&&typeof state.src==='string'&&/^data:image\/(?:png|jpeg);base64,/.test(state.src)){mode='cover';body.classList.add('cover','on');cover.src=state.src;cover.style.display='block';dims.style.display='none';finished=true;
+   cover.decode().catch(()=>{}).then(()=>send('covered'));return;}
+  else if(state.mode==='end'){body.classList.remove('on');setTimeout(()=>send('hidden'),mode==='cover'?0:Number(state.ms)>0?Number(state.ms):200);}
+ });
+ const dims=$('dims');
+ addEventListener('load',()=>send('ready'));
+})();
+</script>
+</body>
+</html>

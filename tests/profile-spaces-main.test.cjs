@@ -61,7 +61,10 @@ test('profiles as spaces: turning it on brings hidden and saved profile windows 
 });
 
 test('profiles as spaces: what an import adds settles at once (Arc Spaces show as groups), with workspaces nothing changes', () => {
-  assert.match(main, /commit:next=>\{(?:\/\*[^*]*\*\/)?if\(next\.settings\?\.spaces==='profiles'\)normalizeWorkspaces\(next\);state=next;save\(\);publishShared\(\);broadcast\(\);\}/);
+  // one commit for the importer and for a profile transfer's apply (main.cjs importCommit)
+  assert.match(main, /const importCommit=next=>\{(?:\/\*[^*]*\*\/)?if\(next\.settings\?\.spaces==='profiles'\)normalizeWorkspaces\(next\);state=next;save\(\);publishShared\(\);broadcast\(\);\};/);
+  assert.match(main, /createImporter\(\{database,[^\n]*commit:importCommit,/);
+  assert.match(main, /createTransfer\(\{\s*getState:\(\)=>state,commit:importCommit,/);
 });
 
 test('a download from a page\'s own pop-up window goes to the profile whose session the pop-up shares', () => {

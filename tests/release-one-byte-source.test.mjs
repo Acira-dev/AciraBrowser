@@ -112,6 +112,17 @@ test('the release bundle is plain ASCII and smaller for it', async () => {
       assert.equal(hasWideText(code), false, `${file} is plain ASCII, so the main process keeps one byte per character`);
       new vm.Script(code, {filename: file});
     }
-    assert.ok((await fs.stat(path.join(output, 'desktop/main.cjs'))).size < 9 * 1024 * 1024, 'the catalogs of the other languages are packed (the bundle was 12.4 MB)');
+    // b14 integration (round 15): Beta 14 whole is 9,443,777 bytes (238be97a), over 9 MiB; the line proves the catalogs are packed (12.4 MB unpacked), so 9.25 MiB (as earlier work' 136ad5fb7)
+    // b14 integration (round 17c): 9.5 MiB. This guard is here to catch the 12.4 MB bundle (catalogs unpacked, or text kept two bytes a character); the Seamless reveal fixes
+    // (earlier work / earlier work) add about 8 KB of main-process code and took Beta 14 to 9,700,361 bytes (9.2510 MiB), still plain ASCII with the catalogs packed.
+    // an earlier build touchpad swipe (22 Nov): the Windows / Linux two-finger swipe (touchpad-phases.cjs, touchpad-log.cjs, the swipe controller's web path, its setting and 13 x 2 strings) adds about 24 KB of main-process code, taking the line from 9,961,154 (318 bytes under 9.5 MiB) to 9,985,344 bytes (9.5228 MiB), still plain ASCII with the catalogs packed.
+    // 14.2 (22 Nov 2026): 9.75 MiB for the whole 14.2 line (the swipe above, and two new update sentences in 13 languages, D141, add 833 bytes more). The guard
+    // still catches what it is for (12.4 MB: catalogs unpacked, or text kept two bytes a character).
+    // 14.4 site notifications (24 Nov 2026): WHICH TREE: this measures desktop/main.cjs bundled from the tree the test runs in, and the bundle carries each
+    // module's path, so the same commit measures 58,738 bytes more in a checkout under /tmp (its paths to the shared node_modules are longer) than in a
+    // worktree beside them. Measured in one tree, the panel's main-process half (its store, the sessions it attaches to only while In Acira, the IPC, the
+    // routing, the worker's permission check, the validation, 17 words in 13 catalogs) adds 35,385 bytes to the line fc9b4b692. In a worktree: the line
+    // about 10,213,250, with the panel 10,248,633, over 9.75 MiB (10,223,616). Raised to 9.80 MiB (10,276,044): 27,411 bytes left. Still catches 12.4 MB.
+    assert.ok((await fs.stat(path.join(output, 'desktop/main.cjs'))).size < 9.80 * 1024 * 1024, 'the catalogs of the other languages are packed (the bundle was 12.4 MB)');
   } finally { await fs.rm(output, {recursive: true, force: true}); }
 });

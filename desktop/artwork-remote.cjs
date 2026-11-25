@@ -106,9 +106,15 @@ function createRemoteArtwork({ root, request, prepare, thumbnail, now = () => Da
     for (const file of files) { if (total <= MAX_CACHE_BYTES) break; fs.unlinkSync(path.join(directory, file.name)); total -= file.size; }
   }
 
+  /** The file name of a picture that is already on this computer, or null. It never touches the network or the file's recency. */
+  const cachedName = (item) => { const base = hash(item.imageUrl); return ['jpg', 'png'].map((ext) => `${base}.${ext}`).find((name) => fs.existsSync(path.join(directory, name))) || null; };
+  /** What a caller needs to show one picture. The id is stable for the picture (collection + a hash of its address), so it can be remembered. */
+  const describe = (collection, item, name) => ({ id: `${collection}:${hash(item.imageUrl, 12)}`, src: `acira-browser-ui://ui/artwork-remote/${name}`, name: item.title, artist: item.artist, date: item.date, license: item.license, credit: item.credit, source: item.source, collection });
+
   async function image(item) {
     const base = hash(item.imageUrl);
-    for (const ext of ['jpg', 'png']) { const cached = path.join(directory, `${base}.${ext}`); if (fs.existsSync(cached)) { fs.utimesSync(cached, new Date(), new Date()); return `${base}.${ext}`; } }
+    const have = cachedName(item);
+    if (have) { fs.utimesSync(path.join(directory, have), new Date(), new Date()); return have; }
     const bytes = await get(item.imageUrl, MAX_INPUT_BYTES), info = artworkImageInfo(bytes);
     const name = `${base}.${info.mime === 'image/png' ? 'png' : 'jpg'}`;
     fs.writeFileSync(path.join(directory, name), bytes);
@@ -130,12 +136,37 @@ function createRemoteArtwork({ root, request, prepare, thumbnail, now = () => Da
       let at = parseInt(hash(String(seed), 8), 16) % items.length, lastError;
       for (let tries = 0; tries < Math.min(3, items.length); tries++, at = (at + 1) % items.length) {
         const item = items[at];
-        try { const name = await image(item); return { id: `${collection}:${hash(item.imageUrl, 12)}`, src: `acira-browser-ui://ui/artwork-remote/${name}`, name: item.title, artist: item.artist, date: item.date, license: item.license, credit: item.credit, source: item.source, collection }; } catch (error) { lastError = error; }
+        try { return describe(collection, item, await image(item)); } catch (error) { lastError = error; }
       }
       throw lastError || Error('No picture is available.');
     })().finally(() => inflight.delete(key));
     inflight.set(key, job);
     return job;
+  }
+
+  /** The pictures already kept on this computer (the ones a new tab has shown), newest first, optionally only `ids`. It never touches the
+   *  network: each collection's cached list is read however old it is, and only entries whose picture file is still in the cache are
+   *  returned. This is what "my picks" is made of, so a pick is something the person has seen, and showing one costs no request. */
+  function kept(ids) {
+    const wanted = Array.isArray(ids) ? new Set(ids) : null;
+    const found = [], listed = new Set();
+    for (const collection of Object.keys(COLLECTIONS)) {
+      let items;
+      try { items = JSON.parse(fs.readFileSync(path.join(directory, collection + '.json'), 'utf8')).items; } catch { continue; }
+      if (!Array.isArray(items)) continue;
+      for (const item of items) {
+        if (!item || typeof item.title !== 'string' || typeof item.imageUrl !== 'string' || !allowed(item.imageUrl)) continue;
+        const id = `${collection}:${hash(item.imageUrl, 12)}`;
+        if ((wanted && !wanted.has(id)) || listed.has(id)) continue;
+        listed.add(id);
+        const name = cachedName(item);
+        if (!name) continue;
+        let at = 0;
+        try { at = fs.statSync(path.join(directory, name)).mtimeMs; } catch { continue; }
+        found.push({ at, picture: describe(collection, item, name) });
+      }
+    }
+    return found.sort((a, b) => b.at - a.at).map((entry) => entry.picture);
   }
 
   /** The bytes of a cached picture for `acira-browser-ui://ui/artwork-remote/<file>`, or null. Never touches the network. */
@@ -145,7 +176,7 @@ function createRemoteArtwork({ root, request, prepare, thumbnail, now = () => Da
     const target = path.join(directory, name);
     try { const stat = fs.lstatSync(target); if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_INPUT_BYTES) return null; return { bytes: fs.readFileSync(target), mime: name.endsWith('.png') ? 'image/png' : 'image/jpeg' }; } catch { return null; }
   }
-  return { list, pick, response, collections: () => Object.entries(COLLECTIONS).map(([id, spec]) => ({ id, label: spec.label, host: spec.host })) };
+  return { list, pick, kept, response, collections: () => Object.entries(COLLECTIONS).map(([id, spec]) => ({ id, label: spec.label, host: spec.host })) };
 }
 
 /** The real transport: Electron's net on an isolated in-memory session. No cookies, no Referer, one generic User-Agent, no redirects. */

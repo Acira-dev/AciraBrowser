@@ -276,7 +276,7 @@ test('a sleeping tab is clearly quieter, not gone: icons and titles dimmed on ev
   assert.match(sleeping, /\.tab-group-header\[data-all-asleep\] \.tab-group-label:not\(:hover\):not\(:focus-visible\)>:is\(span,small,svg\) \{ opacity: 0\.6; \}/);
   assert.match(css('components/TabGroupTray.tsx'), /data-all-asleep=\{allAsleep\|\|undefined\}/);
   assert.match(css('components/TabGroupTray.tsx'), /groupForTab\(\{tabGroups:groups\},member\)\?\.id===group\.id/, 'members are found by the group name in scope, like everywhere else');
-  assert.match(css('components/sidebar/AciraSidebar.tsx'), /data-all-asleep=\{members\.length>0&&members\.every\(member=>member\.sleeping\)\|\|undefined\}/);
+  assert.match(css('components/sidebar/AciraSidebar.tsx'), /data-all-asleep=\{count>0&&\[\.\.\.members,\.\.\.family\]\.every\(member=>member\.sleeping\)\|\|undefined\}/);
   assert.match(css('components/sidebar/sidebar.css'), /\.sb-group\[data-all-asleep\]>\.sb-group-header:not\(:hover\):not\(:focus-visible\) :is\(\.sb-group-name,\.sb-group-folder,small\)\{opacity:\.62\}/);
   // Sidebar: the row's title takes --sb-sleeping; the icon wrapper takes --sb-sleeping-icon of the row's rest ink, and the current, hovered and focused rows are skipped.
   const quiet = ':not([aria-current=true]):not(:hover):not(:has(.sb-tab-main:focus-visible))';
@@ -301,4 +301,40 @@ test('a sleeping tab is clearly quieter, not gone: icons and titles dimmed on ev
     assert.ok(contrast(mix(t['--frame-text'], row, .8 * (chromeDark ? .44 : .52)), row) >= 2, `${at}: sleeping strip icon stroke`);
     assert.ok(contrast(mix(t['--frame-text'], row, .8 * (chromeDark ? .56 : .66)), row) >= 3, `${at}: sleeping strip title`);
   }
+});
+
+// Beta 14, r3 (reported 13 Nov): while the Shelf is open its top is one flat surface, so the strip row loses the recess (shelf.css clears --tab-strip-recess there). The rule above (a tab's ink
+// follows the surface it sits on) and the 25 Oct lift rule (the active tab at least 0.06 OKLab off the strip) are re-measured on the flat strip, in every finish.
+const oklabL = (color: string) => {
+  const lin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const [r, g, b] = rgb(color).map(lin), l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+};
+test('the flat strip of the open Shelf: the current tab\'s ink is 4.5:1, and its lift off the strip is 0.06 OKLab (the fill, or the ring where a light frame\'s fill is not enough), in every finish', () => {
+  const shelf = read('components/sidebar/shelf.css');
+  assert.match(shelf, /\.app\.style-acira:has\(>\.ed-rail\.is-shelf\)\{--tab-strip-recess:rgb\(0 0 0 \/ 0\)\}/);
+  const ringAlpha = Number(shelf.match(/--tab-lift-active:0 0 0 1px rgb\(0 0 0 \/ (\.\d+)\)/)![1]);
+  let ringNeeded = 0;
+  for (const [name, settings] of finishes) for (const dark of [false, true]) {
+    const t = themeTokens({...base, ...settings} as typeof base, dark), chromeDark = t['--chrome-tone'] === 'dark';
+    const block = chromeDark ? '.app.style-acira[data-chrome=dark]' : '.app.style-acira';
+    const strip = t['--frame'], plate = over(token(block, '--tab-surface')!, strip), at = `${name} ${dark ? 'dark' : 'light'}`;
+    assert.ok(contrast(t['--frame-text'], plate) >= 4.5, `${at}: current title ${t['--frame-text']} on ${plate}`);
+    for (const kind of ['private', 'tor']) {
+      const wash = token(block, `--${kind}-wash`) ?? token('.app.style-acira', `--${kind}-wash`)!, current = token(block, `--${kind}-current`) ?? token('.app.style-acira', `--${kind}-current`)!;
+      const washed = mix(wash, plate, percent(current));
+      assert.ok(contrast(t['--frame-text'], washed) >= 4.5, `${at}: current ${kind} title on its wash ${washed}`);
+      const mark = token(block, `--${kind}-mark`) ?? token('.app.style-acira', `--${kind}-mark`)!;
+      assert.ok(contrast(mark, washed) >= 3, `${at}: ${kind} mark ${mark} on the current ${kind} tab ${washed}`);
+    }
+    const fill = oklabL(plate) - oklabL(strip);
+    if (chromeDark) assert.ok(fill >= 0.06, `${at}: the dark frame's active fill is ${fill.toFixed(3)} OKLab off the flat strip`);
+    else {
+      // a light frame wears the ring in the Shelf: it is at least 0.06 OKLab against the strip and against the fill on every finish, which is the whole lift where the white fill alone is not enough (Porcelain: 0.033)
+      const ring = over(`rgb(0 0 0 / ${ringAlpha})`, strip), edge = Math.min(oklabL(plate) - oklabL(ring), oklabL(strip) - oklabL(ring));
+      assert.ok(edge >= 0.06, `${at}: the fill is ${fill.toFixed(3)} off the flat strip and its ring only ${edge.toFixed(3)} (ring ${ringAlpha})`);
+      if (fill < 0.06) ringNeeded++;
+    }
+  }
+  assert.ok(ringNeeded >= 1, 'Porcelain in light needs the ring: the check ran');
 });

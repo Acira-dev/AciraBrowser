@@ -1,0 +1,97 @@
+/* ===== Beta 14: Customize sidebar, the rows and the drag ===== */
+/* Every section is one row, the sidebar's own (icon, name; Favorites and Pinned tabs also show their own icons on the right); no card, no frame round a zone: a label and its hairline name the zone, the space between zones separates them, the grip shows inside the row on hover. The middle ones drag freely, Favorites and the icon row sit at the top or the bottom edge. Class-led selectors only (the smoothness rule); nothing here is
+   mounted outside Customize mode. While a block is carried only transforms and opacity change (the Off tray's chip morph also sizes the ghost, one small box, as the tab drag's chip does).
+   The carried block is real glass: the popups' and menus' own surface, blur, rim and shadow (--menu-surface, --menu-backdrop, --menu-rim, --menu-e2: styles/panels.css), nothing of its own. */
+.app.style-acira .acira-sidebar .sb-cz{
+ --cz-well:rgb(0 0 0 / .16);--cz-well-edge:inset 0 1px 2px rgb(0 0 0 / .28),inset 0 0 0 1px rgb(var(--ink) / .06);--cz-rim:var(--menu-rim);
+ --cz-lift:var(--menu-e2),0 12px 24px -6px rgb(0 0 0 / .28);--cz-fade:calc(160ms * var(--motion-e,1));
+ position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;color:var(--sb-fg);font:450 var(--text-13,13px)/18px var(--font-ui,inherit);user-select:none;-webkit-user-select:none;touch-action:none}
+.app.style-acira:not([data-chrome=dark]) .acira-sidebar .sb-cz{--cz-well:rgb(0 0 0 / .045);--cz-well-edge:inset 0 1px 2px rgb(0 0 0 / .10),inset 0 0 0 1px rgb(var(--ink) / .08);--cz-rim:var(--menu-rim),inset 0 0 0 1px rgb(255 255 255 / .6)}
+/* Customize appears in the frame the sidebar's own content leaves (a cut both ways): that content is unmounted at once, so a fade-in left the sidebar near-empty for ~50 ms on every enter (per-frame audit, 18 Nov: 3 of 3 enters, one frame at 12 % and two more under 60 %). */
+.app.style-acira .acira-sidebar .sb-cz-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:var(--sb-row);margin:2px 8px 0;padding:2px 6px;font-weight:600}
+.app.style-acira .acira-sidebar .sb-cz-head-name{min-width:0}   /* a narrow sidebar wraps the title onto a second line and the head grows with it (it was a fixed height: the second line stood on the top edge's border) */
+.app.style-acira .acira-sidebar .sb-cz-body{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:18px;padding:4px 8px 8px;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
+.app.style-acira .acira-sidebar .sb-cz-cap::after{content:'';flex:1 1 auto;height:1px;background:var(--divider,var(--sb-line))}
+.app.style-acira .acira-sidebar .sb-cz-cap{display:flex;align-items:center;gap:10px;padding:0 14px 6px;color:var(--sb-quiet);font:500 10.5px/12px var(--font-ui,inherit);letter-spacing:.06em;text-transform:uppercase}
+.app.style-acira .acira-sidebar .sb-cz-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* the zones: an edge slot, the middle list, the Off tray. A place that may take the carried block lights softly (a wash and a hairline of the ring colour, by opacity); the one the pointer is in a little more; the others stay quiet. */
+.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray){position:relative;isolation:isolate;flex:none;display:flex;flex-direction:column;gap:0;transition:opacity var(--cz-fade) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz-mid{position:relative;flex:0 0 auto;display:flex;flex-direction:column;gap:0;transition:opacity var(--cz-fade) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz-tray{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 5px}
+.app.style-acira .acira-sidebar .sb-cz-tray>.sb-cz-cap{flex:0 0 100%}
+.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::before,.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::after{content:'';position:absolute;inset:-6px -4px;z-index:-1;border-radius:12px;pointer-events:none;opacity:0;transition:opacity var(--cz-fade) var(--sb-ease)}
+.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::after{background:var(--sb-drop);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sb-ring) 34%,transparent)}
+.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::before{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--sb-ring) 62%,transparent)}
+.app.style-acira .acira-sidebar .sb-cz[data-dragging] :is(.sb-cz-edge,.sb-cz-tray)[data-aim]::after,.app.style-acira .acira-sidebar .sb-cz[data-dragging] :is(.sb-cz-edge,.sb-cz-tray)[data-over]::before{opacity:1}
+.app.style-acira .acira-sidebar .sb-cz[data-dragging] :is(.sb-cz-edge,.sb-cz-tray):not([data-aim]){opacity:.5}
+.app.style-acira .acira-sidebar .sb-cz[data-lift=edge] .sb-cz-mid{opacity:.4}
+.app.style-acira .acira-sidebar .sb-cz-edge[data-zone=bottom]{margin-top:auto}
+.app.style-acira .acira-sidebar .sb-cz-empty{flex:1 1 100%;display:grid;place-items:center;min-height:30px;padding:0 6px;border-radius:var(--sb-radius);color:var(--sb-quiet);font:450 var(--text-12,12px)/16px var(--font-ui,inherit);text-align:center}
+.app.style-acira .acira-sidebar .sb-cz-tray[data-refuse] .sb-cz-empty{color:var(--sb-danger)}
+.app.style-acira .acira-sidebar .sb-cz-tray[data-refuse]>.sb-cz-cap::after{opacity:0}   /* the refusal stands where the label's hairline ends */
+.app.style-acira .acira-sidebar .sb-cz-refuse{position:absolute;top:0;inset-inline-end:14px;color:var(--sb-danger);font:500 10.5px/12px var(--font-ui,inherit);letter-spacing:.02em}
+/* the block */
+.app.style-acira .acira-sidebar .sb-cz-block{position:relative;flex:none;display:flex;align-items:center;gap:10px;height:36px;padding-block:0;padding-inline:14px 8px;border-radius:var(--sb-row-radius);background:transparent;cursor:grab;outline:0;transition:background-color var(--sb-dur,.15s) var(--sb-ease),box-shadow var(--sb-dur,.15s) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz:not([data-dragging]) .sb-cz-block:hover{background:var(--sb-hover)}
+.app.style-acira .acira-sidebar .sb-cz-block:focus-visible{box-shadow:inset 0 0 0 2px var(--sb-ring)}
+.app.style-acira .acira-sidebar .sb-cz-grip{position:absolute;inset-inline-start:3px;top:50%;translate:0 -50%;display:grid;grid-template-columns:repeat(2,3px);gap:2.5px;width:8px;color:var(--sb-quiet);opacity:0;pointer-events:none;transition:opacity var(--sb-dur,.15s) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz-gd{width:3px;height:3px;border-radius:50%;background:currentColor}
+.app.style-acira .acira-sidebar .sb-cz:not([data-dragging]) .sb-cz-block:hover .sb-cz-grip,.app.style-acira .acira-sidebar .sb-cz-block:focus-visible .sb-cz-grip,.app.style-acira .acira-sidebar .sb-cz-face .sb-cz-grip{opacity:.9}
+.app.style-acira .acira-sidebar .sb-cz-icon{flex:none;display:grid;place-items:center;width:20px;height:20px;color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-cz-name{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;font-weight:500}
+.app.style-acira .acira-sidebar .sb-cz-title{display:block;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}   /* a long name fades at its end over 24 px, the sidebar's own rows' rule (.sb-tab-title), not an ellipsis */
+.app.style-acira .acira-sidebar .sb-cz-note{display:block;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);color:var(--sb-quiet);font:450 10.5px/12px var(--font-ui,inherit)}
+.app.style-acira .acira-sidebar .sb-cz-off{position:relative;flex:none;margin-inline-start:-6px;display:grid;place-items:center;width:22px;height:22px;padding:0;border-radius:50%;background:transparent;color:var(--sb-muted);opacity:0;-webkit-app-region:no-drag;transition:opacity var(--sb-dur,.15s) var(--sb-ease),background-color var(--sb-dur,.15s) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz:not([data-dragging]) .sb-cz-block:hover .sb-cz-off,.app.style-acira .acira-sidebar .sb-cz-block:focus-visible .sb-cz-off,.app.style-acira .acira-sidebar .sb-cz-off:focus-visible{opacity:1}
+.app.style-acira .acira-sidebar .sb-cz-off:hover{background:var(--sb-hover);color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-cz-off-room{flex:none;width:22px;margin-inline-start:-6px}
+/* Narrow: the minus' place is 18 px, so a title keeps its room (Bookmarks, Pinned tabs) */
+.app.style-acira .acira-sidebar .sb-cz[data-size=narrow] :is(.sb-cz-off,.sb-cz-off-room){width:18px}
+.app.style-acira .acira-sidebar .sb-cz[data-size=narrow] .sb-cz-off{height:18px}   /* the carried block keeps the minus' place too, so the text and the icons do not step when the block is lifted */
+.app.style-acira .acira-sidebar :is(.sb-cz-off,.sb-cz-chip-on):focus-visible{outline:2px solid var(--sb-ring);outline-offset:1px}
+/* THE GAP: the carried block's place, a quiet inset well (a faint darkening, an inner shadow and a hairline), never an outline. Its content is the ghost's now. It glides with the blocks that open it (sidebar/customize.tsx). */
+.app.style-acira .acira-sidebar :is(.sb-cz-block,.sb-cz-chip)[data-gap]{background:var(--cz-well);box-shadow:var(--cz-well-edge);cursor:grabbing}
+.app.style-acira .acira-sidebar :is(.sb-cz-block,.sb-cz-chip)[data-gap]>:is(.sb-cz-grip,.sb-cz-icon,.sb-cz-name,.sb-cz-pv,.sb-cz-off,.sb-cz-chip-icon,.sb-cz-chip-name,.sb-cz-chip-on){opacity:0;transition:none}
+/* on the drop the well gives the block's own surface back while the ghost lands in it (its content comes back when the ghost is gone) */
+.app.style-acira .acira-sidebar .sb-cz[data-settling] .sb-cz-block[data-gap]{background:transparent;box-shadow:none;transition:background-color calc(200ms * var(--motion-f,1)) var(--sb-ease),box-shadow calc(200ms * var(--motion-f,1)) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-cz[data-settling] .sb-cz-chip[data-gap]{background:var(--sb-tile);box-shadow:inset 0 0 0 1px var(--sb-line);transition:background-color calc(200ms * var(--motion-f,1)) var(--sb-ease),box-shadow calc(200ms * var(--motion-f,1)) var(--sb-ease)}
+/* a block lifted from the keyboard is glass where it stands */
+.app.style-acira .acira-sidebar .sb-cz-block[data-lifted]{background:var(--menu-surface);-webkit-backdrop-filter:var(--menu-backdrop);backdrop-filter:var(--menu-backdrop);box-shadow:var(--cz-rim),var(--cz-lift),0 0 0 2px var(--sb-ring);z-index:2}
+.app.style-acira .acira-sidebar .sb-cz-chip[data-lifted]{box-shadow:inset 0 0 0 1px var(--sb-line),0 0 0 2px var(--sb-ring)}
+/* THE GHOST: real glass over the blocks under it. Its wrapper only translates (and, over the tray, sizes); the glass scales on the lift's spring; the shadow and the surface form on the effects spring and let go on the drop (--cz-let). */
+.app.style-acira .acira-sidebar .sb-cz-ghost{--cz-r:calc(var(--sb-row-radius,8px) + 6px * var(--cz-chip,0));position:absolute;left:0;top:0;z-index:6;pointer-events:none;will-change:transform;contain:layout style;cursor:grabbing}
+.app.style-acira .acira-sidebar .sb-cz-glass{position:absolute;inset:0;border-radius:var(--cz-r);transform-origin:50% 50%}
+.app.style-acira .acira-sidebar .sb-cz-letgo{position:absolute;inset:0;border-radius:var(--cz-r);opacity:calc(1 - var(--cz-let,0))}
+.app.style-acira .acira-sidebar .sb-cz-shadow{position:absolute;inset:0;border-radius:var(--cz-r);box-shadow:var(--cz-lift)}
+.app.style-acira .acira-sidebar .sb-cz-surface{position:absolute;inset:0;border-radius:var(--cz-r);background:var(--menu-surface);-webkit-backdrop-filter:var(--menu-backdrop);backdrop-filter:var(--menu-backdrop);box-shadow:var(--cz-rim)}
+.app.style-acira.opaque-glass .acira-sidebar .sb-cz-surface,.app.style-acira.opaque-glass .acira-sidebar .sb-cz-block[data-lifted]{background:var(--overlay,var(--surface));-webkit-backdrop-filter:none;backdrop-filter:none}
+.app.style-acira .acira-sidebar .sb-cz-face{position:absolute;inset:0;display:flex;align-items:center;gap:10px;box-sizing:border-box;padding-inline:14px 8px;border-radius:var(--cz-r)}
+.app.style-acira .acira-sidebar .sb-cz-face-block{opacity:max(0,calc(1 - var(--cz-chip,0) * 2.4))}
+.app.style-acira .acira-sidebar .sb-cz-face-chip{gap:4px;padding-inline:7px 3px;opacity:max(0,calc(var(--cz-chip,0) * 2.4 - 1.4))}
+/* The carried block wears the ACTIVE TAB's own glow (styles/tab-glow.css: the same tokens, the same strength, the colour its row has, handed over as --site): Site color Off draws none, Soft soft, Rich rich. One flat wash and three soft layers that add up to one fall-off; the shadow under the block stays neutral and the rim is the pop-ups' own. */
+:root:not([data-site-color=off]) .app.style-acira .acira-sidebar .sb-cz[data-glow] .sb-cz-ghost .sb-cz-surface{--cz-wash-c:color-mix(in srgb,var(--site) var(--tg-wash),transparent);background-image:linear-gradient(var(--cz-wash-c),var(--cz-wash-c));box-shadow:var(--cz-rim),0 0 3px color-mix(in srgb,var(--site) calc(var(--tg-glow) * .9),transparent),0 2px 10px -2px color-mix(in srgb,var(--site) calc(var(--tg-glow) * .8),transparent),0 6px 26px -8px color-mix(in srgb,var(--site) calc(var(--tg-glow) * .75),transparent)}
+/* the Off tray's chips */
+.app.style-acira .acira-sidebar .sb-cz-chip{flex:0 1 auto;min-width:0;max-width:100%;display:flex;align-items:center;gap:4px;height:26px;padding-block:0;padding-inline:7px 3px;border-radius:14px;background:var(--sb-tile);box-shadow:inset 0 0 0 1px var(--sb-line);color:var(--sb-label);cursor:grab;outline:0}
+.app.style-acira .acira-sidebar .sb-cz-chip:focus-visible{box-shadow:inset 0 0 0 2px var(--sb-ring)}
+.app.style-acira .acira-sidebar :is(.sb-cz-chip,.sb-cz-face-chip) .sb-cz-chip-icon{display:grid;place-items:center;color:var(--sb-muted)}
+.app.style-acira .acira-sidebar :is(.sb-cz-chip,.sb-cz-face-chip) .sb-cz-chip-name{font:450 var(--text-12,12px)/16px var(--font-ui,inherit);letter-spacing:-.005em;color:var(--sb-label);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a chip wider than a narrow tray ("Pinned extensions" at 168 px) shortens its name, it never leaves the tray */
+.app.style-acira .acira-sidebar :is(.sb-cz-chip,.sb-cz-face-chip) .sb-cz-chip-on{display:grid;place-items:center;width:18px;height:18px;padding:0;border-radius:50%;background:rgb(var(--ink) / .06);color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-cz-chip .sb-cz-chip-on:hover{background:var(--sb-hover)}
+.app.style-acira .acira-sidebar .sb-cz[data-dragging] :is(.sb-cz-block,.sb-cz-chip,.sb-cz-off,.sb-cz-chip-on){cursor:grabbing}
+.app.style-acira .acira-sidebar .sb-cz-title:dir(rtl){-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent)}
+.app.style-acira .acira-sidebar .sb-cz-note:dir(rtl){-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent)}
+/* the previews: the user's own icons only (Favorites' tiles, the pinned tabs' favicons) */
+.app.style-acira .acira-sidebar .sb-cz-pv{flex:none;display:flex;width:auto;height:20px;transition:opacity var(--sb-dur,.15s) var(--sb-ease);color:var(--sb-quiet);overflow:hidden;align-items:center}
+/* Narrow: the preview gives its room to the title (the titles were cut to one or two letters: F..., Bo..., Ic...); the other sizes keep it */
+.app.style-acira .acira-sidebar .sb-cz[data-size=narrow] .sb-cz-pv{display:none}
+.app.style-acira .acira-sidebar .sb-cz-pv.sb-cz-pv-tiles{flex-wrap:nowrap;gap:3px;justify-content:flex-end;width:auto;max-width:56px}
+.app.style-acira .acira-sidebar .sb-cz-tile{flex:none;width:11px;height:11px;border-radius:3px;background:rgb(var(--ink) / .18) center/cover no-repeat}
+.app.style-acira .acira-sidebar .sb-cz-dot{flex:none;width:11px;height:11px;border-radius:50%;background:rgb(var(--ink) / .26) center/cover no-repeat}
+@media (prefers-reduced-motion:reduce){.app.style-acira .acira-sidebar .sb-cz :is(.sb-cz-edge,.sb-cz-tray,.sb-cz-mid,.sb-cz-block){transition:none}.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::before,.app.style-acira .acira-sidebar :is(.sb-cz-edge,.sb-cz-tray)::after{transition:none}}
+
+/* the open hand at rest: the sidebar gives every [role=listitem] (the blocks and the chips are) the arrow, at the same weight, and that rule won by source order, so the hand never showed (hit-test proof, 19 Nov): one class heavier here */
+.app.style-acira .acira-sidebar .sb-cz .sb-cz-block{cursor:grab}
+.app.style-acira .acira-sidebar .sb-cz .sb-cz-chip{cursor:grab}
+/* THE HAND (SidebarCustomize.tsx grab()): at rest the open hand is on the blocks and chips (above); from the press to the release a shield over the window gives every element under the pointer the closed one; a block with nowhere to go has no hand */
+.sb-cz-shield{position:fixed;inset:0;z-index:2147483000;cursor:grabbing}
+.app.style-acira .acira-sidebar .sb-cz .sb-cz-block[data-still]{cursor:default}

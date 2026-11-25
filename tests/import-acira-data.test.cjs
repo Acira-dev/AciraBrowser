@@ -69,8 +69,9 @@ test('a JSON file that is not an Acira export is refused, and the HTML import is
 
 test('the Import & export row and setup name the new file and count only bookmarks as bookmarks',()=>{
  const en=JSON.parse(fs.readFileSync(path.join(__dirname,'../src/i18n/en.json'),'utf8'));
- assert.equal(en['import.importBookmarksBtn'],'Import bookmarks file…');
- assert.match(en['import.importBookmarksDesc'],/profile JSON exported from Acira/);
+ // beta.14: the bookmarks-file button became "Open profile file…" (a profile file, an older Acira export or a bookmarks file); the sheet's open dialog takes all three.
+ assert.equal(en['transfer.file.open'],'Open profile file…');
+ assert.match(en['transfer.file.openDesc'],/older Acira export, or a bookmarks file from any browser/);
  assert.match(fs.readFileSync(path.join(__dirname,'../src/features/onboarding/steps.tsx'),'utf8'),/item\.status === "imported" && item\.category === "bookmarks"/);
  assert.match(fs.readFileSync(path.join(__dirname,'../src/features/import-export/ImportPanel.tsx'),'utf8'),/const fromFile = \(browser: string\) => browser === 'HTML' \|\| browser === 'Acira';/);
 });

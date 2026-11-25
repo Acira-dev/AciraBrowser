@@ -121,7 +121,9 @@ if(process.isMainFrame)window.addEventListener('keydown',event=>{
 // A boolean each; nothing else leaves the page. Inside a cross-origin frame main's input-event and cursor-changed cover it.
 if(process.isMainFrame){
  const BAND=24,CONTROL='a[href],button,input,select,textarea,summary,video,audio,canvas,[role=slider],[role=scrollbar],[role=button],[role=link],[role=tab],[role=menuitem],[draggable=true],[contenteditable]:not([contenteditable=false]),[tabindex]:not([tabindex^="-"])';
- const sent={hover:false,drag:false,lock:false};let beat=0;
+ const sent={hover:false,drag:false,lock:false,carry:false};let beat=0;
+ // Beta 14: a drag that carries a file or an address (a link, an image, a tab) is something the sidebar takes: it may reveal a hidden sidebar at the edge (edge-reveal.cjs `carrying`). Whether it does is the only thing said.
+ const carries=event=>{try{const types=event.dataTransfer&&event.dataTransfer.types;return !!types&&(types.includes('Files')||types.includes('text/uri-list')||types.includes('application/x-acira-app'));}catch(e){return false;}};
  const send=patch=>{let changed=false;for(const key in patch)if(sent[key]!==patch[key]){sent[key]=patch[key];changed=true;}if(changed)ipcRenderer.send('acira:edge-intent',patch);};
  // A control that covers most of the window is the page's surface, not something to use at its edge: a video player filling the window (YouTube's theater and
  // "inline fullscreen" extensions make the player the whole page), a full-window canvas or wrapper. Every edge point of such a page counted as a control, so every rest
@@ -134,13 +136,13 @@ if(process.isMainFrame){
  // when a frame reaches the band; the next move in this document sets it again.
  const frameInBand=()=>{for(const el of document.querySelectorAll('iframe,embed,object')){const r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&(r.left<=BAND||r.top<=BAND))return true;}return false;};
  window.addEventListener('pointerout',event=>{if(!event.isTrusted)return;const to=event.relatedTarget;if(to instanceof HTMLIFrameElement||to instanceof HTMLEmbedElement||to instanceof HTMLObjectElement)send({hover:true});else if(!to)send({hover:frameInBand()});},{capture:true,passive:true});
- for(const name of ['dragstart','dragenter'])window.addEventListener(name,event=>{if(event.isTrusted)send({drag:true});},{capture:true,passive:true});
+ for(const name of ['dragstart','dragenter'])window.addEventListener(name,event=>{if(event.isTrusted)send({drag:true,carry:carries(event)});},{capture:true,passive:true});
  // Main drops a drag it has not heard of for 2s (a drag that ended without an event): dragover keeps it alive.
- window.addEventListener('dragover',event=>{const now=Date.now();if(event.isTrusted&&now-beat>500){beat=now;sent.drag=true;ipcRenderer.send('acira:edge-intent',{drag:true});}},{capture:true,passive:true});
- for(const name of ['dragend','drop'])window.addEventListener(name,()=>send({drag:false}),{capture:true,passive:true});
- window.addEventListener('dragleave',event=>{if(!event.relatedTarget)send({drag:false});},{capture:true,passive:true});
+ window.addEventListener('dragover',event=>{const now=Date.now();if(event.isTrusted&&now-beat>500){beat=now;sent.drag=true;const carry=carries(event);sent.carry=carry;ipcRenderer.send('acira:edge-intent',{drag:true,carry});}},{capture:true,passive:true});
+ for(const name of ['dragend','drop'])window.addEventListener(name,()=>send({drag:false,carry:false}),{capture:true,passive:true});
+ window.addEventListener('dragleave',event=>{if(!event.relatedTarget)send({drag:false,carry:false});},{capture:true,passive:true});
  document.addEventListener('pointerlockchange',()=>send({lock:!!document.pointerLockElement}));
- window.addEventListener('pagehide',()=>{if(sent.hover||sent.drag||sent.lock){sent.hover=sent.drag=sent.lock=false;ipcRenderer.send('acira:edge-intent',{hover:false,drag:false,lock:false});}});
+ window.addEventListener('pagehide',()=>{if(sent.hover||sent.drag||sent.lock||sent.carry){sent.hover=sent.drag=sent.lock=sent.carry=false;ipcRenderer.send('acira:edge-intent',{hover:false,drag:false,lock:false,carry:false});}});
 }
 // A plain click on a link that replaces this page says where it goes. A page that asks "Leave site?" on the way out raises
 // will-prevent-unload in main, which Electron asks synchronously and without the address: knowing the click lets main ask in the
@@ -176,11 +178,12 @@ if(process.isMainFrame){
   }catch{}
  });
 }
-// Two-finger swipe between pages (macOS; desktop/swipe-nav.cjs). Main sees the trackpad's phases but not the page, so for a sideways wheel this says what
+// Two-finger swipe between pages (macOS, Windows, Linux; desktop/swipe-nav.cjs). Main sees the trackpad's phases (macOS) but not the page, so for a sideways wheel this says what
 // the page could still scroll that way: the scrollers from the element under the pointer outward (overflow auto or scroll, how far each is scrolled and
 // can scroll, its overscroll-behavior-x) and the page's own, plus whether the page cancelled the wheel. Main decides; nothing here starts a navigation.
 // A passive listener, ignoring anything vertical, sent at most every 50 ms; a page never sees it and its scrolling is not touched.
-if(process.platform==='darwin'&&process.isMainFrame){
+let swipeFacts=null;
+if((process.platform==='darwin'||process.platform==='win32'||process.platform==='linux')&&process.isMainFrame){
  let lastSent=0,lastToward=0;
  const describe=(node,style)=>({scrolls:true,left:node.scrollLeft,max:node.scrollWidth-node.clientWidth,rtl:style.direction==='rtl',behavior:style.overscrollBehaviorX||'auto'});
  const chainOf=event=>{
@@ -198,7 +201,7 @@ if(process.platform==='darwin'&&process.isMainFrame){
   chain.push({scrolls:source.overflowX!=='hidden'&&source.overflowX!=='clip',left:root.scrollLeft,max:root.scrollWidth-root.clientWidth,rtl:rootStyle.direction==='rtl',behavior:behavior||'auto'});
   return chain;
  };
- window.addEventListener('wheel',event=>{
+ const factsListener=event=>{
   if(!event.isTrusted||event.ctrlKey||!event.deltaX||Math.abs(event.deltaX)<=Math.abs(event.deltaY))return;
   const toward=event.deltaX<0?-1:1,at=performance.now();
   if(toward===lastToward&&at-lastSent<50)return;
@@ -206,7 +209,36 @@ if(process.platform==='darwin'&&process.isMainFrame){
   const chain=chainOf(event);   // the path is only there while the event is being dispatched
   // The page's handlers have all run once this task starts: only then is it known whether one of them cancelled the wheel.
   setTimeout(()=>{try{ipcRenderer.send('acira:swipe-facts',{toward,prevented:event.defaultPrevented,chain});}catch{}},0);
- },{capture:true,passive:true});
+ };
+ // A Mac listens from the start. Windows and Linux attach it (and the wheel listener below) only when main asks, so with the setting off nothing is attached at all.
+ if(process.platform==='darwin')window.addEventListener('wheel',factsListener,{capture:true,passive:true});
+ else swipeFacts={on:()=>window.addEventListener('wheel',factsListener,{capture:true,passive:true}),off:()=>window.removeEventListener('wheel',factsListener,{capture:true})};
+}
+// Windows and Linux: the page's own wheel events are the touchpad's only deltas Electron shows JavaScript, so they go to main (desktop/touchpad-phases.cjs rebuilds the
+// swipe's begin and end from them and from Chromium's input-event types). A passive, capturing listener that never touches the event: the page scrolls exactly as before.
+// Sideways events always go; vertical ones only while a sideways scroll is going (a diagonal swipe needs them), so plain vertical scrolling costs nothing. DIP, not CSS px.
+if((process.platform==='win32'||process.platform==='linux'||(process.argv||[]).includes('--acira-web-swipe'))&&process.isMainFrame){
+ let recent=-1e9,followUntil=-1e9,attached=false;
+ // While a swipe's arrow is showing, main asks for the vertical events too (they pick a row of the list); it never asks for long.
+ ipcRenderer.on('acira:swipe-follow',(_event,on)=>{followUntil=on===true?performance.now()+12000:-1e9;});
+ const zoomOf=()=>{try{const zoom=require('electron').webFrame.getZoomFactor();return Number.isFinite(zoom)&&zoom>0?zoom:1;}catch{return 1;}};
+ const wheelListener=event=>{
+  try{
+   if(!event.isTrusted)return;
+   const dx=event.deltaX,dy=event.deltaY,at=performance.now(),sideways=dx!==0&&Math.abs(dx)>Math.abs(dy);
+   if(!sideways&&at-recent>300&&at>followUntil)return;
+   if(sideways)recent=at;
+   const zoom=zoomOf();
+   ipcRenderer.send('acira:swipe-wheel',{t:performance.timeOrigin+event.timeStamp,dx:dx*zoom,dy:dy*zoom,x:event.clientX*zoom,y:event.clientY*zoom,mods:Boolean(event.shiftKey||event.ctrlKey||event.altKey||event.metaKey),mode:event.deltaMode});
+  }catch{}
+ };
+ // Attached only while main says the swipe is wanted (the setting is on, or a recording was asked for): with it off there is no listener on this page at all.
+ const enable=on=>{
+  if(on&&!attached){attached=true;window.addEventListener('wheel',wheelListener,{capture:true,passive:true});swipeFacts?.on();}
+  else if(!on&&attached){attached=false;window.removeEventListener('wheel',wheelListener,{capture:true});swipeFacts?.off();followUntil=-1e9;}
+ };
+ ipcRenderer.on('acira:swipe-enable',(_event,on)=>enable(on===true));
+ if((process.argv||[]).includes('--acira-web-swipe'))enable(true);   // scripted runs on a Mac only
 }
 // 13.8 keyboard routing (desktop/key-routing.cjs, a port of Chromium's): a browser shortcut that is not reserved goes to the PAGE first, and the browser runs it only if the page did not
 // consume the key. Electron does not tell the main process what the renderer did with a key, so this is the renderer's answer: once the page's own listeners have run for a keydown that
@@ -230,6 +262,7 @@ try{
  },true);
  ipcRenderer.send('acira:key-ack-ready');
 }catch{/* no acknowledgement from this frame (no MessageChannel, no window): the main process keeps the key itself */}
+
 // The mouse's back and forward buttons (3 and 4 here). Chromium steps the page's history on their release unless the page cancelled that mouseup or its
 // auxclick (content/browser/web_contents/web_contents_impl.cc HandleMouseEvent, after the renderer's answer; Blink merges the two). A tab's history may
 // also hold Acira's own page before the first site (its New Tab), which this page's history does not have: main steps there only when the page did not
@@ -245,3 +278,36 @@ try{
  window.addEventListener('mouseup',seen,{capture:true,passive:true});
  window.addEventListener('auxclick',seen,{capture:true,passive:true});
 }
+// Beta 14 (side panel sites): a notification a panel site's page shows reaches the panel when the person clicks it. Only for the pages main made for a panel site (it adds --acira-side-panel-site to their arguments); a tab's page is
+// untouched. The page's own `Notification` stays what it was, shown by the system as before: it is wrapped by a subclass that listens for the click on each notification the page makes, and tells main so (no title, no body: nothing of the
+// notification's words travels). The engine dispatches a real click as a trusted event and a page's own dispatchEvent is not, so a script cannot open its own panel: main acts on `trusted` only (desktop/side-panel-sites.cjs notificationClicked).
+if(process.isMainFrame&&(process.argv||[]).includes('--acira-side-panel-site')&&/^https?:/.test(location.href)){
+ try{
+  const {contextBridge}=require('electron');
+  const report=trusted=>{try{ipcRenderer.send('acira:side-panel-notification',{trusted:trusted===true});}catch{/* a closing frame */}};
+  contextBridge.executeInMainWorld({
+   func:function(report){
+    const Original=window.Notification;
+    if(typeof Original!=='function'||Original.__acira)return;
+    class Notification extends Original{
+     constructor(title,options){
+      if(arguments.length<1)super();else if(arguments.length<2)super(title);else super(title,options);
+      try{this.addEventListener('click',event=>{try{report(event.isTrusted);}catch{/* the bridge is gone */}});}catch{/* an odd Notification */}
+     }
+    }
+    try{Object.defineProperty(Notification,'name',{value:'Notification',configurable:true});Object.defineProperty(Notification,'__acira',{value:true});}catch{/* the name is cosmetic */}
+    Object.defineProperty(window,'Notification',{configurable:true,writable:true,enumerable:false,value:Notification});
+   },
+   args:[report]
+  });
+ }catch{/* no wrapper: the notification still shows, a click just does not open the panel */}
+}
+// D151: the page's first contentful paint (text, an image, a canvas), said once per document from the main frame, so main can tell the interface
+// there is now something of the page to see (desktop/page-blank.cjs): until then, while the sidebar floats over the page, the interface's page
+// surface covers the hole instead of a see-through page or its empty canvas. Only that it happened leaves the page, nothing about what it drew.
+// Said a frame earlier when the document has rendered text, a canvas, an SVG or a video by the time it is parsed: then the report goes in the
+// frame callback just before the page's first frame (frame callbacks wait for render-blocking styles), so the cover leaves with that frame
+// instead of two or three frames after it. An empty first document (the dark canvas a site sends ahead of its real page) says nothing. Main
+// takes the early word only for the first document of a view: a later one may be drawn into a new surface the window shows a frame later
+// (a new browsing context group), and the cover then waits for its paint, which is said too.
+if(process.isMainFrame){try{const said={early:false,paint:false};const say=early=>{const kind=early?'early':'paint';if(said[kind]||said.paint)return;said[kind]=true;if(early)ipcRenderer.send('acira:page-drawn','early');else ipcRenderer.send('acira:page-drawn');};const seen=new PerformanceObserver(list=>{for(const entry of list.getEntries())if(entry.name==='first-contentful-paint'){seen.disconnect();say(false);return;}});seen.observe({type:'paint',buffered:true});window.addEventListener('DOMContentLoaded',()=>{try{const body=document.body;if(body&&((body.innerText||'').trim()||body.querySelector('canvas,svg,video')))requestAnimationFrame(()=>say(true));}catch{/* the paint report still comes */}},{once:true});}catch{/* no paint timing: main's own bounds let the page go */}}

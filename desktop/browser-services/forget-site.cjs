@@ -95,7 +95,7 @@ function createForgetSite({getContext,previewRecords,commitRecords,siteData,dial
  async function forget(wc){
   const c=capture(wc);if(pending.has(c.session))throw new Error('A Forget site review is already open for this browsing profile.');pending.add(c.session);
   try{
-   const review=await describe(wc,c),answer=await dialog.showMessageBox(getWindow(wc),{type:'warning',title:t('forget.title'),message:t('forget.message',{origin:c.origin}),detail:t('forget.detail',{history:review.counts.history,closedTabs:review.counts.closedTabs,entries:review.counts.closedHistoryEntries,cookies:review.counts.cookies,cookieDomain:c.cookieDomain,origin:c.origin}),buttons:[t('dialog.cancel'),t('forget.title')],defaultId:0,cancelId:0});
+   const review=await describe(wc,c),answer=await dialog.showMessageBox(getWindow(wc),{type:'warning',title:t('forget.title'),message:t('forget.message',{origin:c.origin}),detail:t('forget.detail',{history:review.counts.history,closedTabs:review.counts.closedTabs,entries:review.counts.closedHistoryEntries,cookies:review.counts.cookies,cookieDomain:c.cookieDomain,origin:c.origin}),buttons:[t('dialog.cancel'),t('forget.title')],defaultId:0,cancelId:0,site:{centered:true,host:(()=>{try{return new URL(c.origin).host;}catch{return '';}})(),icon:'favicon',tone:'danger'}});
    if(answer.response!==1)return {cancelled:true};
    if(!valid(wc,c))throw new Error('The selected website changed during review. No data was cleared.');
    const results=[];let engine;

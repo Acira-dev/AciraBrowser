@@ -37,8 +37,11 @@ contextBridge.exposeInMainWorld('acira',{
  setup:request=>invoke('acira:setup',request),
  service:request=>invoke('acira:service',request),
  native:request=>invoke('acira:native',request),
+ feedback:request=>invoke('acira:feedback',request),
+ /* Beta 14, the one-time Welcome: the page's requests (opened, leave, save, copy-image, show) and main's events (the frost has begun, a click away, leave-request): desktop/welcome-service.cjs */welcome:request=>invoke('acira:welcome',request),subscribeWelcome:subscription('acira:welcome-event'),
+ /* Easy Files (Beta 14): the pop-up's answer. */easyFiles:request=>invoke('acira:easy-files',request),
  rewind:request=>invoke('acira:rewind',request), secured:request=>invoke('acira:secured',request),
- peek:request=>invoke('acira:peek',request),
+ peek:request=>invoke('acira:peek',request), sidePanel:request=>invoke('acira:side-panel',request),
  passwords:request=>invoke('acira:passwords',request),
  openWindow:kind=>send('acira:open',kind),windowControl:command=>ipcRenderer.send('acira:window',command),exportData:(name,content)=>{void invoke('acira:export',name,content);}
 });
@@ -51,3 +54,30 @@ window.addEventListener('keydown',event=>{if(event.key==='Control')controlDown=t
 window.addEventListener('keyup',event=>{if(event.key==='Control')controlDown=false;},{capture:true,passive:true});
 window.addEventListener('blur',()=>{controlDown=false;},{passive:true});
 window.addEventListener('wheel',event=>{if(event.isTrusted&&event.ctrlKey&&!event.altKey&&Number.isFinite(event.deltaY)&&event.deltaY&&event.target?.closest?.('.page-area')){event.preventDefault();if(controlDown||event.deltaMode!==0||Math.abs(event.deltaY)>=40)send('acira:internal-wheel-zoom',{deltaY:event.deltaY,deltaMode:event.deltaMode});else window.dispatchEvent(new CustomEvent('acira:pinch',{detail:JSON.stringify({deltaY:event.deltaY,x:event.clientX,y:event.clientY})}));}},{capture:true,passive:false});
+// Windows and Linux: the sideways wheel over the sidebar's body (a two-finger swipe there switches workspace, desktop/swipe-nav.cjs) goes to main with the same message a page's
+// preload sends. Passive and capturing, never touches the event; vertical events only while a sideways scroll is going. Window pixels (the interface view is zoomed by the interface scale).
+if(process.platform==='win32'||process.platform==='linux'||(process.argv||[]).includes('--acira-web-swipe')){
+ let recent=-1e9,attached=false;
+ const zoomOf=()=>{try{const zoom=require('electron').webFrame.getZoomFactor();return Number.isFinite(zoom)&&zoom>0?zoom:1;}catch{return 1;}};
+ const wheelListener=event=>{
+  try{
+   if(!event.isTrusted||!event.target?.closest?.('.acira-sidebar'))return;
+   const dx=event.deltaX,dy=event.deltaY,at=performance.now(),sideways=dx!==0&&Math.abs(dx)>Math.abs(dy);
+   if(!sideways&&at-recent>300)return;
+   if(sideways)recent=at;
+   const zoom=zoomOf();
+   ipcRenderer.send('acira:swipe-wheel-ui',{t:performance.timeOrigin+event.timeStamp,dx:dx*zoom,dy:dy*zoom,x:event.clientX*zoom,y:event.clientY*zoom,mods:Boolean(event.shiftKey||event.ctrlKey||event.altKey||event.metaKey),mode:event.deltaMode});
+  }catch{}
+ };
+ // Attached only while main says the swipe is wanted (the setting is on, or a recording was asked for).
+ const enable=on=>{
+  if(on&&!attached){attached=true;window.addEventListener('wheel',wheelListener,{capture:true,passive:true});}
+  else if(!on&&attached){attached=false;window.removeEventListener('wheel',wheelListener,{capture:true});}
+ };
+ ipcRenderer.on('acira:swipe-enable',(_event,on)=>enable(on===true));
+ if((process.argv||[]).includes('--acira-web-swipe'))enable(true);   // scripted runs on a Mac only
+}
+
+// Battery: whether this view can be seen at all. Chromium marks the page hidden when its window is minimised, hidden, fully covered or on another Space; main's edge poller
+// (edge-reveal.cjs) sleeps for such a window and wakes when it is seen again. Told only when it changes; main listens to the window's own interface view only.
+{let seenLast=true;const tellSeen=()=>{const seen=document.visibilityState!=='hidden';if(seen===seenLast)return;seenLast=seen;ipcRenderer.send('acira:ui-seen',seen);};if(typeof document!=='undefined'&&typeof document.addEventListener==='function')document.addEventListener('visibilitychange',tellSeen);}

@@ -2,7 +2,7 @@ import type { BrowserSnapshot, ToastAction } from '../runtime/types';
 
 /** Bible §4 Toast: at most three on screen, newest at the bottom; each row is 44px with a 1px rule between rows. */
 export const toastLimit = 3, toastRowHeight = 44;
-export interface QueuedToast { key: number; id: number; text: string; action?: ToastAction; tone?: 'error' | 'info';
+export interface QueuedToast { key: number; id: number; text: string; action?: ToastAction; tone?: 'error' | 'info'; /** Beta 14 (screenshot): a second action, a second line and a small picture. */ action2?: ToastAction; detail?: string; image?: string;
   /** The profile on screen when it came. With profiles as spaces another profile can come on screen in the same window (otherSpaceToasts). */
   profileId?: string }
 type Incoming = NonNullable<BrowserSnapshot['toast']>;
@@ -16,7 +16,7 @@ const sameToast = (row: QueuedToast, toast: Incoming) => row.action || toast.act
 export function pushToast(list: QueuedToast[], toast: Incoming, profileId?: string): { list: QueuedToast[]; key: number; dropped: number[] } {
   const same = list.find(row => sameToast(row, toast)), key = same ? same.key : toast.id;
   // Status toasts never reach the stack (they go to the pill lane), so only error/info tones are kept here.
-  const entry: QueuedToast = { key, id: toast.id, text: toast.text, action: toast.action, ...(toast.tone === 'error' || toast.tone === 'info' ? { tone: toast.tone } : {}), ...(profileId ? { profileId } : {}) };
+  const entry: QueuedToast = { key, id: toast.id, text: toast.text, action: toast.action, ...(toast.action2 ? { action2: toast.action2 } : {}), ...(toast.detail ? { detail: toast.detail } : {}), ...(toast.image ? { image: toast.image } : {}), ...(toast.tone === 'error' || toast.tone === 'info' ? { tone: toast.tone } : {}), ...(profileId ? { profileId } : {}) };
   const next = same ? list.map(row => row === same ? entry : row) : [...list, entry];
   return { list: next.slice(-toastLimit), key, dropped: next.slice(0, Math.max(0, next.length - toastLimit)).map(row => row.key) };
 }

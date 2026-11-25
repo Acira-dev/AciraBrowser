@@ -1,5 +1,7 @@
 import { NativeNetworkSettings } from "./NativeNetworkSettings";
+import { noteSettingsSection } from './metrics/noteUse';
 import { holdsCommandKey } from '../ui/commandKeys';
+import { useRangeDraft } from "../ui/useRangeDraft";
 import "../styles/native-network.css";
 import { PageZoomControls } from "../components/PageZoomControls";
 import { MenuCustomizer } from "../components/MenuCustomizer";
@@ -7,13 +9,18 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo } from "react";
 import { NewTabSettings } from "./NewTabSettings";
 import { NewTabPreview } from "./settings/NewTabPreview";
 import { ChoiceCards, MiniBrowser, type MiniLayout } from "./settings/ChoiceCards";
+import { ActiveBorderPreview } from "./settings/ActiveBorderPreview";
+import { ACTIVE_BORDER_STYLES, normalizeActiveBorder } from "../ui/activeBorder";
 import { TabLayoutRow } from "./settings/TabLayoutRow";
 import { Segmented } from "../components/Segmented";
+import { noelPrefs } from "../season/noelSettings";
+import { tabSizeOf, type TabSize } from "../runtime/tabSize";
 import { animationSpeedOf } from "../ui/sharedMotion";
 import { miniTheme } from "./settings/miniTheme";
 import { onSettingsTarget, raiseSettingsIntent, settingsDestination, settingsIntentSection, settingsView, settingsViewKey, takeSettingsTarget } from "../ui/settingsView";
 import { toolbarLayout, toolbarLayoutPatch } from "../runtime/toolbarLayout";
-import { formatShortcut } from "../ui/platform";
+import { formatShortcut, isMac } from "../ui/platform";
+import { paletteModifierKey } from "../ui/paletteTarget";
 import { matchesSystemTheme, systemThemeActions, useSystemTheme } from "../ui/systemTheme";
 import { shortcutFor } from "../ui/shortcutKeys";
 import { toolbarVisibilityItems } from "../ui/toolbarMenu";
@@ -21,9 +28,12 @@ import { resetToolbarItems } from "../ui/toolbarPrefs";
 import { effectiveView, seamlessEdgesOf, sidebarHeldOpenIn, windowViews, type WindowView } from "../runtime/windowView";
 import { windowViewDetail, windowViewName } from "../ui/windowViewText";
 import { MiniView } from "./settings/WindowViewCards";
-import { SidebarEdgeRows, SidebarSideRow } from "./settings/SidebarRows";
-import { setTabsLayout, shownView, tabsLayoutOf, viewsOfLayout } from "../ui/sidebarMode";
-import { SidebarGroups } from "./settings/panels/sidebar";
+import { closedBlock, hideToolbarBlock, unavailableViews } from "./settings/layoutAvailability";
+import { setTabsLayout, shownView, tabsLayoutOf } from "../ui/sidebarMode";
+import { sidebarOn } from "../runtime/shelf";
+import { miniRailOn } from "../runtime/miniSidebar";
+import { SidebarGroups, SwitchingTabs } from "./settings/panels/sidebar";
+import { SeamlessSideRow } from "./settings/SidebarRows";
 import type {
   BrowserAction,
   BrowserSnapshot,
@@ -33,18 +43,24 @@ import {
   GlassFinishPicker,
   AppearanceColorWell,
 } from "../components/AppearanceControls";
+import { AuraColourPopover } from "../components/AuraColourPopover";
+import { OwnGradientChips } from "./settings/OwnGradientChips";
+import { GRADIENT_EXTRA, addOwnColour, frameColours, frameMaterialOf, isOwnFinish, ownFinishPatch, removeOwnColour } from "../runtime/ownColours";
+import { defaultAppearancePalette, palettePreference } from "../runtime/appearancePalettes";
 import { EditorGlyph, type EditorIconName } from "../components/EditorGlyph";
 import { AciraGlyph, type AciraGlyphName } from "../components/AciraGlyphs";
 import { BrandLogo } from "../components/BrandLogo";
 import { ContentTransition } from "../components/ContentTransition";
 import { runtime } from "../runtime/client";
-import { ImportPanel, ProfilePrivacy } from "./BrowserData";
+import { AppIconRow } from "./settings/AppIconRow";
+import { ContentFilterControls, FilterListSettings, ImportPanel, ProfileCleanup, ProtectionGroup } from "./BrowserData";
 import { useNewTabPreferences, defaultArtwork } from "../ui/newTabPreferences";
 import { appearanceLookChanged, appearanceResetPatch, newTabChanged } from "./settings/changed";
 import { SettingsSearch } from "./settings/SettingsSearch";
 import {
   Select,
   SettingCrossLink,
+  SettingsHomeContext,
   SettingGroup,
   SettingNote,
   SettingRow,
@@ -62,7 +78,16 @@ import {
   type SettingsEntry,
 } from "./settings/registry";
 import { settingsPanels } from "./settings/panels";
-import { PhishingProtection } from "./settings/panels/anti-tracking";
+import { useFeedbackView } from "../runtime/feedback";
+import MemorySaverPanel from "./settings/panels/memory-saver";
+import RewindPanel from "./settings/panels/rewind";
+import { SidePanelSettings } from "./settings/SidePanelSettings";
+import { AntiTracking, Passkeys, PhishingLists, PhishingProtection, SafeBrowsing } from "./settings/panels/anti-tracking";
+import { ClearData, Cookies, Https, ListUpdates, Overview, Usage } from "./settings/panels/privacy";
+import SitePermissionsPanel from "./settings/panels/site-permissions";
+import SiteScriptsPanel from "./settings/panels/site-scripts";
+import ZapPanel from "./settings/panels/zap";
+import { SecuredSettings } from "./workspaces/SecuredSettings";
 import { ProfileScope, scopedSetting } from "./settings/ProfileScope";
 import {currentSearchProviders,sharedProvidersConfigured} from '../ui/searchSettings';
 import "./browser-settings.css";
@@ -78,11 +103,14 @@ type Props = {
 
 const sectionGlyphs: Record<string, AciraGlyphName> = {
   Appearance: "appearance",
+  Layout: "layout",
+  Sidebar: "sidebar",
   Profiles: "profile",
   Tabs: "tabs",
   "New tab": "empty",
   Search: "search",
   Privacy: "privacy",
+  Protection: "protection",
   Accessibility: "accessibility",
   "Import & export": "transfer",
   // Round 2 (A): the sections that fell back to filled icons, drawn in the same stroke family.
@@ -96,6 +124,8 @@ const sectionGlyphs: Record<string, AciraGlyphName> = {
 };
 const panelIcons: Record<string, EditorIconName> = {};
 
+/** Window opacity: the same algorithm as the Appearance popup's slider (ui/useRangeDraft.ts, D145): the handle and the number follow the pointer from local state, one change leaves per painted frame,
+ *  the last value is published on release / key up / blur / unmount, and the store's answer arriving during a drag never moves the handle. */
 function GlassOpacityControl({
   value,
   disabled,
@@ -105,21 +135,7 @@ function GlassOpacityControl({
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
-  const [draft, setDraft] = useState(value),
-    editing = useRef(false);
-  useEffect(() => {
-    if (!editing.current) setDraft(value);
-  }, [value]);
-  const currentValue = useRef(value);
-  currentValue.current = value;
-  useEffect(() => {
-    const finish = () => {
-      editing.current = false;
-      setDraft(currentValue.current);
-    };
-    window.addEventListener("blur", finish);
-    return () => window.removeEventListener("blur", finish);
-  }, []);
+  const { value: draft, bind } = useRangeDraft(value, onChange);
   return (
     <label className="st-range">
       <input
@@ -133,18 +149,7 @@ function GlassOpacityControl({
         style={
           { "--fill": `${((draft - 40) / 60) * 100}%` } as React.CSSProperties
         }
-        onFocus={() => {
-          editing.current = true;
-        }}
-        onChange={(e) => {
-          const next = Number(e.target.value);
-          setDraft(next);
-          onChange(next);
-        }}
-        onBlur={() => {
-          editing.current = false;
-          setDraft(value);
-        }}
+        {...bind}
       />
       <span>{draft}%</span>
     </label>
@@ -163,7 +168,7 @@ const navSections = (() => {
 })();
 /** The sidebar reads as three groups: who you are, how you browse, and everything else (About last). */
 const navGroups = (() => {
-  const you = ["Profiles", "Appearance", "Tabs", "New tab"], browsing = ["Search", "Privacy", "Connection", "Passwords", "Downloads", "Extensions"];
+  const you = ["Profiles", "Appearance", "Layout", "Sidebar", "Tabs", "New tab"], browsing = ["Search", "Privacy", "Protection", "Connection", "Passwords", "Downloads", "Extensions"];
   const take = (names: string[]) => names.filter((name) => navSections.includes(name));
   const placed = new Set([...you, ...browsing]);
   const rest = navSections.filter((name) => !placed.has(name) && name !== "About");
@@ -179,12 +184,15 @@ for (const panel of settingsPanels)
 
 const sectionLede: Record<string, string> = {
   Appearance: tr("settingslede.appearance"),
+  Layout: tr("settingslede.layout"),
+  Sidebar: tr("settingslede.sidebar"),
   Profiles: tr("settingslede.profiles"),
   Tabs: tr("settingslede.tabs"),
   Connection: tr("settingslede.connection"),
   "New tab": tr("settingslede.newTab"),
   Search: tr("settingslede.search"),
   Privacy: tr("settingslede.privacy"),
+  Protection: tr("settingslede.protection"),
   Accessibility: tr("settingslede.accessibility"),
   "Import & export": tr("settingslede.importExport"),
   Extensions: tr("settingslede.extensions"),
@@ -212,6 +220,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
     [notice, setNotice] = useState(""),
     main = useRef<HTMLElement>(null);
   const setSection = (value: string) => {
+      noteSettingsSection(value);
       view.section = value;
       view.scrollTop = 0;
       publishSection(value);
@@ -268,10 +277,21 @@ export function BrowserSettings({ state, dispatch }: Props) {
     },
     update = (patch: Partial<Settings>) =>
       dispatch({ type: "settings.update", patch });
+  /** 14.1 Your colours: the aura picker's popover, opened from the Finish row's + tile (it becomes the finish) or from the gradient's + (it joins the gradient). */
+  const [picking, setPicking] = useState<{ anchor: HTMLElement; target: "finish" | "gradient" } | null>(null);
+  const ownInUse = isOwnFinish(s), ownField = frameColours(s), ownGradient = ownField.length > 1;
+  const addOwn = (hex: string, target: "finish" | "gradient") => {
+    const ownColours = addOwnColour(s.ownColours, hex);
+    if (target === "finish") update({ ownColours, ...ownFinishPatch(hex) });
+    else update({ ownColours, frameGradient: [...ownField.slice(1), hex.toLowerCase()].slice(-GRADIENT_EXTRA) });
+  };
+  const removeOwn = (hex: string) => { const { inUse, ...patch } = removeOwnColour(s, hex); update({ ...patch, ...(inUse ? palettePreference(defaultAppearancePalette) : {}) }); };
   /** Where tabs and the address bar live: Along the top, In a sidebar, or Sidebar + address (ui/sidebarMode.ts). The miniatures below follow it. */
   const layoutChoice = tabsLayoutOf(s);
   const tabLayout: MiniLayout = layoutChoice === "top" ? "toolbar" : layoutChoice;
   const animationSpeed = animationSpeedOf(s);
+  /** Noël, the opt-in Christmas theme (src/season/noelSettings.ts): what is saved, with the defaults for a value that is missing. */
+  const noel = noelPrefs(s);
   const osReducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const profile = state.browserProfiles.find(
     (item) => item.id === tab.browserProfileId,
@@ -279,8 +299,14 @@ export function BrowserSettings({ state, dispatch }: Props) {
   const windowView = effectiveView(s, state.windowUi);
   /** "Hide the toolbar" has a row only where there is a toolbar to hide that Seamless does not already hide: tabs in a sidebar (not Sidebar + address), in Full, Compact or Focus. */
   const hideToolbarRow = layoutChoice === "sidebar" && windowView !== "seamless";
+  /** Why the "Hide the toolbar" switch is off the table here (settings/layoutAvailability.ts), or null when it works. */
+  const hideToolbarWhy = hideToolbarBlock(s, state.windowUi);
   /** Sidebar + address in Full holds its sidebar open, so Sidebar › Show sidebar has nothing to switch and is not listed (runtime/windowView.ts). */
   const sidebarClosable = !sidebarHeldOpenIn(s, state.windowUi);
+  /** Beta 14: with Mini, a closed sidebar is a rail beside the page, so the rows about the edge that brings a hidden sidebar back are not listed (Seamless keeps them). */
+  const miniRail = miniRailOn(s, state.windowUi);
+  // Beta 14.4: About › Updates › Insider builds is drawn only for a profile it is offered to; search lists it only then.
+  const insiderChannel = useFeedbackView('settings').insider.channel.offered;
   /** The settings, the profile's tabs switch and (when the address bar moves) the morph, in one step, so the card, the strip and the sidebar always agree (Appearance › Layout and Tabs share this). */
   const chooseTabLayout = (layout: MiniLayout) => setTabsLayout(state, dispatch, layout === "toolbar" ? "top" : layout);
   const toolbarItems = toolbarVisibilityItems(s, tab).filter(
@@ -314,14 +340,17 @@ export function BrowserSettings({ state, dispatch }: Props) {
       privateProfile: Boolean(profile?.private),
       desktop: Boolean(runtime.platform),
       systemTheme: desktopTheme.supported,
+      touchpadSwipe: !isMac(),
       websiteOpen: Boolean(zoomTarget),
       appearanceChanged,
       toolbarChanged,
       newTabChanged: newTabIsChanged,
       stockSearch,
-      verticalTabs: Boolean(s.verticalTabs),
+      verticalTabs: sidebarOn(s),
       hideToolbarRow: hideToolbarRow,
       sidebarClosable,
+      miniRail,
+      insiderChannel,
     }),
     [
       customColors,
@@ -332,9 +361,12 @@ export function BrowserSettings({ state, dispatch }: Props) {
       newTabIsChanged,
       stockSearch,
       s.verticalTabs,
+      s.shelf,
       hideToolbarRow,
       sidebarClosable,
+      miniRail,
       desktopTheme.supported,
+      insiderChannel,
     ],
   );
 
@@ -391,8 +423,10 @@ export function BrowserSettings({ state, dispatch }: Props) {
     };
   }, [jump]);
 
-  const openEntry = (entry: SettingsEntry) => {
-    setQuery("");
+  /** D178: a pick from Settings search, a link inside Settings or a section in the list keeps the typed word in the box (the list
+   *  closed; focusing the box or the down key shows the same results); only a landing from outside Settings starts the box empty. */
+  const openEntry = (entry: SettingsEntry, { clearSearch = false } = {}) => {
+    if (clearSearch) setQuery("");
     setSection(entry.section);
     setJump((previous) => ({ entry, serial: (previous?.serial ?? 0) + 1 }));
   };
@@ -406,7 +440,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
     const target = takeSettingsTarget(settingsDestination(tab.id, state.windowId));
     if (!target) return;
     const entry = target.setting ? findSetting(target.setting) : undefined;
-    if (entry) { openEntry(entry); return; }
+    if (entry) { openEntry(entry, { clearSearch: true }); return; }
     if (target.section && settingsRegistry.some((item) => item.section === target.section)) {
       setQuery("");
       setSection(target.section);
@@ -434,44 +468,10 @@ export function BrowserSettings({ state, dispatch }: Props) {
     <>
       {section === "Appearance" && (
         <>
-          <SettingGroup title={tr("settings.layoutGroup")} id="layout">
-            <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} columns={4} />
-            <SidebarSideRow state={state} dispatch={dispatch} />
-            <SettingRow
-              id="window-view"
-              title={tr("windowview.title")}
-              detail={windowViewDetail(shownView(layoutChoice, windowView)) + (shownView(layoutChoice, windowView) === "focus" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("focus-mode", "Ctrl Shift F") ?? formatShortcut("Ctrl Shift F") }) : shownView(layoutChoice, windowView) === "seamless" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("seamless-mode", "Ctrl Shift L") ?? formatShortcut("Ctrl Shift L") }) : "")}
-              stacked
-            >
-              <ChoiceCards
-                label={tr("windowview.title")}
-                columns={viewsOfLayout(layoutChoice).length === windowViews.length ? undefined : windowViews.length}
-                value={shownView(layoutChoice, windowView)}
-                onChange={(mode: WindowView) => update({ windowView: mode })}
-                options={viewsOfLayout(layoutChoice).map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} /> }))}
-              />
-            </SettingRow>
-            {hideToolbarRow && (
-              <SettingRow id="hide-toolbar" title={tr("windowview.hideToolbar")} detail={tr("windowview.hideToolbarDetail")}>
-                <Switch label={tr("windowview.hideToolbar")} checked={s.hideToolbar === true} onChange={(on) => update({ hideToolbar: on })} />
-              </SettingRow>
-            )}
-            {windowView !== "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
-            {windowView === "seamless" && tabLayout !== "sidebar-address" && (
-              <SettingRow id="seamless-edge-top" title={tr("windowview.edgeTop")}>
-                <Switch
-                  label={tr("windowview.edgeTop")}
-                  checked={seamlessEdgesOf(s).top}
-                  onChange={(top) => update({ seamlessEdges: { ...seamlessEdgesOf(s), top } })}
-                />
-              </SettingRow>
-            )}
-            {windowView === "seamless" && <SidebarEdgeRows state={state} dispatch={dispatch} />}
-          </SettingGroup>
           <SettingGroup title={tr("settings.themeGroup")}>
             <SettingRow
               id="appearance-mode"
-              title={tr("app.appearance")}
+              title={tr("settings.lightOrDark")}
               detail={tr("core.lightDarkOrFollowYour")}
               stacked
             >
@@ -506,20 +506,51 @@ export function BrowserSettings({ state, dispatch }: Props) {
               detail={tr("browsersettings.finishDetail")}
               stacked
             >
-              <GlassFinishPicker settings={s} onChange={update} size={20} />
+              <GlassFinishPicker settings={s} onChange={update} size={20} onAddColour={(anchor) => setPicking({ anchor, target: "finish" })} onRemoveColour={removeOwn} />
             </SettingRow>
-            <SettingRow id="site-color" title={tr("browsersettings.siteColor")} detail={tr("browsersettings.siteColorDetail")}>
-              <Segmented
-                label={tr("browsersettings.siteColor")}
-                value={s.siteColor ?? "soft"}
-                options={[
-                  ["off", tr("browsersettings.siteColorOff")],
-                  ["soft", tr("browsersettings.siteColorSoft")],
-                  ["rich", tr("browsersettings.siteColorRich")],
-                ] as const}
-                onChange={(siteColor) => update({ siteColor })}
+            {/* 14.1 Your colours: with one of the person's own colours in use, how the frame wears it (ui/frameField.ts). */}
+            {ownInUse && (
+              <>
+                <SettingRow id="own-frame" title={tr("owncolours.frame")} detail={tr("owncolours.frameDetail")}>
+                  <Segmented
+                    label={tr("owncolours.frame")}
+                    value={ownGradient ? "gradient" : "one"}
+                    options={[["one", tr("owncolours.oneColour")], ["gradient", tr("owncolours.gradient")]] as const}
+                    onChange={(mode) => {
+                      if (mode === "one") return update({ frameGradient: [] });
+                      const other = (s.ownColours ?? []).find((hex) => hex.toLowerCase() !== ownField[0]);
+                      if (other) update({ frameGradient: [other] });
+                      else { const at = document.querySelector<HTMLElement>('[data-setting="own-frame"] .acira-seg'); if (at) setPicking({ anchor: at, target: "gradient" }); }
+                    }}
+                  />
+                </SettingRow>
+                {ownGradient && (
+                  <SettingRow id="own-gradient" title={tr("owncolours.gradientColours")} detail={tr("owncolours.gradientColoursDetail")}>
+                    <OwnGradientChips settings={s} onChange={update} onAdd={(anchor) => setPicking({ anchor, target: "gradient" })} />
+                  </SettingRow>
+                )}
+                <SettingRow id="own-glow" title={tr("owncolours.glow")} detail={tr("owncolours.glowDetail")}>
+                  <Switch label={tr("owncolours.glow")} checked={s.frameGlow === true} onChange={(frameGlow) => update({ frameGlow })} />
+                </SettingRow>
+                <SettingRow id="own-material" title={tr("owncolours.material")} detail={tr("owncolours.materialDetail")}>
+                  <Segmented
+                    label={tr("owncolours.material")}
+                    value={frameMaterialOf(s)}
+                    options={[["glass", tr("owncolours.glass")], ["matte", tr("owncolours.matte")], ["glossy", tr("owncolours.glossy")]] as const}
+                    onChange={(frameMaterial) => update({ frameMaterial })}
+                  />
+                </SettingRow>
+              </>
+            )}
+            {picking && (
+              <AuraColourPopover
+                anchor={picking.anchor}
+                preview={picking.target === "finish"}
+                initial={picking.target === "finish" && ownInUse ? s.browserTint : undefined}
+                onAdd={(hex) => addOwn(hex, picking.target)}
+                onClose={() => setPicking(null)}
               />
-            </SettingRow>
+            )}
             <SettingRow id="website-appearance" title={tr("browsersettings.websiteAppearance")} detail={tr("browsersettings.websiteAppearanceDetail")}>
               <Segmented
                 label={tr("browsersettings.websiteAppearance")}
@@ -533,13 +564,15 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 onChange={(websiteAppearance) => update({ websiteAppearance })}
               />
             </SettingRow>
+            {/* Beta 14.4: people look for the wallpaper here; its home is New tab › Background. */}
+            <SettingCrossLink to="newtab-art" section="New tab" title={tr("ntp.backgroundGroup")} />
           </SettingGroup>
-          {customColors && (
-            <SettingGroup title={tr("browsersettings.colors")} fold foldDetail={tr("core.colorsTheWindowFrameTabs")}>
+          {/* Beta 14.4: see-through has a home people open: Window opacity and Reduce transparency side by side, open, under the word they type. */}
+          <SettingGroup title={tr("settings.transparencyGroup")} id="transparency">
               <SettingRow
                 id="glass-opacity"
                 title={tr("appearancecontrols.windowOpacity")}
-                detail={tr("browsersettings.opacityDetail")}
+                detail={tr("settings.opacityDetail")}
               >
                 <GlassOpacityControl
                   value={s.glassOpacity!}
@@ -547,6 +580,133 @@ export function BrowserSettings({ state, dispatch }: Props) {
                   onChange={(glassOpacity) => update({ glassOpacity })}
                 />
               </SettingRow>
+          <SettingRow
+            id="reduce-transparency"
+            title={tr("browsersettings.reduceTransparency")}
+            detail={
+              state.systemReducedTransparency
+                ? tr("browsersettings.systemOpaqueDetail")
+                : tr("browsersettings.reduceTransparencyDetail")
+            }
+          >
+            <Switch
+              label={tr("browsersettings.reduceTransparency")}
+              checked={Boolean(s.reducedTransparency)}
+              onChange={(reducedTransparency) =>
+                update({ reducedTransparency })
+              }
+            />
+          </SettingRow>
+          </SettingGroup>
+          <SettingGroup title={tr("settings.sizeMotionGroup")} id="size-and-motion">
+            <SettingRow
+              id="interface-size"
+              title={tr("browsersettings.interfaceSize")}
+              detail={tr("browsersettings.interfaceSizeDetail")}
+            >
+              <Select
+                label={tr("browsersettings.interfaceSize")}
+                value={s.interfaceScale}
+                options={[80, 90, 100, 110, 125, 150].map((n) => ({
+                  value: n,
+                  label: `${n}%`,
+                }))}
+                onChange={(interfaceScale) => update({ interfaceScale })}
+              />
+            </SettingRow>
+            <SettingRow
+              id="page-zoom-site"
+              title={tr("browsersettings.website")}
+              detail={tr("browsersettings.websiteZoomDetail")}
+            >
+              {zoomTarget ? (
+                <Select
+                  label={tr("browsersettings.websiteToZoom")}
+                  value={zoomTarget.id}
+                  options={zoomTabs.map((item) => ({
+                    value: item.id,
+                    label: item.title || item.url,
+                  }))}
+                  onChange={(id) => {
+                    view.zoomTargetTabId = id;
+                    setSelectedZoomTab(id);
+                  }}
+                />
+              ) : (
+                <span className="st-muted">
+                  {tr("browsersettings.openAWebsiteToChange")}
+                </span>
+              )}
+            </SettingRow>
+            {zoomTarget && (
+              <SettingRow
+                id="page-zoom"
+                title={tr("app.pageZoom")}
+                detail={new URL(zoomTarget.url).origin}
+              >
+                <PageZoomControls tab={zoomTarget} />
+              </SettingRow>
+            )}
+            <SettingRow
+              id="animation-speed"
+              title={tr("browsersettings.animationSpeed")}
+              detail={
+                animationSpeed === "off"
+                  ? osReducedMotion
+                    ? tr("browsersettings.animationSystemOff")
+                    : tr("browsersettings.animationOffDetail")
+                  : animationSpeed === "fast"
+                    ? tr("browsersettings.animationFastDetail")
+                    : tr("browsersettings.animationPremiumDetail")
+              }
+            >
+              <Segmented
+                label={tr("browsersettings.animationSpeed")}
+                value={animationSpeed}
+                options={[
+                  ["premium", tr("browsersettings.animationPremium")],
+                  ["fast", tr("browsersettings.animationFast")],
+                  ["off", tr("browsersettings.animationOff")],
+                ] as const}
+                onChange={(speed) => update(speed === "off" ? { reducedMotion: true } : { reducedMotion: false, animationSpeed: speed })}
+              />
+            </SettingRow>
+            <SettingCrossLink to="tab-size" section="Layout" title={tr("settings.tabSize")} />
+            <SettingCrossLink to="sidebar-size" section="Sidebar" title={tr("sidebar.sizeTitle")} />
+          </SettingGroup>
+          <SettingGroup title={tr("settings.lightGlowGroup")}>
+            <SettingRow id="site-color" title={tr("browsersettings.siteColor")} detail={tr("browsersettings.siteColorDetail")}>
+              <Segmented
+                label={tr("browsersettings.siteColor")}
+                value={s.siteColor ?? "soft"}
+                options={[
+                  ["off", tr("browsersettings.siteColorOff")],
+                  ["soft", tr("browsersettings.siteColorSoft")],
+                  ["rich", tr("browsersettings.siteColorRich")],
+                ] as const}
+                onChange={(siteColor) => update({ siteColor })}
+              />
+            </SettingRow>
+            {/* Its own switch (reported 19 Nov): it shows what is saved and lights the frame whatever Site color is set to; turning it on changes nothing else. */}
+            <SettingRow id="ambient-mode" title={tr("browsersettings.ambientMode")} detail={tr("browsersettings.ambientModeDetail")}>
+              <Switch label={tr("browsersettings.ambientMode")} checked={s.ambientMode === true} onChange={(ambientMode) => update({ ambientMode })} />
+            </SettingRow>
+            <SettingRow id="active-border" title={tr("browsersettings.activeBorder")} detail={tr("browsersettings.activeBorderDetail")} stacked>
+              <ChoiceCards
+                label={tr("browsersettings.activeBorder")}
+                columns={5}
+                value={normalizeActiveBorder(s.activeBorder)}
+                onChange={(activeBorder) => update({ activeBorder })}
+                options={ACTIVE_BORDER_STYLES.map((look) => ({
+                  value: look,
+                  label: look === "divider-fade" ? tr("browsersettings.activeBorderDividerFade") : look === "lit-edge" ? tr("browsersettings.activeBorderLitEdge") : look === "hairline" ? tr("browsersettings.activeBorderHairline") : look === "inner-light" ? tr("browsersettings.activeBorderInnerLight") : tr("browsersettings.activeBorderPlain"),
+                  art: <ActiveBorderPreview look={look} selected={normalizeActiveBorder(s.activeBorder) === look} />,
+                }))}
+              />
+            </SettingRow>
+          </SettingGroup>
+          {customColors && (
+            <SettingGroup title={tr("settings.ownColorsGroup")} fold foldDetail={tr("settings.ownColorsFoldDetail")}>
               {(
                 [
                   ["surfaceColor", tr("core.pages"), "surface-color"],
@@ -581,51 +741,112 @@ export function BrowserSettings({ state, dispatch }: Props) {
               ))}
             </SettingGroup>
           )}
-          <SettingGroup title={tr("ntp.backgroundGroup")} id="newtab-background-group">
-            <NewTabPreview profile={profile} />
-            <NewTabSettings profile={profile} part="background" />
-            <SettingCrossLink to="newtab-shortcut-editor" section="New tab" title={tr("ntp.layoutGroup")} />
+          {/* Noël (22 Nov): opt-in. Snowfall and the hat show their saved choice while the theme is off, greyed, so turning it on brings back what was chosen. */}
+          <SettingGroup title={tr("settings.seasonalGroup")}>
+            <SettingRow id="noel-on" title={tr("noelsettings.title")} detail={tr("noelsettings.detail")}>
+              <Switch label={tr("noelsettings.title")} checked={noel.on} onChange={(noelOn) => update({ noelOn })} />
+            </SettingRow>
+            <SettingRow id="noel-snow" title={tr("noelsettings.snow")} detail={noel.on ? tr("noelsettings.snowDetail") : tr("settings.reasonNoel")} stacked>
+              <fieldset className="st-dim" disabled={!noel.on}>
+                <Segmented
+                  label={tr("noelsettings.snow")}
+                  value={noel.snow}
+                  options={[
+                    ["sidebar", tr("noelsettings.snowSidebar")],
+                    ["window", tr("noelsettings.snowWindow")],
+                    ["off", tr("noelsettings.snowOff")],
+                  ] as const}
+                  onChange={(noelSnow) => update({ noelSnow })}
+                />
+              </fieldset>
+            </SettingRow>
+            {/* 24 Nov (the team): it keeps snowing unless the person wants a rest; greyed with the reason while Noël or the snowfall is off */}
+            <SettingRow id="noel-keep" title={tr("noelsettings.keep")} detail={!noel.on ? tr("settings.reasonNoel") : noel.snow === 'off' ? tr("noelsettings.reasonSnow") : tr("noelsettings.keepDetail")}>
+              <Switch label={tr("noelsettings.keep")} checked={noel.keep} disabled={!noel.on || noel.snow === 'off'} onChange={(noelKeepSnowing) => update({ noelKeepSnowing })} />
+            </SettingRow>
+            <SettingRow id="noel-hat" title={tr("noelsettings.hat")} detail={noel.on ? tr("noelsettings.hatDetail") : tr("settings.reasonNoel")}>
+              <Switch label={tr("noelsettings.hat")} checked={noel.hat} disabled={!noel.on} onChange={(noelHat) => update({ noelHat })} />
+            </SettingRow>
+            <AppIconRow />
           </SettingGroup>
-          <SettingGroup title={tr("settings.interfaceGroup")}>
+          {/* Beta 14.4: always listed; with nothing to reset the button is off and the line says so. */}
+          <SettingGroup title={tr("browsersettings.reset")}>
             <SettingRow
-              id="interface-size"
-              title={tr("browsersettings.interfaceSize")}
-              detail={tr("browsersettings.interfaceSizeDetail")}
+              id="reset-appearance"
+              title={tr("browsersettings.resetAppearance")}
+              detail={appearanceChanged ? tr("browsersettings.resetAppearanceDetail") : tr("settings.reasonNothingToReset")}
             >
-              <Select
-                label={tr("browsersettings.interfaceSize")}
-                value={s.interfaceScale}
-                options={[80, 90, 100, 110, 125, 150].map((n) => ({
-                  value: n,
-                  label: `${n}%`,
-                }))}
-                onChange={(interfaceScale) => update({ interfaceScale })}
-              />
+              <button
+                type="button"
+                className="st-button"
+                disabled={!appearanceChanged}
+                onClick={() => update(appearanceResetPatch(s))}
+              >
+                {tr("browsersettings.reset")}
+              </button>
             </SettingRow>
-            <SettingRow
-              id="animation-speed"
-              title={tr("browsersettings.animationSpeed")}
-              detail={
-                animationSpeed === "off"
-                  ? osReducedMotion
-                    ? tr("browsersettings.animationSystemOff")
-                    : tr("browsersettings.animationOffDetail")
-                  : animationSpeed === "fast"
-                    ? tr("browsersettings.animationFastDetail")
-                    : tr("browsersettings.animationPremiumDetail")
-              }
-            >
+          </SettingGroup>
+        </>
+      )}
+      {/* Beta 14.4: where things are, the same as the Acira menu's Layout rows (View, Tabs); the sidebar has a page of its own next to it. */}
+      {section === "Layout" && (
+        <>
+          <SettingGroup title={tr("settings.tabLayoutGroup")} id="tab-layout">
+            <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} />
+            {/* 14.3 Tab size (runtime/tabSize.ts): how tall the tabs are, apart from Interface size; Standard is today's size. */}
+            <SettingRow id="tab-size" title={tr("settings.tabSize")} detail={tr("settings.tabSizeDetail")}>
               <Segmented
-                label={tr("browsersettings.animationSpeed")}
-                value={animationSpeed}
-                options={[
-                  ["premium", tr("browsersettings.animationPremium")],
-                  ["fast", tr("browsersettings.animationFast")],
-                  ["off", tr("browsersettings.animationOff")],
-                ] as const}
-                onChange={(speed) => update(speed === "off" ? { reducedMotion: true } : { reducedMotion: false, animationSpeed: speed })}
+                label={tr("settings.tabSize")}
+                value={tabSizeOf(s)}
+                options={[["small", tr("settings.tabSizeSmall")], ["standard", tr("settings.tabSizeStandard")], ["large", tr("settings.tabSizeLarge")]] as const}
+                onChange={(tabSize: TabSize) => update({ tabSize })}
               />
             </SettingRow>
+            <SettingRow
+              id="compact-tab-titles"
+              title={tr("browsersettings.showTitlesInCompactTabs")}
+              detail={layoutChoice === "top" || layoutChoice === "top-sidebar" ? tr("browsersettings.compactTitlesDetail") : tr("settings.reasonTabsAlongTop")}
+            >
+              <Switch
+                label={tr("browsersettings.showTitlesInCompactTabs")}
+                checked={Boolean(s.compactTabTitles)}
+                disabled={layoutChoice !== "top" && layoutChoice !== "top-sidebar"}
+                onChange={(compactTabTitles) => update({ compactTabTitles })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          <SettingGroup title={tr("windowview.title")} id="layout">
+            <SettingRow
+              id="window-view"
+              title={tr("windowview.title")}
+              detail={windowViewDetail(shownView(layoutChoice, windowView)) + (shownView(layoutChoice, windowView) === "focus" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("focus-mode", "Ctrl Shift F") ?? formatShortcut("Ctrl Shift F") }) : shownView(layoutChoice, windowView) === "seamless" ? " " + tr("browsersettings.focusShortcutHint", { shortcut: shortcutFor("seamless-mode", "Ctrl Shift L") ?? formatShortcut("Ctrl Shift L") }) : "")}
+              stacked
+            >
+              <ChoiceCards
+                label={tr("windowview.title")}
+                value={shownView(layoutChoice, windowView)}
+                onChange={(mode: WindowView) => update({ windowView: mode })}
+                options={windowViews.map((mode) => ({ value: mode, label: windowViewName(mode), art: <MiniView view={mode} layout={tabLayout} />, disabled: unavailableViews(layoutChoice).includes(mode) }))}
+              />
+            </SettingRow>
+            {unavailableViews(layoutChoice).length > 0 && <SettingNote>{tr("settings.reasonNoTopBar")}</SettingNote>}
+            {/* "Hide the toolbar" is always listed: where there is no toolbar of its kind to hide, it is off the table and says why. */}
+            <SettingRow id="hide-toolbar" title={tr("windowview.hideToolbar")} detail={hideToolbarWhy ? tr(hideToolbarWhy === "seamless" ? "settings.reasonHideToolbarSeamless" : "settings.reasonHideToolbarLayout") : tr("windowview.hideToolbarDetail")}>
+              <Switch label={tr("windowview.hideToolbar")} checked={s.hideToolbar === true} disabled={hideToolbarWhy !== null} onChange={(on) => update({ hideToolbar: on })} />
+            </SettingRow>
+            {s.sidebarClosed === "mini" && closedBlock(s, state.windowUi) === "seamless" && (
+              <SettingCrossLink id="closed-reason" to="sidebar-closed" section="Sidebar" title={tr("sidebar.closedTitle")} detail={tr("settings.reasonMiniView")} />
+            )}
+            {/* Beta 14.4: both Seamless edge rows are always listed, directly under Window view; outside Seamless they are off and say why. */}
+            <SettingRow id="seamless-edge-top" title={tr("windowview.edgeTop")} detail={windowView === "seamless" && tabLayout !== "sidebar-address" ? tr("windowview.edgeTopDetail") : tr(tabLayout === "sidebar-address" ? "settings.reasonSeamlessTopAddress" : "settings.reasonOnlySeamless")}>
+              <Switch
+                label={tr("windowview.edgeTop")}
+                checked={seamlessEdgesOf(s).top}
+                disabled={windowView !== "seamless" || tabLayout === "sidebar-address"}
+                onChange={(top) => update({ seamlessEdges: { ...seamlessEdgesOf(s), top } })}
+              />
+            </SettingRow>
+            <SeamlessSideRow state={state} dispatch={dispatch} />
           </SettingGroup>
           <SettingGroup title={tr("browsersettings.toolbar")}>
             {toolbarItems.map((item) => (
@@ -666,6 +887,18 @@ export function BrowserSettings({ state, dispatch }: Props) {
                         },
                   )
                 }
+              />
+            </SettingRow>
+            <SettingRow id="screenshot-button" title={tr("browsersettings.screenshotButton")}>
+              <Select
+                label={tr("browsersettings.screenshotButton")}
+                value={s.screenshotButton ?? "off"}
+                options={[
+                  { value: "off", label: tr("browsersettings.screenshotOff") },
+                  { value: "sidebar", label: tr("browsersettings.screenshotSidebar") },
+                  { value: "top", label: tr("browsersettings.screenshotTop") },
+                ]}
+                onChange={(value) => update({ screenshotButton: value as "off" | "sidebar" | "top" })}
               />
             </SettingRow>
             <SettingRow
@@ -714,7 +947,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               </SettingRow>
             )}
           </SettingGroup>
-          <SettingGroup title={tr("menucustomizer.title")} id="menu-customize-group" fold foldDetail={tr("settings.menuFoldDetail")}>
+          <SettingGroup title={tr("settings.aciraMenuGroup")} id="menu-customize-group" fold foldDetail={tr("settings.menuFoldDetail")}>
             <SettingRow
               id="menu-customize"
               title={tr("menucustomizer.rowTitle")}
@@ -724,60 +957,9 @@ export function BrowserSettings({ state, dispatch }: Props) {
               <MenuCustomizer profileId={tab.browserProfileId} reduced={s.reducedMotion} />
             </SettingRow>
           </SettingGroup>
-          <SettingGroup title={tr("app.pageZoom")} fold foldDetail={tr("core.makeOneWebsiteLargerOr")}>
-            <SettingRow
-              id="page-zoom-site"
-              title={tr("browsersettings.website")}
-              detail={tr("browsersettings.websiteZoomDetail")}
-            >
-              {zoomTarget ? (
-                <Select
-                  label={tr("browsersettings.websiteToZoom")}
-                  value={zoomTarget.id}
-                  options={zoomTabs.map((item) => ({
-                    value: item.id,
-                    label: item.title || item.url,
-                  }))}
-                  onChange={(id) => {
-                    view.zoomTargetTabId = id;
-                    setSelectedZoomTab(id);
-                  }}
-                />
-              ) : (
-                <span className="st-muted">
-                  {tr("browsersettings.openAWebsiteToChange")}
-                </span>
-              )}
-            </SettingRow>
-            {zoomTarget && (
-              <SettingRow
-                id="page-zoom"
-                title={tr("app.pageZoom")}
-                detail={new URL(zoomTarget.url).origin}
-              >
-                <PageZoomControls tab={zoomTarget} />
-              </SettingRow>
-            )}
-          </SettingGroup>
-          {appearanceChanged && (
-            <SettingGroup>
-              <SettingRow
-                id="reset-appearance"
-                title={tr("browsersettings.resetAppearance")}
-                detail={tr("browsersettings.resetAppearanceDetail")}
-              >
-                <button
-                  type="button"
-                  className="st-button"
-                  onClick={() => update(appearanceResetPatch(s))}
-                >
-                  {tr("browsersettings.reset")}
-                </button>
-              </SettingRow>
-            </SettingGroup>
-          )}
         </>
       )}
+      {section === "Sidebar" && <SidebarGroups state={state} dispatch={dispatch} />}
       {section === "Profiles" && (
         <>
           {profilePanels.length > 0 ? (
@@ -846,7 +1028,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                   }}
                 >
                   <input
-                    className="st-input"
+                    className="st-input ab-input"
                     aria-label={tr("browsersettings.newProfileName")}
                     placeholder={tr("browsersettings.workOrPersonal")}
                     value={name}
@@ -867,46 +1049,98 @@ export function BrowserSettings({ state, dispatch }: Props) {
         </>
       )}
       {section === "New tab" && (
-        <SettingGroup>
-          <NewTabPreview profile={profile} />
-          <SettingCrossLink to="newtab-art-style" section="Appearance" title={tr("ntp.backgroundGroup")} />
-          <NewTabSettings profile={profile} part="layout" />
-        </SettingGroup>
+        <>
+          <SettingGroup title={tr("settings.newTabShowsGroup")}>
+            <NewTabPreview profile={profile} />
+            <NewTabSettings profile={profile} part="layout" />
+          </SettingGroup>
+          <SettingGroup title={tr("ntp.backgroundGroup")} id="newtab-background-group">
+            <NewTabSettings profile={profile} part="background" />
+          </SettingGroup>
+        </>
       )}
       {section === "Tabs" && (
         <>
-          <SettingGroup>
-            <TabLayoutRow layout={tabLayout} onChange={chooseTabLayout} />
-            <SettingCrossLink to="window-view" section="Appearance" title={tr("windowview.title")} />
+          {/* Beta 14.4: people look for tab size here; its home is Layout. */}
+          <SettingGroup title={tr("settings.tabsLayoutLinksGroup")}>
+            <SettingCrossLink to="sidebar-only-tabs" section="Layout" title={tr("settings.whereTabsGo")} />
+            <SettingCrossLink to="tab-size" section="Layout" title={tr("settings.tabSize")} />
           </SettingGroup>
-          <SidebarGroups state={state} dispatch={dispatch} />
-          <SettingGroup>
+          <SettingGroup title={tr("onstartup.title")}>
             <SettingRow
-              id="compact-tab-titles"
-              title={tr("browsersettings.showTitlesInCompactTabs")}
-              detail={tr("browsersettings.compactTitlesDetail")}
-            >
-              <Switch
-                label={tr("browsersettings.showTitlesInCompactTabs")}
-                checked={Boolean(s.compactTabTitles)}
-                onChange={(compactTabTitles) => update({ compactTabTitles })}
-              />
-            </SettingRow>
-            <SettingRow
-              id="tab-viewer-density"
-              title={tr("browsersettings.allOpenTabsView")}
-              detail={(s.tabViewerDensity ?? "comfortable") === "compact" ? tr("browsersettings.compactViewDetail") : tr("browsersettings.comfortableViewDetail")}
+              id="on-startup"
+              title={tr("onstartup.title")}
+              detail={s.onStartup === "newtab" ? tr("onstartup.detailNewTab") : tr("onstartup.detailContinue")}
             >
               <Select
-                label={tr("browsersettings.allOpenTabsView")}
-                value={s.tabViewerDensity ?? "comfortable"}
+                label={tr("onstartup.title")}
+                value={s.onStartup === "newtab" ? "newtab" : "continue"}
                 options={[
-                  { value: "comfortable", label: tr("browsersettings.comfortable") },
-                  { value: "compact", label: tr("browsersettings.compact") },
+                  { value: "continue", label: tr("onstartup.optContinue") },
+                  { value: "newtab", label: tr("onstartup.optNewTab") },
                 ]}
-                onChange={(value) => update({ tabViewerDensity: value as "comfortable" | "compact" })}
+                onChange={(value) => update({ onStartup: value as "continue" | "newtab" })}
               />
             </SettingRow>
+            <SettingRow id="load-ahead" title={tr("loadahead.title")} detail={tr("loadahead.detail")}>
+              <Select
+                label={tr("loadahead.title")}
+                value={s.loadAhead === "pinned" || s.loadAhead === "recent" ? s.loadAhead : "off"}
+                options={[
+                  { value: "off", label: tr("loadahead.optOff") },
+                  { value: "pinned", label: tr("loadahead.optPinned") },
+                  { value: "recent", label: tr("loadahead.optRecent") },
+                ]}
+                onChange={(value) => update({ loadAhead: value as "off" | "pinned" | "recent" })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          <SettingGroup title={tr("settings.openingClosingGroup")}>
+            <SettingRow id="open-tabs-in-front" title={tr("tabsinfront.title")} detail={tr("tabsinfront.detail")}>
+              <Switch
+                label={tr("tabsinfront.title")}
+                checked={Boolean(s.openTabsInFront)}
+                onChange={(openTabsInFront) => update({ openTabsInFront })}
+              />
+            </SettingRow>
+            <SettingRow id="close-tab-landing" title={tr("closelanding.title")} detail={tr(s.closeTabLanding === "empty" ? "closelanding.detailEmpty" : "closelanding.detail")}>
+              <Select
+                label={tr("closelanding.title")}
+                value={s.closeTabLanding === "empty" ? "empty" : "previous"}
+                options={[
+                  { value: "previous", label: tr("closelanding.optPrevious") },
+                  { value: "empty", label: tr("closelanding.optEmpty") },
+                ]}
+                onChange={(value) => update({ closeTabLanding: value as "previous" | "empty" })}
+              />
+            </SettingRow>
+            <SettingRow id="ask-before-closing" title={tr("closeGuard.askTitle")} detail={tr("closeGuard.askDetail")}>
+              <Switch
+                label={tr("closeGuard.askTitle")}
+                checked={s.askBeforeClosing !== false}
+                onChange={(askBeforeClosing) => update({ askBeforeClosing })}
+              />
+            </SettingRow>
+            <SettingRow id="command-search-new-tab" title={tr("commandsearchnewtab.title")} detail={tr("commandsearchnewtab.detail", { key: paletteModifierKey(isMac()) })}>
+              <Switch
+                label={tr("commandsearchnewtab.title")}
+                checked={Boolean(s.commandSearchNewTab)}
+                onChange={(commandSearchNewTab) => update({ commandSearchNewTab })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          <SwitchingTabs>
+            {!isMac() && (
+              <SettingRow id="touchpad-swipe" title={tr("touchpadswipe.title")} detail={tr("touchpadswipe.detail")}>
+                <Switch
+                  label={tr("touchpadswipe.title")}
+                  checked={Boolean(s.touchpadSwipe)}
+                  onChange={(touchpadSwipe) => update({ touchpadSwipe })}
+                />
+              </SettingRow>
+            )}
+          </SwitchingTabs>
+          <SettingGroup title={tr("settings.previewsGroup")}>
             <SettingRow id="tab-hover-card" title={tr("tabhovercard.title")} detail={tr("tabhovercard.detail")}>
               <Select
                 label={tr("tabhovercard.title")}
@@ -926,36 +1160,41 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 onChange={(linkPreview) => update({ linkPreview })}
               />
             </SettingRow>
-            <SettingRow id="open-tabs-in-front" title={tr("tabsinfront.title")} detail={tr("tabsinfront.detail")}>
-              <Switch
-                label={tr("tabsinfront.title")}
-                checked={Boolean(s.openTabsInFront)}
-                onChange={(openTabsInFront) => update({ openTabsInFront })}
-              />
-            </SettingRow>
-            <SettingRow id="ask-before-closing" title={tr("closeGuard.askTitle")} detail={tr("closeGuard.askDetail")}>
-              <Switch
-                label={tr("closeGuard.askTitle")}
-                checked={s.askBeforeClosing !== false}
-                onChange={(askBeforeClosing) => update({ askBeforeClosing })}
-              />
-            </SettingRow>
             <SettingRow
-              id="on-startup"
-              title={tr("onstartup.title")}
-              detail={s.onStartup === "newtab" ? tr("onstartup.detailNewTab") : tr("onstartup.detailContinue")}
+              id="tab-viewer-density"
+              title={tr("browsersettings.allOpenTabsView")}
+              detail={(s.tabViewerDensity ?? "comfortable") === "compact" ? tr("browsersettings.compactViewDetail") : tr("browsersettings.comfortableViewDetail")}
             >
               <Select
-                label={tr("onstartup.title")}
-                value={s.onStartup === "newtab" ? "newtab" : "continue"}
+                label={tr("browsersettings.allOpenTabsView")}
+                value={s.tabViewerDensity ?? "comfortable"}
                 options={[
-                  { value: "continue", label: tr("onstartup.optContinue") },
-                  { value: "newtab", label: tr("onstartup.optNewTab") },
+                  { value: "comfortable", label: tr("browsersettings.comfortable") },
+                  { value: "compact", label: tr("browsersettings.compact") },
                 ]}
-                onChange={(value) => update({ onStartup: value as "continue" | "newtab" })}
+                onChange={(value) => update({ tabViewerDensity: value as "comfortable" | "compact" })}
               />
             </SettingRow>
           </SettingGroup>
+          <SettingGroup title={tr("settings.videosGroup")}>
+            <SettingRow id="fullscreen-fills-window" title={tr("fullscreenfill.title")} detail={tr("fullscreenfill.detail")}>
+              <Switch
+                label={tr("fullscreenfill.title")}
+                checked={Boolean(s.fullscreenFillsWindow)}
+                onChange={(fullscreenFillsWindow) => update({ fullscreenFillsWindow })}
+              />
+            </SettingRow>
+            <SettingRow id="auto-picture-in-picture" title={tr("autopip.title")} detail={tr("autopip.detail")}>
+              <Switch
+                label={tr("autopip.title")}
+                checked={Boolean(s.autoPictureInPicture)}
+                onChange={(autoPictureInPicture) => update({ autoPictureInPicture })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          <MemorySaverPanel.Component state={state} dispatch={dispatch} />
+          {!profile?.private && <SidePanelSettings state={state} dispatch={dispatch} />}
+          <RewindPanel.Component state={state} dispatch={dispatch} />
         </>
       )}
       {section === "Search" && (
@@ -1000,18 +1239,20 @@ export function BrowserSettings({ state, dispatch }: Props) {
               onChange={(addressSuggestions) => update({ addressSuggestions })}
             />
           </SettingRow>
-          <SettingCrossLink to="filters-ai" section="Privacy" title={tr("browsermenu.aiFreeMode")} />
+          <SettingCrossLink to="filters-ai" section="Protection" title={tr("browsermenu.aiFreeMode")} />
         </SettingGroup>
       )}
+      {/* Beta 14.4: Privacy is your own data; what Acira blocks or guards is on Protection. Each page points at the other first. */}
       {section === "Privacy" && (
         <>
-          {/* R4-07: phishing and malware protection is the first thing on this page, its own named and searchable row. */}
-          <PhishingProtection disabled={Boolean(profile?.private)} />
-          <ProfilePrivacy state={state} />
-          <NativeNetworkSettings part="gpc">
-            <SettingCrossLink to="proxy" section="Connection" title={tr("settings.proxyDnsLink")} />
-          </NativeNetworkSettings>
-          <SettingGroup title={tr("browsersettings.privateBrowsing")}>
+          <SettingCrossLink to="block-ads-trackers" section="Protection" title={tr("settings.protectionPage")} detail={tr("settings.protectionPageLink")} />
+          <ClearData disabled={Boolean(profile?.private)} />
+          <SitePermissionsPanel.Component state={state} dispatch={dispatch} />
+          <ProfileCleanup state={state} />
+          <Cookies disabled={Boolean(profile?.private)}>
+            <ContentFilterControls state={state} part="banners" />
+          </Cookies>
+          <SettingGroup title={tr("settings.privateWindowsGroup")}>
             <SettingRow
               id="incognito"
               title={tr("browsersettings.privateWindow")}
@@ -1026,11 +1267,39 @@ export function BrowserSettings({ state, dispatch }: Props) {
               </button>
             </SettingRow>
             <SettingCrossLink to="rewind-enabled" section="Tabs" title={tr("browsermenu.rewind")} />
+          
+            <SecuredSettings state={state} dispatch={dispatch} disabled={Boolean(profile?.private)} bare />
           </SettingGroup>
+          <Usage disabled={Boolean(profile?.private)} dispatch={dispatch} />
+        </>
+      )}
+      {section === "Protection" && (
+        <>
+          <SettingCrossLink to="clear-browsing-data" section="Privacy" title={tr("settings.privacyPage")} detail={tr("settings.privacyPageLink")} />
+          <ProtectionGroup state={state} title={tr("settings.adsTrackersGroup")}>
+            <Overview bare />
+          </ProtectionGroup>
+          <AntiTracking disabled={Boolean(profile?.private)}>
+            <NativeNetworkSettings part="gpc" bare>
+            <SettingCrossLink to="proxy" section="Connection" title={tr("settings.proxyDnsLink")} />
+          </NativeNetworkSettings>
+          </AntiTracking>
+          <PhishingLists disabled={Boolean(profile?.private)} after={<SafeBrowsing disabled={Boolean(profile?.private)} bare />}>
+            <PhishingProtection disabled={Boolean(profile?.private)} bare />
+          </PhishingLists>
+          <Https disabled={Boolean(profile?.private)} />
+          {/* No passkey choice on a Mac: the guard answers there with no setting (passkey-guard-preload.cjs), so the switch did nothing. */}
+          {!isMac() && <Passkeys disabled={Boolean(profile?.private)} />}
+          <SiteScriptsPanel.Component state={state} dispatch={dispatch} />
+          <ContentFilterControls state={state} part="search" fold />
+          <ZapPanel.Component state={state} dispatch={dispatch} />
+          <FilterListSettings profileId={state.activeBrowserProfileId} privateMode={state.browserProfiles.some((item) => item.id === state.activeBrowserProfileId && item.private)} fold>
+            <ListUpdates disabled={Boolean(profile?.private)} bare />
+          </FilterListSettings>
         </>
       )}
       {section === "Accessibility" && (
-        <SettingGroup>
+        <SettingGroup title={tr("settings.motionTransparencyGroup")}>
           <SettingRow
             id="reduce-motion"
             title={tr("browsersettings.reduceMotion")}
@@ -1042,23 +1311,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               onChange={(reducedMotion) => update({ reducedMotion })}
             />
           </SettingRow>
-          <SettingRow
-            id="reduce-transparency"
-            title={tr("browsersettings.reduceTransparency")}
-            detail={
-              state.systemReducedTransparency
-                ? tr("browsersettings.systemOpaqueDetail")
-                : tr("browsersettings.reduceTransparencyDetail")
-            }
-          >
-            <Switch
-              label={tr("browsersettings.reduceTransparency")}
-              checked={Boolean(s.reducedTransparency)}
-              onChange={(reducedTransparency) =>
-                update({ reducedTransparency })
-              }
-            />
-          </SettingRow>
+          <SettingCrossLink to="reduce-transparency" section="Appearance" title={tr("browsersettings.reduceTransparency")} />
           <SettingCrossLink to="animation-speed" section="Appearance" title={tr("browsersettings.animationSpeed")} />
         </SettingGroup>
       )}
@@ -1094,7 +1347,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
         </SettingGroup>
       )}
       {settingsPanels
-        .filter((panel) => panel.section === section && section !== "Profiles")
+        .filter((panel) => panel.section === section && section !== "Profiles" && !panel.placed)
         .map((panel, index) => (
           <panel.Component
             key={`${panel.section}-${index}`}
@@ -1104,6 +1357,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
         ))}
     </>
   );
+  const settingHome = (id: string) => findSetting(id)?.section;
   const goToSetting = (id: string) => {
     const entry = findSetting(id);
     if (entry) openEntry(entry);
@@ -1111,6 +1365,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
   return (
     <SettingsViewContext.Provider value={view}>
       <SettingsNavContext.Provider value={goToSetting}>
+      <SettingsHomeContext.Provider value={settingHome}>
       <div className="browser-settings settings-acira">
         <aside className="bs-sidebar">
           <div className="bs-brand">
@@ -1126,10 +1381,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
                 className={section === label ? "selected" : ""}
                 aria-current={section === label ? "page" : undefined}
                 aria-label={translateText(label)}
-                onClick={() => {
-                  setSection(label);
-                  setQuery("");
-                }}
+                onClick={() => setSection(label)}
               >
                 <span className="bs-nav-icon" aria-hidden="true">
                   {sectionGlyphs[label] ? (
@@ -1156,7 +1408,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
               query={query}
               onQuery={setQuery}
               context={context}
-              onSelect={openEntry}
+              onSelect={(entry) => openEntry(entry)}
             />
           </header>
           <div className="st-sr-only" role="status" aria-live="polite">
@@ -1175,6 +1427,7 @@ export function BrowserSettings({ state, dispatch }: Props) {
           </ContentTransition>
         </main>
       </div>
+      </SettingsHomeContext.Provider>
       </SettingsNavContext.Provider>
     </SettingsViewContext.Provider>
   );

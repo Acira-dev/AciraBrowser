@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Developer tools divider</title>
+<style>
+/* The divider between a page and its docked Developer tools (Beta 14 section V): the strip in the 6 px gap between the two cards, drawn the way a split view's divider is
+   (src/features/split/split.css): at rest a short grip pill marks it, under the pointer (or focus) the pill gives way to a full-length accent line, and the
+   cursor is the resize cursor on this strip and nowhere else. It is a native view of its own (not in the interface) because the page and DevTools are native views
+   that glide with the page's own spring: the divider is placed in the same frame as they are, so it never lags a frame behind the edge it sits on. */
+:root{--ink:rgb(237 237 239/.92);--accent:#6ea8ff;--motion-scale:1;color-scheme:dark}
+body.light{--ink:rgb(29 31 36/.90);--accent:#2563eb;color-scheme:light}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;-webkit-user-select:none;user-select:none}
+#h{position:absolute;inset:0;touch-action:none;outline:none;-webkit-tap-highlight-color:transparent}
+body[data-side=right] #h,body[data-side=left] #h{cursor:col-resize}
+body[data-side=bottom] #h{cursor:row-resize}
+#h::before,#h::after{content:'';position:absolute;pointer-events:none;transition:opacity calc(120ms*var(--motion-scale)) ease-out}
+#h::before{border-radius:2px;background:var(--ink);opacity:.35}
+/* The grip fades in once the slide has landed (the dock tells the page when), so it does not pop in at the end of the motion. */
+body:not([data-shown]) #h::before{opacity:0}
+body:is([data-side=right],[data-side=left]) #h::before{width:2px;height:36px;left:calc(50% - 1px);top:calc(50% - 18px)}
+body[data-side=bottom] #h::before{height:2px;width:36px;top:calc(50% - 1px);left:calc(50% - 18px)}
+#h::after{border-radius:1px;background:var(--accent);opacity:0}
+body:is([data-side=right],[data-side=left]) #h::after{width:2px;left:calc(50% - 1px);top:0;bottom:0}
+body[data-side=bottom] #h::after{height:2px;top:calc(50% - 1px);left:0;right:0}
+#h[data-lit]::after,#h:focus-visible::after{opacity:1}
+#h[data-lit]::before,#h:focus-visible::before{opacity:0}
+body[data-motion=off] #h::before,body[data-motion=off] #h::after{transition:none}
+@media (forced-colors:active){#h::before{background:CanvasText;opacity:1}#h::after{background:Highlight}}
+</style>
+</head>
+<body data-side="right">
+<div id="h" role="separator" tabindex="0" aria-orientation="vertical"></div>
+<script>
+const api=window.devtoolsDivider,h=document.getElementById('h');
+let drag=null,hover=false;
+const lit=()=>{if(drag||hover)h.setAttribute('data-lit','');else h.removeAttribute('data-lit');};
+// Screen coordinates, not the view's: the view itself moves under the pointer as the size changes, so only the screen is a fixed frame.
+h.addEventListener('pointerdown',event=>{
+ if(event.button!==0||!event.isPrimary)return;event.preventDefault();
+ h.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.screenX,y:event.screenY,moved:false};lit();
+ api.send({type:'down',x:event.screenX,y:event.screenY});
+});
+h.addEventListener('pointermove',event=>{if(drag&&drag.id===event.pointerId){if(Math.abs(event.screenX-drag.x)+Math.abs(event.screenY-drag.y)>3)drag.moved=true;api.send({type:'move',x:event.screenX,y:event.screenY,alt:event.altKey});}});
+const end=event=>{if(!drag||drag.id!==event.pointerId)return;drag=null;lit();if(h.hasPointerCapture(event.pointerId))h.releasePointerCapture(event.pointerId);api.send({type:'up',x:event.screenX,y:event.screenY});};
+h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);h.addEventListener('lostpointercapture',event=>{if(drag&&drag.id===event.pointerId){drag=null;lit();api.send({type:'up'});}});
+h.addEventListener('contextmenu',event=>event.preventDefault());
+h.addEventListener('pointerenter',()=>{hover=true;lit();});
+h.addEventListener('pointerleave',()=>{hover=false;lit();});
+h.addEventListener('dblclick',()=>api.send({type:'reset'}));
+h.addEventListener('keydown',event=>{
+ if(event.key==='Home'||event.key==='Enter'){event.preventDefault();api.send({type:'reset'});return;}
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();api.send({type:'key',key:event.key,big:event.shiftKey});}
+});
+api.onState(state=>{
+ document.body.classList.toggle('light',!state.dark);
+ document.body.setAttribute('data-side',state.side);
+ document.body.setAttribute('data-motion',state.motionScale?'on':'off');
+ if(state.shown)document.body.setAttribute('data-shown','');else document.body.removeAttribute('data-shown');
+ document.documentElement.style.setProperty('--motion-scale',String(state.motionScale||0));
+ if(state.accent)document.documentElement.style.setProperty('--accent',state.accent);
+ h.setAttribute('aria-orientation',state.side==='bottom'?'horizontal':'vertical');
+ if(state.label)h.setAttribute('aria-label',state.label);
+ if(Number.isFinite(state.value))h.setAttribute('aria-valuenow',String(state.value));
+});
+</script>
+</body>
+</html>

@@ -48,12 +48,12 @@ const outranks = (a: string, b: string) => { const x = specificity(a), y = speci
 test('the specificity helper agrees with the cases this file relies on', () => {
   assert.deepEqual(specificity('.a .b'), [0, 2, 0]);
   assert.deepEqual(specificity(':root:root:root .app.style-acira .ed-rail.acira-sidebar[data-addr-side]'), [0, 8, 0]);
-  assert.deepEqual(specificity(':root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode=\'block\'])) > .ed-rail.acira-sidebar'), [0, 7, 0]);
+  assert.deepEqual(specificity(':root:root:root .app.style-acira:where(:has(> .browser-root > .browser-shell[data-sbmode=\'block\']), :has(> .browser-root.addr-side)) > .ed-rail.acira-sidebar'), [0, 7, 0]);
   assert.deepEqual(specificity(':root:root[data-mode-switch=\'edge\']::view-transition-new(acira-toolbar)'), [0, 3, 1]);
 });
 
 test('the sidebar arrives with the room for the block already in its padding (no 0 -> 80 transition under the block)', () => {
-  const fallback = find(block, ':where(:has(> .browser-root > .browser-shell[data-sbmode=\'block\']))', '.ed-rail.acira-sidebar');
+  const fallback = find(block, ':where(:has(> .browser-root > .browser-shell[data-sbmode=\'block\']), :has(> .browser-root.addr-side))', '.ed-rail.acira-sidebar');
   assert.equal(fallback.length, 1);
   assert.equal(decl(fallback[0].body, 'padding-top'), '80px');
   assert.equal(decl(fallback[0].body, 'transition'), undefined, 'the fallback never starts a transition of its own');
@@ -69,6 +69,11 @@ test('the sidebar arrives with the room for the block already in its padding (no
 
 test('the block\'s own marker is on the header in the same render as the sidebar (the fallback depends on it)', () => {
   const app = read('../src/App.tsx');
+  // Seamless (guard c3): no Sidebar mode header there; the root\'s addr-side comes from the same addrBlock, in the same render, and addrBlock is true the moment an edge reveal or Cmd+Shift+E brings the sidebar
+  assert.ok(app.includes("${addrBlock ? ' addr-side' : ''}"), 'the root carries addr-side from addrBlock');
+  assert.ok(app.includes('<RootMirror name="addr" value={addrBlock ? \'side\' : null}/>'), 'and mirrors it on <html> in the same commit (the build asks [data-m-addr~=side], not :has() on .app)');
+  assert.match(read('../scripts/postcss-root-has.cjs'), /'>\.browser-root\.addr-side': "\[data-m-addr~='side'\]",/);
+  assert.match(read('../src/ui/addressInSidebar.ts'), /return input\.wanted && \(input\.sidebarOpen \|\| input\.edgeSide \|\| input\.asked\);/);
   assert.ok(app.includes('data-sbmode={sbHeader}'));
   assert.ok(app.includes('sbHeader = sidebarModeHeader(sbChrome, addrBlock)'), 'the marker comes from the same addrBlock the toolbar is drawn from, not from the store the block publishes later');
 });

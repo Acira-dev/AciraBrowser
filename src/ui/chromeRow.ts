@@ -5,7 +5,8 @@
  *  - Compact:  "Everything stays, in one slimmer row." The same controls, tabs included, in one 32px row.
  *  - Focus:    "Only what you need to read and navigate." Back, the address field (always visible and editable), the
  *              sidebar button when tabs are in the sidebar, the menu and the way out. Bookmarks bar, extensions and
- *              other toolbar buttons hide, and the tab strip shrinks to its favicon chips. */
+ *              other toolbar buttons hide. With tabs on top (the Shelf too: its tabs are on top as well) the strip becomes ONE chip, the
+ *              current tab, beside the tab-list button (Beta 14); with the tabs in the sidebar nothing of that changes. */
 export type ChromeMode = 'standard' | 'compact' | 'focus';
 export type ToolbarSetting = 'visible' | 'compact' | 'hidden';
 
@@ -21,8 +22,10 @@ export const compactRowHeight = 32;
 export interface ChromeRow {
   /** The horizontal tab strip row above the toolbar (never when tabs live in the sidebar). */
   tabStrip: boolean;
-  /** The favicon chips that replace the strip inside the one row (horizontal tabs only). */
+  /** The favicon chips that replace the strip inside the one row (Compact, horizontal tabs only). */
   miniTabs: boolean;
+  /** Focus with tabs on top: one chip for the current tab stands where the chips were, and the tab-list button (`tabOverview`) reaches every other tab. */
+  currentTab: boolean;
   /** The toolbar button that shows or hides the sidebar (tabs in the sidebar); Focus keeps it. */
   sidebarToggle: boolean;
   navigation: boolean;
@@ -44,11 +47,12 @@ export function chromeRow(mode: ChromeMode, sidebarTabs: boolean, toolbarHeight:
   const standard = mode === 'standard', focus = mode === 'focus';
   return {
     tabStrip: standard && !sidebarTabs,
-    miniTabs: !standard && !sidebarTabs,
+    miniTabs: !standard && !focus && !sidebarTabs,
+    currentTab: focus && !sidebarTabs,
     sidebarToggle: sidebarTabs,
     navigation: true,
     addressField: true,
-    tabOverview: standard ? sidebarTabs : !focus,
+    tabOverview: standard ? sidebarTabs : !focus || !sidebarTabs,
     extensions: !focus,
     optionalButtons: !focus,
     overflow: !focus,

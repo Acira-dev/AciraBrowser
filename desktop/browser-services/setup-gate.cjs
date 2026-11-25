@@ -24,6 +24,18 @@ function setupDue(userData, io = fs) {
   } catch { return false; }
 }
 
+/**
+ * Is setup over, as setup's own record says it? True when there is no record (an old profile, or none written yet), when it cannot be read, or when it says
+ * complete, skipped or upgraded; false only while a record exists and says none of those. The usage message waits for it (metrics.cjs `ready`): the Privacy
+ * step switches an unset choice on the moment it shows, long before the person has finished. Unlike `setupDue` this is read after the database exists.
+ */
+function setupRecordFinished(userData, io = fs) {
+  try {
+    const installation = JSON.parse(io.readFileSync(path.join(userData, 'setup', 'onboarding.json'), 'utf8')).installation;
+    return !installation || Boolean(installation.complete || installation.skipped || installation.upgraded);
+  } catch { return true; }
+}
+
 /** `after(job)` runs the job now when the gate is open and as soon as it opens otherwise; each job runs once. */
 function createSetupGate({ open = true } = {}) {
   let isOpen = open;
@@ -51,4 +63,4 @@ const setupGate = createSetupGate();
 /** Does this answer of the setup service say that setup is finished or skipped? (The same shape accounts/onboarding-flag.cjs reads.) */
 const setupFinished = (response) => !!(response && response.ok && response.progress && response.progress.complete === true);
 
-module.exports = { setupDue, createSetupGate, setupGate, setupFinished };
+module.exports = { setupDue, setupRecordFinished, createSetupGate, setupGate, setupFinished };

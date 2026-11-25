@@ -23,6 +23,10 @@ function watch(toolbar: Element) {
 function fitRow(toolbar: HTMLElement) {
   // Sidebar mode's morph moves the row's width for a few hundred ms: it is fitted once, when the morph has settled.
   if (document.documentElement.hasAttribute('data-sm-morph')) return;
+  // Sidebar + address: the row is the block in the sidebar, which is not fitted (address-in-sidebar.css: every button has its place there, and what is marked is SHOWN). A mark left from the bar must not
+  // travel into it: with the interface at 150 % the bar had hidden Home and the tab overview for want of room, and the block then showed both, Home under the sidebar button at Narrow and the tab overview
+  // where the window's buttons are (D82; after a switch and with Reduce motion alike). The block carries no marks.
+  if (toolbar.closest('.browser-root.addr-side')) { for (const node of toolbar.querySelectorAll(`[${FIT}]`)) node.removeAttribute(FIT); delete toolbar.dataset.fitKey; return; }
   const actions = toolbar.querySelector<HTMLElement>(':scope > .toolbar-actions');
   const leading = toolbar.querySelector<HTMLElement>(':scope > .acira-leading-controls');
   if (!actions || !leading || !toolbar.getClientRects().length) return;
@@ -34,22 +38,25 @@ function fitRow(toolbar: HTMLElement) {
   const gap = px(style.columnGap) || 12;
   const overview = leading.querySelector<HTMLElement>('.toolbar-tab-overview'), home = leading.querySelector<HTMLElement>('[data-toolbar-item="home"]');
   const children = [...actions.children] as HTMLElement[];
-  const candidates = children.filter(node => node.hasAttribute('data-toolbar-item') || node.classList.contains('native-extension-actions'));
+  const candidates = children.filter(node => node.hasAttribute('data-toolbar-item') || node.classList.contains('native-extension-actions') || node.classList.contains('toolbar-sites'));
   // What the answer depends on, plus how many controls are marked right now (a re-created button loses its mark).
-  const signature = () => [Math.round(toolbar.clientWidth * 10), Math.round(caption * 10), Math.round(reserve), grid ? 'g' : 'f', children.map(node => node.className + node.getAttribute('data-toolbar-item')).join(','), leading.querySelectorAll('button').length, overview ? 1 : 0, home ? 1 : 0, toolbar.style.getPropertyValue('--fit-lead') ? 1 : 0, toolbar.querySelectorAll('[data-fit-hidden]').length].join('|');
+  const signature = () => [Math.round(toolbar.clientWidth * 10), Math.round(caption * 10), Math.round(reserve), grid ? 'g' : 'f', children.map(node => node.className + node.getAttribute('data-toolbar-item') + (node.getAttribute('data-count') ?? '')).join(','), leading.querySelectorAll('button').length, overview ? 1 : 0, home ? 1 : 0, toolbar.style.getPropertyValue('--fit-lead') ? 1 : 0, toolbar.querySelectorAll('[data-fit-hidden]').length].join('|');
   if (toolbar.dataset.fitKey === signature()) return;
   // Measure the natural row: clear last answer, then see what the CSS shows and how wide it is.
   for (const node of [...candidates, ...(overview ? [overview] : []), ...(home ? [home] : [])]) node.removeAttribute(FIT);
+  // AF: the side panel sites' icons that left on the last pass come back for the measure too.
+  for (const node of toolbar.querySelectorAll(':scope > .toolbar-actions > .toolbar-sites > [data-fit-hidden]')) node.removeAttribute(FIT);
   const items: FitItem[] = [], fixed: number[] = [fitMetrics.control];
   const present = new Map<string, HTMLElement>();
   for (const node of candidates) {
     if (!shown(node)) continue;
-    const pinned = node.classList.contains('native-extension-actions');
-    const id = pinned ? 'pinned' : node.getAttribute('data-toolbar-item') || '';
+    const pinned = node.classList.contains('native-extension-actions'), sites = node.classList.contains('toolbar-sites');
+    const id = pinned ? 'pinned' : sites ? 'sites' : node.getAttribute('data-toolbar-item') || '';
     const width = pinned ? node.getBoundingClientRect().width : fitMetrics.control;
     if (!width) continue;
     if (!id || !hideOrder.includes(id)) { fixed.push(width); continue; }
-    items.push({ id, width }); present.set(id, node);
+    // The pinned extension buttons leave first, and for the field's comfort: they never take it below `addressComfort` (ui/toolbarFit.ts).
+    items.push({ id, width, ...(pinned ? { room: fitMetrics.addressComfort } : {}), ...(sites ? { room: fitMetrics.addressComfort, slots: { count: node.querySelectorAll(':scope > [data-slot]').length, plus: !!node.querySelector(':scope > .toolbar-site-add') } } : {}) }); present.set(id, node);
   }
   for (const node of children) {
     if (candidates.includes(node) || node.classList.contains('toolbar-menu-control') || !shown(node) || node.matches('.toolbar-overflow,.toolbar-overflow-profile')) continue;
@@ -61,12 +68,16 @@ function fitRow(toolbar: HTMLElement) {
   const leadingWidth = grid
     ? kids.reduce((sum, node) => sum + (node.classList.contains('acira-compact-tabs') ? fitMetrics.stripFolded : node.getBoundingClientRect().width), 0) + Math.max(0, kids.length - 1) * navGap
     : leading.getBoundingClientRect().width;
+  // Beta 14: with the one chip of Focus (tabs on top) the tab-list button is the only way to the other tabs, so a tight row folds the chip to its icon and shrinks the address field but never drops the button.
+  const single = !!leading.querySelector('.acira-compact-tabs[data-single]');
   const overviewShown = overview && shown(overview) && overview.getBoundingClientRect().width > 0;
   const homeShown = home && shown(home) && home.getBoundingClientRect().width > 0;
-  const result = fitToolbar({ inner, caption, gap, leading: leadingWidth, tabViewer: overviewShown ? overview!.getBoundingClientRect().width + navGap : 0, home: homeShown ? home!.getBoundingClientRect().width + 4 : 0, items, fixed });
+  const result = fitToolbar({ inner, caption, gap, leading: leadingWidth, tabViewer: overviewShown && !single ? overview!.getBoundingClientRect().width + navGap : 0, home: homeShown ? home!.getBoundingClientRect().width + 4 : 0, items, fixed });
   for (const id of result.hidden) present.get(id)?.setAttribute(FIT, '');
+  // AF: the icons beyond the ones that stay (the "+" first, then the last site) leave one at a time; with none left the whole group is hidden above.
+  if (result.sites && result.sites.visible > 0 && result.sites.visible < result.sites.count) for (const button of present.get('sites')?.querySelectorAll<HTMLElement>(':scope > [data-slot]') ?? []) if (Number(button.dataset.slot) >= result.sites.visible) button.setAttribute(FIT, '');
   if (result.hidden.includes('home')) home?.setAttribute(FIT, '');
-  if (result.dropTabViewer && overview) overview.setAttribute(FIT, '');
+  if (result.dropTabViewer && overview && !single) overview.setAttribute(FIT, '');
   // Compact and Focus: the left column never gets narrower than its controls, and keeps the tab strip at its usable minimum
   // while the address field can make that room (ui/toolbarFit.ts compactLeadFloor); otherwise the strip can fold to its +.
   const strip = kids.some(node => node.classList.contains('acira-compact-tabs'));
@@ -95,6 +106,10 @@ export function useToolbarOverflow(items: readonly { id: ToolbarItemId; label: s
         const hiddenIds: string[] = items.filter(item => { const node = row.querySelector(`:scope > [data-toolbar-item="${item.id}"]`); return !!node && !node.getClientRects().length; }).map(item => item.id);
         // Pinned extension buttons that left the row are reached through the Extensions entry, even when the toolbar has no Extensions button.
         if (row.dataset.fitPinned === '1' && !hiddenIds.includes('extensions')) hiddenIds.push('extensions');
+        // AF: the side panel sites whose icons the fit took out of the row are rows of the » menu, named by their places in the list, one token for all of them (`sp035`: the 1st, 4th and 6th): a site's own id is 41 characters, and the popup's
+        // context may be 120 in all (the "+" has no row: the palette and the menus pin).
+        const behind = [...row.querySelectorAll<HTMLElement>(':scope > .toolbar-sites > [data-site-id]')].filter(button => !button.getClientRects().length).map(button => button.dataset.slot).filter(slot => /^\d$/.test(slot ?? ''));
+        if (behind.length) hiddenIds.push(`sp${behind.join('')}`);
         // R4-26: Home lives with back and forward; when the fit moves it out, it joins this row's » menu.
         if (row.parentElement?.querySelector(':scope > .acira-leading-controls [data-toolbar-item="home"][data-fit-hidden]')) hiddenIds.unshift('home');
         const hidden = hiddenIds.join('.');

@@ -1,4 +1,4 @@
-import { groupForTab } from '../runtime/tabGroups';
+import { groupFolded,groupForTab } from '../runtime/tabGroups';
 import type { TabGroup,TabSession } from '../runtime/types';
 import type { SplitGroup } from '../runtime/splitLayout';
 import { splitPlacements,type SplitPlacement } from '../runtime/splitPlacement';
@@ -24,7 +24,8 @@ const chipWidth=(split:Pick<SplitGroup,'collapsed'|'tabIds'|'name'>)=>Math.min(1
 /** A group keeps its own stable disclosure header; hidden pages never impersonate it. A split lives where its home pane
  *  lives (docs/launch/SPLIT_IN_GROUPS.md): inside that tab's group (chip then its panes, counted in the group's tally, hidden
  *  when it collapses) or on its own. Its panes show only there: tabs follow where their split lives (28 Oct, no linked tabs). */
-export function tabStripEntries(tabs:readonly TabSession[],groups:TabGroup[],compact=false,splitGroups:readonly SplitGroup[]=[]):TabStripEntry[]{
+export function tabStripEntries(all:readonly TabSession[],groups:TabGroup[],compact=false,splitGroups:readonly SplitGroup[]=[]):TabStripEntry[]{
+ /* 14.1: the empty page a close can show (runtime/emptyPage.ts) is never a tab of the strip, the Mini rail or the Shelf */const tabs=all.some(tab=>tab.blank===true)?all.filter(tab=>tab.blank!==true):all;
  const ordered=[...tabs].sort((a,b)=>Number(b.pinned)-Number(a.pinned)),seen=new Set<string>(),counts=new Map<string,number>();
  const {paneOf,linkOf}=splitPlacements(splitGroups,tabs,groups),placed=new Set<string>();
  /** A split's chips: its own panes in pane order; a linked copy has a chip of its own besides the tab's chip in its group. */
@@ -33,6 +34,8 @@ export function tabStripEntries(tabs:readonly TabSession[],groups:TabGroup[],com
   return copy?{key:`link:${placement.split.id}:${member.id}`,tab:member,...(group?{group}:{}),splitGroup:placement.split,header:false,pinned:false,count:count??placement.panes.length,linked:true,homeGroup:groupForTab({tabGroups:groups},member)}:{key:member.id,tab:member,...(group?{group}:{}),splitGroup:placement.split,header:false,pinned:false,count:count??placement.panes.length};
  });
  for(const tab of ordered){const group=!tab.pinned&&groupForTab({tabGroups:groups},tab);if(group)counts.set(group.id,(counts.get(group.id)||0)+1);}
+ // Beta 14, AE: a parent's chip counts its whole family (its own tabs and its inner groups'), an inner group's only its own.
+ const family=new Map(counts);for(const inner of groups)if(inner.parentGroupId)family.set(inner.parentGroupId,(family.get(inner.parentGroupId)||0)+(counts.get(inner.id)||0));
  const entries:TabStripEntry[]=[];
  for(const tab of ordered){
   if(placed.has(tab.id))continue;
@@ -43,14 +46,20 @@ export function tabStripEntries(tabs:readonly TabSession[],groups:TabGroup[],com
    if(!splitGroup.collapsed)entries.push(...members);
    continue;
   }
-  const group=parent||(!tab.pinned?groupForTab({tabGroups:groups},tab):undefined),count=group?counts.get(group.id)??0:0;
-  if(group&&!seen.has(group.id)){
+  const group=parent||(!tab.pinned?groupForTab({tabGroups:groups},tab):undefined),count=group?(group.parentGroupId?counts:family).get(group.id)??0:0;
+  // A parent with no tab of its own is still there: its chip stands before its first inner group's (Beta 14, AE).
+  const outer=group?.parentGroupId?groups.find(item=>item.id===group.parentGroupId):undefined;
+  if(outer&&!seen.has(outer.id)){
+   seen.add(outer.id);const outerCount=family.get(outer.id)??0,outerWidth=Math.min(compact?160:196,Math.max(56,44+Math.ceil(outer.name.length*8)+String(outerCount).length*8+(outer.collapsed?14:0)));
+   entries.push({key:`group:${outer.id}`,tab,group:outer,header:true,pinned:false,fixedWidth:outerWidth,minWidth:Math.min(outerWidth,Math.max(56,44+String(outerCount).length*8+Math.min(Math.ceil(outer.name.length*8),40)+4)),count:outerCount});
+  }
+  if(group&&!outer?.collapsed&&!seen.has(group.id)){  // an inner group goes with its collapsed parent: no chip of its own then
    seen.add(group.id);
    // A collapsed group also shows its expand chevron, so it needs room beyond the name and count.
    const fixedWidth=Math.min(compact?160:196,Math.max(56,44+Math.ceil(group.name.length*8)+String(count).length*8+(group.collapsed?14:0)));
    entries.push({key:`group:${group.id}`,tab,group,header:true,pinned:false,fixedWidth,minWidth:Math.min(fixedWidth,Math.max(56,44+String(count).length*8+Math.min(Math.ceil(group.name.length*8),40)+4)),count});
   }
-  if(group?.collapsed)continue;
+  if(group&&groupFolded({tabGroups:groups},group))continue; // collapsed, or inside a collapsed group (Beta 14, AE)
   if(placement&&splitGroup&&parent){
    const members=paneEntries(placement,parent,count);
    entries.push({key:`split:${splitGroup.id}`,tab:members[0].tab,group:parent,splitGroup,header:true,nested:true,pinned:false,fixedWidth:chipWidth(splitGroup),minWidth:92,count:members.length});

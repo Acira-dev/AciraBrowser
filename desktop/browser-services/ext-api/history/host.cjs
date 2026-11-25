@@ -2,6 +2,12 @@
 // chrome.history.onVisited / onVisitRemoved (ext-api/history.cjs): the one hook is noteHistory(list), which main.cjs calls with the shared
 // browsing-history list whenever it changes (publishShared). The first call only learns the list; later calls report what is new or gone.
 // Visits of private windows are never in that list (they are not recorded), so nothing private can reach an extension from here.
+// chrome.history writes (ext-api/history.cjs) and chrome.browsingData (ext-api/browsing-data.cjs) reach Acira's own history list through ONE store hook, connected by main.cjs (history/app-host.cjs),
+// the way chrome.downloads reaches the downloads manager (downloads/host.cjs). Contract (every call names the ordinary profile the extension belongs to; a private profile has none):
+//   records(profileId)            -> that profile's visits [{id, url, title, time}] (ISO time), never another profile's
+//   remove(profileId, visitIds)   -> Promise: take those visits out of the list
+//   add(profileId, {url, title})  -> Promise: one visit now
+let store = null;
 let known = null;          // Map visit id -> {url, profile}
 let lastList = null;
 const listeners = new Set();
@@ -43,6 +49,9 @@ function emit(event) { for (const listener of [...listeners]) { try { listener(e
 
 module.exports = {
   noteHistory,
+  /** Connect the history store; returns a function that disconnects it. */
+  connectStore(next) { store = next; return () => { if (store === next) store = null; }; },
+  store: () => store,
   /** Listen for {type: 'visited', profileId, item} and {type: 'removed', profileId, removed}. Returns an unsubscribe function. */
   on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   emit,

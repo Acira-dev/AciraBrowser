@@ -21,7 +21,7 @@ function run(contents) {
     mainWindow: {isDestroyed: () => false, isMinimized: () => false, isVisible: () => true, contentView: {children: [view]}},
     windowClosing: false, state: {activeTabId: 't1', tabs: [{id: 't1', contentKind: 'web'}]}, pages: new Map([['t1', {view}]]),
     pageFullscreen: {isActive: () => false}, authActive: false, layout: {visible: true, views: [{tabId: 't1'}]}, pageStill: {}, newTabStill: {},
-    activePageRetry: null, woken: null, equalBounds: () => true, attachPageView() {}, chromeFloated: false, chromeView: {}, viewLog: null,
+    activePageRetry: null, woken: null, equalBounds: () => true, attachPageView() {}, chromeFloat: {floated: false}, chromeView: {}, viewLog: null,
   };
   const make = new Function(...Object.keys(env), `${source}\nreturn checkActivePage;`);
   const check = make(...Object.values(env));

@@ -25,6 +25,8 @@ function materialEase(progress) {
 // Transparent host margin around a floating popover: the popover shadow (contact edge, 0 8px 24px, 0 24px 64px -12px)
 // must fall off inside it, never against a hard host edge.
 const SHADOW={side:56,top:36,bottom:84};
+/* Beta 14: a dialog or a prompt leaves on its own vapor (src/ui/sheetFormation.ts dialogVapor.ms = 176; tests/dialog-vapor.test.cjs keeps the two equal): the host stays until it has finished, plus a beat. */
+const DIALOG_VAPOR_MS=176,DIALOG_EXIT_BEAT_MS=80,DIALOG_VAPOR_KINDS=['dialog','prompt','update'];
 const motionSpeed=layout=>Math.max(.1,Math.min(10,Number(layout.motionSpeed)||1));
 /** The finish's floating-surface tone as RRGGBB for native frost, or null to use the neutral light/dark tint. */
 const materialOpacity=layout=>Number.isFinite(layout.materialOpacity)?Math.max(.4,Math.min(1,layout.materialOpacity)):tokens.material.tint;
@@ -189,14 +191,28 @@ class MaterialHost {
     this.configId=config.id;
     // Menus retain their outside-click dismissal canvas. Passive surfaces must
     // leave the website interactive throughout their entire visible lifetime.
-    this.boundedInput=['toast','zoom','group-preview'].includes(config.kind);
-    const opening=!this.visible,wasClosing=!!this.hideTimer,fresh=opening&&!wasClosing||!this.floatingPopup;
+    const passive=['toast','zoom','group-preview'].includes(config.kind),wasPassive=this.boundedInput;
+    this.boundedInput=passive;
+    const opening=!this.visible,wasClosing=!!this.hideTimer;
+    // A passive surface is no panel: a popup taking over from one (Profiles from its chip while a toast is up), or one taking over from a popup,
+    // opens fresh in its own place. It morphed from the toast's box instead, flying in across the window (the team, Beta 14 on 13.10). Popup to popup
+    // still morphs.
+    const passiveSwitch=this.floatingPopup===true&&(this.visible||wasClosing)&&wasPassive!==undefined&&wasPassive!==passive;
+    // One popup handing over to another keeps the overlay page, and with it the tooltip text that page last gave macOS (below, putAway). The page is
+    // told the pointer left before the next popup is drawn, unless that one is passive (a group's preview closes when the pointer leaves it).
+    if(changedId&&(this.visible||wasClosing)&&!passive)this.forgetPointer();
+    const fresh=opening&&!wasClosing||!this.floatingPopup||passiveSwitch;
     clearTimeout(this.hideTimer);this.hideTimer=null;
     const p=clampBounds(config.bounds,size),x=Math.max(0,p.x-SHADOW.side);
     const centered=config.origin?.x===.5&&config.origin?.y===.5;
     const closedScale=tokens.motion.materialScale;this.closedScale=closedScale;
-    const belowAnchor=!centered&&config.anchor&&config.origin?.y===0;
-    const aboveAnchor=!centered&&config.anchor&&config.origin?.y===1;
+    // The host is cut at the anchor's edge so its transparent margin is never a hit target over the TOOLBAR control that opened it (there the cut hides under the chrome).
+    // A pop-up that hangs from a point inside the PAGE (Easy Files at an upload button, the page's own right-click menu at the pointer) floats a few pixels off that
+    // point: the same cut drew the shadow's straight edge on the page. Those keep their whole margin on every side, in both placements; over the page a click on
+    // that margin is the click-away it looks like.
+    const inPage=config.kind==='easy-files'||config.kind==='page-context';
+    const belowAnchor=!inPage&&!centered&&config.anchor&&config.origin?.y===0;
+    const aboveAnchor=!inPage&&!centered&&config.anchor&&config.origin?.y===1;
     // Transparent shadow margins must never become invisible hit targets over
     // the toolbar control that opened this panel (or its neighboring controls).
     // The panel itself is never cropped by that rule: a right-click menu opens at
@@ -248,11 +264,11 @@ class MaterialHost {
     // transparent canvas alive; PopupSurface is immediately hidden and inert
     // until this generation's material and content acknowledgements complete.
     this.container.setVisible(true);
-    this.visible=true;this.floatingPopup=true;this.reducedMotion=layout.reducedMotion;this.origin=originBounds(config,destination,size);
+    this.visible=true;this.floatingPopup=true;this.reducedMotion=layout.reducedMotion;this.origin=originBounds(config,destination,size);this.dialogVapor=DIALOG_VAPOR_KINDS.includes(config.kind);
     const generation=++this.generation;
     if(preparing){
       clearTimeout(this.opticalTimer);this.opticalTimer=null;
-      this.readyTarget=vapor?{...target,fadeBlur:true}:target;this.readyDuration=layout.reducedMotion?0:(opening?(vapor?tokens.motion.vapor:tokens.motion.material):tokens.motion.morph)/motionSpeed(layout);this.readyDestination=destination;this.readySize=size;
+      this.readyTarget=vapor?{...target,fadeBlur:true}:target;this.readyDuration=layout.reducedMotion?0:(opening||passiveSwitch?(vapor?tokens.motion.vapor:tokens.motion.material):tokens.motion.morph)/motionSpeed(layout);this.readyDestination=destination;this.readySize=size;
       this.raiseLayers();
     }else if(this.rendererMaterial||this.staticMaterial){
       clearTimeout(this.opticalTimer);this.opticalTimer=null;
@@ -307,6 +323,20 @@ class MaterialHost {
     return opening;
   }
 
+  /** The host is out of sight. Every popup is drawn by the same overlay page, and macOS keeps the tooltip text that page last gave
+   * until the page gives another, which it does only on a pointer move or a mouse leave. A popup left with the pointer resting on a
+   * titled button (Beta 14 the team report: "Show _.jpeg in folder" in the downloads popup) kept that text, and the next popup under the
+   * pointer (Profiles, from the chip) showed it stuck over itself. Once nothing of the popup is on screen, and whenever another popup
+   * takes over (placeFloating), the page is told the pointer has left it: its tooltip is cleared (and its hover state, which the
+   * next real move sets again). */
+  putAway() {
+    this.container.setVisible(false);
+    this.forgetPointer();
+  }
+  forgetPointer() {
+    try { const contents=this.content?.webContents; if(contents&&!contents.isDestroyed?.())contents.sendInputEvent({type:'mouseLeave',x:0,y:0}); } catch {}
+  }
+
   hide(layout) {
     if (!this.visible && !this.hideTimer) return;
     const immediate=this.pendingReadyId!=null || layout.reducedMotion || !this.bounds;
@@ -316,20 +346,20 @@ class MaterialHost {
     const generation = ++this.generation;
     if (immediate) {
       clearTimeout(this.opticalTimer);clearTimeout(this.hideTimer);this.opticalTimer=null;this.hideTimer=null;
-      this.opticalAlpha=0;this.opticalBlur=0;this.hideBackdrop();this.container.setVisible(false);return;
+      this.opticalAlpha=0;this.opticalBlur=0;this.hideBackdrop();this.putAway();return;
     }
     if (this.floatingPopup) {
       if(this.rendererMaterial||this.staticMaterial){
         clearTimeout(this.opticalTimer);this.opticalTimer=null;this.hideBackdrop();
-        const duration=this.staticMaterial?0:tokens.motion.vaporExit/motionSpeed(layout);
-        this.hideTimer=setTimeout(()=>{if(this.generation===generation){this.container.setVisible(false);this.hideTimer=null;}},duration+10);return;
+        const duration=this.staticMaterial?0:this.dialogVapor?DIALOG_VAPOR_MS/motionSpeed(layout)+DIALOG_EXIT_BEAT_MS:tokens.motion.vaporExit/motionSpeed(layout);
+        this.hideTimer=setTimeout(()=>{if(this.generation===generation){this.putAway();this.hideTimer=null;}},duration+10);return;
       }
       // Fade the native optical layer too; otherwise a blurred rectangle hangs
       // behind the already-faded DOM contents and then disappears in one frame.
       const duration=tokens.motion.vaporExit/motionSpeed(layout);
       // Text stays at its natural size while the separate material fades.
       this.animateFloating({...this.panelRect,alpha:0,blur:0,fadeBlur:true,scale:this.closedScale??tokens.motion.materialScale,scaleDelay:0},duration);
-      this.hideTimer=setTimeout(()=>{if(this.generation===generation){this.hideBackdrop();this.container.setVisible(false);this.hideTimer=null;}},duration+10);
+      this.hideTimer=setTimeout(()=>{if(this.generation===generation){this.hideBackdrop();this.putAway();this.hideTimer=null;}},duration+10);
       return;
     }
     const duration=tokens.motion.assistantExit,started=performance.now();
@@ -343,7 +373,7 @@ class MaterialHost {
       if(progress<1)this.opticalTimer=setTimeout(fade,16);
     };
     fade();
-    this.hideTimer=setTimeout(()=>{if(this.generation===generation){clearTimeout(this.opticalTimer);this.opticalTimer=null;this.container.setVisible(false);this.hideTimer=null;}},duration+10);
+    this.hideTimer=setTimeout(()=>{if(this.generation===generation){clearTimeout(this.opticalTimer);this.opticalTimer=null;this.putAway();this.hideTimer=null;}},duration+10);
   }
 }
 

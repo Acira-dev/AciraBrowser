@@ -1,0 +1,20 @@
+/* Beta 14: the member card (./MemberCard.tsx). The canvas is 2x the card (CARD_MARGIN in cardData.ts) so the card's shadow is drawn inside it, never cut (Rule 12): keep ancestors overflow:visible around a card. */
+.mc{position:relative;display:block;width:var(--mc-w,320px);aspect-ratio:2/3;flex:none;-webkit-user-select:none;user-select:none}
+.mc-still{position:absolute;inset:0;border-radius:calc(var(--mc-w,320px)*.059);background:#fff;box-shadow:0 1px 2px rgb(0 0 0/.10),0 14px 34px -10px rgb(0 0 0/.30);transition:opacity .2s cubic-bezier(.2,0,0,1)}
+.mc[data-rank=trusted] .mc-still{background:#1d3270}
+.mc[data-rank=insider] .mc-still{background:#09090b}
+.mc-canvas{position:absolute;left:-50%;top:-50%;width:200%;height:200%;opacity:0;pointer-events:none;transition:opacity .2s cubic-bezier(.2,0,0,1)}
+.mc[data-state=ready] .mc-canvas{opacity:1}
+.mc[data-state=ready] .mc-still{opacity:0}
+.app[data-reduced-motion=true] .mc-still,.app[data-reduced-motion=true] .mc-canvas{transition:none}
+@media (prefers-reduced-motion:reduce){.mc-still,.mc-canvas{transition:none}}
+
+/* "Your card": the popup (centred, 440 wide) */
+.app .mc-sheet{display:flex;flex-direction:column;gap:16px;box-sizing:border-box;padding:20px 20px 16px;min-width:0;contain:paint}   /* paint: the card's 2x canvas (its shadow) does not count as the popup's content height */
+.app .mc-stage{display:flex;justify-content:center;padding:24px 0 40px}
+.app .mc-sheet[data-compact] .mc-stage{padding:12px 0 24px}
+.app .mc-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.app .mc-actions .acira-button{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding-inline:8px}
+.app .mc-actions .mc-btn-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .mc-note{margin:0;min-height:20px;text-align:center;font:400 12px/20px var(--font-ui);color:var(--text-secondary)}
+.app .mc-note[data-bad]{color:var(--text-primary)}

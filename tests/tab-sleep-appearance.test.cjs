@@ -9,7 +9,7 @@ test('main.cjs: "inspecting" is DevTools or a debugger that is not Acira\'s own 
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   const start = main.indexOf('async protectedReason('), end = main.indexOf('async sleep(id)', start);
   assert.ok(start > 0 && end > start); const body = main.slice(start, end);
-  assert.ok(body.includes("if(wc.isDevToolsOpened()||pageDebugger.inUseByOthers(wc))return 'inspecting';"));
+  assert.ok(body.includes("if(wc.isDevToolsOpened()||devtoolsDock.protects(tab.id)||pageDebugger.inUseByOthers(wc))return 'inspecting';"));   // Beta 14: DevTools docked in the tab is hosted in a view of ours, where isDevToolsOpened() is false
   assert.ok(!/debugger\.isAttached\(\)/.test(body), 'a debugger that is merely attached no longer keeps a tab awake');
   // nothing else in the order of protections moved
   const order = ["return 'gone'", "return 'private'", "return 'pinned'", "return 'capturing'", "return 'busy'", "return 'internal'", "return 'audio'", "return 'recently-audible'", "return 'background-activity'", "return 'inspecting'", "return 'notifications'", "return 'download'", "return 'never-sleep'", "return 'inspection-failed'"];
@@ -27,10 +27,10 @@ test('13.5: a tab the person switched to while its sleep check was running is ne
   const sleep = require('../desktop/tab-sleep.cjs'); assert.equal(sleep.stayAwakeKind('visible'), 'screen');
 });
 
-test('the appearance module and tab sleep share one lease owner name, so "passive" means exactly the Website appearance session', () => {
+test('the appearance module and tab sleep share one lease owner name, so "passive" means exactly the Website appearance session and (Beta 14 AB) Easy Files\' file-chooser watch', () => {
   const appearance = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'site-appearance.cjs'), 'utf8');
   assert.match(appearance, /acquire\(wc, 'appearance'\)/);
-  const {PASSIVE} = require('../desktop/page-debugger.cjs'); assert.deepEqual(PASSIVE, ['appearance']);
+  const {PASSIVE} = require('../desktop/page-debugger.cjs'); assert.deepEqual(PASSIVE, ['appearance', 'easy-files']);   // the second is the file-chooser watch: tests/tab-sleep-easy-files.test.cjs proves it never keeps a tab awake
   for (const file of ['page-zoom-glide.cjs', 'secured-pages.cjs', 'capture-state.cjs']) assert.ok(!/acquire\([^)]*'appearance'\)/.test(fs.readFileSync(path.join(__dirname, '..', 'desktop', file), 'utf8')), file + ' does not borrow the passive name');
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.cjs'), 'utf8');
   assert.ok(main.includes("pageDebugger.acquire(wc,'sleep')"), 'the freeze lease is not passive: it is released before the check');

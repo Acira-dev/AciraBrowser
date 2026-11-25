@@ -18,8 +18,11 @@ export function homeRect(tab: MorphRect, area: { width: number; height: number }
 
 /** A morph is worth running when the panes on screen change and at least one page is on screen both before and after
  *  (the page that stays is what the eye follows): a tab opening in a split with the page you were on, Unsplit, a pane
- *  swap, a layout change, closing a pane. Switching to an unrelated tab is not one. */
+ *  swap, a layout change. Closing a pane or Unsplit is not one (D191: the page that stays is live at once). Switching to an unrelated tab is not one. */
 export function shouldMorph(before: readonly string[], after: readonly string[], layoutChanged = false) {
+  // D191 (reported 24 Nov, closing a pane): a pane that leaves is never morphed. The page that stays is live and takes the room at once; the glide drew its still grown to cover the
+  // wider box (x2 for a half pane taking the full width: a blurred, stretched page) and the leaver as a faded copy, until the live page came back.
+  if (after.length < before.length) return false;
   // The same panes in the same order: only a different layout moves them (a plain resize is the handles' own, live).
   if (before.length === after.length && before.every((id, index) => id === after[index])) return layoutChanged && after.length > 1;
   return before.some(id => after.includes(id)) && (before.length > 1 || after.length > 1);

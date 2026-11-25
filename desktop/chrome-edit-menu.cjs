@@ -10,7 +10,7 @@ function createChromeEditMenu({Menu,clipboard,getWindow,getTab,navigate}){
    items.push({label,enabled:!!edit[flag],click:()=>{if(valid())contents[method]();}});
   }
   const address=params.isEditable&&await contents.executeJavaScript("Boolean(document.activeElement?.matches('.address-bar input'))").catch(()=>false);
-  if(address)items.push({type:'separator'},{label:tm("chromeEditMenu.pasteAndGo"),click:()=>{if(!valid())return;const text=clipboard.readText().trim();if(text&&text.length<=4096)navigate(tab.id,text);}});
+  if(address)items.push({type:'separator'},{label:tm("chromeEditMenu.pasteAndGo"),click:async()=>{if(!valid())return;let text='';try{text=String(await clipboard.readText()||'').trim();}catch{return;}if(!valid())return;if(text&&text.length<=4096)navigate(tab.id,text);}});
   if(valid())Menu.buildFromTemplate(items).popup({window:getWindow(),frame,sourceType:params.menuSourceType});
  };
 }

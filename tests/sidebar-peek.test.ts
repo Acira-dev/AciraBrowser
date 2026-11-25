@@ -60,19 +60,20 @@ test('the keyboard is unaffected: opening and closing the sidebar works the same
   assert.equal(sidebarControl(s).open, true);
 });
 
-test('Settings: the row is in Tabs › Sidebar and, for Full, Compact and Focus, under Window view (Seamless keeps its own two), and search finds it', () => {
+// Beta 14.4: its home is the Sidebar page; it is always listed, and where it has nothing to decide it is off and its line says why.
+test('Settings: the row is on the Sidebar page only, always listed with its reason, and search finds it', () => {
   const rows = readFileSync(new URL('../src/features/settings/SidebarRows.tsx', import.meta.url), 'utf8');
   const settings = readFileSync(new URL('../src/features/BrowserSettings.tsx', import.meta.url), 'utf8');
+  const panel = readFileSync(new URL('../src/features/settings/panels/sidebar.tsx', import.meta.url), 'utf8');
   const row = rows.indexOf('id="sidebar-peek"');
   assert.ok(row > 0, 'the shared sidebar rows draw it');
-  assert.match(rows.slice(row - 500, row), /if \(!s\.verticalTabs\) return null;[\s\S]*if \(windowView !== 'seamless' && \(sidebarModeOn\(s\) \|\| hideToolbarOn\(s, windowView\)\)\) return null;\s*if \(windowView !== 'seamless'\)/, 'only with tabs in the sidebar, not in Seamless, not in Sidebar mode and not with the toolbar hidden (a closed sidebar always comes back from the edge there)');
-  assert.match(rows.slice(row, row + 400), /sidebarPeekOf\(s\)\[windowView\]/, 'it reads and writes the selected view\'s switch');
-  const view = settings.indexOf('id="window-view"'), edge = settings.indexOf('{windowView !== "seamless" && <SidebarEdgeRows');
-  assert.ok(view > 0 && edge > view, 'Appearance › Layout keeps it right after the Window view cards');
+  assert.match(rows.slice(row - 900, row), /!sidebarOn\(s\) \? 'settings\.reasonNoSidebar' : windowView === 'seamless' \? 'settings\.reasonPeekSeamless'\s*: \(sidebarModeOn\(s\) \|\| hideToolbarOn\(s, windowView\)\) \? 'settings\.reasonPeekAlways'/, 'tabs in the sidebar, not Seamless, not Sidebar mode, not with the toolbar hidden: otherwise off, with the reason');
+  assert.match(rows.slice(row, row + 600), /sidebarPeekOf\(s\)\[view\]/, 'it reads and writes the selected view\'s switch');
+  assert.ok(!settings.includes('<SidebarPeekRow') && panel.includes('<SidebarPeekRow'), 'one place for the switch: the Sidebar page');
   const context: SettingsContext = { customGlassColors: true, privateProfile: false, desktop: true, websiteOpen: true, appearanceChanged: true, toolbarChanged: true, newTabChanged: true, verticalTabs: true };
   const all = [...core, ...sidebarEntries], entry = all.find((item) => item.id === 'sidebar-peek');
-  assert.equal(entry?.title, 'Show the closed sidebar at the left edge');
-  assert.equal(entry?.section, 'Tabs'); assert.equal(entry?.group, 'Sidebar');
+  assert.equal(entry?.title, 'When the sidebar is closed, show it at the left edge', 'the title says its condition');
+  assert.equal(entry?.section, 'Sidebar'); assert.equal(entry?.group, 'Sidebar');
   for (const query of ['closed sidebar', 'sidebar opens by itself', 'peek sidebar', 'left edge'])
     assert.ok(searchSettings(all, query, context).slice(0, 3).some((hit) => hit.entry.id === 'sidebar-peek'), query);
 });

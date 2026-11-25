@@ -61,4 +61,10 @@ function windowMaterial({ release = os.release(), platform = process.platform, e
   return { build, family: windowsFamily(build), acrylic, material: acrylic ? 'acrylic' : 'none' };
 }
 
-module.exports = { BUILD, windowsBuild, currentBuild, overriddenBuild, supportsBackgroundMaterial, supportsDefaultAppsDeepLink, windowsFamily, windowMaterial };
+/** The operating system's version as Electron reports it, as text ("10.0.22631" on Windows, "26.0.1" on macOS; "" when unreadable). The one reader of it: the usage message reduces it
+ *  to a closed list (browser-services/usage-facts.cjs osVersionBucket), nothing else in the app parses it. */
+function systemVersion() {
+  try { return String(process.getSystemVersion()); } catch { return ''; }
+}
+
+module.exports = { BUILD, systemVersion, windowsBuild, currentBuild, overriddenBuild, supportsBackgroundMaterial, supportsDefaultAppsDeepLink, windowsFamily, windowMaterial };

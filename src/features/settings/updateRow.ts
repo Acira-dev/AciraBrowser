@@ -2,7 +2,7 @@ import type { UpdateStatus } from '../../runtime/nativeNetwork';
 import { currentLocale, t, translateText } from '../../i18n';
 
 /** What the updater adds when a download stops (desktop/browser-services/app-updater.cjs): interrupted = a known update with its size, cause = what kind of trouble, retry = failed tries in a row and when the next automatic try is (ms since the epoch, null when none is planned). */
-type Stopped = UpdateStatus & { interrupted?: boolean; cause?: 'network' | 'file' | 'other' | null; retry?: { failures: number; at: number | null } };
+type Stopped = UpdateStatus & { /** the failure came while Install now was under way: the file is downloaded, the setup could not be started */ installFailed?: boolean; interrupted?: boolean; cause?: 'network' | 'file' | 'locked' | 'other' | null; retry?: { failures: number; at: number | null } };
 const inMinutes = (at: number, now: number) => new Intl.NumberFormat(currentLocale(), { style: 'unit', unit: 'minute', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.max(1, Math.ceil((at - now) / 60000)));
 
 /** Settings > About's update row, apart from the panel so tests can read it: the line under the title and the row's button. */
@@ -24,6 +24,9 @@ export function describe(status?: Stopped, now: number = Date.now()) {
     // a download that stopped names its version and when Acira tries again; only a failed look is a failed check. The updater's own words stay in the note below the group.
     case 'error':
       if (status.cause === 'file') return t('updates.notVerified');
+      if (status.cause === 'locked') return t('updates.fileInUse'); // D149: a file in the updater's folder is held by Windows; a restart frees it
+      // D141: a setup that could not be started is not a download that failed (the file is whole): its own sentence, the same retry
+      if (status.installFailed && status.available) return status.retry?.at ? t('updates.installFailedRetry', { version: status.available, time: inMinutes(status.retry.at, now) }) : t('updates.installFailedLater', { version: status.available });
       if (status.interrupted && status.available) return status.retry?.at ? t('updates.downloadFailedRetry', { version: status.available, time: inMinutes(status.retry.at, now) }) : t('updates.downloadFailedLater', { version: status.available });
       return t('updates.checkFailed', { error: '' }).trim();
     default: return t('connection.torStatus.notChecked');

@@ -1,6 +1,6 @@
 'use strict';
-// 13.5: the regression guard's rows for the closed Sidebar-mode sidebar (c1 sidebarmode-full/compact, c3 "bare" reveal, c4 bare popups) drove a state that Sidebar + address no longer has in Full, Compact and
-// Focus (src/runtime/windowView.ts sidebarHeldOpen). They were retargeted, not dropped: this pins that, and that each retargeted row keeps a control that can fail (the rig is not blind).
+// 13.5 retargeted the guard's rows for the closed Sidebar-mode sidebar (c1 sidebarmode-full/compact, c3 "bare" reveal, c4 bare popups) because Sidebar + address held its sidebar open. Beta 14 dropped that rule: c3 and
+// c4 are measuring the bare state again (pinned below, with the controls that can fail); c1's two closed Full/Compact Sidebar-mode rows were not restored (c1 still passes without them).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -15,22 +15,26 @@ test('c1: no row asks for a closed Full/Compact Sidebar mode; the Sidebar-mode r
   assert.doesNotMatch(c1, /name: `sidebarmode-full-/);
   assert.doesNotMatch(c1, /name: `sidebarmode-compact-/);
   assert.match(c1, /name: `sidebarmode-seamless-\$\{look\}`, view: 'seamless', sbmode: true/);
-  assert.match(c1, /negative control saw 0 ghost frames with the fix undone: the rig is blind/);
+  assert.match(c1, /negative control saw 0 ghost frames with the stroke drawn and the fix undone: the rig is blind/);
 });
 
-test('c3: the held-open rows (Full, Compact, Focus) require that hover and Cmd+Shift+E change nothing, each with a Sidebar-only control that must run transitions; the Seamless control must make the baseline comparison fail', only, () => {
+test('c3: Sidebar-mode Full, Compact and Focus are measured as bare reveals again (Beta 14 F2 dropped the held-open rule), the Seamless rows stay, and both negative controls can fail', only, () => {
   const c3 = read('c3-bare-reveal.mjs');
-  assert.match(c3, /kind: 'held', view, look: 'dark', speed: 'premium'/);
-  assert.match(c3, /view transition\(s\) ran for a \$\{trig\} that must do nothing/);
-  assert.match(c3, /the \$\{trig\} ran no view transition in the Sidebar-only layout: the rig is blind/);
-  assert.match(c3, /negative control \(field named again\) was not caught by the Seamless comparison: the rig is blind/);
-  assert.match(c3, /filter\(b => \/view-transition layers\/\.test\(b\)\)/);
-  assert.doesNotMatch(c3, /for \(const view of views\) for \(const look of looks\) for \(const speed of speeds\) out\.push/, 'the old Full/Compact/Focus bare configs are gone');
+  assert.match(c3, /kind: 'bare', view, look: 'dark', speed: 'premium'/);
+  assert.doesNotMatch(c3, /measureHeld|kind: 'held'/, 'the 13.5 "must do nothing" rows are gone');
+  assert.match(c3, /kind: 'seamless', view: 'seamless'/);
+  assert.match(c3, /const missing = r => !r\.error && \(c\.view === 'seamless' \? r\.windows === 0 : r\.windows < 2\);/, 'a missing reveal or hide is measured once more, as before 13.5');
+  assert.match(c3, /negative control \(field named again\) saw 0 px past the sidebar edge: the rig is blind/, 'control 1: the Sidebar-mode Full reveal must show the block past the edge when the field is named again');
+  assert.match(c3, /negative control \(field named again\) was not caught by the Seamless comparison: the rig is blind/, 'control 2: the Seamless comparison must fail on the extra layer');
+  assert.match(c3, /if \(!bare\.pass\) problems\.push\('control \(Sidebar mode\): '/);
 });
 
-test('c4: the scene still asks for the sidebar away, and the check requires that Sidebar mode kept it docked (data-sbmode block) before judging the popups against the field', only, () => {
+test('c4: the check is the pre-13.5 one again: the scene\'s "sidebar away" is the bare state, judged against the docked reference and the field box', only, () => {
   const c4 = read('c4-bare-popups.mjs');
+  assert.match(c4, /await scene\(ctx, \{view, look, sbmode: true, open: true\}\);/, 'the docked reference run');
   assert.match(c4, /await scene\(ctx, \{view, look, sbmode: true, open: false\}\);/);
-  assert.match(c4, /if \(bare !== 'block'\) bad\.push\(`Sidebar mode did not keep the sidebar docked/);
-  assert.doesNotMatch(c4, /the scene is not the bare state/);
+  assert.match(c4, /if \(bare !== 'bare'\) bad\.push\(`the scene is not the bare state/);
+  assert.match(c4, /popup is \$\{row\.parity_dy\}px off the place it takes with the sidebar docked/);
+  assert.match(c4, /gap_min: -2, gap_max: 20, parity_dy: 4/);
+  assert.doesNotMatch(c4, /did not keep the sidebar docked/);
 });

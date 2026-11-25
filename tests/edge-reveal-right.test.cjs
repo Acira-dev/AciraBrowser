@@ -84,7 +84,7 @@ test('Windows, sidebar on the right: the caption corner shares its upper end wit
   assert.equal(below.top, false);
 });
 
-test('the right edge keeps the speed\'s waits: a rest shows after 90ms at Premium, 60ms at Fast and None, 400ms with a control under the pointer at Fast', () => {
+test('the right edge keeps the speed\'s waits: a rest shows after 60ms at every speed (Premium 90 before 14.2, D144), 300ms with a control under the pointer at Fast', () => {
   const win = { x: 0, y: 0, width: 1200, height: 800 };
   const revealAfter = (speed, extra = {}) => {
     let clock = 1000;
@@ -99,8 +99,9 @@ test('the right edge keeps the speed\'s waits: a rest shows after 90ms at Premiu
     return null;
   };
   const premium = revealAfter('premium'), fast = revealAfter('fast'), none = revealAfter('off'), engaged = revealAfter('fast', { engaged: true });
-  assert.ok(premium >= 88 && premium <= 110, 'Premium: about 90ms after the pointer is in the zone, got ' + premium);
-  assert.ok(fast >= 56 && fast <= 80 && fast < premium, 'Fast: about 60ms after the pointer is in the zone, got ' + fast);
+  assert.ok(premium >= 56 && premium <= 80, 'Premium: about 60ms after the pointer is in the zone (14.2, D144; was 90), got ' + premium);
+  assert.ok(fast >= 56 && fast <= 80, 'Fast: about 60ms after the pointer is in the zone, got ' + fast);
+  assert.equal(premium, fast, 'the side\'s plain wait is the same at every speed');
   assert.equal(none, fast, 'None shares the Fast waits');
-  assert.ok(engaged >= 396 && engaged <= 430, 'Fast with a control under the pointer still waits about 400ms, got ' + engaged);
+  assert.ok(engaged >= 296 && engaged <= 330, 'Fast with a control under the pointer still waits about 300ms (14.1, was 400), got ' + engaged);
 });

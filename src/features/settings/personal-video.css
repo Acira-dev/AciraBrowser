@@ -1,0 +1,6 @@
+/* 14.4 live wallpaper (PersonalVideoRow.tsx): the add button and the switch side by side; the kept video as its first frame, its name and Remove.
+   No line or border of its own (the rows around it draw the group's lines). */
+.nt-video-actions { display: flex; align-items: center; gap: 12px; }
+.nt-video-item { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 4px 0 12px; }
+.nt-video-still { flex: none; width: 96px; height: 54px; border-radius: 6px; object-fit: cover; background: var(--input-fill, rgb(127 127 127 / .1)); }
+.nt-video-name { flex: 1; min-width: 0; overflow: hidden; color: var(--st-text, inherit); font-size: 13px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }

@@ -88,7 +88,7 @@ function Bridges() {
       <Select label={t('connection.bridges.type')} value={kind} disabled={!status || busy} onChange={(next) => { setKind(next); setNote(''); }} options={(status?.types || []).map((type) => ({ value: type.id, label: BRIDGE_NAMES[type.id] || type.id }))} />
     </SettingRow>}
     {mode === 'custom' && <SettingRow id="tor-bridge-custom" title={t('connection.bridges.provide')} detail={t('connection.bridges.provideDetail')} stacked>
-      <textarea className="st-textarea tor-bridge-lines" aria-label={t('connection.bridges.provide')} aria-invalid={errors.length > 0 || undefined} spellCheck={false} autoCapitalize="off" autoCorrect="off" rows={4} placeholder={t('connection.bridges.placeholder')} value={text} disabled={busy} onChange={(event) => { setText(event.target.value); setNote(''); }} style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12, wordBreak: 'break-all' }} />
+      <textarea className="st-textarea tor-bridge-lines ab-input" aria-label={t('connection.bridges.provide')} aria-invalid={errors.length > 0 || undefined} spellCheck={false} autoCapitalize="off" autoCorrect="off" rows={4} placeholder={t('connection.bridges.placeholder')} value={text} disabled={busy} onChange={(event) => { setText(event.target.value); setNote(''); }} style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12, wordBreak: 'break-all' }} />
       {errors.length > 0 ? <ul className="st-error tor-bridge-errors" role="alert" style={{ margin: 0, paddingInlineStart: 18 }}>{errors.slice(0, 6).map((error) => <li key={`${error.line}-${error.code}`}>{lineProblem(error)}</li>)}</ul>
         : count > 0 && <p className="st-note st-note-inline" role="status">{t('connection.bridges.ready', { count })}</p>}
     </SettingRow>}
@@ -128,7 +128,7 @@ function MoatRequest({ onBridges }: { onBridges: (next: TorBridgesStatus) => voi
     <SettingRow id="tor-bridge-moat" title={t('connection.moat.title')} detail={t('connection.moat.detail')} stacked={Boolean(puzzle)}>
       {puzzle ? <div className="tor-moat" style={{ display: 'grid', gap: 10, width: '100%', maxWidth: 420 }}>
         <img src={`data:image/jpeg;base64,${puzzle.image}`} alt={t('connection.moat.puzzle')} style={{ width: '100%', maxWidth: 400, borderRadius: 8, background: '#fff' }} />
-        <input className="st-input" style={{ width: '100%', maxWidth: 400, boxSizing: 'border-box' }} aria-label={t('connection.moat.answer')} placeholder={t('connection.moat.answer')} value={answer} disabled={busy} autoCapitalize="off" autoCorrect="off" spellCheck={false} onChange={(event) => setAnswer(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submit(); }} />
+        <input className="st-input ab-input" style={{ width: '100%', maxWidth: 400, boxSizing: 'border-box' }} aria-label={t('connection.moat.answer')} placeholder={t('connection.moat.answer')} value={answer} disabled={busy} autoCapitalize="off" autoCorrect="off" spellCheck={false} onChange={(event) => setAnswer(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submit(); }} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="st-button primary" disabled={busy || !answer.trim()} onClick={submit}>{step === 'checking' ? t('connection.moat.checking') : t('connection.moat.submit')}</button>
           <button type="button" className="st-button" disabled={busy} onClick={() => ask(true)}>{t('connection.moat.another')}</button>

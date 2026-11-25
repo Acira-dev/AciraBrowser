@@ -27,6 +27,12 @@
 :root:root:root[data-sm-pin] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .acira-bookmarks-row { transform: translateY(var(--sm-final-y, 0px)) !important; }
 
 /* ---- playing ---- */
+/* The pieces that travel from the sidebar's rows back to the bar (the mode going off) start INSIDE the sidebar's column, which is outside the page column's own box. At rest the page column hides its overflow
+   (the block's layout, address-in-sidebar.css, lifts that while the block stands in the sidebar), so on the way back Back, Reload, Forward and the field were not drawn at all until they had crossed the sidebar's
+   edge: they vanished on the first frame and came out of the edge one by one (found 19 Nov on stepped frames; the old plan had it too). While a morph plays nothing clips them and the header is drawn over the
+   sidebar, exactly as it is while the block stands there. (min-height: see address-in-sidebar.css, the grid row must not grow to the page's full height.) */
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) > .browser-root { overflow: visible !important; min-height: 0; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) > .browser-root > .browser-shell { z-index: 40; }
 :root:root:root[data-sm-morph] .app:not([data-sm-ghost]) { --navigation-width: calc(var(--sm-col) * 1px) !important; }
 :root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root > .browser-shell { height: calc(var(--sm-hdr) * 1px) !important; overflow: visible !important; }
 :root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .acira-bookmarks-row { transform: translateY(calc(var(--sm-hdr) * 1px - var(--sm-bar-h, 0px))) !important; }
@@ -35,6 +41,18 @@
   border-radius: calc(var(--sm-rad) * 1px) !important;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--sm-ring-color, rgb(0 0 0 / .08)) calc(var(--sm-ring) * 100%), transparent) !important;
 }
+/* D108, the blend: out of Sidebar + address into Along the top (data-sm-span, set by the engine) the arriving bar's light reaches across the whole window from its first frame: its box is the one it
+   ends with, so its picture does not stretch as the column closes, and it lies across the leaving sidebar's head as the old bar's light lies across an opening sidebar on the way in. The old
+   sidebar's copy is cut where the bar stands (the engine, each frame), so the two lights never lie on each other. (--navigation-width is the column's width while the morph plays, above.) */
+:root:root:root[data-sm-morph][data-sm-span] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .st-amb-top { left: calc(var(--navigation-width) * -1) !important; }
+html[data-sidebar-side=right]:root:root[data-sm-morph][data-sm-span] .app:not([data-sm-ghost]) .browser-root > .browser-shell > .st-amb-top { left: -4px !important; right: calc(var(--navigation-width) * -1) !important; }
+/* D99b: a tab of the strip travels as itself, but the strip's own boxes are laid out with the page's column and ride with the sidebar's edge at the column's pace, not the tab's. The tabs' viewport (as wide
+   as its tabs, cut at its box) and the strip's container (cut at its own) therefore cut the tab: Tabs on top + sidebar -> Along the top, its first 48 px (the site's icon, the plate's round end) were
+   not drawn on the first frames, and from there to the end its far end was cut square, the close button with it (stepped frames and a real take of the merged build, 20 Nov; the old bar's copy, which
+   drew the tab a second time until D99, had covered the first of the two). While a morph plays a strip whose tabs all fit cuts nothing: there is nothing out of sight in it to show. A strip that
+   scrolls keeps its cut (its tabs out of sight must stay out of sight). */
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-shell > .acira-tab-row .tab-strip-container:not(.vertical):not([data-scrollable=true]) { overflow: visible !important; }
+:root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-shell > .acira-tab-row .tab-strip-container:not(.vertical):not([data-scrollable=true]) > .tab-strip-viewport { overflow: visible !important; clip-path: none !important; -webkit-mask-image: none !important; mask-image: none !important; }
 :root:root:root[data-sm-morph][data-sm-rail] .app:not([data-sm-ghost]) > .ed-rail { width: calc(var(--sm-rail-w) * 1px) !important; justify-self: start; translate: calc(var(--sm-rail-x) * 1px) 0; }
 :root:root:root[data-sm-morph] .app:not([data-sm-ghost]) .browser-root.addr-side > .browser-shell > .acira-persistent-toolbar { left: calc(var(--sm-addr-left) * 1px) !important; }
 /* The address field is one element: its box (position by translate, size here) is walked by the engine, its text and icons stay as they are. */

@@ -8,7 +8,7 @@ const CONTROL_COMMANDS:Record<string,string>={
  'New tab':'new-tab','Close tab':'close-tab','Enter Compact view':'focus-mode','Exit Compact view':'focus-mode','Enter Focus mode':'focus-mode','Exit Focus mode':'focus-mode','Turn Focus on':'focus-mode','Turn Focus off':'focus-mode',
  'Reload page':'reload','Switch profile':'switch-profile','Bookmark this page':'bookmark','Edit bookmark':'bookmark','Remove bookmark':'bookmark','All bookmarks':'bookmarks-manager','History':'history',
  'Rewind':'rewind','Split view':'split-view','Downloads':'downloads','Remove from split view':'split-close-pane','Close split view':'split-exit','Settings':'settings',
- 'Find on page':'find','Open tab switcher':'tab-viewer','All open tabs':'tab-viewer','All open tabs (Alt+T)':'tab-viewer','Back':'back','Forward':'forward','Home':'home','Acira menu':'menu',
+ 'Copy page address':'copy-url','Find on page':'find','Open tab switcher':'tab-viewer','All open tabs':'tab-viewer','All open tabs (Alt+T)':'tab-viewer','Back':'back','Forward':'forward','Home':'home','Acira menu':'menu',
 };
 
 /** Callers pass a control's label in English or already translated; the tables here are keyed by the English one. */
@@ -29,7 +29,7 @@ export function shortcutForControl(label:string):string|undefined {
   'Bookmark this page':'Ctrl + D','Edit bookmark':'Ctrl + D','Remove bookmark':'Ctrl + D',
   'All bookmarks':'Ctrl + Shift + O','History':'Ctrl + H','Rewind':'Ctrl + Shift + H','Split view':'Ctrl + Shift + S','Downloads':'Ctrl + J',
   'Remove from split view':'Ctrl + Shift + F4','Close split view':'Ctrl + Shift + 0',
-  'Settings':'Ctrl + ,','Close menu':'Esc','Find on page':'Ctrl + F',
+  'Settings':'Ctrl + ,','Close menu':'Esc','Find on page':'Ctrl + F','Copy page address':'Ctrl + Shift + C',
   'Open tab switcher':'Alt + T','All open tabs':'Alt + T','All open tabs (Alt+T)':'Alt + T',
  };
  const command=CONTROL_COMMANDS[label];

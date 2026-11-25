@@ -4,6 +4,8 @@ import { runtime } from "../../runtime/client";
 import { t, useT } from "../../i18n";
 import { PROFILE_PALETTE, isGreyProfileColor, profileColorFor } from "../../runtime/profileColors";
 import "./profile-manager.css";
+import "../../styles/rank-ring.css";
+import { useProfileRing } from "../../runtime/feedback";
 
 /** Profile colors, tuned to sit next to the Acira finishes. The first is the brand burgundy. */
 export const profileColors = PROFILE_PALETTE;
@@ -20,6 +22,8 @@ export function ProfileAvatar({
   picture,
   size = 28,
   className = "",
+  profileId,
+  showRank = false,
 }: {
   name: string;
   color: string;
@@ -27,10 +31,17 @@ export function ProfileAvatar({
   picture?: string | null;
   size?: number;
   className?: string;
+  /** Beta 14: the profile this picture is. */
+  profileId?: string;
+  /** Beta 14 (decided 14 Nov): the rank's ring is on the new tab page's picture ONLY. Only that picture passes this; the toolbar button, the sidebar row and every panel stay plain. When it is set and the
+   * profile is a contributor (Contributor rank and up) the picture wears its rank's ring; Early Member has none. */
+  showRank?: boolean;
 }) {
+  const contributorRank = useProfileRing(showRank ? profileId : undefined).rank;
   if (picture)
     return (
       <img
+        data-rank={contributorRank || undefined}
         className={`profile-avatar profile-photo ${className}`}
         src={picture}
         width={size}
@@ -44,6 +55,7 @@ export function ProfileAvatar({
   const fill = isGreyProfileColor(color) ? profileColorFor(name) : color;
   return (
     <span
+      data-rank={contributorRank || undefined}
       className={`profile-avatar ${className}`}
       aria-hidden="true"
       style={{

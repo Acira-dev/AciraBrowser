@@ -236,7 +236,7 @@ test('13.5: main wires it: no direct visual zoom limits call is left, the instan
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
   assert.doesNotMatch(main, /setVisualZoomLevelLimits/, 'every call goes through page-zoom-glide.cjs');
   assert.match(main, /clearMagnification\(wc,\{afterToggle:\(\)=>siteAppearance\.reassert\(wc\)\}\);wc\.setZoomFactor\(zoom\)/);
-  assert.equal((main.match(/ensureLimits\(wc\)/g) || []).length, 2, 'ensurePage and the link preview');
+  assert.equal((main.match(/ensureLimits\(wc\)/g) || []).length, 3, 'ensurePage, the link preview, and the side panel sites\' hand-over (side-panel-sites-main.cjs calls it for each page it makes: tests/side-panel-sites-wiring.test.cjs)');
   assert.match(main, /pageCreated:\(wc,source\)=>\{ensureLimits\(wc\);zoomGlide\.watch\(wc\);siteAppearance\.attach\(wc,source\);\}/);
   assert.match(main, /nativeTheme\.on\('updated',\(\)=>siteAppearance\.refreshAll\(\{force:true\}\)\)/);
 });
@@ -336,6 +336,6 @@ test('13.5 guard: a page is watched once, however often it is handed over; an un
 
 test('13.5 guard: main hands every page it makes to the glide (tab and link preview)', () => {
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../desktop/main.cjs'), 'utf8');
-  assert.equal((main.match(/zoomGlide\.watch\(wc\)/g) || []).length, 2, 'ensurePage and the link preview');
+  assert.equal((main.match(/zoomGlide\.watch\(wc\)/g) || []).length, 3, 'ensurePage, the link preview, and the side panel sites\' hand-over (side-panel-sites-main.cjs calls it for each page it makes: tests/side-panel-sites-wiring.test.cjs)');
   assert.match(main, /wc\.setZoomMode\('isolated'\);ensureLimits\(wc\);zoomGlide\.watch\(wc\);/);
 });

@@ -57,7 +57,7 @@ test('NewTabPage hands the box to the window\'s list: a combobox with the list\'
   assert.match(page, /suggest\?: NewTabSuggest/, 'optional: a page the window gives nothing behaves as before');
   assert.match(page, /onSuggestionKeyDown=\{suggest\?\.enabled \? suggest\.key : undefined\}/, 'role=combobox and the list keys (the field only becomes a combobox when it has them; with the setting off it stays the plain field it was)');
   assert.match(page, /suggestionOpen=\{Boolean\(suggest\?\.open\)\} suggestionListId=\{suggest\?\.listId\} activeSuggestionId=\{suggest\?\.activeId\}/);
-  assert.match(page, /onChange=\{value => \{ draft\.edit\(value\); const field = searchField\(value\); if \(field\) suggest\?\.change\(field\); \}\}/, 'each edit: typing, a paste, an input method');
+  assert.match(page, /onChange=\{\(value, inputType\) => \{ draft\.edit\(value\); const field = searchField\(value\); if \(field\) suggest\?\.change\(field, inputType\); \}\}/, 'each edit: typing, a paste, an input method');
   assert.match(page, /onFocus=\{\(\) => \{ draft\.onFocus\(\); const field = searchField\(draft\.value\); if \(field\) suggest\?\.focus\(field\); \}\}/);
   assert.match(page, /onBlur=\{event => \{ draft\.onBlur\(\); suggest\?\.blur\(event\); \}\}/);
   assert.match(page, /onViewBlur=\{suggest\?\.viewBlur\}/, 'the list\'s grace after only the view lost the keyboard');
@@ -72,7 +72,7 @@ test('the window serves the box with the address field\'s own list: ranking, nat
   assert.match(app, /const suggestionText = ntpOn \? ntpField\.text : address;/);
   assert.match(app, /const suggestionsWanted = addressFocused \|\| overlay === 'suggestions' \|\| ntpOn;/);
   assert.match(app, /rankAddressSuggestions\(suggestionText, state, 8, \{ commands: addressCommands \}\)/, 'the one ranking');
-  assert.match(app, /overlay === 'suggestions' \? \{ query: suggestionText\.slice\(0, 4096\), index: activeSuggestionIndex \}/, 'the native overlay ranks the text of the field in use');
+  assert.match(app, /overlay === 'suggestions' \? \{ query: suggestionText\.slice\(0, 4096\), index: activeSuggestionIndex[,}]/, 'the native overlay ranks the text of the field in use');
   assert.match(app, /query=\{suggestionText\}/, 'the local list too');
   assert.match(app, /native, overlay, popupSerial, contextId, address, addressAnchor, suggestionText, activeSuggestionIndex/, 'the layout that sends the list re-runs as the box\'s text changes');
   assert.match(app, /key: event => suggestionKey\(event, true\)/, 'the box\'s keys are the address field\'s keys');
@@ -92,8 +92,8 @@ test('a chosen row, a command or an answer lets go of the box as it lets go of t
 
 test('the setting that turns address suggestions off keeps the box as it was: nothing registers, nothing opens', () => {
   assert.match(app, /const ntpOn = newTabFieldServed\(ntpField, tab\.id, s\.addressSuggestions\);/);
-  assert.match(app, /focus: field => \{ if \(!s\.addressSuggestions\) return; setNtpField\(field\);/);
-  assert.match(app, /change: field => \{ if \(!s\.addressSuggestions\) return; setNtpField\(field\);/);
+  assert.match(app, /focus: field => \{ if \(!s\.addressSuggestions\) return;/);
+  assert.match(app, /change: \(field, inputType\) => \{ if \(!s\.addressSuggestions\) return;/);
   assert.match(app, /useLayoutEffect\(\(\) => \{ if \(overlay === 'suggestions' && !s\.addressSuggestions\)\s+setOverlay\(null\); \}/, 'turning it off while a list is up closes it');
 });
 
@@ -103,4 +103,16 @@ test('private and Tor New Tab pages have no search box, so the list never reache
   assert.match(frost, /return <PrivateNewTab/);
   assert.doesNotMatch(read('../src/features/newtab/PrivateNewTab.tsx'), /AddressField|<input/);
   assert.doesNotMatch(read('../src/features/tor/TorNewTab.tsx'), /AddressField|suggest/i);
+});
+
+test('Beta 14 W: the search engine\'s suggestions follow the field in use; text kept in the box or pasted into it is never sent', async () => {
+  const { mayAskFor } = await import('../src/runtime/searchSuggest');
+  assert.equal(mayAskFor('weather in rome', { pasted: false }), true, 'typed text may be asked (when the person turned engine suggestions on)');
+  assert.equal(mayAskFor('weather in rome', { pasted: true }), false, 'a paste never');
+  assert.match(app, /text: suggestionText, pasted: suggestionPasted, hold:/, 'the engine is asked about the field the list serves');
+  assert.match(app, /const suggestionPasted = ntpOn \? ntpPasted\.current : addressPasted\.current;/);
+  assert.match(app, /withEngineSuggestions\(rankAddressSuggestions\(suggestionText, state, 8, \{ commands: addressCommands \}\), engineSuggest, currentSearchProviders\(state\), suggestionText\)/);
+  assert.match(app, /focus: field => \{ if \(!s\.addressSuggestions\) return; ntpPasted\.current = field\.text\.trim\(\) !== '';/, 'a draft kept from before is not typed in this session: never sent until the box is emptied');
+  assert.match(app, /change: \(field, inputType\) => \{ if \(!s\.addressSuggestions\) return; if \(inputType && \/\^insertFrom\(Paste\|Drop\|Yank\)\/\.test\(inputType\)\) ntpPasted\.current = true; else if \(!field\.text\.trim\(\)\) ntpPasted\.current = false;/);
+  assert.match(app, /input\.selectionEnd === input\.value\.length && selected\.title !== suggestionText/, 'Right at the end of an engine\'s suggestion completes the box\'s own text');
 });

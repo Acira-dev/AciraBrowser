@@ -6,15 +6,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { notePopupOpened } from '../src/features/metrics/noteUse';
 
-test('opening the protection popup notes one protectionPanel use; other popups note nothing', async () => {
+test('opening the protection popup notes one protectionPanel use; the bookmarks, tabs and switcher popups note their own; other popups note nothing', async () => {
   const calls: unknown[] = [];
   const previous = (globalThis as { window?: unknown }).window;
   (globalThis as { window?: unknown }).window = { acira: { service: async (request: unknown) => { calls.push(request); return {}; } } };
   try {
     notePopupOpened('protection');
-    for (const kind of ['menu', 'tabs', 'security', 'toString', '__proto__', 'constructor']) notePopupOpened(kind);
+    for (const kind of ['menu', 'security', 'downloads', 'toString', '__proto__', 'constructor']) notePopupOpened(kind);
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(calls, [{ type: 'metrics.note', name: 'protectionPanel' }]);
+    // Beta 14 (B8): three more popups are one use of their own feature each: the All Bookmarks pop-up, the tab viewer (Alt+T) and the Ctrl+Tab switcher
+    calls.length = 0;
+    for (const kind of ['bookmarks', 'tabs', 'switcher']) notePopupOpened(kind);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [{ type: 'metrics.note', name: 'bookmarksPopupOpens' }, { type: 'metrics.note', name: 'tabViewerOpens' }, { type: 'metrics.note', name: 'tabSwitcherOpens' }]);
   } finally { (globalThis as { window?: unknown }).window = previous; }
 });
 

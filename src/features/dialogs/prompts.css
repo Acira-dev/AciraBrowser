@@ -1,0 +1,33 @@
+/* Beta 14 (toolbar prompts): what the sample's `.g.pr` family (dlg-glass.css) gives the two prompts that have rows, a well or a second line: "Open an app?" and "Save / Update password?". Everything else they use
+   (card, tokens, buttons, the accent tile, the checkbox) is dialogs.css. Every selector ends in a class (tests/costly-selectors). */
+/* the sample's `.s` inside a prompt (`.g.pr .s`: 12.5 / 17, the quiet ink, 1 px under the title as the markup sets it) and `.k` with the same 1 px */
+.dlg .dlg-sub-s{font-size:12.5px;line-height:17px;margin-top:1px;color:var(--ink-2);text-wrap:pretty}
+.dlg .dlg-sub-1{margin-top:1px}
+/* an icon inside a tile is 1.5 (the sample's `.tile .ico`), a bare one 1.6 */
+.dlg-tile-accent .dlg-ico{stroke-width:1.5}
+.dlg-mt12{margin-top:12px}
+/* the well with two rows: radius 10, a hairline between the rows inset 12 on both sides (`.g.pr .well`, `.g.pr .li`) */
+.dlg-well{border-radius:10px;background:var(--well);box-shadow:inset 0 0 0 1px var(--well-line)}
+.dlg-li{display:flex;align-items:center;gap:12px;min-height:36px;padding:4px 12px;position:relative}
+.dlg-li+.dlg-li::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--hair)}
+.dlg-ld{font-size:12px;line-height:16px;color:var(--ink-3)}
+.dlg-ld-label{width:68px}
+.dlg-lt{font-size:13px;line-height:18px;color:var(--ink)}
+.dlg-grow{flex:1;min-width:0}
+.dlg-dots{letter-spacing:.12em}
+/* the icon inside a row keeps the row's ink, not the button's (the sample's `.li .ico`) */
+.dlg-li .dlg-ico{color:var(--ink-2)}
+.dlg-eye{width:28px;height:28px;margin-inline-end:-6px;flex:none}
+/* not in the sample (it shows short text): a long address, username or password wraps inside the row (never cut, never over the edge), and a row of controls that does not fit (a long translation) wraps
+   to a second line with the buttons on the right. Right to left: the card's own x sits at the inline end, and the eye's margin follows. */
+.dlg-wrap{overflow-wrap:anywhere}
+.dlg-foot-wrap{flex-wrap:wrap}
+.dlg-pad-p .dlg-x{right:auto;inset-inline-end:10px}
+.dlg .dlg-end{margin-left:0;margin-inline-start:auto}
+/* not in the sample (it has no disabled state): a button that waits for something reads dimmed */
+.dlg-btn:disabled{opacity:.55}
+/* the release notes inside the Update ready prompt start on the title's text edge (the tile's 36 and the 12 gap), in the card's quiet ink */
+.update-prompt .update-pop-notes{padding:0;padding-inline-start:48px;font-size:12.5px;line-height:17px;color:var(--ink-2)}
+/* a card inside a pop-up kind that pads its content like a menu (the Update ready prompt): no padding, the card is the whole surface */
+:root:root:root .browser-popup.dlg-flush{padding:0}
+:root:root:root .browser-popup.dlg-flush .popup-body-content{padding:0}

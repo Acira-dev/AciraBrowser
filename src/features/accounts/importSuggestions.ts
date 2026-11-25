@@ -6,7 +6,7 @@ export const SUGGESTION_CATEGORIES = ["favorites", "spaces", "bookmarks", "histo
 export type SuggestionCategory = (typeof SUGGESTION_CATEGORIES)[number];
 
 /** Browsers people move from most, first; anything else keeps the order discovery found it in, after these. */
-export const SUGGESTION_BROWSER_ORDER = ["Chrome", "Edge", "Brave", "Arc", "Firefox", "Zen", "Helium"] as const;
+export const SUGGESTION_BROWSER_ORDER = ["Chrome", "Edge", "Brave", "Opera", "Opera GX", "Vivaldi", "Arc", "Safari", "Firefox", "Zen", "LibreWolf", "Waterfox", "Floorp", "Helium"] as const;
 
 export interface SuggestionSource {
   id: string;
@@ -14,6 +14,8 @@ export interface SuggestionSource {
   name: string;
   email?: string;
   available: Partial<Record<string, boolean | undefined>>;
+  /** Safari: its data needs the person's permission first, so it is only ever imported from Settings › Import & export. */
+  permission?: "needed";
 }
 
 export interface SuggestionContext {
@@ -28,7 +30,8 @@ export interface SuggestionContext {
 }
 
 /** The categories a suggestion copies for this source; empty when it has nothing Acira can bring in. */
-export function suggestionCategories(source: Pick<SuggestionSource, "available">): SuggestionCategory[] {
+export function suggestionCategories(source: Pick<SuggestionSource, "available" | "permission">): SuggestionCategory[] {
+  if (source.permission === "needed") return [];
   return SUGGESTION_CATEGORIES.filter((category) => source.available?.[category] === true);
 }
 

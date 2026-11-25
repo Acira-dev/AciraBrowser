@@ -6,7 +6,9 @@ function createOverlayGuard(){let dismissed=0;return{get dismissed(){return dism
  * menu or popup, left pointing at a place that moved or at a window the person turned away from. Not the toast stack (founder, 2 Nov):
  * the interface places it on the page's bottom edge again after the change, and it is there when the person comes back. A click in
  * the page still dismisses it, an error still waits to be read. */
-function closesOnWindowChange(overlay){return Boolean(overlay)&&overlay.kind!=='toast';}
+/* Beta 14: the one-time Welcome stays through all of it (it fills the window and frosts it: a resize, losing focus, a minimise or a move is not a click away); the interface re-lays the frame (window - 24 by window - 120) a frame after a resize. */
+/* 17 Nov (the laptop on -3): a question card (dialog, prompt) waits for the person's answer: turning to another window and back, a move, a minimise or a resize is not one (the old card view stayed too). The interface re-lays it a frame after a resize. */
+function closesOnWindowChange(overlay){return Boolean(overlay)&&overlay.kind!=='toast'&&overlay.kind!=='welcome'&&overlay.kind!=='dialog'&&overlay.kind!=='prompt';}
 /** The page menu on screen that was opened over this very page (`menu.owner` is the page's webContents id): what that page loading another document, crashing or going away closes.
  * Not another page's menu, not any other popup. Pure. */
 function pageMenuOf(overlay,menu,owner){return Boolean(overlay&&overlay.kind==='page-context'&&menu&&owner!==undefined&&menu.owner===owner);}
@@ -19,6 +21,8 @@ function unionBounds(rectangles){if(!rectangles.length)return null;const left=Ma
  * is closed by then. Without this the resize's own layout dropped the stack, main retired its id without a word, and no toast showed again. */
 function keptThroughResize(overlay,dx,dy){
  if(!overlay||closesOnWindowChange(overlay))return undefined;
+ if(overlay.kind==='dialog'||overlay.kind==='prompt')return overlay;/* a question card stays where it is until the interface sends its new place, a frame later */
+ if(overlay.kind==='welcome'){/* its frame is window - 24 by window - 120, centred: it grows and shrinks with the window until the interface sends its exact place */const grow=box=>box&&{...box,y:Math.round(box.y+dy/2),width:Math.max(0,box.width+dx),height:Math.max(0,box.height+dy)};return {...overlay,bounds:grow(overlay.bounds)};}
  const shift=box=>box&&{...box,x:Math.round(box.x+dx/2),y:Math.round(box.y+dy)};
  return {...overlay,bounds:shift(overlay.bounds),...(overlay.anchor?{anchor:shift(overlay.anchor)}:{})};
 }

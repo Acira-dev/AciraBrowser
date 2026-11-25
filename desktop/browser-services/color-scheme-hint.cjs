@@ -101,7 +101,7 @@ function attach(session, pipeline, { remember: keep = false, dark = () => requir
   const state = { origins: null, file: folder ? path.join(folder, FILE) : null, timer: null, dark };
   states.set(session, state);
   pipeline.useSendHeaders(details => sendHeaders(state, details));
-  pipeline.useHeaders(details => headersReceived(state, details));
+  pipeline.useHeaders(details => headersReceived(state, details), {scope: 'documents'});   // top-level pages' Accept-CH only
   guard(session);
   return state;
 }

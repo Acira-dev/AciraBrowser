@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { messageText } from "../metrics/messageText";
 import { createPortal } from "react-dom";
 import type {
   DefaultBrowserStatus,
@@ -24,7 +25,6 @@ import { VpnList } from "./VpnList";
 import { SheetBack } from "./SheetBack";
 import { SetupToastHost } from "./setupToast";
 import { USAGE_COPY, useMetrics } from "../metrics/useMetrics";
-import {UsageOffNotice} from '../metrics/UsageOffNotice';
 import {UsageSent} from '../metrics/UsageSent';
 import {SettingInfo} from '../../components/SettingInfo';
 import { currentLocale, t, useT, type MessageId } from "../../i18n";
@@ -66,6 +66,8 @@ export type StepContext = {
   artwork: CatalogArtwork;
   reducedMotion: boolean;
   importer: Importer;
+  /** "Coming from another computer? Bring your Acira over.": opens the receive flow in the setup card (transfer/ReceiveFlow, variant `setup`). */
+  onBringOver?: () => void;
 };
 
 /* ── Rows: Apple inset-grouped (radius 6, 4% fill, no border, inset separators), one selection signal ── */
@@ -206,15 +208,19 @@ export type ImportRun = {
   /** Profiles made for the second and later chosen sources (Undo removes them while they are still untouched). */
   profileIds: string[];
   rows: Record<string, SourceRun>;
+  /** The browser whose Spaces or workspaces came over first, so the toast uses its word (Arc: Spaces; others: workspaces). */
+  spacesBrowser?: string;
 };
 export type Importer = ReturnType<typeof useImporter>;
 
 /** What an import category is called, as a label ("Bookmarks") and inside a sentence ("Importing bookmarks…"). */
 const shortLabel = (category: ImportCategory) => t(`setup.kind.${category}` as MessageId);
 const lowerLabel = (category: ImportCategory) => t(`setup.kindLower.${category}` as MessageId);
-const countLine = (counts: SourceRun["counts"]) =>
+/** Arc calls them Spaces; Opera, Vivaldi and Zen have workspaces. */
+export const spacesCount = (count: number, browser?: string) => t(browser && browser !== "Arc" ? "setup.count.workspaces" : "setup.count.spaces", { count });
+const countLine = (counts: SourceRun["counts"], browser?: string) =>
   [
-    counts.spaces !== undefined ? t("setup.count.spaces", { count: counts.spaces }) : "",
+    counts.spaces !== undefined ? spacesCount(counts.spaces, browser) : "",
     counts.favorites !== undefined ? t("setup.count.favorites", { count: counts.favorites }) : "",
     counts.bookmarks !== undefined ? t("setup.count.bookmarks", { count: counts.bookmarks }) : "",
     counts.history !== undefined ? t("setup.count.historyItems", { count: counts.history }) : "",
@@ -338,6 +344,7 @@ export function useImporter({
           break;
         }
         if (item?.status === "imported") row.counts[category] = item.count || 0;
+        if (category === "spaces" && item?.status === "imported") next.spacesBrowser ||= source.browser;
         // The sidebar's Favorites are the UI's to add; Undo takes the same ones away (importedFavorites.ts).
         if (category === "favorites" && response.batch) row.counts.favorites = applyImportedFavorites(response.batch.profileId, response.batch.id, response.batch.favorites);
         if (response.batch?.id) {
@@ -402,7 +409,7 @@ export function useImporter({
 
 /** Every profile found, in one list that scrolls inside the card (no pages). Arrow keys move between rows, Space chooses;
  *  the list's edges fade only while more is hidden past them. */
-export function ImportStep({ importer, busy, progress, reducedMotion }: StepContext) {
+export function ImportStep({ importer, busy, progress, reducedMotion, onBringOver }: StepContext) {
   useT();
   const { sources, run, previews, icons, selected } = importer;
   const [passwordsOpen, setPasswordsOpen] = useState(false);
@@ -438,13 +445,13 @@ export function ImportStep({ importer, busy, progress, reducedMotion }: StepCont
     if (row) {
       if (row.failed) return row.failed;
       if (!row.finished) return row.current ? t("setup.import.importingKind", { what: lowerLabel(row.current) }) : t("setup.import.making");
-      return t("setup.import.done", { what: countLine(row.counts) || t("setup.import.nothingNew") });
+      return t("setup.import.done", { what: countLine(row.counts, item.browser) || t("setup.import.nothingNew") });
     }
     const who = item.email || (item.accountName && item.accountName !== item.name ? item.accountName : "");
     const preview = previews[item.id];
     const holds = preview
       ? [
-          preview.spaces ? t("setup.count.spaces", { count: preview.spaces }) : "",
+          preview.spaces ? spacesCount(preview.spaces, item.browser) : "",
           preview.favorites ? t("setup.count.favorites", { count: preview.favorites }) : "",
           // Arc's bookmarks are its pinned tabs, already counted with their Spaces.
           !preview.spaces && typeof preview.bookmarks === "number" ? t("setup.count.bookmarks", { count: preview.bookmarks }) : "",
@@ -549,6 +556,8 @@ export function ImportStep({ importer, busy, progress, reducedMotion }: StepCont
         {importer.notice || (progress?.importInterrupted ? t("setup.import.interrupted") + " " : "")}
         {!importer.notice && <FileLink disabled={busy || importer.running} onClick={() => void importer.fromFile()} />}
       </p>
+      {/* The other way in: an Acira on another computer sends everything, look included (spec 4.4, picture 19). */}
+      {onBringOver && <BringOverLink disabled={busy || importer.running} onClick={onBringOver} />}
       {/* Said plainly, here, because it was a surprise: a browser's sign-ins stay in that browser. */}
       <p className="fr-note fr-note-signins">
         <SignInsNote browser={fromBrowsers.length ? listOf(fromBrowsers) : t("setup.import.otherBrowser")} disabled={busy || importer.running} onPasswords={() => setPasswordsOpen(true)} />
@@ -584,6 +593,18 @@ function FileLink({ disabled, onClick }: { disabled: boolean; onClick: () => voi
       </button>
       {after}
     </>
+  );
+}
+
+/** "Coming from another computer? Bring your Acira over.": a note line under the file link, the link opens the receive flow. */
+export function BringOverLink({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <p className="fr-note fr-note-bringover">
+      {t("transfer.setup.linkLead")}{" "}
+      <button className="fr-link fr-inline-link fr-inline-link-end" type="button" disabled={disabled} onClick={onClick}>
+        {t("transfer.setup.linkAction")}
+      </button>
+    </p>
   );
 }
 
@@ -873,8 +894,9 @@ export function PrivacyStep({ preferences, setPreferences, act, busy }: StepCont
   const [sheet, setSheet] = useState(false);
   const applied = connection.status?.choice?.mode === "fixed_servers" ? connection.status.choice.server : null;
   const detected = connection.detected;
-  // Only this new-setup surface initializes an unset choice. Saved choices, including opt-outs, are preserved atomically.
-  const usage = useMetrics({newSetup: true});
+  // Beta 14 (brief section C): setup no longer asks. Sharing is on by default and starts when setup finishes (Onboarding.tsx countInstall); this step only tells the person
+  // what is sent, shows the exact message (a placeholder id until then), and says where the switch is. The status is read, never set, here.
+  const usage = useMetrics();
   const [payload, setPayload] = useState(false);
   return (
     <div className="fr-privacy-controls">
@@ -932,21 +954,13 @@ export function PrivacyStep({ preferences, setPreferences, act, busy }: StepCont
       {sheet && <ConnectionSheet connection={connection} onClose={() => setSheet(false)} />}
       {/* Setup's status pop-up lives here, not in the sheet: "Added" outlives the sheet it was raised from. */}
       <SetupToastHost />
-      {/* Protections and data sharing are two groups, so what keeps you safe never reads as something you hand over. */}
-      <div className="fr-group">
-        {/* The visible default and explanation are part of new setup; an existing choice always wins. */}
-        <ToggleRow
-          title={t("setup.usage.title")}
-          detail={usage.problem || t('usage.setupExplanation')}
-          info={t('setup.usage.info')}
-          checked={usage.enabled}
-          disabled={busy || !usage.ready || usage.busy}
-          onChange={(value) => void usage.set(value)}
-          link={{ label: t("setup.usage.link"), onClick: () => setPayload(true) }}
-        />
-      </div>
+      {/* One quiet line, not a row with a switch: a notice, not a question. "Change in Settings" is a hint here (Settings sits behind setup). */}
+      <p className="fr-note fr-usage-line">
+        {t("setup.usage.line")}{" "}
+        <button type="button" className="fr-link fr-inline-link" disabled={busy || !usage.ready} onClick={() => setPayload(true)}>{t("setup.usage.see")}</button>
+        {" · "}{t("setup.usage.change")}
+      </p>
       {payload && <UsageSheet usage={usage} onClose={() => setPayload(false)} />}
-      {usage.offNotice && <UsageOffNotice onClose={usage.dismissOffNotice}/>}
     </div>
   );
 }
@@ -998,14 +1012,14 @@ function UsageSheet({ usage, onClose }: { usage: ReturnType<typeof useMetrics>; 
       <SheetBack onClick={onClose} />
       <div className="fr-sheet-main fr-sheet-usage">
         <h2 id="fr-usage-title" className="fr-sheet-title">
-          {USAGE_COPY.title}
+          {t("usage.page.title")}
         </h2>
-        <p className="fr-sheet-line">{USAGE_COPY.ask}</p>
-        {usage.status && <UsageSent status={usage.status} />}
+        <p className="fr-sheet-line">{t("usage.page.intro")}</p>
+        {/* Beta 14: the exact message (a placeholder id until setup is finished), one field to a line, then what is never sent. Each field's line is on acira://usage. */}
         <pre className="fr-group fr-sheet-code" aria-label={t("setup.usage.codeLabel")}>
-          {usage.payloadText}
+          {messageText(usage.status?.payload)}
         </pre>
-        <p className="fr-note fr-sheet-note">{USAGE_COPY.detail}</p>
+        <p className="fr-note fr-sheet-note">{t("usage.sent.never")}</p>
       </div>
       <footer className="fr-foot">
         <div className="fr-foot-start" />

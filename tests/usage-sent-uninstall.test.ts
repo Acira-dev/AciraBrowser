@@ -46,7 +46,7 @@ test('the uninstall sentence names every field the message carries, system inclu
   const words: Record<string, string> = { installId: 'same random number', appVersion: 'Acira version', platform: 'system', arch: 'processor type', day: 'date' };
   assert.deepEqual(Object.keys(windows).filter(key => key !== 'schema' && key !== 'event').sort(), Object.keys(words).sort());
   for (const [field, word] of Object.entries(words)) assert.ok(t('usage.sent.uninstall').includes(word), `${field}: "${word}"`);
-  assert.equal(t('usage.sent.uninstall'), 'Only if this is on when you remove Acira from this PC: one last message with the same random number, Acira version, system, processor type and date. Never when Acira updates itself.');
+  assert.equal(t('usage.sent.uninstall'), 'Only if this is on when you remove Acira from this PC: one last message with the same random number, Acira version, system, processor type and date. Never when Acira updates itself. If you pick a reason on the card that asks why, that one word is added.', 'Beta 14 adds the sentence about the optional reason');
   // each language uses its rating line's own word for "system" (Russian declines it: система / системой)
   const system: Record<LocaleCode, string> = { en: 'system', es: 'sistema', fr: 'système', de: 'System', 'pt-BR': 'sistema', it: 'sistema', ja: 'システム', 'zh-CN': '系统', ar: 'النظام', tr: 'sistem', ru: 'систем', ko: '시스템', hi: 'सिस्टम' };
   assert.deepEqual(Object.keys(system).sort(), LOCALES.map(locale => locale.code).sort());

@@ -48,6 +48,14 @@ function centredBounds({page,window:win}){
 }
 
 const validIndex=(value,count)=>Number.isInteger(value)&&value>=0&&value<count;
+/** Beta 14 (toolbar prompts): the prompts that have a layout of their own in the card (src/features/dialogs/PromptCards.tsx); a permission uses the generic prompt layout. */
+const PROMPTS=new Set(['perm','extapp','savepw']);
+const clip=(value,max)=>typeof value==='string'?value.slice(0,max):'';
+/** What a Save / Update password prompt shows: the username, the dots, the words. The password is never in here: `site.reveal` (a function) hands it to main's answer to the eye, nothing else. */
+function savePrompt(site){
+ const save=site.save&&typeof site.save==='object'?site.save:null;
+ return save?{username:clip(save.username,512),masked:clip(save.masked,24),noUsername:clip(save.noUsername,80),usernameLabel:clip(save.usernameLabel,40),passwordLabel:clip(save.passwordLabel,40),showLabel:clip(save.showLabel,80),hideLabel:clip(save.hideLabel,80),reveal:typeof site.reveal==='function'}:undefined;
+}
 /** A message-box description (buttons, ids, popover, site) as the card shows it. Windows order: the actions first, the safe
  * (cancel) answer last. A prompt (popover) accents its first action; a dialog accents its default, and a warning's other
  * actions read as destructive (red text). Pure. */
@@ -70,16 +78,23 @@ function describe(options){
   buttons:order.map(index=>({index,label:buttons[index].slice(0,60),role:index===accent?'primary':(centred&&warning&&index!==cancelId?'danger':'secondary')})),
   count:buttons.length,cancelId,defaultId,
   variant,strip:variant?sites(site.strip):null,list:variant?sites(site.list):null,
-  top:Boolean(variant&&site.top),caption:variant?String(site.caption||'').slice(0,200):'',body:variant?String(site.body||'').slice(0,400):'',
+  top:Boolean(site.top),caption:variant?String(site.caption||'').slice(0,200):'',body:variant?String(site.body||'').slice(0,400):'',
+  /* Beta 14: which glyph the prompt wears: a badge on the site's icon (camera, microphone, pin, bell) or an accent tile with its own glyph (external, key, refresh) */
+  fields:Array.isArray(site.fields)?site.fields.filter(f=>f&&(f.name==='username'||f.name==='password')).slice(0,2).map(f=>({name:f.name,label:String(f.label||'').slice(0,80),value:String(f.value??'').slice(0,1024),secret:f.name==='password'})):null,warns:Array.isArray(site.warns)?site.warns.map(w=>String(w).slice(0,300)).slice(0,3):null,
+  tone:site.tone==='danger'?'danger':'',says:Boolean(site.says),quiet:typeof site.quiet==='string'?site.quiet.slice(0,300):'',badge:typeof site.badge==='string'?site.badge.slice(0,20):'',icon:typeof site.icon==='string'?site.icon.slice(0,20):'',
+  /* Beta 14 (toolbar prompts): which prompt this is (the card draws the sample's layout for it), where it hangs (the site-identity icon, or the right end of the address field), and what a Save / Update password prompt offers */
+  ...(PROMPTS.has(site.prompt)?{prompt:site.prompt}:{}),place:site.place==='field'?'field':'identity',save:savePrompt(site),
   app:Boolean(site.app),urgent:Boolean(site.urgent),manage:Boolean(site.manage),private:Boolean(site.private),input:site.input&&typeof site.input==='object'?{value:String(site.input.value??'').slice(0,10000)}:null,
   mute:site.mute&&typeof site.mute.label==='string'?{label:site.mute.label.slice(0,120)}:null,
  };
 }
 
 const INTERNAL_PAGES=require('./internal-pages.json');
+/** The exit of a dialog or prompt popup (the vapor out, 300 ms) and the 80 ms the sample waits before its view goes. */
+const OVERLAY_EXIT_MS=380,OVERLAY_WAIT_MS=2500;/* the interface's card must be on the layout by then, or the old card view asks instead (below) */
 
 function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=>null,anchorOf=async()=>null,pageBounds=()=>null,blocked=()=>false,
- isDark=()=>true,speed=()=>'premium',reducedMotion=()=>false,uiScale=()=>1,faviconFor=()=>'',appIcon=()=>'',say=id=>id,onManage=()=>{},restoreFocus=()=>{},enabled=()=>true}){
+ isDark=()=>true,speed=()=>'premium',reducedMotion=()=>false,uiScale=()=>1,faviconFor=()=>'',appIcon=()=>'',say=id=>id,onManage=()=>{},restoreFocus=()=>{},enabled=()=>true,overlay=null}){
  const queue=[];
  let view=null,ready=null,readyDone=null,sizeWaiter=null,shown=null,showing=null,exiting=null,exitTimer=null,idleTimer=null,nextTimer=null,gen=0,counter=0,scale=1,disposed=false,visible=false,crashes=[];
 
@@ -138,8 +153,10 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   const entry=shown;if(!entry||message.token!==entry.token)return;
   if(message.type==='manage'){finish(entry,{response:entry.cancelId,dismissed:true});try{onManage(entry);}catch{}return;}
   if(message.type==='answer'&&validIndex(message.index,entry.count))finish(entry,{response:message.index,dismissed:message.dismissed===true&&message.index===entry.cancelId,
-   ...(typeof message.value==='string'&&entry.input?{value:message.value}:{}),...(typeof message.muted==='boolean'?{muted:message.muted}:{})});
+   ...(typeof message.value==='string'&&entry.input?{value:message.value}:{}),...(typeof message.muted==='boolean'?{muted:message.muted}:{}),...(message.values&&typeof message.values==='object'&&entry.fields?{values:fieldValues(message.values)}:{})});
  }
+ /** What a sign-in card sends back: only its two fields, only text. */
+ const fieldValues=values=>({username:typeof values.username==='string'?values.username.slice(0,1024):'',password:typeof values.password==='string'?values.password.slice(0,4096):''});
 
  const stale=entry=>{
   if(entry.done)return true;
@@ -157,17 +174,26 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
 
  /** The card answers and goes: the caller continues at once, the card takes its exit, then the next request is shown. */
  function finish(entry,result){
-  if(entry.done)return;entry.done=true;
+  if(entry.done)return;entry.done=true;clearTimeout(entry.overlayWatch);
   const at=queue.indexOf(entry);if(at>=0)queue.splice(at,1);
   const wasShown=shown===entry;
   if(wasShown){shown=null;gen++;hideCard(entry);}
   if(showing===entry){showing=null;gen++;}
-  entry.resolve({response:result.response,checkboxChecked:false,...(result.dismissed?{dismissed:true}:{}),...(result.value===undefined?{}:{value:result.value}),...(result.muted===undefined?{}:{muted:result.muted})});
+  entry.resolve({response:result.response,checkboxChecked:false,...(result.dismissed?{dismissed:true}:{}),...(result.value===undefined?{}:{value:result.value}),...(result.muted===undefined?{}:{muted:result.muted}),...(result.values===undefined?{}:{values:result.values})});
   if(wasShown&&(entry.mode==='centered'||view?.webContents?.isFocused?.()))try{restoreFocus();}catch{}
   clearTimeout(nextTimer);nextTimer=setTimeout(pump,wasShown?(reducedMotion()?0:EXIT_MS)+NEXT_MS:0);
  }
  /** Takes the card off screen with its exit; the request stays queued when it is only waiting (tab, popup), or is already answered. */
  function hideCard(entry){
+  /* Beta 14: a question drawn by the interface's dialog or prompt popup (desktop/site-prompt.cjs presentOverlay): main takes it back with an event, and the next one waits for the exit. */
+  if(entry&&entry.overlayShown){
+   entry.overlayShown=false;visible=false;
+   try{overlay.hide(entry.token);}catch{}
+   clearTimeout(exitTimer);
+   const ms=reducedMotion()||motion()==='off'?0:OVERLAY_EXIT_MS;
+   exiting=new Promise(resolve=>{exitTimer=setTimeout(()=>{exiting=null;resolve();},ms);});
+   return;
+  }
   if(!live()||!visible)return;
   visible=false;const hidden=view;
   send({type:'leave',token:entry?.token,origin:entry?.origin});
@@ -189,7 +215,43 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   if(want&&!shown&&!showing)void present(want);
  }
 
- async function present(entry){
+ /** Beta 14: the same question, drawn by the app's own pop-up system (a centred dialog or a prompt under the address field) as frosted glass, instead of this module's own card view. The queue,
+  *  who may show now, stale requests and the answer are all the same: only the drawing moved to the interface (src/features/dialogs/DialogLayer.tsx). */
+ async function presentOverlay(entry){
+  const token=++gen;showing=entry;
+  const still=()=>token===gen&&showing===entry&&!entry.done&&!disposed;
+  if(exiting)await exiting;
+  if(!still())return;
+  if(!windowSize()){showing=null;return;}
+  const icons=group=>group?{items:group.hosts.map(host=>pageItem(host,entry)||({host,favicon:iconOf(entry,host)})),more:group.more,moreLabel:group.more?say('closeGuard.andMore',{count:group.more}):''}:null;
+  const spec={token:entry.token,mode:entry.mode,host:entry.host,message:entry.message,detail:entry.detail,favicon:entry.favicon(),variant:entry.variant,top:entry.top,caption:entry.caption,body:entry.body,strip:icons(entry.strip),list:icons(entry.list),
+   buttons:entry.buttons,cancelIndex:entry.cancelId,defaultIndex:entry.defaultId,input:entry.input,mute:entry.mute,manage:entry.manage?{label:say('sitePrompt.manage')}:null,note:entry.private?say('sitePrompt.privateNote'):'',closeLabel:say('toast.dismiss'),
+   tone:entry.tone,says:entry.says,quiet:entry.quiet,badge:entry.badge,icon:entry.icon,fields:entry.fields,warns:entry.warns,...(entry.prompt?{prompt:entry.prompt}:{}),place:entry.place,...(entry.save?{save:entry.save}:{}),...(entry.app||entry.variant==='close'?{appIcon:appIcon()||''}:{})};
+  entry.overlayShown=true;entry.overlaySpec=spec;visible=true;shown=entry;showing=null;
+  clearTimeout(exitTimer);
+  overlay.show(entry.token,spec);
+  watchOverlay(entry);
+ }
+ /** 17 Nov 2026 (the laptop: a question that never showed on a visible Windows window, the close silently blocked): a question is the one thing that may never be lost. The interface draws the card on the layer main
+  *  places from the layout it sends; if after OVERLAY_WAIT_MS main has not got that layer (`overlay.placed()`: the layout names a dialog or prompt), whatever the reason, the interface is told to forget it and the old card
+  *  view (13.10's, still shipped) asks instead. The answer, the queue and the stale rules are the same either way. */
+ function watchOverlay(entry){
+  if(typeof overlay.placed!=='function')return;
+  clearTimeout(entry.overlayWatch);
+  entry.overlayWatch=setTimeout(()=>{
+   entry.overlayWatch=null;
+   if(disposed||entry.done||shown!==entry||!entry.overlayShown)return;
+   let placed=true;try{placed=Boolean(overlay.placed());}catch{placed=true;}
+   if(placed)return;
+   try{console.warn('The question "'+String(entry.message).slice(0,60)+'" did not reach the screen in '+OVERLAY_WAIT_MS+' ms; asking with the card view.');}catch{}
+   try{overlay.hide(entry.token);}catch{}
+   entry.overlayShown=false;entry.overlaySpec=null;entry.legacy=true;shown=null;showing=null;visible=false;
+   void present(entry,true);
+  },OVERLAY_WAIT_MS);
+  entry.overlayWatch.unref?.();
+ }
+ async function present(entry,viaView=false){
+  if(!viaView&&overlay&&overlay.enabled())return presentOverlay(entry);
   const token=++gen;showing=entry;
   const still=()=>token===gen&&showing===entry&&!entry.done&&!disposed;
   if(!await prepare()){if(still())finish(entry,{response:entry.cancelId,dismissed:true});return;}
@@ -227,15 +289,20 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   * mute, stale}. Resolves {response, dismissed?, value?, muted?}; "dismissed" means nobody decided (Esc, ×, the page went away). */
  function showMessageBox(options){
   const d=describe(options),site=(options&&options.site)||{};
-  return new Promise(resolve=>{
+  let made=null;
+  const asked=new Promise(resolve=>{
    if(disposed){resolve({response:d.cancelId,checkboxChecked:false,dismissed:true});return;}
    let tabId=null;try{tabId=site.contents?tabOf(site.contents):null;}catch{}
-   const entry={...d,token:++counter,resolve,contents:site.contents||null,tabId,stale:typeof site.stale==='function'?site.stale:null,done:false,
+   const entry={...d,token:++counter,resolve,contents:site.contents||null,tabId,stale:typeof site.stale==='function'?site.stale:null,reveal:typeof site.reveal==='function'?site.reveal:null,done:false,
     favicon:()=>{try{if(d.app)return appIcon()||'';return d.host&&!d.private?faviconFor(d.host)||'':'';}catch{return '';}}};
+   made=entry;
    queue.push(entry);
    prune();
    if(!entry.done)pump();
   });
+  /* Beta 14: the one who asked can take the question back (a Save password prompt whose page moved on): it is answered "dismissed", as if the person closed it. */
+  asked.cancel=()=>{if(made&&!made.done)finish(made,{response:made.cancelId,dismissed:true});};
+  return asked;
  }
 
  /** The window's layout changed: stay above the page views, follow the icon, or step aside for a popup that took the space. */
@@ -260,9 +327,26 @@ function createSitePrompt({WebContentsView,getWindow,getState=()=>null,tabOf=()=
   for(const entry of [...queue])finish(entry,{response:entry.cancelId,dismissed:true});
   destroy();
  }
+ /** The interface's answer (the `dialog-answer` command): {id, index, dismissed, text, muted}. */
+ function answer(message){if(message&&typeof message==='object')onMessage({type:'answer',token:message.id,index:message.index,dismissed:message.dismissed===true,...(typeof message.text==='string'?{value:message.text}:{}),...(typeof message.muted==='boolean'?{muted:message.muted}:{}),...(message.values&&typeof message.values==='object'?{values:message.values}:{})});}
+ /** The eye of a Save password prompt (the `dialog-reveal` command): main hands the password to the overlay page that draws that prompt, and to nothing else. */
+ function reveal(message){
+  const entry=shown;if(!message||typeof message!=='object'||!entry||entry.done||message.id!==entry.token||!entry.reveal||!overlay||typeof overlay.reveal!=='function')return;
+  let text='';try{text=String(entry.reveal()??'');}catch{return;}
+  overlay.reveal(entry.token,text.slice(0,1024));
+ }
  /** A window that was closing and was kept open (a page asked to stay) takes questions again. */
+ /** The interface's card layer was closed (a click outside it, the native Escape, another popup taking its place): the question was not answered by a button, but it is answered: "nobody decided", the cancel button, as Esc
+  *  on the card does. Left pending it would sit in main for ever with nothing on screen (and the 2.5 s watch would bring the old card view back by itself, 17 Nov). No-op when the question was answered, or the layer was never its own. */
+ function layerClosed(){const entry=shown;if(!entry||entry.done||!entry.overlayShown)return;finish(entry,{response:entry.cancelId,dismissed:true});}
  const reopen=()=>{disposed=false;};
- return {showMessageBox,relayout,onState,dispose,reopen,pump,enabled,
+ /** Is the interface's own card in use (not the old card view)? Main routes the native-dialog questions only then. */
+ const overlayEnabled=()=>Boolean(overlay&&overlay.enabled());
+ /** The interface was reloaded (or came back after a crash) while a question was up: it forgot it, so say it again. */
+ const resend=()=>{if(shown&&shown.overlayShown&&shown.overlaySpec&&overlay&&overlay.enabled())try{overlay.show(shown.token,shown.overlaySpec);}catch{}};
+ /** A question drawn by the interface's card is waiting for its answer (main.cjs: only a dismissal closes its layer; nothing hovers over it). */
+ const questionUp=()=>Boolean(shown&&!shown.done&&shown.overlayShown);
+ return {showMessageBox,relayout,onState,dispose,reopen,pump,enabled,answer,reveal,overlayEnabled,resend,layerClosed,questionUp,
   get visible(){return visible;},get pending(){return queue.length;},get current(){return shown?{token:shown.token,host:shown.host,mode:shown.mode}:null;},get webContents(){return view?.webContents||null;}};
 }
 module.exports={createSitePrompt,anchoredPlacement,centredBounds,describe,readIdentityRect,IDENTITY_SCRIPT,WIDTH,GAP,EDGE,MARGIN,EXIT_MS,NEXT_MS};

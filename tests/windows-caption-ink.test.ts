@@ -48,7 +48,18 @@ test('Windows caption buttons: custom tints and a sidebar or toolbar colour of t
 
 test('the window sends these caption colours: App builds its layout with windowCaptionColors and main passes them to titleBarOverlay', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8'), main = readFileSync(new URL('../desktop/main.cjs', import.meta.url), 'utf8');
-  assert.match(app, /\.\.\.windowCaptionColors\(finish, colors as Record<string, string>, \{ standardTop: effectiveMode === 'standard' && !sideTabs, sidebarFrame, toolbarOwn \}\)/);
+  assert.match(app, /\.\.\.windowCaptionColors\(finish, colors as Record<string, string>, \{ standardTop: effectiveMode === 'standard' && !sideTabs && !\(shelfOn\(state\.settings\) && workspaceOpen\), sidebarFrame, toolbarOwn, sidebarRight: state\.settings\.sidebarSide === 'right' \}\)/);   // 14.3: the field's colour at the top right differs by side (ui/windowCaption.ts)
   assert.doesNotMatch(app, /captionForeground:/, 'one place decides the caption colours');
   assert.match(main, /symbolColor:layout\.captionForeground\|\|/);
+});
+
+test('Windows caption buttons while the Shelf is open: they sit on the flat strip, which is the frame colour itself (no recessed band behind them), in every finish', () => {
+  const open = {standardTop: false, sidebarFrame: true, toolbarOwn: false}, closedOrTop = {standardTop: true, sidebarFrame: false, toolbarOwn: false};
+  const finishes = [...appearancePalettes.map(p => palettePreference(p)), {windowFinish: 'private' as WindowFinish}, {windowFinish: 'tor' as WindowFinish}];
+  for (const preference of finishes) for (const dark of [false, true]) {
+    const settings = {...base, ...preference} as typeof base, finish = studyFinish(settings, dark), colors = themeTokens(settings, dark);
+    const flat = windowCaptionColors(finish, colors, open).captionColor, recessed = windowCaptionColors(finish, colors, closedOrTop).captionColor;
+    assert.equal(flat.toLowerCase(), String(colors['--frame']).toLowerCase(), `${JSON.stringify(preference)} ${dark ? 'dark' : 'light'}: the caption band is the flat strip`);
+    assert.notEqual(flat.toLowerCase(), recessed.toLowerCase(), 'and the closed Shelf / Along the top keep the recessed colour');
+  }
 });

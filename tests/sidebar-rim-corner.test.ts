@@ -38,6 +38,8 @@ g.document = {
 
 const require = createRequire(import.meta.url);
 const edge = require('../src/ui/chromeEdge.ts') as typeof import('../src/ui/chromeEdge');
+// Beta 14 smoothness (B3): the float's values live in their own rule for the pictures and the overlay pieces (src/ui/edgeVars.ts), not on <html> or .app.
+const edgeVars = require('../src/ui/edgeVars.ts') as typeof import('../src/ui/edgeVars');
 edge.installChromeEdge(); edge.bindEdgeTab('active');
 const paint = async () => { for (let frame = 0; frame < 8; frame++) await Promise.resolve(); };
 const say = async (side: boolean, top = false) => { listener?.({ type: 'chrome-edge', side, top, pinned: { side: false, top: false } }); await paint(); };
@@ -59,9 +61,9 @@ test('beside the sidebar the line\'s row starts 2px inside the end of the curve;
   g.devicePixelRatio = 1;
   panes = []; areaRect = rect(6, 6, 1268, 808); edge.setEdgeFloatable(true, false, true); await reset();
   await say(true);
-  assert.equal(root.style.getPropertyValue('--sf-rim-x'), '14px', 'no sidebar edge yet: the clip starts where the curve ends (6 + 8)');
-  assert.equal(root.style.getPropertyValue('--sf-rim-line-x'), '14px', 'and so does the line\'s row');
+  assert.equal(edgeVars.edgeVar('--sf-rim-x'), '14px', 'no sidebar edge yet: the clip starts where the curve ends (6 + 8)');
+  assert.equal(edgeVars.edgeVar('--sf-rim-line-x'), '14px', 'and so does the line\'s row');
   areaRect = rect(246, 6, 1028, 808); edge.refreshEdgeFloat();
-  assert.equal(root.style.getPropertyValue('--sf-rim-x'), '245px', 'the stroke up the sidebar\'s edge still starts one pixel behind it');
-  assert.equal(root.style.getPropertyValue('--sf-rim-line-x'), '252px', 'the line starts at the curve\'s end, 246 + 8, less 2');
+  assert.equal(edgeVars.edgeVar('--sf-rim-x'), '245px', 'the stroke up the sidebar\'s edge still starts one pixel behind it');
+  assert.equal(edgeVars.edgeVar('--sf-rim-line-x'), '252px', 'the line starts at the curve\'s end, 246 + 8, less 2');
 });

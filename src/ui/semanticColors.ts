@@ -1,6 +1,9 @@
+import type { FrameMaterial } from '../runtime/types';
+import { frameColours,frameMaterialOf } from '../runtime/ownColours';
+import { frameStop } from './frameField';
 import { compositeColor,contrast,fromOklch,mix,rgb,toOklch } from './colorMath';
 
-export interface AppearanceColorOverrides {glassOpacity?:number;surfaceColor?:string;sidebarColor?:string;tabColor?:string;toolbarColor?:string}
+export interface AppearanceColorOverrides {glassOpacity?:number;surfaceColor?:string;sidebarColor?:string;tabColor?:string;toolbarColor?:string;/** 14.1 Your colours (runtime/ownColours.ts): read with the finish's own colorPreset/browserTint. */frameGradient?:string[];frameMaterial?:FrameMaterial;colorPreset?:string;browserTint?:string}
 /** The glass slider, 40–100% (round 2: "down to about 40%"); the default stays 64. */
 export function materialOpacity(value:unknown,reduced=false){return reduced?1:(typeof value==='number'&&Number.isFinite(value)?Math.max(40,Math.min(100,value)):64)/100;}
 const colorSeed=(value:string|undefined)=>value&&/^#[\da-f]{6}$/i.test(value)?value:undefined;
@@ -20,14 +23,40 @@ const acrylicRange={light:['#7a7a7a','#f6f6f6'],dark:['#161616','#6e6e6e']};
  * own ink needs to keep its contrast over both ends of the acrylic range (4.5:1 text, 3:1 muted), so nothing goes
  * unreadable at 40%. Light maps 40–100% to a .70–1 veil so light glass still reads light over a dark wallpaper; dark
  * maps it almost one to one. The bottom of the veil is a step thinner, as before. */
-function glassVeil(opacity:number,dark:boolean,surfaces:{color:string;ink:string;min:number}[]){
- if(opacity>=1)return {top:1,bottom:1};
- const range=acrylicRange[dark?'dark':'light'],t=(opacity-.4)/.6;
+/** Window opacity's see-through end (Beta 14.4; the team, 24 Nov: "just keep the Windows opacity dragging thing ... make just 40% more
+ * glassy ... you just drag it and it actually goes to that glassy thing"). From the default 64 % up, the veil wanted is today's, value for
+ * value. Below it the glass shows more, eased in with a smoothstep from 64 % (no kink while dragging) to the full amount at the 40 % end:
+ * `alpha` cuts the veil's alpha by `amount`, `light` lets `amount` more light through it (1 - alpha raised by `amount`). The readability
+ * floor below still has the last word at every value. */
+export const GLASS_END={from:.64,kind:'alpha' as 'alpha'|'light',amount:.4};
+/** The veil's top and bottom alpha the slider asks for, before the readability floor. */
+export function glassWant(opacity:number,dark:boolean){
+ const t=(opacity-.4)/.6;
  // Light glass lets the blur through as dark glass does (founder, 31 Oct: "the light version isn't premium glass"): .58-.88 white
  // rather than .7-1, with the same readability floor below lifting it wherever an ink would fall short on a grey backdrop.
- const wantTop=dark?opacity+(1-opacity)*.06:.58+.3*t,wantBottom=dark?Math.max(.3,opacity-.1):Math.max(.5,wantTop-.1);
- const floor=(alpha:number)=>{let a=alpha;for(let step=0;step<40&&a<1;step++){if(surfaces.every(s=>range.every(back=>contrast(s.ink,compositeColor(`rgb(${triple(s.color)} / ${a})`,back))>=s.min)))return +a.toFixed(3);a=Math.min(1,a+.025);}return 1;};
- return {top:floor(wantTop),bottom:floor(wantBottom)};
+ const top=dark?opacity+(1-opacity)*.06:.58+.3*t,bottom=dark?Math.max(.3,opacity-.1):Math.max(.5,top-.1);
+ if(opacity>=GLASS_END.from||GLASS_END.amount<=0)return {top,bottom};
+ const u=Math.min(1,(GLASS_END.from-opacity)/(GLASS_END.from-.4)),e=u*u*(3-2*u)*GLASS_END.amount;
+ const thin=(alpha:number)=>GLASS_END.kind==='alpha'?alpha*(1-e):Math.max(0,1-(1-alpha)*(1+e));
+ return {top:thin(top),bottom:thin(bottom)};
+}
+function glassVeil(opacity:number,dark:boolean,surfaces:{color:string;ink:string;min:number}[]){
+ if(opacity>=1)return {top:1,bottom:1};
+ const range=acrylicRange[dark?'dark':'light'],{top:wantTop,bottom:wantBottom}=glassWant(opacity,dark);
+ const passes=(a:number)=>surfaces.every(s=>range.every(back=>contrast(s.ink,compositeColor(`rgb(${triple(s.color)} / ${a})`,back))>=s.min));
+ const floor=(alpha:number)=>{let a=alpha;for(let step=0;step<40&&a<1;step++){if(passes(a))return +a.toFixed(3);a=Math.min(1,a+.025);}return 1;};
+ if(opacity>=GLASS_END.from||GLASS_END.amount<=0)return {top:floor(wantTop),bottom:floor(wantBottom)};
+ // Below the default the whole drag moves and arrives at the glass end exactly at 40 % (the team, 24 Nov: where the floor ruled, the
+ // last stops of the drag did nothing). Per look and per edge of the veil: from today's value at 64 % (`floor` of what 64 % asks) to the
+ // end at 40 %, which is what 40 % asks, or the readability floor where that is higher (found to the thousandth: the 2.5 % grid above,
+ // then 0.1 % steps back down). In between it follows the shape of what the slider asks (the smoothstep ease from 64 %), squeezed into
+ // that span, with a quarter of a straight line mixed in so the last stops never go flat; every 1 % step moves it, it is never under the end
+ // value, and nothing jumps at 64 %. Kept to 5 decimals so a narrow span still moves at each step.
+ const fine=(alpha:number)=>{const grid=floor(alpha);let a=grid;for(let next=+(a-.001).toFixed(3);next>=alpha-1e-9&&next>=0&&passes(next);next=+(next-.001).toFixed(3))a=next;return Math.max(a,Math.min(1,alpha));};
+ const edge=glassWant(GLASS_END.from,dark),end=glassWant(.4,dark);
+ const line=(opacity-.4)/(GLASS_END.from-.4);
+ const arrive=(want:number,at:number,last:number)=>{const from=floor(at),to=Math.min(from,fine(last)),shape=at>last?(want-last)/(at-last):line;return +(to+(from-to)*Math.max(0,Math.min(1,.75*shape+.25*line))).toFixed(5);};
+ return {top:arrive(wantTop,edge.top,end.top),bottom:arrive(wantBottom,edge.bottom,end.bottom)};
 }
 
 /** Keep the chosen hue where possible, then validate the actual rounded sRGB bytes.
@@ -116,7 +145,11 @@ export function semanticColorVariables(base:FinishSurfaces,highContrast=false,re
  const popupInk=readable(text,popupSurfaces,4.6),popupMuted=readable(muted,popupSurfaces,4.6);
  const popupIcon=readable(icon,popupSurfaces,3.2),popupFocus=readable(focus,popupSurfaces,3.2);
  const nativeOpaque=opacity===1;
- const veil=glassVeil(opacity,base.windowDark??deep,[{color:chrome,ink:chromeInk,min:4.5},{color:chrome,ink:chromeMuted,min:3},{color:sidebar,ink:sidebarInk,min:4.5},{color:sidebar,ink:sidebarMuted,min:3}]);
+ // 14.1 Your colours: Matte and Glossy are the frame at full strength (no veil over the window material); on Glass every colour of a gradient
+ // joins the readability floor, so the veil holds the ink and the muted ink on each of them (ui/frameField.ts).
+ const ownSettings={colorPreset:base.overrides?.colorPreset,browserTint:base.overrides?.browserTint,frameGradient:base.overrides?.frameGradient,frameMaterial:base.overrides?.frameMaterial} as never;
+ const ownStops=base.overrides?.sidebarColor?[]:frameColours(ownSettings).slice(1).map(c=>frameStop(c,base.windowDark??deep));
+ const veil=frameMaterialOf(ownSettings)!=='glass'?{top:1,bottom:1}:glassVeil(opacity,base.windowDark??deep,[{color:chrome,ink:chromeInk,min:4.5},{color:chrome,ink:chromeMuted,min:3},{color:sidebar,ink:sidebarInk,min:4.5},{color:sidebar,ink:sidebarMuted,min:3},...ownStops.flatMap(color=>[{color,ink:chromeInk,min:4.5},{color,ink:chromeMuted,min:3}])]);
  // A toolbar color has its own veil, so it never thickens the frame. One whose tone runs against the window's (a cream
  // toolbar in a dark window) holds at least .86, or the acrylic behind would grey it into mud.
  const windowDark=base.windowDark??deep,toolbarVeil=toolbarSeed?Math.max(glassVeil(opacity,windowDark,[{color:toolbar,ink:toolbarInk,min:4.5},{color:toolbar,ink:toolbarMuted!,min:3}]).top,toolbarDark===windowDark||opacity>=1?0:.86):veil.top;

@@ -2,10 +2,9 @@ import { ChoiceCards, MiniBrowser, type MiniLayout } from './ChoiceCards';
 import { SettingRow } from './controls';
 import { t } from '../../i18n';
 
-/** The Tabs choice (R4-56): along the top, in a sidebar, or in a sidebar with the address bar in it (Sidebar mode: Arc, Zen). One component, two places: Appearance › Layout (where people look
- * first) and the top of Tabs (where the sidebar's other options live). Both show the SAME choice (ui/sidebarMode.ts: `verticalTabs` and `addressInSidebar` read as one of three layouts, written
+/** The Tabs choice (R4-56): along the top, along the top with a sidebar beside the page (Beta 14, Top + sidebar), in a sidebar, or in a sidebar with the address bar in it (Sidebar mode: Arc, Zen). It lives at the top of Settings › Tabs only (Appearance › Layout has an "Also in Tabs" row for it). It shows the one choice (ui/sidebarMode.ts: `verticalTabs` and `addressInSidebar` read as one of three layouts, written
  * together with the per-profile rail switch and the morph), the same registry id and the same words as the menu and Make it
- * yours: "Tabs", "Along the top", "In a sidebar", "Sidebar + address". Only one section renders at a time, so the anchor is never duplicated. */
+ * yours: "Tabs", "Along the top", "Top + sidebar", "In a sidebar", "Sidebar + address". Only one section renders at a time, so the anchor is never duplicated. */
 export function TabLayoutRow({ layout, onChange, columns }: { layout: MiniLayout; onChange: (layout: MiniLayout) => void; /** Card width in columns of a 4-up row: Appearance passes 4 so the three cards match the Window view cards under them; Tabs leaves the default (three cards across the row). */ columns?: number }) {
   return (
     <SettingRow id="sidebar-only-tabs" title={t('yours.tabs')} detail={t('settings.tabsDetail')} stacked>
@@ -16,6 +15,7 @@ export function TabLayoutRow({ layout, onChange, columns }: { layout: MiniLayout
         columns={columns}
         options={[
           { value: 'toolbar', label: t('yours.tabsTop'), art: <MiniBrowser layout="toolbar" /> },
+          { value: 'top-sidebar', label: t('yours.tabsTopSide'), art: <MiniBrowser layout="top-sidebar" /> },
           { value: 'sidebar', label: t('yours.tabsSide'), art: <MiniBrowser layout="sidebar" /> },
           { value: 'sidebar-address', label: t('yours.tabsSideAddress'), art: <MiniBrowser layout="sidebar-address" /> },
         ]}

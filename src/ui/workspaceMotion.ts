@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { BrowserSnapshot } from '../runtime/types';
 import { profilesAsSpaces } from '../runtime/workspaces';
-import { animateSpring, reducedMotion } from './sharedMotion';
+import { animateSpring, motionScale, reducedMotion } from './sharedMotion';
 
 /**
  * Switching workspaces (R3-57, R3-26): the colour and the tab list change as one move. The frame crossfades as one layer
@@ -29,6 +29,14 @@ export function startWorkspaceTransition(update: () => void): void {
   transition.finished.finally(() => { if (root.dataset.modeSwitch === 'workspace') delete root.dataset.modeSwitch; delete root.dataset.themeSettle; });
 }
 
+/** Beta 14.0 (the three-widths sweep's F5 = D66; the team: nothing drawn twice): the list a workspace brings used to slide in WHILE the frame's crossfade was still showing the last workspace's list, so from
+ * +17 to +92 ms two lists stood 6 to 12 pt apart (the workspace's name twice, "New tab" twice, "Bookmarks" twice). The list is now a layer of its own in the crossfade (workspaces.css names it for the
+ * switch): the last list fades where it stands, over `WS_LIST_OUT_MS` x the speed, and the new one starts its slide when that fade is 85 % done: the last list is under 12 % before the new one, on its
+ * E spring, reaches 12 %, so the two hand over and are never on screen together. The rest of the frame (the sidebar's colour, the page, the workspace row) crossfades as before. */
+export const WS_LIST_OUT_MS = 50;
+/** How long the list a workspace brings waits before it slides in: while a workspace crossfade plays, 85 % of the last list's fade; none when no crossfade plays (reduced motion, a hidden window). */
+export const workspaceListHold = (): number => (typeof document !== 'undefined' && document.documentElement.dataset.modeSwitch === 'workspace' ? Math.round(WS_LIST_OUT_MS * motionScale('S') * .85) : 0);
+
 /** Slides a surface (the sidebar's tab list, the strip's tabs; a ref or a selector) in when `workspace` changes: from the right when the new one sits after the old one in `order`, from the left when before. */
 export function useWorkspaceSlide(surface: RefObject<HTMLElement | null> | string, workspace: string, order: readonly string[]): void {
   const last = useRef<{ id: string; at: number } | null>(null);
@@ -39,8 +47,9 @@ export function useWorkspaceSlide(surface: RefObject<HTMLElement | null> | strin
     if (!was || was.id === workspace || !el) return;
     const side = at === was.at ? 1 : Math.sign(at - was.at);
     // Transform on the S spring and opacity on the E spring; fill 'backwards' leaves nothing behind when they end.
-    animateSpring(el, [{ transform: `translateX(${side * 16}px)` }, { transform: 'translateX(0)' }], 'workspace.slide', { fill: 'backwards' });
-    animateSpring(el, [{ opacity: 0 }, { opacity: 1 }], 'workspace.fade', { fill: 'backwards' });
+    const delay = workspaceListHold();
+    animateSpring(el, [{ transform: `translateX(${side * 16}px)` }, { transform: 'translateX(0)' }], 'workspace.slide', { fill: 'backwards', delay });
+    animateSpring(el, [{ opacity: 0 }, { opacity: 1 }], 'workspace.fade', { fill: 'backwards', delay });
   }, [workspace]);// eslint-disable-line react-hooks/exhaustive-deps
 }
 

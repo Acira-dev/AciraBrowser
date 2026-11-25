@@ -1,0 +1,83 @@
+/* Beta 14: the All Bookmarks pop-up's tree. The rows are the sidebar's own (components/sidebar/BookmarkTree.tsx: .sb-bookmark, .sb-folder,
+   .sb-bookmark-more), so they take the sidebar's metrics: 32px rows that touch, the 16px icon, 8px gap, 13/450 text, 12px per level, the
+   chevron that shows on hover. sidebar.css scopes its row rules to .acira-sidebar and keys them to the sidebar's own surface variables;
+   this block is the same rules for .bmp-tree, with those variables mapped onto the pop-up's menu tokens. tests/bookmark-popup-tree.test.ts
+   keeps the shared metrics identical in both files. */
+.app .bmp-tree{
+  --sb-row:32px;--sb-row-radius:8px;--sb-dur:120ms;--sb-nest:2px;
+  --sb-fg:var(--text-1,currentColor);--sb-rest:color-mix(in srgb,var(--sb-fg) 84%,transparent);
+  --sb-label:var(--menu-t2,color-mix(in srgb,currentColor 64%,transparent));--sb-faint:var(--menu-t3,color-mix(in srgb,currentColor 58%,transparent));--sb-quiet:var(--menu-t3,color-mix(in srgb,currentColor 58%,transparent));
+  --sb-hover:var(--menu-hover,rgb(127 127 127 / .08));--sb-ring:var(--focus-ring-color,var(--chrome-focus-ring,currentColor));
+  --sb-ease:var(--ease-ui,cubic-bezier(.2,0,0,1));--sb-tor:var(--tor-mark,#6a3f86);
+  --sb-spring:linear(0,0.0582,0.1823,0.3238,0.4588,0.5768,0.6749,0.7536,0.8153,0.8628,0.8988,0.9259,0.946,0.9608,0.9717,0.9796,0.9854,0.9895,0.9925,0.9947,0.9962,0.9973,0.9981,0.9987,1);
+  display:flex;flex-direction:column;min-width:0;padding:2px 0 6px;
+}
+/* The shared row shape (sidebar.css: Rows). */
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){position:relative;display:flex;align-items:center;flex:none;height:var(--sb-row);border-radius:var(--sb-row-radius);color:var(--sb-rest);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder):hover{background:var(--sb-hover);color:var(--sb-fg)}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){gap:8px;padding:0 6px;border:0;background:none;font:450 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){width:100%}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder):focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
+.app[data-theme='dark'] .bmp-tree{--sb-tor:var(--tor-mark,#dcc7f6)}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){padding-inline-end:8px}
+.app .bmp-tree .sb-tab-icon{flex:none;display:grid;place-items:center;width:16px;height:16px;transition:opacity var(--sb-dur) var(--sb-ease)}
+.app .bmp-tree .sb-tab-title{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
+/* The step per level is on the row's start side, so the hierarchy reads in a right-to-left interface too (the sidebar's rule is physical). */
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){padding-inline-start:calc(6px + var(--sb-nest,0px) + var(--sb-level,0) * 12px)}
+.app .bmp-tree :is(.sb-bookmark,.sb-folder){-webkit-user-select:none;user-select:none}
+/* A folder's chevron: hidden at rest, turned right when closed, down when open (sidebar.css: Bookmarks). */
+/* A name written right to left starts at the right edge and fades at its left end (rtl.css: the sidebar's rule; a title that starts with a Latin letter stays left to right). */
+.app .bmp-tree .sb-tab-title:dir(rtl){-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent)}
+.app .bmp-tree :where(.sb-folder)>svg.sb-folder-chevron:last-child{flex:none;margin-right:2px;color:var(--sb-label);opacity:0;transform:rotate(-90deg);transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring),opacity var(--sb-dur) var(--sb-ease)}
+.app .bmp-tree :where(.sb-folder)[aria-expanded=true]>svg.sb-folder-chevron:last-child{transform:none}
+.app .bmp-tree :where(.sb-folder):is(:hover,:focus-visible)>svg.sb-folder-chevron:last-child{opacity:1}
+.app .bmp-tree:dir(rtl) :where(.sb-folder)>svg.sb-folder-chevron:last-child{margin-right:0;margin-left:2px;transform:rotate(90deg)}
+.app .bmp-tree:dir(rtl) :where(.sb-folder)[aria-expanded=true]>svg.sb-folder-chevron:last-child{transform:none}
+.app .bmp-tree .sb-tab-mark{flex:none;display:grid;place-items:center;width:20px;height:20px;margin-right:6px;color:var(--sb-mark);pointer-events:none}
+.app .bmp-tree :where(.sb-tab-mark)>svg.tab-privacy-glyph{width:14px;height:14px}
+.app .bmp-tree:dir(rtl) .sb-tab-mark{margin-right:0;margin-left:6px}
+.app .bmp-tree .sb-bookmark[data-tor]{--sb-mark:var(--sb-tor)}
+.app .bmp-tree .sb-bookmark[data-tor]>.sb-tab-mark{margin:0 0 0 auto}
+.app .bmp-tree{--fg-u:calc(1ms * var(--motion-scale,1));--fg-ease:cubic-bezier(.65,0,.35,1)}
+/* The folder (Beta 14, section M: GroupFolderGlyph.tsx, the same drawing as the tab groups' in folders.css): one outline line in the row's ink, flat, nothing white, no fill. Closed it is
+   a plain outline folder, open the drop-front folder; the line morphs between them (240 units on the website hero's symmetric curve, so closing is the exact reverse), the speed setting scales
+   it and Off makes it instant. Under Reduce Motion the two settled drawings cross-fade instead. */
+.app .bmp-tree .sb-tab-icon>.fg{display:grid;place-items:center;overflow:visible}
+.app .bmp-tree .fg-svg{grid-area:1/1;display:none;overflow:visible;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.app .bmp-tree .fg-x1{display:block;stroke-width:1.25}
+.app .bmp-tree .fg-x15{stroke-width:1.875}
+@media (min-resolution:1.4dppx) and (max-resolution:1.6dppx){
+ .app .bmp-tree .fg-x1{display:none}
+ .app .bmp-tree .fg-x15{display:block}
+}
+.app .bmp-tree .fg-m{d:var(--dc);transition:d calc(240 * var(--fg-u)) var(--fg-ease)}
+.app .bmp-tree .fg[data-open] .fg-m{d:var(--do)}
+.app .bmp-tree .fg-c,.app .bmp-tree .fg-o{display:none}
+.app[data-reduced-motion='true'] .bmp-tree .fg-m{display:none}
+.app[data-reduced-motion='true'] .bmp-tree :is(.fg-c,.fg-o){display:inline;transition:opacity 120ms linear!important}
+.app[data-reduced-motion='true'] .bmp-tree .fg-o{opacity:0}
+.app[data-reduced-motion='true'] .bmp-tree .fg[data-open] .fg-o{opacity:1}
+.app[data-reduced-motion='true'] .bmp-tree .fg[data-open] .fg-c{opacity:0}
+@media (prefers-reduced-motion:reduce){
+ .app .bmp-tree .fg-m{display:none}
+ .app .bmp-tree :is(.fg-c,.fg-o){display:inline;transition:opacity 120ms linear!important}
+ .app .bmp-tree .fg-o{opacity:0}
+ .app .bmp-tree .fg[data-open] .fg-o{opacity:1}
+ .app .bmp-tree .fg[data-open] .fg-c{opacity:0}
+}
+@media(forced-colors:active){.app .bmp-tree .fg-svg{stroke:CanvasText}}
+/* Search results: the folders a match lives in, quiet, after the name. */
+.app .bmp-tree .bmp-path{display:flex;align-items:center;gap:4px;flex:0 1 auto;max-width:50%;min-width:0;overflow:hidden;white-space:nowrap;font:450 var(--text-12,12px)/16px var(--font-ui,inherit);color:var(--sb-faint)}
+.app .bmp-tree .bmp-seg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app .bmp-tree .bmp-seg:not(:last-child){flex:0 1000 auto}
+.app .bmp-tree .bmp-sep{flex:none}
+.app .bmp-tree .sb-bookmark:is(:hover,:focus-visible) .bmp-path,.app .bmp-tree .sb-folder:is(:hover,:focus-visible) .bmp-path{color:var(--sb-label)}
+.app .bmp-tree :where(.sb-folder)>.bmp-path+svg.sb-folder-chevron:last-child{display:none}
+/* An open folder with nothing in it (sidebar.css: .sb-bookmarks-empty, one level under the folder). */
+.app .bmp-tree .sb-bookmarks-empty{display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;padding-inline-start:calc(6px + var(--sb-nest,0px) + var(--sb-level,0) * 12px);border-radius:var(--sb-row-radius);color:var(--sb-faint);font:450 var(--text-12,12px)/16px var(--font-ui,inherit)}
+.app .bmp-tree .sb-bookmarks-empty>.sb-tab-icon{width:16px;height:16px}
+/* A line of text in place of the list (nothing saved, nothing matches). */
+.app .bmp-note{margin:0;padding:12px 8px 8px;color:var(--menu-t3,currentColor);font:400 13px/1.4 var(--font-ui,inherit)}
+/* A bookmark's own menu, shown in place of the list. */
+.app .bmp-menu{display:block;min-width:0}
+@media(forced-colors:active){.app .bmp-tree :is(.sb-bookmark,.sb-folder):focus-visible{outline-color:Highlight}}

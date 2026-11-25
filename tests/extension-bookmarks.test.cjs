@@ -342,8 +342,8 @@ test('wired behind the permission: handlers answer only an extension holding "bo
   // the person changes something while a write is waiting: the write goes in first
   await handlers.get('bookmarks.create').callback(has, { parentId: '1', title: 'Pending', url: 'https://pending.test/' });
   bufferModule.flushAll(); assert.equal(commits.length, 3); assert.ok(nodes.some(n => n.title === 'Pending'));
-  // history stays read-only
-  assert.deepEqual(await handlers.get('history.deleteAll').callback(withPerm(['history'])), { __acira_error: 'Acira lets extensions read history but not change it.' });
+  // history reads are this module's; the writes (addUrl / deleteUrl / deleteRange / deleteAll) are ext-api/history.cjs's since 14.3 (tests/ext-history-browsing-data.test.cjs)
+  { const answer = await handlers.get('history.deleteAll').callback(withPerm(['history'])); assert.ok(!/read history but not change it/.test(String(answer && answer.__acira_error)), 'the old refusal is gone'); }
   assert.ok((await handlers.get('sessions.restore').callback(withPerm(['sessions']))).__acira_error);
   apis.dispose(); events.reset(); bufferModule.reset(); require('node:fs').rmSync(userData, { recursive: true, force: true });
 });

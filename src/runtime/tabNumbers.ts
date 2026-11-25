@@ -5,9 +5,9 @@ import { listedTabs } from './favoriteTabs';
  *
  *  It reads the shortcut, it does not invent a second rule. Main's `select-tab` takes `listedTabs(state)[digit - 1]` for 1…8
  *  and the last listed tab for 9 (desktop/shortcuts.cjs, desktop/main.cjs), so this walks the same digits over the same list:
- *  favorites' own tabs have no number in the sidebar layout (they live in their tiles, not in listedTabs), pinned tabs and the
- *  tabs of groups count by their place in the list, and a tab inside a collapsed group keeps its number (the shortcut still
- *  goes there; the sidebar has no row to draw it on).
+ *  a favorite's tab that lives only in its tile (the default since Beta 14) follows the rows in that list, so the rows keep numbers 1, 2, 3…
+ *  and the tile's tab has a place after them (no row draws it), pinned tabs and the tabs of groups count by their place in the list,
+ *  and a tab inside a collapsed group keeps its number (the shortcut still goes there; the sidebar has no row to draw it on).
  *
  *  Two digits (desktop/tab-numbers.cjs): with the modifier down, 1 then 5 within a moment goes to tab 15, so every tab from the tenth
  *  to the ninety-ninth shows its own place. Tab 9 has no figure once there are ten tabs (Ctrl+9 alone is the LAST tab; no digit is

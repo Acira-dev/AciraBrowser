@@ -5,6 +5,8 @@
 //    save, which origin a login belongs to, or what to fill: the origin comes from the browser process, the fill from main.
 //  - It reports focus on username/password fields so main can show the suggestion list (a separate native view).
 //  - It fills fields when main says so, using the native value setter + input/change events so frameworks notice.
+//  - Email masks: it also reports focus on an email-address field outside a sign-in form (role 'email') so main can offer "Use an email mask"
+//    when the person has connected a mask service. It reports the field's place and kind only, never its value; main drops it otherwise.
 // Heuristics follow Chromium's form parsing in spirit: a visible <input type=password> defines a sign-in form; the username is
 // the closest preceding visible text/email/tel field (autocomplete=username and name/id hints win); one password field is a
 // sign-in, two (or autocomplete=new-password) a sign-up, three a change-password form.
@@ -44,6 +46,11 @@ if(process.isMainFrame&&/^https?:$/.test(location.protocol)){
   else if(passwords.length===2||fresh.length){kind=passwords.length===2&&!fresh.length&&tokens(passwords[0]).includes('current-password')?'change':'signup';current=kind==='change'?passwords[0]:null;next=kind==='change'?[passwords[1]]:(fresh.length?fresh:passwords);}
   return {kind,passwords,current,fresh:next,username:usernameFor(passwords[0])};
  }
+ const EMAIL_HINT=/e-?mail/i;
+ /** A field that asks for an email address: type=email, autocomplete=email, or a name, id or placeholder that says so. */
+ const looksEmail=el=>isTextLike(el)&&(el.type==='email'||tokens(el).includes('email')||EMAIL_HINT.test(`${el.name} ${el.id} ${el.getAttribute('placeholder')||''}`));
+ /** An email field that is not the username of a sign-in (a newsletter, a checkout, the email of a sign-up form); never a search box. */
+ const emailLike=el=>looksEmail(el)&&visible(el)&&!tokens(el).includes('username')&&!tokens(el).includes('current-password')&&!el.closest('[role=search],search');
  const rectOf=el=>{const r=el.getBoundingClientRect();return {x:r.left,y:r.top,width:r.width,height:r.height};};
  function describe(el){
   if(isPassword(el)){
@@ -51,10 +58,15 @@ if(process.isMainFrame&&/^https?:$/.test(location.protocol)){
    return {role:isNew?'new-password':'password',kind:info.kind,fieldId:idOf(el),usernameId:info.username?idOf(info.username):'',passwordIds:info.passwords.map(idOf),freshIds:info.fresh.map(idOf),rect:rectOf(el)};
   }
   if(isTextLike(el)){
-   const scope=scopeOf(el),password=passwordsIn(scope).find(p=>follows(el,p));
-   if(!password||usernameFor(password)!==el)return null;
-   const info=analyze(password);
-   return {role:'username',kind:info.kind,fieldId:idOf(el),usernameId:idOf(el),passwordIds:info.passwords.map(idOf),freshIds:info.fresh.map(idOf),rect:rectOf(el)};
+   const scope=scopeOf(el),all=passwordsIn(scope),password=all.find(p=>follows(el,p));
+   const email=()=>({role:'email',kind:'signup',fieldId:idOf(el),usernameId:idOf(el),passwordIds:[],freshIds:[],rect:rectOf(el)});
+   if(password){
+    const info=analyze(password);
+    if(usernameFor(password)===el)return {role:'username',kind:info.kind,fieldId:idOf(el),usernameId:idOf(el),passwordIds:info.passwords.map(idOf),freshIds:info.fresh.map(idOf),rect:rectOf(el),email:looksEmail(el)};
+    return info.kind==='signup'&&emailLike(el)?email():null;// the email of a sign-up form that is not its username field
+   }
+   if(all.length&&analyze(all[0]).kind==='login')return null;// a sign-in form: its saved logins are the offer, never a new mask
+   return emailLike(el)?email():null;
   }
   return null;
  }

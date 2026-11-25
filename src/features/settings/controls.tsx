@@ -231,12 +231,14 @@ export function SettingNote({ children }: { children: ReactNode }) {
 
 /** Opens a registry setting wherever it lives (BrowserSettings provides it: the same jump Settings search uses). */
 export const SettingsNavContext = createContext<(settingId: string) => void>(() => {});
+/** Beta 14.4: the page a registered setting lives on, from the registry (BrowserSettings provides it), so an "Also in" line always names the setting's own home. */
+export const SettingsHomeContext = createContext<(settingId: string) => string | undefined>(() => undefined);
 
 /** A setting people look for in two places (R3-74): its home is `section`; this row, in the other place, names it and opens it. */
-export function SettingCrossLink({ to, section, title }: { to: string; section: string; title: string }) {
-  const go = useContext(SettingsNavContext);
+export function SettingCrossLink({ to, section, title, detail, id }: { to: string; section: string; title: string; /** Why the setting is not available here (settings/layoutAvailability.ts), in place of "Also in {section}". */ detail?: string; /** The row's own anchor when the same link stands twice on a page. */ id?: string }) {
+  const go = useContext(SettingsNavContext), home = useContext(SettingsHomeContext)(to) ?? section;
   return (
-    <SettingRow id={`also-${to}`} title={title} detail={t('settings.alsoIn', { section: translateText(section) })}>
+    <SettingRow id={id ?? `also-${to}`} title={title} detail={detail ?? t('settings.alsoIn', { section: translateText(home) })}>
       <button type="button" className="st-button" aria-label={`${t('app.open')}: ${title}`} onClick={() => go(to)}>{t('app.open')}</button>
     </SettingRow>
   );

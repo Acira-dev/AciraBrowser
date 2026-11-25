@@ -3,7 +3,7 @@ import type { BrowserSnapshot, TabSession } from './types';
 /** Acira's own pages that menus, buttons and shortcuts open in a tab of their own (or the tab already showing them), so the page
  * you were on stays as it was: a video keeps playing, a half-typed form keeps its text (founder, 30 Oct: Settings replaced a
  * playing YouTube tab, which reloaded on Back and vanished on Home). */
-const APP_PAGE = /^acira:\/\/(settings|history|downloads|bookmarks|rewind|routines)$/;
+const APP_PAGE = /^acira:\/\/(settings|history|downloads|bookmarks|rewind|routines|usage)$/;
 
 /** The app page an address names ('settings'), or null for anything else. */
 export function appPageOf(url: string): string | null {

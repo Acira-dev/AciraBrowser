@@ -80,7 +80,7 @@ test('the script is fixed text plus a rounded number: no page data, no gesture, 
  const code=volumeScript(.123456,true);
  assert.match(code,/const v=0\.12,all=true/);assert.doesNotMatch(volumeScript('1;alert(1)',false),/alert/,'a string cannot get in');
  assert.match(volumeScript(7,false),/const v=1,all=false/);assert.match(volumeScript(-3,true),/const v=0,/);
- assert.doesNotMatch(code,/location|cookie|fetch|XMLHttp|eval|Function\(|postMessage/);assert.ok(code.length<800);
+ assert.doesNotMatch(code,/location|cookie|fetch|XMLHttp|eval|Function\(|postMessage/);assert.ok(code.length<1500,'Beta 14.1: the media list and the note hook are part of the text');
 });
 
 test('the volume command crosses the desktop bridge: a level 0..1, only on volume',()=>{
@@ -92,5 +92,5 @@ test('the volume command crosses the desktop bridge: a level 0..1, only on volum
  assert.throws(()=>validateCommand({type:'media',tabId:id,action:'play',level:.5},s),'only volume carries a level');
  const main=require('node:fs').readFileSync(require.resolve('../desktop/main.cjs'),'utf8');
  assert.match(main,/if\(c\.action==='volume'\)return mediaControls\.command\(c\.tabId,'volume',c\.level\)/,'main answers with the result (a read resolves with the level)');
- assert.match(main,/mediaControls\.prune\(state\.tabs\.map\(t=>t\.id\)\)/,'closed tabs lose their level');
+ assert.match(main,/mediaControls\.prune\(\[\.\.\.state\.tabs\.map\(t=>t\.id\),\.\.\.sidePanelSites\.siteIds\(\),\.\.\.\(peek\.mediaId\(\)\?\[peek\.mediaId\(\)\]:\[\]\)\]\)/,'closed tabs lose their level (a pinned side panel site keeps its own)');
 });

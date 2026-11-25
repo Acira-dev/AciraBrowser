@@ -79,9 +79,9 @@
 @media(prefers-reduced-motion:reduce){.address-bar .address-zoom-indicator,.address-bar .address-zoom-indicator>*{transition:none}}
 
 /* 13.6: right-click on the star or the zoom icon opens the toolbar menu with one row, Hide: no title bar, the rows of the other context menus. */
-.app .browser-popup.popup-content-toolbar-context[data-address-item]{padding:5px}
+.app .browser-popup.popup-content-toolbar-context[data-address-item]{padding:4px}
 .app .browser-popup.popup-content-toolbar-context[data-address-item]>.popup-header{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0;margin:-1px}
-.app .browser-popup.popup-content-toolbar-context[data-address-item] .menu-row{min-height:24px;height:24px;padding:0 7px;gap:8px;border-radius:6px;font-size:13px}
+.app .browser-popup.popup-content-toolbar-context[data-address-item] .menu-row{min-height:24px;height:24px;padding:0 8px;gap:8px;border-radius:6px;font-size:13px}
 .app .browser-popup.popup-content-toolbar-context[data-address-item] .menu-row>:is(svg,.menu-icon):first-child{flex:0 0 16px;width:16px;height:16px}
 .app .browser-popup.popup-content-toolbar-context[data-address-item] .menu-row>span{flex:1;min-width:0;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app .browser-popup.popup-content-toolbar-context[data-address-item] .menu-row:is(:hover,:focus-visible){outline:none;background:var(--hover);color:var(--hover-text)}

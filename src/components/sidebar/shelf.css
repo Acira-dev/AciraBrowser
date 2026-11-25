@@ -1,0 +1,74 @@
+/* ===== Beta 14: Top + sidebar, the Shelf, and its rail ===== */
+/* Mac: the traffic lights stand over the docked shelf, so the tab strip beside it no longer keeps their corner (it does while the shelf is closed or on the right; a peeking shelf takes the column too, like every sidebar-on-the-frame rule). */
+:root:root:root[data-platform=darwin]:not([data-sidebar-side=right]) .app.style-acira:has(>.ed-rail.is-expanded) .acira-tab-row{padding-left:0}
+/* (gap:0 on the rail: frost-preview.css gives every `.ed-rail.is-expanded nav` a 4px gap, which put 4px more under the Favorite tiles than the sample's 10px before its line, found by measuring the real app.) */
+/* The rail: the shelf's smallest size. A 52px column of icons, one per section, with now playing and the profile at its foot; a section's panel opens beside it, inside the same sidebar. */
+.app.style-acira .acira-sidebar.is-rail{overflow:hidden}
+.app.style-acira .acira-sidebar .sb-rail-wrap{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:row;align-items:stretch;overflow:hidden}
+.app.style-acira .acira-sidebar .sb-rail{flex:0 0 52px;width:52px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:0;min-height:0;padding:6px 0 10px}
+.app.style-acira .acira-sidebar .sb-rail-sections{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;gap:4px;overflow-y:auto;overflow-x:clip;scrollbar-width:none;padding:4px 0 2px}
+.app.style-acira .acira-sidebar .sb-rail-sections::-webkit-scrollbar{display:none}
+.app.style-acira .acira-sidebar .sb-rail-foot{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:8px}
+.app.style-acira .acira-sidebar .sb-rail-btn{position:relative;flex:none;display:grid;place-items:center;width:36px;height:36px;padding:0;border-radius:8px;color:var(--sb-muted,var(--text-secondary));background:transparent;-webkit-app-region:no-drag;transition:background-color var(--sb-dur,.15s) var(--sb-ease,ease),color var(--sb-dur,.15s) var(--sb-ease,ease)}
+.app.style-acira .acira-sidebar .sb-rail-btn:hover{background:var(--sb-hover,var(--well));color:var(--sb-fg,var(--ed-ink))}
+.app.style-acira .acira-sidebar .sb-rail-btn[data-open]{background:var(--sb-selected,var(--well));color:var(--sb-fg,var(--ed-ink))}
+.app.style-acira .acira-sidebar .sb-rail-btn:focus-visible{outline:2px solid var(--sb-ring,var(--ed-blue));outline-offset:-2px}
+.app.style-acira .acira-sidebar :where(.sb-rail-btn)>svg.sb-rail-glyph{width:18px;height:18px}
+.app.style-acira .acira-sidebar .sb-rail-media{color:var(--sb-fg,var(--ed-ink));isolation:isolate}
+/* 14.1: the tile and its play / pause are two buttons, as the closed Mini rail's tile: a click on the tile goes to the playing tab, the disc on its corner plays and pauses. */
+.app.style-acira .acira-sidebar .sb-rail-media-wrap{position:relative;flex:none;width:36px;height:36px}
+.app.style-acira .acira-sidebar .sb-rail-media-glyph{position:absolute;z-index:2;right:1px;bottom:1px;width:14px;height:14px;margin:0;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:var(--sb-fg,var(--ed-ink));color:var(--sb-bg,var(--ed-chrome));font:inherit;-webkit-app-region:no-drag;transition:scale 120ms var(--sb-ease,ease)}
+.app.style-acira .acira-sidebar .sb-rail-media-glyph:hover{scale:1.14}
+.app.style-acira .acira-sidebar .sb-rail-media-glyph:focus-visible{outline:2px solid var(--sb-ring,var(--ed-blue));outline-offset:1px}
+.app.style-acira[data-reduced-motion=true] .acira-sidebar .sb-rail-media-glyph{transition:none}
+.app.style-acira .acira-sidebar :where(.sb-rail-media-glyph)>svg.sb-rail-media-icon{width:9px;height:9px}
+/* 14.0.1 (the team, final7 on YouTube: the logo where the video's own picture and its coloured glow belong): the tile shows the track's picture (main's artwork, ShelfRail.tsx RailMediaTile), 28px with the rail tiles'
+   corner, over the site's icon, which stays until the picture comes and when the page has none. Behind the tile a soft still light of the picture's own colours (--np-c1 / --np-c3, the card's palette; the site's colour
+   with no picture), drawn the way the closed Mini rail's tile light is (miniRail.css .np-dim): full while it plays, sunk when paused, softer in the light look. It stays inside the 52px rail (8px each side). */
+.app.style-acira .acira-sidebar .sb-rail-media-light{position:absolute;z-index:-1;inset:-6px;border-radius:14px;pointer-events:none;background:radial-gradient(closest-side at 44% 56%,color-mix(in oklab,var(--np-c1) 55%,transparent),transparent),radial-gradient(closest-side at 60% 42%,color-mix(in oklab,var(--np-c3) 40%,transparent),transparent);opacity:.3;transition:opacity 1s var(--sb-ease,ease)}
+.app.style-acira .acira-sidebar .sb-rail-media[data-playing] .sb-rail-media-light{opacity:1}
+.app.style-acira .acira-sidebar .sb-rail-media[data-playing]:not([data-art]) .sb-rail-media-light{opacity:.6}
+.app.style-acira[data-appearance=light] .acira-sidebar .sb-rail-media-light{opacity:.25}
+.app.style-acira[data-appearance=light] .acira-sidebar .sb-rail-media[data-playing] .sb-rail-media-light{opacity:.65}
+.app.style-acira .acira-sidebar .sb-rail-media-art{position:absolute;left:4px;top:4px;width:28px;height:28px;border-radius:6px;object-fit:cover;user-select:none;outline:1px solid rgb(255 255 255 / .08);outline-offset:-1px;animation:sb-rail-art-in 220ms cubic-bezier(.23,1,.32,1) backwards}
+.app.style-acira[data-appearance=light] .acira-sidebar .sb-rail-media-art{outline-color:rgb(0 0 0 / .08)}
+.app.style-acira .acira-sidebar .sb-rail-media[data-art]>.sb-rail-glyph{opacity:0}
+@keyframes sb-rail-art-in{from{opacity:0}}
+.app.style-acira[data-reduced-motion=true] .acira-sidebar .sb-rail-media-art{animation:none}
+.app.style-acira[data-reduced-motion=true] .acira-sidebar .sb-rail-media-light{transition:none}
+@media (forced-colors:active){.app.style-acira .acira-sidebar .sb-rail-media-light{display:none}}
+.app.style-acira .acira-sidebar .sb-rail-profile{border-radius:50%}
+.app.style-acira .acira-sidebar .sb-rail-profile .sb-foot-private{width:24px;height:24px}
+.app.style-acira .acira-sidebar .sb-rail-panel{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.app.style-acira .acira-sidebar .sb-rail-panel>.sb-scroll,.app.style-acira .acira-sidebar .sb-rail-favorites{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:clip}
+.app.style-acira .acira-sidebar .sb-rail-panel{padding-top:10px}
+/* The panel shows one section open: its header names it and does not fold. */
+.app.style-acira .acira-sidebar .sb-rail-panel .sb-zone-toggle{pointer-events:none}
+.app.style-acira .acira-sidebar .sb-rail-panel .sb-zone-chev{display:none}
+/* On the right the rail stands at the window's edge and its panel opens toward the page. */
+:root[data-sidebar-side=right] .app.style-acira .acira-sidebar .sb-rail-wrap{flex-direction:row-reverse}
+@media(forced-colors:active){.app.style-acira .acira-sidebar .sb-rail-btn[data-open]{border:1px solid Highlight}}
+/* Beta 14, r3 (reported 13 Nov: the top is one flat tone like In a sidebar, no recess band). With the tabs on top the strip row is recessed a step back (--tab-strip-recess,
+   toolbar-controls.css) so the active tab lifts off it. While the Shelf is open (`is-shelf`, set on the docked column and the docked rail, never on a peeking card) the strip is not
+   recessed: the token is clear, so the strip, the column and the toolbar row are the same surface and the seam between them has no tone step, the way In a sidebar has it. The closed
+   Shelf is Along the top as today, recessed; opening it flattens the strip in the same layout step as the toolbar row (sidebar.css, `.ed-rail.is-expanded`). Everything that reads the
+   token follows it (the narrow tab's close patch repeats the strip's paint). The lift the recess gave the active tab in a light frame is kept: dark and deep frames stay above 0.07 OKLab flat,
+   and the light finishes with a tinted frame are at 0.065 or more; Porcelain, whose white fill is only 0.033 off a flat strip (0.066 recessed), gets the sidebar's own selected-row ring (--shadow-card,
+   1px at 8%, sidebar.css `--sb-current-shadow`) a touch firmer, 10%, and the ring is 0.06 OKLab or more against both the strip and the fill (tests/tab-ink-surfaces.test.ts, every finish). */
+.app.style-acira:has(>.ed-rail.is-shelf){--tab-strip-recess:rgb(0 0 0 / 0)}
+.app.style-acira:not([data-chrome=dark]):has(>.ed-rail.is-shelf){--tab-lift-active:0 0 0 1px rgb(0 0 0 / .10),0 1px 2px rgb(0 0 0 / .08)}
+/* Beta 14 (WP2): the Favorites are tiles in the rail, the brief's picture (variant C): one column of tiles above the library icons, the tiles being the open sidebar's own Favorites tiles (SidebarApps `rail`), so their active border,
+   dot, menus and keys are the same. The column scrolls where there are more tiles than the rail is tall; the library icons below it keep their place. */
+.app.style-acira .acira-sidebar .sb-rail-tiles{flex:0 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:clip;scrollbar-width:none;padding:4px 0 0}
+.app.style-acira .acira-sidebar .sb-rail-tiles::-webkit-scrollbar{display:none}
+.app.style-acira .acira-sidebar .sb-rail-tiles .sb-apps-region{width:100%;display:flex;flex-direction:column;align-items:center;padding:0}
+.app.style-acira .acira-sidebar .sb-rail-tiles .sb-apps{display:flex;flex-direction:column;align-items:center;gap:4px}
+/* Beta 14, exact sample parity (item18's variant C, measured: 36px tiles with 8px corners and a 4px gap in the 52px rail, 10px from the top, 18px icons, a line 20px wide under the last tile with 10px above and below it, then the 36px library icons 4px apart). */
+.app.style-acira .acira-sidebar .sb-rail-tiles .sb-app{flex:none;width:36px;height:36px;border-radius:8px}
+.app.style-acira .acira-sidebar .sb-rail-tiles .sb-app>.site-identity-icon{width:18px!important;height:18px!important}  /* !important: the icon carries its size inline (SiteIdentityIcon size={16}), which the plain rule never beat */
+.app.style-acira .acira-sidebar .sb-rail-sections[data-after-tiles]{flex:1 0 auto;padding-top:0}
+.app.style-acira .acira-sidebar .sb-rail-sections[data-after-tiles]::before{content:'';flex:none;width:20px;height:1px;margin:10px 0 6px;background:rgb(var(--ink) / .2)}
+/* No Favorites (none yet, or hidden): nothing stands above the icons, and no line. */
+.app.style-acira .acira-sidebar .sb-rail-tiles:empty{display:none}
+.app.style-acira .acira-sidebar .sb-rail-tiles:empty+.sb-rail-sections[data-after-tiles]{padding-top:4px}
+.app.style-acira .acira-sidebar .sb-rail-tiles:empty+.sb-rail-sections[data-after-tiles]::before{display:none}

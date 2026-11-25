@@ -25,14 +25,20 @@ const found = (query: string) => searchSettings(all, query, context, 12).map((hi
 
 /** setting → its section after R3-74 (the "proposed" column of SETTINGS_IA.md). */
 const moved: Record<string, string> = {
-  'newtab-art': 'Appearance', 'newtab-art-style': 'Appearance', 'newtab-collection': 'Appearance', 'newtab-artwork': 'Appearance', 'newtab-art-details': 'Appearance',
-  'newtab-personal-image': 'Appearance', 'newtab-caption': 'Appearance', 'newtab-daily': 'Appearance',
+  // Beta 14.4: the New Tab's background lives on the New tab page, with the rest of the New Tab.
+  'newtab-art': 'New tab', 'newtab-art-style': 'New tab', 'newtab-collection': 'New tab', 'newtab-artwork': 'New tab', 'newtab-art-details': 'New tab',
+  'newtab-personal-image': 'New tab', 'newtab-caption': 'New tab', 'newtab-daily': 'New tab',
   'newtab-name': 'New tab', 'newtab-mark': 'New tab', 'newtab-search': 'New tab', 'newtab-shortcuts': 'New tab', 'newtab-saved': 'New tab', 'newtab-recent': 'New tab', 'newtab-frequent': 'New tab', 'newtab-shortcut-editor': 'New tab',
-  proxy: 'Connection', 'secure-dns': 'Connection', 'network-save': 'Connection', gpc: 'Privacy',
+  proxy: 'Connection', 'secure-dns': 'Connection', 'network-save': 'Connection', gpc: 'Protection', // Beta 14.4: Global Privacy Control sits with Anti-tracking on Protection
   'spellcheck-enabled': 'Languages', 'spellcheck-languages': 'Languages',
   'rewind-enabled': 'Tabs', 'rewind-retention': 'Tabs', 'rewind-clear': 'Tabs',
   incognito: 'Privacy',
-  'sidebar-only-tabs': 'Appearance', 'window-view': 'Appearance', // R4-56: Layout group at the top of Appearance
+  // Beta 14.4: three homes on the Acira menu's words. Layout = where things are (the Tabs choice, Window view, the toolbar), Sidebar = its own page,
+  // Appearance = how it looks (Window opacity and Reduce transparency side by side), Tabs = how tabs behave.
+  'sidebar-only-tabs': 'Layout', 'tab-size': 'Layout', 'window-view': 'Layout', 'hide-toolbar': 'Layout', 'seamless-edge-top': 'Layout', 'seamless-edge-side': 'Layout', 'toolbar-customize': 'Layout', 'bookmarks-bar': 'Layout', 'menu-customize': 'Layout',
+  sidebar: 'Sidebar', 'sidebar-visible': 'Sidebar', 'sidebar-peek': 'Sidebar', 'sidebar-apps': 'Sidebar', 'sidebar-section-bookmarks': 'Sidebar',
+  'glass-opacity': 'Appearance', 'reduce-transparency': 'Appearance', 'interface-size': 'Appearance', 'page-zoom': 'Appearance',
+  'on-startup': 'Tabs', 'side-panel-sites': 'Tabs', 'reduce-motion': 'Accessibility',
 };
 
 test('moved settings sit in their proposed section and keep their ids', () => {
@@ -45,7 +51,7 @@ test('every registered section is a section of the Settings sidebar', () => {
   assert.ok(!known.has('Spelling'), 'spell checking is part of Languages');
 });
 
-test('the new tab background is where people look: Appearance, found by new-tab and by background words', () => {
+test('the new tab background is found by new-tab and by background words (its home is New tab › Background)', () => {
   for (const query of ['new tab background', 'background image', 'wallpaper', 'new tab image']) assert.ok(found(query).includes('newtab-art-style'), query);
   assert.ok(found('new tab collection').includes('newtab-collection'));
   assert.ok(found('cover').includes('newtab-art'));
@@ -72,8 +78,10 @@ test('Also-in links point at real settings in the section they name', () => {
     assert.ok(byId(to), `link target ${to} is registered`);
     assert.equal(byId(to)!.section, section, `${to} lives in ${section}`);
   }
-  // Every link is shown from a different section than the one it names.
-  assert.ok(links.some(([, to]) => to === 'newtab-art-style') && links.some(([, to]) => to === 'newtab-shortcut-editor'), 'the background and the layout link to each other');
+  // Beta 14.4: where people look first for something whose home is elsewhere: the wallpaper from Appearance, tab size from Tabs and Appearance, transparency from Accessibility.
+  for (const to of ['newtab-art', 'tab-size', 'sidebar-only-tabs', 'reduce-transparency', 'animation-speed']) assert.ok(links.some(([, target]) => target === to), `a link to ${to}`);
+  // A link is a pointer, never a second control: its line names the setting's home from the registry (controls.tsx SettingsHomeContext).
+  assert.match(fs.readFileSync(path.join(root, 'src/features/settings/controls.tsx'), 'utf8'), /useContext\(SettingsHomeContext\)\(to\) \?\? section/);
 });
 
 test('the new tab settings split by part, and every part keeps its anchors', () => {
@@ -87,35 +95,36 @@ test('the new tab settings split by part, and every part keeps its anchors', () 
   assert.match(settings, /<NewTabSettings profile=\{profile\} part="layout" \/>/);
 });
 
-test('secure DNS and the proxy render in Connection, Global Privacy Control in Privacy', () => {
+test('secure DNS and the proxy render in Connection, Global Privacy Control in Protection (with Anti-tracking)', () => {
   const panel = (name: string) => fs.readFileSync(path.join(root, 'src/features/settings/panels', name), 'utf8');
   assert.match(panel('proxy.tsx'), /section: 'Connection'/);
   assert.match(panel('secure-dns.tsx'), /section: 'Connection'/);
   assert.match(panel('secure-dns.tsx'), /part="dns"/);
   assert.doesNotMatch(panel('privacy.tsx'), /<Connection disabled/);
-  assert.match(fs.readFileSync(path.join(root, 'src/features/BrowserSettings.tsx'), 'utf8'), /<NativeNetworkSettings part="gpc">/);
+  assert.match(fs.readFileSync(path.join(root, 'src/features/BrowserSettings.tsx'), 'utf8'), /<NativeNetworkSettings part="gpc" bare>/);
 });
 
-// R4-56: "I can't find where to set a sidebar view or only a toolbar view." Tabs (along the top / in a sidebar) and Window view
-// are the Layout group at the top of Appearance, Tabs is mirrored at the top of the Tabs section, and every common word finds it.
-test('Layout leads Appearance: Tabs and Window view are registered there, in the Layout group', () => {
-  assert.equal(byId('sidebar-only-tabs')?.section, 'Appearance');
-  assert.equal(byId('sidebar-only-tabs')?.group, 'Layout');
-  assert.equal(byId('window-view')?.group, 'Layout');
-  // The group name is not reused for unrelated rows (bookmarks bar, interface size and animation speed used to share it).
-  assert.deepEqual(all.filter((entry) => entry.section === 'Appearance' && entry.group === 'Layout').map((entry) => entry.id), ['sidebar-only-tabs', 'window-view', 'hide-toolbar', 'seamless-edge-top']);
-  // The sidebar's own rows moved to Tabs › Sidebar, where the sidebar's other options are (their Appearance rows are live copies of the same settings).
-  for (const id of ['sidebar-peek', 'seamless-edge-side']) assert.deepEqual([byId(id)?.section, byId(id)?.group], ['Tabs', 'Sidebar'], id);
+// R4-56: "I can't find where to set a sidebar view or only a toolbar view." Beta 14.4: they have a page of their own, Layout, named like the Acira menu's Layout rows:
+// the Tabs choice and Tab size first, then Window view with Hide the toolbar and the two Seamless edge rows, then the toolbar.
+test('Layout holds the Tabs choice, Window view and the toolbar; the sidebar has its own page', () => {
+  assert.deepEqual([byId('sidebar-only-tabs')?.section, byId('sidebar-only-tabs')?.group], ['Layout', 'Tab layout']);
+  assert.deepEqual(all.filter((entry) => entry.section === 'Layout' && entry.group === 'Window view').map((entry) => entry.id), ['window-view', 'hide-toolbar', 'seamless-edge-top', 'seamless-edge-side']);
+  for (const id of ['sidebar-peek', 'sidebar-reveal', 'sidebar-closed', 'sidebar-size', 'sidebar-side']) assert.deepEqual([byId(id)?.section, byId(id)?.group], ['Sidebar', 'Sidebar'], id);
+  for (const id of ['sidebar-apps', 'sidebar-apps-limit', 'sidebar-apps-tabs']) assert.deepEqual([byId(id)?.section, byId(id)?.group], ['Sidebar', 'Favorites'], id);
   // Sidebar mode and the address bar's place are the Tabs choice's third answer (item 4): no rows of their own, their words go to the Tabs card.
   for (const id of ['sidebar-mode', 'address-in-sidebar']) assert.equal(byId(id), undefined, `${id} is not a row any more`);
   assert.equal(byId('sidebar-only-tabs')?.title, 'Tabs', 'the name the menu and Make it yours use');
+  const order = [...settingsSections];
+  assert.ok(order.indexOf('Appearance') < order.indexOf('Layout') && order.indexOf('Layout') < order.indexOf('Sidebar'), 'Layout and Sidebar follow Appearance');
 });
 
 test('every common word for the tab layout finds it first or second, with typos too', () => {
   for (const query of ['sidebar', 'vertical tabs', 'tabs on the side', 'tabs on top', 'toolbar view', 'horizontal tabs', 'tab layout', 'layout', 'view', 'sidebar view', 'side tabs', 'tabs']) {
     assert.ok(found(query).slice(0, 2).includes('sidebar-only-tabs'), `${query}: ${found(query).slice(0, 3).join(', ')}`);
   }
-  for (const query of ['vertcal tabs', 'horizonal tabs', 'toolbr view', 'layot']) assert.equal(found(query)[0], 'sidebar-only-tabs', `${query}: ${found(query).slice(0, 3).join(', ')}`);
+  for (const query of ['vertcal tabs', 'horizonal tabs', 'toolbr view']) assert.equal(found(query)[0], 'sidebar-only-tabs', `${query}: ${found(query).slice(0, 3).join(', ')}`);
+  // "layout" is the Window view's word as well (both are in a Layout group, one in Appearance and one in Tabs): a typo of it offers the two, either first.
+  assert.ok(found('layot').slice(0, 2).includes('sidebar-only-tabs'), `layot: ${found('layot').slice(0, 3).join(', ')}`);
   // "sidebar" leads with the Sidebar group (Tabs › Sidebar), the Tabs layout choice follows, typos included.
   for (const query of ['sidebar', 'sidebr', 'sidbar']) assert.deepEqual(found(query).slice(0, 2), ['sidebar', 'sidebar-only-tabs'], query);
   // "view" and "layout" are the Window view's words too: both rows are offered.
@@ -129,35 +138,41 @@ test('sidebar words land on the Sidebar group: sidebar, sidebar mode, bookmarks 
   assert.equal(found('sidebar')[0], 'sidebar');
   for (const query of ['sidebar mode', 'everything in sidebar', 'sidebar only']) assert.equal(found(query)[0], 'sidebar-only-tabs', query);
   for (const query of ['bookmarks in sidebar', 'bookmarks in the sidebar', 'hide bookmarks', 'bookmarks under tabs', 'bookmarks below tabs']) assert.equal(found(query)[0], 'sidebar-section-bookmarks', query);
-  for (const query of ['address bar', 'url bar', 'address bar in sidebar']) assert.equal(found(query)[0], 'sidebar-only-tabs', query);
+  // Beta 14.4 (the team): "address bar" leads with Hide the toolbar and the address-bar search engine; the Tabs card keeps "address bar in sidebar".
+  assert.deepEqual(found('address bar').slice(0, 2), ['hide-toolbar', 'search-engine']);
+  assert.equal(found('address bar in sidebar')[0], 'sidebar-only-tabs');
   // The left-edge rows are drawn with tabs in the sidebar only, so search offers them only then; the address row is offered either way (with tabs on top it says what it needs).
-  for (const query of ['left edge', 'closed sidebar']) assert.ok(['sidebar-peek', 'seamless-edge-side'].includes(searchSettings(all, query, { ...context, verticalTabs: true }, 12)[0].entry.id), query);
-  assert.ok(!searchSettings(all, 'closed sidebar', { ...context, verticalTabs: false }, 12).some((hit) => hit.entry.id === 'sidebar-peek'), 'no row to jump to with tabs on top');
-  for (const id of ['sidebar', 'sidebar-peek', 'sidebar-apps', 'sidebar-section-bookmarks', 'sidebar-section-pinned', 'sidebar-section-downloads', 'sidebar-section-history', 'sidebar-section-reading', 'sidebar-customize']) assert.equal(byId(id)?.section, 'Tabs', id);
+  // Beta 14.4: the edge rows are always listed (greyed with the reason where they cannot apply), so search offers them in every layout and lands on the row.
+  assert.ok(['sidebar-peek', 'seamless-edge-side'].includes(searchSettings(all, 'left edge', { ...context, verticalTabs: true }, 12)[0].entry.id), 'left edge');
+  // "closed sidebar" offers both rows that say it: When the sidebar is closed (Mini or Hidden) and When the sidebar is closed, show it at the left edge.
+  assert.deepEqual(searchSettings(all, 'closed sidebar', { ...context, verticalTabs: true }, 12).slice(0, 2).map((hit) => hit.entry.id), ['sidebar-closed', 'sidebar-peek']);
+  assert.ok(searchSettings(all, 'closed sidebar', { ...context, verticalTabs: false }, 12).some((hit) => hit.entry.id === 'sidebar-peek'), 'with tabs on top the row is there, off, and says why');
+  for (const id of ['sidebar', 'sidebar-peek', 'sidebar-apps', 'sidebar-section-bookmarks', 'sidebar-section-pinned', 'sidebar-section-downloads', 'sidebar-section-history', 'sidebar-section-reading', 'sidebar-customize']) assert.equal(byId(id)?.section, 'Sidebar', id);
 });
 
-test('the rows the registry names exist in Tabs › Sidebar, and the Appearance rows are live copies', () => {
+test('the rows the registry names exist on the Sidebar page, and no other page repeats them', () => {
   const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
   const panel = read('src/features/settings/panels/sidebar.tsx'), settings = read('src/features/BrowserSettings.tsx'), rows = read('src/features/settings/SidebarRows.tsx');
-  for (const id of ['sidebar-peek', 'seamless-edge-side', 'sidebar-visible', 'sidebar-apps', 'sidebar-customize']) assert.ok(`${panel}${rows}`.includes(`id="${id}"`) || `${panel}${rows}`.includes(`id={'sidebar-section-`) || id === 'seamless-edge-side', id);
-  // Tabs › Sidebar sits right under the Tabs layout card; Sidebar sections shows what is inside before it is opened.
-  const tabs = settings.slice(settings.indexOf('{section === "Tabs" &&'), settings.indexOf('id="compact-tab-titles"'));
-  assert.ok(tabs.indexOf('<TabLayoutRow') < tabs.indexOf('<SidebarGroups') && tabs.indexOf('<SidebarGroups') > 0);
+  for (const id of ['sidebar-peek', 'seamless-edge-side', 'sidebar-visible', 'sidebar-apps', 'sidebar-customize']) assert.ok(`${panel}${rows}`.includes(`id="${id}"`), id);
+  assert.match(settings, /\{section === "Sidebar" && <SidebarGroups state=\{state\} dispatch=\{dispatch\} \/>\}/);
   assert.match(panel, /id="sidebar-sections" bodyRef=\{sections\} fold foldDetail=\{t\("sidebar\.showHideAndReorderTabs"\)\}/);
-  // Appearance › Layout and Tabs › Sidebar read and write the same settings through the same components.
-  assert.match(settings, /<SidebarEdgeRows state=\{state\} dispatch=\{dispatch\} \/>/);
-  assert.match(panel, /<SidebarEdgeRows state=\{state\} dispatch=\{dispatch\} describe \/>/);
+  assert.match(panel, /<SettingGroup title=\{t\("acirasidebar\.favorites"\)\} id="favorites">/);
+  // The peek row is on Sidebar, the Seamless edge row is under Window view on Layout: each control in one place.
+  assert.match(panel, /<SidebarPeekRow state=\{state\} dispatch=\{dispatch\} \/>/);
+  assert.equal([...settings.matchAll(/<SeamlessSideRow /g)].length, 1);
+  assert.doesNotMatch(settings, /<SidebarPeekRow|<SidebarSideRow/);
 });
 
-test('Tabs and Window view render in Appearance › Layout first, Tabs is mirrored at the top of Tabs, one writer for both', () => {
+test('Layout: the Tabs card, then Window view with its edge rows; the Tabs page only points at the card, one writer', () => {
   const source = fs.readFileSync(path.join(root, 'src/features/BrowserSettings.tsx'), 'utf8');
-  const appearance = source.slice(source.indexOf('{section === "Appearance" &&'), source.indexOf('{section === "Profiles" &&'));
-  assert.ok(appearance.indexOf('<TabLayoutRow') > 0 && appearance.indexOf('<TabLayoutRow') < appearance.indexOf('id="window-view"'), 'Tabs, then Window view');
-  assert.ok(appearance.indexOf('id="window-view"') < appearance.indexOf('id="appearance-mode"'), 'Layout comes before Theme');
-  assert.match(appearance, /<SettingGroup title=\{tr\("settings\.layoutGroup"\)\} id="layout">\s*<TabLayoutRow/);
-  const tabs = source.slice(source.indexOf('{section === "Tabs" &&'), source.indexOf('id="compact-tab-titles"'));
-  assert.match(tabs, /<TabLayoutRow layout=\{tabLayout\} onChange=\{chooseTabLayout\} \/>/);
-  assert.equal([...source.matchAll(/<TabLayoutRow /g)].length, 2, 'the same component, twice');
+  const layout = source.slice(source.indexOf('{section === "Layout" &&'), source.indexOf('{section === "Sidebar" &&'));
+  assert.ok(layout.indexOf('<TabLayoutRow') > 0 && layout.indexOf('<TabLayoutRow') < layout.indexOf('id="tab-size"') && layout.indexOf('id="tab-size"') < layout.indexOf('id="window-view"'), 'the Tabs card and Tab size, then Window view');
+  assert.ok(layout.indexOf('id="window-view"') < layout.indexOf('id="hide-toolbar"') && layout.indexOf('id="hide-toolbar"') < layout.indexOf('id="seamless-edge-top"') && layout.indexOf('id="seamless-edge-top"') < layout.indexOf('<SeamlessSideRow'), 'Hide the toolbar and the Seamless rows directly under Window view');
+  const appearance = source.slice(source.indexOf('{section === "Appearance" &&'), source.indexOf('{section === "Layout" &&'));
+  assert.ok(!appearance.includes('<TabLayoutRow') && !appearance.includes('id="window-view"'), 'Appearance is how it looks');
+  const tabs = source.slice(source.indexOf('{section === "Tabs" &&'), source.indexOf('{section === "Search" &&'));
+  assert.ok(!tabs.includes('<TabLayoutRow') && tabs.includes('<SettingCrossLink to="sidebar-only-tabs" section="Layout"') && tabs.includes('<SettingCrossLink to="tab-size" section="Layout"'), 'Tabs points at Layout');
+  assert.equal([...source.matchAll(/<TabLayoutRow /g)].length, 1, 'the card is in one place');
   assert.equal([...source.matchAll(/setTabsLayout\(/g)].length, 1, 'one place writes the tab layout from Settings (ui/sidebarMode.ts: both settings, the profile switch and the morph)');
   assert.equal([...source.matchAll(/setRailPrefs\(/g)].length, 0, 'and it is not written by hand beside it');
   const row = fs.readFileSync(path.join(root, 'src/features/settings/TabLayoutRow.tsx'), 'utf8');

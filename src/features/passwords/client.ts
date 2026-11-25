@@ -5,7 +5,16 @@ export interface PwDenied { code: string; message: string }
 export interface PwFlags { strength: 'weak' | 'fair' | 'strong'; reused: number }
 export interface PwStatus { private?: boolean; ok?: boolean; available?: boolean; count?: number; unreadable?: number; code?: string; message?: string; enabled?: boolean }
 export interface PwImportPreview { cancelled?: boolean; unreadable?: string; token?: string; total?: number; new?: number; update?: number; same?: number; skipped?: number; name?: string }
+export interface PwMaskService { id: string; name: string; keyPage: string }
+export interface PwMask { id: string; origin: string; host: string; address: string; enabled: boolean; provider: string; createdAt: number }
+/** Email masks (desktop/passwords/masks.cjs). The API key is never in an answer. */
+export interface PwMasks { connected: boolean; provider?: string; name?: string; offer?: boolean; note?: boolean; count?: number; providers: PwMaskService[]; items: PwMask[] }
 type Request =
+  | { type: 'masks.status' | 'masks.disconnect' }
+  | { type: 'masks.connect'; provider: string; key: string }
+  | { type: 'masks.settings'; offer?: boolean; note?: boolean }
+  | { type: 'masks.enable'; id: string; enabled: boolean }
+  | { type: 'masks.delete'; id: string }
   | { type: 'passwords.status' | 'passwords.list' | 'passwords.check' | 'passwords.deleteAll' | 'passwords.export' | 'passwords.import.preview' }
   | { type: 'passwords.settings'; enabled: boolean }
   | { type: 'passwords.detail' | 'passwords.reveal' | 'passwords.delete' | 'passwords.never.remove'; id: string }

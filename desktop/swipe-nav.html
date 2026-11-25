@@ -31,8 +31,8 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:400 1
 /* The arrow. The view is a fixed strip at the page's edge, so what slides out of the edge is clipped by the view itself. */
 #chip{position:absolute;top:28px;left:0;width:36px;height:36px;border-radius:10px;background:var(--overlay);box-shadow:var(--rim),var(--shadow);display:grid;place-items:center;color:var(--muted);opacity:0;will-change:transform;transform-origin:50% 50%}
 #chip svg{display:block;width:18px;height:18px;fill:currentColor;transition:opacity calc(140ms*var(--speed)) var(--ease)}
-#chip svg.fwd,body.right #chip svg.back{display:none}
-body.right #chip svg.fwd{display:block}
+#chip svg.fwd,body.show-fwd #chip svg.back{display:none}
+body.show-fwd #chip svg.fwd{display:block}
 #chip.armed{color:var(--text);scale:1.08}
 body.off #chip svg{transition:none}
 /* The list. */
@@ -122,7 +122,7 @@ function openList(state){
 swipeNav.onState(state=>{
  setLook(state);
  if(role==='chip'){
-  if(state.type==='show'){side=state.side==='right'?'right':'left';body.classList.toggle('right',side==='right');progress=0;armed=false;chip.classList.remove('armed');drawChip();}
+  if(state.type==='show'){side=state.side==='right'?'right':'left';body.classList.toggle('right',side==='right');body.classList.toggle('show-fwd',(state.glyph==='fwd'||state.glyph==='back'?state.glyph:(side==='right'?'fwd':'back'))==='fwd');progress=0;armed=false;chip.classList.remove('armed');drawChip();}
   else if(state.type==='progress'){progress=state.progress;drawChip();}
   else if(state.type==='armed'){armed=!!state.on;chip.classList.toggle('armed',armed);}
   else if(state.type==='leave')leaveChip(state.leave);

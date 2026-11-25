@@ -61,6 +61,7 @@ test('a burst of deletions writes one marker and one snapshot',async()=>{
  const names=Array.from({length:10},(_,i)=>'s'+i);f.live.cookies=names.map(name=>cookie({name}));f.session.cookies.emit('changed',{},cookie({name:'s0'}),'explicit',false);await manager.flush();
  d.calls.opened.length=0;f.live.cookies=[];
  for(const name of names)f.session.cookies.emit('changed',{},cookie({name}),'overwrite',true);
+ const end=Date.now()+5000;while(d.calls.opened.filter(name=>name.endsWith('.tmp')).length<1&&Date.now()<end)await new Promise(resolve=>setTimeout(resolve,10));
  await tick();
  assert.equal(d.calls.opened.filter(name=>name.endsWith('.revoked')).length,1,'one marker for the burst');
  assert.equal(d.calls.opened.filter(name=>name.endsWith('.tmp')).length,1,'one snapshot for the burst');

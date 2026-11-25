@@ -93,7 +93,7 @@ test('the ring follows the Site colour setting: Soft is the design (and applies 
   assert.match(css, /:root\[data-site-color=rich\][^{]*\.ed-rail\.acira-sidebar\{--sb-site-tint:\d+%\}/);
   assert.ok(numbers.richLight > numbers.lightTint && numbers.richDark > numbers.darkTint, 'Rich tints more than Soft');
   assert.doesNotMatch(css, /data-site-color=soft/, 'Soft needs no rule of its own');
-  assert.match(css, /\.sb-app\[aria-current=page\],\.sb-apps>\.sb-glide\)\{background:color-mix\(in oklab,var\(--sb-site\) var\(--sb-site-tint\),var\(--sb-current\)\);box-shadow:inset 0 0 0 2px var\(--sb-site\)\}/, 'only the active tile and its gliding card carry the ring; rest and hover are untouched');
+  assert.match(css, /\.sb-app\[aria-current=page\]:where\(:not\(\.sb-app-stack\)\),\.app\.style-acira \.acira-sidebar \.sb-apps>\.sb-glide\{background:color-mix\(in oklab,var\(--sb-site\) var\(--sb-site-tint\),var\(--sb-current\)\);box-shadow:var\(--ab-seat\)\}/, 'only the active tile and its gliding card carry the tint and the seat (the ring itself is the active border\'s, styles/active-border.css: one 1px ring, no 2px inset line); rest and hover are untouched');
 });
 
 test('the tile reads its colour from its own icon, and the gliding card flies from one ring colour to the other', () => {
@@ -101,8 +101,8 @@ test('the tile reads its colour from its own icon, and the gliding card flies fr
   assert.match(sidebar, /useIconColors\(apps\.map\(app=>\(\{key:app\.id,site:appHost\(app\.url\),src:app\.icon\|\|siteIdentity\(app\.url\)\.icon\|\|siteIcon\(app\.url\)\}\)\),!privateMode\)/);
   assert.match(sidebar, /data-site=\{colours\[app\.id\]\?'':undefined\}/);
   assert.match(sidebar, /'--site-h':colours\[app\.id\]!\.h,'--site-c':colours\[app\.id\]!\.c/);
-  assert.match(sidebar, /\.\.\.\(tile\?\{'--sb-site':ring\(was\.el\)\}:\{\}\)/, 'the card starts in the colour of the tile it leaves');
-  assert.match(sidebar, /glide\.style\.setProperty\('--sb-site',ring\(el\)\)/, 'and ends in the colour of the tile it lands on');
+  assert.match(sidebar, /\.\.\.\(tile&&!off\?\{'--sb-site':ring\(was\.el\)\}:\{\}\)/, 'the card starts in the colour of the tile it leaves (not under Site color Off, F10: the card computes no colour then)');
+  assert.match(sidebar, /if\(tile&&!off\)glide\.style\.setProperty\('--sb-site',ring\(el\)\)/, 'and ends in the colour of the tile it lands on');
   assert.match(css, /@property --sb-site\{syntax:'<color>'/, 'registered, so the card can animate between the two colours');
   assert.doesNotMatch(read('src/ui/siteIconColor.ts'), /fetch\(|XMLHttpRequest|crossOrigin/, 'nothing is fetched');
 });
@@ -131,9 +131,10 @@ test('the placement is one control in the Favorites row, the layout puts the til
   assert.match(settings, /setSidebarAppsPlace\(tab\.browserProfileId, privateMode, to\.appsPlace\)/, 'Reset sidebar layout writes the place from the shared reset list');
   assert.match(read('src/features/settings/changed.ts'), /appsPlace: 'top' as 'top' \| 'bottom'/, 'and the list puts them back at the top');
   const sidebar = read('src/components/sidebar/AciraSidebar.tsx');
-  assert.match(sidebar, /const favoritesBottom=show\('favorites'\)&&favorites\.place==='bottom'/);
-  assert.ok(sidebar.indexOf('<SidebarMedia') < sidebar.indexOf('className="sb-favorites-bottom"') && sidebar.indexOf('className="sb-favorites-bottom"') < sidebar.indexOf('<WorkspaceRow'), 'media card, then the tiles, then the workspace row and the footer');
-  assert.match(sidebar, /show\('favorites'\)&&!favoritesBottom\?<>/, 'the top is the empty spacer when they sit at the bottom');
+  assert.match(sidebar, /arrangeOf\(layout,\{shelf,favoritesPlace:favorites\.place==='bottom'\?'bottom':'top',sidePanel:sidePanelSites>0\}\)/, 'the arrangement knows where the Favorites store keeps the tiles');
+  assert.ok(sidebar.indexOf('<SidebarMedia') < sidebar.indexOf('{bottomNodes}') && sidebar.indexOf('{bottomNodes}') < sidebar.lastIndexOf('<ResizeHandle'), 'media card, then the bottom edge: the tiles (when they sit there), the workspace row and the footer');
+  assert.match(sidebar, /<div key=\{id\} className="sb-favorites-bottom">/, 'the tiles at the bottom stand in the bottom edge');
+  assert.match(sidebar, /!arrangement\.top\.includes\('favorites'\)&&<div className="sb-top-space"/, 'the top is the empty spacer when they sit at the bottom');
   assert.match(css, /\.sb-favorites-bottom \.sb-apps-region\{padding:2px 12px 8px;-webkit-app-region:no-drag\}/, 'the window-drag strip stays at the top');
   for (const locale of ['en', 'es', 'fr', 'de', 'pt-BR', 'it', 'ja', 'zh-CN', 'ar', 'tr', 'ru', 'ko', 'hi']) {
     const catalog = JSON.parse(read(`src/i18n/${locale}.json`)) as Record<string, string>;

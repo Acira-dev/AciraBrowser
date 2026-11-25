@@ -44,6 +44,24 @@ test('restart saves the session first, then calls quitAndInstall (never before)'
   assert.equal(order.filter(row => row[0] === 'quitAndInstall').length, 1);
 });
 
+// D141 (22 Nov 2026): the setup could not be started (an antivirus, a file taken away): electron-updater reports the error while Install now is
+// under way. The status used to read as a download that stopped; it now says the install failed, and only for that failure.
+test('an error while Install now is under way is an install that failed, not a download that stopped; a later failed look is not', async () => {
+  const dir = folder(), auto = fakeUpdater();
+  const updater = make(dir, { autoUpdater: auto });
+  await updater.check(); assert.equal(updater.status().installFailed, false, 'ready: nothing failed');
+  await updater.install();
+  auto.emit('error', Object.assign(new Error('spawn EACCES'), { code: 'EACCES' }));
+  const failed = updater.status();
+  assert.equal(failed.status, 'error'); assert.equal(failed.installFailed, true); assert.equal(failed.available, '1.1.0', 'the version it could not install is still named');
+  // Install now is free again, and a look that finds the file ready clears it
+  await updater.check(); assert.equal(updater.status().status, 'ready'); assert.equal(updater.status().installFailed, false);
+  // an error with no install under way (a look that failed) is not an install that failed
+  auto.checkForUpdates = async () => { auto.emit('checking-for-update'); auto.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED')); return null; };
+  const second = make(folder(), { autoUpdater: (() => { const other = fakeUpdater(); other.checkForUpdates = async () => { other.emit('checking-for-update'); other.emit('update-available', { version: '1.1.0' }); other.emit('error', new Error('net::ERR_CONNECTION_RESET')); return null; }; return other; })() });
+  await second.check().catch(() => {}); assert.equal(second.status().status, 'error'); assert.equal(second.status().installFailed, false, 'a download that failed stays a download that failed');
+});
+
 test('a failing session save does not trap the person in the old version', async () => {
   const order = [];
   const updater = make(folder(), { autoUpdater: fakeUpdater(order), beforeInstall: async () => { throw new Error('disk busy'); } });
@@ -219,7 +237,7 @@ test('the stand-in updater downloads from a local feed for real, so the proof sh
 test('the update popup, the dot and the pill are wired through the one popup system, with no markup from the network', () => {
   const app_ = read('src', 'App.tsx'), validation = read('desktop', 'validation.cjs'), popup = read('src', 'ui', 'popup.ts'), main = read('desktop', 'main.cjs');
   assert.match(app_, /kind === 'update' && <UpdatePopover/); assert.match(app_, /update:'\.update-pill'/, 'the panel opens from the pill in every phase (the download dots too)');
-  assert.match(validation, /'workspace-edit', 'update', 'whats-new'\]/); assert.match(popup, /if\(kind==='update'\)return \['ready','error'\]\.includes\(updatePanelPhase\(\)\)\?\d+:\d+;/, 'the panel is taller when it shows a ready update or a stopped download (13.2)');
+  assert.match(validation, /'workspace-edit', 'update', 'whats-new'(?:, 'task-manager')?, 'transfer'(?:, 'dialog', 'prompt')?\]/); assert.match(popup, /if\(kind==='update'\)return updatePanelPhase\(\)==='ready'\?\d+(?:\/\*[^*]*\*\/)?:updatePanelPhase\(\)==='error'\?\d+:\d+;/, 'the panel is taller when it shows a ready update or a stopped download (13.2)');
   assert.match(main, /request\.type==='update\.prompt'/); assert.match(main, /case 'update\.status'[^]*case 'update\.prompt'/);
   for (const file of ['UpdatePill.tsx', 'UpdatePopover.tsx', 'useUpdateReady.ts']) assert.doesNotMatch(read('src', 'features', 'updates', file), /dangerouslySetInnerHTML|innerHTML/, `${file} renders text only`);
   assert.match(read('src', 'features', 'updates', 'UpdatePill.tsx'), /preset=\{ready \? 'check' : paused \|\| stopped \? 'progressHeld' : 'progress'\}/, 'the existing dot matrix: progress fill (held still while paused or after a stopped download, 13.2), then the check');
@@ -264,11 +282,12 @@ test('after a restart into a new version with notes: one popup, claimed once, wi
 
 test('the what\'s-new popup is a centred popup kind with the update popup\'s glass, shown by itself after a short calm, never a dialog window', () => {
   const popup = read('src', 'ui', 'popup.ts'), app_ = read('src', 'App.tsx'), validation = read('desktop', 'validation.cjs'), scrim = read('desktop', 'page-scrim.cjs'), pill = read('src', 'features', 'updates', 'UpdatePill.tsx'), main = read('desktop', 'main.cjs');
-  assert.match(popup, /const centered=kind==='tabs'\|\|kind==='switcher'\|\|kind==='whats-new';/, 'centred by the popup system, so at any window size, scale and sidebar state');
+  // Beta 14 adds the View ranks overlay ('ranks') to the centred kinds: the same panel family, the same dimming. Move to another computer ('transfer') is centred the same way.
+  assert.match(popup, /const centered=kind==='tabs'\|\|kind==='switcher'\|\|kind==='whats-new'\|\|kind==='ranks'\|\|kind==='insider'\|\|kind==='transfer'(?:\|\|kind==='welcome')?(?:\|\|kind==='member-card')?(?:\|\|kind==='dialog')?;/, 'centred by the popup system, so at any window size, scale and sidebar state');
   assert.match(popup, /kind==='whats-new'\?400:/); assert.match(popup, /if\(kind==='whats-new'\)return \d+;/);
-  assert.match(validation, /'update', 'whats-new'\]/); assert.match(scrim, /'whats-new'\]\)/, 'the page dims behind it like the other centred panels');
+  assert.match(validation, /'update', 'whats-new'(?:, 'task-manager')?, 'transfer'(?:, 'dialog', 'prompt')?\]/); assert.match(scrim, /'switcher', 'transfer', 'whats-new', 'ranks', 'insider'(?:, 'member-card')?\]\)/, 'the page dims behind it like the other centred panels');
   assert.match(app_, /kind === 'whats-new' && <WhatsNewPopover/); assert.match(app_, /onOpenNotes=\{\(\) => open\('whats-new'\)\}/);
-  assert.match(pill, /!whatsNew\?\.pending \|\| !canAsk/); assert.match(pill, /claimWhatsNew\(\)\.then\(\(claimed\) => \{ if \(claimed\) openNotes\.current\(\); \}\); \}, 1200\)/);
+  assert.match(pill, /!whatsNew\?\.pending \|\| !canAsk/); assert.match(pill, /claimWhatsNew\(\)\.then\(\(claimed\) => \{ if \(claimed\) openNotes\.current\(\); \}\);[^]*?\}, 1200\)/); assert.match(pill, /insider\.state[^]*?welcome\.owed === true/, 'a profile that owes the Beta 14 welcome gets its notes there, not on top of it');
   assert.match(main, /request\.type==='update\.prompt'\|\|request\.type==='update\.welcome'/); assert.match(main, /now\.prompt\|\|now\.welcome/);
   assert.doesNotMatch(read('src', 'features', 'updates', 'WhatsNewPopover.tsx'), /dangerouslySetInnerHTML|innerHTML|autoFocus/, 'plain text only, and it never takes the keyboard from the page');
 });

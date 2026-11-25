@@ -308,7 +308,7 @@ test('wiring: the header hook, the service requests, the private source and the 
  assert.match(blocking,/function attach\(session,profileId,privateMode\)\{/,'attach keeps its signature');
  assert.match(blocking,/scriptRules\.attach\(session,\{profileId,privateMode\}\);/);
  assert.match(blocking,/scripts:\{follow:\(session,sourceProfileId\)=>scriptRules\.follow\(session,sourceProfileId\)/);
- assert.match(blocking,/pipeline\.useHeaders\(details=>scriptRules\.headers\(details,session\)\);/);
+ assert.match(blocking,/pipeline\.useHeaders\(details=>scriptRules\.headers\(details,session\),\{scope:'documents'\}\);/);
  assert.match(blocking,/scriptRules\.watch\(session,wc\)/,'every tab is watched for a page that arrives without the header');
  assert.match(blocking,/contexts\.delete\(session\);scriptRules\.release\(session\);/);
  assert.match(blocking,/clearStorageData\(origin\?\{origin,storages:\['serviceworkers'\]\}:\{storages:\['serviceworkers'\]\}\)/);

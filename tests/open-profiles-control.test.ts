@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { LOCALES } from '../src/i18n/locales';
+import { MAX_WORKSPACES } from '../src/runtime/workspaces';
 
 // Profiles and workspaces, made obvious (6 Nov): no question when a profile is added. One segmented control, "Open profiles: In this window ·
 // In separate windows", is the existing "Switch between" setting (`settings.spaces`), in the profile menu, at the top of Settings › Profiles and in
@@ -153,8 +154,8 @@ test('the sidebar menu is New workspace… and Customize sidebar, Add profile…
   const spaces = menu(windowOf({ profiles: 2, spaces: 'profiles' }));
   assert.match(spaces, /Add profile…/);
   assert.doesNotMatch(spaces, /New workspace…/);
-  const full = menu(windowOf({ workspaceCount: 8 }));
-  assert.doesNotMatch(full, /New workspace…/, 'at eight workspaces there is no room');
+  const full = menu(windowOf({ workspaceCount: MAX_WORKSPACES }));
+  assert.doesNotMatch(full, /New workspace…/, 'at the limit there is no room');
   assert.match(full, /Customize sidebar/);
   const noWorkspaces = menu(windowOf({ privateWindow: true, workspaceCount: 1 }));
   assert.match(noWorkspaces, /Customize sidebar/);
@@ -166,30 +167,30 @@ test('a workspace icon\'s menu starts with New workspace…, then Rename…, Ico
   const second = menu(state, 'workspace-1');
   const order = ['New workspace…', 'Rename…', 'Icon and color…', 'Delete workspace'].map(text => second.indexOf(text));
   assert.ok(order.every(at => at > -1) && order.every((at, i) => !i || at > order[i - 1]), `rows in order: ${order}`);
-  assert.doesNotMatch(menu(windowOf({ workspaceCount: 8 }), 'workspace-1'), /New workspace…/, 'no room at eight');
+  assert.doesNotMatch(menu(windowOf({ workspaceCount: MAX_WORKSPACES }), 'workspace-1'), /New workspace…/, 'no room at the limit');
   assert.doesNotMatch(menu(windowOf({ profiles: 2, spaces: 'profiles' }), 'workspace-default'), /New workspace…/, 'in one window profiles are the spaces: no workspace to make');
 });
 
-test('menu heights hold the new rows: the sidebar menu (81 measured), the workspace icon menu, the tab strip menu and the profile menu', () => {
+test('menu heights hold the new rows: the sidebar menu (120 measured), the workspace icon menu, the tab strip menu and the profile menu', () => {
   const height = (kind: string, state: BrowserSnapshot, target?: object) => { store.clear(); if (target) store.set('acira-workspace-target', JSON.stringify({ ...target, at: Date.now() })); return popupNaturalHeight(kind, state, {}); };
   // measured in the real app on 6 Nov, three profiles and three workspaces (the rig in the shared notes folder)
   const rig = windowOf({ profiles: 3, workspaceCount: 3 });
-  assert.equal(height('workspace-context', rig, { mode: 'sidebar' }), 81, 'New workspace…, a divider and Customize sidebar');
-  assert.equal(height('workspace-context', windowOf({ workspaceCount: 8 }), { mode: 'sidebar' }), 42, 'Customize sidebar alone');
-  assert.equal(height('workspace-context', rig, { mode: 'context', workspaceId: 'workspace-default' }) - height('workspace-context', windowOf({ workspaceCount: 8 }), { mode: 'context', workspaceId: 'workspace-default' }), 39, 'New workspace… and its divider on top, until eight');
+  assert.equal(height('workspace-context', rig, { mode: 'sidebar' }), 120, 'New workspace…, a divider, Customize sidebar, a divider and the Tabs layout row (81 before Beta 14 added that row; 120 measured in the real app on 13 Nov)');
+  assert.equal(height('workspace-context', windowOf({ workspaceCount: MAX_WORKSPACES }), { mode: 'sidebar' }), 81, 'Customize sidebar and the Tabs layout row (42 for Customize sidebar alone before Beta 14)');
+  assert.equal(height('workspace-context', rig, { mode: 'context', workspaceId: 'workspace-default' }) - height('workspace-context', windowOf({ workspaceCount: MAX_WORKSPACES }), { mode: 'context', workspaceId: 'workspace-default' }), 39, 'New workspace… and its divider on top, until the limit');
   assert.equal(height('profile', rig), 497, 'Open profiles adds a divider and its 70px block (measured 497)');
   assert.equal(height('profile', windowOf({ profiles: 1, workspaceCount: 3 })), 497 - 79 - 2 * 44, 'one profile: no Open profiles block');
   const strip = (state: BrowserSnapshot) => height('strip-context', state);
-  assert.equal(strip(windowOf({ workspaceCount: 1 })) - strip(windowOf({ workspaceCount: 8 })), 39, 'New workspace… and its divider, until eight');
+  assert.equal(strip(windowOf({ workspaceCount: 1 })) - strip(windowOf({ workspaceCount: MAX_WORKSPACES })), 39, 'New workspace… and its divider, until the limit');
 });
 
 test('the tab strip\'s + menu ends with New workspace… (Add profile… with profiles in one window), and the sidebar and row open the sidebar menu', () => {
   const app = read('../src/App.tsx');
   const strip = app.slice(app.indexOf("kind === 'strip-context' &&"), app.indexOf("kind === 'strip-context' &&") + 2600);
   assert.match(strip, /tr\("browsermenu\.reopenClosedTab"\)[\s\S]*<hr\/>\{row\(tr\(profilesAsSpaces\(state\) \? 'profiles\.add' : 'workspaces\.new'\), Plus,/, 'after Reopen closed tab, behind a divider');
-  assert.match(strip, /windowWorkspaces\(state\)\.length < MAX_WORKSPACES/, 'until eight');
+  assert.match(strip, /windowWorkspaces\(state\)\.length < MAX_WORKSPACES/, 'until the limit');
   const sidebar = read('../src/components/sidebar/AciraSidebar.tsx');
-  assert.match(sidebar, /openWorkspacePopup\(state,'workspace-context',event,\{mode:'sidebar'\}\);else setCustomizing\(true\)/, 'empty space opens the menu; a window with no workspaces keeps going straight to Customize');
+  assert.match(sidebar, /openWorkspacePopup\(state,'workspace-context',event,\{mode:'sidebar'\}\);\};/, 'empty space opens the menu, in every window: since Beta 14 it always holds the Tabs layout row, so a window with no workspaces no longer goes straight to Customize');
   const row = read('../src/features/workspaces/WorkspaceSwitcher.tsx');
   assert.match(row, /closest\('\.sb-ws:not\(\.sb-ws-add\)'\)\) return; event\.preventDefault\(\); openWorkspacePopup\(state, 'workspace-context', event, \{ mode: 'sidebar' \}\)/, 'the row\'s empty part and its + open it; an icon keeps its own menu');
   assert.match(app, /event\.action === 'customize-sidebar'[\s\S]{0,120}openSidebarCustomize\(\)/, 'the menu\'s Customize sidebar row reaches the sidebar through the chrome');

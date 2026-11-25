@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { rewind, rewindAvailable, type RewindState } from '../../rewind/client';
-import { Select, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
+import { Select, SettingCrossLink, SettingGroup, SettingNote, SettingRow, Switch } from '../controls';
 import type { SettingsPanel, SettingsPanelProps } from '../panels';
 
 import { t } from '../../../i18n';
@@ -26,8 +26,9 @@ function RewindSettings({ state, dispatch }: SettingsPanelProps) {
       {confirm ? <span className="rewind-confirm"><button type="button" className="btn" onClick={() => setConfirm(false)}>{t("ext.dlgCancel")}</button> <button type="button" className="btn danger" onClick={() => { setConfirm(false); void rewind({ type: 'rewind.clear' }).then(next => { setData(next); dispatch({ type: 'toast', text: t("rewind.historyDeleted") }); }); }}>{t('rewind.deleteCount', { count })}</button></span>
         : <button type="button" className="btn" disabled={!count} onClick={() => setConfirm(true)}>{t("pwp.deleteEllipsis")}</button>}
     </SettingRow>
+    <SettingCrossLink to="clear-browsing-data" section="Privacy" title={t("privacy.clearBrowsingData")} />
     {error && <SettingNote>{error}</SettingNote>}
   </SettingGroup>;
 }
-const panel: SettingsPanel = { section: 'Tabs', order: 55, Component: RewindSettings };
+const panel: SettingsPanel = { section: 'Tabs', order: 55, placed: true, Component: RewindSettings };
 export default panel;

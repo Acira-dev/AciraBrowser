@@ -94,6 +94,7 @@ test('Settings > About: the row\'s button pauses Acira\'s own download, as the p
   assert.deepEqual(rowAction(status({ status: 'paused', available: '0.1.0-beta.9', progress: 42 })), { action: 'update.resume', disabled: false });
   assert.deepEqual(rowAction(status({ status: 'downloading', available: '0.1.0-beta.9', progress: 42, pausable: true })), { action: 'update.pause', disabled: false });
   assert.deepEqual(rowAction(status({ status: 'downloading', available: '0.1.0-beta.9', progress: 42, pausable: false })), { action: 'update.check', disabled: true }, 'electron-updater\'s own download cannot pause: the button stays as it was');
+  assert.deepEqual(rowAction(status({ status: 'downloading', available: '0.1.0-beta.9', progress: 100, transferred: 382e6, total: 382e6, pausable: false })), { action: 'update.check', disabled: true }, 'D131: at the last byte main says pausable false, and the row offers no Pause');
   assert.match(read('src/features/settings/panels/updates.tsx'), /button\.action === 'update\.pause'\s+\? <button type="button" className="st-button" onClick=\{\(\) => void act\('update\.pause'\)\}>\{t\('updates\.pause'\)\}<\/button>/, 'a quiet button (not primary): pausing is the lesser act');
   assert.match(read('src/features/settings/panels/updates.tsx'), /button\.action === 'update\.resume'\s+\? <button type="button" className="st-button primary" onClick=\{\(\) => void act\('update\.resume'\)\}>\{t\('updates\.resume'\)\}<\/button>/);
 });

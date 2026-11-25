@@ -12,7 +12,7 @@
 //
 // deps (all from main.cjs): available() -> the profile's ordinary controllers; destination() -> a controller to own a popup window;
 // createWindow(options) -> a new ordinary controller of the profile (createBrowserWindow); attach(webContents, window) -> hands a page to the
-// engine; sessionOf() -> the profile's Electron session; ordinary(url) -> true for an http(s) address Acira opens; icon, title, hidden().
+// engine; sessionOf() -> the profile's Electron session; ordinary(url) -> true for an http(s) address Acira opens; icon (a path, or a function asked each time a window is made), title, hidden().
 
 const {trace} = require('../../ext-trace.cjs');
 
@@ -90,7 +90,7 @@ function createWindowsHost({electron, available, destination, createWindow, atta
     const origin = extensionId ? `chrome-extension://${extensionId}/` : null;
     const allowed = value => value === 'about:blank' || ordinary(value) || (!!origin && String(value).startsWith(origin));
     const preferences = {session, sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false};
-    const window = new electron.BrowserWindow({show: false, x: rect.x, y: rect.y, width: rect.width, height: rect.height, autoHideMenuBar: true, icon, title: typeof title === 'function' ? title() : title, webPreferences: preferences});
+    const window = new electron.BrowserWindow({show: false, x: rect.x, y: rect.y, width: rect.width, height: rect.height, autoHideMenuBar: true, icon: typeof icon === 'function' ? icon() : icon, title: typeof title === 'function' ? title() : title, webPreferences: preferences});
     const track = child => {
       const key = AUX + child.id;
       owner.auxiliaries.set(key, child);

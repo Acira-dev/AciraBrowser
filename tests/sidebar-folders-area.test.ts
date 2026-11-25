@@ -85,7 +85,7 @@ test('the setting is remembered for each profile, and an unknown value falls bac
 });
 
 test('Settings > Sidebar has a "Tab groups" row with three choices, searchable, reset by "Reset sidebar layout"', () => {
-  assert.match(panel, /<SettingRow id="sidebar-folders" title=\{t\("sidebar\.tabGroups"\)\} detail=\{t\("sidebar\.tabGroupsDetail"\)\}>/);
+  assert.match(panel, /<SettingRow id="sidebar-folders" title=\{t\("sidebar\.tabGroups"\)\} detail=\{shelf \? t\('settings\.reasonShelf'\) : t\("sidebar\.tabGroupsDetail"\)\}>/);
   assert.match(panel, /value=\{rail\.folders \?\? 'mixed'\}/);
   assert.match(panel, /\{ value: 'mixed', label: t\("sidebar\.groupsWithTabs"\) \}, \{ value: 'above', label: t\("sidebar\.groupsAbove"\) \}, \{ value: 'below', label: t\("sidebar\.groupsBelow"\) \}/);
   assert.ok(panel.indexOf('id="sidebar-folders"') > panel.indexOf('id="sidebar-new-tabs-top"') && panel.indexOf('id="sidebar-folders"') < panel.indexOf('id="sidebar-reset"'), 'between New tabs at the top and the reset row, with the other tab-list rows (the Width row is the Sidebar size row now, under Show sidebar)');

@@ -12,7 +12,7 @@ const {normalizeOrigin,classify,displayHost,RANK}=require('./origin-match.cjs');
 const {tr}=require('./text.cjs');
 const {writeFileAtomic}=require('../atomic-file.cjs');
 
-const VERSION=1,MAX_RECORDS=10000,LIMITS={origin:2048,username:512,password:1024,note:4096};
+const VERSION=1,MAX_RECORDS=10000,MAX_MASKS=500,LIMITS={origin:2048,username:512,password:1024,note:4096,address:254,remoteId:64,key:512};
 const SAFE_PROFILE=/^[A-Za-z0-9_.:-]{1,120}$/,SAFE_RECORD=/^[0-9a-f]{32}$/;
 class VaultError extends Error{constructor(code,message){super(message);this.name='VaultError';this.code=code;}}
 const fail=(code,message)=>{throw new VaultError(code,message);};
@@ -82,7 +82,7 @@ function createVault({dir,keys,now=Date.now,randomBytes=crypto.randomBytes}){
   const state=load(profileId);if(state.index)return state.index;
   const index=new Map();state.broken=state.broken||0;
   for(const [id,sealed] of state.records){
-   try{const payload=open(profileId,sealed);if(payload.kind==='login')index.set(id,{id,kind:'login',origin:payload.origin,username:payload.username,createdAt:payload.createdAt,updatedAt:payload.updatedAt});else if(payload.kind==='never')index.set(id,{id,kind:'never',origin:payload.origin,createdAt:payload.createdAt});else state.broken++;}
+   try{const payload=open(profileId,sealed);if(payload.kind==='login')index.set(id,{id,kind:'login',origin:payload.origin,username:payload.username,createdAt:payload.createdAt,updatedAt:payload.updatedAt});else if(payload.kind==='never')index.set(id,{id,kind:'never',origin:payload.origin,createdAt:payload.createdAt});else if(payload.kind==='mask')index.set(id,{id,kind:'mask',origin:payload.origin,address:payload.address,provider:payload.provider,remoteId:payload.remoteId,enabled:payload.enabled!==false,createdAt:payload.createdAt});else if(payload.kind==='connection')index.set(id,{id,kind:'connection',provider:payload.provider,offer:payload.offer!==false,note:payload.note!==false});else state.broken++;}
    catch(error){if(error instanceof VaultError)throw error;state.broken++;}
   }
   state.index=index;return index;
@@ -135,7 +135,7 @@ function createVault({dir,keys,now=Date.now,randomBytes=crypto.randomBytes}){
    state.records.set(current.id,seal(profileId,current.id,{kind:'login',...next,createdAt:current.createdAt,updatedAt:now()}));state.index=null;persist(profileId,state);
    return {id:current.id};
   },
-  remove(profileId,id){const state=load(profileId);if(!state.records.delete(String(id)))fail('missing',tr('pw.vault.missing','That item no longer exists.'));state.index=null;persist(profileId,state);return true;},
+  remove(profileId,id){const state=load(profileId);const kind=indexOf(profileId).get(String(id))?.kind;if(kind==='mask'||kind==='connection')fail('missing',tr('pw.vault.missing','That item no longer exists.'));/* masks go through maskRemove, the key through connectionRemove */if(!state.records.delete(String(id)))fail('missing',tr('pw.vault.missing','That item no longer exists.'));state.index=null;persist(profileId,state);return true;},
   addNever(profileId,origin){
    const normalized=normalizeOrigin(origin);if(!normalized)fail('invalid',tr('pw.vault.invalidOrigin','Enter a website address that starts with http:// or https://.'));
    const state=load(profileId);
@@ -154,6 +154,52 @@ function createVault({dir,keys,now=Date.now,randomBytes=crypto.randomBytes}){
   secret(profileId,id){const item=api.get(profileId,id);return {origin:item.origin,username:item.username,password:item.password};},
   /** Every login with secrets: export and the weak/reused check only (callers are gated). */
   all(profileId){return [...indexOf(profileId).values()].filter(e=>e.kind==='login').map(e=>api.get(profileId,e.id)).sort(byHostThenUser);},
+  // --- email masks (desktop/passwords/masks.cjs) ---------------------------------------------------------------------
+  // Two more sealed record kinds in the same per-profile file: one `connection` (which mask service, its API key, two switches) and a
+  // `mask` per address made through it (site, address, the service's own id, last known on/off). The key never leaves this module except
+  // through connection(), which only the main-process mask service calls.
+  masks(profileId){return [...indexOf(profileId).values()].filter(e=>e.kind==='mask').map(e=>({id:e.id,origin:e.origin,address:e.address,provider:e.provider,remoteId:e.remoteId,enabled:e.enabled,createdAt:e.createdAt})).sort((a,b)=>b.createdAt-a.createdAt||a.address.localeCompare(b.address));},
+  maskAdd(profileId,input){
+   const origin=normalizeOrigin(input.origin);if(!origin||origin.length>LIMITS.origin)fail('invalid',tr('pw.vault.invalidOrigin','Enter a website address that starts with http:// or https://.'));
+   const address=clean(input.address,LIMITS.address,'Address',{required:true,trim:true}),provider=clean(input.provider,32,'Service',{required:true}),remoteId=clean(input.remoteId,LIMITS.remoteId,'Mask id',{required:true});
+   const state=load(profileId);
+   if([...indexOf(profileId).values()].filter(e=>e.kind==='mask').length>=MAX_MASKS)fail('full',tr('pw.vault.maskFull','This list is full. Delete masks you no longer use.'));
+   if(state.records.size>=MAX_RECORDS)fail('full',tr('pw.vault.full','This vault is full.'));
+   const id=randomBytes(16).toString('hex');
+   state.records.set(id,seal(profileId,id,{kind:'mask',origin,address,provider,remoteId,enabled:input.enabled!==false,createdAt:now()}));state.index=null;persist(profileId,state);return {id};
+  },
+  maskSet(profileId,id,patch){
+   const state=load(profileId),sealed=state.records.get(String(id));if(!sealed)fail('missing',tr('pw.vault.missing','That item no longer exists.'));
+   let payload;try{payload=open(profileId,sealed);}catch{fail('corrupt',tr('pw.vault.unreadableItem','That item can’t be read.'));}
+   if(payload.kind!=='mask')fail('missing',tr('pw.vault.missing','That item no longer exists.'));
+   if(typeof patch.enabled==='boolean')payload.enabled=patch.enabled;
+   state.records.set(sealed.id,seal(profileId,sealed.id,payload));state.index=null;persist(profileId,state);return true;
+  },
+  maskRemove(profileId,id){
+   const state=load(profileId),entry=indexOf(profileId).get(String(id));if(!entry||entry.kind!=='mask')fail('missing',tr('pw.vault.missing','That item no longer exists.'));
+   state.records.delete(entry.id);state.index=null;persist(profileId,state);return true;
+  },
+  /** The mask service's connection without the key: {provider, offer, note} or null. */
+  connectionMeta(profileId){const entry=[...indexOf(profileId).values()].find(e=>e.kind==='connection');return entry?{id:entry.id,provider:entry.provider,offer:entry.offer,note:entry.note}:null;},
+  /** The connection WITH its key. Main-process mask service only. */
+  connection(profileId){
+   const entry=[...indexOf(profileId).values()].find(e=>e.kind==='connection');if(!entry)return null;
+   try{const payload=open(profileId,load(profileId).records.get(entry.id));return {id:entry.id,provider:payload.provider,key:payload.key,offer:payload.offer!==false,note:payload.note!==false};}
+   catch{fail('corrupt',tr('pw.vault.unreadableItem','That item can’t be read.'));}
+  },
+  connectionSet(profileId,input){
+   const provider=clean(input.provider,32,'Service',{required:true}),key=clean(input.key,LIMITS.key,'Key',{required:true,trim:true});
+   const state=load(profileId),existing=[...indexOf(profileId).values()].find(e=>e.kind==='connection');
+   const id=existing?existing.id:randomBytes(16).toString('hex');
+   if(!existing&&state.records.size>=MAX_RECORDS)fail('full',tr('pw.vault.full','This vault is full.'));
+   state.records.set(id,seal(profileId,id,{kind:'connection',provider,key,offer:input.offer!==false,note:input.note!==false,createdAt:now()}));state.index=null;persist(profileId,state);return {id};
+  },
+  /** Drops the connection and every mask record of this profile (the masks at the service are not touched). */
+  connectionRemove(profileId){
+   const state=load(profileId);let any=false;
+   for(const entry of indexOf(profileId).values())if(entry.kind==='connection'||entry.kind==='mask'){state.records.delete(entry.id);any=true;}
+   if(any){state.index=null;persist(profileId,state);}return any;
+  },
   removeProfile(profileId){profileCheck(profileId);profiles.delete(profileId);for(const name of [fileOf(profileId),`${fileOf(profileId)}.bak`])try{fs.rmSync(name,{force:true});}catch{}return true;},
   removeAll(profileId){return api.removeProfile(profileId);},
   lock(){profiles.clear();},
@@ -169,4 +215,4 @@ function safeStorageKeys(safeStorage){
   unwrap:blob=>Buffer.from(safeStorage.decryptString(blob),'base64'),
  };
 }
-module.exports={createVault,safeStorageKeys,VaultError,LIMITS,MAX_RECORDS};
+module.exports={createVault,safeStorageKeys,VaultError,LIMITS,MAX_RECORDS,MAX_MASKS};

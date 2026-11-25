@@ -16,7 +16,7 @@
  --sb-ring:var(--focus-ring-color,var(--chrome-focus-ring));--sb-line:rgb(var(--ink) / .08);--sb-line-strong:var(--chrome-line-strong,rgb(var(--ink) / .14));
  --sb-ease:var(--ease-ui,cubic-bezier(.2,0,0,1));--sb-strong:cubic-bezier(.23,1,.32,1);--sb-spring:linear(0,0.0582,0.1823,0.3238,0.4588,0.5768,0.6749,0.7536,0.8153,0.8628,0.8988,0.9259,0.946,0.9608,0.9717,0.9796,0.9854,0.9895,0.9925,0.9947,0.9962,0.9973,0.9981,0.9987,1);--sb-move:var(--ease-move,cubic-bezier(.645,.045,.355,1));--sb-dur:120ms;
  --sb-row:32px;--sb-radius:var(--radius-control,4px);--sb-row-radius:8px;--sb-danger:#d9474f;--sb-drop:color-mix(in srgb,var(--sb-ring) 12%,transparent);
- --sb-rail:.55;--gf-sheet:#fff;--gf-sheen:rgb(255 255 255 / .72);
+ --sb-rail:.55;
  /* Group colors, sidebar only: Chrome's nine, muted OKLCH, lighter in dark (concept). The strip keeps its own. On a light sidebar the
     dot is the group's only mark, so each colour keeps 3:1 on every light finish (Sand over a dark desktop is the darkest glass):
     blue, yellow, green, pink, cyan and orange take a deeper tone of their own hue, kept inside sRGB (beta.10, contrast-2). */
@@ -34,7 +34,6 @@
 @container style(--sidebar-tone: dark){.app.style-acira .ed-rail.acira-sidebar{
  --tab-group-grey:oklch(.7 0 0);--tab-group-blue:oklch(.72 .12 255);--tab-group-red:oklch(.7 .14 25);--tab-group-yellow:oklch(.82 .11 95);--tab-group-green:oklch(.74 .11 150);
  --tab-group-pink:oklch(.74 .12 350);--tab-group-purple:oklch(.72 .12 300);--tab-group-cyan:oklch(.78 .09 210);--tab-group-orange:oklch(.76 .12 60);
- --gf-sheet:rgb(255 255 255 / .56);--gf-sheen:rgb(255 255 255 / .24);
 }}
 /* A deep finish in light mode: its glass is lighter than in dark mode, so labels, counts and the faint notes (section notes, empty states,
    app slots) on 50% white measured 4.15-4.3:1. 54% is the least that keeps 4.5:1 on all seven deep finishes (Emerald and Alpine are the
@@ -63,16 +62,18 @@
 .app.style-acira .acira-sidebar .sb-app{
  position:relative;display:grid;place-items:center;min-width:0;height:40px;padding:0;border:0;border-radius:6px;
  background:var(--sb-tile);color:var(--sb-fg);box-shadow:none;-webkit-app-region:no-drag;
- transition:background-color var(--sb-dur) var(--sb-ease);
+ transition:background-color var(--sb-dur) var(--sb-ease),box-shadow var(--sb-dur) var(--sb-ease);
 }
 .app.style-acira .acira-sidebar .sb-app:hover{background:color-mix(in srgb,var(--sb-tile),rgb(var(--ink)) 4%)}
 .app.style-acira .acira-sidebar .sb-app[data-editing]{background:var(--sb-selected)}
 .app.style-acira .acira-sidebar .sb-app[aria-current=page]{background:var(--sb-current);box-shadow:var(--sb-current-shadow)}
+/* No Favorite dot (reported 17 Nov, very firm: "no dot at all"). Beta 14 brought back a faint dot (3px, 7px above the tile's bottom edge) for "open in the background" and nudged the icon up 2px; both are gone, in every state and mode. A tile carries no ::after and no data-dot, and its icon stays where a tile with no dot has it. tests/favorite-tabs-in-list.test.ts fails if either comes back. */
+.app.style-acira .acira-sidebar .sb-app-loading{display:grid;place-items:center;width:20px;height:20px;color:var(--sb-muted)}
 /* Settings keep a favorite's tab only in its tile (Favorites' tabs in the tab list: off): the tile is that tab's one place, so a sleeping tab dims there as a row does. */
-.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>*{opacity:var(--sb-sleeping-icon)}
+.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>.site-identity-icon,.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>.acira-symbol,.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>.sb-app-initial,.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>.sb-app-loading,.app.style-acira .acira-sidebar .sb-app[data-sleeping]:not([aria-current=page]):not(:hover):not(:focus-visible)>.sb-peek-card{opacity:var(--sb-sleeping-icon)}
 .app.style-acira .acira-sidebar .sb-app:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-2px}
-/* The active tile's ring is its site's own colour (item 10, founder-approved 7 Nov): a 2px ring inside the tile's edge, so nothing shifts, and a light tint
-   of the same colour in the tile. Hue and chroma come from the icon (ui/siteIconColor.ts), lightness from the theme (.58 light, .72 dark: 3:1 or more
+/* The active tile's ring is its site's own colour (item 10, team-approved 7 Nov), drawn in the chosen active-border look (styles/active-border.css, Beta 14: one 1px ring, not a 2px inset line),
+   and a light tint of the same colour in the tile. Hue and chroma come from the icon (ui/siteIconColor.ts), lightness from the theme (.58 light, .72 dark: 3:1 or more
    against the tile for every hue, Rich's tint too (20% light, 18% dark), tests/site-icon-color.test.ts), so one cached pair serves both. An icon with no real colour (grey, black, white, none)
    and Off use the accent. Strength follows Settings > Appearance > Site colour (:root[data-site-color]): Soft is the design and also applies while the
    attribute is missing; Rich takes a stronger tint and a fine second ring outside; Off is the accent only. Rest and hover are unchanged. Keyboard
@@ -82,12 +83,15 @@
 .app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-site-l:.72;--sb-site-tint:10%}
 :root[data-site-color=rich] .app.style-acira .ed-rail.acira-sidebar{--sb-site-tint:20%}
 :root[data-site-color=rich] .app.style-acira[data-chrome=dark] .ed-rail.acira-sidebar{--sb-site-tint:18%}
+:root[data-site-color=off] .app.style-acira .ed-rail.acira-sidebar{--sb-site-tint:0%}   /* Off covers the Favorites (F10): the selected tile and the card that flies between them take no tint, and the card takes the accent ring like the tile (below) */
+:root[data-site-color=off] .app.style-acira .acira-sidebar .sb-apps>.sb-glide{--sb-site:var(--sb-site-fallback)}
 .app.style-acira .acira-sidebar .sb-app{--sb-site:var(--sb-site-fallback)}
 .app.style-acira .acira-sidebar .sb-app[data-site]{--sb-site:oklch(var(--sb-site-l) var(--site-c) var(--site-h))}
 :root[data-site-color=off] .app.style-acira .acira-sidebar .sb-app[data-site]{--sb-site:var(--sb-site-fallback)}
-.app.style-acira .acira-sidebar :is(.sb-app[aria-current=page],.sb-apps>.sb-glide){background:color-mix(in oklab,var(--sb-site) var(--sb-site-tint),var(--sb-current));box-shadow:inset 0 0 0 2px var(--sb-site)}
-:root[data-site-color=rich] .app.style-acira .acira-sidebar :is(.sb-app[aria-current=page],.sb-apps>.sb-glide){box-shadow:inset 0 0 0 2px var(--sb-site),0 0 0 1px color-mix(in oklab,var(--sb-site) 40%,transparent)}
-.app.style-acira .acira-sidebar .sb-app>:is(img,svg){width:20px;height:20px;object-fit:contain}
+/* The Favorites stack (.sb-app-stack) takes neither the site-coloured tile wash nor Rich's 12px glow when a folded Favorite is the open tab: it has no tile of its own (favorites-stack.css) and its quiet active marker is the front plate's neutral ring. :where() keeps the rule's specificity what it was for every other tile. */
+.app.style-acira .acira-sidebar .sb-app[aria-current=page]:where(:not(.sb-app-stack)),.app.style-acira .acira-sidebar .sb-apps>.sb-glide{background:color-mix(in oklab,var(--sb-site) var(--sb-site-tint),var(--sb-current));box-shadow:var(--ab-seat)}
+:root[data-site-color=rich] .app.style-acira .acira-sidebar .sb-app[aria-current=page]:where(:not(.sb-app-stack)),:root[data-site-color=rich] .app.style-acira .acira-sidebar .sb-apps>.sb-glide{box-shadow:var(--ab-seat),0 0 12px -2px color-mix(in oklab,var(--sb-site) 34%,transparent)}
+.app.style-acira .acira-sidebar .sb-app>.site-identity-icon,.app.style-acira .acira-sidebar .sb-app>.sb-app-add-ico{width:20px;height:20px;object-fit:contain}
 .app.style-acira .acira-sidebar .sb-app-initial{font-size:var(--text-13,13px);font-weight:500;line-height:1;color:var(--sb-muted)}
 .app.style-acira .acira-sidebar .sb-app:is(.sb-app-add,.sb-app-slot){background:transparent;color:var(--sb-faint)}
 .app.style-acira .acira-sidebar .sb-app-slot{box-shadow:inset 0 0 0 1px rgb(var(--ink) / .06)}
@@ -98,7 +102,7 @@
 .app.style-acira .acira-sidebar .sb-app[data-drop]::before{content:'';position:absolute;top:6px;bottom:6px;width:2px;border-radius:1px;background:var(--sb-ring);pointer-events:none}
 .app.style-acira .acira-sidebar .sb-app[data-drop=before]::before{left:-4px}
 .app.style-acira .acira-sidebar .sb-app[data-drop=after]::before{right:-4px}
-.app.style-acira .acira-sidebar .sb-apps[data-dropping] :is(.sb-app-add,.sb-app-slot){background:var(--sb-drop)}
+.app.style-acira .acira-sidebar .sb-apps[data-dropping] .sb-app-add,.app.style-acira .acira-sidebar .sb-apps[data-dropping] .sb-app-slot{background:var(--sb-drop)}
 .app.style-acira .acira-sidebar .sb-apps:not(:hover,:focus-within,[data-dropping]) .sb-app-add:not([aria-expanded=true]){opacity:0}
 .app.style-acira .acira-sidebar .sb-app-add{transition:opacity var(--sb-dur) var(--sb-ease),background-color var(--sb-dur) var(--sb-ease)}
 /* Favorites switched off: a caption band level with the toolbar keeps the top of the sidebar draggable. */
@@ -136,17 +140,21 @@
 .app.style-acira .acira-sidebar .sb-danger{padding:0 8px;border-color:transparent;color:var(--sb-danger)}
 
 /* One scroll region between Favorites and the footer: inset 6px, a 16px fade at the bottom edge, an overlay
-   scrollbar that shows while hovered. */
+   scrollbar (EdgeThumb: Rule 12, only while scrolling or with the pointer near its right edge). */
 .app.style-acira .acira-sidebar .sb-sections-wrap{position:relative;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;width:100%}
-/* The pinned extensions: one row of the toolbar's buttons above the tab list (SidebarExtensions.tsx). Wraps rather than scrolls; 30 px buttons as the toolbar's, 14 px in like the rows below. */
+/* The pinned extensions: ONE line of the toolbar's buttons above the tab list (SidebarExtensions.tsx), 30 px buttons at the engine's 5 px pitch as the toolbar's, 14 px in like the rows below.
+   What does not fit the line is behind the last slot, the "more" button (Beta 14); the buttons are never shrunk and the row's height never changes with how many are pinned. */
 .app.style-acira .acira-sidebar .sb-ext-row{flex:none;display:flex;align-items:center;padding:2px 14px 8px;min-width:0}
 .app.style-acira .acira-sidebar .sb-ext-row[hidden]{display:none}
-/* A tab switch gives the page a new id, so the toolbar's buttons are rebuilt and arrive a moment later: the row keeps its height meanwhile, or the whole tab list jumps up 30 px and back for a frame or two (13.6 final run: 25 of 310 samples in a fast burst). */
-.app.style-acira .acira-sidebar .sb-ext-row:not([hidden]){box-sizing:border-box;min-height:40px}
-.app.style-acira .acira-sidebar .sb-ext-row .native-extension-actions{max-width:100%;min-width:0;gap:2px}
-.app.style-acira .acira-sidebar .sb-ext-row browser-action-list{max-width:100%;flex-wrap:wrap}
-.app.style-acira .acira-sidebar .sb-scroll{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 8px 10px;overflow-x:hidden;overflow-y:auto;scrollbar-width:none;scrollbar-color:rgb(var(--ink) / .24) transparent;-webkit-mask-image:linear-gradient(#000 calc(100% - 16px),transparent)}
-.app.style-acira .acira-sidebar .sb-scroll:hover{scrollbar-width:thin}
+/* 14.1: every pinned button fits: they sit in the middle of the row (SidebarExtensions.tsx data-centred); with the "more" button the row starts at its inset as before */
+.app.style-acira .acira-sidebar .sb-ext-row[data-centred]{justify-content:center}
+.app.style-acira .acira-sidebar .sb-ext-warm{display:none}
+/* The row's own height: 30 px buttons, 2 px above and 8 px below, whatever is pinned and whatever the buttons are doing (a tab switch, a sidebar that was revealed a frame ago). */
+.app.style-acira .acira-sidebar .sb-ext-row:not([hidden]){box-sizing:border-box;height:40px;overflow:hidden}
+.app.style-acira .acira-sidebar .sb-ext-row .native-extension-actions{max-width:100%;min-width:0}
+.app.style-acira .acira-sidebar .sb-ext-row browser-action-list{max-width:100%;flex-wrap:nowrap}
+.app.style-acira .acira-sidebar .sb-scroll{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0 8px 10px;overflow-x:hidden;overflow-y:auto;scrollbar-width:none;-webkit-mask-image:linear-gradient(#000 calc(100% - 16px),transparent)}
+.app.style-acira .acira-sidebar .sb-sections-wrap{--edge-thumb:rgb(var(--ink) / .3)}
 
 /* Zone headers: 28px, sticky to the top of the scroll region (HIG); the chevron sits in the icon column and shows on
    hover or while folded; the label sits on the title edge (M21); label and count at 44%; the action shows on hover.
@@ -255,38 +263,18 @@
 .app.style-acira .acira-sidebar .sb-group{position:relative;display:flex;flex-direction:column;margin:0}
 .app.style-acira .acira-sidebar .sb-group>.sb-group-header{display:flex;align-items:center;gap:8px;width:100%;height:var(--sb-row);padding:0 6px;border:0;border-radius:var(--sb-row-radius);background:none;color:var(--sb-fg);font:500 var(--text-13,13px)/18px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag;transition:background-color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-group>.sb-group-header:hover{background:var(--sb-hover)}
-/* The group's folder (reported 6 Nov: groups read as folders; 7 Nov, item 9: with small sheets for its tabs, glass you can partly see
-   through, opening and closing). GroupFolderGlyph.tsx draws it: a back plate, one to three sheets, a front plate; the group's exact
-   colour is the stroke and the tint (mixing --sb-fg into it only dims it in the dark sidebar, the token is translucent). Closed, the
-   sheets stand square behind the front plate; open, the front plate tilts into the open-folder shape and the sheets lift and fan a
-   little. Every move runs on the chevron's clock (.24s x --motion-scale, the sidebar's spring; Off is instant), and a sheet arriving or
-   leaving is started by the glyph itself. */
-.app.style-acira .acira-sidebar .sb-group-folder{color:var(--group-color)}
-.app.style-acira .acira-sidebar .sb-group-folder>.gf{overflow:visible}
-.app.style-acira .acira-sidebar .gf-back{fill:currentColor;fill-opacity:.1;stroke:currentColor;stroke-opacity:.5;stroke-width:.8;stroke-linejoin:round}
-.app.style-acira .acira-sidebar .gf-sheet{fill:var(--gf-sheet);stroke:color-mix(in srgb,currentColor 50%,transparent);stroke-width:.6;transform-box:fill-box;transform-origin:50% 100%;transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
-.app.style-acira .acira-sidebar .gf-sheet[data-leaving]{--gf-out:calc(.2s * var(--motion-scale,1));animation:gf-sheet-out var(--gf-out) var(--sb-ease) both}
-@keyframes gf-sheet-out{to{opacity:0;translate:0 3px}}
-.app.style-acira .acira-sidebar .gf-front{stroke:currentColor;stroke-opacity:.82;stroke-width:.85;stroke-linejoin:round;d:path("M1.2 7.95Q1.2 6.7 2.45 6.7L13.55 6.7Q14.8 6.7 14.8 7.95L14.8 12.35Q14.8 13.6 13.55 13.6L2.45 13.6Q1.2 13.6 1.2 12.35Z");transition:d calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
-.app.style-acira .acira-sidebar .gf-sheen{fill:none;stroke:var(--gf-sheen);stroke-width:.6;stroke-linecap:round;d:path("M2.9 7.75L13.1 7.75");transition:d calc(.24s * var(--motion-scale,1)) var(--sb-spring)}
-.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-front{d:path("M2.21 7.72Q2.5 6.5 3.75 6.5L13.95 6.5Q15.2 6.5 14.93 7.72L13.87 12.38Q13.6 13.6 12.35 13.6L2.05 13.6Q0.8 13.6 1.09 12.38Z")}
-.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheen{d:path("M4.2 7.55L13.5 7.55")}
-.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="0"]{transform:translate(0,-1.1px)}
-.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="1"]{transform:translate(.55px,-1.45px) rotate(3.2deg)}
-.app.style-acira .acira-sidebar .sb-group:not([data-collapsed]) .gf-sheet[data-depth="2"]{transform:translate(-1.1px,-1.8px) rotate(-6.4deg)}
 .app.style-acira .acira-sidebar .sb-group-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
 .app.style-acira .acira-sidebar .sb-group-header>small{font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-group-header>svg{flex:none;margin-right:4px;color:var(--sb-label);opacity:0;transition:transform calc(.24s * var(--motion-scale,1)) var(--sb-spring),opacity var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-group-header:is(:hover,:focus-visible)>svg,.app.style-acira .acira-sidebar .sb-group[data-collapsed]>.sb-group-header>svg{opacity:1}
 .app.style-acira .acira-sidebar .sb-group[data-collapsed]>.sb-group-header>svg{transform:rotate(-90deg)}
-.app.style-acira .acira-sidebar .sb-group[data-joining]>.sb-group-header{background:var(--sb-drop)}
 /* A group's members (tabs, a split card, a linked pane) are ordinary rows moved one step in: each row's own box (its hover,
    current and split fills) starts right of the group's rail with the same 6px gap as a row's text inset, and keeps the same
    right edge as every other row (reported 27 Oct: no fill under or left of the rail). */
-.app.style-acira .acira-sidebar .sb-group-members{--sb-rail-x:13px;--sb-group-indent:calc(var(--sb-rail-x) + 2px + 6px);position:relative;display:flex;flex-direction:column;overflow:visible}
+.app.style-acira .acira-sidebar .sb-group-members{--sb-rail-x:calc(14px - var(--ng-w,2px) / 2);--sb-group-indent:21px;position:relative;display:flex;flex-direction:column;overflow:visible}
 /* overflow:visible (sidebar-controls.css gives the list overflow:hidden): a member's ring and glow (tab-glow.css) reach 16-22px past its row, and the list's box is exactly its rows, so the glow was cut flat at the first row's top, the last row's bottom and the right edge (beta.13, founder 8 Nov). The rows fit by layout (min-width:0, margin-left), nothing spills; the scroller still clips at the sidebar's own edge, as for a tab outside a group. */
-/* Decided (28 Oct): the group line fades out at its two ends; the fade stays within the first and last rows (12 of their 32 px), so it is still clear which tabs belong. */
-.app.style-acira .acira-sidebar .sb-group-members::before{content:'';position:absolute;z-index:1;left:var(--sb-rail-x);top:0;bottom:0;width:2px;border-radius:1px;background:var(--group-color);opacity:var(--sb-rail);pointer-events:none;--sb-rail-fade:12px;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent)}
+/* The team (28 Oct): the group line fades out at its two ends; the fade stays within the first and last rows (12 of their 32 px), so it is still clear which tabs belong. */
+.app.style-acira .acira-sidebar .sb-group-members::before{content:'';position:absolute;z-index:1;left:var(--sb-rail-x);top:0;bottom:0;width:var(--ng-w,2px);border-radius:1px;background:var(--group-color);opacity:var(--sb-rail);pointer-events:none;--sb-rail-fade:12px;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sb-rail-fade),#000 calc(100% - var(--sb-rail-fade)),transparent)}
 .app.style-acira .acira-sidebar .sb-group[data-collapsed]:not([data-holds-active]) .sb-group-members::before{opacity:0}
 .app.style-acira .acira-sidebar .sb-group-members>:is(.sb-tab,.sb-tab-leaving,.sb-split-group){margin-left:var(--sb-group-indent);min-width:0}
 /* Collapsing hides every member but the current tab; the motion is the scroll region's FLIP (transform + opacity). */
@@ -309,7 +297,7 @@
 .app.style-acira .acira-sidebar .sb-bookmark-more{color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-bookmark-more>.sb-tab-icon{color:var(--sb-quiet)}
 .app.style-acira .acira-sidebar .sb-bookmark-more:is(:hover,:focus-visible)>.sb-tab-icon{color:inherit}
-.app.style-acira .acira-sidebar .sb-bookmarks-empty{display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;border-radius:var(--sb-row-radius);color:var(--sb-faint);font-size:var(--text-12,12px);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-bookmarks-empty{display:flex;align-items:center;gap:8px;min-height:var(--sb-row);padding:2px 6px;line-height:14px;border-radius:var(--sb-row-radius);color:var(--sb-faint);font-size:var(--text-12,12px);transition:background-color var(--sb-dur) var(--sb-ease),color var(--sb-dur) var(--sb-ease)}
 .app.style-acira .acira-sidebar .sb-bookmarks-empty[data-dropping]{background:var(--sb-drop);color:var(--sb-fg)}
 
 /* Off-screen current tab: a 28px glass pill docked under the list, in flow (M F01): the list ends above it, so it never
@@ -325,8 +313,14 @@
 .app.style-acira .acira-sidebar .sb-active-peek>:first-child{flex:none}
 .app.style-acira .acira-sidebar .sb-active-peek:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
 @keyframes sb-peek{from{opacity:0}to{opacity:1}}
-/* With many tabs the Bookmarks zone falls below the fold: a 28px row above the footer jumps there. */
-.app.style-acira .acira-sidebar .sb-jump{flex:none;display:flex;align-items:center;gap:8px;height:28px;margin:0 8px 2px;padding:0 6px 0 30px;border:0;border-radius:var(--sb-row-radius);background:none;color:var(--sb-label);font:500 var(--text-12,12px)/16px var(--font-ui,inherit);text-align:left;-webkit-app-region:no-drag}
+/* With many tabs the Bookmarks zone falls below the fold: a row under the list (the header's own look, .sb-zone-toggle, with its mark) jumps there; the current tab's pill sits under it (Beta 14/A4). */
+.app.style-acira .acira-sidebar .sb-jump{flex:none;margin:0 8px 2px;border-radius:var(--sb-row-radius);-webkit-app-region:no-drag}
+.app.style-acira .acira-sidebar .sb-jump>.sb-zone-chev{opacity:.8}
+/* Beta 14 (option A, the team's review): a clean separation between the tab list and what docks under it. The hairline the real Bookmarks header already has above it (the same
+   fading line, --sb-line) sits above the jump row too, with a little air; the current tab's pill keeps 6px from the row above it. The rule is on the jump row's own class: it first read `.sb-scroll+.sb-jump`, and the scrollbar element (EdgeThumb, rule 12) sits between the two, so the hairline and the air never showed in the real app (acceptance pass, 15 Nov). */
+.app.style-acira .acira-sidebar .sb-jump{position:relative;margin-top:8px}
+.app.style-acira .acira-sidebar .sb-jump::before{content:'';position:absolute;left:4px;right:4px;top:-5px;height:1px;background:linear-gradient(90deg,transparent,var(--sb-line) 16%,var(--sb-line) 84%,transparent);pointer-events:none}
+.app.style-acira .acira-sidebar .sb-jump+.sb-active-peek{margin-top:6px}
 .app.style-acira .acira-sidebar .sb-jump>small{flex:1;font:500 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums;color:var(--sb-label)}
 .app.style-acira .acira-sidebar .sb-jump:hover{background:var(--sb-hover);color:var(--sb-fg)}
 .app.style-acira .acira-sidebar .sb-jump:focus-visible{outline:2px solid var(--sb-ring);outline-offset:-4px}
@@ -362,6 +356,32 @@ html[data-sidebar-resizing] .app.style-acira:not(.native-layer){transition:none!
 .app.style-acira .acira-sidebar :is(.sb-foot-profile,.sb-foot-icon):focus-visible{outline:2px solid var(--sb-ring);outline-offset:-2px}
 .app.style-acira .acira-sidebar .sb-foot-dot{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;background:var(--chrome-accent,var(--sb-ring));box-shadow:0 0 0 1.5px var(--chrome-sheet,var(--sheet))}
 .app.style-acira .acira-sidebar .sb-foot-glyph{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}
+/* Side panel sites (Beta 14, AF): the pinned sites' own icons in one thin row just above the footer (the profile and the four small icons already fill a standard-width footer, so there is no room beside them).
+   Same 28px targets as the row's icons; the icon is the site's own, never tinted; a hairline-free quiet pressed state while its panel is open. Nothing renders until a first site is pinned. */
+.app.style-acira .acira-sidebar .sb-sp-row{position:relative;flex:none;display:flex;align-items:center;margin-top:auto;padding:4px 12px 0 8px}
+.app.style-acira .acira-sidebar .sb-sp-row::before{content:'';position:absolute;top:0;left:12px;right:12px;height:1px;background:linear-gradient(90deg,transparent,var(--sb-line) 16%,var(--sb-line) 84%,transparent);pointer-events:none}
+/* the footer itself is exactly 13.8's (its own rule is untouched): the row sits above it and takes over its hairline and its push to the bottom */
+.app.style-acira .acira-sidebar .sb-sp-row+.sb-foot{margin-top:0}
+.app.style-acira .acira-sidebar .sb-sp-row+.sb-foot::before{display:none}
+.app.style-acira .acira-sidebar .sb-sp{display:flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0}
+.app.style-acira .acira-sidebar .sb-sp.sb-sp-rail{flex-direction:column;gap:2px;margin:0;padding:0;order:0}
+.app.style-acira .acira-sidebar .sb-sp-icon{flex:none;color:var(--sb-fg)}
+.app.style-acira .acira-sidebar .sb-sp-glyph{display:grid;place-items:center;width:16px;height:16px;transition:transform var(--sb-fast,120ms) cubic-bezier(.23,1,.32,1)}
+.app.style-acira .acira-sidebar :where(.sb-sp-glyph)>img.sb-sp-site,.app.style-acira .acira-sidebar :where(.sb-sp-glyph)>svg.sb-sp-site{width:16px;height:16px;border-radius:3px}
+.app.style-acira .acira-sidebar .sb-sp-icon:active .sb-sp-glyph{transform:scale(.94)}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-open]{background:var(--sb-selected)}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-dragging]{opacity:.45}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-drop]::before{content:'';position:absolute;top:5px;bottom:5px;width:2px;border-radius:1px;background:var(--chrome-accent,var(--sb-ring))}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-drop=before]::before{left:-2px}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-drop=after]::before{right:-2px}
+.app.style-acira .acira-sidebar .sb-sp-dot{top:4px;right:4px}
+/* The sound mark: the tab strip's own badge (a few dots) on the icon's lower right corner, on the same hard-edged cut-out of the icon (tab-sound.css), so the dots never touch the icon. The glyph is 16px in a 28px target: its corner is 6px in from the target's. */
+.app.style-acira .acira-sidebar .sb-sp-sound{position:absolute;left:6px;top:6px;width:16px;height:16px;pointer-events:none}
+.app.style-acira .acira-sidebar .sb-sp-sound>.tab-sound-meter[data-variant=badge]{display:block;right:-2px;bottom:-2px}
+.app.style-acira .acira-sidebar .sb-sp-icon[data-sound] .sb-sp-glyph{mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);mask-size:100% 100%,12px 12px;mask-repeat:no-repeat;mask-position:0 0,right -2px bottom -2px;mask-composite:exclude}
+.app.style-acira .acira-sidebar .sb-sp-add{color:var(--sb-muted)}
+.app.style-acira .acira-sidebar .sb-sp-add:disabled{opacity:.4}
+
 
 /* Bible §10: controls use the arrow cursor; the pointer hand is for links in web content only. */
 .app.style-acira .acira-sidebar,.app.style-acira .acira-sidebar :is(button,[role=option],[role=listitem],summary,label,.sb-tab,.sb-app){cursor:default}
@@ -376,9 +396,6 @@ html[data-sidebar-resizing] .app.style-acira:not(.native-layer){transition:none!
  .app.style-acira .acira-sidebar :is(.sb-tab[data-drop],.sb-app[data-drop])::before,.app.style-acira .acira-sidebar .sb-resize::after{background:Highlight}
  .app.style-acira .acira-sidebar .sb-group-members::before{background:CanvasText}
  .app.style-acira .acira-sidebar .sb-group-folder{color:CanvasText}
- .app.style-acira .acira-sidebar :is(.gf-back,.gf-front){fill:none;stroke:CanvasText;stroke-opacity:1}
- .app.style-acira .acira-sidebar .gf-sheet{fill:Canvas;stroke:CanvasText}
- .app.style-acira .acira-sidebar .gf-sheen{display:none}
  .app.style-acira .acira-sidebar :focus-visible{outline-color:Highlight}
  .app.style-acira .acira-sidebar .sb-zone-head{background:Canvas;backdrop-filter:none}
 }
@@ -463,13 +480,11 @@ html[data-sidebar-resizing] .app.style-acira:not(.native-layer){transition:none!
 .app.style-acira .acira-sidebar .sb-zone-head>.sb-zone-actions{position:absolute;top:50%;right:34px;display:flex;gap:2px;translate:0 -50%}
 .app.style-acira .acira-sidebar .sb-zone[data-folded] .sb-zone-chev-end{opacity:.8}
 /* Sidebar open: the sidebar and the toolbar become one frame, and the page is a card set into it (Arc, Dia, Zen, Safari;
-   benchmark §2 #1): flush under the toolbar, 6px from the window's right and bottom edges, 8px corners, a 1px ring (8%
-   light / 6% dark). Electron rounds a page view's corners uniformly (no per-corner radius, even through a clipping
+   benchmark §2 #1): flush under the toolbar, 6px from the window's right and bottom edges, 8px corners, no ring (frame at rest, 18 Nov: the light goes round the card instead, ambient.css). Electron rounds a page view's corners uniformly (no per-corner radius, even through a clipping
    View), so the card's top corners are round too; with the toolbar on the frame they are the card's corners, not a
    notch under a raised toolbar. App sends the same radius and inset to the native page view. */
 html:not([data-edge-float]) .app.style-acira:has(>.ed-rail.is-expanded)>.browser-root .browser-shell>.browser-toolbar.acira-persistent-toolbar{background:transparent}
-html:not([data-edge-float]) .app.style-acira:has(>.ed-rail.is-expanded)>.browser-root .browser-body>.page-area{margin:0 6px 6px 0;border-radius:var(--geometry-pageRadius,8px);box-shadow:0 0 0 1px rgb(0 0 0 / .08)}
-html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-expanded)>.browser-root .browser-body>.page-area{box-shadow:0 0 0 1px rgb(255 255 255 / .06)}
+html:not([data-edge-float]) .app.style-acira:has(>.ed-rail.is-expanded)>.browser-root .browser-body>.page-area{margin:0 6px 6px 0;border-radius:var(--geometry-pageRadius,8px)}
 /* Open and close (Round 2; founder: laggy, looked bad). The grid column used to animate its width for 280ms, so the
    page card resized every frame and the site reflowed every frame. Now the layout changes once, inside A's layout view
    transition (sharedMotion, started on the input frame by client.ts): the sidebar slides in from the window's edge (or
@@ -490,6 +505,26 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
 :root[data-mode-switch=layout]::view-transition-new(acira-toolbar){animation:none;opacity:1}
 @keyframes sb-slide-in{from{transform:var(--sb-slide-from,translateX(-100%))}}
 @keyframes sb-slide-out{to{transform:var(--sb-slide-from,translateX(-100%))}}
+/* Beta 14, Top + sidebar (reported 14 Nov: one layer passing over another while the Shelf slides). The tab strip is in both frames and its box moves with the column's edge (sharedMotion sets
+   data-strip-glide, ui/stripGlide.ts). It had no rule of its own, so its box ran on the default 240ms expo-out while the column slid for 480ms: closing, the strip's box reached the window's edge over
+   the column still leaving; opening, it stood clear of the arriving column. Now it glides on the column's clock and curve, with the toolbar and the page card, and only the new strip shows,
+   revealed by its morphing box (its tabs keep their pixels: an old and a new strip crossfading drew each tab twice), the box clipping its image. A strip that arrives or leaves is not marked and keeps its fade. */
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-group(acira-tab-row){animation-duration:calc(480ms * var(--motion-pace, 1));animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-old(acira-tab-row),
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-new(acira-tab-row){width:auto;height:100%;object-fit:none;object-position:var(--strip-at, 0%) center}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-image-pair(acira-tab-row){overflow:hidden}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-old(acira-tab-row){animation:none;opacity:0}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-new(acira-tab-row){animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-strip-settle;opacity:1}
+/* The new strip's first control stands further in or out than the old one's (the closed Shelf's strip starts after the window's corner): the picture starts offset by that (ui/stripGlide.ts stripStartOffset, --strip-at / --strip-off) so the content does not jump in the first frame, and settles on the strip's own curve. */
+@keyframes sb-strip-settle{from{object-position:calc(var(--strip-at, 0%) + var(--strip-off, 0px)) center}to{object-position:var(--strip-at, 0%) center}}
+/* The strip's recess band and the toolbar's fill differ between the open Shelf (flat) and the closed one (a band each). sharedMotion sets data-tone-fade when a layout switch changes either: the bands fade over the slide on its curve (the images are the bands alone: every control is a named element of its own, so nothing is drawn twice), where the new picture alone showed at once, a step of 10 to 22% of the row in the first frame. */
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-group(acira-strip-tone){animation-duration:calc(480ms * var(--motion-pace, 1));animation-timing-function:linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1)}
+:root[data-mode-switch=layout][data-tone-fade]::view-transition-old(acira-toolbar){animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-tone-out;opacity:1}
+:root[data-mode-switch=layout][data-tone-fade]::view-transition-new(acira-toolbar){animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-tone-in;opacity:1}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-old(acira-strip-tone){animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-tone-out}
+:root[data-mode-switch=layout][data-strip-glide]::view-transition-new(acira-strip-tone){animation:calc(480ms * var(--motion-pace, 1)) linear(0,.03361,.112,.21091,.31536,.41656,.50969,.59255,.66451,.72589,.77752,.82045,.85584,.88478,.9083,.9273,.94258,.95483,.9646,.97237,.97853,.9834,.98725,.99027,.99265,.99452,.99598,.99712,.99801,.99871,.99925,.99967,1) both sb-tone-in}
+@keyframes sb-tone-out{to{opacity:0}}
+@keyframes sb-tone-in{from{opacity:0}}
 /* The page card glides with the sidebar (reported 30 Oct: its thin outline and rounded corner stayed behind in the frame's
    crossfade while the sidebar closed). Named only for a layout switch: the card, its surface and 1px outline, morphs on the
    sidebar's spring, and its content rides above in the new layout, centred and revealed by the card's box: never stretched,
@@ -519,7 +554,8 @@ html:not([data-edge-float]) .app.style-acira[data-chrome=dark]:has(>.ed-rail.is-
 :root[data-mode-switch=layout]::view-transition-image-pair(acira-page-split){clip-path:inset(0 round 8px)}
 /* Downloads, History, Reading list (Round 2, off until turned on): rows like bookmarks; a quiet line when empty; a
    download's progress or size at the row's end; a Reading list row's "mark as read" check on hover, like a close. */
-.app.style-acira .acira-sidebar .sb-section-empty{display:flex;align-items:center;gap:8px;height:var(--sb-row);padding:0 6px;color:var(--sb-faint);font-size:var(--text-12,12px)}
+/* The quiet rows (an empty Downloads, History, Reading list or Bookmarks) are a row's height at least and grow with their text (QA QW-5: a line that wraps to three lines in Spanish, Italian or Russian ran 3px past its divider in a fixed 32px row): min-height, never height, whatever the language or the string. */
+.app.style-acira .acira-sidebar .sb-section-empty{display:flex;align-items:center;gap:8px;min-height:var(--sb-row);padding:2px 6px;line-height:14px;color:var(--sb-faint);font-size:var(--text-12,12px)}
 .app.style-acira .acira-sidebar .sb-row-note{flex:none;margin:0 4px 0 auto;padding-left:8px;color:var(--sb-faint);font:450 var(--text-12,12px)/16px var(--font-ui,inherit);font-variant-numeric:tabular-nums}
 .app.style-acira .acira-sidebar .sb-reading .sb-reading-done{opacity:0;pointer-events:none}
 .app.style-acira .acira-sidebar .sb-reading:is(:hover,:focus-within) .sb-reading-done{opacity:1;pointer-events:auto}
@@ -661,8 +697,8 @@ html:not([data-material=acrylic]):not([data-edge-float]) .app.style-acira:has(>.
 }
 .app.style-acira .acira-sidebar .sb-peek-card[data-open] .sb-peek-face{opacity:1;transform:none;transition:transform var(--sb-peek-in) var(--sb-strong),opacity 110ms var(--sb-ease)}
 /* A favorite's tile (40px tall): the icon steps 10px left and the card, 30px wide, comes out from under it to the right; the pair sits centred. */
-.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card)>:is(img,svg,.sb-app-initial){position:relative;z-index:1;transition:transform var(--sb-peek-out) var(--sb-move)}
-.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card[data-open])>:is(img,svg,.sb-app-initial){transform:translateX(-10px);transition-duration:var(--sb-peek-in);transition-timing-function:var(--sb-strong)}
+.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card)>.site-identity-icon,.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card)>.sb-app-initial{position:relative;z-index:1;transition:transform var(--sb-peek-out) var(--sb-move),translate var(--sb-dur) var(--sb-ease)}
+.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card[data-open])>.site-identity-icon,.app.style-acira .acira-sidebar .sb-app:has(>.sb-peek-card[data-open])>.sb-app-initial{transform:translateX(-10px);transition-duration:var(--sb-peek-in);transition-timing-function:var(--sb-strong)}
 .app.style-acira .acira-sidebar .sb-app>.sb-peek-card{position:absolute;inset:0;z-index:0}
 .app.style-acira .acira-sidebar .sb-app .sb-peek-face{position:absolute;top:4px;bottom:4px;left:calc(50% - 10px);width:30px;padding-left:10px;border-radius:6px}
 /* A tab row (32px tall): the card slides out to the right of the 16px icon (24px square, from the icon's centre) and the title steps aside by 16px.

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ENUMS, USES, COUNTS, RATING_FEATURES, validate, validateRating } from '../supabase/functions/usage/handler.mjs';
+import { ENUMS_V4, USES_V4, COUNTS, RATING_FEATURES, validate, validateRating } from '../supabase/functions/usage/handler.mjs';
 
 const require = createRequire(import.meta.url);
 const usage = require('../desktop/browser-services/usage-facts.cjs');
@@ -15,8 +15,8 @@ const { createMetrics } = require('../desktop/browser-services/metrics.cjs');
 const DAY_MS = 86400000, START = Date.parse('2026-10-27T09:00:00Z');
 
 test('the app and the function agree on every schema-3 field, value and bucket, and on the rating features', () => {
-  assert.deepEqual(JSON.parse(JSON.stringify(usage.ENUMS)), JSON.parse(JSON.stringify(ENUMS)));
-  assert.deepEqual([...usage.USES], [...USES]);
+  assert.deepEqual(JSON.parse(JSON.stringify(usage.ENUMS)), JSON.parse(JSON.stringify(ENUMS_V4)));
+  assert.deepEqual([...usage.USES], [...USES_V4]);
   assert.deepEqual([...usage.COUNT_BUCKETS], [...COUNTS]);
   assert.deepEqual([...rating.FEATURES], [...RATING_FEATURES]);
   for (const feature of Object.values(rating.SOURCES)) assert.ok(rating.FEATURES.includes(feature), feature);
@@ -29,7 +29,7 @@ test('no identifier can reach the daily payload, whatever the local facts say', 
   assert.deepEqual([out.windowView, out.interfaceScale, out.adBlocking, out.linkPreview, out.proxy, out.workspaces, out.windows, out.splitPanes, out.setup, out.shortcutsCustom, out.signBackIn, out.passwordsImported, out.commandBar],
     ['unknown', 'other', 'unknown', 'unknown', 'unknown', '5+', '1', '4', 'unknown', 'no', '1-49', 'no', '10+']);
   assert.doesNotMatch(JSON.stringify(out), /evil|socks|10\.0|Alice|bank|example|Ctrl|37|133/);
-  for (const [field, list] of Object.entries(usage.ENUMS)) assert.ok(list.includes(out[field]), field);
+  for (const field of usage.SNAPSHOT) assert.ok(usage.ENUMS[field].includes(out[field]), field);
   assert.ok(!('unknown' in out));
 });
 
@@ -101,10 +101,11 @@ test('the real client: no card while sharing is off, then one card after the rul
   for (let i = 0; i < 3; i++) metrics.note('peek');
   assert.equal(metrics.ratingOffer(), null, 'asking switched off');
   await metrics.setAskRatings(true); assert.equal(metrics.ratingOffer(), 'peek');
-  await metrics.set(false);
+  await metrics.set(false); await metrics.idle();
   assert.equal(metrics.ratingOffer(), null, 'sharing off: never asks');
   assert.deepEqual(await metrics.ratingAnswer('peek', 4), { sent: false, reason: 'off' }, 'and never sends');
-  assert.equal(sent.length, 1);
+  assert.equal(sent.filter((item) => item.event !== 'off').length, 1, 'only the one rating was sent; the choice to switch sharing off is the single `off` message');
+  assert.deepEqual(sent.filter((item) => item.event === 'off').map((item) => item.where), ['settings']);
   const saved = JSON.parse(fs.readFileSync(path.join(directory, 'metrics.json'), 'utf8'));
   assert.deepEqual(saved.rating.counts, {}, 'turning sharing off deletes the rating counts');
 });

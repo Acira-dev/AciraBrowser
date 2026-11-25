@@ -264,7 +264,7 @@ function WebsiteAuthForm({
         )}
         <form onSubmit={submit} autoComplete="off">
           <label htmlFor={label + "-user"}>{t("pw.frame.username")}</label>
-          <input
+          <input className="ab-input"
             id={label + "-user"}
             ref={userInput}
             value={username}
@@ -276,7 +276,7 @@ function WebsiteAuthForm({
             spellCheck={false}
           />
           <label htmlFor={label + "-password"}>{t("pw.frame.password")}</label>
-          <input
+          <input className="ab-input"
             id={label + "-password"}
             type="password"
             ref={passwordInput}

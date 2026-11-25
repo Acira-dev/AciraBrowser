@@ -89,6 +89,10 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
     const show = (el: HTMLElement): boolean | 'quiet' => {
       const raw = el.dataset.tip || el.dataset.tipTitle || '';
       if (!raw.trim() || !el.isConnected || !measure.current) return false;
+      // B14 Mini sample: in the 56px rail the name is drawn over the page by the tab card's view (miniRail.ts railTip); this layer stays quiet.
+      if (el.closest('.acira-sidebar.is-mini:not([data-mini=open])')) return 'quiet';
+      // D24: while a row or a folder is carried in the sidebar no tooltip opens (the folder's "double-click to rename" drew over the rows under the pointer).
+      if (document.querySelector('.acira-sidebar [data-dragging]')) return 'quiet';
       const parsed = parseTip(raw);
       // A two-line tip is taller than a toolbar row: beside a button over a website it may find no free spot, and then the
       // title and its keys (one line, which does fit) are better than the system's raw tooltip.
@@ -179,6 +183,7 @@ export function TooltipHost({ blockPage }: { blockPage: boolean }) {
   }, []);
   return createPortal(<>
     <div ref={measure} className="t-tip t-tip-measure" aria-hidden="true"/>
-    {tip && <div key={tip.id} className="t-tip" role="tooltip" data-side={tip.side} data-wrap={tip.wrap || undefined} data-desc={tip.description ? '' : undefined} style={{ left: tip.x, top: tip.y, width:tip.width }}>{tip.description ? <><span className="t-tip-head"><span className="t-tip-title">{tip.text}</span>{tip.key && <kbd>{tip.key}</kbd>}</span><span className="t-tip-desc">{tip.description}</span></> : <>{tip.text}{tip.key && <kbd>{tip.key}</kbd>}</>}</div>}
+    {/* A tip with a description sizes itself (.t-tip[data-desc] is width:max-content): the measured width is a whole number of pixels, and 141 for a 141.39 px card made a two-word line wrap (the new tab chip's "Founding Contributor", 17 Nov). */}
+    {tip && <div key={tip.id} className="t-tip" role="tooltip" data-side={tip.side} data-wrap={tip.wrap || undefined} data-desc={tip.description ? '' : undefined} style={{ left: tip.x, top: tip.y, ...(tip.description ? {} : { width:tip.width }) }}>{tip.description ? <><span className="t-tip-head"><span className="t-tip-title">{tip.text}</span>{tip.key && <kbd>{tip.key}</kbd>}</span><span className="t-tip-desc">{tip.description}</span></> : <>{tip.text}{tip.key && <kbd>{tip.key}</kbd>}</>}</div>}
   </>, document.body);
 }

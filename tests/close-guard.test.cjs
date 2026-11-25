@@ -35,21 +35,19 @@ test('"Close Acira?" names the tabs and windows; Enter closes, Esc cancels',()=>
   assert.equal(prompt.site.centered,true);assert.equal(prompt.site.app,true,'the Acira mark, not a site');
 });
 
-test('unsaved work (R4-49): a short human title, the site as a tidy row, one line of body copy, Keep editing is what Enter does',()=>{
+test('unsaved work (R4-49, Beta 14 AK): one site is the sample leave card (file tile, the sentence naming the site), Keep editing is what Enter does',()=>{
   const one=closePrompt({scope:'tab',unsaved:[{id:'a',host:'docs.example.com'}]},say);
-  assert.equal(one.message,'Leave without saving?');assert.equal(one.detail,'');
-  assert.deepEqual(one.site.list,{hosts:['docs.example.com'],more:0},'the site is a row (icon + readable name), not the title');
-  assert.equal(one.site.body,'Changes you made may not be saved.');
-  assert.deepEqual(one.buttons,['Close anyway','Keep editing']);assert.equal(one.defaultId,1,'Enter keeps editing');assert.equal(one.cancelId,1,'Esc keeps editing');
+  assert.equal(one.message,'Leave without saving?');assert.equal(one.detail,'Changes you made on docs.example.com may not be saved.','the sentence names the site');
+  assert.deepEqual(one.buttons,['Leave','Keep editing'],'the sample\'s words');assert.equal(one.defaultId,1,'Enter keeps editing');assert.equal(one.cancelId,1,'Esc keeps editing');
   assert.equal(one.site.top,true,'a tab or a window with unsaved work asks up by the tab strip, not in the middle');
-  assert.equal(one.site.app,true);assert.equal(one.site.variant,'close');assert.equal(one.site.host,'');
+  assert.equal(one.site.centered,true);assert.equal(one.site.icon,'file');assert.equal(one.site.variant,undefined,'the sample card, not the list card');assert.equal(one.site.host,'docs.example.com');
   assert.equal(closePrompt({scope:'window',unsaved:[{id:'a',host:'docs.example.com'}]},say).site.top,true);
   assert.equal(closePrompt({scope:'tabs',unsaved:[{id:'a',host:'x.test'}]},say).site.top,true);
   assert.equal(closePrompt({scope:'quit',unsaved:[{id:'a',host:'x.test'}]},say).site.top,undefined,'a quit stays in the middle');
+  assert.equal(closePrompt({scope:'tab',unsaved:[{id:'a',host:''}]},say).detail,'Changes you made may not be saved.','an address without a host');
   const many=closePrompt({scope:'tabs',unsaved:[{id:'a',host:'docs.example.com'},{id:'b',host:'mail.example.com'},{id:'c',host:'docs.example.com'}]},say);
   assert.equal(many.message,'Some tabs have unsaved changes');assert.equal(many.detail,'');
   assert.deepEqual(many.site.list,{hosts:['docs.example.com','mail.example.com'],more:0},'a site with two tabs is one row');
-  assert.equal(closePrompt({scope:'tab',unsaved:[{id:'a',host:''}]},say).site.list.hosts[0],'This page','an address without a host');
 });
 
 test('a long list stops after four sites and says how many more',()=>{
@@ -182,7 +180,7 @@ test('unsaved work is listed once for a window, even when it is not the last',as
   const a=windowFake('a',PAGES,{unsaved:[{id:'a:https://one.test/',url:'https://www.one.test/doc'}]}),b=windowFake('b',PAGES),guard=guardFor([a,b]);
   assert.equal(await guard.confirmWindowClose(a),true);
   assert.equal(a.asked.length,1);assert.equal(a.asked[0].message,'Leave without saving?');
-  assert.deepEqual(a.asked[0].site.list,{hosts:['one.test'],more:0});assert.equal(a.asked[0].site.top,true);assert.equal(a.asked[0].site.mute,undefined,'no Don\'t-ask box on a data-loss card');
+  assert.equal(a.asked[0].detail,'Changes you made on one.test may not be saved.');assert.equal(a.asked[0].site.top,true);assert.equal(a.asked[0].site.mute,undefined,'no Don\'t-ask box on a data-loss card');
   assert.deepEqual(a.approved,['a:https://one.test/'],'Close anyway waives that page\'s own prompt');
   const cancelled=windowFake('c',PAGES,{unsaved:[{id:'c:1',url:'https://one.test/'}],choose:()=>({response:1})});
   assert.equal(await guardFor([cancelled,b]).confirmWindowClose(cancelled),false);assert.deepEqual(cancelled.approved,[]);

@@ -1,0 +1,1 @@
+Source: https://github.com/imputnet/helium @ f29a25968e483f8bb85e47829ccd487bbe229199 (GPL-3.0; Chromium parts BSD-3). Fetched 2026-10-24T08:46:00Z.

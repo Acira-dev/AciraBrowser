@@ -9,12 +9,32 @@ import "../../styles/workspaces.css";
 import { formatShortcut } from "../../ui/platform";
 import { OpenProfilesControl, ProfileAvatar } from "./profileModel";
 import { useT } from "../../i18n";
+import { useRef, useState } from "react";
+import { useRevealOpenRow } from "../workspaces/revealOpenRow";
+import { ContributorBlock, MyReports } from "../feedback/ContributorBlock";
+import { useProfileRing } from "../../runtime/feedback";
+import { Seal, type SealKind } from "../feedback/Seal";
+import { pointsLabel } from "../feedback/words";
 import { openSettings } from "../../ui/settingsView";
 import "./profile-switcher.css";
 
 /* Row glyphs come from the shared 16px icon family (the same private-window mark as the main menu). */
 const PrivateGlyph=()=><PrivateWindow className="acira-menu-icon" size={16}/>;
 const ManageGlyph=()=><Users className="acira-menu-icon" size={16}/>;
+
+/** A profile's standing in its row (B2, the reference design 17 Nov): its rank token (the rank's seal, else the Early Member one when the mark is set, else none) and its points, from the local copies (no request). Nothing for a profile that shows
+ * nothing (the switch is off, no readable key). The token is a picture only; the points are read out. */
+function ProfileStanding({ profileId }: { profileId: string }) {
+  const ring = useProfileRing(profileId);
+  if (ring.points === null || ring.points === undefined) return null;
+  const kind: SealKind | null = ring.rank ?? (ring.mark ? "early" : null);
+  return (
+    <span className="pf-standing">
+      {kind && <span className="pf-token" aria-hidden="true"><Seal kind={kind} size={16} /></span>}
+      <span className="pf-points">{pointsLabel(ring.points)}</span>
+    </span>
+  );
+}
 
 /** The profile panel, built from A's round 9 panel classes (src/styles/panels.css): identity rows (avatar or photo,
  * name, where it opens), the current one marked only by its trailing accent check; one fade-ended divider; then New
@@ -26,19 +46,29 @@ export function ProfileSwitcher({
   profileId,
   dispatch,
   close,
+  onOpen,
+  keyboard = false,
 }: {
   state: BrowserSnapshot;
   profileId: string;
   dispatch: (action: BrowserAction) => void;
   close: () => void;
+  /** Opens another popup (View ranks). */
+  onOpen?: (kind: string, id?: string) => void;
+  /** Opened from the keyboard: the current profile is the first focused row (the popup moves focus to [data-initial-focus]); a mouse open moves none (the reference design B2, 17 Nov). */
+  keyboard?: boolean;
 }) {
   const t = useT();
+  // Beta 14: "Your reports" replaces the panel's content in place, with a way back (like a submenu).
+  const [reports, setReports] = useState(false), root = useRef<HTMLDivElement>(null);
+  useRevealOpenRow(root, "[data-profile-workspace][aria-checked=true]");
   const profiles = state.browserProfiles.filter((profile) => !profile.private);
   const privateHere = state.browserProfiles.some((profile) => profile.private && profile.id === profileId);
   // With profiles as spaces the profiles are the spaces: no workspaces section under them.
   const workspaces = privateHere || profilesAsSpaces(state) ? [] : windowWorkspaces(state);
+  if (reports) return <div className="pf" role="menu" aria-label={t("profiles.panel")}><MyReports onBack={() => setReports(false)} /></div>;
   return (
-    <div className="pf" role="menu" aria-label={t("profiles.panel")}>
+    <div ref={root} className="pf" role="menu" aria-label={t("profiles.panel")}>
       {privateHere ? (
         <button type="button" role="menuitemradio" aria-checked="true" className="acira-menu-row acira-menu-row-identity" onClick={close}>
           <PrivateGlyph />
@@ -58,6 +88,7 @@ export function ProfileSwitcher({
               type="button"
               role="menuitemradio"
               aria-checked={current}
+              data-initial-focus={keyboard && current ? "true" : undefined}
               title={profile.email || undefined}
               className="acira-menu-row acira-menu-row-identity"
               onClick={() => {
@@ -66,6 +97,7 @@ export function ProfileSwitcher({
               }}
             >
               <ProfileAvatar
+                profileId={profile.id}
                 className="acira-menu-avatar"
                 name={profile.name}
                 color={profile.color}
@@ -77,7 +109,7 @@ export function ProfileSwitcher({
                 {profile.name}
                 <span className="acira-menu-sub">{current ? t("profiles.thisWindow") : t("profiles.switchHere")}</span>
               </span>
-              {current ? <Check className="acira-menu-check" size={16} /> : <span />}
+              <span className="pf-trail"><ProfileStanding profileId={profile.id} />{current && <Check className="acira-menu-check" size={16} />}</span>
             </button>
             {!current && (
               <button type="button" role="menuitem" className="pf-own-window" aria-label={t("profiles.openOwnWindow", { name: profile.name })} title={t("profiles.opensOwn")}
@@ -171,6 +203,8 @@ export function ProfileSwitcher({
           </button>
         </>
       )}
+      {/* B2 (the reference design, 17 Nov): the contributor block comes last, after the profiles, Add profile…, Workspaces, New private window and Manage profiles…. It ends with no divider of its own; the one before it is here. */}
+      {!privateHere && <ContributorBlock dispatch={dispatch} close={close} onOpen={onOpen} onReports={() => setReports(true)} lead={<hr className="acira-menu-sep" />} />}
     </div>
   );
 }

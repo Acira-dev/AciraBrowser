@@ -43,8 +43,36 @@ function appLifecycle() {
 const closing = () => Object.assign(new Error('Acira is closing.'), { closing: true });
 const isClosing = error => !!error && error.closing === true;
 
-/** `lifecycle`: {now(), windowsOpen(), onQuit(fn) -> unsubscribe}; the default is the app's own, a test passes its own (or null for none). */
-function createBackgroundWork({ lifecycle = appLifecycle() } = {}) {
+/** Beta 14 page-load pass: is a website loading in any window right now? (Electron's own isLoading: a navigation, its subresources and frames until
+ * the load ends.) False outside Electron. */
+function pagesLoadingNow() {
+  try {
+    const { webContents } = require('electron');
+    if (!webContents || typeof webContents.getAllWebContents !== 'function') return false;
+    return webContents.getAllWebContents().some(contents => { try { return !contents.isDestroyed() && /^https?:/i.test(contents.getURL()) && contents.isLoading(); } catch { return false; } });
+  } catch { return false; }
+}
+/** Beta 14 page-load pass: the background lists' heavy steps on the main thread (validating a downloaded list, writing the list cache, loading a
+ * new engine: 10-45 ms each, measured ~20 s after a start and every few hours) wait for a moment when no website is loading, so they do not land
+ * inside a page's load: there they held the page's start-up questions to main (frame-boot, the request pipeline) for as long. Resolves once no
+ * page has been loading for `quietMs`, or after `maxMs` (a page that never stops loading never holds an update back for long). */
+function createSettle({ pagesLoading = pagesLoadingNow, quietMs = 250, maxMs = 5000, pollMs = 100, now = Date.now, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  return async function settled() {
+    const start = now(); let quietSince = null;
+    for (;;) {
+      let busy = false; try { busy = !!pagesLoading(); } catch { busy = false; }
+      const at = now();
+      if (busy) quietSince = null; else if (quietSince === null) quietSince = at;
+      if (quietSince !== null && at - quietSince >= quietMs) return 'quiet';
+      if (at - start >= maxMs) return 'timeout';
+      await wait(pollMs);
+    }
+  };
+}
+
+/** `lifecycle`: {now(), windowsOpen(), onQuit(fn) -> unsubscribe}; the default is the app's own, a test passes its own (or null for none).
+ * `settle`: what settled() waits for (createSettle above); a test passes its own. */
+function createBackgroundWork({ lifecycle = appLifecycle(), settle = createSettle() } = {}) {
   let stopped = false, quitAt = 0, controller = new AbortController(), unsubscribe = null;
   const now = () => (lifecycle ? lifecycle.now() : Date.now());
   function resumeIfCalledOff() {
@@ -66,6 +94,8 @@ function createBackgroundWork({ lifecycle = appLifecycle() } = {}) {
     /** Aborted when the quit begins; a fresh one after a quit that was called off. Hand it to the request. */
     signal() { resumeIfCalledOff(); return controller.signal; },
     interrupt,
+    /** Waits for a moment with no website loading (bounded): the background lists' heavy main-thread steps go there. */
+    settled() { return settle(); },
     dispose() { if (unsubscribe) { try { unsubscribe(); } catch { /* gone */ } unsubscribe = null; } },
   };
 }
@@ -76,4 +106,4 @@ function shared() { return instance || (instance = createBackgroundWork()); }
 /** For a test: the next shared() is a new one (or this one). */
 function setShared(work) { instance = work || null; }
 
-module.exports = { createBackgroundWork, shared, setShared, closing, isClosing, QUIT_RESUME_MS };
+module.exports = { createBackgroundWork, createSettle, pagesLoadingNow, shared, setShared, closing, isClosing, QUIT_RESUME_MS };

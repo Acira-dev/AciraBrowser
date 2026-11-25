@@ -53,7 +53,7 @@ test('the places a bookmark folder indents and the update pill’s two paddings 
   assert.match(library, /\.bm-node \{[^}]*padding-inline-start: calc\(8px \+ var\(--depth, 0\) \* 14px\)/);
   assert.match(library, /\.bm-edit-option \{[^}]*padding-inline-start: calc\(8px \+ var\(--depth, 0\) \* 14px\)/);
   const pill = readFileSync(new URL('../src/features/updates/update-pill.css', import.meta.url), 'utf8');
-  assert.match(pill, /\.app \.update-pill \{[^}]*margin-inline: 2px 4px;[^}]*padding-inline: 7px 10px;/);
+  assert.match(pill, /\.app \.update-pill \{[^}]*margin-inline: 2px 4px;[^}]*padding-inline: 8px 12px;/);
   const tor = readFileSync(new URL('../src/features/tor/tor.css', import.meta.url), 'utf8');
   assert.match(tor, /\.tor-hop:not\(:last-child\)::after\{[^}]*inset-inline-start:7\.25px/);
 });

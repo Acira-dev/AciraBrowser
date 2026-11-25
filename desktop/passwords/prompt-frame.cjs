@@ -35,8 +35,22 @@ function placement({mode,page,rect,zoom=1,count=0,anchor=null,window:size=null})
  return {x:Math.round(x),y:Math.round(y),width,height};
 }
 
-function createPromptFrame({WebContentsView,getWindow,boundsOf,zoomOf=()=>1,onChoose,onAction,onDismiss,isDark=()=>true,reducedMotion=()=>false,focusPage=()=>{},anchorOf=async()=>null}){
- let view=null,ready=false,queued=null,spec=null,visible=false,shownMode='',leaving=null,showToken=0;
+/* Beta 14: `ask` (the window's site prompt, desktop/site-prompt.cjs showMessageBox) draws the Save / Update password prompt as frosted glass in the interface's own pop-up system, hung from the address field; this view then only
+ * draws the suggestion list (and the old save card when no `ask` is given, as in the tests). `contentsOf(tabId)` is the page that signed in, so the question waits for its tab and goes with it. */
+function createPromptFrame({WebContentsView,getWindow,boundsOf,zoomOf=()=>1,onChoose,onAction,onDismiss,isDark=()=>true,reducedMotion=()=>false,focusPage=()=>{},anchorOf=async()=>null,ask=null,contentsOf=()=>null}){
+ let view=null,ready=false,queued=null,spec=null,visible=false,shownMode='',leaving=null,showToken=0,saveAsked=null;
+ /** The Save / Update prompt through the site prompt: Save (or Update) is answer 0, "Never for this site" 1, a closed prompt is "dismissed" (the ×, Esc, the page moving on). A prompt the bridge took back first answers nobody. */
+ function askSave(next){
+  const words=frameStrings(),mine={},update=next.kind==='update';saveAsked=mine;
+  try{
+   mine.handle=ask({type:'question',popover:true,message:update?words.titleUpdate:words.titleSave,buttons:[update?words.update:words.save,words.never],defaultId:0,cancelId:1,
+    site:{prompt:'savepw',place:'field',host:next.host||'',contents:contentsOf(next.tabId),save:{username:next.username||'',masked:next.masked||'',noUsername:words.noUsername,usernameLabel:words.username,passwordLabel:words.password,showLabel:words.show,hideLabel:words.hide},
+     reveal:typeof next.reveal==='function'?next.reveal:undefined,stale:()=>saveAsked!==mine}});
+  }catch{saveAsked=null;return false;}
+  Promise.resolve(mine.handle).then(result=>{if(saveAsked!==mine)return;saveAsked=null;onAction(result&&result.dismissed?'dismiss':result&&result.response===0?'save':'never');},()=>{if(saveAsked===mine)saveAsked=null;});
+  return true;
+ }
+ function dropSaveAsk(){if(!saveAsked)return;const old=saveAsked;saveAsked=null;try{old.handle?.cancel?.();}catch{}}
  const askAnchor=()=>Promise.resolve().then(anchorOf).catch(()=>null);
  function ensure(){
   if(view&&!view.webContents.isDestroyed())return view;
@@ -66,6 +80,7 @@ function createPromptFrame({WebContentsView,getWindow,boundsOf,zoomOf=()=>1,onCh
  function raise(){const win=getWindow();if(!view||!win||win.isDestroyed())return;const kids=win.contentView.children;if(kids.at(-1)!==view)win.contentView.addChildView(view);}
  return {
   show(next){
+   if(next.mode==='save'&&ask){this.hide(true);if(askSave(next))return;}
    // The prompt's anchor (the address field) is read from the interface first; a newer show or hide cancels a pending one.
    if(next.mode==='save'&&!next.anchored){const token=++showToken;askAnchor().then(anchor=>{if(token===showToken)this.show({...next,anchor,anchored:true});});return;}
    showToken++;clearTimeout(leaving);leaving=null;spec=next;ensure();
@@ -77,7 +92,7 @@ function createPromptFrame({WebContentsView,getWindow,boundsOf,zoomOf=()=>1,onCh
   },
   /** The prompt leaves in 120ms (bible §4 Transient surfaces); the suggestion list and every forced hide go at once. */
   hide(immediate=false){
-   showToken++;const wasVisible=visible,mode=shownMode;visible=false;spec=null;queued=null;clearTimeout(leaving);leaving=null;
+   dropSaveAsk();showToken++;const wasVisible=visible,mode=shownMode;visible=false;spec=null;queued=null;clearTimeout(leaving);leaving=null;
    if(!view||view.webContents.isDestroyed())return;
    const finish=()=>{leaving=null;if(visible||!view||view.webContents.isDestroyed())return;view.setVisible(false);view.setBounds({x:0,y:0,width:0,height:0});send({mode:'none'});};
    if(wasVisible&&mode==='save'&&!immediate){send({mode:'leave'});leaving=setTimeout(finish,EXIT_MS+20);return;}
@@ -90,7 +105,7 @@ function createPromptFrame({WebContentsView,getWindow,boundsOf,zoomOf=()=>1,onCh
   },
   get visible(){return visible;},
   get webContents(){return view?.webContents||null;},
-  dispose(){showToken++;spec=null;queued=null;clearTimeout(leaving);leaving=null;const win=getWindow();try{if(view&&win&&!win.isDestroyed())win.contentView.removeChildView(view);}catch{}try{if(view&&!view.webContents.isDestroyed())view.webContents.close();}catch{}view=null;visible=false;},
+  dispose(){dropSaveAsk();showToken++;spec=null;queued=null;clearTimeout(leaving);leaving=null;const win=getWindow();try{if(view&&win&&!win.isDestroyed())win.contentView.removeChildView(view);}catch{}try{if(view&&!view.webContents.isDestroyed())view.webContents.close();}catch{}view=null;visible=false;},
  };
 }
 module.exports={createPromptFrame,placement,ROW,PAD};

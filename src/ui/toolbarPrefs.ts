@@ -3,14 +3,14 @@ import {t} from '../i18n';
 /** Customizable toolbar actions, stored per local profile. Button order is not browsing data, so a private
  * profile keeps its own layout too; storage is shared with the popup renderer so both stay in step.
  * The Acira menu and pinned extension actions are fixed: the menu is the recovery route to Settings. */
-export type ToolbarItemId='extensions'|'downloads'|'history'|'bookmarks'|'split'|'appearance'|'focus'|'profile'|'routines'|'aifree'|'vpn'|'protection';
+export type ToolbarItemId='extensions'|'downloads'|'history'|'bookmarks'|'split'|'appearance'|'focus'|'seamless'|'profile'|'routines'|'aifree'|'vpn'|'protection';
 export type ToolbarItem={id:ToolbarItemId;visible:boolean};
-export const toolbarItemLabels:Record<ToolbarItemId,string>={extensions:'Extensions',downloads:'Downloads',history:'History',bookmarks:'All bookmarks',split:'Split view',appearance:'Appearance',focus:'Focus mode',profile:'Profiles',routines:'Tab sets',aifree:'AI-free mode',vpn:'VPN',get protection(){return t('protection.title');}};
+export const toolbarItemLabels:Record<ToolbarItemId,string>={extensions:'Extensions',downloads:'Downloads',history:'History',bookmarks:'All bookmarks',split:'Split view',appearance:'Appearance',focus:'Focus mode',get seamless(){return t('windowview.seamless');},profile:'Profiles',routines:'Tab sets',aifree:'AI-free mode',vpn:'VPN',get protection(){return t('protection.title');}};
 /** The toolbar draws the buttons in this order, left to right. The profile button leads (at the left end of the actions, its
- * place since 25 Oct), so the Focus button sits beside the Acira menu and stays there when Focus is turned on. */
+ * place since 25 Oct), so the Focus button sits beside the Acira menu and stays there when Focus is turned on. The Seamless button (14.4, a member's ask: both available, neither replacing the other) is optional and off, just before Focus (Focus stays last, beside the Acira menu). */
 export const defaultToolbarItems:readonly ToolbarItem[]=[
  {id:'profile',visible:true},{id:'extensions',visible:true},{id:'downloads',visible:false},{id:'history',visible:false},{id:'bookmarks',visible:false},
- {id:'split',visible:false},{id:'appearance',visible:false},{id:'routines',visible:false},{id:'aifree',visible:false},{id:'vpn',visible:false},{id:'protection',visible:false},{id:'focus',visible:true},
+ {id:'split',visible:false},{id:'appearance',visible:false},{id:'routines',visible:false},{id:'aifree',visible:false},{id:'vpn',visible:false},{id:'protection',visible:false},{id:'seamless',visible:false},{id:'focus',visible:true},
 ];
 /** A list saved since the toolbar draws the saved order carries an ORDERED entry. Before (to 0.1.0-beta.10) the profile button was
  * drawn first wherever the list put it, so an unmarked list keeps the look it had: its profile button moves to the front when it
