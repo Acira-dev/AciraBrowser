@@ -20,6 +20,8 @@ const CORNER = { width: 144, height: 36 };
 const LEEWAY = 12;
 /** The pointer must have stayed in the corner this long, with the caption still hidden, before the fallback shows it; the buttons then stay this long after it leaves. */
 const DWELL_MS = 1200, HOLD_MS = 500;
+/** D187: the corner's top strip, in DIPs (caption-notch.cjs CORNER_STRIP): the dwell fallback only counts a pointer resting in it. */
+const CORNER_STRIP = 8;
 /** A burst of window events (a maximise sends several) is one re-send this long after the last. */
 const SETTLE_MS = 80;
 
@@ -29,12 +31,14 @@ function createCaptionWatch({ platform = process.platform, window, cursor, hidde
   const shown = w => { try { return w.isVisible() && !w.isMinimized() && !w.isFullScreen(); } catch { return false; } };
 
   /** Is the pointer over the caption box (the corner, with leeway)? */
-  function inCorner(w) {
+  function inCorner(w, strip = false) {
     let p, b;
     try { p = cursor(); b = w.getContentBounds(); } catch { return false; }
     if (!p || !b) return false;
-    const h = Math.max(CORNER.height, Math.round(height?.() || 0));
-    return p.x >= b.x + b.width - CORNER.width - LEEWAY && p.x <= b.x + b.width + LEEWAY && p.y >= b.y - LEEWAY && p.y < b.y + h + LEEWAY;
+    // D187: the dwell fallback follows the reveal's new rule: the corner's top STRIP (edge-reveal.cjs / caption-notch.cjs CORNER_STRIP), not the whole box, which is the page's now. Once forced, and
+    // when the interface is down (nothing else can bring the buttons), the whole box counts as before.
+    const h = strip ? CORNER_STRIP : Math.max(CORNER.height, Math.round(height?.() || 0));
+    return p.x >= b.x + b.width - CORNER.width - LEEWAY && p.x <= b.x + b.width + LEEWAY && p.y >= b.y - LEEWAY && p.y < b.y + h + (strip ? 0 : LEEWAY);
   }
 
   return {
@@ -43,12 +47,11 @@ function createCaptionWatch({ platform = process.platform, window, cursor, hidde
       if (platform !== 'win32' || stopped) return;
       const w = live();
       if (!w || (!forced && !hidden())) { since = 0; return; }
-      const t = now(), here = shown(w) && inCorner(w);
+      const t = now(), alive = shown(w), down = interfaceDown(), here = alive && inCorner(w, !down && !forced);
       if (here) {
         lastIn = t;
         if (!since) since = t;
         if (!forced) {
-          const down = interfaceDown();
           if (down || t - since >= DWELL_MS) {
             forced = true;
             try { log(down ? 'interface-down' : 'dwell'); } catch {}
@@ -73,4 +76,4 @@ function createCaptionWatch({ platform = process.platform, window, cursor, hidde
   };
 }
 
-module.exports = { createCaptionWatch, CORNER, LEEWAY, DWELL_MS, HOLD_MS, SETTLE_MS };
+module.exports = { createCaptionWatch, CORNER, CORNER_STRIP, LEEWAY, DWELL_MS, HOLD_MS, SETTLE_MS };

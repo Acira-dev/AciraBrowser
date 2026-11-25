@@ -52,6 +52,8 @@ The Linux feed an installed copy asks is:
   https://raw.githubusercontent.com/Acira-dev/AciraBrowserUpdates/main/feed/linux/      (frozen fallback)
 scripts/prepare-linux-feed.mjs (beta.10) is no longer the way to publish.
 No public repository or website is changed by this private release handoff.
+The setup zip (AciraBrowser-Linux-SetupFiles.zip) is made by scripts/package-linux-handoff.mjs. It holds SHA256SUMS.txt,
+which the installer needs. Never pack it by hand.
 
 REBUILD
 Use the private Linux source branch/patch named in the validation receipt.

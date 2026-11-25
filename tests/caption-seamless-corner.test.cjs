@@ -54,7 +54,7 @@ function rig(mode, { answer = null, focused = true, maximized = true, side = 'le
   const run = ms => { const frames = []; for (let t = 0; t < ms; t += STEP) { ctx.advance(STEP); if (due !== null && ctx.clock.t >= due) { due = null; publish(true); } const fn = next; next = null; if (fn) fn(); const s = ctx.state.states.at(-1); frames.push({ t: t + STEP, box: seen(s), back: s?.backing ?? null, color: s?.overlay?.color, ink: s?.overlay?.symbolColor, delay }); } return frames; };
   const point = p => { ctx.screen.point = p; };
   point(at(500, 400)); run(600);
-  return { ctx, run, point, at, box, b, focus: on => { hasKeys = on; }, nextDelay: () => delay, corner: at(b.width - 3, 3), onClose: at(b.width - 20, 14), onMax: at(b.width - 69, 14), onMin: at(b.width - 115, 14), middle: at(Math.round(b.width / 2), 3), away: at(500, 400) };
+  return { ctx, run, point, at, box, b, focus: on => { hasKeys = on; }, nextDelay: () => delay, corner: at(b.width - 3, 3), onClose: at(b.width - 20, 5), onMax: at(b.width - 69, 5), onMin: at(b.width - 115, 5), onPage: at(b.width - 20, 20), onPageMin: at(b.width - 115, 30), middle: at(Math.round(b.width / 2), 3), away: at(500, 400) };
 }
 const firstFull = frames => frames.find(f => f.box && f.box.buttons === 3)?.t ?? null;
 /** Drawn in full within one poller tick of the pointer getting there. */
@@ -105,6 +105,24 @@ for (const mode of Object.keys(MODES)) for (const focused of [true, false]) {
     assert.deepEqual(narrow(r), []);
     r.point(r.corner);
     assert.ok(atOnce(r.run(300)), 'the corner still shows them at once');
+  });
+}
+
+// D187 (Windows, the member's PDF viewer: his pointer going to a page's three dots under the corner brought the buttons over them): below the corner's top 8 DIP strip the pointer is on the PAGE's controls.
+// The buttons and, in Seamless / Hide the toolbar, the top bar, never come from there, however long it rests (the 1.2 s fallback follows the strip too). FAILS on earlier work (the whole 144 x 36 box showed them).
+for (const mode of Object.keys(MODES)) for (const focused of [true, false]) {
+  test(`D187 ${mode}, ${focused ? 'in front' : 'not in front'}: a pointer at y 20 or 30 in the corner (the page's controls) shows nothing, not after 6 s either; at y 5 it does`, () => {
+    for (const spot of ['onPage', 'onPageMin']) {
+      const r = rig(mode, { focused });
+      assert.equal(r.box(), null, 'at rest: nothing');
+      r.point(r[spot]);
+      const frames = r.run(6000);
+      assert.deepEqual(frames.filter(f => f.box).map(f => f.t), [], `${spot}: no box in 6 s (the dwell fallback included)`);
+      assert.equal(r.ctx.api.guard.held(), true, `${spot}: minimise and maximise stay held off`);
+    }
+    const strip = rig(mode, { focused });
+    strip.point(strip.corner);
+    assert.ok(atOnce(strip.run(300)), 'at the strip the buttons come at once, as in 13.7');
   });
 }
 
@@ -191,10 +209,11 @@ test('the corner watch on its own: the corner only, focused or not, the band kee
   let hidden = true;
   const hold = (point, ms, over = {}) => { let shown = false; for (let e = 0; e <= ms; e += STEP) { shown = watch.sample({ ...base, hidden, ...over, point }); hidden = !shown; clock.t += STEP; } return shown; };
   assert.equal(hold(at(600, 3), 500), false, 'the top edge away from the corner: nothing');
-  assert.equal(hold(at(1200 - CORNER.width + 2, 20), 0), true, 'the corner: at once');
+  assert.equal(hold(at(1200 - CORNER.width + 2, 20), 600), false, 'D187: the corner below its top strip (a page control): nothing');
+  assert.equal(hold(at(1200 - CORNER.width + 2, 4), 0), true, 'the corner\'s top strip: at once');
   assert.equal(hold(at(700, 30), 1000), true, 'along the caption band: it stays');
   assert.equal(hold(at(700, 300), 1500), false, 'into the page: gone after the grace');
-  assert.equal(hold(at(1190, 10), 0), true, 'back on the buttons at once (no lock-out wait over the buttons themselves)');
+  assert.equal(hold(at(1190, 6), 0), true, 'back on the buttons at once (no lock-out wait over the buttons themselves)');
   hold(at(700, 300), 1500);
   assert.equal(hold(at(1190, 10), 200, { pressed: true }), false, 'a held button: nothing');
   assert.equal(hold(at(700, 300), 300), false);

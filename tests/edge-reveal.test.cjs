@@ -385,7 +385,7 @@ test('the poller emits chrome-edge when an edge changes, polls at 16ms only whil
   const screen = { point: { x: 0, y: 0 }, getCursorScreenPoint() { return this.point; } };
   const win = { destroyed: false, focused: true, isDestroyed() { return this.destroyed; }, isFocused() { return this.focused; }, isMinimized: () => false, getContentBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }), on() {} };
   const state = { settings: { verticalTabs: true } };
-  const item = { window: win, state, emit: event => emitted.push(event), size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), docked: () => false, suspended: () => false };
+  const item = { needsLook: () => true, /* 14.5: this test pins the poller's cadence while it looks at a window; a window with nothing to watch now lets it sleep (edge-poller-edges-off.test.cjs) */ window: win, state, emit: event => emitted.push(event), size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), docked: () => false, suspended: () => false };
   let view = 'seamless';
   const app = { whenReady: () => Promise.resolve(), on() {} };
   const poller = watchChromeEdges({ app, windows: () => [item], screen, view: () => view, now: () => clock.t, schedule: (fn, delay) => { delays.push(delay); timeout = fn; return { unref() {} }; }, cancel() {} });
@@ -696,7 +696,7 @@ test('R5: the poller passes each view\'s switch to the controller; Full with a c
   const screen = { point: { x: 600, y: 400 }, getCursorScreenPoint() { return this.point; } };
   const win = { isDestroyed: () => false, isFocused: () => true, isMinimized: () => false, getContentBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }), on() {} };
   const state = { settings: { verticalTabs: true } };
-  const item = { window: win, state, emit: event => emitted.push(event), size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), peek: () => peek, docked: () => false, suspended: () => false };
+  const item = { needsLook: () => true, /* 14.5: this test pins the poller's cadence while it looks at a window; a window with nothing to watch now lets it sleep (edge-poller-edges-off.test.cjs) */ window: win, state, emit: event => emitted.push(event), size: () => ({ topHeight: 72, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: true, side: true }), peek: () => peek, docked: () => false, suspended: () => false };
   const app = { whenReady: () => Promise.resolve(), on() {} };
   watchChromeEdges({ app, windows: () => [item], screen, view: () => view, now: () => clock.t, schedule: (fn, delay) => { delays.push(delay); timeout = fn; return { unref() {} }; }, cancel() {} });
   const run = ms => { for (let i = 0; i < ms / 16; i++) { clock.t += 16; const fn = timeout; timeout = null; fn(); } };

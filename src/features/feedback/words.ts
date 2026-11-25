@@ -18,6 +18,7 @@ export function noteLines(note:FeedbackNote,reports:FeedbackReport[]):string[]{
   const kind=reports.find(item=>item.id===note.reportId)?.kind;
   return [t(kind==='idea'?'feedback.note.shippedIdea':'feedback.note.shippedBug',{release:note.release??''})];
  }
+ if(note.kind==='invited')return [t('feedback.note.invited'),...(note.points?[t('feedback.note.points',{count:note.points})]:[])];
  const lines=[t('feedback.note.accepted')];
  if(note.points)lines.push(t('feedback.note.points',{count:note.points}));
  if(note.rank)lines.push(t(noteRankIds[note.rank]));

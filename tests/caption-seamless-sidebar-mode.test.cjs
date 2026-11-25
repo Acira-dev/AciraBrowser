@@ -29,7 +29,7 @@ function rig(layout) {
   let next = null;
   watchChromeEdges({ app: { whenReady: () => ({ then: fn => fn() }), on() {} }, windows: () => [ctx.api.edgeItem], screen: ctx.screen, view: s => runtime.effectiveView(s.settings, s.windowUi), now: () => ctx.clock.t, schedule: fn => { next = fn; return { unref() {} }; }, cancel() {} });
   const b = ctx.state.bounds, at = (x, y) => ({ x: b.x + x, y: b.y + y });
-  const away = at(500, 400), corner = at(b.width - 40, 3), middle = at(Math.round(b.width / 2), 3), onNotch = at(b.width - 60, 20);
+  const away = at(500, 400), corner = at(b.width - 40, 3), middle = at(Math.round(b.width / 2), 3), onNotch = at(b.width - 60, 4);
   ctx.screen.point = away;
   const box = () => seen(ctx.state.states.at(-1));
   /** Runs the poller every STEP ms (what main's timer does while an edge is active), with the caption's own timers on the same clock; records what is on screen after each look. */

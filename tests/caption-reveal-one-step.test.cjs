@@ -19,7 +19,8 @@ const { realMainCaption, seen, alpha } = require('./caption-main-vm.cjs');
 
 const NOTCH_HEIGHT = 34;
 const SHOWN = { color: 'rgba(238,240,242,1)', symbolColor: '#26282b', height: NOTCH_HEIGHT, background: '#eef0f2' };
-const HIDDEN = { color: '#00000000', symbolColor: '#00000000', height: NOTCH_HEIGHT, background: '#eef0f2' };
+const { HIDDEN_OVERLAY_HEIGHT } = require('../desktop/caption-guard.cjs');
+const HIDDEN = { color: '#00000000', symbolColor: '#00000000', height: HIDDEN_OVERLAY_HEIGHT, background: '#eef0f2' }; // D187 (Windows): a few DIP tall while hidden
 
 /** A BrowserWindow that remembers every call that matters to the caption, in order, and the state each call left behind. */
 function fakeWindow({ minimizable = true, maximizable = true, maximized = false } = {}) {
@@ -184,7 +185,7 @@ test('main.cjs\'s real setCaption: the notch layout starts hidden, a reveal is t
   // The backdrop and the bounds: one overlay per change; the box is the same height (the notch's 34) whether shown or hidden, so only its colours change, in one call;
   // the shown backdrop is opaque (the frame colour at alpha 1) with the symbol colour on, the hidden one is transparent on both.
   assert.equal(state.overlays.length, 5, 'hidden at the start (twice: after the buttons changed), shown, hidden (twice): no more');
-  assert.deepEqual(state.overlays.map(o => o.height), Array(5).fill(NOTCH_HEIGHT), 'the height never changes between states');
+  assert.deepEqual(state.overlays.map(o => o.height), [HIDDEN_OVERLAY_HEIGHT, HIDDEN_OVERLAY_HEIGHT, NOTCH_HEIGHT, HIDDEN_OVERLAY_HEIGHT, HIDDEN_OVERLAY_HEIGHT], 'D187: a few DIP while hidden, the notch\'s 34 in the very call that shows the buttons');
   assert.deepEqual(state.overlays.map(o => [alpha(o.color), alpha(o.symbolColor)]), [[0, 0], [0, 0], [0, 1], [0, 0], [0, 0]], 'the glyphs go on and off in the one call; the overlay stays clear (13.7: the box behind them is the rounded view, caption-backing.cjs)');
   assert.deepEqual(Object.keys(state.overlays[1]).sort(), ['color', 'height', 'symbolColor'], 'the overlay carries colours and height only (Windows owns the buttons\' width)');
 });

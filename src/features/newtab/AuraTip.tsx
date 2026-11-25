@@ -4,6 +4,7 @@ import { feedbackCall, RANKS } from '../../runtime/feedback';
 import { useAura } from '../../ui/useAura';
 import { ringColor } from '../feedback/AuraTrigger';
 import { markName } from '../feedback/words';
+import { useWindowInactive } from '../../ui/windowActive';
 import './aura-tip.css';
 
 /** The music card's own quiet neutral (NowPlaying.tsx NEUTRAL_AURA), for the Early Member mark: no rank colour. */
@@ -29,7 +30,7 @@ export function rankTints(hex: string): string[] {
 }
 /** What the tip says: the rank's own words ("You are now a Founding Contributor", the words the profile viewer's notes use) or the mark's name. */
 export const tipText = (owed: string) => owed.startsWith('rank:') && (RANKS as readonly string[]).includes(owed.slice(5)) ? t(`feedback.note.rank.${owed.slice(5)}` as Parameters<typeof t>[0])
-  : /^points:[1-9]\d{0,6}$/.test(owed) ? t('feedback.note.pointsAccepted', { count: Number(owed.slice(7)) }) : markName();   // Beta 14.4: "Your report was accepted: +25 points" (one acceptance, or the total of several that arrived together)
+  : /^invite:[1-9]\d{0,6}$/.test(owed) ? t('feedback.note.invitedBubble', { count: Number(owed.slice(7)) }) : /^points:[1-9]\d{0,6}$/.test(owed) ? t('feedback.note.pointsAccepted', { count: Number(owed.slice(7)) }) : markName();   // Beta 14.5: "Your friend joined: +25 points". Beta 14.4: "Your report was accepted: +25 points" (one acceptance, or the total of several that arrived together)
 
 /** Beta 14 on the new tab page (the team's notes 17 Nov, A4): when this profile is owed an aura (a new mark or rank), a small tooltip points up at the profile picture, with the music player's moving glow on
  *  its border (the same markup and the same drawing, src/ui/useAura.ts, flipped so the waves and the lit edge face the picture). It replaces the aura layer on this page (AuraTrigger.tsx stands down while the tip is up).
@@ -79,8 +80,9 @@ export function AuraTip({ owed, reduced, rank = null }: { owed: string | null; r
     return () => observer?.disconnect();
   }, [shown]);
   // a rank's bubble glows in that rank's colour; the points bubble in the colour of the rank the member already has (the quiet neutral when there is none yet)
-  const colors = useMemo(() => shown?.startsWith('rank:') ? rankTints(ringColor(shown.slice(5))) : shown?.startsWith('points:') && rank ? rankTints(ringColor(rank)) : NEUTRAL, [shown, rank]);
-  useAura(card, colors, Boolean(shown), true, reduced);
+  const colors = useMemo(() => shown?.startsWith('rank:') ? rankTints(ringColor(shown.slice(5))) : (shown?.startsWith('points:') || shown?.startsWith('invite:')) && rank ? rankTints(ringColor(rank)) : NEUTRAL, [shown, rank]);
+  const inactive = useWindowInactive();   // 14.5 (battery): the glow holds its frame while the window is not the active one
+  useAura(card, colors, Boolean(shown), true, reduced || inactive);
   if (!shown) return null;
   return <div ref={tip} className="nt-aura-tip" data-phase={leaving ? 'out' : 'in'} data-reduced={reduced || undefined} role="status" style={{ '--aura-room': `${room}px` } as CSSProperties} onClick={() => leave(true)}>
     <span className="nt-aura-caret" aria-hidden="true" />

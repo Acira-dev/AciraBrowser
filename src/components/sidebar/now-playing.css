@@ -56,6 +56,8 @@
 .np-card[data-long] .np-title{margin-left:-12px;padding-left:12px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent,#000 12px,#000 calc(100% - 18px),transparent)}
 .np-card[data-long] .np-title-run{padding-right:32px}
 .np-card[data-full][data-long] .np-title-run{animation:np-marquee 16s linear 1.4s infinite}
+/* 14.5 (battery): a long title holds where it is while the window is not the active one (main tells the root: ui/windowActive.ts) and runs on from there when it is */
+:root[data-window-active="false"] .np-card .np-title-run{animation-play-state:paused}
 .np-wrap:not([data-playing]) .np-title-run{animation-play-state:paused}
 @keyframes np-marquee{0%,8%{transform:none}100%{transform:translateX(-100%)}}
 .np-artist{display:flex;align-items:center;min-width:0;font-size:11.5px;line-height:14px;color:var(--sb-muted)}

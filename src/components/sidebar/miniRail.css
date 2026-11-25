@@ -618,7 +618,8 @@ html:root[data-mode-switch=layout][data-mini-dock] .app.style-acira:not(.native-
 .app.style-acira .acira-sidebar.is-mini[data-mini-dock-st][data-mini=rail]>.st-amb-side{translate:calc(56px - var(--mini-w,240px)) 0;transition:none}
 .app.style-acira>.st-amb-side.sb-mini-amb[data-arrive]{animation:none!important}
 /* the old collapse's own animations on the sidebar's parts (the rows' fade-in at 12-30 %, the veil's, the sections' glide) are the old design's: not on the live sidebar of this switch */
-.app.style-acira .acira-sidebar.is-mini[data-mini-dock-st=out]>:not(.st-glow-rail),.app.style-acira .acira-sidebar.is-mini[data-mini-dock-st=out]>:is(.sb-sections-wrap,.sb-foot){animation:none!important}
+/* D194: and on the landed rail until the page's mark of the collapse has gone (a switch ended by its net: the entrance started anew and every rail icon blinked) */
+.app.style-acira .acira-sidebar.is-mini:is([data-mini-dock-st=out],[data-mini-dock-done])>:not(.st-glow-rail),.app.style-acira .acira-sidebar.is-mini:is([data-mini-dock-st=out],[data-mini-dock-done])>:is(.sb-sections-wrap,.sb-foot){animation:none!important}
 :root:root:root .app.style-acira>.ed-rail.acira-sidebar.is-mini[data-mini-dock-st=out]::after{animation:none!important}
 /* the labels leave by the clock, expo-out (the edge reaches a long label at 60 ms; none is under it by then) */
 .app.style-acira .acira-sidebar.is-mini[data-mini-dock-st][data-mini=closing] :is(.sb-tab-title,.sb-group-name,.sb-zone-label,.sb-new-label,.sb-group-chev,.sb-header-add,.sb-zone-actions,.sb-zone-chev,.sb-foot-name,.sb-foot-icons,.sb-mini-keep,.sb-sep,.sb-group-rail,.sb-ws-title-name,.sb-ws-title-count,.sb-workspaces,.sb-sp,.sb-ext-row,.np-text-wrap,.np-right){transition:opacity var(--mini-text-out) var(--mini-text-ease)}

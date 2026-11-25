@@ -16,8 +16,8 @@ const { createCaptionGuard } = require('../desktop/caption-guard.cjs');
 const LEGACY = path.join(__dirname, 'fixtures', 'caption-13-1.txt');
 const last = state => seen(state.states.at(-1));
 const nothingOrFullBox = (states, label) => states.forEach(s => { const box = seen(s); assert.ok(box === null || box.buttons === 3, `${label}: after ${s.call} a visible overlay had ${box && box.buttons} buttons`); });
-/** The pointer in the top-right corner of the fake window (bounds 100,50 1200x800): 20 px in from the right, 10 down; or far from it. */
-const corner = ctx => { ctx.screen.point = { x: ctx.state.bounds.x + ctx.state.bounds.width - 20, y: ctx.state.bounds.y + 10 }; };
+/** The pointer in the top-right corner of the fake window (bounds 100,50 1200x800): 20 px in from the right, 4 down (inside the 8 DIP strip: D187); or far from it. */
+const corner = ctx => { ctx.screen.point = { x: ctx.state.bounds.x + ctx.state.bounds.width - 20, y: ctx.state.bounds.y + 4 }; };
 const awayFrom = ctx => { ctx.screen.point = { x: ctx.state.bounds.x + 500, y: ctx.state.bounds.y + 400 }; };
 const plain = { captionNotch: false, captionHeight: 40 };
 const notch = { captionNotch: true, captionHeight: NOTCH_HEIGHT };
@@ -363,7 +363,7 @@ test('the edge poller keeps looking when one window\'s getter throws (it used to
   const clock = { t: 5000 }, ticks = [];
   let timeout = null, boom = true;
   const w = { isDestroyed: () => false, isFocused: () => true, isMinimized: () => false, isFullScreen: () => false, getContentBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }), on() {} };
-  const item = { window: w, state: { settings: {} }, emit() {}, size: () => ({ topHeight: 0, sideWidth: 0 }), holds: () => ({ top: false, side: false }), edges: () => { if (boom) { boom = false; throw new Error('a getter threw'); } return { top: false, side: false }; }, docked: () => true, suspended: () => false,
+  const item = { needsLook: () => true, /* 14.5: this test pins the poller's cadence while it looks at a window; a window with nothing to watch now lets it sleep (edge-poller-edges-off.test.cjs) */ window: w, state: { settings: {} }, emit() {}, size: () => ({ topHeight: 0, sideWidth: 0 }), holds: () => ({ top: false, side: false }), edges: () => { if (boom) { boom = false; throw new Error('a getter threw'); } return { top: false, side: false }; }, docked: () => true, suspended: () => false,
     captionTick: () => { ticks.push(clock.t); } };
   const warned = [], warn = console.warn; console.warn = (...args) => warned.push(args.join(' '));
   try {

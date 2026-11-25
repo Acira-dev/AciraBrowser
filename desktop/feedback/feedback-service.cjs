@@ -69,6 +69,9 @@ function createFeedbackService({
     allowEnroll: insiderOptions.enroll === true, ...(insiderOptions.enrollDelay !== undefined ? { enrollDelay: insiderOptions.enrollDelay } : {}),
     // An activation or a code makes the key the way every profile's is (the Early Member mark with it), and a profile made an Insider has its "new rank" aura marked played (the sheet's or the reveal's seal is its moment).
     ensureProfile: (profileId) => ensureProfile(profileId),
+    // Beta 14.5: a member who opens the invites screen or makes a code has joined the invite programme, so their profile asks the server for its record from then on (a friend who joins adds points that it tells
+    // about); nothing is asked before that, as for everyone else. The deliberate act is the engagement, as sending a report is.
+    onInvites: (profileId) => { if (certificateTier(certifiedNumber(profileId)) === 'insider' && !store.read(profileId).engaged) store.update(profileId, (current) => { current.engaged = true; return current; }); },
     onActivated: (profileId) => { const certifiedAura = certifiedAuraOf(certifiedNumber(profileId)); store.update(profileId, (current) => { if (!current.aura.played.includes(certifiedAura)) current.aura.played.push(certifiedAura); if (current.aura.pending && current.aura.pending !== 'earlyMember') current.aura.pending = null; return current; }); },
     now, fileSystem, onWarning,
   });
@@ -76,7 +79,13 @@ function createFeedbackService({
   const higherRank = (a, b) => (model.rankIndex(a) >= model.rankIndex(b) ? a : b);
   /** Beta 14.4: the bubble for accepted reports that only added points: its id carries the total ('points:25'); null when nothing is owed. */
   const pointsAuraOf = (n) => (Number.isInteger(n) && n > 0 ? `points:${n}` : null);
-  const POINTS_ID = /^points:[1-9]\d{0,6}$/;   // the id comes from the interface: only a whole, positive total of at most seven digits
+  const POINTS_ID = /^points:[1-9]\d{0,6}$/;
+  /** Beta 14.5: the bubble for friends who joined with the member's invite code ('invite:25'); after the points bubble of reports, null when nothing is owed. */
+  const inviteAuraOf = (n) => (Number.isInteger(n) && n > 0 ? `invite:${n}` : null);
+  const INVITE_ID = /^invite:[1-9]\d{0,6}$/;
+  /** The total-carrying bubbles (their id is 'points:<n>' or 'invite:<n>'): what kind it is, and its total. */
+  const totalOf = (id) => (typeof id === 'string' && (POINTS_ID.test(id) || INVITE_ID.test(id)) ? { kind: id.slice(0, id.indexOf(':')), total: Number(id.slice(id.indexOf(':') + 1)) } : null);
+  const pendingTotal = (local) => pointsAuraOf(local.pointsOwed) ?? inviteAuraOf(local.inviteOwed);   // the id comes from the interface: only a whole, positive total of at most seven digits
   /** The aura a profile is owed, for the view: a certificate holder is owed the Founding aura (once), never the Early Member one and never an Insider one. */
   const auraOwed = (local, certified, number = null) => {
     const pending = local.aura.pending;
@@ -123,7 +132,7 @@ function createFeedbackService({
     if (!base.off && !base.privateOrTor && (ownCert || lent)) { const number = certifiedNumber(ctx.profileId), rank = certifiedRankOf(number); if (rank !== base.rank) { base.rank = rank; base.next = null; } base.mark = null; base.aura = ownCert ? auraOwed(found.local, true, number) : null; }
     else { if (base.rank === 'insider') { base.rank = 'trusted'; base.next = null; } if (base.aura) base.aura = auraOwed(found.local, false); }
     // The bubble for points only (never for a private window or the switch off); a rank's or the mark's aura goes first, this one follows when that has been shown.
-    if (!base.aura && !base.off && !base.privateOrTor) base.aura = pointsAuraOf(found.local.pointsOwed);
+    if (!base.aura && !base.off && !base.privateOrTor) base.aura = pendingTotal(found.local);
     // A note's "You are now a ..." line is the server's own rank event. It is told only when that rank is the one the profile shows now or one above the last it showed: never the Insider rank (150 points: this build never
     // shows it, Trusted above) and never a rank BELOW the shown one (a Founding Contributor, by certificate or by hand, is not told "You are now a Trusted Contributor"). The note keeps its other lines.
     const shownIndex = model.rankIndex(base.rank);
@@ -271,8 +280,9 @@ function createFeedbackService({
       str(request.id, 'Id', 40);
       if (!eligible(ctx)) return { done: false };
       const owed = api.auraPending(ctx.profileId);
-      if (!owed || (owed !== request.id && !(owed.startsWith('points:') && POINTS_ID.test(request.id)))) return { done: false };   // a total that grew while the bubble was up is still the points bubble
-      api.auraDone(ctx.profileId, owed.startsWith('points:') ? request.id : owed);
+      const owedTotal = totalOf(owed);
+      if (!owed || (owed !== request.id && !(owedTotal && totalOf(request.id)?.kind === owedTotal.kind))) return { done: false };   // a total that grew while the bubble was up is still the same kind of bubble
+      api.auraDone(ctx.profileId, owedTotal ? request.id : owed);
       return { done: true };
     },
     noteSeen: async (ctx, request) => {
@@ -444,7 +454,7 @@ function createFeedbackService({
     /** Keys and copies whose profile no longer exists (a removal that was cut off) go at start. */
     tidy() { if (!profiles().some((profile) => !profile.private)) return; /* the profile list is not known yet: nothing may be called leftover */ const live = new Set(profiles().filter((profile) => !profile.private).map((profile) => profile.id)); for (const id of new Set([...keyring.list(), ...store.list()])) if (!live.has(id)) { keyring.remove(id); store.remove(id); } insider.tidy(live); },
     /** The aura a profile still owes (its id: 'earlyMember' or 'rank:<rank>'), or null; and that it was shown. */
-    auraPending(profileId) { try { const local = store.read(profileId); return local.off ? null : (auraOwed(local, insider.isInsider(profileId)) ?? pointsAuraOf(local.pointsOwed)); } catch { return null; } }, // a certificate holder is owed the Founding aura, never the Early Member one; the Insider aura no longer exists
+    auraPending(profileId) { try { const local = store.read(profileId); return local.off ? null : (auraOwed(local, insider.isInsider(profileId)) ?? pendingTotal(local)); } catch { return null; } }, // a certificate holder is owed the Founding aura, never the Early Member one; the Insider aura no longer exists
     /** The aura closed as a ring: the resting ring appears now, under the layer's own identical one (the layer fades a moment later). The aura itself is marked done at its end. */
     auraRing(profileId, id) {
       if (typeof id !== 'string' || !id.startsWith('rank:')) return;
@@ -453,6 +463,7 @@ function createFeedbackService({
     },
     auraDone(profileId, id) {
       store.update(profileId, (current) => {
+        if (id.startsWith('invite:')) { if (INVITE_ID.test(id)) current.inviteOwed = Math.max(0, current.inviteOwed - Math.min(Number(id.slice(7)), current.inviteOwed)); if (!current.off) current.dot = true; return current; }   // a friend's bubble told the member; never more than what is owed
         if (id.startsWith('points:')) { if (POINTS_ID.test(id)) current.pointsOwed = Math.max(0, current.pointsOwed - Math.min(Number(id.slice(7)), current.pointsOwed)); if (!current.off) current.dot = true; return current; }   // never more than what is owed, and never an addition   // the bubble told the member what it said; points that arrived while it was up stay for the next one
         if (!current.aura.played.includes(id)) current.aura.played.push(id);
         if (current.aura.pending === id) current.aura.pending = null;

@@ -10,6 +10,7 @@ import type { BrowserAction, BrowserSnapshot } from '../runtime/types';
 import { flatItems, paletteSections, type PaletteCommand, type PaletteItem, type PaletteLink, type PaletteWorkspaceTabs } from '../ui/paletteResults';
 import { mruOrder, readStamps } from '../ui/tabMru';
 import { historyVisibleFrom, tabVisibleFrom } from '../ui/suggestionPrivacy';
+import { bookmarkMatches } from '../ui/addressSuggestions';
 import { shownTab } from '../runtime/tabTitle';
 import { formatShortcut } from '../ui/platform';
 import { commandLabel } from '../ui/shortcutKeys';
@@ -98,7 +99,9 @@ export function CommandPalette({ state, dispatch, close, onNavigate, onOpenNewTa
     if (!findSettings || typed.length < 3 || typed.startsWith('>')) return [];
     return findSettings(typed);
   }, [query, findSettings]);
-  const sections = useMemo(() => paletteSections({ query, commands: [...offered, ...spaces, ...sitePanels, ...transfer], tabs, activeTabId: state.activeTabId, history, pages, recent, otherTabs, settings: settingRows }), [settingRows, query, offered, spaces, sitePanels, transfer, tabs, state.activeTabId, history, pages, recent, otherTabs]);
+  // 14.5: bookmarks, found and named as the address field does (this profile's ordinary bookmarks; none from a Tor tab of an ordinary window). Not in the `>` command list.
+  const bookmarkRows = useMemo(() => query.trim().startsWith('>') ? [] : bookmarkMatches(query, state).map(entry => ({ url: entry.url, title: entry.title, score: entry.score })), [query, state.bookmarks, state.bookmarkNodes, state.browsingHistory, state.browserProfiles, state.activeBrowserProfileId, state.tabs, state.activeTabId]);
+  const sections = useMemo(() => paletteSections({ query, commands: [...offered, ...spaces, ...sitePanels, ...transfer], tabs, activeTabId: state.activeTabId, history, pages, recent, otherTabs, settings: settingRows, bookmarks: bookmarkRows }), [settingRows, query, offered, spaces, sitePanels, transfer, tabs, state.activeTabId, history, pages, recent, otherTabs, bookmarkRows]);
   const items = flatItems(sections), current = Math.min(active, Math.max(0, items.length - 1));
   // Typing filters the results on the shared list motion (A, round 2): sections that stay glide, new ones settle in.
   useListMotion(list, query, { frequent: true });
@@ -110,7 +113,7 @@ export function CommandPalette({ state, dispatch, close, onNavigate, onOpenNewTa
   const newTabByDefault = state.settings.commandSearchNewTab === true;
   const run = (item: PaletteItem | undefined, modifier = false) => {
     if (!item) return;
-    const open = paletteOpen(item.kind, newTabByDefault, modifier), address = item.kind === 'web' ? item.query : item.kind === 'history' || item.kind === 'page' ? item.url : '';
+    const open = paletteOpen(item.kind, newTabByDefault, modifier), address = item.kind === 'web' ? item.query : item.kind === 'history' || item.kind === 'page' || item.kind === 'bookmark' ? item.url : '';
     if (open === 'switch' && item.kind === 'tab') { dispatch({ type: 'tab.select', id: item.tab.id }); close(); return; }
     if (open === 'new') { onOpenNewTab(address); return; }
     if (open === 'here') { onNavigate(address); return; }
@@ -139,7 +142,7 @@ export function CommandPalette({ state, dispatch, close, onNavigate, onOpenNewTa
       {sections.map(section => <div key={section.key} role="group" aria-label={section.label}><div className="palette-section" aria-hidden="true">{section.label}</div>
         {section.items.map(item => { const at = ++index, Icon = item.kind === 'command' ? transferIcon(item.command.id) || categoryIcon[item.command.category] || Settings2 : item.kind === 'setting' ? Settings2 : item.kind === 'page' ? pageIcon(item.url) : item.kind === 'web' ? Globe2 : null;
           return <button type="button" key={item.key} id={`palette-${item.key}`} role="option" aria-selected={at === current} data-active={at === current} tabIndex={-1} className="palette-row" onPointerMove={() => { if (at !== current) { moved.current = true; setActive(at); } }} onClick={event => run(item, event.altKey || event.ctrlKey || event.metaKey)}>
-            {Icon ? <Icon size={16}/> : <SiteIdentityIcon url={item.kind === 'tab' ? item.tab.url : item.kind === 'history' ? item.url : ''} favicon={item.kind === 'tab' ? item.tab.favicon : undefined}/>}
+            {Icon ? <Icon size={16}/> : <SiteIdentityIcon url={item.kind === 'tab' ? item.tab.url : item.kind === 'history' || item.kind === 'bookmark' ? item.url : ''} favicon={item.kind === 'tab' ? item.tab.favicon : undefined}/>}
             <Title text={item.title} indices={item.indices}/>{item.hint && <span className="palette-hint" title={item.hint}>{item.hint}</span>}{item.meta && <span className="palette-meta">{item.meta}</span>}
           </button>; })}
       </div>)}

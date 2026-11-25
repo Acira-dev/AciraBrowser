@@ -8,7 +8,7 @@
 // A code is accepted with or without the dashes and the ACIRA prefix, in any letter case, with spaces or invisible characters in it, or inside a pasted sentence
 // ("Your code is ACIRA-7KQ2-M9XD."). A shape that cannot be any of them is told on the spot and is never sent, so a typing slip does not spend one of the server's tries.
 // The move code's shape is the browser's side of the contract (the function is named, not the shape): the Insider contract says what the server must give.
-const { parseInsiderLink, TOKEN } = require('./insider-link.cjs');
+const { parseInsiderLink, parseInviteLink, TOKEN } = require('./insider-link.cjs');
 
 const LENGTH = 8, MOVE_LENGTH = 12, PREFIX = 'ACIRA', MAX_INPUT = 400;
 /** Soft hyphens, zero-width and direction marks, the word joiner and the byte order mark: what a copied code can carry without showing. */
@@ -20,7 +20,7 @@ const SHAPE = /^[A-Z0-9]+$/;
 /** A code inside other text: the prefix, then two (invite) or three (move) groups of four, and not when the group goes on (a longer code is not this one). */
 const IN_TEXT_MOVE = new RegExp(`ACIRA${SEP}([A-Z0-9]{4})${SEP}([A-Z0-9]{4})${SEP}([A-Z0-9]{4})(?![A-Z0-9]|[_\\u2010-\\u2015\\u2212\\-][A-Z0-9])`);
 const IN_TEXT = new RegExp(`ACIRA${SEP}([A-Z0-9]{4})${SEP}([A-Z0-9]{4})(?![A-Z0-9]|[_\\u2010-\\u2015\\u2212\\-][A-Z0-9])`);
-const LINK_IN_TEXT = /acira:\/\/insider\/activate\?[^\s"'<>]*/i;
+const LINK_IN_TEXT = /acira:\/\/insider\/(?:activate|invite)\?[^\s"'<>]*/i;
 
 const clean = (text) => text.normalize('NFKC').replace(INVISIBLE, '').toUpperCase();
 
@@ -60,7 +60,10 @@ function parseEntry(input) {
   if (input.length > MAX_INPUT) return { ok: false, reason: 'long' };
   const plain = input.normalize('NFKC').replace(INVISIBLE, '');
   const link = LINK_IN_TEXT.exec(plain);
-  if (link) { const token = parseInsiderLink(link[0].replace(/[.,;:!?)\]]+$/, '')); return token ? { ok: true, kind: 'activation', token } : { ok: false, reason: 'characters' }; }
+  if (link) {
+    const text = link[0].replace(/[.,;:!?)\]]+$/, ''), token = parseInsiderLink(text), code = token ? null : parseInviteLink(text);
+    return token ? { ok: true, kind: 'activation', token } : code ? { ok: true, kind: 'invite', code } : { ok: false, reason: 'characters' };
+  }
   const bare = plain.trim();
   if (TOKEN.test(bare)) return { ok: true, kind: 'activation', token: bare };
   const read = rawOf(input, [LENGTH, MOVE_LENGTH]);

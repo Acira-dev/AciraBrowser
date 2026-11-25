@@ -42,6 +42,34 @@ function matchScore(query:string,title:string,url:string){
  return words.every(word=>haystack.includes(word))?650:-1;
 }
 
+type BookmarkSource=Pick<BrowserSnapshot,'bookmarks'|'tabs'>&Partial<Pick<BrowserSnapshot,'browserProfiles'|'bookmarkNodes'>>;
+export interface BookmarkEntry{url:string;title:string;/** The bookmark's other names for the same address, and the page's history title: they find the row without naming it. */alsoNamed:string[];/** Its place in the bookmark list. */index:number}
+/** This profile's own ordinary bookmarks as the address field shows them (shared with Command search). 14.4 (a member's report): a bookmark row wears the bookmark's OWN name, then the page's history title, then the site's label. Two bookmarks on one site used to read the
+ * same (the label, twice). The names come from this profile's own ordinary bookmarks, and only when the privacy rule lets bookmarks be shown at all (none from a Tor tab of an ordinary window). An address saved under two
+ * names is one row (the list is keyed by address): the name that comes first in the bookmark list titles it, and the other names still find it. */
+export function bookmarkEntries(state:BookmarkSource,viewer:Parameters<typeof bookmarksVisibleFrom>[1],profile:string,history:readonly {url:string;title:string;browserProfileId?:string}[]):BookmarkEntry[]{
+ if(!bookmarksVisibleFrom(state,viewer)||!state.bookmarks.length)return [];
+ const historyTitles=new Map<string,string>();for(const visit of history)if(visit.browserProfileId===profile&&!historyTitles.has(visit.url))historyTitles.set(visit.url,visit.title);
+ const names=new Map<string,string[]>();
+ for(const node of state.bookmarkNodes??[]){
+  const name=node.title?.trim();if(!node.url||!name||node.tor||node.browserProfileId!==profile)continue;
+  const known=names.get(node.url);if(!known)names.set(node.url,[name]);else if(!known.includes(name))known.push(name);
+ }
+ return state.bookmarks.map((url,index)=>{const own=names.get(url)??[],historyTitle=historyTitles.get(url);
+  return {url,title:own[0]||historyTitle||siteIdentity(url).label,alsoNamed:[...own.slice(1),...historyTitle?[historyTitle]:[]],index};});
+}
+/** Command search (14.5): the bookmarks the address field would offer for this text, by the address field's own matching (exact and prefix addresses, whole names, every word found), best first. */
+export function bookmarkMatches(input:string,state:BookmarkSource&Pick<BrowserSnapshot,'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'settings'>,limit=4):{url:string;title:string;score:number}[]{
+ const normalized=input.trim().slice(0,4096).toLocaleLowerCase();if(!normalized)return [];
+ const current=state.tabs.find(tab=>tab.id===state.activeTabId),profile=current?.browserProfileId||state.activeBrowserProfileId,viewer=current??{browserProfileId:profile};
+ const found=new Map<string,{url:string;title:string;score:number;index:number}>();
+ for(const entry of bookmarkEntries(state,viewer,profile,historyVisibleFrom(state,viewer,state.browsingHistory))){
+  const valid=normalizedUrl(entry.url);if(!valid||valid==='acira://new')continue;
+  const score=Math.max(matchScore(normalized,entry.title,valid),...entry.alsoNamed.map(text=>matchScore(normalized,text,valid)));if(score<0)continue;
+  const known=found.get(valid);if(!known||score>known.score)found.set(valid,{url:valid,title:entry.title,score,index:entry.index});
+ }
+ return [...found.values()].sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,limit).map(({url,title,score})=>({url,title,score}));
+}
 /** Pure local ranking. Profile-specific history never crosses browsing profiles, and no source crosses a privacy line
  * (`suggestionPrivacy.ts`): an ordinary tab never names a private, Tor or secured tab; a Tor tab reads nothing ordinary. */
 export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'tabs'|'activeTabId'|'activeBrowserProfileId'|'browsingHistory'|'bookmarks'|'settings'>&Partial<Pick<BrowserSnapshot,'websiteLanguage'|'browserProfiles'|'bookmarkNodes'>>,limit=8,extras:{commands?:readonly AddressCommand[];now?:Date}={}):AddressSuggestion[]{
@@ -57,19 +85,7 @@ export function rankAddressSuggestions(input:string,state:Pick<BrowserSnapshot,'
  };
  const alreadyOpen=t('addresssuggestions.alreadyOpen'),bookmarkLabel=t('addresssuggestions.bookmark'),fromHistory=t('addresssuggestions.fromHistory');
  state.tabs.forEach((tab,index)=>{if(tab.browserProfileId===profile&&tab.id!==state.activeTabId&&tabVisibleFrom(state,viewer,tab))add('tab',tab.url,tab.customTitle||tab.title,220-index,alreadyOpen,tab.id);});
- const historyTitles=new Map<string,string>();for(const visit of history)if(visit.browserProfileId===profile&&!historyTitles.has(visit.url))historyTitles.set(visit.url,visit.title);
- // 14.4 (a member's report): a bookmark row wears the bookmark's OWN name, then the page's history title, then the site's label. Two bookmarks on one site used to read the
- // same (the label, twice). The names come from this profile's own ordinary bookmarks, and only when the privacy rule above lets bookmarks be shown at all. An address saved under two
- // names is one row (the list is keyed by address): the name that comes first in the bookmark list titles it, and the other names still find it.
- const names=new Map<string,string[]>();
- if(bookmarks.length)for(const node of state.bookmarkNodes??[]){
-  const name=node.title?.trim();if(!node.url||!name||node.tor||node.browserProfileId!==profile)continue;
-  const known=names.get(node.url);if(!known)names.set(node.url,[name]);else if(!known.includes(name))known.push(name);
- }
- bookmarks.forEach((url,index)=>{
-  const own=names.get(url)??[],historyTitle=historyTitles.get(url);
-  add('bookmark',url,own[0]||historyTitle||siteIdentity(url).label,150-index,bookmarkLabel,undefined,undefined,[...own.slice(1),...historyTitle?[historyTitle]:[]]);
- });
+ for(const entry of bookmarkEntries(state,viewer,profile,history))add('bookmark',entry.url,entry.title,150-entry.index,bookmarkLabel,undefined,undefined,entry.alsoNamed);
  history.forEach((visit,index)=>{if(visit.browserProfileId===profile)add('history',visit.url,visit.title,100-Math.min(index,99),fromHistory,undefined,visit.id);});
  const local=[...candidates.values()].sort((a,b)=>b.score-a.score||a.order-b.order).map(candidate=>candidate.item);
  if(!query)return local.slice(0,limit);

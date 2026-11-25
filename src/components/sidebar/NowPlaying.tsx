@@ -19,6 +19,7 @@ import { noteUse } from '../../features/metrics/noteUse';
 import { DotMatrix } from '../DotMatrix';
 import { SiteIdentityIcon } from '../SiteIdentityIcon';
 import { Line, PlayPause, Speaker } from './NowPlayingIcons';
+import { useWindowInactive } from '../../ui/windowActive';
 import './now-playing.css';
 
 /** The now-playing card (Beta 14, approved look 13 Nov): a mini player for one tab that plays sound. Compact (48 px: artwork,
@@ -123,7 +124,9 @@ export function NowPlayingCard({ tab, main, full, onOpen, onFold, onGo, active, 
   useEffect(() => { if (!art) return; let alive = true; void samplePalette(art).then(p => { if (alive) setPalette(p); }); return () => { alive = false; }; }, [art]);
   const siteTint = useMemo(() => paletteFromColor(tab.siteColor), [tab.siteColor]);
   const auraColors = useMemo(() => glowColors({ palette, pictureComing: !!art || !!info?.artSrc, siteTint, neutral: NEUTRAL_AURA }), [palette, art, info?.artSrc, siteTint]);
-  useAura(wrap, auraColors, full, playing, reduced);
+  // 14.5 (battery): while the window is not the active one the glow holds its frame and the dots rest (nobody is looking at them; the title's marquee pauses in now-playing.css)
+  const inactive = useWindowInactive(), calm = reduced || inactive;
+  useAura(wrap, auraColors, full, playing, calm);
   useLayoutEffect(() => { if (!(active && playing && full)) return undefined; lightOn.add(tab.id); publishLight(); return () => { lightOn.delete(tab.id); publishLight(); }; }, [active, playing, full, tab.id]);
 
   // ── Open and fold (the card's `data-full` is owned here, never by render, so a folding card keeps its layout until it lands) ──
@@ -277,7 +280,7 @@ export function NowPlayingCard({ tab, main, full, onOpen, onFold, onGo, active, 
         </button>
         {/* The right end: the ONE dot matrix, only while audio is really playing (A10); it fades out with a small blur when paused and keeps its box. A compact card under the pointer offers play / pause in its place. */}
         <span className="np-right">
-          <span className="np-dots" data-on={dots || undefined} aria-hidden="true"><DotMatrix preset={dots ? 'audio' : 'off'} rows={4} cols={5} snap tone="ink" reducedMotion={reduced}/></span>
+          <span className="np-dots" data-on={dots || undefined} aria-hidden="true"><DotMatrix preset={dots ? 'audio' : 'off'} rows={4} cols={5} snap tone="ink" reducedMotion={calm}/></span>
           <button type="button" className="np-btn np-play np-hplay" data-sb-focus aria-label={playing ? t('sidebarmedia.pause') : t('sidebarmedia.play')} tabIndex={full ? -1 : 0} aria-hidden={full || undefined} onClick={toggle}><PlayPause playing={playing}/></button>
         </span>
         {/* The closed Mini rail's player (Beta 14 final round, the team 01:34 / 03:13): the artwork is the rail's tile and this is its play / pause, on the tile's corner like the site's icon on the open card's artwork. It is drawn in the rail only

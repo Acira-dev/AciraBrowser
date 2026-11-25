@@ -13,13 +13,13 @@ import { ActiveBorderPreview } from "./settings/ActiveBorderPreview";
 import { ACTIVE_BORDER_STYLES, normalizeActiveBorder } from "../ui/activeBorder";
 import { TabLayoutRow } from "./settings/TabLayoutRow";
 import { Segmented } from "../components/Segmented";
-import { noelPrefs } from "../season/noelSettings";
+import { noelPrefs, noelSnowChoices, shownNoelSnow } from "../season/noelSettings";
 import { tabSizeOf, type TabSize } from "../runtime/tabSize";
 import { animationSpeedOf } from "../ui/sharedMotion";
 import { miniTheme } from "./settings/miniTheme";
 import { onSettingsTarget, raiseSettingsIntent, settingsDestination, settingsIntentSection, settingsView, settingsViewKey, takeSettingsTarget } from "../ui/settingsView";
 import { toolbarLayout, toolbarLayoutPatch } from "../runtime/toolbarLayout";
-import { formatShortcut, isMac } from "../ui/platform";
+import { formatShortcut, isLinux, isMac } from "../ui/platform";
 import { paletteModifierKey } from "../ui/paletteTarget";
 import { matchesSystemTheme, systemThemeActions, useSystemTheme } from "../ui/systemTheme";
 import { shortcutFor } from "../ui/shortcutKeys";
@@ -750,12 +750,12 @@ export function BrowserSettings({ state, dispatch }: Props) {
               <fieldset className="st-dim" disabled={!noel.on}>
                 <Segmented
                   label={tr("noelsettings.snow")}
-                  value={noel.snow}
-                  options={[
+                  value={shownNoelSnow(noel.snow, isLinux())}
+                  options={([
                     ["sidebar", tr("noelsettings.snowSidebar")],
                     ["window", tr("noelsettings.snowWindow")],
                     ["off", tr("noelsettings.snowOff")],
-                  ] as const}
+                  ] as const).filter(([v]) => noelSnowChoices(isLinux()).includes(v))}
                   onChange={(noelSnow) => update({ noelSnow })}
                 />
               </fieldset>

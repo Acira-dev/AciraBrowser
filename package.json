@@ -1,6 +1,6 @@
 {
   "name": "acira-browser",
-  "version": "0.1.0-beta.14.4",
+  "version": "0.1.0-beta.14.5",
   "description": "An independent, calm consumer browser",
   "license": "AGPL-3.0-only",
   "main": "desktop/main.cjs",

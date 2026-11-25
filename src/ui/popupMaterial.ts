@@ -30,3 +30,11 @@ export function popupMaterialProvider({native,reducedTransparency,status,opaque}
  if(status==='native')return 'native';
  return opaque?'opaque':'live';
 }
+
+/** What the backdrop hook publishes while a one-shot capture is being acquired (the legacy path, after the snapshot asks came back empty).
+ *  Beta 14.5 (EDICT, "the page's menu changes colour when you right-click again at another spot"): a popup that already carries a published (frozen) frame keeps it and its 'live' status until the new frame
+ *  replaces it. The state used to turn 'pending' here, which draws the dense grey plate for the length of the capture (about 100 ms): live glass, a grey plate, live glass again. With no frame yet it is 'pending'
+ *  as before, and the videos that are not decoded yet are never advertised as glass. */
+export function acquiringState<V,S extends {status:'pending'|'live'|'native';opaque:boolean;videos:V[]}>(previous:S,published:readonly unknown[],acquiring:V[]):S|{status:'pending';opaque:boolean;videos:V[]}{
+ return published.length?previous:{status:'pending',opaque:previous.opaque,videos:acquiring};
+}

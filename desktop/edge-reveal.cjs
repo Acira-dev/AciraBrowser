@@ -162,7 +162,10 @@ function createEdgeController({ now = Date.now } = {}) {
     const live = input.focused !== false;
     // Windows: the caption buttons' corner (top right, hidden with the toolbar) shows the top at once, so the buttons are back
     // under the pointer before it can click where they are.
-    const caption = input.caption && rawPoint && inside ? rawPoint.x - b.x >= b.width - input.caption.width && rel.y < input.caption.height : false;
+    // D187 (Windows): a caption with a `strip` shows the top only from the top `strip` DIPs of the corner, not from the whole box: below it the pointer is on the PAGE's controls (the hidden buttons' hit region is
+    // shrunk to the same strip, main.cjs setCaption). Without `strip` (the Mac and Linux never have a caption here) the whole box, as before.
+    const strip = input.caption && Number.isFinite(input.caption.strip) ? input.caption.strip : null;
+    const caption = input.caption && rawPoint && inside ? rawPoint.x - b.x >= b.width - input.caption.width && (strip !== null ? rel.y <= strip : rel.y < input.caption.height) : false;
     // macOS fullscreen on a notched display: the window sits below the camera housing and the menu bar comes down in the band above it, so
     // the pointer that goes to "the top" ends in that band, outside the window. It is at the top edge of the screen, which is what the zone
     // stands for: it counts as pressing against the window's top edge, and keeps the bar open while it stays there.
@@ -327,7 +330,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
   const step = () => {
     timer = null;
     if (lookAt && looks.push(Date.now() - lookAt) > 59) { console.log('[edge-cadence]', looks.sort((x, y) => x - y)[30], looks[59]); looks = []; }
-    let fast = false, soon = 250, awake = false;
+    let fast = false, soon = 250; const needy = new Set();   // 14.5: the windows that still need a look after this one
     for (const item of windows()) {
       const win = item.window;
       if (!win || win.isDestroyed?.()) { seen.delete(item); continue; }
@@ -343,7 +346,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       // and main wakes it (`wake()`) when a window is shown, restored, focused or seen again. A window that can be seen is looked at exactly as before.
       if (!focused && !entry.edge.active() && !entry.last.top && !entry.last.side && !entry.last.pinned.top && !entry.last.pinned.side && !entry.notchShown && !entry.cornerShown
         && (!!win.isMinimized?.() || win.isVisible?.() === false || !!item.unseen?.())) continue;
-      awake = true;
+      needy.add(item);
       // Windows, Sidebar mode: the caption buttons' notch shows while the pointer is along the top (caption-notch.cjs; its own controller, the same rules as Seamless's top edge).
       // Nothing is sent to the interface: `item.notchShown(shown)` is main's caption overlay going visible or transparent.
       const notchInput = item.notch?.() || null;
@@ -375,7 +378,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
           height: cornerInput?.height, speed: item.speed?.() || 'premium', pressed: !!item.pressed?.(),
         });
         if (watch.active()) fast = true;
-        else if (watching && cornerInput.hidden) soon = Math.min(soon, cornerLook(require('./caption-notch.cjs').cornerDistance(point, box, cornerInput.height)));
+        else if (watching && cornerInput.hidden) soon = Math.min(soon, cornerLook(require('./caption-notch.cjs').cornerDistance(point, box, cornerInput.height, true)));
         reportCorner = () => { const current = item.cornerIsShown ? !!item.cornerIsShown() : !!entry.cornerShown; if (shown !== current) item.cornerShown?.(shown); entry.cornerShown = shown; };
       }
       const input = { view: effective, vertical: !!(state?.settings?.verticalTabs || (state?.settings?.shelf && state?.settings?.verticalTabs !== true)), sidebarSide: state?.settings?.sidebarSide === 'right' ? 'right' : 'left', docked: !!item.docked?.(), edges: item.edges?.() || { top: true, side: true }, peek, topAuto: !!item.topAuto?.(), speed: item.speed?.() || 'premium', miniRail: !!item.miniRail?.(), reveal: item.reveal?.() || 'edge', handle: item.handle?.() || null, carrying: !!item.carrying?.() };
@@ -415,7 +418,14 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
         usable = over || recent || onBar;
         if (TRACE && usable !== entry.unfocusedOver) { entry.unfocusedOver = usable; console.log('[edge-unfocused]', Date.now(), JSON.stringify({ over: usable, point })); }
       }
-      if (!(usable && edgesOn) && idle) { tellHandle(false, false, false); reportCorner(); continue; }
+      if (!(usable && edgesOn) && idle) {
+        tellHandle(false, false, false); reportCorner();
+        // 14.5 (battery): a window with every edge off (Full view by default: nothing reveals) and no caption notch or corner to watch has nothing a look could change; edge
+        // enabling comes only from the window's state (settings, view, tabs), so main wakes the poller on each state change (`wake()`, main.cjs broadcast). Windows keeps its look
+        // (`item.needsLook`): the caption fallback (caption-watch.cjs) rides this tick.
+        if (!edgesOn && !notchInput && !entry.notchShown && !cornerInput && !entry.cornerShown && !item.needsLook?.()) needy.delete(item);
+        continue;
+      }
       fast = true;
       if (TRACE) { const line = JSON.stringify({ pressed: !!item.pressed?.(), engaged: !!item.engaged?.(), ...item.why?.() }); if (line !== entry.intent) { entry.intent = line; console.log('[edge-intent]', Date.now(), line); } }
       // Wayland (pointer-point.cjs): the system never says where the pointer is (Electron answers {0,0}), so the window's own pointer events do. They are in the
@@ -460,7 +470,7 @@ function watchChromeEdges({ app, windows, screen, view, now = Date.now, schedule
       reportCorner();
     }
     lookAt = TRACE && fast ? Date.now() : 0;
-    asleep = !fast && !awake;
+    asleep = !fast && needy.size === 0;
     if (!stopped && !asleep) timer = schedule(tick, fast ? 16 : soon);
     timer?.unref?.();
   };

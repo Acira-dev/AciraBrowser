@@ -97,6 +97,9 @@ function createWindowsHost({electron, available, destination, createWindow, atta
       child.setMenu(null);
       child.on('closed', () => owner.auxiliaries.delete(key));
       child.webContents.on('will-navigate', (event, value) => { if (!allowed(value)) event.preventDefault(); });
+      // Beta 14.5 (a member on Windows 14.4: the extension window opened from the right-click menu could not be closed): Electron cancels a close silently when the page has a beforeunload handler and nobody answers
+      // 'will-prevent-unload' (a tab's gate does, desktop/leave-gate.cjs; these windows had none), so the window's close button did nothing. An extension's own window is not a document with unsaved work: it closes.
+      child.webContents.on('will-prevent-unload', event => event.preventDefault());
       child.webContents.setWindowOpenHandler(details => ({action: allowed(details.url) ? 'allow' : 'deny', overrideBrowserWindowOptions: {show: !hidden(), autoHideMenuBar: true, webPreferences: {...preferences, preload: undefined}}}));
       child.webContents.on('did-create-window', popup => track(popup));
       attach(child.webContents, child);

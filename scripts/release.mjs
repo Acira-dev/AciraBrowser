@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { signFiles, signingMode, signatureStatus } from './release-sign.mjs';
+import { signFiles, signingMode, signatureStatus, preflightSigning } from './release-sign.mjs';
 import { withInstallerHelpers } from './release-helpers.mjs';
 import { reportTarget } from './check-release-target.mjs';
 const require = createRequire(import.meta.url);
@@ -36,6 +36,7 @@ const publish = flag('--publish'), out = path.resolve(flag('--out') ? value('--o
 const assetsDir = path.join(out, 'assets'), builderOut = path.join(out, 'builder');
 const mode = signingMode(process.env);
 say(`${publish ? 'PUBLISH' : 'DRY RUN'} ${tag} channel=${channel} signing=${mode} out=${out}`);
+try { preflightSigning(process.env, { probe: true }); } catch (error) { if (error?.name !== 'SigningStop') throw error; fail(error.message + (error.detail ? '\n' + error.detail : '')); } // Certum: the certificate is usable (a throwaway file is signed) before the build starts
 
 // 0. can people who are not logged in reach the release target? (read-only requests; a dry run only warns, --publish refuses)
 const reach = await checkReleaseTarget(target);

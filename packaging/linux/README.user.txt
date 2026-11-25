@@ -2,7 +2,7 @@ Acira Browser {{VERSION}} for Linux (x86_64)
 
 INSTALL
 1. Put {{IMAGE}} in the same folder
-   as these setup files.
+   as these setup files, or in the folder that holds that folder.
 2. Open a terminal in that folder and run:
      bash Install-Acira.sh
    Run it as yourself, not as root.

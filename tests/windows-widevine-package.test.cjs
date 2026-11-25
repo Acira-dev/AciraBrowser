@@ -211,3 +211,13 @@ test('the build wiring: opt-in flag, preflight first, twin qualified by the exis
  const order=['writeAsarIntegrity(exe,','burnFuses(exe,EVS_FUSES)','await authenticode(exe)','await vmp(output,{python,env})'].map(step=>seal.indexOf(step));
  assert.ok(order.every((at,i)=>at>0&&(i===0||at>order[i-1])),'integrity, fuses, Authenticode, VMP: '+order);
 });
+
+test('the code-signing hook\'s records (signer, timestamp, hash per file) land in the sealed provenance, and VMP still comes after',async t=>{
+ const {root:base,twin}=await fixtureTwin(t),seen=[];
+ const record={name:'AciraBrowser.exe',signer:'Acira, Inc.',thumbprint:'A1'.repeat(20),timestamped:true,timestamper:'CN=Certum Timestamp',timestampServer:'http://time.certum.pl',signedAt:'2026-11-26T09:00:00.000Z',sha256:'b'.repeat(64),file:'C:\\private\\path\\AciraBrowser.exe',subject:'CN=x'};
+ const result=await W.sealWindowsWidevine(twin,{root:base,vmp:standInVmp(seen),log:()=>{},authenticode:async()=>{seen.push({step:'authenticode'});return {mode:'certum',records:[record]};}});
+ assert.deepEqual(seen.map(step=>step.step),['authenticode','sign','verify']);
+ const provenance=JSON.parse(await fs.readFile(path.join(result.output,'ACIRA-PROVENANCE.json'),'utf8'));
+ assert.equal(provenance.widevine.authenticode,'signed before VMP');
+ assert.deepEqual(provenance.widevine.authenticodeFiles,[{name:'AciraBrowser.exe',signer:'Acira, Inc.',thumbprint:'A1'.repeat(20),timestamped:true,timestamper:'CN=Certum Timestamp',timestampServer:'http://time.certum.pl',signedAt:'2026-11-26T09:00:00.000Z',sha256:'b'.repeat(64)}],'no local paths in the record');
+});

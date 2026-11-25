@@ -3,7 +3,7 @@ import {runtime} from '../runtime/client';
 import type {PopupBackdropSource,Rectangle} from '../runtime/types';
 import {freezePopupVideo,waitForPopupVideo} from './popupMedia';
 import {createPopupCaptureLifetime,stopPopupCapture} from './popupCaptureLifetime';
-import {canRetainClosingMaterial,createPopupMaterialDeadline} from './popupMaterial';
+import {acquiringState,canRetainClosingMaterial,createPopupMaterialDeadline} from './popupMaterial';
 import {decodePopupSnapshot} from './popupSnapshot';
 
 export interface BackdropVideo {source:PopupBackdropSource&{sourceBounds?:Rectangle};video?:HTMLVideoElement;stream?:MediaStream;frame?:HTMLCanvasElement}
@@ -48,7 +48,7 @@ export function usePopupBackdrop({id,enabled,closing,context,geometryKey=''}:{id
       current.videos.push({source:current.source,video,stream});
       // Mount the owned video before playback. The native one-shot grant ends
       // when acquisition succeeds; waiting for paint must not retain that grant.
-      setState(previous=>({status:'pending',opaque:previous.opaque,videos:[...published.current,...current.staged,...current.videos]}));
+      setState(previous=>acquiringState(previous,published.current,[...current.staged,...current.videos]));   // Beta 14.5: a frame already on screen stays (popupMaterial.ts acquiringState)
       current.ready=waitForPopupVideo(video,current.controller.signal);
       void current.ready.catch(()=>{});
     };

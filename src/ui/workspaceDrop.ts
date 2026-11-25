@@ -50,24 +50,9 @@ export function useWorkspaceDropHover(): Hover | null {
   return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => hover, () => null);
 }
 
-/** With more workspaces than the row shows (up to 16), a drag held at the row's left or right end scrolls it, faster the nearer the edge, so every icon can be reached; it stops when the pointer leaves the end or the drag is over. */
-let edgeSpeed = 0, edgeStrip: HTMLElement | null = null, edgeFrame = 0;
-function scrollRowAtEdge(point: { x: number; y: number } | null): void {
-  const strip = point ? document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>('[data-workspace-strip]') ?? null : null, zone = 32;
-  edgeSpeed = 0; edgeStrip = strip;
-  if (strip && point && strip.scrollWidth > strip.clientWidth + 1) {
-    const box = strip.getBoundingClientRect(), left = point.x - box.left, right = box.right - point.x;
-    if (left < zone) edgeSpeed = -(3 + 9 * (1 - Math.max(0, left) / zone)); else if (right < zone) edgeSpeed = 3 + 9 * (1 - Math.max(0, right) / zone);
-  }
-  if (!edgeSpeed || edgeFrame) return;
-  const step = () => { edgeFrame = 0; if (!edgeSpeed || !edgeStrip) return; edgeStrip.scrollLeft += edgeSpeed; edgeFrame = requestAnimationFrame(step); };
-  edgeFrame = requestAnimationFrame(step);
-}
-
 /** Lights the icon under `point` (null clears it). `noteFor` says what a drop there would do: a note shows the banner and rings the icon (dims it when
  *  refused); null (nothing to say) leaves the icon plain; without it the icon only wears the old fill. */
 export function markWorkspaceDrop(point: { x: number; y: number } | null, noteFor?: (workspaceId: string) => WorkspaceDropNote | null): void {
-  scrollRowAtEdge(point);
   const id = point ? workspaceDropAt(point) : null, note = id && noteFor ? noteFor(id) : null;
   const lit = id && (!noteFor || note) ? id : null;
   for (const icon of document.querySelectorAll<HTMLElement>('[data-ws][data-drop]')) if (icon.dataset.ws !== lit) delete icon.dataset.drop;

@@ -4,6 +4,7 @@ import { edgeActiveTab, miniFloat, miniRelease, miniStill } from './chromeEdge';
 import { motionSpeed } from './sharedMotion';
 import { bentRamp, lightShare, selectedFade, stayFadeEnd, stayFloor, stayRise, type Disc, type Glider } from './miniDockGlide';
 import { MOVING_ATTR } from './miniDockMove';
+import { MINI_DOCK_DONE, holdDockDone } from './miniDockDirection';
 import { REFIT_EVENT } from './sidebarMorph';
 import { runtime } from '../runtime/client';
 import { MINI_RAIL_WIDTH, miniRailOn } from '../runtime/miniSidebar';
@@ -713,7 +714,7 @@ function dockSwitch(el: HTMLElement, w: number, direction: 'out' | 'in', begin: 
   // one; an expand reads before `begin`'s microtask changes its form (queued first), and that microtask settles it.
   let controls: ReturnType<typeof holdLateControls> | null = null, still = false, line: (() => void) | null = null;
   collapseTexts = new Map();
-  setEdge(w, lead); el.setAttribute(DOCK_ST, direction);
+  setEdge(w, lead); el.setAttribute(DOCK_ST, direction); el.removeAttribute(MINI_DOCK_DONE);
   queueMicrotask(() => {
     if (done || dockSeq !== mine || !el.isConnected) return;
     if (direction === 'out') { settle(el); collapseTexts = new Map(openTexts(el).map(([item, shown]) => [textKey(item), shown] as [string, number])); }
@@ -727,7 +728,7 @@ function dockSwitch(el: HTMLElement, w: number, direction: 'out' | 'in', begin: 
   const watch = new MutationObserver(() => { if (!root.hasAttribute('data-mini-dock')) end(); });
   const end = () => { if (done) return; done = true; watch.disconnect(); window.clearTimeout(net); setEdge(0); markDock(null); controls?.release(); line?.(); for (const item of lights) item.cancel(); unmarkFaded(); dropPlates(); if (el.isConnected) {
       if (direction === 'in') panelBack(el);     // D175 (a web animation: settle, below, cancels only CSS transitions)
-      if (direction === 'out') holdLanded(el);
+      if (direction === 'out') { holdLanded(el); holdDockDone(el, root); }     // D194: ended by the net before the page's mark went: the rail's entrance stays held off (miniDockDirection.ts)
       el.removeAttribute(DOCK_ST); el.removeAttribute('data-mini-dock-go'); el.removeAttribute(LIST_GLIDE); finish();
       // The hand-over to the settled sidebar starts no fade: the open tab's row is drawn by the rail's own plate while the dock runs and by the row's background once it has landed, and that background came in from nothing over
       // 100 ms (real frames, every expand: the open tab's row 20 levels under rest for three frames right after the switch; hidden probe: background-color from transparent, started in the frame the dock ended).

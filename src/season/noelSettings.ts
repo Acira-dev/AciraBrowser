@@ -15,6 +15,12 @@ import type { Settings } from '../runtime/types';
 export const NOEL_LIGHT = '#a9c6e6';
 export type NoelSnow = 'sidebar' | 'window' | 'off';
 export const NOEL_SNOW_VALUES: readonly NoelSnow[] = ['sidebar', 'window', 'off'];
+/** D196 (25 Nov, a Linux user): the choices offered on this platform. On Linux the snow over the whole window has no window of its own (desktop/season-overlay.cjs), so it
+ *  is not offered there. */
+export const noelSnowChoices = (linux: boolean): readonly NoelSnow[] => (linux ? NOEL_SNOW_VALUES.filter(v => v !== 'window') : NOEL_SNOW_VALUES);
+/** What the choice shows: a stored 'window' reads as 'sidebar' on Linux (where the snow falls in the sidebar); the stored value is kept, so the same settings on a Mac or Windows
+ *  still snow over the whole window. */
+export const shownNoelSnow = (snow: NoelSnow, linux: boolean): NoelSnow => (linux && snow === 'window' ? 'sidebar' : snow);
 export interface NoelPrefs { on: boolean; snow: NoelSnow; hat: boolean; keep: boolean }
 
 export const NOEL_DEFAULTS: Readonly<NoelPrefs> = Object.freeze({ on: false, snow: 'sidebar', hat: true, keep: true });

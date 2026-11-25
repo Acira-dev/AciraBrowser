@@ -21,6 +21,11 @@ const { createEdgeController } = require('./edge-reveal.cjs');
 const NOTCH = { width: 138, height: 34 };
 /** The corner that shows a hidden notch at once (a little wider and taller than the buttons: the pointer is never over an invisible button). */
 const CORNER = { width: 144, height: 36 };
+/** D187 (Windows, 14.4): the corner shows a hidden notch only from its top STRIP, this many DIPs from the window's top edge (Seamless's own top zone, edge-reveal.cjs EDGE.top), not from the
+ * whole 144 x 36 box: a pointer going to a page's control under the corner (a PDF viewer's three dots) used to bring the buttons over it. While hidden, the overlay is only HIDDEN_OVERLAY_HEIGHT
+ * DIPs tall (caption-guard.cjs hiddenOverlayHeight, main.cjs setCaption), so Windows' hit regions of the transparent buttons are that thin too. */
+const CORNER_STRIP = 8;
+const corner = height => ({ width: CORNER.width, height: Math.max(CORNER.height, Math.round(height || 0)), strip: CORNER_STRIP });
 
 /** One per window. `sample()` is called every poll with what main can see and returns whether the notch shows.
  * Input: point (global cursor, DIPs, or null), bounds (the window's content bounds), focused, suspended (minimised, fullscreen, an HTML-fullscreen page), active (this
@@ -37,7 +42,7 @@ function createCaptionNotch({ now = Date.now } = {}) {
         keys: { top: false, side: false }, holds: { top: false, side: false }, engaged: false,
         // Keeping it open: the pointer anywhere in the band the notch hangs in (plus the controller's own leeway), so the buttons can be reached.
         size: { topHeight: NOTCH.height, sideWidth: 0 },
-        caption: hidden ? { ...CORNER } : null,
+        caption: hidden ? corner(0) : null,
       }).top;
     },
     /** Hide now (Esc is not needed: the pointer leaving does it); it stays hidden until the pointer has left the zone. */
@@ -66,7 +71,7 @@ function createCaptionCorner({ now = Date.now } = {}) {
         view: 'seamless', vertical: true, docked: true, edges: { top: true, side: false }, peek: {},
         keys: { top: false, side: false }, holds: { top: false, side: false }, engaged: false,
         size: { topHeight: band, sideWidth: 0 },
-        caption: hidden ? { width: CORNER.width, height: Math.max(CORNER.height, band) } : null,
+        caption: hidden ? corner(band) : null,
       }).top;
     },
     /** Is it showing or about to (the poller keeps its fast cadence while so). */
@@ -75,10 +80,11 @@ function createCaptionCorner({ now = Date.now } = {}) {
 }
 
 /** How far the pointer is from a hidden caption's corner, in DIPs (0 inside): the poller looks more often the closer it is (edge-reveal.cjs). */
-function cornerDistance(point, bounds, height) {
+function cornerDistance(point, bounds, height, strip = false) {
   if (!point || !bounds) return Infinity;
-  const h = Math.max(CORNER.height, Math.round(height || 0)), x0 = bounds.x + bounds.width - CORNER.width, x1 = bounds.x + bounds.width, y0 = bounds.y, y1 = bounds.y + h;
+  // D187: the reveal is the top strip of the corner only, so the pointer's distance is to that strip (the poller looks often only near what can reveal).
+  const h = strip ? CORNER_STRIP : Math.max(CORNER.height, Math.round(height || 0)), x0 = bounds.x + bounds.width - CORNER.width, x1 = bounds.x + bounds.width, y0 = bounds.y, y1 = bounds.y + h;
   return Math.hypot(Math.max(x0 - point.x, 0, point.x - x1), Math.max(y0 - point.y, 0, point.y - y1));
 }
 
-module.exports = { createCaptionNotch, createCaptionCorner, cornerDistance, NOTCH, CORNER };
+module.exports = { createCaptionNotch, createCaptionCorner, cornerDistance, NOTCH, CORNER, CORNER_STRIP, corner };

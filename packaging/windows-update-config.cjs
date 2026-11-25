@@ -6,9 +6,11 @@
 const {loadReleaseTarget}=require('./release-target.cjs');
 const {publicFeedConfig}=require('./update-feed.cjs');
 const FILE='resources/app-update.yml';
-function windowsUpdateConfig(target=loadReleaseTarget()){
+// publisherNames (a signed build only): the names an update's signature must carry (electron-updater's publisherName; the installed app checks it with acira-verify.exe,
+// desktop/windows-helper.cjs updateSignatureCheck). An app built without names checks nothing, so list every name the app will ever be signed with from the first signed build.
+function windowsUpdateConfig(target=loadReleaseTarget(),{publisherNames=[]}={}){
  if(target.provider!=='generic')throw Error('The Windows update feed is the public generic feed (packaging/release-target.json); got provider '+target.provider+'.');
- return {...publicFeedConfig(target.url),updaterCacheDirName:'acira-browser-updater'}; // the same cache folder name the Mac app uses
+ return {...publicFeedConfig(target.url),updaterCacheDirName:'acira-browser-updater',...(publisherNames.length?{publisherName:[...publisherNames]}:{})}; // the same cache folder name the Mac app uses
 }
 // JSON strings are valid YAML scalars, like the Mac writer (packaging/macos/update-feed.cjs).
 const serializeUpdateConfig=config=>Object.entries(config).map(([key,value])=>key+': '+JSON.stringify(value)).join('\n')+'\n';

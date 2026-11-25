@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
+import {signFiles,signingMode,publisherNames,preflightSigning,readSignRecords} from './release-sign.mjs';
 const root=path.resolve(import.meta.dirname,'..'),require=createRequire(import.meta.url);
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run this command on Windows x64 with Node.js 24; a Mac run cannot qualify the Windows installer.');
 const pkg=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8'));
@@ -15,6 +16,14 @@ function run(exe,args,env={}){const result=spawnSync(exe,args,{cwd:root,stdio:'i
 const git=spawnSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'});if(git.status!==0||git.stdout.trim())throw Error('Pull committed main and keep the checkout clean before building.');
 const head=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});if(head.status!==0)throw Error('Unable to identify the source commit.');
 const commit=head.stdout.trim(),candidate=path.join(root,'release','windows-'+pkg.version+'-'+commit.slice(0,8)+'-candidate');
+// Signing (ACIRA_SIGN=certum; docs/launch/CODE_SIGNING.md). Asked for here means asked for everywhere below: the build stops, never goes on unsigned. The SimplySign login is checked in the
+// first minutes, so a missing login stops the build now and not after the hours of rigs; every signature of this build is appended to one records file that the result reads back.
+const signMode=signingMode(process.env),signing=signMode!=='none',signRecordsFile=signing?path.join(root,'release','sign-records-'+pkg.version+'-'+commit.slice(0,8)+'.jsonl'):null;
+if(signing){
+ if(!process.argv.includes('--widevine'))throw Error('Signing is wired into the Widevine build only (npm run build:windows:widevine), the one that ships. Unset ACIRA_SIGN for this plain build.');
+ try{preflightSigning(process.env,{probe:true});}catch(error){if(error?.name!=='SigningStop')throw error;console.error('[sign] '+error.message+(error.detail?'\n'+error.detail:''));process.exit(1);} // one plain line and no stack: the certificate is usable, proven by signing a throwaway file, before anything is compiled or downloaded
+ await fs.mkdir(path.dirname(signRecordsFile),{recursive:true});await fs.rm(signRecordsFile,{force:true});process.env.ACIRA_SIGN_RECORDS=signRecordsFile;
+}
 // Widevine: the EVS login and client, and the pinned ECS runtime, before any long work, so a missing piece stops the build in its first minutes.
 const widevine=process.argv.includes('--widevine'),sealing=widevine?require('../packaging/windows-widevine.cjs'):null;let evs=null,runtime=null,guard=(held,work)=>work(held);/* guard: removes the extracted runtime however the build ends (fetch-windows-widevine.mjs); a build without Widevine has none */
 if(widevine){evs=await sealing.preflight();console.log('Widevine build: EVS client '+evs.client+' ('+evs.python+'), login refreshed');const fetcher=await import('./fetch-windows-widevine.mjs');runtime=await fetcher.fetchWindowsWidevineRuntime();guard=fetcher.guardWindowsWidevineRuntime;}
@@ -40,16 +49,25 @@ for(const file of ['qa/accounts-private-worker.mjs','qa/release-session-cookie.m
 // fuse set), so the rigs above cannot drive it; check 1 of the release gate opens it the way a person does instead, on a throwaway profile.
 let product=portable.output,sealed=null;
 if(widevine){
- // Microsoft signing, once it exists: pass authenticode:file=>signFiles([file]) (scripts/release-sign.mjs) here. It runs before VMP, the order Windows needs.
- sealed=await sealing.sealWindowsWidevine(portable.output,{root,python:evs.python});product=sealed.output;
+ // The program is code-signed (scripts/release-sign.mjs) right before VMP, the order Windows needs; the hook's records go into the sealed provenance.
+ sealed=await sealing.sealWindowsWidevine(portable.output,{root,python:evs.python,authenticode:signing?async file=>signFiles([file]):null});product=sealed.output;
  run('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(root,'qa/release-alive.ps1'),'-Exe',path.join(product,'AciraBrowser.exe'),'-Profile',path.join(root,'.qa-profiles','widevine-alive-'+Date.now())]);
 }
 // Retain the existing freshly compiled Creation helpers until the child installer build exits.
 const {withInstallerHelpers}=await import('./release-helpers.mjs');
-withInstallerHelpers({root,sign:()=>{},build:()=>node('scripts/release-installer.mjs',product)});
+withInstallerHelpers({root,sign:files=>{if(signing)signFiles(files);},build:()=>node('scripts/release-installer.mjs',product)}); // the installer's two helpers and acira-verify.exe; the setup and its uninstaller are signed by electron-builder inside release-installer.mjs
 const installerDirectory=path.join(root,'release/installers',portable.sourceDigest.slice(0,8)+(widevine?'-widevine':''));
 const installer={output:installerDirectory,...JSON.parse(await fs.readFile(path.join(installerDirectory,'ACIRA-INSTALLER-PROVENANCE.json'),'utf8'))};
-const result={version:pkg.version,commit,portable:product,installerDirectory:installer.output,installer:installer.installer,published:false,updateConfig:installer.updateConfig,nativeWindowsChecksPassed:true,installedIntoRealProfile:false,widevineQualified:false,
+let signingResult=null;
+if(signing){
+ // Everything that ships must have a record, and the program must be the one that was signed (VMP writes only its .sig file next to it).
+ const records=readSignRecords(signRecordsFile),last=re=>records.filter(record=>re.test(record.name)).at(-1);
+ const missing=[['AciraBrowser.exe',/^AciraBrowser\.exe$/],['AciraBrowserSetup.exe',/^AciraBrowserSetup\.exe$/],['the setup\'s uninstaller',/__uninstaller\.exe$/],['acira-progress.exe',/^acira-progress\.exe$/],['acira-uninstall.exe',/^acira-uninstall\.exe$/],['acira-verify.exe',/^acira-verify\.exe$/]].filter(([,re])=>!last(re)).map(([label])=>label);
+ if(missing.length)throw Error('Signing was asked for, but this build recorded no signature for: '+missing.join(', ')+' ('+signRecordsFile+'). Nothing was handed over.');
+ if(last(/^AciraBrowser\.exe$/).sha256!==sealed.widevine.program.sha256)throw Error('AciraBrowser.exe is not the file that was signed: it changed after code signing, so the VMP signature or the Authenticode signature is broken. Nothing was handed over.');
+ signingResult={mode:signMode,publisherName:publisherNames(process.env),recordsFile:path.relative(root,signRecordsFile).replaceAll('\\','/'),files:records.map(({name,signer,thumbprint,timestamped,timestamper,timestampServer,signedAt,sha256})=>({name,signer,thumbprint,timestamped,timestamper,timestampServer,signedAt,sha256})),installerSetup:installer.installer.signing?.setup||null};
+}
+const result={version:pkg.version,commit,portable:product,installerDirectory:installer.output,installer:installer.installer,published:false,updateConfig:installer.updateConfig,nativeWindowsChecksPassed:true,installedIntoRealProfile:false,widevineQualified:false,...(signingResult?{signing:signingResult}:{}),
  ...(sealed?{widevine:{runtime:sealed.widevine.runtime.release,archiveSha256:sealed.widevine.runtime.archiveSha256,twin:portable.output,productionVmpSigned:true,signature:sealed.widevine.vmp.signature,authenticode:sealed.widevine.authenticode,sealedOpensAndCloses:true,playbackVerified:false}}:{})};
 await fs.writeFile(path.join(installer.output,'WINDOWS-BUILD-RESULT.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));
 });

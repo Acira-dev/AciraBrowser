@@ -5,6 +5,7 @@ import {SettingInfo} from '../../components/SettingInfo';
 import { t, translateText } from '../../i18n';
 import { macKeys } from '../../i18n/platform';
 import { isMac } from '../../ui/platform';
+import { hostScale, selectListBox } from './selectPlacement';
 
 /** Acira Settings controls. No native <select> or switch chrome. Styles live in settings.css. */
 
@@ -58,18 +59,11 @@ export function Select<T extends string | number>({ value, options, onChange, la
     // scroller and express its position in the Settings root's coordinates.
     const host = trigger.current.closest<HTMLElement>('.browser-settings');
     const origin = host?.getBoundingClientRect();
-    const left = origin?.left ?? 0, top = origin?.top ?? 0;
-    const right = Math.min(window.innerWidth, origin?.right ?? window.innerWidth);
-    const bottom = Math.min(window.innerHeight, origin?.bottom ?? window.innerHeight);
-    const height = Math.min(LIST_MAX, options.length * 34 + 12);
-    const below = bottom - rect.bottom - 8;
-    const above = rect.top - Math.max(0, top) - 8;
-    const up = below < height && above > below;
-    const room = Math.max(0, Math.min(height, up ? above : below));
-    // Clamp the actual list width, not an assumed 200px: at enlarged interface
-    // sizes that assumption shifted a 120px list away from its trigger.
-    const width = Math.max(rect.width, list.current?.getBoundingClientRect().width ?? 0);
-    setBox({ position: host ? 'absolute' : 'fixed', left: Math.max(8, Math.min(rect.left - left, right - left - width - 8)), minWidth: rect.width, maxHeight: room, ...(up ? { bottom: (origin?.bottom ?? window.innerHeight) - rect.top + 6 } : { top: rect.bottom - top + 6 }) });
+    // D195: the host can be zoomed (an internal page carries the tab's CSS zoom): what is measured is on screen, what is set is the host's own pixels (selectPlacement.ts).
+    const scale = host && origin ? hostScale(origin.width, host.offsetWidth) : 1;
+    const placed = selectListBox({ rect, host: origin ?? null, window: { width: window.innerWidth, height: window.innerHeight }, height: Math.min(LIST_MAX, options.length * 34 + 12), listWidth: list.current?.getBoundingClientRect().width ?? 0, scale });
+    const { up: _up, ...style } = placed;
+    setBox({ position: host ? 'absolute' : 'fixed', ...style });
     openedScroll.current.clear();
     for (let node: Element | null = trigger.current.parentElement; node; node = node.parentElement) openedScroll.current.set(node, {top: node.scrollTop, left: node.scrollLeft});
     list.current?.focus({ preventScroll: true });

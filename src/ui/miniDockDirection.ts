@@ -34,3 +34,14 @@ export function clearMiniDock(): void {
   const root = document.documentElement;
   root.removeAttribute(MINI_DOCK_ATTR); root.style.removeProperty(MINI_DOCK_DX);
 }
+/** D194 (reported 25 Nov: "a flash from sidebar to minibar the flash is like smthn dimming the icons for a sec then repaering when going from side to mini"): miniRail.css starts the rail's entrance (its rows from
+ * nothing to whole over 12 % to 30 % of a collapse, and their 6 px glide) on the page's mark of a collapse (`data-mini-dock=out` on the root), and holds it off with the sidebar's own mark of the switch. A switch that ended
+ * before the page's mark went (its 1500 ms net) took the sidebar's mark off first: the entrance started anew over the landed rail and every rail icon went to nothing and came back. The landed rail now keeps a mark of its
+ * own until the page's mark has gone, under the same hold. Nothing changes when the page's mark goes first (the normal end). */
+export const MINI_DOCK_DONE = 'data-mini-dock-done';
+export function holdDockDone(el: Element, root: Element = document.documentElement): void {
+  if (!root.hasAttribute(MINI_DOCK_ATTR) || typeof MutationObserver === 'undefined') return;
+  el.setAttribute(MINI_DOCK_DONE, '');
+  const off = new MutationObserver(() => { if (!root.hasAttribute(MINI_DOCK_ATTR)) { off.disconnect(); el.removeAttribute(MINI_DOCK_DONE); } });
+  off.observe(root, { attributes: true, attributeFilter: [MINI_DOCK_ATTR] });
+}

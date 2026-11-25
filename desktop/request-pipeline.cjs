@@ -15,7 +15,7 @@ const LAZY={sent:'onSendHeaders',responseStarted:'onResponseStarted',redirect:'o
 // contents it belongs to or none, age, last phase), so a failed cleanup, its shutdown record and the check's poll can name it. Electron's proxying factory
 // (shell/browser/net/proxying_url_loader_factory.cc) reports an end for every request it removes, so nothing is dropped from the count: a request that is open is open.
 const ownerAliveDefault=id=>{try{const found=require('electron').webContents?.fromId(id);return found?!found.isDestroyed():false;}catch{return true;}};
-const hostOf=url=>{try{return new URL(url).hostname.slice(0,253);}catch{return '';}};
+const hostOf=require('./request-memo.cjs').hostnameOf;   // 14.5 battery: the request's host without parsing its whole address again (request-memo.cjs)
 const observerRegistry=session=>{if(!session[OBSERVERS])Object.defineProperty(session,OBSERVERS,{value:{list:[],pipelines:new Set()},configurable:true});return session[OBSERVERS];};
 /** observer: {phases: iterable of PHASES, notify(phase, details, result)}. Returns {update(phases), dispose()}. */
 function observeRequests(session,observer){
@@ -29,11 +29,19 @@ function observeRequests(session,observer){
  * gone. Now it is read only when a participant asks for it, and at most once per request. */
 function requestView(details){
  const headers=result=>({...(result.responseHeaders?{responseHeaders:result.responseHeaders}:{}),...(result.requestHeaders?{requestHeaders:result.requestHeaders}:{})});
- if(!details||typeof details!=='object'||!('frame' in details))return result=>({...details,...headers(result)});
+ // 14.5 (battery, content blocking's per-request churn): every participant of a request used to be handed a NEW copy of the details (about 15 keys, plus a getter for the
+ // frame): eight copies per request, all identical until a participant adds headers. The view is now built again only when the headers it carries changed (by reference), so
+ // the participants of one request share one; none of them writes to it (they return patches), and what each one sees is unchanged.
+ let lastRequestHeaders,lastResponseHeaders,last=null;
+ const cached=(result,build)=>{if(last&&result.requestHeaders===lastRequestHeaders&&result.responseHeaders===lastResponseHeaders)return last;lastRequestHeaders=result.requestHeaders;lastResponseHeaders=result.responseHeaders;return last=build(result);};
+ if(!details||typeof details!=='object'||!('frame' in details))return result=>cached(result,r=>({...details,...headers(r)}));
  const rest={};for(const key of Object.keys(details))if(key!=='frame')rest[key]=details[key];
  let read=false,frame=null;const get=()=>{if(!read){read=true;frame=details.frame;}return frame;};
- return result=>Object.defineProperty({...rest,...headers(result)},'frame',{get,enumerable:true,configurable:true});
+ return result=>cached(result,r=>Object.defineProperty({...rest,...headers(r)},'frame',{get,enumerable:true,configurable:true}));
 }
+const EMPTY=Object.freeze({});
+/** True when the patch has an own enumerable key (no array is made to find out). */
+const hasKeys=patch=>{for(const key in patch)if(Object.prototype.hasOwnProperty.call(patch,key))return true;return false;};
 /** One owner for each Electron webRequest event; participants return patches, never replace listeners. */
 class RequestPipeline{
  constructor(session,{ownerAlive=ownerAliveDefault,now=Date.now}={}){
@@ -82,6 +90,6 @@ class RequestPipeline{
  sealNetwork(reason='retired native context'){if(typeof reason!=='string'||reason.length>120||/[\u0000-\u001f]/.test(reason))throw new Error('Use a bounded native retirement reason.');this.networkState.retired=true;this.networkState.reason=reason;this.syncHeaders();return this.networkStatus();}
  networkStatus(){return {blocked:this.networkState.retired||this.networkState.holds.size>0,retired:this.networkState.retired,temporaryHolds:this.networkState.holds.size};}
  /** A handler may return a promise (CNAME uncloaking waits for one DNS answer); the chain continues when it settles and a rejected promise cancels like a thrown error. Handlers that return plain patches never leave the synchronous path. */
- run(handlers,details,callback){let settled=false;const finish=result=>{if(!settled){settled=true;callback(result);}},fail=error=>{console.error('Request policy failed',error.message);finish({cancel:true});};try{if(this.networkStatus().blocked&&/^(?:https?|wss?):/i.test(details.url)){finish({cancel:true});return;}const view=requestView(details),step=(index,result)=>{for(let i=index;i<handlers.length;i++){const patch=handlers[i](view(result))||{};if(typeof patch.then==='function'){patch.then(value=>{const merged={...result,...(value||{})};if(merged.cancel||merged.redirectURL)finish(merged);else step(i+1,merged);}).catch(fail);return;}result={...result,...patch};if(result.cancel||result.redirectURL)break;}finish(result);};step(0,{});}catch(error){fail(error);}}
+ run(handlers,details,callback){let settled=false;const finish=result=>{if(!settled){settled=true;callback(result);}},fail=error=>{console.error('Request policy failed',error.message);finish({cancel:true});};try{if(this.networkStatus().blocked&&/^(?:https?|wss?):/i.test(details.url)){finish({cancel:true});return;}const view=requestView(details),step=(index,result)=>{for(let i=index;i<handlers.length;i++){const patch=handlers[i](view(result))||EMPTY;if(typeof patch.then==='function'){patch.then(value=>{const merged={...result,...(value||{})};if(merged.cancel||merged.redirectURL)finish(merged);else step(i+1,merged);}).catch(fail);return;}if(hasKeys(patch))result={...result,...patch};if(result.cancel||result.redirectURL)break;}finish(result);};step(0,{});}catch(error){fail(error);}}
 }
 module.exports={RequestPipeline,observeRequests,REQUEST_PHASES:PHASES};

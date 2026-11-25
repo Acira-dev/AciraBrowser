@@ -14,6 +14,14 @@
 // trusts a `flipped` flag: a missed flip, a window that was not there at the time, or flags that something else reset would leave the buttons off under a visible
 // overlay for ever. Visible: both flags are on (read back, and set if they are not). Hidden: both are off and what to give back is remembered once.
 
+/** D187 (Windows, 14.4): while the buttons are hidden the caption overlay is this many DIPs tall instead of the caption's height. A transparent button is still a native hit region (see above), and it
+ * used to cover the page's top-right controls (a PDF viewer's download, print and three dots) with a 138 x 34 DIP box nobody could click through. The overlay's height goes back to the caption's own in
+ * the very `setTitleBarOverlay` call that makes the buttons visible (main.cjs setCaption, after `release`). Not Windows: the Mac's hidden lights have no hit region and no overlay height. */
+const HIDDEN_OVERLAY_HEIGHT = 2;
+function hiddenOverlayHeight({ platform = process.platform, hidden, height }) {
+  return platform === 'win32' && hidden ? Math.min(HIDDEN_OVERLAY_HEIGHT, Math.max(1, Math.round(height || HIDDEN_OVERLAY_HEIGHT))) : height;
+}
+
 function createCaptionGuard({ platform = process.platform, window }) {
   let held = null;
   const live = () => { const w = window(); return w && !w.isDestroyed() ? w : null; };
@@ -58,4 +66,4 @@ function createCaptionGuard({ platform = process.platform, window }) {
   };
 }
 
-module.exports = { createCaptionGuard };
+module.exports = { createCaptionGuard, hiddenOverlayHeight, HIDDEN_OVERLAY_HEIGHT };

@@ -9,7 +9,7 @@
 const RANKS = Object.freeze(['contributor', 'trusted', 'insider', 'founding']);
 const MARKS = Object.freeze(['earlyMember']);
 const REPORT_STATUSES = Object.freeze(['received', 'working', 'fixed']);
-const NOTE_KINDS = Object.freeze(['accepted', 'shipped']);
+const NOTE_KINDS = Object.freeze(['accepted', 'shipped', 'invited']);   // 'invited' (Beta 14.5): a friend joined with the member's invite code; an older build drops a kind it does not know
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const RELEASE = /^[A-Za-z0-9][A-Za-z0-9.+-]{0,31}$/;
 const MAX_REPORTS = 200, MAX_NOTES = 50, MAX_POINTS = 1000000;
@@ -42,8 +42,8 @@ function normalizeServer(raw, { now = () => Date.now() } = {}) {
     if (!item || typeof item.id !== 'string' || !ID.test(item.id) || !NOTE_KINDS.includes(item.kind)) continue;
     notes.push({
       id: item.id, kind: item.kind, reportId: typeof item.reportId === 'string' && ID.test(item.reportId) ? item.reportId : null,
-      points: item.kind === 'accepted' ? int(item.points, 1, MAX_POINTS) : null,
-      rank: item.kind === 'accepted' && RANKS.includes(item.rank) ? item.rank : null,
+      points: item.kind === 'accepted' || item.kind === 'invited' ? int(item.points, 1, MAX_POINTS) : null,
+      rank: item.kind === 'accepted' && RANKS.includes(item.rank) ? item.rank : null,   // an invite never carries a rank
       askName: item.kind === 'accepted' && item.askName === true,
       release: item.kind === 'shipped' && typeof item.release === 'string' && RELEASE.test(item.release) ? item.release : null,
       at: iso(item.at),
@@ -97,6 +97,14 @@ function applyServer(local, server, { certified = false } = {}) {
   if (fresh.length) {
     next.pointsCounted = [...counted, ...fresh.map((note) => note.id)].slice(-400);
     if (!local.off && (certified || !gained)) next.pointsOwed = Math.min(1000000, (Number.isInteger(local.pointsOwed) ? local.pointsOwed : 0) + fresh.reduce((sum, note) => sum + note.points, 0));
+  }
+  // Beta 14.5 (reported 25 Nov: "Yes, add points"): a friend who joined with the member's invite code adds points. Its bubble says so ("Your friend joined: +25 points"), so its points are their own total (`inviteOwed`),
+  // each note once (`inviteCounted`); never part of a rank's bubble (an invite never changes a rank). With the switch off nothing is saved up.
+  const invitedBefore = new Set(local.inviteCounted || []);
+  const friends = server.notes.filter((note) => note.kind === 'invited' && Number.isInteger(note.points) && note.points > 0 && !known.has(note.id) && !previous.has(note.id) && !invitedBefore.has(note.id));
+  if (friends.length) {
+    next.inviteCounted = [...invitedBefore, ...friends.map((note) => note.id)].slice(-400);
+    if (!local.off) next.inviteOwed = Math.min(1000000, (Number.isInteger(local.inviteOwed) ? local.inviteOwed : 0) + friends.reduce((sum, note) => sum + note.points, 0));
   }
   // The ring around the picture is the rank's own colour; a new rank's ring appears when its aura has been drawn back into the button (auraDone), not before. Without an aura due (the
   // switch is off, or it was shown already) the ring follows the rank at once.

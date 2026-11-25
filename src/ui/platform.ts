@@ -1,5 +1,6 @@
 export const isMac = () => typeof window !== 'undefined' && (window.acira?.platform === 'darwin' || (!window.acira && /Mac/.test(navigator.platform)));
 export const isWindows = () => typeof window !== 'undefined' && (window.acira?.platform === 'win32' || (!window.acira && /Win/.test(navigator.platform)));
+export const isLinux = () => typeof window !== 'undefined' && (window.acira?.platform === 'linux' || (!window.acira && /Linux/.test(navigator.platform)));
 export const isTorSupported = () => isWindows() || isMac();
 
 const MAC_MODIFIERS: Record<string,string> = {Ctrl:'⌃',Option:'⌥',Shift:'⇧',Cmd:'⌘'};

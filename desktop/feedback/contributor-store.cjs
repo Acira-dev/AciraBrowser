@@ -15,7 +15,7 @@ const AURA_ID = /^(?:earlyMember|rank:(?:contributor|trusted|insider|founding))$
 const iso = (value) => { const time = typeof value === 'string' ? Date.parse(value) : NaN; return Number.isFinite(time) ? new Date(time).toISOString() : null; };
 
 /** A fresh profile's copy. `earlyMember` is set by the service when the key is made (the mark needs no server check). */
-const blank = () => ({ v: VERSION, earlyMember: false, engaged: false, off: false, server: null, ringRank: null, sent: [], notesSeen: [], aura: { played: [], pending: null }, pointsOwed: 0, pointsCounted: [], dot: false, thanks: null });
+const blank = () => ({ v: VERSION, earlyMember: false, engaged: false, off: false, server: null, ringRank: null, sent: [], notesSeen: [], aura: { played: [], pending: null }, pointsOwed: 0, pointsCounted: [], inviteOwed: 0, inviteCounted: [], dot: false, thanks: null });
 
 /** Whatever was read, made into a well-formed copy (unknown fields dropped). */
 function clean(raw) {
@@ -37,6 +37,9 @@ function clean(raw) {
   // Beta 14.4: the points of accepted reports the member has not been told about yet by the bubble, and the notes already counted (so one acceptance is never announced twice)
   local.pointsOwed = Number.isInteger(raw.pointsOwed) && raw.pointsOwed > 0 ? Math.min(raw.pointsOwed, 1000000) : 0;
   local.pointsCounted = (Array.isArray(raw.pointsCounted) ? raw.pointsCounted : []).filter((id) => typeof id === 'string' && ID.test(id)).slice(-MAX_SEEN);
+  // Beta 14.5: the points of friends who joined that the member has not been told about yet by the bubble, and the notes already counted
+  local.inviteOwed = Number.isInteger(raw.inviteOwed) && raw.inviteOwed > 0 ? Math.min(raw.inviteOwed, 1000000) : 0;
+  local.inviteCounted = (Array.isArray(raw.inviteCounted) ? raw.inviteCounted : []).filter((id) => typeof id === 'string' && ID.test(id)).slice(-MAX_SEEN);
   local.thanks = raw.thanks && typeof raw.thanks === 'object' && typeof raw.thanks.name === 'string' ? { name: plain(raw.thanks.name, 40) } : null;
   return local;
 }

@@ -10,7 +10,8 @@ import {frequentScale,kick,motionScaleOf,motionScales,motionSpeed,springEasing,s
 import {usePopupBackdrop,type BackdropVideo} from '../ui/usePopupBackdrop';
 import {useToastFrost} from '../ui/useToastFrost';
 import {keyboardInput} from '../ui/inputModality';
-import {popupMaterialProvider} from '../ui/popupMaterial';
+import {popupMaterialProvider,type PopupMaterialProvider} from '../ui/popupMaterial';
+import {awaitNativeAck} from '../ui/sheetReadyHandshake';
 import {pickRowFor} from './popupPick';
 import {centreOutDelays,centreOutPull,springCurve,tabViewerOrigin,tabViewerScale} from '../ui/tabViewerMotion';
 import '../styles/popup-sheet.css';
@@ -196,7 +197,14 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
   const primedContext=useRef(context),contextPrimed=primedContext.current===context,visibleReady=ready&&(contextPrimed||inactive);
   /* Beta 14: the welcome has no glass of its own (the whole window frosts behind it, desktop/welcome-frost.cjs) */const welcome=sceneKey.endsWith(':welcome');
   const backdrop=usePopupBackdrop({id:overlayId,enabled:native&&!state.settings.reducedTransparency&&!welcome,closing:inactive,context,geometryKey:`${geometry.bounds.x},${geometry.bounds.y},${geometry.bounds.width},${geometry.bounds.height}`});
-  const provider=welcome?'opaque':popupMaterialProvider({native,reducedTransparency:state.settings.reducedTransparency,status:backdrop.status,opaque:backdrop.opaque,visible:visibleReady});
+  const baseProvider=welcome?'opaque':popupMaterialProvider({native,reducedTransparency:state.settings.reducedTransparency,status:backdrop.status,opaque:backdrop.opaque,visible:visibleReady});
+  // D193 / Beta 14.5: the native material layer's hand-shake with main is bounded (sheetReadyHandshake.ts). The sheet that is already on screen on its dense plate keeps drawing it until main has put the native glass
+  // under it (it used to lose the plate the moment the provider turned native and showed the page through it for the length of the two IPC answers: the flicker of a popup whose capture came late), and a
+  // hand-shake that is still unanswered after the bound shows the content on the dense plate for good ('late'): never a popup that stays hidden.
+  const [handshake,setHandshake]=useState<{key:string;late:boolean;acked:boolean}>({key:'',late:false,acked:false});
+  const handshakeKey=`${overlayId}:${sceneKey}`,shake=handshake.key===handshakeKey?handshake:{key:handshakeKey,late:false,acked:false};
+  const nativeLayer=baseProvider==='native'&&!shake.late;
+  const provider:PopupMaterialProvider=baseProvider==='native'&&(shake.late||visibleReady&&!shake.acked)?'opaque':baseProvider;
   useLayoutEffect(()=>{
     if(contextPrimed||inactive)return;
     // A new context cannot display the old frozen pixels or an opaque warming
@@ -220,22 +228,23 @@ export function SheetPopupSurface({geometry,state,sceneKey,native=false,closing=
     let cancelled=false,frame=0;
     const waitForBox=()=>new Promise<void>(resolve=>{let frames=0;const check=()=>{const node=root.current;if(cancelled||!node||frames++>=3||Math.abs(node.offsetHeight-geometry.bounds.height)<1&&Math.abs(node.offsetWidth-geometry.bounds.width)<1)resolve();else frame=requestAnimationFrame(check);};check();});
     const prepare=async()=>{
-      const layer=provider==='native'?'native':'renderer';
+      const layer=nativeLayer?'native':'renderer';
       // Captured renderer material has already decoded and frozen. Native
       // fallback still primes its material/content handshake before reveal.
       // A local sheet must also wait for Motion to commit its measured box;
       // otherwise its first visible frame still has the old estimate.
       if(layer==='renderer'){if(!native&&!ready)await waitForBox();if(cancelled)return;setReady(true);if(native&&overlayId!==undefined)void(async()=>{if(await runtime.overlayReady?.(overlayId,'material',layer))await runtime.overlayReady?.(overlayId,'content',layer);})();return;}
-      if(native&&overlayId!==undefined&&!await runtime.overlayReady?.(overlayId,'material',layer))return;
-      if(cancelled)return;
-      if(native&&overlayId!==undefined&&!await runtime.overlayReady?.(overlayId,'content',layer))return;
+      // The native hand-shake waits at most nativeAckWaitMs (a false answer is asked again): 'late' hands the sheet its dense plate, which runs this effect again on the renderer layer and shows the content.
+      const answer=native&&overlayId!==undefined?await awaitNativeAck(async stage=>runtime.overlayReady?.(overlayId,stage,layer),{cancelled:()=>cancelled}):'acked';
+      if(cancelled||answer==='cancelled')return;
+      if(answer==='late'){setHandshake({key:handshakeKey,late:true,acked:false});return;}
       // motion applies a new box a frame after the layout arrives: reveal once the sheet is drawn at that size (a few frames at most).
       if(!ready)await waitForBox();
-      if(!cancelled)setReady(true);
+      if(!cancelled){setHandshake({key:handshakeKey,late:false,acked:true});setReady(true);}
     };
     void prepare();
     return()=>{cancelled=true;cancelAnimationFrame(frame);};
-  },[native,overlayId,inactive,materialReady,provider,geometry.bounds.x,geometry.bounds.y,geometry.bounds.width,geometry.bounds.height]);
+  },[native,overlayId,inactive,materialReady,nativeLayer,handshakeKey,geometry.bounds.x,geometry.bounds.y,geometry.bounds.width,geometry.bounds.height]);
   useLayoutEffect(()=>{
     const node=plane.current;if(!node)return;
     // Rows resolve away from the anchor: downward menus top-first, upward ones bottom-first.

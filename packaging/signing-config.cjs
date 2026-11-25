@@ -3,17 +3,26 @@
 // secret ever lives in the repository. See docs/launch/CODE_SIGNING.md.
 //   Azure Trusted Signing : ACIRA_SIGN=azure  + AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET
 //                           + ACIRA_AZURE_ENDPOINT / ACIRA_AZURE_ACCOUNT / ACIRA_AZURE_PROFILE / ACIRA_PUBLISHER_NAME
+//   Certum (SimplySign)   : ACIRA_SIGN=certum + ACIRA_CERTUM_THUMBPRINT + ACIRA_PUBLISHER_NAME (the certificate's common name, Acira, Inc.); the certificate is picked from the
+//                           Windows store while SimplySign Desktop is logged in (scripts/release-sign.mjs, docs/launch/CODE_SIGNING.md)
 //   Certificate file (PFX): CSC_LINK (path or base64) + CSC_KEY_PASSWORD + ACIRA_PUBLISHER_NAME (certificate CN)
 //   Cloud HSM / token     : ACIRA_SIGN_COMMAND=<path to a signing script electron-builder calls per file>
 //                           + ACIRA_PUBLISHER_NAME
 const base=require('./electron-builder.json');
 const {applyReleaseTarget,loadReleaseTarget}=require('./release-target.cjs'); // "publish" (where the installed app looks for updates) comes from packaging/release-target.json
+const SIGN_HOOK=require('node:path').join(__dirname,'..','scripts','release-sign-hook.cjs'); // electron-builder's custom sign function: signs one file the way scripts/release-sign.mjs does
 function signingMode(env){
- if(env.ACIRA_SIGN==='azure')return 'azure';
+ const asked=String(env.ACIRA_SIGN||'').trim().toLowerCase();
+ // A typo must never turn "sign this build" into a silent unsigned one.
+ if(asked&&asked!=='none'&&asked!=='azure'&&asked!=='certum')throw new Error(`ACIRA_SIGN must be "certum" or "azure" (got "${env.ACIRA_SIGN}").`);
+ if(asked==='azure')return 'azure';
+ if(asked==='certum')return 'certum';
  if(env.ACIRA_SIGN_COMMAND)return 'command';
  if(env.CSC_LINK)return 'pfx';
  return 'none';
 }
+/** The publisher names the build accepts and the installed app's updater pins: ACIRA_PUBLISHER_NAME, several separated by | (a name may hold commas: "Acira, Inc."). */
+function publisherNames(env){return String(env.ACIRA_PUBLISHER_NAME||'').split('|').map(name=>name.trim()).filter(Boolean);}
 function requireEnv(env,names,mode){
  const missing=names.filter(name=>!env[name]);
  if(missing.length)throw new Error(`Code signing (${mode}) needs these environment variables: ${missing.join(', ')}.`);
@@ -32,6 +41,28 @@ function applyIdentity(config,env){
  config.win.artifactName=config.win.artifactName.replace(/^AciraBrowser/,'AciraBrowserQA');config.nsis.artifactName=config.nsis.artifactName.replace(/^AciraBrowser/,'AciraBrowserQA'); // AciraBrowserQASetup.exe, AciraBrowserQA-portable.zip
  return config;
 }
+/** Switches signing on in an electron-builder configuration (nothing happens in mode "none"). Used by createConfig and by scripts/release-installer.mjs. */
+function applySigning(config,env=process.env){
+ const mode=signingMode(env);
+ if(mode==='none')return config;
+ requireEnv(env,['ACIRA_PUBLISHER_NAME'],mode);
+ const names=publisherNames(env);
+ config.forceCodeSigning=true;config.win.signAndEditExecutable=true; // no win.signDlls: electron-builder 26.15 has no such key and its schema refuses the whole win block (found by the first signed build); our own steps sign the programs and helpers, the DLLs stay as Electron ships them, as in 14.4
+ delete config.win.signExecutable;config.win.verifyUpdateCodeSignature=true; // signExecutable:false would make electron-builder skip signing the setup and uninstaller
+ if(mode==='azure'){
+  requireEnv(env,['AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET','ACIRA_AZURE_ENDPOINT','ACIRA_AZURE_ACCOUNT','ACIRA_AZURE_PROFILE'],mode);
+  config.win.azureSignOptions={publisherName:names[0],endpoint:env.ACIRA_AZURE_ENDPOINT,codeSigningAccountName:env.ACIRA_AZURE_ACCOUNT,certificateProfileName:env.ACIRA_AZURE_PROFILE};
+ }else if(mode==='certum'){
+  requireEnv(env,['ACIRA_CERTUM_THUMBPRINT'],mode);
+  config.win.signtoolOptions={publisherName:names,signingHashAlgorithms:['sha256'],sign:SIGN_HOOK}; // one SHA-256 signature per file, made by the hook (the setup and its uninstaller)
+ }else if(mode==='command'){
+  config.win.signtoolOptions={publisherName:names,sign:env.ACIRA_SIGN_COMMAND};
+ }else{
+  requireEnv(env,['CSC_KEY_PASSWORD'],mode);
+  config.win.signtoolOptions={publisherName:names,signingHashAlgorithms:['sha256'],rfc3161TimeStampServer:env.ACIRA_TIMESTAMP_URL||'http://timestamp.digicert.com'};
+ }
+ return config;
+}
 function createConfig(env=process.env,releaseTarget=loadReleaseTarget()){
  const config=applyReleaseTarget(structuredClone(base),releaseTarget),mode=signingMode(env);
  applyIdentity(config,env);
@@ -44,19 +75,6 @@ function createConfig(env=process.env,releaseTarget=loadReleaseTarget()){
  if(env.ACIRA_UPDATE_FEED_URL)config.publish=[{...publicFeedConfig(env.ACIRA_UPDATE_FEED_URL),channel:'latest'}];
  config.mac.publish=[publicFeedConfig(env.ACIRA_MAC_UPDATE_FEED_URL||env.ACIRA_UPDATE_FEED_URL||undefined)];
  if(mode==='none')return config;
- requireEnv(env,['ACIRA_PUBLISHER_NAME'],mode);
- const publisher=env.ACIRA_PUBLISHER_NAME;
- config.forceCodeSigning=true;config.win.signAndEditExecutable=true;config.win.signDlls=true; // every exe and dll in the app, not only the main program
- delete config.win.signExecutable;config.win.verifyUpdateCodeSignature=true;
- if(mode==='azure'){
-  requireEnv(env,['AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET','ACIRA_AZURE_ENDPOINT','ACIRA_AZURE_ACCOUNT','ACIRA_AZURE_PROFILE'],mode);
-  config.win.azureSignOptions={publisherName:publisher,endpoint:env.ACIRA_AZURE_ENDPOINT,codeSigningAccountName:env.ACIRA_AZURE_ACCOUNT,certificateProfileName:env.ACIRA_AZURE_PROFILE};
- }else if(mode==='command'){
-  config.win.signtoolOptions={publisherName:[publisher],sign:env.ACIRA_SIGN_COMMAND};
- }else{
-  requireEnv(env,['CSC_KEY_PASSWORD'],mode);
-  config.win.signtoolOptions={publisherName:[publisher],signingHashAlgorithms:['sha256'],rfc3161TimeStampServer:env.ACIRA_TIMESTAMP_URL||'http://timestamp.digicert.com'};
- }
- return config;
+ return applySigning(config,env);
 }
-module.exports={createConfig,signingMode,QA_IDENTITY};
+module.exports={createConfig,applySigning,signingMode,publisherNames,SIGN_HOOK,QA_IDENTITY};

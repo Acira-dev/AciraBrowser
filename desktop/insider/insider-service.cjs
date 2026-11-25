@@ -48,7 +48,7 @@ const OFFER_LIFETIME = 30 * 60 * 1000;
 
 function createInsiderService({
   directory, keyring, config = insiderConfig(), send, ordinary = () => true, eligible = () => true, sessionFor = () => null, routed = () => true, profiles = () => [], tell = () => {},
-  note = () => {}, onChannelChange = () => {}, onActivated = () => {}, ensureProfile = null, describeProfile = () => null, now = Date.now, fileSystem = fs, onWarning = () => {},
+  note = () => {}, onChannelChange = () => {}, onActivated = () => {}, onInvites = () => {}, ensureProfile = null, describeProfile = () => null, now = Date.now, fileSystem = fs, onWarning = () => {},
   wait, random, allowEnroll = false, enrollDelay = 60 * 1000,
 }) {
   const store = createInsiderStore({ dir: directory, fileSystem, warn: onWarning });
@@ -99,6 +99,9 @@ function createInsiderService({
     return null;
   }
   const showsCertified = (profileId) => isInsider(profileId) || lenderOf(profileId) !== null;
+  /** Beta 14.5 (reported 25 Nov): the profile whose key makes and lists the invites for this one: its own, else the lending profile's on the same computer (the one that holds the number this profile shows). Never a second number,
+   * never a move: the codes are the lender's and so are its invites left. null when neither holds a certificate. */
+  const inviterOf = (profileId) => (isInsider(profileId) ? profileId : lenderOf(profileId));
   /** Own member, else the lender's (for the card, the seal and the number only). */
   function shownMember(profileId) { const own = member(profileId); if (own) return own; const from = lenderOf(profileId); return from ? member(from) : null; }
   /** THE READ API (the welcome of section AL, the new tab block, the card): {tier, number, since, by, perks} from a valid certificate, else null. */
@@ -112,7 +115,7 @@ function createInsiderService({
   const serverInvites = new Map();
   const invitesNow = (profileId) => (serverInvites.has(profileId) ? serverInvites.get(profileId) : null);
   const welcomeOf = (profileId) => { const local = store.read(profileId); return { owed: local.welcome.state === 'owed', step: local.welcome.state === 'owed' ? local.welcome.step || 'welcome' : null }; };
-  const NONE = (welcome) => ({ available: false, insider: false, member: null, borrowed: false, invitesLeft: null, invitesOpen: false, invitesAsked: false, channel: { offered: false, on: false }, reveal: false, welcome, activation: null, closed: null });
+  const NONE = (welcome) => ({ available: false, insider: false, member: null, borrowed: false, canInvite: false, invitesLeft: null, invitesOpen: false, invitesAsked: false, channel: { offered: false, on: false }, reveal: false, welcome, activation: null, closed: null });
 
   /** What the interface is shown. Nothing about the programme while it is not available; the welcome is shown without it. (`activation` and `closed` stay null: the 16:40 build is gone.) */
   function view(ctx) {
@@ -120,8 +123,9 @@ function createInsiderService({
     const welcome = welcomeOf(ctx.profileId);
     if (!available()) return NONE(welcome);
     const local = store.read(ctx.profileId), mine = member(ctx.profileId), lent = mine ? null : shownMember(ctx.profileId);
+    const inviter = mine || lent ? inviterOf(ctx.profileId) : null;   // the invites of a borrowed profile are its lender's (same computer, same number)
     return {
-      available: true, insider: Boolean(mine), member: mine || lent, borrowed: Boolean(lent), invitesLeft: mine ? local.invitesLeft : null, invitesOpen: Boolean(mine) && Boolean(config.invitesOpen) && invitesNow(ctx.profileId) === true, invitesAsked: invitesNow(ctx.profileId) !== null,
+      available: true, insider: Boolean(mine), member: mine || lent, borrowed: Boolean(lent), canInvite: Boolean(inviter), invitesLeft: inviter ? store.read(inviter).invitesLeft : null, invitesOpen: Boolean(inviter) && Boolean(config.invitesOpen) && invitesNow(inviter) === true, invitesAsked: invitesNow(inviter ?? ctx.profileId) !== null,
       channel: { offered: Boolean(mine && config.feed), on: Boolean(mine && config.feed && local.channel !== false) }, // on unless the person turned it off
       reveal: Boolean(mine && local.revealedFor !== mine.number), welcome, activation: null, closed: null,
     };
@@ -256,7 +260,7 @@ function createInsiderService({
       if (!guard(target)) { offers.delete(id); return { result: 'unavailable', offer: null }; }
       offer.state = 'working'; offer.result = null; offer.retry = false; offer.waitSeconds = null;
       tell(offer.profileId);
-      const answer = await claim(offer.profileId, 'activate', offer.token, sessionFor(target));
+      const answer = await claim(offer.profileId, offer.kind === 'invite' ? 'redeem' : 'activate', offer.token, sessionFor(target));
       if (offers.get(id) !== offer) return { result: answer.result, offer: offerOf(ctx.windowId) };
       offer.state = 'done'; offer.result = answer.result; offer.retry = answer.retry === true; offer.waitSeconds = answer.waitSeconds ?? null;
       // A one-use token that has given its answer is not kept: only "Try again" (offline, clock, a wait) needs it again.
@@ -274,35 +278,38 @@ function createInsiderService({
     },
     /** A fresh code for a friend, if invites remain. The code is in this answer and nowhere else. */
     async invite(ctx) {
-      if (!guard(ctx) || !verified(ctx.profileId).ok) return { result: 'unavailable' };
+      const who = guard(ctx) ? inviterOf(ctx.profileId) : null;   // this profile's own key, else its lender's
+      if (!who) return { result: 'unavailable' };
       if (!config.invitesOpen) return { result: 'closed' }; // invites are not open yet (B1): nothing is asked of the server
-      if (invitesNow(ctx.profileId) !== true) return { result: 'closed', view: view(ctx) }; // the server has not said "open" (the list answer's invitesOpen): no code is asked for
+      if (invitesNow(who) !== true) return { result: 'closed', view: view(ctx) }; // the server has not said "open" (the list answer's invitesOpen): no code is asked for
       const session = sessionFor(ctx);
       if (!routed(session)) return { result: 'offline' };
-      const answer = await client.invite(ctx.profileId, session);
+      const answer = await client.invite(who, session);
       if (!answer.ok) return failure(answer);
-      if (answer.result === 'revoked') { drop(ctx.profileId); return { result: 'revoked', view: view(ctx) }; }
+      if (answer.result === 'revoked') { drop(who); if (who !== ctx.profileId) tell(ctx.profileId); return { result: 'revoked', view: view(ctx) }; }
       // The server's invites are shut (none_left with `closed`): the member's codes are all still theirs, so the count kept here is NOT overwritten with the 0 that answer carries; the screen says invites are not open.
-      if (answer.result === 'none_left' && answer.closed) { serverInvites.set(ctx.profileId, false); tell(ctx.profileId); return { result: 'closed', view: view(ctx) }; }
-      if (answer.invitesLeft !== undefined) store.update(ctx.profileId, (current) => { current.invitesLeft = answer.invitesLeft; return current; });
-      if (answer.result === 'ok') { note('insiderInviteCreated'); tell(ctx.profileId); return { result: 'ok', code: answer.code, invitesLeft: answer.invitesLeft ?? null, view: view(ctx) }; }
+      if (answer.result === 'none_left' && answer.closed) { serverInvites.set(who, false); tell(who); tell(ctx.profileId); return { result: 'closed', view: view(ctx) }; }
+      if (answer.invitesLeft !== undefined) store.update(who, (current) => { current.invitesLeft = answer.invitesLeft; return current; });
+      if (answer.result === 'ok') { note('insiderInviteCreated'); try { onInvites(who); } catch { /* the points copy is a courtesy */ } tell(who); tell(ctx.profileId); return { result: 'ok', code: answer.code, invitesLeft: answer.invitesLeft ?? null, view: view(ctx) }; }
       return { ...refusal(answer), view: view(ctx) };
     },
     /** The codes this Insider made, by state, never in full. */
     async invites(ctx) {
-      if (!guard(ctx) || !verified(ctx.profileId).ok) return { result: 'unavailable' };
+      const who = guard(ctx) ? inviterOf(ctx.profileId) : null;
+      if (!who) return { result: 'unavailable' };
       if (!config.invitesOpen) return { result: 'closed' };
       const session = sessionFor(ctx);
       if (!routed(session)) return { result: 'offline' };
-      const answer = await client.invites(ctx.profileId, session);
+      const answer = await client.invites(who, session);
       if (!answer.ok) return failure(answer);
-      if (answer.result === 'revoked') { drop(ctx.profileId); return { result: 'revoked', view: view(ctx) }; }
+      if (answer.result === 'revoked') { drop(who); if (who !== ctx.profileId) tell(ctx.profileId); return { result: 'revoked', view: view(ctx) }; }
       if (answer.result !== 'ok') return { result: answer.result, view: view(ctx) };
       // What the server says about its invites switch is kept for this run, per profile: only the list's own `invitesOpen: true` opens them (client readAnswer), so nothing is shown or asked for from a server that has not said so.
-      const wasOpen = invitesNow(ctx.profileId);
-      serverInvites.set(ctx.profileId, answer.invitesOpen === true);
-      if (answer.invitesLeft !== undefined && answer.invitesLeft !== store.read(ctx.profileId).invitesLeft) { store.update(ctx.profileId, (current) => { current.invitesLeft = answer.invitesLeft; return current; }); tell(ctx.profileId); }
-      else if (wasOpen !== (answer.invitesOpen === true)) tell(ctx.profileId);
+      const wasOpen = invitesNow(who);
+      serverInvites.set(who, answer.invitesOpen === true);
+      if (answer.invitesOpen === true) { try { onInvites(who); } catch { /* the points copy is a courtesy */ } }
+      if (answer.invitesLeft !== undefined && answer.invitesLeft !== store.read(who).invitesLeft) { store.update(who, (current) => { current.invitesLeft = answer.invitesLeft; return current; }); tell(who); tell(ctx.profileId); }
+      else if (wasOpen !== (answer.invitesOpen === true)) { tell(who); tell(ctx.profileId); }
       return { result: 'ok', invitesOpen: answer.invitesOpen === true, ...(answer.invitesTotal !== undefined ? { invitesTotal: answer.invitesTotal } : {}), invites: answer.invites.map((item) => ({ id: item.id, state: item.state, code: maskedCode(item.hint), createdAt: item.createdAt, usedAt: item.usedAt })), view: view(ctx) };
     },
     /** "Move my Insider" (rule 9): a one-time move code, shown once. */
@@ -425,13 +432,16 @@ function createInsiderService({
      * is kept for that window and the pop-up is told to open on it. Nothing is sent. Returns false when the programme is hidden or the context may not have one (a private or Tor
      * window, a private profile): then the link does nothing.
      */
-    offer({ windowId, profileId, private: isPrivate = false, tor = false }, token) {
+    offer({ windowId, profileId, private: isPrivate = false, tor = false }, token, kind = 'activate') {
       const ctx = { windowId, profileId, private: isPrivate, tor };
       if (typeof token === 'string' && token.length) linkSeen = true; // an activation link reached this run: automatic enrollment waits for the next launch
       if (!guard(ctx) || typeof token !== 'string' || !token.length) return false;
+      // Beta 14.5: an INVITE link (kind 'invite', the token is the code) on a profile that already shows a number (its own pass, or one it borrows on this computer) opens nothing: the code would not be spent, and a sheet
+      // that says "Activate" for a member is wrong. Main tells the person calmly ('member').
+      if (kind === 'invite' && showsCertified(profileId)) return 'member';
       const id = String(windowId ?? 0), current = offers.get(id);
       if (current?.state === 'working') return true; // an answer is on its way: the sheet stays as it is
-      offers.set(id, { token, profileId, at: now(), state: 'ask', result: null, retry: false, waitSeconds: null });
+      offers.set(id, { token, kind: kind === 'invite' ? 'invite' : 'activate', profileId, at: now(), state: 'ask', result: null, retry: false, waitSeconds: null });
       asked.set(id, 'activate');
       tell(profileId);
       return true;

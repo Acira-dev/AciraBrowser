@@ -21,6 +21,10 @@ const REST_MAINS_MS = 2 * 60 * 1000, REST_BATTERY_MS = 30 * 1000;
 /** The rules, in the order they are read: the first that says no is the reason it does not snow (`whyNoSnow`). Each name is what a read-out and the log say. */
 const RULES = [
   ['choice-off', s => !s.settings || s.settings.noelOn !== true || s.settings.noelSnow !== 'window'],
+  // D196 (25 Nov, a Linux user, 14.4 AppImage: "the main window just shows snow, does not tile and covers any URL you attempt to view"): on Linux the snow's own window is
+  // a top-level window to the window manager, which may tile it, place it, blur what is behind it (his screenshot: the wallpaper, blurred, over the whole page) or, on Wayland,
+  // not glue it to the browser window at all. So on Linux there is no separate snow window; the snow falls in the sidebar (the interface draws it there for this choice too).
+  ['linux-own-window', s => !windowSnowSupported(s.platform)],
   ['reduce-motion', s => !!s.reducedMotion],                       // Acira's own Reduce motion
   ['system-reduce-motion', s => !!s.reducedMotionSetting],         // the system's
   ['window-hidden', s => !s.windowVisible],
@@ -39,6 +43,8 @@ const RULES = [
   ['secured-workspace-tab', s => !!s.securedTab],                 // a tab of a secured workspace (it counts as private)
   ['private-tab', s => !!s.privateTab],
 ];
+/** Whether the snow over the whole window (its own window) may be made on this platform: not on Linux (D196). */
+function windowSnowSupported(platform) { return platform !== 'linux'; }
 /** The first rule that says no, by name, or '' when the overlay may snow. Pure: `s` is a plain record of what the app knows (`info()` below). */
 function whyNoSnow(s) { for (const [name, no] of RULES) if (no(s)) return name; return ''; }
 /** Whether the overlay may snow now. Pure. */
@@ -61,7 +67,7 @@ function createSeasonOverlay(deps) {
   const info = () => {
     const w = main(), tab = activeTabInfo ? activeTabInfo() : {}, f = flags ? flags() : {};
     const page = pageBounds();
-    return { settings: state().settings, reducedMotionSetting: !!osReducedMotion(), reducedMotion: !!(state().settings && state().settings.reducedMotion), windowVisible: !!w && w.isVisible(), minimized: !!w && w.isMinimized(), focused: !!w && (w.isFocused() || forceActive()), idle: restNow(), fullscreen: !!f.pageFullscreen, keep: !(state().settings && state().settings.noelKeepSnowing === false), sharing: !!f.sharing, authActive: !!f.authActive, pageBounds: page, audible: !!tab.audible, mediaPlaying: !!tab.mediaPlaying, privateTab: !!tab.privateTab, securedTab: !!tab.securedTab, lastKeyInPage: lastKey, moving: !!f.layoutMoving, now: nowMs() };
+    return { platform, settings: state().settings, reducedMotionSetting: !!osReducedMotion(), reducedMotion: !!(state().settings && state().settings.reducedMotion), windowVisible: !!w && w.isVisible(), minimized: !!w && w.isMinimized(), focused: !!w && (w.isFocused() || forceActive()), idle: restNow(), fullscreen: !!f.pageFullscreen, keep: !(state().settings && state().settings.noelKeepSnowing === false), sharing: !!f.sharing, authActive: !!f.authActive, pageBounds: page, audible: !!tab.audible, mediaPlaying: !!tab.mediaPlaying, privateTab: !!tab.privateTab, securedTab: !!tab.securedTab, lastKeyInPage: lastKey, moving: !!f.layoutMoving, now: nowMs() };
   };
   const post = (payload) => { if (!view || view.webContents.isDestroyed()) return; if (!ready) { queued = payload; return; } view.webContents.send('noel:state', payload); };
   const place = () => {
@@ -137,7 +143,7 @@ function createSeasonOverlay(deps) {
   const stop = () => { if (tick) { clearInterval(tick); tick = null; } };
   return {
     /** Call when the settings, the window or the page area change; also runs on a 2 Hz timer while the choice is on. */
-    update() { const on = state().settings && state().settings.noelOn === true && state().settings.noelSnow === 'window'; if (on && !choiceOn && log) { if (checkTimer) clearTimer(checkTimer); checkTimer = setTimer(() => { void check(); }, CHECK_MS); } choiceOn = !!on; if (on) start(); else { stop(); running = false; if (win) { post({ type: 'config', dark: dark(), run: false }); if (!meltTimer) meltTimer = setTimer(() => { meltTimer = null; destroy(); }, MELT_MS + 1500); } } evaluate(); },
+    update() { const on = windowSnowSupported(platform) && state().settings && state().settings.noelOn === true && state().settings.noelSnow === 'window'; if (on && !choiceOn && log) { if (checkTimer) clearTimer(checkTimer); checkTimer = setTimer(() => { void check(); }, CHECK_MS); } choiceOn = !!on; if (on) start(); else { stop(); running = false; if (win) { post({ type: 'config', dark: dark(), run: false }); if (!meltTimer) meltTimer = setTimer(() => { meltTimer = null; destroy(); }, MELT_MS + 1500); } } evaluate(); },
     /** The window was moved or resized (Windows needs the hide; on a Mac the child follows by itself and is only re-fitted). */
     moved() { if (follow()) hideForMove(); else { place(); } },
     resized() { if (follow()) hideForMove(); else place(); },
@@ -159,4 +165,4 @@ function createSeasonOverlay(deps) {
     readout, probe,
   };
 }
-module.exports = { createSeasonOverlay, mayFall, whyNoSnow, RULES, CHECK_MS, REST_MAINS_MS, REST_BATTERY_MS, overlayBounds, TYPING_QUIET_MS, MOVE_QUIET_MS, MELT_MS };
+module.exports = { createSeasonOverlay, mayFall, whyNoSnow, windowSnowSupported, RULES, CHECK_MS, REST_MAINS_MS, REST_BATTERY_MS, overlayBounds, TYPING_QUIET_MS, MOVE_QUIET_MS, MELT_MS };

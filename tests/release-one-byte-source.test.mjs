@@ -123,6 +123,9 @@ test('the release bundle is plain ASCII and smaller for it', async () => {
     // worktree beside them. Measured in one tree, the panel's main-process half (its store, the sessions it attaches to only while In Acira, the IPC, the
     // routing, the worker's permission check, the validation, 17 words in 13 catalogs) adds 35,385 bytes to the line fc9b4b692. In a worktree: the line
     // about 10,213,250, with the panel 10,248,633, over 9.75 MiB (10,223,616). Raised to 9.80 MiB (10,276,044): 27,411 bytes left. Still catches 12.4 MB.
-    assert.ok((await fs.stat(path.join(output, 'desktop/main.cjs'))).size < 9.80 * 1024 * 1024, 'the catalogs of the other languages are packed (the bundle was 12.4 MB)');
+    // 14.5 (25 Nov 2026): the five 14.5 branches together (battery: request memo and edge-poller sleep; extension questions bounded; invite links and points
+    // with their words in 13 catalogs; the popup hand-shake bound; D187's caption strip) take the line in this worktree to 10,279,031 bytes, 2,987 over 9.80 MiB.
+    // Raised to 9.90 MiB (10,380,902): about 100 KB left. Still catches 12.4 MB.
+    assert.ok((await fs.stat(path.join(output, 'desktop/main.cjs'))).size < 9.90 * 1024 * 1024, 'the catalogs of the other languages are packed (the bundle was 12.4 MB)');
   } finally { await fs.rm(output, {recursive: true, force: true}); }
 });

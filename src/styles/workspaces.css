@@ -2,16 +2,12 @@
    Everything is built from the existing tokens: the sidebar's own ink and raised-row look, the panel rows, the Edit favorite
    form's fields. A workspace's colour is one 2px rail under its icon (the tab group language); the frame tint is theme.ts. */
 
-/* ── Sidebar: one row of icons above the profile footer, closed by the same fade-ended rule the footer used. ── */
-/* Only with two or more workspaces (R4-48 D1). Cells are 28px; the open one grows to carry its name while the row holds four or fewer. */
-.app.style-acira .acira-sidebar .sb-workspaces { position: relative; flex: none; display: flex; align-items: center; gap: 0; height: 40px; margin-top: auto; padding: 6px 8px; overflow: hidden; }
-/* Past what the column holds (5 at Narrow, 8 at Standard, 10 at Wide, up to 16 workspaces) the cells scroll inside their own strip: the + stays at the end, the open workspace is scrolled into view
-   (WorkspaceSwitcher.tsx revealOpen) and a soft fade at an edge says there is more. The 4px of padding, cancelled by the margin, keeps a focus ring or a drop outline inside the strip's clip. */
-.app.style-acira .acira-sidebar .sb-ws-strip { position: relative; flex: 0 1 auto; min-width: 0; display: flex; align-items: center; padding: 4px; margin: -4px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-width: none; --ws-fade-l: 0px; --ws-fade-r: 0px;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--ws-fade-l), #000 calc(100% - var(--ws-fade-r)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--ws-fade-l), #000 calc(100% - var(--ws-fade-r)), transparent 100%); }
-.app.style-acira .acira-sidebar .sb-ws-strip::-webkit-scrollbar { display: none; }
-.app.style-acira .acira-sidebar .sb-ws-strip[data-more-start] { --ws-fade-l: 22px; }
-.app.style-acira .acira-sidebar .sb-ws-strip[data-more-end] { --ws-fade-r: 22px; }
+/* ── Sidebar: the workspaces' icons above the profile footer, closed by the same fade-ended rule the footer used. ── */
+/* Only with two or more workspaces (R4-48 D1). Cells are 28px; the open one grows to carry its name while the row holds four or fewer.
+   14.5 (the team's pick): every workspace is always on screen. The cells wrap onto as many 28px lines as the column needs (up to 16 workspaces and the + at 168 / 240 / 312 px: 4, 3 or 2 lines),
+   the + is the last cell, and nothing scrolls, fades or hides. One line is 40px as before; each further line adds 28px (WorkspaceSwitcher.tsx workspaceRowLayout). */
+.app.style-acira .acira-sidebar .sb-workspaces { position: relative; flex: none; display: flex; align-items: flex-start; gap: 0; min-height: 40px; margin-top: auto; padding: 6px 8px; overflow: hidden; container-type: inline-size; }
+.app.style-acira .acira-sidebar .sb-ws-strip { position: relative; flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; }
 .sb-ws-icon { position: relative; flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
 .sb-ws-icon > svg { width: 16px; height: 16px; }
 .sb-ws-identity { display: grid; place-items: center; width: 16px; height: 16px; }
@@ -21,7 +17,12 @@
 .app.style-acira .acira-sidebar .sb-ws[data-playing] .sb-ws-icon > .tab-sound-meter { display: grid; place-items: center; width: 16px; height: 16px; color: currentColor; }
 .app.style-acira .acira-sidebar .sb-ws[data-playing]:is(:hover, :focus-visible) .sb-ws-identity { display: grid; }
 .app.style-acira .acira-sidebar .sb-ws[data-playing]:is(:hover, :focus-visible) .sb-ws-icon > .tab-sound-meter { display: none; }
-.app.style-acira .acira-sidebar .sb-workspaces[data-named] .sb-ws[aria-checked=true] { display: flex; justify-content: flex-start; gap: 6px; width: auto; max-width: 140px; padding: 0 10px 0 6px; }
+/* The open workspace's name shows on its pill (four or fewer) when the whole row, with the name at most as long as the room leaves, stays on ONE line: the pill is never wider than the line leaves after the other cells
+   (100cqw is the row's inner width), and with less than 70px for the name it is icon-only (the title line above the list keeps the name), so a long name never wraps the row and a switch never changes its height. */
+.app.style-acira .acira-sidebar .sb-workspaces[data-named] .sb-ws[aria-checked=true] { display: flex; justify-content: flex-start; gap: 6px; width: auto; max-width: min(140px, calc(100cqw - 28px * var(--ws-n, 2))); padding: 0 10px 0 6px; }
+@container (max-width: 125px) { .app.style-acira .acira-sidebar .sb-workspaces[data-count="2"] .sb-ws[aria-checked=true] { display: grid; width: 28px; padding: 0; } .app.style-acira .acira-sidebar .sb-workspaces[data-count="2"] .sb-ws-name { display: none; } }
+@container (max-width: 153px) { .app.style-acira .acira-sidebar .sb-workspaces[data-count="3"] .sb-ws[aria-checked=true] { display: grid; width: 28px; padding: 0; } .app.style-acira .acira-sidebar .sb-workspaces[data-count="3"] .sb-ws-name { display: none; } }
+@container (max-width: 181px) { .app.style-acira .acira-sidebar .sb-workspaces[data-count="4"] .sb-ws[aria-checked=true] { display: grid; width: 28px; padding: 0; } .app.style-acira .acira-sidebar .sb-workspaces[data-count="4"] .sb-ws-name { display: none; } }
 .sb-ws-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--text-13, 13px)/18px var(--font-ui, inherit); animation: sb-ws-name-in calc(160ms * var(--motion-scale, 1)) cubic-bezier(.16, 1, .3, 1) both; }
 /* Keep a single hit target when the playing matrix swaps to the workspace icon under the pointer. */
 .sb-workspaces .sb-ws > :is(.sb-ws-icon,.sb-ws-name), .sb-ws-pill { pointer-events:none; }
@@ -30,7 +31,7 @@
 .app.style-acira .acira-sidebar .sb-workspaces::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--sb-line) var(--divider-fade, 24px), var(--sb-line) calc(100% - var(--divider-fade, 24px)), transparent); pointer-events: none; }
 .app.style-acira .acira-sidebar .sb-workspaces + .sb-foot::before { display: none; }
 /* The open workspace's raised pill: one element that glides between cells (translate on the spring, set from script). */
-.app.style-acira .acira-sidebar .sb-ws-pill { position: absolute; left: 0; top: 4px; z-index: 0; border-radius: 6px; background: var(--sb-current); box-shadow: var(--sb-current-shadow); pointer-events: none; opacity: 0; transition: width calc(160ms * var(--motion-scale, 1)) cubic-bezier(.16, 1, .3, 1); }
+.app.style-acira .acira-sidebar .sb-ws-pill { position: absolute; left: 0; top: 0; z-index: 0; border-radius: 6px; background: var(--sb-current); box-shadow: var(--sb-current-shadow); pointer-events: none; opacity: 0; transition: width calc(160ms * var(--motion-scale, 1)) cubic-bezier(.16, 1, .3, 1); }
 .app.style-acira .acira-sidebar .sb-ws { position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--sb-muted); -webkit-app-region: no-drag; transition: background-color var(--sb-dur, 120ms) var(--sb-ease), color var(--sb-dur, 120ms) var(--sb-ease); }
 .app.style-acira .acira-sidebar .sb-ws > svg { width: 16px; height: 16px; }
 /* 14.3 (Move left / right): the pill covers the icons it passes while it travels with the open workspace (a neighbour crossing it showed through); the open workspace's own icon and name stay on top of it. At rest nothing overlaps the pill, so nothing changes there. */

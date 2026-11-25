@@ -5,6 +5,7 @@ import {feedbackAct,insiderCall,useFeedbackView,type CodeResult,type InsiderResu
 import {noteUse} from '../metrics/noteUse';
 import {Seal,type SealKind} from '../feedback/Seal';
 import {SealCloser} from '../feedback/SealCloser';
+import {FOUNDING_LAST} from '../feedback/sealNumbers';
 import {markName,rankName} from '../feedback/words';
 import type {InsiderFlow} from './insiderFlow';
 import {ActivateSheet,memberLines,revealOf} from './InsiderSheets';
@@ -74,7 +75,7 @@ function Reveal() {
  * offers a code only when that answer says `invitesOpen`; until the answer comes it shows only its title, and a server that does not say (a missing field) is a closed one. */
 function Invites() {
   const view = useFeedbackView('insider'), left = view.insider.invitesLeft;
-  const [list, setList] = useState<InviteRow[] | null>(null), [made, setMade] = useState(''), [problem, setProblem] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
+  const [list, setList] = useState<InviteRow[] | null>(null), [made, setMade] = useState(''), [problem, setProblem] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState<'' | 'code' | 'link'>('');
   const [answer, setAnswer] = useState<'wait' | 'answered' | 'trouble'>('wait');
   const stamp = useRef(0), noteId = useId(), open = view.insider.invitesOpen;
   const load = async () => { const result = await insiderCall({ type: 'insider.invites' }); if (result.result === 'ok') { setList(result.invites ?? []); setAnswer('answered'); } else setAnswer(result.result === 'closed' || result.result === 'revoked' ? 'answered' : 'trouble'); };
@@ -82,16 +83,17 @@ function Invites() {
   useEffect(() => { void insiderCall({ type: 'insider.opened' }); void load(); }, []);
   const make = async () => {
     if (busy) return;
-    setBusy(true); setProblem(''); setCopied(false);
+    setBusy(true); setProblem(''); setCopied('');
     const result = await insiderCall({ type: 'insider.invite' });
     setBusy(false);
     if (result.result === 'ok' && result.code) { setMade(result.code); void load(); void feedbackAct({ type: 'feedback.state' }); return; }
     // 'closed': the server's own invites switch is shut (none_left with `closed`): the member's codes are all still theirs, so the calm line says invites are not open, not that none are left
     setProblem(result.result === 'none_left' ? t('insider.invites.noneLeft') : result.result === 'closed' ? t('insider.invites.closed') : t('insider.invites.problem'));
   };
-  const copy = async () => { try { await navigator.clipboard.writeText(made); noteUse('insiderInviteCopied'); setCopied(true); const mine = ++stamp.current; window.setTimeout(() => { if (stamp.current === mine) setCopied(false); }, 1600); } catch { /* the code stays on screen to be copied by hand */ } };
+  // Beta 14.5: the code, or a link that carries it (acira://insider/invite?c=<code>): a friend who has Acira opens it and gets the same confirmation sheet; the code itself works as before
+  const copy = async (what: 'code' | 'link' = 'code') => { try { await navigator.clipboard.writeText(what === 'link' ? `acira://insider/invite?c=${made}` : made); noteUse('insiderInviteCopied'); setCopied(what); const mine = ++stamp.current; window.setTimeout(() => { if (stamp.current === mine) setCopied(''); }, 1600); } catch { /* the code stays on screen to be copied by hand */ } };
   const stateText = (state: InviteRow['state']) => t(state === 'used' ? 'insider.invites.used' : state === 'unused' ? 'insider.invites.unused' : 'insider.invites.expired');
-  if (!view.insider.insider) return <div className="ins-screen"><h2 className="ins-title">{t('insider.invites.title')}</h2><p className="ins-text">{t('insider.invites.problem')}</p></div>;
+  if (!view.insider.insider && !view.insider.canInvite) return <div className="ins-screen"><h2 className="ins-title">{t('insider.invites.title')}</h2><p className="ins-text">{t('insider.invites.problem')}</p></div>;
   if (!open && answer === 'wait' && !view.insider.invitesAsked) return <div className="ins-screen"><h2 className="ins-title">{t('insider.invites.title')}</h2></div>;
   if (!open) return <div className="ins-screen">
     <h2 className="ins-title">{t('insider.invites.title')}</h2>
@@ -100,11 +102,12 @@ function Invites() {
   </div>;
   return <div className="ins-screen">
     <h2 className="ins-title">{t('insider.invites.title')}</h2>
+    {(view.insider.member?.number ?? 0) > FOUNDING_LAST && <p className="ins-text ins-points-rule">{t('insider.invites.points', { count: 25 })}</p>}
     {made && <div className="ins-made" role="group" aria-label={t('insider.invites.code')}>
       <p className="ins-label">{t('insider.invites.code')}</p>
       <p className="ins-code" dir="ltr">{made}</p>
       <p className="ins-text">{t('insider.invites.once')}</p>
-      <div className="ins-buttons"><button type="button" className="acira-button" onClick={() => void copy()}>{copied ? t('insider.invites.copied') : t('insider.invites.copy')}</button></div>
+      <div className="ins-buttons"><button type="button" className="acira-button" onClick={() => void copy('code')}>{copied === 'code' ? t('insider.invites.copied') : t('insider.invites.copy')}</button><button type="button" className="acira-button" onClick={() => void copy('link')}>{copied === 'link' ? t('insider.invites.copied') : t('insider.invites.copyLink')}</button></div>
     </div>}
     <div className="ins-buttons ins-buttons-start"><button type="button" className="acira-button acira-button-primary" disabled={busy || left === 0} onClick={() => void make()}>{left === null ? t('insider.invites.title') : t('insider.invites.make', { count: left })}</button></div>
     <p className="ins-line popup-status" role="status" aria-live="polite">{problem || (left === 0 ? t('insider.invites.noneLeft') : '')}</p>

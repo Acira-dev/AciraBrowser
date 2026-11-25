@@ -4,6 +4,7 @@ import { CheckMark, CrossMark } from '../CheckMark';
 import { Info, ShieldCheck, Sparkles, SparklesOff } from '../AppIcons';
 import { WorkspaceGlyph } from '../WorkspaceGlyph';
 import type { StatusIcon } from '../../runtime/types';
+import { createHoldGate, type HoldGate } from '../../ui/toastHold';
 import { classScale, motionSpeed, motionTokens, springEasing, springFor, type MotionTokenId } from '../../ui/sharedMotion';
 import '../../styles/transient.css';
 
@@ -168,11 +169,16 @@ export function ToastStack({ rows, expanded, reducedMotion, render, onHold, clas
     if (shown.length >= room.length) { setRoom(shown); return; }
     const timer = setTimeout(() => setRoom(shown), toastLeaveMs(reducedMotion)); return () => clearTimeout(timer);
   }, [roomKey]);
+  // Beta 14.5: a pointer-leave that comes while the stack is still moving under a resting pointer (the spread, a card coming or going) is held for a moment (toastHold.ts), not taken as the pointer leaving.
+  const onHoldRef = useRef(onHold); onHoldRef.current = onHold;
+  const gate = useRef<HoldGate>(undefined); gate.current ??= createHoldGate(held => onHoldRef.current?.(held));
+  useEffect(() => { gate.current?.moved(); }, [expanded, roomKey]);
+  useEffect(() => () => gate.current?.dispose(), []);
   const held = room.length > shown.length ? room : shown, front = (held.length ? toastRowSize(held[held.length - 1]).height : TOAST_LINE);
   const { width, stack } = toastSlotSize(held, undefined, expanded);
   const { enter, exit, move } = toastMotion(reducedMotion);
   return <ol className={`t-stack ${className}`} data-expanded={expanded || undefined} data-instant={reducedMotion || undefined} style={{ width, height: stack, pointerEvents: shown.length ? undefined : 'none', '--front-h': `${front}px`, '--t-move': `${move.duration}ms`, '--t-move-ease': move.easing } as CSSProperties}
-    onPointerEnter={() => onHold?.(true)} onPointerLeave={() => onHold?.(false)} onFocus={() => onHold?.(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) onHold?.(false); }}>
+    onPointerEnter={() => gate.current?.enter()} onPointerLeave={() => gate.current?.leave()} onFocus={() => gate.current?.enter()} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) gate.current?.leave(); }}>
     <AnimatePresence initial={false}>
       {shown.map((row, index) => {
         const fromFront = shown.length - 1 - index;

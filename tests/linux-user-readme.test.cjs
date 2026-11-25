@@ -42,7 +42,7 @@ test('the packaging script puts THAT README in the folder the zip is made from, 
  try{
   const put=(rel,data)=>{const file=path.join(root,rel);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,data);};
   const copy=rel=>put(rel,fs.readFileSync(path.join(repo,rel)));
-  for(const rel of ['scripts/package-linux-handoff.mjs','packaging/linux/user-readme.cjs','packaging/linux/README.user.txt','packaging/linux/BUILDER-README.txt','packaging/linux/Install-Acira.sh','packaging/linux/install-acira-linux.py','packaging/linux/computer.acira.browser.policy','packaging/acira-icon-512.png','LICENSE','THIRD_PARTY_NOTICES.md'])copy(rel);
+  for(const rel of ['scripts/package-linux-handoff.mjs','packaging/linux/user-readme.cjs','packaging/linux/setup-zip.cjs','packaging/linux/README.user.txt','packaging/linux/BUILDER-README.txt','packaging/linux/Install-Acira.sh','packaging/linux/install-acira-linux.py','packaging/linux/computer.acira.browser.policy','packaging/acira-icon-512.png','LICENSE','THIRD_PARTY_NOTICES.md'])copy(rel);
   put('package.json',JSON.stringify({name:'x',version:'0.1.0-beta.13.2'}));
   const out='release/linux-normal',image='AciraBrowser-0.1.0-beta.13.2-linux-x86_64.AppImage';
   put(out+'/'+image,'appimage');put(out+'/beta-linux.yml','a');put(out+'/latest-linux.yml','b');

@@ -11,7 +11,7 @@ interface Base { key: string; title: string; indices: number[]; meta: string; sc
 export type PaletteItem =
   | Base & { kind: 'command'; command: PaletteCommand }
   | Base & { kind: 'tab'; tab: PaletteTab }
-  | Base & { kind: 'history' | 'page'; url: string; favicon?: string }
+  | Base & { kind: 'history' | 'page' | 'bookmark'; url: string; favicon?: string }
   | Base & { kind: 'web'; query: string }
   | Base & { kind: 'setting'; setting: string };
 export interface PaletteSection { key: string; label: string; items: PaletteItem[] }
@@ -19,7 +19,9 @@ export interface PaletteSection { key: string; label: string; items: PaletteItem
 export interface PaletteWorkspaceTabs { id: string; name: string; tabs: PaletteTab[] }
 /** Beta 14.4: a Settings row the settings search found for the query (its own ranking, words and languages): title, where it lives, its id. */
 export interface PaletteSetting { id: string; title: string; place: string }
-export interface PaletteInput { query: string; commands: PaletteCommand[]; tabs: PaletteTab[]; activeTabId: string; history: PaletteLink[]; pages: PaletteLink[]; recent: string[]; otherTabs?: PaletteWorkspaceTabs[]; settings?: PaletteSetting[] }
+/** 14.5: a bookmark the address field's own matching found for the query (ui/addressSuggestions.ts bookmarkMatches), best first; `score` is that matching's. */
+export interface PaletteBookmark extends PaletteLink { score: number }
+export interface PaletteInput { query: string; commands: PaletteCommand[]; tabs: PaletteTab[]; activeTabId: string; history: PaletteLink[]; pages: PaletteLink[]; recent: string[]; otherTabs?: PaletteWorkspaceTabs[]; settings?: PaletteSetting[]; bookmarks?: PaletteBookmark[] }
 
 export const commandPrefix = '>';
 export const hostOf = (url: string) => { try { const parsed = new URL(url); return parsed.protocol === 'acira:' ? '' : parsed.host.replace(/^www\./, ''); } catch { return ''; } };
@@ -62,11 +64,17 @@ const settingItem = (entry: PaletteSetting, query: string, at: number): PaletteI
   const match = fuzzyMatch(query, entry.title);
   return { kind: 'setting', key: `setting:${entry.id}`, title: entry.title, indices: match?.indices ?? [], meta: entry.place, score: Math.max(match?.score ?? 0, SETTING_SCORE) - at, setting: entry.id };
 };
+/** A bookmark row: the address field's matching decided that it matches; its score sits on the same scale as the tab and history rows, a little above history (the bookmark is the person's own choice). */
+const BOOKMARK_BASE = 50;
+const bookmarkItem = (entry: PaletteBookmark, query: string, at: number): PaletteItem => {
+  const title = entry.title || hostOf(entry.url) || entry.url, match = fuzzyMatch(query, title);
+  return { kind: 'bookmark', key: `bookmark:${entry.url}`, title, indices: match && match.indices.length ? match.indices : [], meta: hostOf(entry.url), score: BOOKMARK_BASE + entry.score / 10 - at, url: entry.url };
+};
 // A held-back row (see `guard`) comes after every other row of its list, whatever it scores.
 const ranked = (items: (PaletteItem | null)[], limit: number) => (items.filter(Boolean) as PaletteItem[]).sort((a, b) => +!!a.guard - +!!b.guard || b.score - a.score).slice(0, limit);
 const calm = (items: PaletteItem[]) => [...items.filter(item => !item.guard), ...items.filter(item => item.guard)];
 
-export function paletteSections({ query: raw, commands, tabs, activeTabId, history, pages, recent, otherTabs = [], settings = [] }: PaletteInput): PaletteSection[] {
+export function paletteSections({ query: raw, commands, tabs, activeTabId, history, pages, recent, otherTabs = [], settings = [], bookmarks = [] }: PaletteInput): PaletteSection[] {
   const commandsOnly = raw.trimStart().startsWith(commandPrefix), query = (commandsOnly ? raw.trimStart().slice(1) : raw).trim();
   const byId = new Map(commands.map(entry => [entry.id, entry]));
   const recentCommands = recent.map(id => byId.get(id)).filter(Boolean) as PaletteCommand[];
@@ -92,6 +100,8 @@ export function paletteSections({ query: raw, commands, tabs, activeTabId, histo
   // R4-48 P1-2: the other workspaces' tabs, a section each, a little below this workspace's own matches; choosing one switches there.
   const otherRows: PaletteSection[] = otherTabs.map(space => ({ key: `workspace:${space.id}`, label: t('workspaces.foundIn', { name: space.name }), items: ranked(space.tabs.map(tab => { const item = tabItem(tab, query); return item && { ...item, key: `tab:${tab.id}`, score: item.score - 12 }; }), 4) })).filter(section => section.items.length);
   const commandIds = new Set(commands.map(entry => entry.id)), pageRows = pages.filter(entry => !commandIds.has(PAGE_COMMAND[entry.url])).map(entry => ({ ...entry, title: t('paletteresults.openPage', { page: entry.title }) }));
+  // 14.5: the bookmarks the address field would offer, but not one whose page is already an open tab (that row is the tab) and not twice in the history rows below.
+  const bookmarkRows = bookmarks.filter(entry => !openUrls.has(entry.url)).slice(0, 4).map((entry, at) => bookmarkItem(entry, query, at)), bookmarked = new Set(bookmarks.map(entry => entry.url));
   const sections: PaletteSection[] = [
     { key: 'tabs', label: t("paletteresults.openTabsCount", { count: tabRows.length }), items: tabRows },
     ...otherRows,
@@ -99,7 +109,8 @@ export function paletteSections({ query: raw, commands, tabs, activeTabId, histo
     { key: 'pages', label: t("browsersettings.acira"), items: ranked(pageRows.map(entry => link('page', entry, query)), 3) },
     // Beta 14.4: "transparency", "tab size", "hide sidebar" typed here open Settings on that row.
     { key: 'settings', label: t("browsermenu.settings"), items: settings.slice(0, 2).map((entry, at) => settingItem(entry, query, at)) },
-    { key: 'history', label: t("browsermenu.history"), items: ranked(history.filter(entry => !openUrls.has(entry.url) && !seen.has(entry.url) && seen.add(entry.url)).map(entry => link('history', entry, query)), 5) },
+    { key: 'bookmarks', label: t("browsermenu.bookmarks"), items: bookmarkRows },
+    { key: 'history', label: t("browsermenu.history"), items: ranked(history.filter(entry => !openUrls.has(entry.url) && !bookmarked.has(entry.url) && !seen.has(entry.url) && seen.add(entry.url)).map(entry => link('history', entry, query)), 5) },
   ].filter(section => section.items.length);
   // A section sorts by its best row that Enter may run; one with only held-back rows goes after the web row, so Enter never closes tabs by accident.
   const live = sections.filter(section => section.items.some(item => !item.guard)).sort((a, b) => b.items.find(item => !item.guard)!.score - a.items.find(item => !item.guard)!.score), held = sections.filter(section => !live.includes(section));

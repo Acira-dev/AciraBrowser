@@ -8,7 +8,7 @@ export const RANKS:readonly Rank[]=['contributor','trusted','insider','founding'
 export type ReportKind='bug'|'idea';
 export type ReportCategory='broken'|'looks'|'crash'|'site';
 export const CATEGORIES:readonly ReportCategory[]=['broken','looks','crash','site'];
-export interface FeedbackNote{id:string;kind:'accepted'|'shipped';reportId:string|null;points:number|null;rank:Rank|null;askName:boolean;release:string|null;at:string|null}
+export interface FeedbackNote{id:string;kind:'accepted'|'shipped'|'invited';reportId:string|null;points:number|null;rank:Rank|null;askName:boolean;release:string|null;at:string|null}
 export interface FeedbackReport{id:string;kind:ReportKind;snippet:string;at:string|null;status:'received'|'working'|'fixed';release:string|null}
 export interface FeedbackView{
  /** The server's addresses are set in this build: Send is offered only then. Marks, ranks and the viewer work without. */available:boolean;
@@ -19,7 +19,7 @@ export interface FeedbackView{
  /** What the next rank needs, from the server's own thresholds ("19 points away from Trusted Contributor"); away is null when it is not about points (the first accepted report). */next:{rank:Rank;away:number|null}|null;
  thresholds:{trusted:number;insider:number}|null;thresholdsKnown:boolean;
  notes:FeedbackNote[];reports:FeedbackReport[];dot:boolean;inviteUrl?:string;
- /** The aura this profile is owed ('earlyMember', 'rank:<rank>' or 'points:<total>': the bubble for accepted reports that only add points), null when none or when the switch is off. */aura:string|null;
+ /** The aura this profile is owed ('earlyMember', 'rank:<rank>' or 'points:<total>': the bubble for accepted reports that only add points, 'invite:<total>': the bubble for friends who joined with this member's invite code), null when none or when the switch is off. */aura:string|null;
  /** Rank emblems (a proposal under review): which drawing the rank marks use, or null for the quiet dots. Only a test profile can name one (desktop/feedback/feedback-service.cjs); no shipped build does. */emblem:'hybrid'|'mark'|'etched'|'ring'|null;
  /** Beta 14, the Insider programme (desktop/insider/insider-service.cjs). `available` is false while no server is named: then nothing about the programme is shown anywhere. */insider:InsiderView;
 }
@@ -31,7 +31,7 @@ export type Activation=null;
 /** THE INSIDER STATE THE WELCOME (section AL) AND EVERY SCREEN READ: present only while the profile holds a valid certificate (signed by a shipped key, for this profile's own key). `since` is a month
  * ('2026-11'); `by` is 'founding-team' or 'member' (null when the certificate names neither); `perks` holds only the perks this version knows. Certificates never expire. */
 export interface InsiderMember{tier:'insider';number:number;since:string;by:'founding-team'|'member'|null;perks:string[]}
-export interface InsiderView{available:boolean;insider:boolean;member:InsiderMember|null;/** True when the member is the install's numbered profile's, shown here for display only (one person = one number): no actions on this profile. */borrowed?:boolean;invitesLeft:number|null;/** B1 (17 Nov): false while invites are not open yet (insider-config.cjs invitesOpen): the invite pop-up shows a disabled button and a note, and the menu row drops its count. */invitesOpen:boolean;/** Public 14.4: whether the server has said anything about its invites yet this run (the invites list's own `invitesOpen`): until it has, the invites screen waits for the answer instead of showing a closed note. */invitesAsked?:boolean;channel:{offered:boolean;on:boolean};reveal:boolean;welcome:{owed:boolean;step:WelcomeStep|null};activation:Activation;closed:null}
+export interface InsiderView{available:boolean;insider:boolean;member:InsiderMember|null;/** True when the member is the install's numbered profile's, shown here for display only (one person = one number): no actions on this profile. */borrowed?:boolean;/** Beta 14.5: this profile can make and list invites: its own certificate's, or (borrowed) its lending profile's on this computer. */canInvite?:boolean;invitesLeft:number|null;/** B1 (17 Nov): false while invites are not open yet (insider-config.cjs invitesOpen): the invite pop-up shows a disabled button and a note, and the menu row drops its count. */invitesOpen:boolean;/** Public 14.4: whether the server has said anything about its invites yet this run (the invites list's own `invitesOpen`): until it has, the invites screen waits for the answer instead of showing a closed note. */invitesAsked?:boolean;channel:{offered:boolean;on:boolean};reveal:boolean;welcome:{owed:boolean;step:WelcomeStep|null};activation:Activation;closed:null}
 /** The activation sheet's question (a personal link was opened in this window): never the link itself, which stays in main. */
 export interface InsiderOffer{state:'ask'|'working'|'done';result:CodeResult|'busy'|null;retry:boolean;waitSeconds:number|null;profileId:string;profile:{name:string;color:string;avatar:string|null;picture:string|null}|null;member:InsiderMember|null}
 export const NO_INSIDER:InsiderView={available:false,insider:false,member:null,invitesLeft:null,invitesOpen:false,invitesAsked:false,channel:{offered:false,on:false},reveal:false,welcome:{owed:false,step:null},activation:null,closed:null};

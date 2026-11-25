@@ -81,6 +81,7 @@ function realMainCaption({ source, layout: layoutInit, flags, legacy = false, ed
     require: id => {
       if (id === './caption-backing.cjs') { const backingModule = require('../desktop/caption-backing.cjs'); return { ...backingModule, createCaptionBacking: options => backingModule.createCaptionBacking({ ...options, schedule: timer, cancel: untimer }) }; }
       if (id === './caption-guard.cjs') return require('../desktop/caption-guard.cjs');
+      if (id === './caption-notch.cjs') return require('../desktop/caption-notch.cjs'); // D187: main reads CORNER_STRIP for the corner's top strip
       if (id === './caption-watch.cjs') return { ...watchModule, createCaptionWatch: options => watchModule.createCaptionWatch({ ...options, now: () => clock.t, schedule: timer, cancel: untimer }) };
       throw new Error('unexpected require ' + id);
     },

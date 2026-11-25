@@ -69,7 +69,11 @@ test('the corner where the hidden buttons are shows the notch at once, so they a
   const before = r.hold(away, 200);
   assert.equal(before, false);
   const t0 = r.clock.t;
-  assert.equal(r.hold(at(win.width - 20, 20), 0), true, 'one sample in the corner: shown');
+  assert.equal(r.hold(at(win.width - 20, 5), 0), true, 'one sample in the corner\'s top strip: shown');
+  // D187: below the strip the pointer is on the page's controls
+  const page = rig(); page.hold(away, 200);
+  assert.equal(page.hold(at(win.width - 20, 20), 0), false, 'y 20 in the corner (a page control): nothing');
+  assert.equal(page.hold(at(win.width - 20, 20), 3000), false, 'and still nothing after 3 s');
   assert.equal(r.clock.t - t0 <= STEP, true);
   const near = rig();
   assert.equal(near.hold(at(win.width - CORNER.width - 20, 20), 300), false, 'beside the corner (not on the top edge): nothing');
@@ -104,7 +108,7 @@ test('the poller shows and hides the notch through item.notchShown, sends the in
   const bounds = { x: 0, y: 0, width: 1200, height: 800 };
   const w = { isDestroyed: () => false, isFocused: () => true, isMinimized: () => false, isFullScreen: () => false, getContentBounds: () => bounds, on() {} };
   // Sidebar mode on Windows is not Seamless: the controller's own edges are those of the Full view with the sidebar open, which has none.
-  const item = { window: w, state: { settings: { verticalTabs: true } }, emit: event => emitted.push(event), size: () => ({ topHeight: 6, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: false, side: true }), docked: () => true, suspended: () => false,
+  const item = { needsLook: () => true, /* 14.5: this test pins the poller's cadence while it looks at a window; a window with nothing to watch now lets it sleep (edge-poller-edges-off.test.cjs) */ window: w, state: { settings: { verticalTabs: true } }, emit: event => emitted.push(event), size: () => ({ topHeight: 6, sideWidth: 240 }), holds: () => ({ top: false, side: false }), edges: () => ({ top: false, side: true }), docked: () => true, suspended: () => false,
     notch: () => mode, notchShown: shown => { calls.push(shown); mode = { active: true, hidden: !shown }; } };
   const app = { whenReady: () => Promise.resolve(), on() {} };
   watchChromeEdges({ app, windows: () => [item], screen, view: () => 'full', now: () => clock.t, schedule: (fn, delay) => { delays.push(delay); timeout = fn; return { unref() {} }; }, cancel() {} });

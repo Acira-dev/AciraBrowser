@@ -12,7 +12,7 @@ import { t } from '../../../i18n';
 export function InsiderCodeRow() {
   const insider = useFeedbackView('settings').insider;
   if (!insider.available) return null;
-  if (insider.insider) return <SettingRow id="insider-code" title={t('insider.code.label')} detail={t('settings.insiderAlready')} />;
+  if (insider.insider || insider.borrowed) return <SettingRow id="insider-code" title={t('insider.code.label')} detail={t('settings.insiderAlready')} />;
   return (
     <SettingRow id="insider-code" title={t('insider.code.label')} detail={t('settings.insiderCodeDetail')}>
       <button type="button" className="st-button" onClick={() => void openInsider('code')}>{t('settings.insiderEnter')}</button>

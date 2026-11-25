@@ -62,7 +62,7 @@ async function writeAsarIntegrity(program,integrity){
 /** The program's ASAR integrity record ([{file,alg,value}]), or null when it has none. */
 async function readAsarIntegrity(program){
  const {NtExecutable,NtExecutableResource}=builderModule('resedit');
- const entry=NtExecutableResource.from(NtExecutable.from(await fs.readFile(program))).entries.find(item=>item.type==='INTEGRITY'&&item.id==='ELECTRONASAR');
+ const entry=NtExecutableResource.from(NtExecutable.from(await fs.readFile(program),{ignoreCert:true})).entries.find(item=>item.type==='INTEGRITY'&&item.id==='ELECTRONASAR'); // reading only: after Authenticode the program is signed, and pe-library refuses a signed file unless told (the writer runs before signing)
  return entry?JSON.parse(Buffer.from(entry.bin).toString('utf8')):null;
 }
 /** The official EVS client on the package folder: sign-pkg (production, streaming) or verify-pkg. It finds AciraBrowser.exe by the name hint. */
@@ -147,7 +147,8 @@ async function sealWindowsWidevine(twin,{root,python,env=process.env,authenticod
  const asarIntegrity=await writeAsarIntegrity(exe,await sealAsar(output));
  log('Burning the EVS fuse set');
  const fuses=await burnFuses(exe,EVS_FUSES);
- if(authenticode){log('Code signing the program (before VMP)');await authenticode(exe);}
+ let signedProgram=null; // what the hook returns (scripts/release-sign.mjs: {records:[{signer, timestamp, ...}]}); recorded below
+ if(authenticode){log('Code signing the program (before VMP)');signedProgram=await authenticode(exe);}
  log('VMP signing with castlabs EVS (production, streaming)');
  const signed=await vmp(output,{python,env});log(signed.diagnostic);
  const verified=await vmp(output,{python,env,verifyOnly:true});log(verified.diagnostic);
@@ -157,6 +158,7 @@ async function sealWindowsWidevine(twin,{root,python,env=process.env,authenticod
  provenance.widevine={...provenance.widevine,stage:'sealed',twin:{folder:path.relative(root,twin).replaceAll('\\','/'),manifestSha256:qualified.manifestSha256,programSha256:qualified.manifest.files.find(entry=>entry.file===PROGRAM)?.sha256},
   program:{sha256:programSha256,fuses,asarIntegrity},vmp:{kind:'streaming',signature:{file:SIGNATURE,sha256:signature},signed:signed.diagnostic,verified:verified.diagnostic},
   authenticode:authenticode?'signed before VMP':'not signed (Microsoft signing pending; when it exists it goes before VMP)',
+  ...(signedProgram?.records?{authenticodeFiles:signedProgram.records.map(({name,signer,thumbprint,timestamped,timestamper,timestampServer,signedAt,sha256})=>({name,signer,thumbprint,timestamped,timestamper,timestampServer,signedAt,sha256}))}:{}),
   order:['resource editor (icon, version)','ASAR integrity record','EVS fuse set','Authenticode (when configured)','VMP signature (last: it covers the whole program)'],playbackVerified:false};
  provenance.electronFuses=fuses;
  provenance.nativeQualification=`Qualified as its twin ${provenance.widevine.twin.folder} (the same files with the app as a resources\\app folder and the Windows fuse set, which the packaged-app rigs need). This folder is that twin sealed; scripts/release-installer.mjs compares the two file by file.`;

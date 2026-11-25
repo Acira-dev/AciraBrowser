@@ -62,6 +62,7 @@ installRowSelectionGuard();
 import type { BookmarkNode,BrowserAction,BrowserDownload,BrowserSnapshot,HistoryVisit,SidebarSide,TabGroup,TabSession } from '../../runtime/types';
 import { pageKey } from '../../features/libraryModel';
 import { sidebarNote } from '../../features/downloadText';
+import { useFileDrag,type DownloadCommand } from '../../features/Downloads';
 import { useNewTabPreferences } from '../../ui/newTabPreferences';
 import { animateSpring,classScale,frequentStretch,motionSpeed,stripEase,stripMs,useListMotion } from '../../ui/sharedMotion';
 import { bookmarkContext,navigateFromRow,openPage,savedPageIdentity } from '../../ui/pageActions';
@@ -1450,12 +1451,20 @@ function SidebarGroup({pinnedFolder=false,group,members,family=[],nested=false,f
 type SectionProps={state:BrowserSnapshot;dispatch:Dispatch;profileId:string;privateMode:boolean;folded:Record<string,boolean>;reduced:boolean;lead:boolean};
 const listButton=(label:string,shortcut:string,onClick:()=>void)=><button type="button" className="sb-zone-action sb-zone-icon" aria-label={label} title={`${label} · ${formatShortcut(shortcut)}`} onClick={onClick}><svg className="sb-list-glyph" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 3h8M2 6h8M2 9h5"/></svg></button>;
 const quietRow=(key:string,text:string)=><div key={key} className="sb-section-empty" data-flip={'empty:'+key}><span className="sb-tab-icon"/><span>{text}</span></div>;
+/** One row of the Downloads section: one click opens a finished file; a finished file that is still on disk can also be picked up and dragged out (the same native
+ * file drag the downloads popup and the Downloads page use: the browser's own drag is cancelled and main starts the real one), so it can go to the desktop, a folder or a
+ * page's upload box. A running, failed or missing file gets no drag. The native drag is not a sidebar drag: nothing here reorders or moves a tab. */
+const dragCommand=async(id:string,command:DownloadCommand)=>{try{await runtime.service({type:'downloads.command',id,command});}catch{/* the file went away: the row simply lets go */}};
+export function SidebarDownloadRow({item,open}:{item:BrowserDownload;open:(item:BrowserDownload)=>void}){
+ const drag=useFileDrag(item,dragCommand);
+ return <button type="button" className="sb-bookmark sb-download" data-flip={'d:'+item.id} data-sb-focus title={item.name} onKeyDown={moveFocus} onClick={()=>open(item)} onContextMenu={event=>{event.preventDefault();event.stopPropagation();if(item.url&&/^https?:/i.test(item.url))openBookmarkMenu(item.url,{x:event.clientX,y:event.clientY,width:2,height:2});}} {...drag}>
+  <span className="sb-tab-icon"><PreviewIcon icon={FileText} size={16}/></span><span className="sb-tab-title" dir="auto">{item.name}</span><small className="sb-row-note">{sidebarNote(item)}</small></button>;
+}
 function SidebarDownloads({state,profileId,privateMode,folded,reduced,lead,navigate}:SectionProps&{navigate:(page:string)=>void}){
  const items=state.downloads.filter(item=>!item.browserProfileId||item.browserProfileId===profileId).sort((a,b)=>(b.startedAt||0)-(a.startedAt||0)).slice(0,5);
  const open=(item:BrowserDownload)=>{if(item.status==='Ready'&&item.canOpen)void runtime.service({type:'downloads.command',id:item.id,command:'open'}).catch(()=>navigate('downloads'));else navigate('downloads');};
  return <>{lead&&<div className="sb-sep" role="separator" data-flip="sep:downloads"/>}<Zone id="downloads" title={t("browsermenu.downloads")} folded={!!folded['downloads-closed']} toggleKey="downloads-closed" mark={<PreviewIcon icon={Download} size={14}/>} reduced={reduced} profileId={profileId} privateMode={privateMode} action={<span className="sb-zone-actions">{listButton(t('acirasidebar.allDownloads'),'Ctrl J',()=>navigate('downloads'))}</span>}>
-  {items.length?items.map(item=><button key={item.id} type="button" className="sb-bookmark sb-download" data-flip={'d:'+item.id} data-sb-focus title={item.name} onKeyDown={moveFocus} onClick={()=>open(item)} onContextMenu={event=>{event.preventDefault();event.stopPropagation();if(item.url&&/^https?:/i.test(item.url))openBookmarkMenu(item.url,{x:event.clientX,y:event.clientY,width:2,height:2});}}>
-   <span className="sb-tab-icon"><PreviewIcon icon={FileText} size={16}/></span><span className="sb-tab-title" dir="auto">{item.name}</span><small className="sb-row-note">{sidebarNote(item)}</small></button>)
+  {items.length?items.map(item=><SidebarDownloadRow key={item.id} item={item} open={open}/>)
    :[quietRow('downloads',t('dl.emptyTitle'))]}
  </Zone></>;
 }

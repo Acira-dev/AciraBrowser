@@ -3,6 +3,7 @@ import { readInfo } from './nowPlaying';
 import { samplePalette } from './nowPlayingPalette';
 import { dominantHex, paletteFromColor, sampleFromLights } from './videoGlowLights';
 import { createInterposer } from './ambientInterpose';
+import { isWindowInactive } from './windowActive';
 
 /**
  * The video's own light (Beta 14, "Fullscreen videos fill the window"). While a page fills its page view, the light round the frame (the site glow in the sidebar, Ambient in the sidebar and the toolbar)
@@ -72,7 +73,7 @@ function start(tabId: string) {
   glow = { tabId, lights: null, hex: null, src: null, tries: 0, title: tabs.find(tab => tab.id === tabId)?.title };
   void refresh(mine);
   window.setTimeout(() => void refresh(mine), FIRST_MS);
-  timer = window.setInterval(() => { if (!document.hidden) void refresh(mine); }, REFRESH_MS);
+  timer = window.setInterval(() => { if (!document.hidden && !isWindowInactive()) void refresh(mine); }, REFRESH_MS);   // 14.5: not while the window is not the active one
 }
 function stop(tell = true) {
   window.clearInterval(timer); timer = 0; token++;

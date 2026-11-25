@@ -15,6 +15,7 @@ if a.uninstall:
  if shutil.which('update-desktop-database') and desktop.parent.exists():subprocess.run(['update-desktop-database',str(desktop.parent)],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  print(name+' removed. Browser profiles, passwords and the shared authentication policy were preserved.');sys.exit(0)
 matches=list(here.glob(exe+'-*-linux-*.AppImage'))
+if not matches:matches=list(here.parent.glob(exe+'-*-linux-*.AppImage'))  # unpacking the zip makes a subfolder of Downloads: the AppImage may be one folder up
 if len(matches)!=1:raise SystemExit('Keep exactly one '+exe+' Linux AppImage beside this installer.')
 image=matches[0];policy=here/'computer.acira.browser.policy';source_icon=here/'acira-icon-512.png';manifest=here/'SHA256SUMS.txt'
 if not manifest.is_file():raise SystemExit('The release checksum file is missing.')
